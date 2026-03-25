@@ -11,12 +11,17 @@ export function registerSearchCommand(program: Command) {
     .description("Full-text search across all indexed releases")
     .argument("<query>", "Search query")
     .option("-l, --limit <n>", "Max results to return", "20")
-    .action(async (query: string, opts: { limit: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (query: string, opts: { limit: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
       const results = searchReleases(query, limit);
 
       if (results.length === 0) {
-        console.log(chalk.yellow("No results found."));
+        if (opts.json) {
+          console.log(JSON.stringify([], null, 2));
+        } else {
+          console.log(chalk.yellow("No results found."));
+        }
         return;
       }
 
@@ -37,6 +42,23 @@ export function registerSearchCommand(program: Command) {
 
       const releaseMap = new Map(releaseRows.map((r) => [r.id, r]));
       const sourceMap = new Map(sourceRows.map((s) => [s.id, s.name]));
+
+      if (opts.json) {
+        const jsonResults = results.map((result) => {
+          const release = releaseMap.get(result.id);
+          const sourceName = release ? sourceMap.get(release.sourceId) ?? "Unknown" : "Unknown";
+          const preview = result.content.replace(/\n/g, " ").slice(0, 150);
+          return {
+            id: result.id,
+            title: result.title,
+            content: preview,
+            sourceName,
+            publishedAt: release?.publishedAt ?? null,
+          };
+        });
+        console.log(JSON.stringify(jsonResults, null, 2));
+        return;
+      }
 
       for (const result of results) {
         const release = releaseMap.get(result.id);

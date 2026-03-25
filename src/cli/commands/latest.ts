@@ -11,7 +11,8 @@ export function registerLatestCommand(program: Command) {
     .description("Show the latest releases, optionally filtered by source")
     .argument("[slug]", "Source slug to filter by")
     .option("-c, --count <n>", "Number of releases to show", "10")
-    .action(async (slug: string | undefined, opts: { count: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (slug: string | undefined, opts: { count: string; json?: boolean }) => {
       const db = getDb();
       const count = parseInt(opts.count, 10);
 
@@ -46,7 +47,16 @@ export function registerLatestCommand(program: Command) {
       const rows = await query;
 
       if (rows.length === 0) {
-        console.log(chalk.yellow("No releases found."));
+        if (opts.json) {
+          console.log(JSON.stringify([], null, 2));
+        } else {
+          console.log(chalk.yellow("No releases found."));
+        }
+        return;
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(rows, null, 2));
         return;
       }
 

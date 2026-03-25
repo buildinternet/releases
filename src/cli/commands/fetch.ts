@@ -31,9 +31,11 @@ export function registerFetchCommand(program: Command) {
     .command("fetch")
     .description("Fetch releases from configured sources")
     .argument("[slug]", "Fetch a specific source by slug, or all sources if omitted")
-    .action(async (slug?: string) => {
+    .option("--json", "Output as JSON")
+    .action(async (slug: string | undefined, opts: { json?: boolean }) => {
       const db = getDb();
 
+      const fetchResults: Array<{ source: string; newReleases: number }> = [];
       let targetSources: Source[];
 
       if (slug) {
@@ -46,7 +48,11 @@ export function registerFetchCommand(program: Command) {
       } else {
         targetSources = await db.select().from(sources);
         if (targetSources.length === 0) {
-          console.log(chalk.yellow("No sources configured. Use `released add` to add one."));
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.yellow("No sources configured. Use `released add` to add one."));
+          }
           return;
         }
       }
@@ -55,13 +61,18 @@ export function registerFetchCommand(program: Command) {
         const adapter = getAdapter(source.type);
         if (!adapter) continue;
 
-        logger.info(`Fetching releases from ${chalk.cyan(source.name)}...`);
+        if (!opts.json) {
+          logger.info(`Fetching releases from ${chalk.cyan(source.name)}...`);
+        }
 
         try {
           const rawReleases = await adapter.fetch(source);
 
           if (rawReleases.length === 0) {
-            console.log(chalk.yellow(`No releases found for ${source.name}`));
+            if (!opts.json) {
+              console.log(chalk.yellow(`No releases found for ${source.name}`));
+            }
+            fetchResults.push({ source: source.name, newReleases: 0 });
             continue;
           }
 
@@ -97,12 +108,20 @@ export function registerFetchCommand(program: Command) {
             .set({ lastFetchedAt: new Date().toISOString() })
             .where(eq(sources.id, source.id));
 
-          console.log(
-            chalk.green(`Fetched ${inserted} new releases from ${source.name}`),
-          );
+          fetchResults.push({ source: source.name, newReleases: inserted });
+
+          if (!opts.json) {
+            console.log(
+              chalk.green(`Fetched ${inserted} new releases from ${source.name}`),
+            );
+          }
         } catch (err) {
           logger.error(`Failed to fetch from ${source.name}:`, err);
         }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(fetchResults, null, 2));
       }
     });
 }

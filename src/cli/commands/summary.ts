@@ -10,7 +10,8 @@ export function registerSummaryCommand(program: Command) {
     .description("AI-generated summary of recent releases for a source")
     .argument("<slug>", "Source slug")
     .option("-d, --days <n>", "Number of days to look back", "30")
-    .action(async (slug: string, opts: { days: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (slug: string, opts: { days: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
       const source = await findSourceBySlug(slug);
 
@@ -28,11 +29,18 @@ export function registerSummaryCommand(program: Command) {
         return;
       }
 
-      console.log(
-        chalk.dim(`Summarizing ${recentReleases.length} release(s) from ${source.name}...\n`),
-      );
+      if (!opts.json) {
+        console.log(
+          chalk.dim(`Summarizing ${recentReleases.length} release(s) from ${source.name}...\n`),
+        );
+      }
 
       const summary = await summarizeReleases(recentReleases.map(toReleaseInput));
-      console.log(summary);
+
+      if (opts.json) {
+        console.log(JSON.stringify({ summary }, null, 2));
+      } else {
+        console.log(summary);
+      }
     });
 }

@@ -8,12 +8,22 @@ export function registerListCommand(program: Command) {
   program
     .command("list")
     .description("List all configured changelog sources")
-    .action(async () => {
+    .option("--json", "Output as JSON")
+    .action(async (opts: { json?: boolean }) => {
       const db = getDb();
-      const rows = await db.select().from(sources);
+      const allSources = await db.select().from(sources);
 
-      if (rows.length === 0) {
-        console.log("No sources configured.");
+      if (allSources.length === 0) {
+        if (opts.json) {
+          console.log(JSON.stringify([], null, 2));
+        } else {
+          console.log("No sources configured.");
+        }
+        return;
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(allSources, null, 2));
         return;
       }
 
@@ -21,7 +31,7 @@ export function registerListCommand(program: Command) {
         head: ["Name", "Slug", "Type", "URL", "Last Fetched"],
       });
 
-      for (const row of rows) {
+      for (const row of allSources) {
         table.push([
           row.name,
           row.slug,

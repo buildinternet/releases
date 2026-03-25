@@ -11,7 +11,8 @@ export function registerCompareCommand(program: Command) {
     .argument("<slugA>", "First source slug")
     .argument("<slugB>", "Second source slug")
     .option("-d, --days <n>", "Number of days to look back", "30")
-    .action(async (slugA: string, slugB: string, opts: { days: string }) => {
+    .option("--json", "Output as JSON")
+    .action(async (slugA: string, slugB: string, opts: { days: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
       const cutoff = daysAgoIso(days);
 
@@ -41,17 +42,23 @@ export function registerCompareCommand(program: Command) {
         return;
       }
 
-      console.log(
-        chalk.dim(
-          `Comparing ${releasesA.length} release(s) from ${sourceA.name} with ${releasesB.length} release(s) from ${sourceB.name}...\n`,
-        ),
-      );
+      if (!opts.json) {
+        console.log(
+          chalk.dim(
+            `Comparing ${releasesA.length} release(s) from ${sourceA.name} with ${releasesB.length} release(s) from ${sourceB.name}...\n`,
+          ),
+        );
+      }
 
       const comparison = await compareProducts(
         { name: sourceA.name, releases: releasesA.map(toReleaseInput) },
         { name: sourceB.name, releases: releasesB.map(toReleaseInput) },
       );
 
-      console.log(comparison);
+      if (opts.json) {
+        console.log(JSON.stringify({ comparison }, null, 2));
+      } else {
+        console.log(comparison);
+      }
     });
 }
