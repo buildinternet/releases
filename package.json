@@ -4,7 +4,7 @@
   "description": "Context7-style changelog indexer for AI agents and developers",
   "type": "module",
   "bin": {
-    "released": "./dist/index.js"
+    "released": "./src/index.ts"
   },
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target bun",
