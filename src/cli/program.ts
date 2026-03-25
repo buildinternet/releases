@@ -1,0 +1,25 @@
+import { Command } from "commander";
+import { registerAddCommand } from "./commands/add.js";
+import { registerRemoveCommand } from "./commands/remove.js";
+import { registerListCommand } from "./commands/list.js";
+import { registerFetchCommand } from "./commands/fetch.js";
+import { registerSearchCommand } from "./commands/search.js";
+import { registerLatestCommand } from "./commands/latest.js";
+import { registerSummaryCommand } from "./commands/summary.js";
+import { registerCompareCommand } from "./commands/compare.js";
+import { registerServeCommand } from "./commands/serve.js";
+
+export const program = new Command()
+  .name("released")
+  .description("Context7-style changelog indexer for AI agents and developers")
+  .version("0.1.0");
+
+registerAddCommand(program);
+registerRemoveCommand(program);
+registerListCommand(program);
+registerFetchCommand(program);
+registerSearchCommand(program);
+registerLatestCommand(program);
+registerSummaryCommand(program);
+registerCompareCommand(program);
+registerServeCommand(program);
