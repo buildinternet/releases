@@ -95,6 +95,25 @@ released org list
 released org show vercel
 ```
 
+### Discover sources
+
+Automatically find changelog and release-note pages for a domain:
+
+```bash
+released discover vercel.com              # scan domain, show results (dry-run)
+released discover vercel.com --add        # auto-add all discovered sources
+released discover vercel.com --json       # machine-readable output
+released discover --org vercel            # use org's domain and GitHub handle
+```
+
+Discovery uses multiple strategies in parallel:
+- **Sitemap parsing** — robots.txt → sitemap(s) → filter changelog-like URLs
+- **Well-known paths** — probes `/changelog`, `/releases`, `/updates`, etc. on root and subdomains (`docs.`, `support.`, `help.`, etc.)
+- **Feed discovery** — reuses the existing RSS/Atom/JSON feed probing
+- **HTML link analysis** — scans the homepage for changelog-related links
+- **GitHub repo enumeration** — lists repos with releases (when org has a linked GitHub handle)
+- **Provider detection** — identifies hosting platforms (Mintlify, ReadMe, Zendesk, Intercom, Docusaurus, WordPress, etc.) via DNS, HTTP headers, and HTML signatures, then uses provider-specific hints for feed paths and crawl patterns
+
 ### MCP Server
 
 Start the MCP server for AI agent integration:

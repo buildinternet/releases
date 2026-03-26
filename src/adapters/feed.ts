@@ -28,6 +28,10 @@ export interface SourceMetadata {
   crawlPattern?: string;
   lastCrawlJobId?: string;
   lastCrawlAt?: string;
+
+  // Provider detection
+  provider?: string;
+  providerDetectedAt?: string;
 }
 
 // ── Feed discovery ──────────────────────────────────────────────────
