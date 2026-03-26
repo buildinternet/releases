@@ -82,7 +82,7 @@ Stateless HTTP router with two routes. Re-exports `Sandbox` (required by SDK) an
 - **POST /onboard**: Parse `{ company, domain?, githubOrg? }`, generate sessionId (nanoid), get DiscoverySession DO stub, call `stub.startDiscovery(params)`, return `{ sessionId, status: "running" }`.
 - **GET /onboard/:sessionId/status**: Get DO stub, call `stub.getStatus()`, return `{ status, progress?, result? }`.
 
-**DB snapshot sourcing:** For MVP, the Worker reads the DB file from a known R2 bucket (`released-data/released.db`), uploaded via a separate step before invoking onboard. For production, the Worker reads from D1/Turso directly.
+**DB snapshot sourcing:** For MVP, the POST body includes the DB file as a base64-encoded field (`{ company, domain?, githubOrg?, dbSnapshot: "<base64>" }`). The DB is small (typically under 5MB). For production, the Worker reads from D1/Turso directly.
 
 ## Durable Object (`workers/discovery/src/discovery-session.ts`)
 
@@ -111,6 +111,7 @@ Thin script that parses args and calls `runDiscovery()`. Runs inside the sandbox
 - Parses args: `company [--domain X] [--github-org Y]`
 - Calls `runDiscovery()` with an `onProgress` callback that writes `/tmp/discovery-progress.json` (throttled to every 5s)
 - `runDiscovery()` writes `/tmp/discovery-state.json` on completion
+- On error, writes a partial state file in a catch block (status: `"error"`, whatever sources were found so far) so there is always something to return
 - Exits 0 on success, 1 on error
 
 Progress file shape:
@@ -234,9 +235,19 @@ Budget cap: $2.00/run, 30 turns. Safety limits unchanged from Phase 1.
 - **DB migration to D1/Turso** -- separate initiative, not a Phase 2 dependency
 - **Authentication on the Worker endpoints** -- needed before production, but not for initial deployment. Flag for follow-up.
 
+## Error Recovery
+
+If the sandbox crashes mid-run (OOM, network timeout, budget exceeded):
+
+- The DO sets `status: 'error'` via the catch handler on the execution promise
+- The state file may not exist. `getStatus()` already handles this (returns error message)
+- `run-discovery.ts` wraps the `runDiscovery()` call in try/catch and writes a partial state file on failure (status: `"error"`, whatever sources were found so far). This ensures there is always an artifact to inspect, even on crash.
+- The sandbox DB is disposable — partially-added sources do not affect the real DB
+
 ## Verify During Implementation
 
 1. **Secrets propagation:** Do Worker secrets flow into sandbox containers as env vars automatically?
 2. **ctx.waitUntil() + sandbox execution:** Confirm the DO stays alive for the full 3-5 minute execution.
 3. **Sandbox filesystem from Dockerfile:** Verify `/app` contents from the Dockerfile are present when the sandbox starts.
-4. **sleepAfter tuning:** Default is 10 minutes. May want to lower for cost savings since each run is ~3.5 min.
+4. **Dockerfile base image:** Verify `docker.io/cloudflare/sandbox:0.7.0` is the correct image path and version. Check the latest Sandbox SDK docs — the image path or required format may differ.
+5. **sleepAfter tuning:** Default is 10 minutes. Set to `"3m"` — enough time for the polling endpoint to read the result after the agent finishes, without keeping the container warm for 6+ unnecessary minutes.
