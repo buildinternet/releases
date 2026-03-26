@@ -8,6 +8,7 @@ import type { Adapter, RawRelease, FetchOptions } from "../../adapters/types.js"
 import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
 import { logger } from "../../lib/logger.js";
+import { elapsedSec } from "../../lib/dates.js";
 
 function getAdapter(type: string): Adapter | null {
   switch (type) {
@@ -81,16 +82,17 @@ export function registerFetchCommand(program: Command) {
           logger.info(`Fetching releases from ${chalk.cyan(source.name)}${limitStr}...`);
         }
 
+        const startTime = performance.now();
+
         try {
           const rawReleases = await adapter.fetch(source, fetchOptions);
 
           if (rawReleases.length === 0) {
             if (!opts.json) {
-              // For scrape sources, empty result may mean content hash was unchanged
               const msg = source.type === "scrape"
                 ? `No changes detected for ${source.name}`
                 : `No releases found for ${source.name}`;
-              console.log(chalk.yellow(msg));
+              console.log(chalk.yellow(`${msg} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`));
             }
             fetchResults.push({ source: source.name, newReleases: 0 });
             continue;
@@ -132,11 +134,11 @@ export function registerFetchCommand(program: Command) {
 
           if (!opts.json) {
             console.log(
-              chalk.green(`Fetched ${inserted} new releases from ${source.name}`),
+              chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`),
             );
           }
         } catch (err) {
-          logger.error(`Failed to fetch from ${source.name}:`, err);
+          logger.error(`Failed to fetch from ${source.name} (${elapsedSec(startTime)}s):`, err);
         }
       }
 

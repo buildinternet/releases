@@ -24,6 +24,7 @@ export const scrape: Adapter = {
     // Use /markdown endpoint — more reliable than /json for diverse changelog pages
     const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/markdown`;
 
+    logger.info(`Fetching page via Cloudflare...`);
     const res: Response = await fetch(endpoint, {
       method: "POST",
       headers: {
@@ -58,6 +59,8 @@ export const scrape: Adapter = {
       return [];
     }
 
+    logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
+
     // Re-fetch protection: hash the markdown and compare to stored hash
     const contentHash = createHash("sha256")
       .update(markdown)
@@ -75,10 +78,10 @@ export const scrape: Adapter = {
       .set({ lastContentHash: contentHash })
       .where(eq(sources.id, source.id));
 
-    // Parse with Anthropic AI ingestion agent
+    logger.info(`Parsing changelog with AI...`);
     let parsed;
     try {
-      parsed = await parseChangelog(markdown);
+      parsed = await parseChangelog(markdown, source.slug);
     } catch (error) {
       logger.warn(
         `AI parsing failed for ${source.url}: ${error instanceof Error ? error.message : String(error)}`,

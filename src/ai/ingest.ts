@@ -88,7 +88,10 @@ function chunkMarkdown(markdown: string, maxChunkChars = 15_000): string[] {
   return chunks;
 }
 
-async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: string): Promise<ParsedRelease[]> {
+async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: string, sourceSlug?: string): Promise<ParsedRelease[]> {
+  // Prompt caching: system prompt + tool schema is ~300 tokens, well below Haiku's
+  // 4,096-token minimum. Revisit if we expand the system prompt or switch to a model
+  // with a lower threshold (Sonnet: 1,024). See: platform.claude.com/docs/en/build-with-claude/prompt-caching
   const response = await client.messages.create({
     model: config.ingestModel(),
     max_tokens: 16384,
@@ -103,13 +106,14 @@ async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: 
     ],
   });
 
-  logger.debug(`AI ingest chunk (${chunk.length} chars) stop_reason:`, response.stop_reason);
+  logger.debug(`AI ingest chunk (${chunk.length} chars) stop_reason: ${response.stop_reason}`);
 
   await logUsage({
     operation: "ingest",
     model: config.ingestModel(),
     inputTokens: response.usage.input_tokens,
     outputTokens: response.usage.output_tokens,
+    sourceSlug,
   });
 
   if (response.stop_reason === "max_tokens") {
@@ -131,7 +135,7 @@ async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: 
   return input.releases as ParsedRelease[];
 }
 
-export async function parseChangelog(markdown: string): Promise<ParsedRelease[]> {
+export async function parseChangelog(markdown: string, sourceSlug?: string): Promise<ParsedRelease[]> {
   const client = getAnthropicClient();
   const chunks = chunkMarkdown(markdown);
 
@@ -139,9 +143,13 @@ export async function parseChangelog(markdown: string): Promise<ParsedRelease[]>
 
   const allReleases: ParsedRelease[] = [];
 
-  for (const chunk of chunks) {
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    if (chunks.length > 1) {
+      logger.info(`Parsing chunk ${i + 1}/${chunks.length} (${chunk.length.toLocaleString()} chars)...`);
+    }
     try {
-      const releases = await parseChunk(client, chunk);
+      const releases = await parseChunk(client, chunk, sourceSlug);
       allReleases.push(...releases);
     } catch (error) {
       logger.warn(
