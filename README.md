@@ -33,6 +33,24 @@ The source type is auto-detected from the URL:
 
 You can override detection with `--type github`, `--type scrape`, or `--type feed` if needed. Discovered feed URLs are cached so subsequent fetches skip discovery.
 
+If you know the feed URL and it isn't easily discoverable, provide it explicitly:
+
+```bash
+released add "Claude Code" --url https://docs.anthropic.com/en/changelog \
+  --feed-url https://docs.anthropic.com/en/changelog/rss.xml
+```
+
+### Edit sources
+
+```bash
+released edit next-js --url https://github.com/vercel/next.js/releases
+released edit linear --name "Linear Changelog" --feed-url https://linear.app/rss/changelog.json
+released edit my-blog --org acme               # set organization
+released edit my-blog --no-org                  # remove organization
+released edit my-blog --type feed               # change adapter type
+released edit my-blog --no-feed-url             # clear stored feed URL
+```
+
 ### Fetch releases
 
 ```bash

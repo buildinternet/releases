@@ -1,5 +1,6 @@
 import { Command } from "commander";
 import { registerAddCommand } from "./commands/add.js";
+import { registerEditCommand } from "./commands/edit.js";
 import { registerRemoveCommand } from "./commands/remove.js";
 import { registerListCommand } from "./commands/list.js";
 import { registerFetchCommand } from "./commands/fetch.js";
@@ -10,6 +11,7 @@ import { registerCompareCommand } from "./commands/compare.js";
 import { registerServeCommand } from "./commands/serve.js";
 import { registerUsageCommand } from "./commands/usage.js";
 import { registerOrgCommand } from "./commands/org.js";
+import { registerDiscoverCommand } from "./commands/discover.js";
 
 export const program = new Command()
   .name("released")
@@ -17,6 +19,7 @@ export const program = new Command()
   .version("0.1.0");
 
 registerAddCommand(program);
+registerEditCommand(program);
 registerRemoveCommand(program);
 registerListCommand(program);
 registerFetchCommand(program);
@@ -27,3 +30,4 @@ registerCompareCommand(program);
 registerServeCommand(program);
 registerUsageCommand(program);
 registerOrgCommand(program);
+registerDiscoverCommand(program);
