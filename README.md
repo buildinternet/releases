@@ -22,20 +22,16 @@ Copy `.env.example` to `.env` and fill in:
 ### Add sources
 
 ```bash
-released add "Next.js" --type github --url https://github.com/vercel/next.js
-released add "Linear" --type scrape --url https://linear.app/changelog
-released add "My Blog" --type feed --url https://example.com/changelog
+released add "Next.js" --url https://github.com/vercel/next.js
+released add "Linear" --url https://linear.app/changelog
+released add "My Blog" --url https://example.com/changelog
 ```
 
-Source types:
+The source type is auto-detected from the URL:
+- **GitHub URLs** → uses the GitHub Releases API
+- **Other URLs** → probes for an RSS/Atom/JSON feed, then uses the scrape adapter (feed-first with Cloudflare + AI fallback)
 
-| Type | How it works |
-|------|-------------|
-| `github` | Fetches from GitHub Releases API |
-| `scrape` | Auto-discovers RSS/Atom/JSON feeds first; falls back to Cloudflare Browser Rendering + AI parsing if no feed is found |
-| `feed` | Discovers and parses RSS/Atom/JSON Feed directly (no AI, no Cloudflare) |
-
-The `scrape` adapter caches discovered feed URLs so subsequent fetches skip discovery and use the fast feed path automatically.
+You can override detection with `--type github`, `--type scrape`, or `--type feed` if needed. Discovered feed URLs are cached so subsequent fetches skip discovery.
 
 ### Fetch releases
 
