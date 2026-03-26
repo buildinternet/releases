@@ -1,6 +1,9 @@
-import { eq, desc, gte, and } from "drizzle-orm";
+import { eq, desc, gte, and, sql } from "drizzle-orm";
 import { getDb } from "./connection.js";
-import { sources, releases, type Source, type Release } from "./schema.js";
+import {
+  sources, releases, organizations, orgAccounts,
+  type Source, type Release, type Organization,
+} from "./schema.js";
 
 export async function findSourceBySlug(slug: string): Promise<Source | null> {
   const db = getDb();
@@ -18,4 +21,104 @@ export async function getRecentReleases(
     .from(releases)
     .where(and(eq(releases.sourceId, sourceId), gte(releases.publishedAt, cutoffIso)))
     .orderBy(desc(releases.publishedAt));
+}
+
+export async function findOrg(identifier: string): Promise<Organization | null> {
+  const db = getDb();
+
+  // 1. Slug (exact)
+  const [bySlug] = await db.select().from(organizations).where(eq(organizations.slug, identifier));
+  if (bySlug) return bySlug;
+
+  // 2. Domain (exact)
+  const [byDomain] = await db.select().from(organizations).where(eq(organizations.domain, identifier));
+  if (byDomain) return byDomain;
+
+  // 3. Name (case-insensitive, oldest first for determinism)
+  const [byName] = await db
+    .select()
+    .from(organizations)
+    .where(sql`LOWER(${organizations.name}) = LOWER(${identifier})`)
+    .orderBy(organizations.createdAt)
+    .limit(1);
+  if (byName) return byName;
+
+  // 4. Account handle (exact)
+  const [byHandle] = await db
+    .select({ org: organizations })
+    .from(orgAccounts)
+    .innerJoin(organizations, eq(orgAccounts.orgId, organizations.id))
+    .where(eq(orgAccounts.handle, identifier));
+  if (byHandle) return byHandle.org;
+
+  return null;
+}
+
+export async function getSourcesByOrg(orgId: string): Promise<Source[]> {
+  const db = getDb();
+  return db.select().from(sources).where(eq(sources.orgId, orgId));
+}
+
+export async function getRecentReleasesByOrg(
+  orgId: string,
+  cutoffIso: string,
+): Promise<Array<Release & { sourceName: string; sourceSlug: string }>> {
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: releases.id,
+      sourceId: releases.sourceId,
+      version: releases.version,
+      title: releases.title,
+      content: releases.content,
+      contentSummary: releases.contentSummary,
+      url: releases.url,
+      contentHash: releases.contentHash,
+      metadata: releases.metadata,
+      publishedAt: releases.publishedAt,
+      fetchedAt: releases.fetchedAt,
+      sourceName: sources.name,
+      sourceSlug: sources.slug,
+    })
+    .from(releases)
+    .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .where(and(eq(sources.orgId, orgId), gte(releases.publishedAt, cutoffIso)))
+    .orderBy(desc(releases.publishedAt));
+  return rows;
+}
+
+export async function listOrgs(opts?: {
+  query?: string;
+  platform?: string;
+}): Promise<Organization[]> {
+  const db = getDb();
+  let allOrgs = await db.select().from(organizations);
+
+  if (opts?.platform) {
+    const accountOrgIds = await db
+      .select({ orgId: orgAccounts.orgId })
+      .from(orgAccounts)
+      .where(eq(orgAccounts.platform, opts.platform));
+    const orgIdSet = new Set(accountOrgIds.map((a) => a.orgId));
+    allOrgs = allOrgs.filter((o) => orgIdSet.has(o.id));
+  }
+
+  if (opts?.query) {
+    const q = opts.query.toLowerCase();
+    const accounts = await db.select().from(orgAccounts);
+    const orgIdsWithMatchingHandle = new Set(
+      accounts
+        .filter((a) => a.handle.toLowerCase().includes(q))
+        .map((a) => a.orgId),
+    );
+    allOrgs = allOrgs.filter(
+      (o) =>
+        o.name.toLowerCase().includes(q) ||
+        o.slug.toLowerCase().includes(q) ||
+        (o.domain && o.domain.toLowerCase().includes(q)) ||
+        orgIdsWithMatchingHandle.has(o.id),
+    );
+  }
+
+  return allOrgs;
 }
