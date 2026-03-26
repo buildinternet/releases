@@ -101,18 +101,20 @@ Automatically find changelog and release-note pages for a domain:
 
 ```bash
 released discover vercel.com              # scan domain, show results (dry-run)
+released discover vercel.com --verify     # use AI to verify results and find more
 released discover vercel.com --add        # auto-add all discovered sources
 released discover vercel.com --json       # machine-readable output
 released discover --org vercel            # use org's domain and GitHub handle
 ```
 
-Discovery uses multiple strategies in parallel:
+Discovery uses multiple evidence-based strategies in parallel:
 - **Sitemap parsing** — robots.txt → sitemap(s) → filter changelog-like URLs
-- **Well-known paths** — probes `/changelog`, `/releases`, `/updates`, etc. on root and subdomains (`docs.`, `support.`, `help.`, etc.)
-- **Feed discovery** — reuses the existing RSS/Atom/JSON feed probing
+- **Feed discovery** — RSS/Atom/JSON feed probing via HTML `<link>` tags and well-known feed paths
 - **HTML link analysis** — scans the homepage for changelog-related links
 - **GitHub repo enumeration** — lists repos with releases (when org has a linked GitHub handle)
 - **Provider detection** — identifies hosting platforms (Mintlify, ReadMe, Zendesk, Intercom, Docusaurus, WordPress, etc.) via DNS, HTTP headers, and HTML signatures, then uses provider-specific hints for feed paths and crawl patterns
+
+The `--verify` flag adds an AI verification pass (requires `ANTHROPIC_API_KEY`) that filters out false positives and suggests additional changelog URLs the automated methods may have missed — useful for sites where changelogs live on unexpected subdomains or paths.
 
 ### MCP Server
 

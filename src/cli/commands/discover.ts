@@ -15,8 +15,9 @@ export function registerDiscoverCommand(program: Command) {
     .argument("[domain]", "Domain to scan (e.g. vercel.com)")
     .option("--org <org>", "Use an existing org's domain and GitHub handle")
     .option("--add", "Add all discovered sources (default: dry-run)")
+    .option("--verify", "Use AI to verify candidates and suggest additional URLs")
     .option("--json", "Output as JSON")
-    .action(async (domain: string | undefined, opts: { org?: string; add?: boolean; json?: boolean }) => {
+    .action(async (domain: string | undefined, opts: { org?: string; add?: boolean; verify?: boolean; json?: boolean }) => {
       let scanDomain: string | undefined = domain;
       let githubHandle: string | undefined;
       let orgId: string | null = null;
@@ -47,7 +48,11 @@ export function registerDiscoverCommand(program: Command) {
         process.exit(1);
       }
 
-      const { sources: results, provider } = await discover({ domain: scanDomain, githubHandle });
+      const { sources: results, provider } = await discover({
+        domain: scanDomain,
+        githubHandle,
+        verify: opts.verify,
+      });
 
       if (results.length === 0) {
         if (opts.json) {

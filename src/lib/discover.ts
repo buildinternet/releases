@@ -3,11 +3,13 @@ import { config } from "./config.js";
 import { discoverFeed } from "../adapters/feed.js";
 import { parseNextLink } from "../adapters/github.js";
 import { detectProvider, type DetectedProvider } from "./providers.js";
+import { getAnthropicClient } from "../ai/client.js";
+import { logUsage } from "./usage.js";
 
 // ── Types ────────────────────────────────────────────────────────────
 
 export type DiscoveredType = "github" | "feed" | "scrape";
-export type DiscoveryMethod = "sitemap" | "well-known" | "feed" | "html-link" | "github-api" | "provider-hint";
+export type DiscoveryMethod = "sitemap" | "feed" | "html-link" | "github-api" | "provider-hint" | "ai-verified" | "ai-suggested";
 export type Confidence = "high" | "medium" | "low";
 
 export interface DiscoveredSource {
@@ -16,7 +18,7 @@ export interface DiscoveredSource {
   method: DiscoveryMethod;
   confidence: Confidence;
   label?: string;
-  provider?: string; // detected hosting provider id (e.g. "mintlify", "readme")
+  provider?: string;
 }
 
 export interface DiscoverResult {
@@ -27,33 +29,21 @@ export interface DiscoverResult {
 export interface DiscoverOptions {
   domain?: string;
   githubHandle?: string;
+  verify?: boolean;
 }
 
 // ── Changelog URL patterns ───────────────────────────────────────────
 
+// Patterns that indicate a changelog/release-notes page.
+// These match against URL path segments — use word boundaries or path-segment
+// anchors to avoid false positives on unrelated URLs like /rest-api/updates-*.
 const CHANGELOG_PATTERNS = [
-  /changelog/i,
-  /releases/i,
-  /updates/i,
-  /whats-new/i,
-  /what-s-new/i,
-  /release-notes/i,
-  /announcements/i,
+  /\/changelog(\/|$)/i,
+  /\/releases(\/|$)/i,
+  /\/whats-new(\/|$)/i,
+  /\/what-s-new(\/|$)/i,
+  /\/release-notes(\/|$)/i,
 ];
-
-const WELL_KNOWN_CHANGELOG_PATHS = [
-  "/changelog",
-  "/releases",
-  "/updates",
-  "/whats-new",
-  "/blog/changelog",
-  "/blog/releases",
-  "/docs/releases",
-  "/docs/changelog",
-  "/release-notes",
-];
-
-const SUBDOMAIN_PREFIXES = ["docs", "developers", "status", "support", "help"];
 
 function matchesChangelogPattern(url: string): boolean {
   return CHANGELOG_PATTERNS.some((re) => re.test(url));
@@ -111,13 +101,11 @@ function isSitemapIndex(xml: string): boolean {
 async function discoverFromSitemap(origin: string): Promise<DiscoveredSource[]> {
   const results: DiscoveredSource[] = [];
 
-  // Step 1: Find sitemap URLs from robots.txt
   const robotsTxt = await fetchText(`${origin}/robots.txt`);
   const sitemapUrls = robotsTxt
     ? parseSitemapUrlsFromRobots(robotsTxt, origin)
     : [`${origin}/sitemap.xml`];
 
-  // Step 2: Fetch and parse sitemaps (handle indexes)
   const allPageUrls: string[] = [];
 
   for (const sitemapUrl of sitemapUrls) {
@@ -125,7 +113,6 @@ async function discoverFromSitemap(origin: string): Promise<DiscoveredSource[]> 
     if (!xml) continue;
 
     if (isSitemapIndex(xml)) {
-      // It's a sitemap index — fetch child sitemaps in parallel
       const childUrls = extractLocsFromSitemap(xml);
       const childResults = await Promise.allSettled(
         childUrls.slice(0, 10).map((u) => fetchText(u)),
@@ -140,24 +127,64 @@ async function discoverFromSitemap(origin: string): Promise<DiscoveredSource[]> 
     }
   }
 
-  // Step 3: Filter for changelog-like URLs (cap to avoid processing huge sitemaps)
+  // Cap to avoid processing huge sitemaps
   const capped = allPageUrls.length > 50_000 ? allPageUrls.slice(0, 50_000) : allPageUrls;
-  for (const url of capped) {
-    if (matchesChangelogPattern(url)) {
+  const matchingUrls = capped.filter(matchesChangelogPattern);
+
+  // Collapse individual entries to their parent directory.
+  // If /changelog/2024-01-foo and /changelog/2024-02-bar both match,
+  // return /changelog (the index) instead of every individual entry.
+  // If /blog/changelog-april-2020 and /blog/changelog-may-2020 match,
+  // return /blog as a candidate too.
+  const dirCounts = new Map<string, number>();
+  for (const url of matchingUrls) {
+    try {
+      const parsed = new URL(url);
+      const lastSlash = parsed.pathname.lastIndexOf("/");
+      const dir = lastSlash > 0 ? parsed.pathname.slice(0, lastSlash) : parsed.pathname;
+      const dirUrl = `${parsed.origin}${dir}`;
+      dirCounts.set(dirUrl, (dirCounts.get(dirUrl) ?? 0) + 1);
+    } catch { /* skip */ }
+  }
+
+  // Emit collapsed parent directories (strong signal: multiple entries)
+  const collapsedDirs = new Set<string>();
+  for (const [dirUrl, count] of dirCounts) {
+    if (count >= 2) {
       results.push({
-        url,
+        url: dirUrl,
         type: "scrape",
         method: "sitemap",
         confidence: "high",
-        label: extractPathLabel(url),
+        label: `${extractPathLabel(dirUrl)} (${count} entries in sitemap)`,
       });
+      collapsedDirs.add(dirUrl);
     }
+  }
+
+  // Only include individual URLs that weren't collapsed into a parent
+  for (const url of matchingUrls) {
+    try {
+      const parsed = new URL(url);
+      const lastSlash = parsed.pathname.lastIndexOf("/");
+      const dir = lastSlash > 0 ? parsed.pathname.slice(0, lastSlash) : parsed.pathname;
+      const dirUrl = `${parsed.origin}${dir}`;
+      if (!collapsedDirs.has(dirUrl)) {
+        results.push({
+          url,
+          type: "scrape",
+          method: "sitemap",
+          confidence: "high",
+          label: extractPathLabel(url),
+        });
+      }
+    } catch { /* skip */ }
   }
 
   return dedup(results);
 }
 
-// ── Well-known path probing ──────────────────────────────────────────
+// ── Feed probing helper ──────────────────────────────────────────────
 
 async function probeUrl(url: string): Promise<boolean> {
   try {
@@ -172,7 +199,6 @@ async function probeUrl(url: string): Promise<boolean> {
     clearTimeout(timer);
     if (!res.ok) return false;
     const ct = res.headers.get("content-type") ?? "";
-    // Accept HTML pages, JSON, and feed MIME types (for provider-hint feed probes)
     return ct.includes("text/html")
       || ct.includes("application/json")
       || ct.includes("xml")
@@ -183,59 +209,6 @@ async function probeUrl(url: string): Promise<boolean> {
   }
 }
 
-async function discoverFromWellKnownPaths(
-  origin: string,
-  provider: DetectedProvider | null,
-): Promise<DiscoveredSource[]> {
-  const results: DiscoveredSource[] = [];
-
-  // Build candidate URLs: root domain + subdomains
-  const candidates: string[] = [];
-  const allPaths = [...WELL_KNOWN_CHANGELOG_PATHS];
-
-  // Add provider-specific changelog paths
-  if (provider?.hints.changelogPaths) {
-    for (const path of provider.hints.changelogPaths) {
-      if (!allPaths.includes(path)) allPaths.push(path);
-    }
-  }
-
-  for (const path of allPaths) {
-    candidates.push(`${origin}${path}`);
-  }
-
-  const host = new URL(origin).hostname;
-  for (const prefix of SUBDOMAIN_PREFIXES) {
-    const subOrigin = `https://${prefix}.${host}`;
-    for (const path of ["/changelog", "/releases", "/updates", "/whats-new"]) {
-      candidates.push(`${subOrigin}${path}`);
-    }
-  }
-
-  // Probe all in parallel
-  const probeResults = await Promise.allSettled(
-    candidates.map(async (url) => ({ url, ok: await probeUrl(url) })),
-  );
-
-  for (const r of probeResults) {
-    if (r.status === "fulfilled" && r.value.ok) {
-      const isProviderHint = provider?.hints.changelogPaths?.some((p) =>
-        r.value.url.endsWith(p),
-      );
-      results.push({
-        url: r.value.url,
-        type: provider?.hints.preferredType ?? "scrape",
-        method: isProviderHint ? "provider-hint" : "well-known",
-        confidence: isProviderHint ? "high" : "medium",
-        label: extractPathLabel(r.value.url),
-        provider: provider?.id,
-      });
-    }
-  }
-
-  return results;
-}
-
 // ── Feed discovery ───────────────────────────────────────────────────
 
 async function discoverFeeds(
@@ -244,7 +217,6 @@ async function discoverFeeds(
 ): Promise<DiscoveredSource[]> {
   const results: DiscoveredSource[] = [];
 
-  // Try feed discovery on the root and known changelog paths
   const urlsToProbe = [
     origin,
     `${origin}/changelog`,
@@ -275,11 +247,9 @@ async function discoverFeeds(
   if (provider?.hints.feedPaths) {
     const providerProbes = await Promise.allSettled(
       provider.hints.feedPaths.map(async (feedPath) => {
-        // Try the feed path on root and on /changelog
         const bases = [origin, `${origin}/changelog`];
         for (const base of bases) {
           const feedUrl = `${base.replace(/\/$/, "")}${feedPath}`;
-          // Skip if already found
           if (results.some((r) => r.url === feedUrl)) continue;
           const ok = await probeUrl(feedUrl);
           if (ok) return { feedUrl, feedPath };
@@ -313,7 +283,6 @@ async function discoverFromHtmlLinks(origin: string): Promise<DiscoveredSource[]
   const html = await fetchText(origin);
   if (!html) return results;
 
-  // Extract <a> tags with changelog-related hrefs or text
   const linkRe = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let match;
   const seen = new Set<string>();
@@ -332,7 +301,6 @@ async function discoverFromHtmlLinks(origin: string): Promise<DiscoveredSource[]
       if (seen.has(resolved)) continue;
       seen.add(resolved);
 
-      // Only include links to the same domain or subdomains
       const linkHost = new URL(resolved).hostname;
       const originHost = new URL(origin).hostname;
       if (!linkHost.endsWith(originHost) && !originHost.endsWith(linkHost)) continue;
@@ -377,7 +345,6 @@ async function discoverFromGitHub(handle: string): Promise<DiscoveredSource[]> {
     }
 
     if (res.status === 404) {
-      // Try as a user instead
       if (url.includes("/orgs/")) {
         url = `https://api.github.com/users/${handle}/repos?per_page=100&sort=updated&direction=desc`;
         continue;
@@ -398,7 +365,6 @@ async function discoverFromGitHub(handle: string): Promise<DiscoveredSource[]> {
       archived: boolean;
     }> = await res.json();
 
-    // Check which repos have releases
     const releaseChecks = await Promise.allSettled(
       repos
         .filter((r) => !r.fork && !r.archived)
@@ -427,8 +393,157 @@ async function discoverFromGitHub(handle: string): Promise<DiscoveredSource[]> {
 
     url = parseNextLink(res.headers.get("link"));
 
-    // Cap at 300 repos to avoid excessive API calls
     if (results.length >= 300) break;
+  }
+
+  return results;
+}
+
+// ── AI verification ──────────────────────────────────────────────────
+
+const VERIFY_TOOL = {
+  name: "report_results" as const,
+  description: "Report which candidate URLs are valid changelog pages and suggest any additional changelog URLs discovered.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      verified: {
+        type: "array" as const,
+        description: "Candidate URLs confirmed to be changelog or release note pages",
+        items: {
+          type: "object" as const,
+          properties: {
+            url: { type: "string" as const },
+            label: { type: "string" as const, description: "Brief description of what this page contains" },
+          },
+          required: ["url", "label"],
+        },
+      },
+      rejected: {
+        type: "array" as const,
+        description: "Candidate URLs that are NOT changelog pages (404, homepage redirect, unrelated content)",
+        items: {
+          type: "object" as const,
+          properties: {
+            url: { type: "string" as const },
+            reason: { type: "string" as const },
+          },
+          required: ["url", "reason"],
+        },
+      },
+      suggested: {
+        type: "array" as const,
+        description: "Additional changelog/release-note URLs discovered that were not in the candidate list",
+        items: {
+          type: "object" as const,
+          properties: {
+            url: { type: "string" as const },
+            type: { type: "string" as const, enum: ["feed", "scrape"] },
+            label: { type: "string" as const },
+          },
+          required: ["url", "type", "label"],
+        },
+      },
+    },
+    required: ["verified", "rejected", "suggested"],
+  },
+};
+
+async function verifyWithAI(
+  candidates: DiscoveredSource[],
+  domain: string,
+  provider: DetectedProvider | null,
+): Promise<DiscoveredSource[]> {
+  const client = getAnthropicClient();
+
+  const candidateList = candidates.map((c) =>
+    `- ${c.url} (found via ${c.method}, type: ${c.type}${c.label ? `, label: ${c.label}` : ""})`
+  ).join("\n");
+
+  const providerNote = provider
+    ? `\nThe site appears to use ${provider.name} as its documentation/content platform.`
+    : "";
+
+  const response = await client.messages.create({
+    model: config.ingestModel(),
+    max_tokens: 4096,
+    system: [
+      "You verify whether candidate URLs are actual changelog or release-note pages.",
+      "For each candidate URL, determine if it is a real changelog/release-notes page or a false positive (404, redirect to homepage, unrelated content).",
+      "Also look for changelog URLs that the automated discovery may have missed — check common patterns like support sites, blog posts tagged as releases, or documentation subdomains.",
+      "Be thorough but only suggest URLs you are confident exist based on the domain structure and provider type.",
+    ].join("\n"),
+    tools: [VERIFY_TOOL],
+    tool_choice: { type: "tool", name: "report_results" },
+    messages: [
+      {
+        role: "user",
+        content: [
+          `Domain: ${domain}${providerNote}`,
+          "",
+          candidates.length > 0 ? `Candidate URLs to verify:\n${candidateList}` : "No candidates were found by automated discovery.",
+          "",
+          "Please verify each candidate and suggest any additional changelog/release-note URLs for this domain that automated discovery may have missed.",
+          "Consider: support sites (support.domain.com), documentation sites (docs.domain.com), blog release categories, and known provider patterns.",
+        ].join("\n"),
+      },
+    ],
+  });
+
+  await logUsage({
+    operation: "discover-verify",
+    model: config.ingestModel(),
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const toolBlock = response.content.find((block) => block.type === "tool_use");
+  if (!toolBlock || toolBlock.type !== "tool_use") {
+    logger.warn("AI verification did not return tool results — returning candidates as-is");
+    return candidates;
+  }
+
+  const input = toolBlock.input as {
+    verified?: Array<{ url: string; label: string }>;
+    rejected?: Array<{ url: string; reason: string }>;
+    suggested?: Array<{ url: string; type: string; label: string }>;
+  };
+
+  // Build verified set from AI response
+  const verifiedUrls = new Set((input.verified ?? []).map((v) => v.url));
+  const verifiedLabels = new Map((input.verified ?? []).map((v) => [v.url, v.label]));
+
+  // Log rejections
+  for (const r of input.rejected ?? []) {
+    logger.info(`Rejected: ${r.url} — ${r.reason}`);
+  }
+
+  // Keep only verified candidates, upgrade their confidence
+  const results: DiscoveredSource[] = [];
+
+  for (const candidate of candidates) {
+    if (verifiedUrls.has(candidate.url)) {
+      results.push({
+        ...candidate,
+        confidence: "high",
+        method: "ai-verified",
+        label: verifiedLabels.get(candidate.url) ?? candidate.label,
+      });
+    }
+  }
+
+  // Add AI-suggested URLs
+  for (const suggestion of input.suggested ?? []) {
+    // Skip if already in results
+    if (results.some((r) => r.url === suggestion.url)) continue;
+
+    results.push({
+      url: suggestion.url,
+      type: suggestion.type === "feed" ? "feed" : "scrape",
+      method: "ai-suggested",
+      confidence: "medium",
+      label: suggestion.label,
+    });
   }
 
   return results;
@@ -454,6 +569,25 @@ function dedup(sources: DiscoveredSource[]): DiscoveredSource[] {
     }
   }
   return Array.from(seen.values());
+}
+
+/** Remove URLs that are children of other discovered URLs.
+ *  e.g., if /changelog is in the list, drop /changelog/2024-01-foo */
+function collapseChildren(sources: DiscoveredSource[]): DiscoveredSource[] {
+  const urls = new Set(sources.map((s) => s.url));
+  return sources.filter((s) => {
+    try {
+      const parsed = new URL(s.url);
+      // Walk up the path to check if any parent is also in the result set
+      const segments = parsed.pathname.split("/").filter(Boolean);
+      for (let i = segments.length - 1; i >= 1; i--) {
+        const parentPath = "/" + segments.slice(0, i).join("/");
+        const parentUrl = `${parsed.origin}${parentPath}`;
+        if (urls.has(parentUrl) && parentUrl !== s.url) return false;
+      }
+    } catch { /* keep */ }
+    return true;
+  });
 }
 
 function confidenceRank(c: Confidence): number {
@@ -483,15 +617,14 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
       logger.info(`Detected provider: ${provider.name}`);
     }
 
-    // Run all domain-based discovery methods in parallel
-    const [sitemapResults, wellKnownResults, feedResults, htmlResults] = await Promise.allSettled([
+    // Run evidence-based discovery methods in parallel
+    const [sitemapResults, feedResults, htmlResults] = await Promise.allSettled([
       discoverFromSitemap(origin),
-      discoverFromWellKnownPaths(origin, provider),
       discoverFeeds(origin, provider),
       discoverFromHtmlLinks(origin),
     ]);
 
-    for (const r of [sitemapResults, wellKnownResults, feedResults, htmlResults]) {
+    for (const r of [sitemapResults, feedResults, htmlResults]) {
       if (r.status === "fulfilled") all.push(...r.value);
     }
 
@@ -509,9 +642,21 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
     all.push(...ghResults);
   }
 
-  // Deduplicate and sort by confidence then method
-  const deduped = dedup(all);
+  // Deduplicate, collapse children, and sort by confidence
+  let deduped = collapseChildren(dedup(all));
   deduped.sort((a, b) => confidenceRank(b.confidence) - confidenceRank(a.confidence));
+
+  // AI verification pass — validates candidates and suggests additional URLs
+  if (options.verify && options.domain) {
+    logger.info("Verifying results with AI...");
+    try {
+      deduped = await verifyWithAI(deduped, options.domain, provider);
+      deduped = dedup(deduped);
+      deduped.sort((a, b) => confidenceRank(b.confidence) - confidenceRank(a.confidence));
+    } catch (err) {
+      logger.warn(`AI verification failed, returning unverified results: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
 
   return { sources: deduped, provider };
 }
