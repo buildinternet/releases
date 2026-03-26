@@ -42,9 +42,10 @@ export function registerFetchCommand(program: Command) {
     .option("--crawl", "Enable crawl mode for multi-page changelogs (scrape sources only, persists)")
     .option("--no-crawl", "One-off override to skip crawl mode for this invocation")
     .option("--crawl-pattern <pattern>", "URL pattern to scope crawl (e.g. https://example.com/changelog/*)")
+    .option("--force", "Delete existing releases for the source before fetching (clean re-fetch)")
     .action(async (slug: string | undefined, opts: {
       json?: boolean; since?: string; max?: string; all?: boolean;
-      crawl?: boolean; crawlPattern?: string;
+      crawl?: boolean; crawlPattern?: string; force?: boolean;
     }) => {
       const db = getDb();
 
@@ -79,9 +80,11 @@ export function registerFetchCommand(program: Command) {
         fetchOptions.maxEntries = parseInt(opts.max ?? "100", 10);
       }
 
-      for (const source of targetSources) {
+      for (let source of targetSources) {
         const adapter = getAdapter(source.type);
         if (!adapter) continue;
+
+        let sourceModified = false;
 
         // Handle --crawl flag: persist on scrape sources, warn on others
         if (opts.crawl === true && source.type !== "scrape") {
@@ -96,11 +99,27 @@ export function registerFetchCommand(program: Command) {
             crawlEnabled: true,
             crawlPattern: pattern,
           });
-          // Clear stale content hash to prevent it from suppressing single-page fallback
           await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+          sourceModified = true;
           if (!opts.json) {
             logger.info(`Crawl mode enabled for ${source.name} (pattern: ${pattern})`);
           }
+        }
+
+        // --force: delete existing releases for a clean re-fetch
+        if (opts.force) {
+          const deleted = await db.delete(releases).where(eq(releases.sourceId, source.id)).returning();
+          if (!opts.json && deleted.length > 0) {
+            logger.info(`Cleared ${deleted.length} existing release(s) for ${source.name}`);
+          }
+          await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+          sourceModified = true;
+        }
+
+        // Reload source from DB if we modified metadata/columns so the adapter sees fresh data
+        if (sourceModified) {
+          const [reloaded] = await db.select().from(sources).where(eq(sources.id, source.id));
+          if (reloaded) source = reloaded;
         }
 
         // Pass crawl override to adapter

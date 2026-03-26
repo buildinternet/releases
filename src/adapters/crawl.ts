@@ -51,14 +51,17 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
     url,
     formats: ["markdown"],
     rejectResourceTypes: ["image", "media", "font", "stylesheet"],
+    // Declare crawl purposes per Cloudflare Content Signals policy.
+    // "search" and "ai_input" — we index changelogs for search and AI summarization.
+    // Explicitly excludes "ai_training" to respect site operator preferences.
+    crawlPurposes: ["search", "ai-input"],
   };
 
   if (options.includePatterns?.length) {
     body.options = { includePatterns: options.includePatterns };
   }
-  if (options.limit) {
-    body.limit = options.limit;
-  }
+  body.limit = options.limit ?? 50;
+  body.depth = 2; // Follow links one level deep from the starting page
   if (options.modifiedSince) {
     body.modifiedSince = options.modifiedSince;
   }
