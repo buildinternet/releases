@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, organizations, orgAccounts } from "../../db/schema.js";
-import { findOrg } from "../../db/queries.js";
+import { findOrg, findIgnoredUrl } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { discoverFeed } from "../../adapters/feed.js";
@@ -95,8 +95,9 @@ interface AddSourceResult {
   type: string;
   url: string;
   org?: string;
-  status: "added" | "error";
+  status: "added" | "error" | "ignored";
   error?: string;
+  reason?: string;
 }
 
 async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> {
@@ -205,6 +206,13 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
     }
   }
 
+  // Check if URL is on the ignore list before inserting
+  const ignoredEntry = await findIgnoredUrl(url);
+  if (ignoredEntry) {
+    logger.warn(`Skipping ignored URL: ${url}${ignoredEntry.reason ? ` (${ignoredEntry.reason})` : ""}`);
+    return { name, slug, type: sourceType, url, org: orgName ?? undefined, status: "ignored", reason: ignoredEntry.reason ?? undefined };
+  }
+
   try {
     await db.insert(sources).values({
       name,
@@ -276,6 +284,10 @@ export function registerAddCommand(program: Command) {
             hasError = true;
             if (!opts.json) {
               logger.error(chalk.red(`Failed to add ${result.name}: ${result.error}`));
+            }
+          } else if (result.status === "ignored") {
+            if (!opts.json) {
+              logger.info(chalk.yellow(`Skipped (ignored): ${result.name} (${result.url})${result.reason ? ` — ${result.reason}` : ""}`));
             }
           } else if (!opts.json) {
             const orgLabel = result.org ? ` [org: ${result.org}]` : "";
