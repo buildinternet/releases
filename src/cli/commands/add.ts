@@ -1,14 +1,22 @@
 import { Command } from "commander";
 import chalk from "chalk";
+import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { sources } from "../../db/schema.js";
+import { sources, organizations, orgAccounts } from "../../db/schema.js";
+import { findOrg } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
+import { logger } from "../../lib/logger.js";
 
 const VALID_TYPES = ["github", "scrape"] as const;
 type SourceType = (typeof VALID_TYPES)[number];
 
 function isValidType(t: string): t is SourceType {
   return (VALID_TYPES as readonly string[]).includes(t);
+}
+
+function parseGitHubOwner(url: string): string | null {
+  const match = url.match(/github\.com\/([^/]+)\//);
+  return match ? match[1] : null;
 }
 
 export function registerAddCommand(program: Command) {
@@ -19,7 +27,8 @@ export function registerAddCommand(program: Command) {
     .requiredOption("--type <type>", "Source type: github or scrape")
     .requiredOption("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
-    .action(async (name: string, opts: { type: string; url: string; slug?: string }) => {
+    .option("--org <org>", "Organization name or slug (creates if not found)")
+    .action(async (name: string, opts: { type: string; url: string; slug?: string; org?: string }) => {
       if (!isValidType(opts.type)) {
         console.error(chalk.red(`Invalid type "${opts.type}". Must be one of: ${VALID_TYPES.join(", ")}`));
         process.exit(1);
@@ -27,14 +36,54 @@ export function registerAddCommand(program: Command) {
 
       const slug = opts.slug ?? toSlug(name);
       const db = getDb();
+      let orgId: string | null = null;
+
+      // Resolve or create org if --org provided
+      if (opts.org) {
+        let org = await findOrg(opts.org);
+        if (!org) {
+          const orgSlug = toSlug(opts.org);
+          org = await findOrg(orgSlug);
+          if (!org) {
+            const now = new Date().toISOString();
+            const [created] = await db.insert(organizations).values({
+              name: opts.org,
+              slug: orgSlug,
+              createdAt: now,
+              updatedAt: now,
+            }).returning();
+            org = created;
+            logger.info(`Created organization: ${org.name} (${org.slug})`);
+          }
+        }
+        orgId = org.id;
+      }
+
+      // Auto-association for GitHub sources (only if no --org specified)
+      if (!opts.org && opts.type === "github") {
+        const owner = parseGitHubOwner(opts.url);
+        if (owner) {
+          const [account] = await db
+            .select()
+            .from(orgAccounts)
+            .where(and(eq(orgAccounts.platform, "github"), eq(orgAccounts.handle, owner)));
+          if (account) {
+            orgId = account.orgId;
+            const org = await findOrg(account.orgId);
+            logger.info(`Auto-linked to organization "${org?.name ?? account.orgId}"`);
+          }
+        }
+      }
 
       await db.insert(sources).values({
         name,
         slug,
         type: opts.type,
         url: opts.url,
+        orgId,
       });
 
-      console.log(chalk.green(`Source added: ${name} (${slug})`));
+      const orgLabel = orgId ? ` [org: ${opts.org}]` : "";
+      console.log(chalk.green(`Source added: ${name} (${slug})${orgLabel}`));
     });
 }
