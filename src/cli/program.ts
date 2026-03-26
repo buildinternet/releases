@@ -14,6 +14,9 @@ import { registerOrgCommand } from "./commands/org.js";
 import { registerDiscoverCommand } from "./commands/discover.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerApiCommand } from "./commands/api.js";
+import { registerReleaseCommand } from "./commands/release.js";
+import { registerCheckCommand } from "./commands/check.js";
+import { registerFetchLogCommand } from "./commands/fetch-log.js";
 
 export const program = new Command()
   .name("released")
@@ -35,3 +38,6 @@ registerOrgCommand(program);
 registerDiscoverCommand(program);
 registerStatsCommand(program);
 registerApiCommand(program);
+registerReleaseCommand(program);
+registerCheckCommand(program);
+registerFetchLogCommand(program);

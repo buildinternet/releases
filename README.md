@@ -165,6 +165,51 @@ Claude Desktop config:
 | `compare_products` | AI comparison between two products |
 | `list_products` | List all tracked sources |
 | `list_organizations` | List all organizations with their linked sources |
+| `add_source` | Add a new changelog source |
+| `remove_source` | Remove a source and its releases |
+| `fetch_source` | Trigger a fetch for one or all sources |
+| `add_organization` | Create a new organization |
+| `link_account` | Link a platform account to an organization |
+
+### Release Management
+
+View, edit, and delete individual releases:
+
+```bash
+released release show rel_abc123               # view full release details
+released release show rel_abc123 --json        # machine-readable output
+
+released release edit rel_abc123 --title "Fixed title" --version "v2.0.1"
+released release edit rel_abc123 --content "Updated content"   # recomputes contentHash
+
+released release delete rel_abc123             # delete by ID
+released release delete --source next-js       # delete all releases for a source
+released release delete --source next-js --before 2025-01-01
+released release delete --before 2024-01-01    # prune old releases across all sources
+```
+
+### Source Health Checks
+
+Probe source URLs to check availability and detect issues:
+
+```bash
+released check             # check all sources
+released check next-js     # check one source
+released check --json      # machine-readable output
+```
+
+Reports HTTP status, response time, and health classification (`healthy`, `degraded`, `error`). For feed sources, also probes the feed URL.
+
+### Fetch History
+
+View recent fetch activity:
+
+```bash
+released fetch-log                   # recent fetch logs across all sources
+released fetch-log next-js           # logs for one source
+released fetch-log --limit 50        # more entries
+released fetch-log --json            # machine-readable output
+```
 
 ### Statistics
 

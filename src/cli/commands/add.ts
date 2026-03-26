@@ -15,7 +15,7 @@ function isValidType(t: string): t is SourceType {
   return (VALID_TYPES as readonly string[]).includes(t);
 }
 
-function isGitHubUrl(url: string): boolean {
+export function isGitHubUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?github\.com\/[^/]+\/[^/]+/.test(url);
 }
 
