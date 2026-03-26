@@ -18,7 +18,8 @@ Add an `organizations` concept that groups sources under a company identity. Org
 | `name`      | TEXT   | NOT NULL                 |
 | `slug`      | TEXT   | NOT NULL, UNIQUE         |
 | `domain`    | TEXT   | UNIQUE (when non-null)   |
-| `created_at`| TEXT   | NOT NULL                 |
+| `created_at` | TEXT   | NOT NULL                 |
+| `updated_at` | TEXT   | NOT NULL                 |
 
 ### `org_accounts` table
 
