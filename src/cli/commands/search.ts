@@ -16,7 +16,8 @@ export function registerSearchCommand(program: Command) {
     .option("--json", "Output as JSON")
     .action(async (query: string, opts: { limit: string; org?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
-      const results = searchReleases(query, limit);
+      const fetchLimit = opts.org ? limit * 5 : limit;
+      const results = searchReleases(query, fetchLimit);
 
       if (results.length === 0) {
         if (opts.json) {

@@ -15,7 +15,7 @@ function isValidType(t: string): t is SourceType {
 }
 
 function parseGitHubOwner(url: string): string | null {
-  const match = url.match(/github\.com\/([^/]+)\//);
+  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
   return match ? match[1] : null;
 }
 
@@ -37,26 +37,25 @@ export function registerAddCommand(program: Command) {
       const slug = opts.slug ?? toSlug(name);
       const db = getDb();
       let orgId: string | null = null;
+      let orgName: string | null = null;
 
       // Resolve or create org if --org provided
       if (opts.org) {
         let org = await findOrg(opts.org);
         if (!org) {
           const orgSlug = toSlug(opts.org);
-          org = await findOrg(orgSlug);
-          if (!org) {
-            const now = new Date().toISOString();
-            const [created] = await db.insert(organizations).values({
-              name: opts.org,
-              slug: orgSlug,
-              createdAt: now,
-              updatedAt: now,
-            }).returning();
-            org = created;
-            logger.info(`Created organization: ${org.name} (${org.slug})`);
-          }
+          const now = new Date().toISOString();
+          const [created] = await db.insert(organizations).values({
+            name: opts.org,
+            slug: orgSlug,
+            createdAt: now,
+            updatedAt: now,
+          }).returning();
+          org = created;
+          logger.info(`Created organization: ${org.name} (${org.slug})`);
         }
         orgId = org.id;
+        orgName = org.name;
       }
 
       // Auto-association for GitHub sources (only if no --org specified)
@@ -64,13 +63,14 @@ export function registerAddCommand(program: Command) {
         const owner = parseGitHubOwner(opts.url);
         if (owner) {
           const [account] = await db
-            .select()
+            .select({ orgId: orgAccounts.orgId, orgName: organizations.name })
             .from(orgAccounts)
+            .innerJoin(organizations, eq(orgAccounts.orgId, organizations.id))
             .where(and(eq(orgAccounts.platform, "github"), eq(orgAccounts.handle, owner)));
           if (account) {
             orgId = account.orgId;
-            const org = await findOrg(account.orgId);
-            logger.info(`Auto-linked to organization "${org?.name ?? account.orgId}"`);
+            orgName = account.orgName;
+            logger.info(`Auto-linked to organization "${orgName}"`);
           }
         }
       }
@@ -83,7 +83,7 @@ export function registerAddCommand(program: Command) {
         orgId,
       });
 
-      const orgLabel = orgId ? ` [org: ${opts.org}]` : "";
+      const orgLabel = orgName ? ` [org: ${orgName}]` : "";
       console.log(chalk.green(`Source added: ${name} (${slug})${orgLabel}`));
     });
 }

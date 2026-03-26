@@ -1,4 +1,4 @@
-import { eq, desc, gte, and, sql } from "drizzle-orm";
+import { eq, desc, gte, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import {
   sources, releases, organizations, orgAccounts,
@@ -103,9 +103,13 @@ export async function listOrgs(opts?: {
     allOrgs = allOrgs.filter((o) => orgIdSet.has(o.id));
   }
 
-  if (opts?.query) {
+  if (opts?.query && allOrgs.length > 0) {
     const q = opts.query.toLowerCase();
-    const accounts = await db.select().from(orgAccounts);
+    const orgIds = allOrgs.map((o) => o.id);
+    const accounts = await db
+      .select()
+      .from(orgAccounts)
+      .where(inArray(orgAccounts.orgId, orgIds));
     const orgIdsWithMatchingHandle = new Set(
       accounts
         .filter((a) => a.handle.toLowerCase().includes(q))
