@@ -51,20 +51,22 @@ You have access to the Released CLI at: ${cliCmd}
 
 Available commands:
 - list: Show all indexed sources (use --json for machine-readable output)
+- ignore list --json: Show all ignored URLs (these will never be re-added)
 - discover <domain>: Probe a domain for changelog URLs, feeds, and GitHub repos
 - add <url> --name <name> --type <type>: Add a new source (types: github, scrape, feed)
 - add --batch <file>: Add multiple sources from a JSON file (array of {url, name, type})
 - fetch <slug> --dry-run: Test fetching a source without persisting
-- remove <slug1> <slug2> ...: Remove sources by slug
+- remove <slug1> <slug2> ... --ignore --reason <reason>: Remove sources and add their URLs to the ignore list
 
 Your workflow:
+0. Check ignored URLs with "ignore list --json" — skip any URLs that appear in the ignore list
 1. Check what sources already exist with "list --json"
 2. Use web search to find the company's main website, changelog pages, and GitHub organization
 3. Use "discover" on the company's domain to find changelog surfaces
 4. For any promising URLs found via search or discover, add them as sources
 5. Use batch operations ("add --batch") when adding multiple sources at once — write the JSON array to a temp file, then pass it
 6. Delegate validation to the "source-validator" subagent for each source (it runs "fetch --dry-run" and evaluates results)
-7. Remove sources that don't extract well or are duplicates of better sources
+7. Remove sources that don't extract well or are duplicates using "remove <slug> --ignore --reason <reason>" so they won't be re-discovered
 8. Report your findings
 
 When WebFetch returns empty or skeleton content (JS-rendered pages), use the render_markdown MCP tool to get the fully-rendered content.
