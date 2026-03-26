@@ -166,11 +166,13 @@ export function registerStatsCommand(program: Command) {
           ],
         });
         for (const f of recentFetches) {
-          const statusLabel = f.status === "success"
-            ? chalk.green("success")
-            : f.status === "error"
-              ? chalk.red("error")
-              : chalk.dim("no change");
+          const statusLabel = f.status === "dry_run"
+            ? chalk.magenta("dry run")
+            : f.status === "success"
+              ? chalk.green("success")
+              : f.status === "error"
+                ? chalk.red("error")
+                : chalk.dim("no change");
           activityTable.push([
             f.sourceName,
             f.orgName ?? chalk.dim("—"),

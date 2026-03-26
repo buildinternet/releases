@@ -72,11 +72,13 @@ export function registerFetchLogCommand(program: Command) {
       });
 
       for (const log of logs) {
-        const statusLabel = log.status === "success"
-          ? chalk.green("success")
-          : log.status === "error"
-            ? chalk.red("error")
-            : chalk.dim("no change");
+        const statusLabel = log.status === "dry_run"
+          ? chalk.magenta("dry run")
+          : log.status === "success"
+            ? chalk.green("success")
+            : log.status === "error"
+              ? chalk.red("error")
+              : chalk.dim("no change");
 
         const errorText = log.error
           ? chalk.red(log.error.length > 40 ? log.error.slice(0, 40) + "..." : log.error)

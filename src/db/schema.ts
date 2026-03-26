@@ -85,7 +85,7 @@ export const fetchLog = sqliteTable("fetch_log", {
   releasesFound: integer("releases_found").notNull(),
   releasesInserted: integer("releases_inserted").notNull(),
   durationMs: integer("duration_ms"),
-  status: text("status", { enum: ["success", "error", "no_change"] }).notNull(),
+  status: text("status", { enum: ["success", "error", "no_change", "dry_run"] }).notNull(),
   error: text("error"),
   rawContent: text("raw_content"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),

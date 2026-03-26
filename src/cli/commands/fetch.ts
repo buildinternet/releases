@@ -206,10 +206,20 @@ export function registerFetchCommand(program: Command) {
             return;
           }
 
-          // ── Dry-run: show results without writing to DB ──────────
+          // ── Dry-run: show results without writing releases to DB ──
           if (opts.dryRun) {
             fetchResults.push({ source: source.name, newReleases: rawReleases.length });
             totalInserted += rawReleases.length;
+
+            // Log to fetch_log with dry_run status so stats shows it correctly
+            await db.insert(fetchLog).values({
+              sourceId: source.id,
+              releasesFound: rawReleases.length,
+              releasesInserted: 0,
+              durationMs: Math.round(performance.now() - startTime),
+              status: "dry_run",
+              rawContent: rawContent ?? null,
+            });
 
             if (!opts.json) {
               console.log(chalk.bold(`\n${source.name}: ${rawReleases.length} release(s) found ${chalk.dim(`(${elapsedSec(startTime)}s)`)}\n`));
