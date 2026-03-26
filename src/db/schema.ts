@@ -1,7 +1,8 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import { newSourceId, newReleaseId } from "../lib/id.js";
 
 export const sources = sqliteTable("sources", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
+  id: text("id").primaryKey().$defaultFn(newSourceId),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   type: text("type", { enum: ["github", "scrape"] }).notNull(),
@@ -15,8 +16,8 @@ export const sources = sqliteTable("sources", {
 export const releases = sqliteTable(
   "releases",
   {
-    id: integer("id").primaryKey({ autoIncrement: true }),
-    sourceId: integer("source_id")
+    id: text("id").primaryKey().$defaultFn(newReleaseId),
+    sourceId: text("source_id")
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
     version: text("version"),
@@ -39,12 +40,12 @@ export const releases = sqliteTable(
 
 export const usageLog = sqliteTable("usage_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),
-  operation: text("operation").notNull(), // e.g. "ingest", "summarize", "compare"
+  operation: text("operation").notNull(),
   model: text("model").notNull(),
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
-  sourceSlug: text("source_slug"), // nullable — which source this was for
-  releaseCount: integer("release_count"), // how many releases were involved
+  sourceSlug: text("source_slug"),
+  releaseCount: integer("release_count"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 

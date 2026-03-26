@@ -9,7 +9,7 @@ export async function findSourceBySlug(slug: string): Promise<Source | null> {
 }
 
 export async function getRecentReleases(
-  sourceId: number,
+  sourceId: string,
   cutoffIso: string,
 ): Promise<Release[]> {
   const db = getDb();

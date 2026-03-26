@@ -73,7 +73,7 @@ server.registerTool("get_latest_releases", {
   const db = getDb();
   const maxCount = count ?? 10;
 
-  let sourceFilter: number | undefined;
+  let sourceFilter: string | undefined;
   if (product) {
     const source = await findSourceBySlug(product);
     if (!source) {
