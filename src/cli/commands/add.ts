@@ -7,6 +7,7 @@ import { findOrg } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { discoverFeed } from "../../adapters/feed.js";
+import { readFileSync } from "fs";
 
 const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;
 type SourceType = (typeof VALID_TYPES)[number];
@@ -79,134 +80,253 @@ async function detectCrawlPattern(sourceUrl: string): Promise<string | null> {
   }
 }
 
+interface AddSourceInput {
+  name: string;
+  url: string;
+  type?: string;
+  slug?: string;
+  org?: string;
+  feedUrl?: string;
+}
+
+interface AddSourceResult {
+  name: string;
+  slug: string;
+  type: string;
+  url: string;
+  org?: string;
+  status: "added" | "error";
+  error?: string;
+}
+
+async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> {
+  const { name, url } = input;
+
+  if (input.type && !isValidType(input.type)) {
+    return { name, slug: input.slug ?? toSlug(name), type: input.type, url, status: "error", error: `Invalid type "${input.type}". Must be one of: ${VALID_TYPES.join(", ")}` };
+  }
+
+  // Auto-detect type from URL when not specified
+  let sourceType: SourceType;
+  let discoveredFeedUrl: string | undefined;
+  let discoveredFeedType: string | undefined;
+
+  if (input.feedUrl) {
+    // Explicit feed URL provided — skip discovery
+    sourceType = (input.type as SourceType) ?? "scrape";
+    discoveredFeedUrl = input.feedUrl;
+    discoveredFeedType = "unknown";
+    logger.info(`Using provided feed URL — ${sourceType} adapter`);
+  } else if (input.type) {
+    sourceType = input.type as SourceType;
+  } else if (isGitHubUrl(url)) {
+    sourceType = "github";
+    logger.info(`Detected GitHub URL — using github adapter`);
+  } else {
+    // Probe for a feed to decide between scrape and feed
+    logger.info(`Detecting source type for ${url}...`);
+    try {
+      const feed = await discoverFeed(url);
+      if (feed) {
+        sourceType = "scrape";
+        discoveredFeedUrl = feed.url;
+        discoveredFeedType = feed.type;
+        logger.info(`Found ${feed.type} feed — using scrape adapter (feed-first with fallback)`);
+      } else {
+        sourceType = "scrape";
+        logger.info(`No feed found — using scrape adapter (Cloudflare + AI)`);
+      }
+    } catch {
+      sourceType = "scrape";
+      logger.info(`Feed detection failed — defaulting to scrape adapter`);
+    }
+  }
+
+  const slug = input.slug ?? toSlug(name);
+  const db = getDb();
+  let orgId: string | null = null;
+  let orgName: string | null = null;
+
+  // Resolve or create org if provided
+  if (input.org) {
+    let org = await findOrg(input.org);
+    if (!org) {
+      const orgSlug = toSlug(input.org);
+      const now = new Date().toISOString();
+      const [created] = await db.insert(organizations).values({
+        name: input.org,
+        slug: orgSlug,
+        createdAt: now,
+        updatedAt: now,
+      }).returning();
+      org = created;
+      logger.info(`Created organization: ${org.name} (${org.slug})`);
+    }
+    orgId = org.id;
+    orgName = org.name;
+  }
+
+  // Auto-association for GitHub sources (only if no org specified)
+  if (!input.org && sourceType === "github") {
+    const owner = parseGitHubOwner(url);
+    if (owner) {
+      const [account] = await db
+        .select({ orgId: orgAccounts.orgId, orgName: organizations.name })
+        .from(orgAccounts)
+        .innerJoin(organizations, eq(orgAccounts.orgId, organizations.id))
+        .where(and(eq(orgAccounts.platform, "github"), eq(orgAccounts.handle, owner)));
+      if (account) {
+        orgId = account.orgId;
+        orgName = account.orgName;
+        logger.info(`Auto-linked to organization "${orgName}"`);
+      }
+    }
+  }
+
+  // Build initial metadata with discovered feed info
+  const metadata: Record<string, unknown> = {};
+  if (discoveredFeedUrl) {
+    metadata.feedUrl = discoveredFeedUrl;
+    metadata.feedType = discoveredFeedType;
+    metadata.feedDiscoveredAt = new Date().toISOString();
+    metadata.noFeedFound = false;
+  }
+
+  // For non-feed sources, detect if entries have individual pages
+  if ((sourceType === "scrape" || sourceType === "agent") && !discoveredFeedUrl) {
+    logger.info(`Checking for individual entry pages...`);
+    const crawlPattern = await detectCrawlPattern(url);
+    if (crawlPattern) {
+      if (sourceType === "scrape") {
+        sourceType = "agent";
+        logger.info(`Detected blog-index pattern — using agent adapter for better extraction`);
+      }
+      metadata.crawlPattern = crawlPattern;
+    }
+  }
+
+  try {
+    await db.insert(sources).values({
+      name,
+      slug,
+      type: sourceType,
+      url,
+      orgId,
+      metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : undefined,
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { name, slug, type: sourceType, url, org: orgName ?? undefined, status: "error", error: message };
+  }
+
+  return { name, slug, type: sourceType, url, org: orgName ?? undefined, status: "added" };
+}
+
 export function registerAddCommand(program: Command) {
   program
     .command("add")
     .description("Add a new changelog source")
-    .argument("<name>", "Display name for the source")
+    .argument("[name]", "Display name for the source")
     .option("--type <type>", "Source type: github, scrape, feed, or agent (auto-detected from URL if omitted)")
-    .requiredOption("--url <url>", "URL of the source")
+    .option("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--org <org>", "Organization name or slug (creates if not found)")
     .option("--feed-url <feedUrl>", "Explicit feed URL (skips auto-discovery)")
-    .action(async (name: string, opts: { type?: string; url: string; slug?: string; org?: string; feedUrl?: string }) => {
-      if (opts.type && !isValidType(opts.type)) {
-        console.error(chalk.red(`Invalid type "${opts.type}". Must be one of: ${VALID_TYPES.join(", ")}`));
+    .option("--batch <file>", "JSON file with sources to add (use - for stdin)")
+    .option("--json", "Output as JSON")
+    .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; feedUrl?: string; batch?: string; json?: boolean }) => {
+      // --- Batch mode ---
+      if (opts.batch) {
+        let raw: string;
+        if (opts.batch === "-") {
+          raw = await Bun.stdin.text();
+        } else {
+          raw = readFileSync(opts.batch, "utf-8");
+        }
+
+        let entries: AddSourceInput[];
+        try {
+          entries = JSON.parse(raw);
+        } catch {
+          logger.error("Failed to parse batch JSON input");
+          process.exit(1);
+        }
+
+        if (!Array.isArray(entries)) {
+          logger.error("Batch input must be a JSON array");
+          process.exit(1);
+        }
+
+        // Validate each entry has required fields
+        for (const [i, entry] of entries.entries()) {
+          if (!entry.name || !entry.url) {
+            logger.error(`Entry ${i} is missing required "name" or "url" field`);
+            process.exit(1);
+          }
+        }
+
+        const results: AddSourceResult[] = [];
+        let hasError = false;
+
+        for (const entry of entries) {
+          const result = await addSingleSource(entry);
+          results.push(result);
+
+          if (result.status === "error") {
+            hasError = true;
+            if (!opts.json) {
+              logger.error(chalk.red(`Failed to add ${result.name}: ${result.error}`));
+            }
+          } else if (!opts.json) {
+            const orgLabel = result.org ? ` [org: ${result.org}]` : "";
+            logger.info(chalk.green(`Source added: ${result.name} (${result.slug}) [${result.type}]${orgLabel}`));
+          }
+        }
+
+        if (opts.json) {
+          console.log(JSON.stringify(results, null, 2));
+        }
+
+        if (hasError) {
+          process.exit(1);
+        }
+        return;
+      }
+
+      // --- Single-add mode ---
+      if (!name) {
+        logger.error("Missing required argument: name (or use --batch for batch mode)");
+        process.exit(1);
+      }
+      if (!opts.url) {
+        logger.error("Missing required option: --url");
         process.exit(1);
       }
 
-      // Auto-detect type from URL when not specified
-      let sourceType: SourceType;
-      let discoveredFeedUrl: string | undefined;
-      let discoveredFeedType: string | undefined;
-
-      if (opts.feedUrl) {
-        // Explicit feed URL provided — skip discovery
-        sourceType = (opts.type as SourceType) ?? "scrape";
-        discoveredFeedUrl = opts.feedUrl;
-        discoveredFeedType = "unknown";
-        logger.info(`Using provided feed URL — ${sourceType} adapter`);
-      } else if (opts.type) {
-        sourceType = opts.type as SourceType;
-      } else if (isGitHubUrl(opts.url)) {
-        sourceType = "github";
-        logger.info(`Detected GitHub URL — using github adapter`);
-      } else {
-        // Probe for a feed to decide between scrape and feed
-        logger.info(`Detecting source type for ${opts.url}...`);
-        try {
-          const feed = await discoverFeed(opts.url);
-          if (feed) {
-            // Use scrape (which tries feed first, with Cloudflare fallback)
-            sourceType = "scrape";
-            discoveredFeedUrl = feed.url;
-            discoveredFeedType = feed.type;
-            logger.info(`Found ${feed.type} feed — using scrape adapter (feed-first with fallback)`);
-          } else {
-            sourceType = "scrape";
-            logger.info(`No feed found — using scrape adapter (Cloudflare + AI)`);
-          }
-        } catch {
-          sourceType = "scrape";
-          logger.info(`Feed detection failed — defaulting to scrape adapter`);
-        }
-      }
-
-      const slug = opts.slug ?? toSlug(name);
-      const db = getDb();
-      let orgId: string | null = null;
-      let orgName: string | null = null;
-
-      // Resolve or create org if --org provided
-      if (opts.org) {
-        let org = await findOrg(opts.org);
-        if (!org) {
-          const orgSlug = toSlug(opts.org);
-          const now = new Date().toISOString();
-          const [created] = await db.insert(organizations).values({
-            name: opts.org,
-            slug: orgSlug,
-            createdAt: now,
-            updatedAt: now,
-          }).returning();
-          org = created;
-          logger.info(`Created organization: ${org.name} (${org.slug})`);
-        }
-        orgId = org.id;
-        orgName = org.name;
-      }
-
-      // Auto-association for GitHub sources (only if no --org specified)
-      if (!opts.org && sourceType === "github") {
-        const owner = parseGitHubOwner(opts.url);
-        if (owner) {
-          const [account] = await db
-            .select({ orgId: orgAccounts.orgId, orgName: organizations.name })
-            .from(orgAccounts)
-            .innerJoin(organizations, eq(orgAccounts.orgId, organizations.id))
-            .where(and(eq(orgAccounts.platform, "github"), eq(orgAccounts.handle, owner)));
-          if (account) {
-            orgId = account.orgId;
-            orgName = account.orgName;
-            logger.info(`Auto-linked to organization "${orgName}"`);
-          }
-        }
-      }
-
-      // Build initial metadata with discovered feed info
-      const metadata: Record<string, unknown> = {};
-      if (discoveredFeedUrl) {
-        metadata.feedUrl = discoveredFeedUrl;
-        metadata.feedType = discoveredFeedType;
-        metadata.feedDiscoveredAt = new Date().toISOString();
-        metadata.noFeedFound = false;
-      }
-
-      // For non-feed sources, detect if entries have individual pages
-      if ((sourceType === "scrape" || sourceType === "agent") && !discoveredFeedUrl) {
-        logger.info(`Checking for individual entry pages...`);
-        const crawlPattern = await detectCrawlPattern(opts.url);
-        if (crawlPattern) {
-          if (sourceType === "scrape") {
-            // Auto-upgrade to agent adapter for blog-index changelogs
-            sourceType = "agent";
-            logger.info(`Detected blog-index pattern — using agent adapter for better extraction`);
-          }
-          metadata.crawlPattern = crawlPattern;
-        }
-      }
-
-      await db.insert(sources).values({
+      const result = await addSingleSource({
         name,
-        slug,
-        type: sourceType,
         url: opts.url,
-        orgId,
-        metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : undefined,
+        type: opts.type,
+        slug: opts.slug,
+        org: opts.org,
+        feedUrl: opts.feedUrl,
       });
 
-      const orgLabel = orgName ? ` [org: ${orgName}]` : "";
-      const typeLabel = !opts.type ? ` (auto-detected: ${sourceType})` : "";
-      console.log(chalk.green(`Source added: ${name} (${slug})${typeLabel}${orgLabel}`));
+      if (result.status === "error") {
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          logger.error(chalk.red(result.error!));
+        }
+        process.exit(1);
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(result, null, 2));
+      } else {
+        const orgLabel = result.org ? ` [org: ${result.org}]` : "";
+        const typeLabel = !opts.type ? ` (auto-detected: ${result.type})` : "";
+        console.log(chalk.green(`Source added: ${result.name} (${result.slug})${typeLabel}${orgLabel}`));
+      }
     });
 }
