@@ -17,6 +17,7 @@ import { registerApiCommand } from "./commands/api.js";
 import { registerReleaseCommand } from "./commands/release.js";
 import { registerCheckCommand } from "./commands/check.js";
 import { registerFetchLogCommand } from "./commands/fetch-log.js";
+import { registerOnboardCommand } from "./commands/onboard.js";
 
 export const program = new Command()
   .name("released")
@@ -41,3 +42,4 @@ registerApiCommand(program);
 registerReleaseCommand(program);
 registerCheckCommand(program);
 registerFetchLogCommand(program);
+registerOnboardCommand(program);
