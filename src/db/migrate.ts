@@ -19,6 +19,41 @@ export function runMigrations() {
     db.run(sql`PRAGMA user_version = 1`);
   }
 
+  // v1 → v2: add organizations support
+  if (user_version < 2) {
+    db.run(sql`
+      CREATE TABLE IF NOT EXISTS organizations (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        slug TEXT NOT NULL UNIQUE,
+        domain TEXT UNIQUE,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+
+    db.run(sql`
+      CREATE TABLE IF NOT EXISTS org_accounts (
+        id TEXT PRIMARY KEY,
+        org_id TEXT NOT NULL REFERENCES organizations(id) ON DELETE CASCADE,
+        platform TEXT NOT NULL,
+        handle TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      )
+    `);
+
+    db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_org_accounts_platform_handle ON org_accounts(platform, handle)`);
+
+    try {
+      db.run(sql`ALTER TABLE sources ADD COLUMN org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL`);
+    } catch {
+      // Column already exists if migration ran partially
+    }
+
+    db.run(sql`CREATE INDEX IF NOT EXISTS idx_sources_org ON sources(org_id)`);
+    db.run(sql`PRAGMA user_version = 2`);
+  }
+
   // Create tables if they don't exist
   db.run(sql`
     CREATE TABLE IF NOT EXISTS sources (
