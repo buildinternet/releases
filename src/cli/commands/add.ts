@@ -8,7 +8,7 @@ import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { discoverFeed } from "../../adapters/feed.js";
 
-const VALID_TYPES = ["github", "scrape", "feed"] as const;
+const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;
 type SourceType = (typeof VALID_TYPES)[number];
 
 function isValidType(t: string): t is SourceType {
@@ -84,7 +84,7 @@ export function registerAddCommand(program: Command) {
     .command("add")
     .description("Add a new changelog source")
     .argument("<name>", "Display name for the source")
-    .option("--type <type>", "Source type: github, scrape, or feed (auto-detected from URL if omitted)")
+    .option("--type <type>", "Source type: github, scrape, feed, or agent (auto-detected from URL if omitted)")
     .requiredOption("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--org <org>", "Organization name or slug (creates if not found)")
@@ -182,14 +182,17 @@ export function registerAddCommand(program: Command) {
         metadata.noFeedFound = false;
       }
 
-      // For scrape sources without a feed, detect if entries have individual pages
-      if (sourceType === "scrape" && !discoveredFeedUrl) {
+      // For non-feed sources, detect if entries have individual pages
+      if ((sourceType === "scrape" || sourceType === "agent") && !discoveredFeedUrl) {
         logger.info(`Checking for individual entry pages...`);
         const crawlPattern = await detectCrawlPattern(opts.url);
         if (crawlPattern) {
-          metadata.crawlEnabled = true;
+          if (sourceType === "scrape") {
+            // Auto-upgrade to agent adapter for blog-index changelogs
+            sourceType = "agent";
+            logger.info(`Detected blog-index pattern — using agent adapter for better extraction`);
+          }
           metadata.crawlPattern = crawlPattern;
-          logger.info(`Detected blog-index pattern — crawl mode enabled (${crawlPattern})`);
         }
       }
 

@@ -30,7 +30,7 @@ export const sources = sqliteTable("sources", {
   id: text("id").primaryKey().$defaultFn(newSourceId),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  type: text("type", { enum: ["github", "scrape", "feed"] }).notNull(),
+  type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
   url: text("url").notNull(),
   orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
   metadata: text("metadata").default("{}"),

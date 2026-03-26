@@ -8,6 +8,7 @@ import type { Adapter, RawRelease, FetchOptions, FetchResult } from "../../adapt
 import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
 import { feed, updateSourceMeta } from "../../adapters/feed.js";
+import { agent } from "../../adapters/agent.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
 
@@ -19,6 +20,8 @@ function getAdapter(type: string): Adapter | null {
       return scrape;
     case "feed":
       return feed;
+    case "agent":
+      return agent;
     default:
       logger.warn(`Unknown adapter type "${type}", skipping.`);
       return null;
@@ -42,12 +45,13 @@ export function registerFetchCommand(program: Command) {
     .option("--crawl", "Enable crawl mode for multi-page changelogs (scrape sources only, persists)")
     .option("--no-crawl", "One-off override to skip crawl mode for this invocation")
     .option("--crawl-pattern <pattern>", "URL pattern to scope crawl (e.g. https://example.com/changelog/*)")
+    .option("--dry-run", "Run the adapter but skip DB inserts — show what would be fetched")
     .option("--force", "Delete existing releases for the source before fetching (clean re-fetch)")
     .option("--unfetched", "Only fetch sources that have never been fetched")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .action(async (slug: string | undefined, opts: {
       json?: boolean; since?: string; max?: string; all?: boolean;
-      crawl?: boolean; crawlPattern?: string; force?: boolean;
+      crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean;
       unfetched?: boolean; concurrency?: string;
     }) => {
       const db = getDb();
@@ -154,7 +158,7 @@ export function registerFetchCommand(program: Command) {
           }
         }
 
-        if (opts.crawl === true && source.type === "scrape") {
+        if (opts.crawl === true && source.type === "scrape" && !opts.dryRun) {
           const pattern = opts.crawlPattern ?? `${source.url.replace(/\/$/, "")}/**`;
           await updateSourceMeta(source, {
             crawlEnabled: true,
@@ -168,7 +172,7 @@ export function registerFetchCommand(program: Command) {
         }
 
         // --force: delete existing releases for a clean re-fetch
-        if (opts.force) {
+        if (opts.force && !opts.dryRun) {
           const deleted = await db.delete(releases).where(eq(releases.sourceId, source.id)).returning();
           if (!opts.json && deleted.length > 0) {
             logger.info(`Cleared ${deleted.length} existing release(s) for ${source.name}`);
@@ -212,15 +216,34 @@ export function registerFetchCommand(program: Command) {
                 : `No releases found for ${source.name}`;
               console.log(chalk.yellow(`${msg} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`));
             }
-            await db.insert(fetchLog).values({
-              sourceId: source.id,
-              releasesFound: 0,
-              releasesInserted: 0,
-              durationMs: Math.round(performance.now() - startTime),
-              status: "no_change",
-              rawContent: rawContent ?? null,
-            });
+            if (!opts.dryRun) {
+              await db.insert(fetchLog).values({
+                sourceId: source.id,
+                releasesFound: 0,
+                releasesInserted: 0,
+                durationMs: Math.round(performance.now() - startTime),
+                status: "no_change",
+                rawContent: rawContent ?? null,
+              });
+            }
             fetchResults.push({ source: source.name, newReleases: 0 });
+            return;
+          }
+
+          // ── Dry-run: show results without writing to DB ──────────
+          if (opts.dryRun) {
+            fetchResults.push({ source: source.name, newReleases: rawReleases.length });
+            totalInserted += rawReleases.length;
+
+            if (!opts.json) {
+              console.log(chalk.bold(`\n${source.name}: ${rawReleases.length} release(s) found ${chalk.dim(`(${elapsedSec(startTime)}s)`)}\n`));
+              for (const raw of rawReleases) {
+                const date = raw.publishedAt ? chalk.gray(raw.publishedAt.toISOString().split("T")[0]) : chalk.gray("no date");
+                const version = raw.version ? chalk.cyan(`[${raw.version}] `) : "";
+                console.log(`  ${version}${raw.title}  ${date}`);
+                if (raw.url) console.log(`    ${chalk.dim(raw.url)}`);
+              }
+            }
             return;
           }
 
