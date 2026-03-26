@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -106,3 +106,14 @@ export type OrgAccount = typeof orgAccounts.$inferSelect;
 export type NewOrgAccount = typeof orgAccounts.$inferInsert;
 export type FetchLog = typeof fetchLog.$inferSelect;
 export type NewFetchLog = typeof fetchLog.$inferInsert;
+
+export const ignoredUrls = sqliteTable("ignored_urls", {
+  id: text("id").primaryKey().$defaultFn(newIgnoredUrlId),
+  url: text("url").notNull().unique(),
+  orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  reason: text("reason"),
+  ignoredAt: text("ignored_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export type IgnoredUrl = typeof ignoredUrls.$inferSelect;
+export type NewIgnoredUrl = typeof ignoredUrls.$inferInsert;

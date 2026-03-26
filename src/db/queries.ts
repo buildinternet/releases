@@ -1,8 +1,8 @@
 import { eq, desc, gte, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts,
-  type Source, type Release, type Organization, type OrgAccount,
+  sources, releases, organizations, orgAccounts, ignoredUrls,
+  type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl,
 } from "./schema.js";
 
 export async function findSourceBySlug(slug: string): Promise<Source | null> {
@@ -143,6 +143,34 @@ export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
   if (urls.length === 0) return [];
   const db = getDb();
   return db.select().from(sources).where(inArray(sources.url, urls));
+}
+
+export async function findIgnoredUrl(url: string): Promise<IgnoredUrl | null> {
+  const db = getDb();
+  const [row] = await db.select().from(ignoredUrls).where(eq(ignoredUrls.url, url));
+  return row ?? null;
+}
+
+export async function addIgnoredUrl(url: string, opts?: { orgId?: string; reason?: string }): Promise<void> {
+  const db = getDb();
+  await db.insert(ignoredUrls).values({
+    url,
+    orgId: opts?.orgId ?? null,
+    reason: opts?.reason ?? null,
+  }).onConflictDoNothing();
+}
+
+export async function listIgnoredUrls(orgId?: string): Promise<IgnoredUrl[]> {
+  const db = getDb();
+  if (orgId) {
+    return db.select().from(ignoredUrls).where(eq(ignoredUrls.orgId, orgId));
+  }
+  return db.select().from(ignoredUrls);
+}
+
+export async function removeIgnoredUrl(url: string): Promise<void> {
+  const db = getDb();
+  await db.delete(ignoredUrls).where(eq(ignoredUrls.url, url));
 }
 
 /** Returns true if content is unchanged (hash matches). Persists the new hash on change. */
