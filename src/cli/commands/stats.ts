@@ -4,7 +4,7 @@ import Table from "cli-table3";
 import { sql, eq, gte, desc, count } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases, organizations, fetchLog } from "../../db/schema.js";
-import { daysAgoIso } from "../../lib/dates.js";
+import { daysAgoIso, timeAgo } from "../../lib/dates.js";
 
 export function registerStatsCommand(program: Command) {
   program
@@ -144,7 +144,7 @@ export function registerStatsCommand(program: Command) {
             s.sourceType,
             String(s.totalReleases),
             s.recentReleases > 0 ? chalk.green(String(s.recentReleases)) : chalk.dim("0"),
-            s.lastFetchedAt ? timeAgo(s.lastFetchedAt) : chalk.dim("never"),
+            timeAgo(s.lastFetchedAt) ?? chalk.dim("never"),
           ]);
         }
         console.log(sourceTable.toString());
@@ -179,7 +179,7 @@ export function registerStatsCommand(program: Command) {
             f.releasesInserted > 0 ? chalk.green(String(f.releasesInserted)) : chalk.dim("0"),
             String(f.totalReleases),
             f.durationMs ? `${(f.durationMs / 1000).toFixed(1)}s` : chalk.dim("—"),
-            timeAgo(f.createdAt),
+            timeAgo(f.createdAt) ?? "",
           ]);
         }
         console.log(activityTable.toString());
@@ -187,16 +187,4 @@ export function registerStatsCommand(program: Command) {
         console.log(chalk.dim("\nNo fetch activity recorded yet. Run `released fetch` to start."));
       }
     });
-}
-
-function timeAgo(isoDate: string): string {
-  const ms = Date.now() - new Date(isoDate).getTime();
-  const mins = Math.floor(ms / 60_000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  return `${Math.floor(days / 30)}mo ago`;
 }

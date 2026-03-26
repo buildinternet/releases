@@ -4,12 +4,15 @@ import * as z from "zod/v4";
 import { eq, desc, inArray, and } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
-import { sources, releases, organizations, orgAccounts } from "../db/schema.js";
+import { sources, releases, organizations, orgAccounts, fetchLog, type Source } from "../db/schema.js";
 import { searchReleases } from "../db/fts.js";
 import { findSourceBySlug, getRecentReleases, findOrg, getSourcesByOrg, listOrgs } from "../db/queries.js";
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
 import { daysAgoIso } from "../lib/dates.js";
+import { toSlug } from "../lib/slug.js";
 import { logger } from "../lib/logger.js";
+import { getAdapter, contentHash } from "../adapters/resolve.js";
+import { isGitHubUrl } from "../cli/commands/add.js";
 
 function textResult(text: string) {
   return { content: [{ type: "text" as const, text }] };
@@ -303,6 +306,236 @@ server.registerTool("list_organizations", {
     .join("\n\n");
 
   return textResult(text);
+});
+
+// ── add_source ───────────────────────────────────────────────────────
+server.registerTool("add_source", {
+  description: "Add a new changelog source to the index",
+  inputSchema: {
+    name: z.string().describe("Display name for the source"),
+    url: z.string().describe("URL of the changelog source"),
+    type: z.string().optional().describe("Source type: github, scrape, feed, or agent (auto-detected from URL if omitted)"),
+    slug: z.string().optional().describe("Custom slug (auto-derived from name if omitted)"),
+    organization: z.string().optional().describe("Organization slug, name, or domain to associate"),
+  },
+}, async ({ name, url, type, slug, organization }) => {
+  const db = getDb();
+  const validTypes = ["github", "scrape", "feed", "agent"];
+
+  if (type && !validTypes.includes(type)) {
+    return textResult(`Invalid type "${type}". Must be one of: ${validTypes.join(", ")}`);
+  }
+
+  let sourceType = type ?? (isGitHubUrl(url) ? "github" : "scrape");
+  const sourceSlug = slug ?? toSlug(name);
+
+  const existing = await findSourceBySlug(sourceSlug);
+  if (existing) {
+    return textResult(`Source with slug "${sourceSlug}" already exists.`);
+  }
+
+  let orgId: string | null = null;
+  if (organization) {
+    const org = await findOrg(organization);
+    if (!org) {
+      return textResult(`Organization not found: "${organization}"`);
+    }
+    orgId = org.id;
+  }
+
+  await db.insert(sources).values({
+    name,
+    slug: sourceSlug,
+    type: sourceType as "github" | "scrape" | "feed" | "agent",
+    url,
+    orgId,
+  });
+
+  return textResult(`Source added: ${name} (${sourceSlug}), type: ${sourceType}`);
+});
+
+// ── remove_source ────────────────────────────────────────────────────
+server.registerTool("remove_source", {
+  description: "Remove a changelog source and all its releases",
+  inputSchema: {
+    slug: z.string().describe("Slug of the source to remove"),
+  },
+}, async ({ slug }) => {
+  const db = getDb();
+  const source = await findSourceBySlug(slug);
+  if (!source) {
+    return textResult(`Source not found: "${slug}"`);
+  }
+
+  await db.delete(sources).where(eq(sources.slug, slug));
+  return textResult(`Removed source: ${source.name} (${slug})`);
+});
+
+// ── fetch_source ─────────────────────────────────────────────────────
+server.registerTool("fetch_source", {
+  description: "Trigger a fetch for a specific source or all sources",
+  inputSchema: {
+    slug: z.string().optional().describe("Source slug to fetch (omit to fetch all sources)"),
+    force: z.boolean().optional().describe("Delete existing releases before fetching (clean re-fetch)"),
+  },
+}, async ({ slug, force }) => {
+  const db = getDb();
+  let targetSources: Source[];
+
+  if (slug) {
+    const source = await findSourceBySlug(slug);
+    if (!source) {
+      return textResult(`Source not found: "${slug}"`);
+    }
+    targetSources = [source];
+  } else {
+    targetSources = await db.select().from(sources);
+    if (targetSources.length === 0) {
+      return textResult("No sources configured. Use add_source to add one.");
+    }
+  }
+
+  const results: Array<{ source: string; found: number; inserted: number; error?: string }> = [];
+
+  for (let source of targetSources) {
+    const adapter = getAdapter(source.type);
+    if (!adapter) {
+      results.push({ source: source.name, found: 0, inserted: 0, error: `Unknown adapter type: ${source.type}` });
+      continue;
+    }
+
+    const startTime = performance.now();
+
+    try {
+      if (force) {
+        await db.delete(releases).where(eq(releases.sourceId, source.id));
+        await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+        source = { ...source, lastContentHash: null };
+      }
+
+      const result = await adapter.fetch(source);
+      const rawReleases = result.releases;
+
+      if (rawReleases.length === 0) {
+        await db.insert(fetchLog).values({
+          sourceId: source.id,
+          releasesFound: 0,
+          releasesInserted: 0,
+          durationMs: Math.round(performance.now() - startTime),
+          status: "no_change",
+          rawContent: result.rawContent ?? null,
+        });
+        results.push({ source: source.name, found: 0, inserted: 0 });
+        continue;
+      }
+
+      const rows = rawReleases.map((raw) => ({
+        sourceId: source.id,
+        version: raw.version ?? null,
+        title: raw.title,
+        content: raw.content,
+        url: raw.url ?? null,
+        contentHash: contentHash(raw),
+        publishedAt: raw.publishedAt?.toISOString() ?? null,
+      }));
+
+      let inserted = 0;
+      for (let i = 0; i < rows.length; i += 500) {
+        const batch = await db.insert(releases).values(rows.slice(i, i + 500)).onConflictDoNothing().returning({ id: releases.id });
+        inserted += batch.length;
+      }
+
+      await db.update(sources).set({ lastFetchedAt: new Date().toISOString() }).where(eq(sources.id, source.id));
+
+      await db.insert(fetchLog).values({
+        sourceId: source.id,
+        releasesFound: rawReleases.length,
+        releasesInserted: inserted,
+        durationMs: Math.round(performance.now() - startTime),
+        status: inserted > 0 ? "success" : "no_change",
+        rawContent: result.rawContent ?? null,
+      });
+
+      results.push({ source: source.name, found: rawReleases.length, inserted });
+    } catch (err) {
+      const errMsg = err instanceof Error ? err.message : String(err);
+      await db.insert(fetchLog).values({
+        sourceId: source.id,
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: Math.round(performance.now() - startTime),
+        status: "error",
+        error: errMsg,
+        rawContent: null,
+      }).catch(() => {});
+      results.push({ source: source.name, found: 0, inserted: 0, error: errMsg });
+    }
+  }
+
+  const summary = results.map((r) => {
+    if (r.error) return `${r.source}: error — ${r.error}`;
+    return `${r.source}: ${r.found} found, ${r.inserted} new`;
+  }).join("\n");
+
+  return textResult(summary);
+});
+
+// ── add_organization ─────────────────────────────────────────────────
+server.registerTool("add_organization", {
+  description: "Create a new organization",
+  inputSchema: {
+    name: z.string().describe("Organization name"),
+    domain: z.string().optional().describe("Primary domain (e.g. vercel.com)"),
+    slug: z.string().optional().describe("Custom slug (auto-derived from name if omitted)"),
+  },
+}, async ({ name, domain, slug }) => {
+  const db = getDb();
+  const orgSlug = slug ?? toSlug(name);
+
+  const existing = await findOrg(orgSlug);
+  if (existing) {
+    return textResult(`Organization with slug "${orgSlug}" already exists.`);
+  }
+
+  const now = new Date().toISOString();
+  const [created] = await db.insert(organizations).values({
+    name,
+    slug: orgSlug,
+    domain: domain ?? null,
+    createdAt: now,
+    updatedAt: now,
+  }).returning();
+
+  return textResult(`Organization added: ${created.name} (${created.slug})`);
+});
+
+// ── link_account ─────────────────────────────────────────────────────
+server.registerTool("link_account", {
+  description: "Link a platform account to an organization",
+  inputSchema: {
+    organization: z.string().describe("Organization slug, name, or domain"),
+    platform: z.string().describe("Platform name (github, x, linkedin, etc.)"),
+    handle: z.string().describe("Account handle on the platform"),
+  },
+}, async ({ organization, platform, handle }) => {
+  const db = getDb();
+  const org = await findOrg(organization);
+  if (!org) {
+    return textResult(`Organization not found: "${organization}"`);
+  }
+
+  await db.insert(orgAccounts).values({
+    orgId: org.id,
+    platform,
+    handle,
+  });
+
+  await db
+    .update(organizations)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(eq(organizations.id, org.id));
+
+  return textResult(`Linked ${platform}/${handle} to ${org.name}`);
 });
 
 // ── Start function ───────────────────────────────────────────────────

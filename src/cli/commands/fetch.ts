@@ -1,37 +1,13 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { createHash } from "crypto";
 import { eq, count, sql } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases, fetchLog, type Source } from "../../db/schema.js";
-import type { Adapter, RawRelease, FetchOptions, FetchResult } from "../../adapters/types.js";
-import { github } from "../../adapters/github.js";
-import { scrape } from "../../adapters/scrape.js";
-import { feed, updateSourceMeta } from "../../adapters/feed.js";
-import { agent } from "../../adapters/agent.js";
+import type { FetchOptions } from "../../adapters/types.js";
+import { updateSourceMeta } from "../../adapters/feed.js";
+import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
-
-function getAdapter(type: string): Adapter | null {
-  switch (type) {
-    case "github":
-      return github;
-    case "scrape":
-      return scrape;
-    case "feed":
-      return feed;
-    case "agent":
-      return agent;
-    default:
-      logger.warn(`Unknown adapter type "${type}", skipping.`);
-      return null;
-  }
-}
-
-function contentHash(raw: RawRelease): string {
-  const input = raw.title + (raw.version || "") + (raw.publishedAt?.toISOString() || "") + raw.content;
-  return createHash("sha256").update(input).digest("hex");
-}
 
 export function registerFetchCommand(program: Command) {
   program
