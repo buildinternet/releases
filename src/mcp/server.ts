@@ -1,12 +1,12 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
-import { eq, desc, inArray } from "drizzle-orm";
+import { eq, desc, inArray, and } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
-import { sources, releases } from "../db/schema.js";
+import { sources, releases, organizations, orgAccounts } from "../db/schema.js";
 import { searchReleases } from "../db/fts.js";
-import { findSourceBySlug, getRecentReleases } from "../db/queries.js";
+import { findSourceBySlug, getRecentReleases, findOrg, getSourcesByOrg, listOrgs } from "../db/queries.js";
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
 import { daysAgoIso } from "../lib/dates.js";
 import { logger } from "../lib/logger.js";
@@ -26,14 +26,27 @@ server.registerTool("search_releases", {
   inputSchema: {
     query: z.string().describe("Search query"),
     product: z.string().optional().describe("Filter to a specific product slug"),
+    organization: z.string().optional().describe("Filter to sources belonging to this organization"),
     limit: z.number().optional().describe("Max results to return (default 20)"),
   },
-}, async ({ query, product, limit }) => {
+}, async ({ query, product, organization, limit }) => {
   const db = getDb();
   const maxResults = limit ?? 20;
 
-  // Fetch more than needed when filtering by product, since FTS limit applies globally
-  let results = searchReleases(query, product ? maxResults * 5 : maxResults);
+  // Build a set of allowed source IDs when filtering by org
+  let orgSourceIds: Set<string> | undefined;
+  if (organization) {
+    const org = await findOrg(organization);
+    if (!org) {
+      return textResult(`No organization found matching "${organization}"`);
+    }
+    const orgSources = await getSourcesByOrg(org.id);
+    orgSourceIds = new Set(orgSources.map((s) => s.id));
+  }
+
+  // Fetch more than needed when filtering, since FTS limit applies globally
+  const needsPostFilter = product || orgSourceIds;
+  let results = searchReleases(query, needsPostFilter ? maxResults * 5 : maxResults);
 
   if (product) {
     const source = await findSourceBySlug(product);
@@ -45,8 +58,23 @@ server.registerTool("search_releases", {
       .from(releases)
       .where(eq(releases.sourceId, source.id));
     const sourceReleaseIds = new Set(sourceReleases.map((r) => r.id));
-    results = results.filter((r) => sourceReleaseIds.has(r.id)).slice(0, maxResults);
+    results = results.filter((r) => sourceReleaseIds.has(r.id));
   }
+
+  if (orgSourceIds) {
+    // FTS results have release IDs; look up their sourceId to filter
+    const releaseRows = await db
+      .select({ id: releases.id, sourceId: releases.sourceId })
+      .from(releases)
+      .where(inArray(releases.id, results.map((r) => r.id)));
+    const releaseSourceMap = new Map(releaseRows.map((r) => [r.id, r.sourceId]));
+    results = results.filter((r) => {
+      const sid = releaseSourceMap.get(r.id);
+      return sid !== undefined && orgSourceIds!.has(sid);
+    });
+  }
+
+  results = results.slice(0, maxResults);
 
   if (results.length === 0) {
     return textResult("No releases found matching the query.");
@@ -64,12 +92,13 @@ server.registerTool("search_releases", {
 
 // ── get_latest_releases ──────────────────────────────────────────────
 server.registerTool("get_latest_releases", {
-  description: "Get the most recent releases, optionally filtered by product",
+  description: "Get the most recent releases, optionally filtered by product or organization",
   inputSchema: {
     product: z.string().optional().describe("Filter to a specific product slug"),
+    organization: z.string().optional().describe("Filter to sources belonging to this organization"),
     count: z.number().optional().describe("Number of releases to return (default 10)"),
   },
-}, async ({ product, count }) => {
+}, async ({ product, organization, count }) => {
   const db = getDb();
   const maxCount = count ?? 10;
 
@@ -80,6 +109,17 @@ server.registerTool("get_latest_releases", {
       return textResult(`No product found with slug "${product}"`);
     }
     sourceFilter = source.id;
+  }
+
+  // Resolve org filter to a set of source IDs
+  let orgSourceIds: Set<string> | undefined;
+  if (organization) {
+    const org = await findOrg(organization);
+    if (!org) {
+      return textResult(`No organization found matching "${organization}"`);
+    }
+    const orgSources = await getSourcesByOrg(org.id);
+    orgSourceIds = new Set(orgSources.map((s) => s.id));
   }
 
   const query = db
@@ -94,8 +134,21 @@ server.registerTool("get_latest_releases", {
     })
     .from(releases);
 
-  const filtered = sourceFilter !== undefined
-    ? query.where(eq(releases.sourceId, sourceFilter))
+  // Apply source-level filters
+  const conditions: ReturnType<typeof eq>[] = [];
+  if (sourceFilter !== undefined) {
+    conditions.push(eq(releases.sourceId, sourceFilter));
+  }
+  if (orgSourceIds) {
+    const ids = [...orgSourceIds];
+    if (ids.length === 0) {
+      return textResult("No sources found for this organization.");
+    }
+    conditions.push(inArray(releases.sourceId, ids));
+  }
+
+  const filtered = conditions.length > 0
+    ? query.where(and(...conditions))
     : query;
 
   const rows = await filtered
@@ -190,9 +243,22 @@ server.registerTool("compare_products", {
 // ── list_products ────────────────────────────────────────────────────
 server.registerTool("list_products", {
   description: "List all indexed products/sources",
-}, async () => {
+  inputSchema: {
+    organization: z.string().optional().describe("Filter to sources belonging to this organization"),
+  },
+}, async ({ organization }) => {
   const db = getDb();
-  const allSources = await db.select().from(sources);
+  let allSources;
+
+  if (organization) {
+    const org = await findOrg(organization);
+    if (!org) {
+      return textResult(`No organization found matching "${organization}"`);
+    }
+    allSources = await getSourcesByOrg(org.id);
+  } else {
+    allSources = await db.select().from(sources);
+  }
 
   if (allSources.length === 0) {
     return textResult("No products indexed yet. Use `released add` to add sources.");
@@ -208,6 +274,31 @@ server.registerTool("list_products", {
         `  Last fetched: ${s.lastFetchedAt ?? "Never"}`,
       ].join("\n"),
     )
+    .join("\n\n");
+
+  return textResult(text);
+});
+
+// ── list_organizations ───────────────────────────────────────────────
+server.registerTool("list_organizations", {
+  description: "List all indexed organizations, optionally filtered",
+  inputSchema: {
+    query: z.string().optional().describe("Search across org name, slug, domain, and account handles"),
+    platform: z.string().optional().describe("Filter to orgs with an account on this platform"),
+  },
+}, async ({ query, platform }) => {
+  const allOrgs = await listOrgs({ query, platform });
+
+  if (allOrgs.length === 0) {
+    return textResult("No organizations found.");
+  }
+
+  const text = allOrgs
+    .map((o) => [
+      `**${o.name}**`,
+      `  Slug: ${o.slug}`,
+      `  Domain: ${o.domain ?? "N/A"}`,
+    ].join("\n"))
     .join("\n\n");
 
   return textResult(text);
