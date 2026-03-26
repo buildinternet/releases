@@ -7,7 +7,7 @@ import { findOrg } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 
-const VALID_TYPES = ["github", "scrape"] as const;
+const VALID_TYPES = ["github", "scrape", "feed"] as const;
 type SourceType = (typeof VALID_TYPES)[number];
 
 function isValidType(t: string): t is SourceType {
@@ -24,7 +24,7 @@ export function registerAddCommand(program: Command) {
     .command("add")
     .description("Add a new changelog source")
     .argument("<name>", "Display name for the source")
-    .requiredOption("--type <type>", "Source type: github or scrape")
+    .requiredOption("--type <type>", "Source type: github, scrape, or feed")
     .requiredOption("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--org <org>", "Organization name or slug (creates if not found)")

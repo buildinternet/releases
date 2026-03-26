@@ -22,7 +22,7 @@ Type-check: `npx tsc --noEmit`
 ## Conventions
 
 - All logging goes to **stderr** (`src/lib/logger.ts`). stdout is reserved for MCP JSON-RPC in serve mode.
-- Source types: `github` and `scrape`. RSS is deferred.
+- Source types: `github`, `scrape`, and `feed`. The `scrape` adapter auto-discovers RSS/Atom/JSON feeds before falling back to Cloudflare + AI. The `feed` type is for sources where the feed URL is known or discoverable. Feed metadata (URL, type, ETag) is cached in `source.metadata`.
 - Shared DB query helpers live in `src/db/queries.ts` — use them instead of inlining drizzle queries.
 - `toReleaseInput()` from `src/ai/query.ts` converts DB rows (nullable fields) to AI input shape — don't hand-roll this mapping.
 - `daysAgoIso()` from `src/lib/dates.ts` for date cutoff calculations.

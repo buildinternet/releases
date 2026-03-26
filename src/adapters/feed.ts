@@ -1,0 +1,455 @@
+import { eq } from "drizzle-orm";
+import type { Source } from "../db/schema.js";
+import { sources } from "../db/schema.js";
+import { getDb } from "../db/connection.js";
+import type { Adapter, RawRelease, FetchOptions } from "./types.js";
+import { logger } from "../lib/logger.js";
+
+// ── Feed types ──────────────────────────────────────────────────────
+
+type FeedType = "rss" | "atom" | "jsonfeed";
+
+interface DiscoveredFeed {
+  url: string;
+  type: FeedType;
+}
+
+export interface FeedMetadata {
+  feedUrl?: string;
+  feedType?: FeedType;
+  feedDiscoveredAt?: string;
+  feedEtag?: string;
+  feedLastModified?: string;
+  noFeedFound?: boolean;
+}
+
+// ── Feed discovery ──────────────────────────────────────────────────
+
+const WELL_KNOWN_PATHS = [
+  // JSON feeds first — preferred over XML when available
+  "/feed.json",
+  "/changelog/feed.json",
+  "/changelog.json",
+  // XML feeds
+  "/feed",
+  "/feed.xml",
+  "/rss",
+  "/rss.xml",
+  "/atom.xml",
+  "/changelog.rss",
+  "/changelog/feed",
+  "/changelog/rss",
+  "/changelog.xml",
+];
+
+/**
+ * Discover a feed URL for a given page URL.
+ * 1. Fetch the HTML and look for <link rel="alternate"> feed tags.
+ * 2. Probe well-known feed paths in parallel.
+ * Prefers JSON feeds over XML when multiple are available.
+ */
+export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | null> {
+  // Step 1: Check HTML <head> for feed links
+  const fromHead = await discoverFromHead(pageUrl);
+  if (fromHead) return fromHead;
+
+  // Step 2: Probe well-known paths in parallel
+  const base = new URL(pageUrl);
+  const results = await Promise.allSettled(
+    WELL_KNOWN_PATHS.map((path) => probeFeedPath(base.origin, path)),
+  );
+
+  // Return the first successful probe (array order = preference order)
+  for (const result of results) {
+    if (result.status === "fulfilled" && result.value) return result.value;
+  }
+
+  return null;
+}
+
+async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null> {
+  try {
+    const res = await fetch(pageUrl, {
+      headers: { "Accept": "text/html", "User-Agent": "released/0.1" },
+      redirect: "follow",
+    });
+    if (!res.ok || !res.body) return null;
+
+    // Stream only enough bytes to get the <head> section
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let html = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      html += decoder.decode(value, { stream: true });
+      if (html.includes("</head>") || html.length > 32_000) {
+        reader.cancel();
+        break;
+      }
+    }
+
+    const headEnd = html.indexOf("</head>");
+    const head = headEnd > -1 ? html.slice(0, headEnd) : html;
+    return parseFeedLinks(head, pageUrl);
+  } catch (err) {
+    logger.debug(`Failed to fetch HTML for feed discovery: ${err}`);
+    return null;
+  }
+}
+
+async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFeed | null> {
+  const probeUrl = `${origin}${path}`;
+  const res = await fetch(probeUrl, {
+    method: "HEAD",
+    redirect: "follow",
+    headers: { "User-Agent": "released/0.1" },
+  });
+  if (!res.ok) return null;
+
+  const ct = res.headers.get("content-type") ?? "";
+  const feedType = classifyFeedMime(ct);
+  if (feedType) return { url: probeUrl, type: feedType };
+
+  // Some servers don't set proper content-type on HEAD — try GET for ambiguous paths
+  if (path.endsWith(".xml") || path.endsWith(".json") || path === "/feed" || path === "/rss") {
+    const getRes = await fetch(probeUrl, {
+      redirect: "follow",
+      headers: { "User-Agent": "released/0.1", "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml" },
+    });
+    if (!getRes.ok) return null;
+    const getCt = getRes.headers.get("content-type") ?? "";
+    const body = await getRes.text();
+    const detected = classifyFeedMime(getCt) ?? detectFeedTypeFromContent(body);
+    if (detected) return { url: probeUrl, type: detected };
+  }
+
+  return null;
+}
+
+function parseFeedLinks(head: string, baseUrl: string): DiscoveredFeed | null {
+  const linkRe = /<link\s[^>]*rel=["']alternate["'][^>]*>/gi;
+  const candidates: DiscoveredFeed[] = [];
+  let match;
+
+  while ((match = linkRe.exec(head)) !== null) {
+    const tag = match[0];
+    const typeMatch = tag.match(/type=["']([^"']+)["']/);
+    const hrefMatch = tag.match(/href=["']([^"']+)["']/);
+    if (!typeMatch || !hrefMatch) continue;
+
+    const feedType = classifyFeedMime(typeMatch[1]);
+    if (!feedType) continue;
+
+    candidates.push({ url: new URL(hrefMatch[1], baseUrl).toString(), type: feedType });
+  }
+
+  if (candidates.length === 0) return null;
+
+  // Prefer JSON feed over XML
+  return candidates.find((c) => c.type === "jsonfeed") ?? candidates[0];
+}
+
+/** Classify a MIME type or Content-Type header value as a feed type. */
+function classifyFeedMime(ct: string): FeedType | null {
+  ct = ct.toLowerCase();
+  if (ct.includes("feed+json")) return "jsonfeed";
+  if (ct.includes("rss")) return "rss";
+  if (ct.includes("atom")) return "atom";
+  // <link type="application/json"> in HTML head is acceptable as JSON feed
+  if (ct === "application/json") return "jsonfeed";
+  return null;
+}
+
+function detectFeedTypeFromContent(body: string): FeedType | null {
+  const trimmed = body.trimStart().slice(0, 500);
+  if (trimmed.startsWith("{")) return "jsonfeed";
+  if (trimmed.includes("<feed") && trimmed.includes("xmlns")) return "atom";
+  if (trimmed.includes("<rss") || trimmed.includes("<channel>")) return "rss";
+  return null;
+}
+
+// ── Feed fetching + parsing ─────────────────────────────────────────
+
+export async function fetchAndParseFeed(
+  feedUrl: string,
+  feedType: FeedType,
+  options?: FetchOptions,
+  headers?: Record<string, string>,
+): Promise<{ releases: RawRelease[]; etag?: string; lastModified?: string }> {
+  const reqHeaders: Record<string, string> = {
+    "User-Agent": "released/0.1",
+    "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
+    ...headers,
+  };
+
+  const res = await fetch(feedUrl, { headers: reqHeaders, redirect: "follow" });
+
+  if (res.status === 304) return { releases: [] };
+
+  if (!res.ok) {
+    throw new Error(`Feed fetch failed: ${res.status} ${res.statusText}`);
+  }
+
+  const body = await res.text();
+  const etag = res.headers.get("etag") ?? undefined;
+  const lastModified = res.headers.get("last-modified") ?? undefined;
+
+  let releases: RawRelease[];
+  switch (feedType) {
+    case "rss": releases = parseRss(body); break;
+    case "atom": releases = parseAtom(body); break;
+    case "jsonfeed": releases = parseJsonFeed(body); break;
+  }
+
+  if (options?.since) {
+    releases = releases.filter((r) => !r.publishedAt || r.publishedAt >= options.since!);
+  }
+  if (options?.maxEntries) {
+    releases = releases.slice(0, options.maxEntries);
+  }
+
+  return { releases, etag, lastModified };
+}
+
+/**
+ * Shared discovery → fetch → cache flow used by both the feed adapter and
+ * the scrape adapter's feed-first optimization.
+ *
+ * Returns releases on success, null if no feed is available or discovery fails.
+ */
+export async function fetchViaFeed(
+  source: Source,
+  options?: FetchOptions,
+): Promise<RawRelease[] | null> {
+  const meta = getSourceFeedMeta(source);
+  const metaUpdates: Partial<FeedMetadata> = {};
+
+  if (meta.noFeedFound) return null;
+
+  let feedUrl = meta.feedUrl;
+  let feedType = meta.feedType;
+
+  // Discovery
+  if (!feedUrl) {
+    logger.info(`Checking for RSS/Atom/JSON feed...`);
+    try {
+      const discovered = await discoverFeed(source.url);
+      if (!discovered) {
+        await updateSourceFeedMeta(source, { noFeedFound: true });
+        return null;
+      }
+      feedUrl = discovered.url;
+      feedType = discovered.type;
+      Object.assign(metaUpdates, {
+        feedUrl,
+        feedType,
+        feedDiscoveredAt: new Date().toISOString(),
+        noFeedFound: false,
+      });
+      logger.info(`Discovered ${feedType} feed: ${feedUrl}`);
+    } catch (err) {
+      logger.debug(`Feed discovery failed: ${err}`);
+      return null;
+    }
+  }
+
+  // Conditional fetch headers
+  const conditionalHeaders: Record<string, string> = {};
+  if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
+  if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;
+
+  // Fetch and parse
+  logger.info(`Fetching ${feedType} feed: ${feedUrl}`);
+  const { releases, etag, lastModified } = await fetchAndParseFeed(
+    feedUrl,
+    feedType!,
+    options,
+    Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
+  );
+
+  if (etag) metaUpdates.feedEtag = etag;
+  if (lastModified) metaUpdates.feedLastModified = lastModified;
+
+  // Write all metadata changes in a single update
+  if (Object.keys(metaUpdates).length > 0) {
+    await updateSourceFeedMeta(source, metaUpdates);
+  }
+
+  if (releases.length === 0) {
+    logger.info(`No new releases from feed (304 or empty)`);
+  } else {
+    logger.info(`Parsed ${releases.length} releases from feed`);
+  }
+
+  return releases;
+}
+
+// ── Feed parsers ────────────────────────────────────────────────────
+
+function parseRss(xml: string): RawRelease[] {
+  const releases: RawRelease[] = [];
+  for (const item of extractAllBetween(xml, "<item>", "</item>")) {
+    const title = extractText(item, "title");
+    if (!title) continue;
+
+    const description = extractText(item, "description") ?? extractText(item, "content:encoded") ?? "";
+    const link = extractText(item, "link");
+    const pubDate = extractText(item, "pubDate");
+
+    releases.push({
+      title,
+      content: decodeHtmlEntities(description),
+      url: link ?? undefined,
+      publishedAt: pubDate ? new Date(pubDate) : undefined,
+      version: extractVersionFromTitle(title),
+      isBreaking: detectBreaking(title, description),
+    });
+  }
+  return releases;
+}
+
+function parseAtom(xml: string): RawRelease[] {
+  const releases: RawRelease[] = [];
+  for (const entry of extractAllBetween(xml, "<entry>", "</entry>")) {
+    const title = extractText(entry, "title");
+    if (!title) continue;
+
+    const content = extractText(entry, "content") ?? extractText(entry, "summary") ?? "";
+    const link = extractAtomLink(entry);
+    const updated = extractText(entry, "updated") ?? extractText(entry, "published");
+
+    releases.push({
+      title,
+      content: decodeHtmlEntities(content),
+      url: link ?? undefined,
+      publishedAt: updated ? new Date(updated) : undefined,
+      version: extractVersionFromTitle(title),
+      isBreaking: detectBreaking(title, content),
+    });
+  }
+  return releases;
+}
+
+function parseJsonFeed(json: string): RawRelease[] {
+  const feed = JSON.parse(json);
+  const items: Array<{
+    title?: string;
+    content_html?: string;
+    content_text?: string;
+    url?: string;
+    date_published?: string;
+  }> = feed.items ?? [];
+
+  return items
+    .filter((item) => item.title)
+    .map((item) => ({
+      title: item.title!,
+      content: item.content_text ?? stripHtml(item.content_html ?? ""),
+      url: item.url,
+      publishedAt: item.date_published ? new Date(item.date_published) : undefined,
+      version: extractVersionFromTitle(item.title!),
+      isBreaking: detectBreaking(item.title!, item.content_text ?? item.content_html ?? ""),
+    }));
+}
+
+// ── XML helpers (no external dependency) ────────────────────────────
+
+function extractAllBetween(xml: string, openTag: string, closeTag: string): string[] {
+  const results: string[] = [];
+  let idx = 0;
+  while (true) {
+    const start = xml.indexOf(openTag, idx);
+    if (start === -1) break;
+    const end = xml.indexOf(closeTag, start + openTag.length);
+    if (end === -1) break;
+    results.push(xml.slice(start + openTag.length, end));
+    idx = end + closeTag.length;
+  }
+  return results;
+}
+
+// Cache compiled regexes per tag name
+const reCache = new Map<string, { cdata: RegExp; text: RegExp }>();
+
+function getTagRegexes(tag: string) {
+  let cached = reCache.get(tag);
+  if (!cached) {
+    cached = {
+      cdata: new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tag}>`, "i"),
+      text: new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"),
+    };
+    reCache.set(tag, cached);
+  }
+  return cached;
+}
+
+function extractText(xml: string, tag: string): string | null {
+  const re = getTagRegexes(tag);
+  const cdataMatch = xml.match(re.cdata);
+  if (cdataMatch) return cdataMatch[1].trim();
+  const textMatch = xml.match(re.text);
+  return textMatch ? textMatch[1].trim() : null;
+}
+
+function extractAtomLink(entry: string): string | null {
+  const altMatch = entry.match(/<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["'][^>]*\/?>/i);
+  if (altMatch) return altMatch[1];
+  const hrefMatch = entry.match(/<link[^>]*href=["']([^"']+)["'][^>]*\/?>/i);
+  return hrefMatch ? hrefMatch[1] : null;
+}
+
+function extractVersionFromTitle(title: string): string | undefined {
+  const match = title.match(/v?(\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?)/);
+  return match ? match[1] : undefined;
+}
+
+function detectBreaking(title: string, content: string): boolean {
+  const text = `${title} ${content}`.toLowerCase();
+  return text.includes("breaking change") || text.includes("breaking:") || text.includes("⚠");
+}
+
+function stripHtml(html: string): string {
+  return html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+}
+
+function decodeHtmlEntities(text: string): string {
+  return text
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&apos;/g, "'");
+}
+
+// ── Source metadata helpers ──────────────────────────────────────────
+
+export function getSourceFeedMeta(source: Source): FeedMetadata {
+  try {
+    return JSON.parse(source.metadata ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+/** Merge partial feed metadata into the source's metadata JSON column. */
+export async function updateSourceFeedMeta(source: Source, meta: Partial<FeedMetadata>): Promise<void> {
+  const existing = getSourceFeedMeta(source);
+  const merged = { ...existing, ...meta };
+  const db = getDb();
+  await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id));
+}
+
+// ── Feed adapter (standalone, for "feed" source type) ───────────────
+
+export const feed: Adapter = {
+  async fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]> {
+    const releases = await fetchViaFeed(source, options);
+    if (releases === null) {
+      logger.warn(`No feed found for ${source.url}`);
+      return [];
+    }
+    return releases;
+  },
+};

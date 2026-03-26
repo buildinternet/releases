@@ -7,6 +7,7 @@ import { sources, releases, type Source } from "../../db/schema.js";
 import type { Adapter, RawRelease, FetchOptions } from "../../adapters/types.js";
 import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
+import { feed } from "../../adapters/feed.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec } from "../../lib/dates.js";
 
@@ -16,6 +17,8 @@ function getAdapter(type: string): Adapter | null {
       return github;
     case "scrape":
       return scrape;
+    case "feed":
+      return feed;
     default:
       logger.warn(`Unknown adapter type "${type}", skipping.`);
       return null;

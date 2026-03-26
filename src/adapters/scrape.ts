@@ -8,9 +8,22 @@ import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
+import { fetchViaFeed } from "./feed.js";
 
 export const scrape: Adapter = {
   async fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]> {
+    // Try feed first (fast, free, deterministic) — falls back on null
+    try {
+      const feedResult = await fetchViaFeed(source, options);
+      if (feedResult !== null) {
+        logger.info(`Feed returned ${feedResult.length} releases (no AI needed)`);
+        return feedResult;
+      }
+    } catch (err) {
+      logger.warn(`Feed fetch/parse failed, falling back to Cloudflare + AI: ${err}`);
+    }
+
+    // Fall back to Cloudflare + AI
     const accountId = config.cloudflareAccountId();
     const apiToken = config.cloudflareApiToken();
 
@@ -110,3 +123,4 @@ export const scrape: Adapter = {
     return mapped;
   },
 };
+
