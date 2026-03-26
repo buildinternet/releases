@@ -16,6 +16,12 @@ export function getDbPath(): string {
   return join(getDataDir(), "released.db");
 }
 
+export function getLogsDir(): string {
+  const dir = join(getDataDir(), "logs");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+
 export const config = {
   anthropicApiKey: () => process.env.ANTHROPIC_API_KEY || "",
   cloudflareAccountId: () => process.env.CLOUDFLARE_ACCOUNT_ID || "",

@@ -75,7 +75,10 @@ export const scrape: Adapter = {
       content: entry.content,
       publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
       isBreaking: entry.isBreaking,
-      url: source.url,
+      // Don't set url to the source page URL — it's the same for all entries
+      // and would trigger the UNIQUE(source_id, url) constraint. Dedup for
+      // scraped entries relies on content_hash instead.
+      url: undefined,
     }));
   },
 };
