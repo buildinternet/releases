@@ -2,7 +2,7 @@ import { eq } from "drizzle-orm";
 import type { Source } from "../db/schema.js";
 import { sources } from "../db/schema.js";
 import { getDb } from "../db/connection.js";
-import type { Adapter, RawRelease, FetchOptions } from "./types.js";
+import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { logger } from "../lib/logger.js";
 
 // ── Feed types ──────────────────────────────────────────────────────
@@ -465,12 +465,12 @@ export async function updateSourceMeta(source: Source, meta: Partial<SourceMetad
 // ── Feed adapter (standalone, for "feed" source type) ───────────────
 
 export const feed: Adapter = {
-  async fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]> {
+  async fetch(source: Source, options?: FetchOptions): Promise<FetchResult> {
     const releases = await fetchViaFeed(source, options);
     if (releases === null) {
       logger.warn(`No feed found for ${source.url}`);
-      return [];
+      return { releases: [] };
     }
-    return releases;
+    return { releases };
   },
 };

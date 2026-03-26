@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import { eq, count, sql } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases, fetchLog, type Source } from "../../db/schema.js";
-import type { Adapter, RawRelease, FetchOptions } from "../../adapters/types.js";
+import type { Adapter, RawRelease, FetchOptions, FetchResult } from "../../adapters/types.js";
 import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
 import { feed, updateSourceMeta } from "../../adapters/feed.js";
@@ -199,8 +199,11 @@ export function registerFetchCommand(program: Command) {
         printProgress(source.name);
         const startTime = performance.now();
 
+        let rawContent: string | undefined;
         try {
-          const rawReleases = await adapter.fetch(source, sourceFetchOptions);
+          const result = await adapter.fetch(source, sourceFetchOptions);
+          const rawReleases = result.releases;
+          rawContent = result.rawContent;
 
           if (rawReleases.length === 0) {
             if (!opts.json && !showProgress) {
@@ -215,6 +218,7 @@ export function registerFetchCommand(program: Command) {
               releasesInserted: 0,
               durationMs: Math.round(performance.now() - startTime),
               status: "no_change",
+              rawContent: rawContent ?? null,
             });
             fetchResults.push({ source: source.name, newReleases: 0 });
             return;
@@ -261,6 +265,7 @@ export function registerFetchCommand(program: Command) {
             releasesInserted: inserted,
             durationMs: Math.round(performance.now() - startTime),
             status: inserted > 0 ? "success" : "no_change",
+            rawContent: rawContent ?? null,
           });
 
           if (!opts.json && !showProgress) {
@@ -278,6 +283,7 @@ export function registerFetchCommand(program: Command) {
             durationMs: Math.round(performance.now() - startTime),
             status: "error",
             error: err instanceof Error ? err.message : String(err),
+            rawContent: rawContent ?? null,
           }).catch(() => {}); // don't fail the whole fetch if logging fails
 
           if (!showProgress) {

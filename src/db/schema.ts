@@ -87,6 +87,7 @@ export const fetchLog = sqliteTable("fetch_log", {
   durationMs: integer("duration_ms"),
   status: text("status", { enum: ["success", "error", "no_change"] }).notNull(),
   error: text("error"),
+  rawContent: text("raw_content"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 }, (table) => [
   index("idx_fetch_log_source").on(table.sourceId),

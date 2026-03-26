@@ -1,5 +1,5 @@
 import type { Source } from "../db/schema.js";
-import type { Adapter, RawRelease, FetchOptions } from "./types.js";
+import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
@@ -31,7 +31,7 @@ interface GitHubRelease {
 // A lightweight optimization to skip fetching all pages when the latest
 // release hasn't changed could be added here in the future.
 export const github: Adapter = {
-  async fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]> {
+  async fetch(source: Source, options?: FetchOptions): Promise<FetchResult> {
     const { owner, repo } = parseOwnerRepo(source.url);
     const token = config.githubToken();
     const since = options?.since;
@@ -84,13 +84,13 @@ export const github: Adapter = {
         });
 
         if (maxEntries && releases.length >= maxEntries) {
-          return releases;
+          return { releases };
         }
       }
 
       url = hitDateCutoff ? null : parseNextLink(res.headers.get("link"));
     }
 
-    return releases;
+    return { releases };
   },
 };

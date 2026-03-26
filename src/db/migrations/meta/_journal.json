@@ -15,6 +15,13 @@
       "when": 1774549784569,
       "tag": "0001_true_magus",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1774554711022,
+      "tag": "0002_robust_gabe_jones",
+      "breakpoints": true
     }
   ]
 }

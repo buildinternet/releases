@@ -18,6 +18,12 @@ export interface FetchOptions {
   crawl?: boolean;
 }
 
+export interface FetchResult {
+  releases: RawRelease[];
+  /** Raw content from the upstream source (e.g. Cloudflare markdown). Saved to fetchLog for re-processing. */
+  rawContent?: string;
+}
+
 export interface Adapter {
-  fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]>;
+  fetch(source: Source, options?: FetchOptions): Promise<FetchResult>;
 }

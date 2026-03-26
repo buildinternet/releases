@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import type { Source } from "../db/schema.js";
 import { sources } from "../db/schema.js";
 import { getDb } from "../db/connection.js";
-import type { Adapter, RawRelease, FetchOptions } from "./types.js";
+import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
@@ -14,7 +14,7 @@ import { getSourceMeta, updateSourceMeta } from "./feed.js";
 import { CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
 
 export const scrape: Adapter = {
-  async fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]> {
+  async fetch(source: Source, options?: FetchOptions): Promise<FetchResult> {
     const meta = getSourceMeta(source);
     const crawlActive = options?.crawl === true || (options?.crawl !== false && meta.crawlEnabled);
 
@@ -25,7 +25,7 @@ export const scrape: Adapter = {
       } catch (err) {
         if (err instanceof CrawlTimeoutError) {
           logger.warn(`${err.message} — returning empty`);
-          return [];
+          return { releases: [] };
         }
         if (err instanceof CrawlJobError) {
           logger.warn(`${err.message} — falling back to single-page scrape`);
@@ -42,7 +42,7 @@ export const scrape: Adapter = {
         const feedResult = await fetchViaFeed(source, options);
         if (feedResult !== null) {
           logger.info(`Feed returned ${feedResult.length} releases (no AI needed)`);
-          return feedResult;
+          return { releases: feedResult };
         }
       } catch (err) {
         logger.warn(`Feed fetch/parse failed, falling back to Cloudflare + AI: ${err}`);
@@ -58,7 +58,7 @@ async function fetchViaCrawl(
   source: Source,
   meta: ReturnType<typeof getSourceMeta>,
   options?: FetchOptions,
-): Promise<RawRelease[]> {
+): Promise<FetchResult> {
   const accountId = config.cloudflareAccountId();
   const apiToken = config.cloudflareApiToken();
 
@@ -91,18 +91,22 @@ async function fetchViaCrawl(
     return pageBase !== startingUrl;
   });
 
+  // Combine all page markdown for raw content storage
+  const buildRawContent = (crawlPages: typeof allPages) =>
+    crawlPages.map((p) => `<!-- URL: ${p.url} -->\n${p.markdown}`).join("\n\n---\n\n");
+
   if (pages.length === 0 && allPages.length > 0) {
     // Only got the index page — fall back to parsing it (better than nothing)
     logger.info(`Crawl only returned the index page, parsing it directly`);
     const releases = await parseCrawlPages(allPages, source.slug, options);
     await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
-    return releases;
+    return { releases, rawContent: buildRawContent(allPages) };
   }
 
   if (pages.length === 0) {
     logger.info(`Crawl returned no pages`);
     await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
-    return [];
+    return { releases: [] };
   }
 
   logger.info(`Crawl returned ${pages.length} page(s), parsing...`);
@@ -111,10 +115,10 @@ async function fetchViaCrawl(
   await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
 
   logger.info(`Parsed ${releases.length} release(s) from crawl`);
-  return releases;
+  return { releases, rawContent: buildRawContent(pages) };
 }
 
-async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promise<RawRelease[]> {
+async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promise<FetchResult> {
   const accountId = config.cloudflareAccountId();
   const apiToken = config.cloudflareApiToken();
 
@@ -160,7 +164,7 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
 
   if (!markdown || markdown.trim().length === 0) {
     logger.warn(`Cloudflare returned empty markdown for ${source.url}`);
-    return [];
+    return { releases: [] };
   }
 
   logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
@@ -172,7 +176,7 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
 
   if (source.lastContentHash === contentHash) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
-    return [];
+    return { releases: [] };
   }
 
   // Store the new hash on the source
@@ -190,7 +194,7 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
     logger.warn(
       `AI parsing failed for ${source.url}: ${error instanceof Error ? error.message : String(error)}`,
     );
-    return [];
+    return { releases: [], rawContent: markdown };
   }
 
   logger.info(`Parsed ${parsed.length} releases from ${source.url}`);
@@ -212,5 +216,5 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
     mapped = mapped.slice(0, options.maxEntries);
   }
 
-  return mapped;
+  return { releases: mapped, rawContent: markdown };
 }
