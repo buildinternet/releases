@@ -199,14 +199,20 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
 
   logger.info(`Parsed ${parsed.length} releases from ${source.url}`);
 
-  let mapped: RawRelease[] = parsed.map((entry) => ({
-    version: entry.version,
-    title: entry.title,
-    content: entry.content,
-    url: source.url,
-    publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
-    isBreaking: entry.isBreaking,
-  }));
+  let mapped: RawRelease[] = parsed.map((entry) => {
+    // Generate a unique URL per entry so UNIQUE(source_id, url) doesn't collapse them
+    const fragment = entry.version
+      ? entry.version.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
+      : entry.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+    return {
+      version: entry.version,
+      title: entry.title,
+      content: entry.content,
+      url: `${source.url}#${fragment}`,
+      publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
+      isBreaking: entry.isBreaking,
+    };
+  });
 
   // Apply date and count limits
   if (options?.since) {
