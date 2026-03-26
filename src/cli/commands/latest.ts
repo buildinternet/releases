@@ -1,9 +1,10 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { eq, desc } from "drizzle-orm";
+import { eq, desc, inArray } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases } from "../../db/schema.js";
+import { findOrg } from "../../db/queries.js";
 
 export function registerLatestCommand(program: Command) {
   program
@@ -11,8 +12,9 @@ export function registerLatestCommand(program: Command) {
     .description("Show the latest releases, optionally filtered by source")
     .argument("[slug]", "Source slug to filter by")
     .option("-c, --count <n>", "Number of releases to show", "10")
+    .option("--org <identifier>", "Filter to an organization")
     .option("--json", "Output as JSON")
-    .action(async (slug: string | undefined, opts: { count: string; json?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { count: string; org?: string; json?: boolean }) => {
       const db = getDb();
       const count = parseInt(opts.count, 10);
 
@@ -26,6 +28,26 @@ export function registerLatestCommand(program: Command) {
           console.error(chalk.red(`Source not found: ${slug}`));
           process.exit(1);
         }
+      }
+
+      let orgSourceIds: string[] | undefined;
+      if (opts.org) {
+        const org = await findOrg(opts.org);
+        if (!org) {
+          console.error(chalk.red(`Organization not found: ${opts.org}`));
+          process.exit(1);
+        }
+        const orgSources = await db.select({ id: sources.id }).from(sources).where(eq(sources.orgId, org.id));
+        orgSourceIds = orgSources.map((s) => s.id);
+      }
+
+      if (orgSourceIds !== undefined && orgSourceIds.length === 0) {
+        if (opts.json) {
+          console.log(JSON.stringify([], null, 2));
+        } else {
+          console.log(chalk.yellow("No releases found."));
+        }
+        return;
       }
 
       let query = db
@@ -42,6 +64,8 @@ export function registerLatestCommand(program: Command) {
 
       if (slug) {
         query = query.where(eq(sources.slug, slug)) as typeof query;
+      } else if (orgSourceIds) {
+        query = query.where(inArray(releases.sourceId, orgSourceIds)) as typeof query;
       }
 
       const rows = await query;

@@ -4,6 +4,7 @@ import { inArray } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases } from "../../db/schema.js";
 import { searchReleases } from "../../db/fts.js";
+import { findOrg, getSourcesByOrg } from "../../db/queries.js";
 
 export function registerSearchCommand(program: Command) {
   program
@@ -11,8 +12,9 @@ export function registerSearchCommand(program: Command) {
     .description("Full-text search across all indexed releases")
     .argument("<query>", "Search query")
     .option("-l, --limit <n>", "Max results to return", "20")
+    .option("--org <identifier>", "Filter to an organization")
     .option("--json", "Output as JSON")
-    .action(async (query: string, opts: { limit: string; json?: boolean }) => {
+    .action(async (query: string, opts: { limit: string; org?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
       const results = searchReleases(query, limit);
 
@@ -43,8 +45,33 @@ export function registerSearchCommand(program: Command) {
       const releaseMap = new Map(releaseRows.map((r) => [r.id, r]));
       const sourceMap = new Map(sourceRows.map((s) => [s.id, s.name]));
 
+      // Filter by org if requested
+      let filteredResults = results;
+      if (opts.org) {
+        const org = await findOrg(opts.org);
+        if (!org) {
+          console.error(chalk.red(`Organization not found: ${opts.org}`));
+          process.exit(1);
+        }
+        const orgSources = await getSourcesByOrg(org.id);
+        const orgSourceIdSet = new Set(orgSources.map((s) => s.id));
+        filteredResults = results.filter((r) => {
+          const release = releaseMap.get(r.id);
+          return release && orgSourceIdSet.has(release.sourceId);
+        });
+
+        if (filteredResults.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.yellow("No results found."));
+          }
+          return;
+        }
+      }
+
       if (opts.json) {
-        const jsonResults = results.map((result) => {
+        const jsonResults = filteredResults.map((result) => {
           const release = releaseMap.get(result.id);
           const sourceName = release ? sourceMap.get(release.sourceId) ?? "Unknown" : "Unknown";
           const preview = result.content.replace(/\n/g, " ").slice(0, 150);
@@ -60,7 +87,7 @@ export function registerSearchCommand(program: Command) {
         return;
       }
 
-      for (const result of results) {
+      for (const result of filteredResults) {
         const release = releaseMap.get(result.id);
         const sourceName = release ? sourceMap.get(release.sourceId) ?? "Unknown" : "Unknown";
         const date = release?.publishedAt ?? "No date";
@@ -72,6 +99,6 @@ export function registerSearchCommand(program: Command) {
         console.log();
       }
 
-      console.log(chalk.dim(`${results.length} result(s) found.`));
+      console.log(chalk.dim(`${filteredResults.length} result(s) found.`));
     });
 }

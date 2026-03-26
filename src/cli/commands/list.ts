@@ -1,8 +1,9 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
+import { eq } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { sources } from "../../db/schema.js";
+import { sources, organizations } from "../../db/schema.js";
 
 export function registerListCommand(program: Command) {
   program
@@ -11,7 +12,18 @@ export function registerListCommand(program: Command) {
     .option("--json", "Output as JSON")
     .action(async (opts: { json?: boolean }) => {
       const db = getDb();
-      const allSources = await db.select().from(sources);
+      const allSources = await db
+        .select({
+          id: sources.id,
+          name: sources.name,
+          slug: sources.slug,
+          type: sources.type,
+          url: sources.url,
+          lastFetchedAt: sources.lastFetchedAt,
+          orgName: organizations.name,
+        })
+        .from(sources)
+        .leftJoin(organizations, eq(sources.orgId, organizations.id));
 
       if (allSources.length === 0) {
         if (opts.json) {
@@ -28,7 +40,7 @@ export function registerListCommand(program: Command) {
       }
 
       const table = new Table({
-        head: ["Name", "Slug", "Type", "URL", "Last Fetched"],
+        head: ["Name", "Slug", "Type", "URL", "Org", "Last Fetched"],
       });
 
       for (const row of allSources) {
@@ -37,6 +49,7 @@ export function registerListCommand(program: Command) {
           row.slug,
           row.type,
           row.url,
+          row.orgName ?? chalk.dim("\u2014"),
           row.lastFetchedAt ?? chalk.dim("never"),
         ]);
       }
