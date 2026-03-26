@@ -49,7 +49,7 @@ export default async function IndependentSourcePage({
     {
       items: [
         { label: "Latest", value: source.latestVersion, subtitle: formatDate(source.latestDate) },
-        { label: "Source", value: safeHostname(source.url) },
+        { label: "Source", value: safeHostname(source.url), externalLink: source.url },
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
     },

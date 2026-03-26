@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
 
-interface SidebarItem { label: string; value: string | number | null; large?: boolean; subtitle?: string; link?: string; }
+interface SidebarItem { label: string; value: string | number | null; large?: boolean; subtitle?: string; link?: string; externalLink?: string; }
 interface SidebarSection { items: SidebarItem[]; }
 interface SidebarProps { sections: SidebarSection[]; accounts?: { platform: string; handle: string }[]; }
 
@@ -15,6 +15,8 @@ export function Sidebar({ sections, accounts }: SidebarProps) {
               <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 mb-1.5">{item.label}</div>
               {item.link ? (
                 <Link href={item.link} className="text-sm font-medium text-stone-900 hover:text-stone-600">{String(item.value)}</Link>
+              ) : item.externalLink ? (
+                <a href={item.externalLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-stone-900 hover:text-stone-600">{String(item.value)}</a>
               ) : (
                 <>
                   <div className={item.large ? "text-[22px] font-bold text-stone-900" : "text-sm font-medium text-stone-900"}>

@@ -116,6 +116,19 @@ Discovery uses multiple evidence-based strategies in parallel:
 
 The `--verify` flag adds an AI verification pass (requires `ANTHROPIC_API_KEY`) that filters out false positives and suggests additional changelog URLs the automated methods may have missed — useful for sites where changelogs live on unexpected subdomains or paths.
 
+### Web Frontend
+
+Browse the catalog in your browser:
+
+```bash
+released api              # start the API server on :3456
+cd web && bun run dev     # start the Next.js frontend on :3000
+```
+
+The API server exposes read-only JSON endpoints (`/api/stats`, `/api/orgs`, `/api/sources`, `/api/search`). The frontend is a Next.js app in `web/` that fetches from the API. Configure the API URL for the frontend with `RELEASED_API_URL` (defaults to `http://localhost:3456`).
+
+Production deployment: the API and frontend are deployed separately. The frontend will be hosted at [releases.sh](https://releases.sh).
+
 ### MCP Server
 
 Start the MCP server for AI agent integration:
@@ -153,6 +166,14 @@ Claude Desktop config:
 | `list_products` | List all tracked sources |
 | `list_organizations` | List all organizations with their linked sources |
 
+### Statistics
+
+```bash
+released stats             # index overview, source health, recent fetch activity
+released stats --days 7    # adjust period
+released stats --json      # machine-readable output
+```
+
 ### Usage Tracking
 
 ```bash
@@ -167,6 +188,8 @@ released usage --days 7    # last 7 days
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, Cloudflare Browser Rendering for scraping
 - **AI Layer** — Anthropic SDK for changelog parsing (ingestion) and summarization (query)
 - **MCP Server** — `@modelcontextprotocol/sdk` on stdio
+- **API Server** — Bun HTTP server with read-only JSON endpoints, CORS enabled
+- **Web Frontend** — Next.js 15 (App Router) + Tailwind CSS in `web/`
 - **Migrations** — Drizzle Kit (`bun run db:generate` to create, applied automatically at startup)
 
 ## Data Storage
@@ -177,6 +200,7 @@ Data is stored in `~/.released/released.db` (configurable via `RELEASED_DATA_DIR
 
 ```bash
 bun src/index.ts <command>   # run directly without linking
-npx tsc --noEmit             # type-check
+npx tsc --noEmit             # type-check (CLI)
+cd web && npx tsc --noEmit   # type-check (frontend)
 bun run db:generate          # generate migration after schema change
 ```
