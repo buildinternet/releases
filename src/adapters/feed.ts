@@ -14,13 +14,20 @@ interface DiscoveredFeed {
   type: FeedType;
 }
 
-export interface FeedMetadata {
+export interface SourceMetadata {
+  // Feed fields
   feedUrl?: string;
   feedType?: FeedType;
   feedDiscoveredAt?: string;
   feedEtag?: string;
   feedLastModified?: string;
   noFeedFound?: boolean;
+
+  // Crawl fields
+  crawlEnabled?: boolean;
+  crawlPattern?: string;
+  lastCrawlJobId?: string;
+  lastCrawlAt?: string;
 }
 
 // ── Feed discovery ──────────────────────────────────────────────────
@@ -222,8 +229,8 @@ export async function fetchViaFeed(
   source: Source,
   options?: FetchOptions,
 ): Promise<RawRelease[] | null> {
-  const meta = getSourceFeedMeta(source);
-  const metaUpdates: Partial<FeedMetadata> = {};
+  const meta = getSourceMeta(source);
+  const metaUpdates: Partial<SourceMetadata> = {};
 
   if (meta.noFeedFound) return null;
 
@@ -236,7 +243,7 @@ export async function fetchViaFeed(
     try {
       const discovered = await discoverFeed(source.url);
       if (!discovered) {
-        await updateSourceFeedMeta(source, { noFeedFound: true });
+        await updateSourceMeta(source, { noFeedFound: true });
         return null;
       }
       feedUrl = discovered.url;
@@ -273,7 +280,7 @@ export async function fetchViaFeed(
 
   // Write all metadata changes in a single update
   if (Object.keys(metaUpdates).length > 0) {
-    await updateSourceFeedMeta(source, metaUpdates);
+    await updateSourceMeta(source, metaUpdates);
   }
 
   if (releases.length === 0) {
@@ -425,7 +432,7 @@ function decodeHtmlEntities(text: string): string {
 
 // ── Source metadata helpers ──────────────────────────────────────────
 
-export function getSourceFeedMeta(source: Source): FeedMetadata {
+export function getSourceMeta(source: Source): SourceMetadata {
   try {
     return JSON.parse(source.metadata ?? "{}");
   } catch {
@@ -433,9 +440,9 @@ export function getSourceFeedMeta(source: Source): FeedMetadata {
   }
 }
 
-/** Merge partial feed metadata into the source's metadata JSON column. */
-export async function updateSourceFeedMeta(source: Source, meta: Partial<FeedMetadata>): Promise<void> {
-  const existing = getSourceFeedMeta(source);
+/** Merge partial source metadata into the source's metadata JSON column. */
+export async function updateSourceMeta(source: Source, meta: Partial<SourceMetadata>): Promise<void> {
+  const existing = getSourceMeta(source);
   const merged = { ...existing, ...meta };
   const db = getDb();
   await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id));

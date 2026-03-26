@@ -14,6 +14,8 @@ export interface FetchOptions {
   since?: Date;
   /** Maximum number of releases to fetch */
   maxEntries?: number;
+  /** --crawl (true) / --no-crawl (false) / unset (use persisted setting) */
+  crawl?: boolean;
 }
 
 export interface Adapter {

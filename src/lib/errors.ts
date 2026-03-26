@@ -25,3 +25,17 @@ export class ConfigError extends Error {
     this.name = "ConfigError";
   }
 }
+
+export class CrawlTimeoutError extends Error {
+  constructor(jobId: string, timeoutMs: number) {
+    super(`Crawl job ${jobId} timed out after ${Math.round(timeoutMs / 1000)}s`);
+    this.name = "CrawlTimeoutError";
+  }
+}
+
+export class CrawlJobError extends Error {
+  constructor(jobId: string, public jobStatus: string) {
+    super(`Crawl job ${jobId} ended with status: ${jobStatus}`);
+    this.name = "CrawlJobError";
+  }
+}

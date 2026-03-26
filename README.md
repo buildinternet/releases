@@ -42,6 +42,18 @@ released fetch --since 2025-01-01 --max 50
 released fetch --all       # no date/count limits
 ```
 
+### Crawl mode
+
+For changelogs spread across multiple pages, crawl mode follows links and parses each page individually:
+
+```bash
+released fetch linear --crawl                    # enable crawl, auto-detect pattern
+released fetch linear --crawl --crawl-pattern "https://linear.app/changelog/*"
+released fetch linear --no-crawl                 # one-off skip, keeps setting
+```
+
+Crawl mode persists on the source — subsequent `released fetch linear` calls will automatically crawl. Only works with `scrape` sources.
+
 ### Query
 
 ```bash

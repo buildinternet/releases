@@ -7,7 +7,7 @@ import { sources, releases, type Source } from "../../db/schema.js";
 import type { Adapter, RawRelease, FetchOptions } from "../../adapters/types.js";
 import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
-import { feed } from "../../adapters/feed.js";
+import { feed, updateSourceMeta } from "../../adapters/feed.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec } from "../../lib/dates.js";
 
@@ -39,7 +39,13 @@ export function registerFetchCommand(program: Command) {
     .option("--since <date>", "Only fetch releases after this date (ISO 8601 or YYYY-MM-DD)")
     .option("--max <n>", "Maximum number of releases to fetch per source (default: 100)", "100")
     .option("--all", "Fetch all releases with no limits")
-    .action(async (slug: string | undefined, opts: { json?: boolean; since?: string; max?: string; all?: boolean }) => {
+    .option("--crawl", "Enable crawl mode for multi-page changelogs (scrape sources only, persists)")
+    .option("--no-crawl", "One-off override to skip crawl mode for this invocation")
+    .option("--crawl-pattern <pattern>", "URL pattern to scope crawl (e.g. https://example.com/changelog/*)")
+    .action(async (slug: string | undefined, opts: {
+      json?: boolean; since?: string; max?: string; all?: boolean;
+      crawl?: boolean; crawlPattern?: string;
+    }) => {
       const db = getDb();
 
       const fetchResults: Array<{ source: string; newReleases: number }> = [];
@@ -76,6 +82,29 @@ export function registerFetchCommand(program: Command) {
       for (const source of targetSources) {
         const adapter = getAdapter(source.type);
         if (!adapter) continue;
+
+        // Handle --crawl flag: persist on scrape sources, warn on others
+        if (opts.crawl === true && source.type !== "scrape") {
+          if (!opts.json) {
+            logger.warn(`--crawl is only supported for scrape sources, skipping for ${source.name} (${source.type})`);
+          }
+        }
+
+        if (opts.crawl === true && source.type === "scrape") {
+          const pattern = opts.crawlPattern ?? `${source.url.replace(/\/$/, "")}/**`;
+          await updateSourceMeta(source, {
+            crawlEnabled: true,
+            crawlPattern: pattern,
+          });
+          // Clear stale content hash to prevent it from suppressing single-page fallback
+          await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+          if (!opts.json) {
+            logger.info(`Crawl mode enabled for ${source.name} (pattern: ${pattern})`);
+          }
+        }
+
+        // Pass crawl override to adapter
+        fetchOptions.crawl = opts.crawl;
 
         if (!opts.json) {
           const limits = [];
