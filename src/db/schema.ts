@@ -1,5 +1,30 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId } from "../lib/id.js";
+
+export const organizations = sqliteTable("organizations", {
+  id: text("id").primaryKey().$defaultFn(newOrgId),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  domain: text("domain").unique(),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const orgAccounts = sqliteTable(
+  "org_accounts",
+  {
+    id: text("id").primaryKey().$defaultFn(newOrgAccountId),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    platform: text("platform").notNull(),
+    handle: text("handle").notNull(),
+    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_org_accounts_platform_handle").on(table.platform, table.handle),
+  ],
+);
 
 export const sources = sqliteTable("sources", {
   id: text("id").primaryKey().$defaultFn(newSourceId),
@@ -7,11 +32,14 @@ export const sources = sqliteTable("sources", {
   slug: text("slug").notNull().unique(),
   type: text("type", { enum: ["github", "scrape"] }).notNull(),
   url: text("url").notNull(),
+  orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
   metadata: text("metadata").default("{}"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   lastFetchedAt: text("last_fetched_at"),
   lastContentHash: text("last_content_hash"),
-});
+}, (table) => [
+  index("idx_sources_org").on(table.orgId),
+]);
 
 export const releases = sqliteTable(
   "releases",
@@ -55,3 +83,7 @@ export type Release = typeof releases.$inferSelect;
 export type NewRelease = typeof releases.$inferInsert;
 export type UsageLog = typeof usageLog.$inferSelect;
 export type NewUsageLog = typeof usageLog.$inferInsert;
+export type Organization = typeof organizations.$inferSelect;
+export type NewOrganization = typeof organizations.$inferInsert;
+export type OrgAccount = typeof orgAccounts.$inferSelect;
+export type NewOrgAccount = typeof orgAccounts.$inferInsert;
