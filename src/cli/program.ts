@@ -12,6 +12,7 @@ import { registerServeCommand } from "./commands/serve.js";
 import { registerUsageCommand } from "./commands/usage.js";
 import { registerOrgCommand } from "./commands/org.js";
 import { registerDiscoverCommand } from "./commands/discover.js";
+import { registerStatsCommand } from "./commands/stats.js";
 
 export const program = new Command()
   .name("released")
@@ -31,3 +32,4 @@ registerServeCommand(program);
 registerUsageCommand(program);
 registerOrgCommand(program);
 registerDiscoverCommand(program);
+registerStatsCommand(program);

@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { createHash } from "crypto";
 import { eq, count } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { sources, releases, type Source } from "../../db/schema.js";
+import { sources, releases, fetchLog, type Source } from "../../db/schema.js";
 import type { Adapter, RawRelease, FetchOptions } from "../../adapters/types.js";
 import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
@@ -147,6 +147,13 @@ export function registerFetchCommand(program: Command) {
                 : `No releases found for ${source.name}`;
               console.log(chalk.yellow(`${msg} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`));
             }
+            await db.insert(fetchLog).values({
+              sourceId: source.id,
+              releasesFound: 0,
+              releasesInserted: 0,
+              durationMs: Math.round(performance.now() - startTime),
+              status: "no_change",
+            });
             fetchResults.push({ source: source.name, newReleases: 0 });
             continue;
           }
@@ -185,12 +192,29 @@ export function registerFetchCommand(program: Command) {
 
           fetchResults.push({ source: source.name, newReleases: inserted });
 
+          await db.insert(fetchLog).values({
+            sourceId: source.id,
+            releasesFound: rawReleases.length,
+            releasesInserted: inserted,
+            durationMs: Math.round(performance.now() - startTime),
+            status: inserted > 0 ? "success" : "no_change",
+          });
+
           if (!opts.json) {
             console.log(
               chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`),
             );
           }
         } catch (err) {
+          await db.insert(fetchLog).values({
+            sourceId: source.id,
+            releasesFound: 0,
+            releasesInserted: 0,
+            durationMs: Math.round(performance.now() - startTime),
+            status: "error",
+            error: err instanceof Error ? err.message : String(err),
+          }).catch(() => {}); // don't fail the whole fetch if logging fails
+
           logger.error(`Failed to fetch from ${source.name} (${elapsedSec(startTime)}s):`, err);
         }
       }

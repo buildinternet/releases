@@ -8,6 +8,13 @@
       "when": 1774539355041,
       "tag": "0000_abnormal_kulan_gath",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1774549784569,
+      "tag": "0001_true_magus",
+      "breakpoints": true
     }
   ]
 }

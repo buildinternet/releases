@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -77,6 +77,22 @@ export const usageLog = sqliteTable("usage_log", {
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 
+export const fetchLog = sqliteTable("fetch_log", {
+  id: text("id").primaryKey().$defaultFn(newFetchLogId),
+  sourceId: text("source_id")
+    .notNull()
+    .references(() => sources.id, { onDelete: "cascade" }),
+  releasesFound: integer("releases_found").notNull(),
+  releasesInserted: integer("releases_inserted").notNull(),
+  durationMs: integer("duration_ms"),
+  status: text("status", { enum: ["success", "error", "no_change"] }).notNull(),
+  error: text("error"),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+}, (table) => [
+  index("idx_fetch_log_source").on(table.sourceId),
+  index("idx_fetch_log_created").on(table.createdAt),
+]);
+
 export type Source = typeof sources.$inferSelect;
 export type NewSource = typeof sources.$inferInsert;
 export type Release = typeof releases.$inferSelect;
@@ -87,3 +103,5 @@ export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
 export type OrgAccount = typeof orgAccounts.$inferSelect;
 export type NewOrgAccount = typeof orgAccounts.$inferInsert;
+export type FetchLog = typeof fetchLog.$inferSelect;
+export type NewFetchLog = typeof fetchLog.$inferInsert;
