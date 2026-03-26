@@ -1,6 +1,7 @@
 import { config } from "../lib/config.js";
 import { AIError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 
 export interface ParsedRelease {
@@ -103,6 +104,13 @@ async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: 
   });
 
   logger.debug(`AI ingest chunk (${chunk.length} chars) stop_reason:`, response.stop_reason);
+
+  await logUsage({
+    operation: "ingest",
+    model: config.ingestModel(),
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
 
   if (response.stop_reason === "max_tokens") {
     logger.warn("AI ingest hit max_tokens — chunk may be too large, some entries may be lost");

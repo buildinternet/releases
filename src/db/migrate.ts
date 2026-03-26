@@ -15,7 +15,8 @@ export function runMigrations() {
       url TEXT NOT NULL,
       metadata TEXT DEFAULT '{}',
       created_at TEXT NOT NULL,
-      last_fetched_at TEXT
+      last_fetched_at TEXT,
+      last_content_hash TEXT
     )
   `);
 
@@ -40,6 +41,27 @@ export function runMigrations() {
   db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_releases_source_hash ON releases(source_id, content_hash)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_releases_source_published ON releases(source_id, published_at)`);
   db.run(sql`CREATE INDEX IF NOT EXISTS idx_releases_published ON releases(published_at)`);
+
+  // Add last_content_hash column to sources if it doesn't exist (migration)
+  try {
+    db.run(sql`ALTER TABLE sources ADD COLUMN last_content_hash TEXT`);
+  } catch {
+    // Column already exists — ignore
+  }
+
+  // Usage log table
+  db.run(sql`
+    CREATE TABLE IF NOT EXISTS usage_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operation TEXT NOT NULL,
+      model TEXT NOT NULL,
+      input_tokens INTEGER NOT NULL,
+      output_tokens INTEGER NOT NULL,
+      source_slug TEXT,
+      release_count INTEGER,
+      created_at TEXT NOT NULL
+    )
+  `);
 
   // FTS5 virtual table for full-text search
   db.run(sql`

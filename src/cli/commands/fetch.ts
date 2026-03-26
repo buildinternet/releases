@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import { eq, count } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases, type Source } from "../../db/schema.js";
-import type { Adapter, RawRelease } from "../../adapters/types.js";
+import type { Adapter, RawRelease, FetchOptions } from "../../adapters/types.js";
 import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
 import { logger } from "../../lib/logger.js";
@@ -32,7 +32,10 @@ export function registerFetchCommand(program: Command) {
     .description("Fetch releases from configured sources")
     .argument("[slug]", "Fetch a specific source by slug, or all sources if omitted")
     .option("--json", "Output as JSON")
-    .action(async (slug: string | undefined, opts: { json?: boolean }) => {
+    .option("--since <date>", "Only fetch releases after this date (ISO 8601 or YYYY-MM-DD)")
+    .option("--max <n>", "Maximum number of releases to fetch per source (default: 100)", "100")
+    .option("--all", "Fetch all releases with no limits")
+    .action(async (slug: string | undefined, opts: { json?: boolean; since?: string; max?: string; all?: boolean }) => {
       const db = getDb();
 
       const fetchResults: Array<{ source: string; newReleases: number }> = [];
@@ -57,20 +60,37 @@ export function registerFetchCommand(program: Command) {
         }
       }
 
+      // Build fetch options with defaults
+      const fetchOptions: FetchOptions = {};
+      if (!opts.all) {
+        if (opts.since) {
+          fetchOptions.since = new Date(opts.since);
+        }
+        fetchOptions.maxEntries = parseInt(opts.max ?? "100", 10);
+      }
+
       for (const source of targetSources) {
         const adapter = getAdapter(source.type);
         if (!adapter) continue;
 
         if (!opts.json) {
-          logger.info(`Fetching releases from ${chalk.cyan(source.name)}...`);
+          const limits = [];
+          if (fetchOptions.since) limits.push(`since ${fetchOptions.since.toISOString().split("T")[0]}`);
+          if (fetchOptions.maxEntries) limits.push(`max ${fetchOptions.maxEntries}`);
+          const limitStr = limits.length > 0 ? ` (${limits.join(", ")})` : "";
+          logger.info(`Fetching releases from ${chalk.cyan(source.name)}${limitStr}...`);
         }
 
         try {
-          const rawReleases = await adapter.fetch(source);
+          const rawReleases = await adapter.fetch(source, fetchOptions);
 
           if (rawReleases.length === 0) {
             if (!opts.json) {
-              console.log(chalk.yellow(`No releases found for ${source.name}`));
+              // For scrape sources, empty result may mean content hash was unchanged
+              const msg = source.type === "scrape"
+                ? `No changes detected for ${source.name}`
+                : `No releases found for ${source.name}`;
+              console.log(chalk.yellow(msg));
             }
             fetchResults.push({ source: source.name, newReleases: 0 });
             continue;

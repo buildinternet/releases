@@ -1,18 +1,16 @@
+import { createHash } from "crypto";
+import { eq } from "drizzle-orm";
 import type { Source } from "../db/schema.js";
-import type { Adapter, RawRelease } from "./types.js";
+import { sources } from "../db/schema.js";
+import { getDb } from "../db/connection.js";
+import type { Adapter, RawRelease, FetchOptions } from "./types.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
 
-interface CloudflareMarkdownResponse {
-  success: boolean;
-  result: string;
-  errors?: Array<{ message: string }>;
-}
-
 export const scrape: Adapter = {
-  async fetch(source: Source): Promise<RawRelease[]> {
+  async fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]> {
     const accountId = config.cloudflareAccountId();
     const apiToken = config.cloudflareApiToken();
 
@@ -23,9 +21,10 @@ export const scrape: Adapter = {
       );
     }
 
+    // Use /markdown endpoint — more reliable than /json for diverse changelog pages
     const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/markdown`;
 
-    const response = await fetch(endpoint, {
+    const res: Response = await fetch(endpoint, {
       method: "POST",
       headers: {
         Authorization: `Bearer ${apiToken}`,
@@ -34,15 +33,15 @@ export const scrape: Adapter = {
       body: JSON.stringify({ url: source.url }),
     });
 
-    if (!response.ok) {
-      const body = await response.text();
+    if (!res.ok) {
+      const body = await res.text();
       throw new AdapterError(
         "scrape",
-        `Cloudflare Browser Rendering API returned ${response.status} for ${source.url}: ${body}`,
+        `Cloudflare Browser Rendering API returned ${res.status} for ${source.url}: ${body}`,
       );
     }
 
-    const data: CloudflareMarkdownResponse = await response.json();
+    const data = await res.json() as { success: boolean; result: string; errors?: Array<{ message: string }> };
 
     if (!data.success) {
       const messages = data.errors?.map((e) => e.message).join("; ") ?? "unknown error";
@@ -59,6 +58,24 @@ export const scrape: Adapter = {
       return [];
     }
 
+    // Re-fetch protection: hash the markdown and compare to stored hash
+    const contentHash = createHash("sha256")
+      .update(markdown)
+      .digest("hex");
+
+    if (source.lastContentHash === contentHash) {
+      logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
+      return [];
+    }
+
+    // Store the new hash on the source
+    const db = getDb();
+    await db
+      .update(sources)
+      .set({ lastContentHash: contentHash })
+      .where(eq(sources.id, source.id));
+
+    // Parse with Anthropic AI ingestion agent
     let parsed;
     try {
       parsed = await parseChangelog(markdown);
@@ -69,16 +86,24 @@ export const scrape: Adapter = {
       return [];
     }
 
-    return parsed.map((entry) => ({
+    logger.info(`Parsed ${parsed.length} releases from ${source.url}`);
+
+    let mapped: RawRelease[] = parsed.map((entry) => ({
       version: entry.version,
       title: entry.title,
       content: entry.content,
       publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
       isBreaking: entry.isBreaking,
-      // Don't set url to the source page URL — it's the same for all entries
-      // and would trigger the UNIQUE(source_id, url) constraint. Dedup for
-      // scraped entries relies on content_hash instead.
-      url: undefined,
     }));
+
+    // Apply date and count limits
+    if (options?.since) {
+      mapped = mapped.filter((r) => !r.publishedAt || r.publishedAt >= options.since!);
+    }
+    if (options?.maxEntries) {
+      mapped = mapped.slice(0, options.maxEntries);
+    }
+
+    return mapped;
   },
 };

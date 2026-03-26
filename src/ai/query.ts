@@ -1,5 +1,6 @@
 import { config } from "../lib/config.js";
 import { AIError } from "../lib/errors.js";
+import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 
 export interface ReleaseInput {
@@ -47,6 +48,14 @@ export async function summarizeReleases(releases: ReleaseInput[]): Promise<strin
       ],
     });
 
+    await logUsage({
+      operation: "summarize",
+      model: config.queryModel(),
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      releaseCount: releases.length,
+    });
+
     const textBlock = response.content.find((block) => block.type === "text");
     if (!textBlock || textBlock.type !== "text") {
       throw new AIError("Model did not return a text response.");
@@ -89,6 +98,14 @@ export async function compareProducts(
           content: `Compare recent changes between these two products:\n\n${formatReleases(productA)}\n\n---\n\n${formatReleases(productB)}`,
         },
       ],
+    });
+
+    await logUsage({
+      operation: "compare",
+      model: config.queryModel(),
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      releaseCount: productA.releases.length + productB.releases.length,
     });
 
     const textBlock = response.content.find((block) => block.type === "text");

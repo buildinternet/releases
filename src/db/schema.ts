@@ -9,6 +9,7 @@ export const sources = sqliteTable("sources", {
   metadata: text("metadata").default("{}"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   lastFetchedAt: text("last_fetched_at"),
+  lastContentHash: text("last_content_hash"),
 });
 
 export const releases = sqliteTable(
@@ -36,7 +37,20 @@ export const releases = sqliteTable(
   ],
 );
 
+export const usageLog = sqliteTable("usage_log", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  operation: text("operation").notNull(), // e.g. "ingest", "summarize", "compare"
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens").notNull(),
+  outputTokens: integer("output_tokens").notNull(),
+  sourceSlug: text("source_slug"), // nullable — which source this was for
+  releaseCount: integer("release_count"), // how many releases were involved
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
 export type Source = typeof sources.$inferSelect;
 export type NewSource = typeof sources.$inferInsert;
 export type Release = typeof releases.$inferSelect;
 export type NewRelease = typeof releases.$inferInsert;
+export type UsageLog = typeof usageLog.$inferSelect;
+export type NewUsageLog = typeof usageLog.$inferInsert;

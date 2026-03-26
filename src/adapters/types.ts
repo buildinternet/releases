@@ -9,6 +9,13 @@ export interface RawRelease {
   isBreaking?: boolean;
 }
 
+export interface FetchOptions {
+  /** Only fetch releases published after this date */
+  since?: Date;
+  /** Maximum number of releases to fetch */
+  maxEntries?: number;
+}
+
 export interface Adapter {
-  fetch(source: Source): Promise<RawRelease[]>;
+  fetch(source: Source, options?: FetchOptions): Promise<RawRelease[]>;
 }
