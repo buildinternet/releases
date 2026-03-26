@@ -1,4 +1,3 @@
-// src/cli/commands/onboard.ts
 import { Command } from "commander";
 import chalk from "chalk";
 import { runDiscovery, type DiscoveryState } from "../../agent/discovery.js";
@@ -29,16 +28,11 @@ export function registerOnboardCommand(program: Command) {
           company,
           domain: opts.domain,
           githubOrg: opts.githubOrg,
-          json: opts.json,
-          onProgress: (text) => {
-            if (!opts.json) {
-              process.stderr.write(chalk.dim(text));
-            }
+          onProgress: opts.json ? undefined : (text) => {
+            process.stderr.write(chalk.dim(text));
           },
-          onToolUse: (toolName, command) => {
-            if (opts.json) return;
+          onToolUse: opts.json ? undefined : (toolName, command) => {
             if (toolName === "Bash" && command) {
-              // Show CLI commands the agent runs (truncate long ones)
               const display = command.length > 120 ? command.slice(0, 117) + "..." : command;
               process.stderr.write(chalk.gray(`  $ ${display}\n`));
             } else if (toolName !== lastToolName) {
@@ -53,7 +47,6 @@ export function registerOnboardCommand(program: Command) {
           return;
         }
 
-        // Print summary
         printSummary(state);
       },
     );
@@ -61,26 +54,29 @@ export function registerOnboardCommand(program: Command) {
 
 function printSummary(state: DiscoveryState): void {
   const { sources } = state;
+  const write = (s: string) => process.stderr.write(s + "\n");
 
-  process.stderr.write("\n");
-  console.log(chalk.bold(`Discovery results for ${state.product}\n`));
+  write("");
+  write(chalk.bold(`Discovery results for ${state.product}`));
+  write("");
 
-  if (state.domain) console.log(chalk.gray(`  Domain: ${state.domain}`));
-  if (state.githubOrg) console.log(chalk.gray(`  GitHub: ${state.githubOrg}`));
+  if (state.domain) write(chalk.gray(`  Domain: ${state.domain}`));
+  if (state.githubOrg) write(chalk.gray(`  GitHub: ${state.githubOrg}`));
 
   if (sources.length === 0) {
-    console.log(chalk.yellow("\n  No sources discovered."));
+    write(chalk.yellow("\n  No sources discovered."));
     return;
   }
 
   const validated = sources.filter((s) => s.validated);
   const failed = sources.filter((s) => s.validationError);
 
-  console.log(
+  write(
     chalk.gray(
-      `  ${sources.length} source(s) found, ${validated.length} validated, ${failed.length} failed\n`,
+      `  ${sources.length} source(s) found, ${validated.length} validated, ${failed.length} failed`,
     ),
   );
+  write("");
 
   for (const s of sources) {
     const conf =
@@ -96,9 +92,9 @@ function printSummary(state: DiscoveryState): void {
         : chalk.gray("not validated");
     const dup = s.duplicateOf ? chalk.dim(` (dup of ${s.duplicateOf})`) : "";
 
-    console.log(`  ${chalk.cyan(s.slug)} ${chalk.dim(s.type)} ${conf} — ${status}${dup}`);
-    console.log(chalk.dim(`    ${s.url}`));
+    write(`  ${chalk.cyan(s.slug)} ${chalk.dim(s.type)} ${conf} — ${status}${dup}`);
+    write(chalk.dim(`    ${s.url}`));
   }
 
-  console.log(chalk.dim(`\n  Status: ${state.status}`));
+  write(chalk.dim(`\n  Status: ${state.status}`));
 }

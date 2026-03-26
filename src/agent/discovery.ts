@@ -1,15 +1,15 @@
-// src/agent/discovery.ts
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "path";
 import { config } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
+import type { Confidence } from "../lib/discover.js";
 
-export interface DiscoveredSource {
+export interface AgentDiscoveredSource {
   url: string;
   type: "github" | "scrape" | "feed";
   slug: string;
   label: string;
-  confidence: "high" | "medium" | "low";
+  confidence: Confidence;
   validated: boolean;
   validationError?: string;
   releaseCount?: number;
@@ -25,7 +25,7 @@ export interface DiscoveryState {
   startedAt: string;
   updatedAt: string;
   status: "discovering" | "awaiting_review" | "approved" | "fetching" | "complete";
-  sources: DiscoveredSource[];
+  sources: AgentDiscoveredSource[];
   agentSessionId?: string;
   costUsd?: number;
   turns?: number;
@@ -35,17 +35,19 @@ export interface DiscoveryOptions {
   company: string;
   domain?: string;
   githubOrg?: string;
-  json?: boolean;
-  /** Called with each assistant text chunk for progress display */
   onProgress?: (text: string) => void;
-  /** Called with each tool use for progress display */
   onToolUse?: (toolName: string, command?: string) => void;
 }
 
-function buildSystemPrompt(projectRoot: string): string {
+const DISCOVERY_STATE_FILE = "/tmp/discovery-state.json";
+
+const projectRoot = resolve(import.meta.dir, "../..");
+const cliCmd = `bun ${projectRoot}/src/index.ts`;
+
+function buildSystemPrompt(): string {
   return `You are a changelog discovery agent for the "Released" tool. Your job is to find and onboard changelog sources for a given company or product.
 
-You have access to the Released CLI at: bun ${projectRoot}/src/index.ts
+You have access to the Released CLI at: ${cliCmd}
 
 Available commands:
 - list: Show all indexed sources (use --json for machine-readable output)
@@ -71,7 +73,7 @@ Be methodical. If a source doesn't extract well, try a different URL or type.
 Do NOT actually fetch (without --dry-run) unless explicitly told to.
 Keep your output concise — focus on actions and results.
 
-IMPORTANT: At the end of your work, write a JSON state file to /tmp/discovery-state.json with this exact schema:
+IMPORTANT: At the end of your work, write a JSON state file to ${DISCOVERY_STATE_FILE} with this exact schema:
 {
   "product": "<company name>",
   "domain": "<discovered domain or null>",
@@ -96,17 +98,14 @@ IMPORTANT: At the end of your work, write a JSON state file to /tmp/discovery-st
 }
 
 export async function runDiscovery(options: DiscoveryOptions): Promise<DiscoveryState> {
-  const projectRoot = resolve(import.meta.dir, "../..");
-
   const apiKey = config.anthropicApiKey();
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY is required to run the discovery agent");
   }
 
   const model = config.agentModel();
-  const systemPrompt = buildSystemPrompt(projectRoot);
+  const systemPrompt = buildSystemPrompt();
 
-  // Build the user prompt with optional hints
   const hints: string[] = [];
   if (options.domain) hints.push(`Their website is ${options.domain}.`);
   if (options.githubOrg) hints.push(`Their GitHub organization is ${options.githubOrg}.`);
@@ -114,16 +113,17 @@ export async function runDiscovery(options: DiscoveryOptions): Promise<Discovery
 
   const prompt = `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only.`;
 
-  // Build MCP server config for Cloudflare Browser Rendering
   const mcpServers: Record<string, object> = {};
-  if (config.cloudflareAccountId() && config.cloudflareApiToken()) {
+  const cfAccountId = config.cloudflareAccountId();
+  const cfApiToken = config.cloudflareApiToken();
+  if (cfAccountId && cfApiToken) {
     mcpServers["cloudflare-browser"] = {
       type: "stdio",
       command: "bun",
       args: [resolve(projectRoot, "src/agent/mcp-cloudflare-browser.ts")],
       env: {
-        CLOUDFLARE_ACCOUNT_ID: config.cloudflareAccountId(),
-        CLOUDFLARE_API_TOKEN: config.cloudflareApiToken(),
+        CLOUDFLARE_ACCOUNT_ID: cfAccountId,
+        CLOUDFLARE_API_TOKEN: cfApiToken,
       },
     };
   }
@@ -148,7 +148,7 @@ export async function runDiscovery(options: DiscoveryOptions): Promise<Discovery
           description:
             "Validates a single changelog source by running fetch --dry-run and evaluating the results. Invoke with the source slug.",
           prompt: `You validate Released changelog sources. Given a source slug, run:
-  bun ${projectRoot}/src/index.ts fetch <slug> --dry-run
+  ${cliCmd} fetch <slug> --dry-run
 
 Evaluate the output:
 - Did it find releases? How many?
@@ -164,7 +164,6 @@ Report back with: slug, release count, quality assessment (good/partial/bad), an
     },
   });
 
-  // Stream messages
   for await (const message of conversation) {
     if (message.type === "assistant") {
       for (const block of message.message.content) {
@@ -185,20 +184,19 @@ Report back with: slug, release count, quality assessment (good/partial/bad), an
     }
   }
 
-  // Read the state file the agent should have written
-  const stateFile = "/tmp/discovery-state.json";
   try {
-    const raw = await Bun.file(stateFile).text();
+    const raw = await Bun.file(DISCOVERY_STATE_FILE).text();
     const state: DiscoveryState = JSON.parse(raw);
     return state;
   } catch {
     logger.warn("Agent did not write a valid discovery state file — returning minimal state");
+    const now = new Date().toISOString();
     return {
       product: options.company,
       domain: options.domain,
       githubOrg: options.githubOrg,
-      startedAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString(),
+      startedAt: now,
+      updatedAt: now,
       status: "awaiting_review",
       sources: [],
     };
