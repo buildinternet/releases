@@ -24,6 +24,61 @@ function parseGitHubOwner(url: string): string | null {
   return match ? match[1] : null;
 }
 
+/**
+ * Detect if a changelog page is a blog-index (links to individual entry pages)
+ * by fetching the HTML and counting child-path links.
+ * Returns the crawl pattern if detected, null otherwise.
+ */
+async function detectCrawlPattern(sourceUrl: string): Promise<string | null> {
+  try {
+    const res = await fetch(sourceUrl, {
+      headers: { "User-Agent": "released/0.1 (+https://releases.sh)" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(10_000),
+    });
+    if (!res.ok) return null;
+
+    const html = await res.text();
+    const baseUrl = sourceUrl.replace(/\/$/, "");
+    const basePath = new URL(baseUrl).pathname.replace(/\/$/, "");
+
+    // Find all href values that are child paths of the source URL
+    const hrefPattern = /href=["']([^"']+)["']/g;
+    const childPaths = new Set<string>();
+
+    let match;
+    while ((match = hrefPattern.exec(html)) !== null) {
+      const href = match[1];
+      try {
+        // Resolve relative URLs
+        const resolved = new URL(href, sourceUrl);
+        // Must be same origin and a child path (deeper than the base)
+        if (resolved.origin === new URL(sourceUrl).origin) {
+          const path = resolved.pathname.replace(/\/$/, "");
+          if (
+            path.startsWith(basePath + "/") &&
+            path !== basePath &&
+            path.split("/").length > basePath.split("/").length
+          ) {
+            childPaths.add(path);
+          }
+        }
+      } catch {
+        // Skip malformed URLs
+      }
+    }
+
+    // If 3+ unique child paths found, this looks like a blog-index
+    if (childPaths.size >= 3) {
+      return `${baseUrl}/**`;
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 export function registerAddCommand(program: Command) {
   program
     .command("add")
@@ -125,6 +180,17 @@ export function registerAddCommand(program: Command) {
         metadata.feedType = discoveredFeedType;
         metadata.feedDiscoveredAt = new Date().toISOString();
         metadata.noFeedFound = false;
+      }
+
+      // For scrape sources without a feed, detect if entries have individual pages
+      if (sourceType === "scrape" && !discoveredFeedUrl) {
+        logger.info(`Checking for individual entry pages...`);
+        const crawlPattern = await detectCrawlPattern(opts.url);
+        if (crawlPattern) {
+          metadata.crawlEnabled = true;
+          metadata.crawlPattern = crawlPattern;
+          logger.info(`Detected blog-index pattern — crawl mode enabled (${crawlPattern})`);
+        }
       }
 
       await db.insert(sources).values({
