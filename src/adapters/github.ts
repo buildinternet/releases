@@ -12,7 +12,7 @@ function parseOwnerRepo(url: string): { owner: string; repo: string } {
   return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
 }
 
-function parseNextLink(linkHeader: string | null): string | null {
+export function parseNextLink(linkHeader: string | null): string | null {
   if (!linkHeader) return null;
   const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);
   return match ? match[1] : null;

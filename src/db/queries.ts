@@ -2,7 +2,7 @@ import { eq, desc, gte, and, sql, inArray } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import {
   sources, releases, organizations, orgAccounts,
-  type Source, type Release, type Organization,
+  type Source, type Release, type Organization, type OrgAccount,
 } from "./schema.js";
 
 export async function findSourceBySlug(slug: string): Promise<Source | null> {
@@ -125,4 +125,22 @@ export async function listOrgs(opts?: {
   }
 
   return allOrgs;
+}
+
+export async function getOrgAccountByPlatform(
+  orgId: string,
+  platform: string,
+): Promise<OrgAccount | null> {
+  const db = getDb();
+  const [account] = await db
+    .select()
+    .from(orgAccounts)
+    .where(and(eq(orgAccounts.orgId, orgId), eq(orgAccounts.platform, platform)));
+  return account ?? null;
+}
+
+export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
+  if (urls.length === 0) return [];
+  const db = getDb();
+  return db.select().from(sources).where(inArray(sources.url, urls));
 }
