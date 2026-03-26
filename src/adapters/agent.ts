@@ -1,11 +1,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Source } from "../db/schema.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
+import { checkContentHash } from "../db/queries.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
+import { sha256Hex } from "../lib/hash.js";
 import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";
+import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
 
 // ── Tool schema for structured extraction ────────────────────────────
 // Claude calls this when it's done fetching/exploring and has extracted
@@ -247,7 +250,11 @@ async function fetchViaCloudflare(url: string): Promise<string | null> {
       Authorization: `Bearer ${apiToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ url }),
+    body: JSON.stringify({
+      url,
+      rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
+      gotoOptions: { waitUntil: "networkidle2" },
+    }),
   });
 
   if (!res.ok) {
@@ -419,6 +426,13 @@ export const agent: Adapter = {
       const markdown = await fetchViaCloudflare(source.url);
       if (markdown) {
         logger.info(`Cloudflare returned ${markdown.length.toLocaleString()} chars of markdown`);
+
+        const contentHash = sha256Hex(markdown);
+        if (await checkContentHash(source, contentHash)) {
+          logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
+          return { releases: [] };
+        }
+
         result = await extractFromMarkdown(markdown, source.url);
       } else {
         throw new AdapterError(
@@ -445,6 +459,13 @@ export const agent: Adapter = {
         const markdown = await fetchViaCloudflare(source.url);
         if (markdown) {
           logger.info(`Cloudflare returned ${markdown.length.toLocaleString()} chars of markdown`);
+
+          const contentHash = sha256Hex(markdown);
+          if (await checkContentHash(source, contentHash)) {
+            logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
+            return { releases: [] };
+          }
+
           try {
             const cfResult = await extractFromMarkdown(markdown, source.url);
             if (cfResult.entries.length > result.entries.length) {

@@ -1,17 +1,16 @@
-import { createHash } from "crypto";
-import { eq } from "drizzle-orm";
 import type { Source } from "../db/schema.js";
-import { sources } from "../db/schema.js";
-import { getDb } from "../db/connection.js";
+import { checkContentHash } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
+import { CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
+import { sha256Hex } from "../lib/hash.js";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
 import { fetchViaFeed } from "./feed.js";
-import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
 import { getSourceMeta, updateSourceMeta } from "./feed.js";
-import { CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
+import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
+import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
 
 export const scrape: Adapter = {
   async fetch(source: Source, options?: FetchOptions): Promise<FetchResult> {
@@ -79,6 +78,9 @@ async function fetchViaCrawl(
     includePatterns: [pattern],
     limit: options?.maxEntries,
     modifiedSince,
+    maxAge: meta.crawlMaxAge,
+    render: meta.crawlRender,
+    source: meta.crawlSource,
   });
 
   logger.info(`Crawl started (job ${jobId}), polling for results...`);
@@ -139,7 +141,11 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
       Authorization: `Bearer ${apiToken}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ url: source.url }),
+    body: JSON.stringify({
+      url: source.url,
+      rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
+      gotoOptions: { waitUntil: "networkidle2" },
+    }),
   });
 
   if (!res.ok) {
@@ -169,22 +175,11 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
 
   logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
 
-  // Re-fetch protection: hash the markdown and compare to stored hash
-  const contentHash = createHash("sha256")
-    .update(markdown)
-    .digest("hex");
-
-  if (source.lastContentHash === contentHash) {
+  const contentHash = sha256Hex(markdown);
+  if (await checkContentHash(source, contentHash)) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
     return { releases: [] };
   }
-
-  // Store the new hash on the source
-  const db = getDb();
-  await db
-    .update(sources)
-    .set({ lastContentHash: contentHash })
-    .where(eq(sources.id, source.id));
 
   logger.info(`Parsing changelog with AI...`);
   let parsed;

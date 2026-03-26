@@ -144,3 +144,14 @@ export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
   const db = getDb();
   return db.select().from(sources).where(inArray(sources.url, urls));
 }
+
+/** Returns true if content is unchanged (hash matches). Persists the new hash on change. */
+export async function checkContentHash(
+  source: Source,
+  contentHash: string,
+): Promise<boolean> {
+  if (source.lastContentHash === contentHash) return true;
+  const db = getDb();
+  await db.update(sources).set({ lastContentHash: contentHash }).where(eq(sources.id, source.id));
+  return false;
+}

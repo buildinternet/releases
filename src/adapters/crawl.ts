@@ -3,6 +3,7 @@ import { AdapterError, CrawlTimeoutError, CrawlJobError } from "../lib/errors.js
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
 import type { RawRelease, FetchOptions } from "./types.js";
+import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
 
 // NOTE: The crawl flow is currently synchronous (poll until done). This is
 // designed to be split into start/retrieve phases for background execution.
@@ -12,6 +13,9 @@ interface CrawlOptions {
   includePatterns?: string[];
   limit?: number;
   modifiedSince?: number; // unix timestamp
+  maxAge?: number;            // Cloudflare R2 cache TTL in seconds
+  render?: boolean;           // false = skip headless browser rendering
+  source?: "all" | "sitemaps" | "links"; // URL discovery method
 }
 
 interface CrawlPage {
@@ -50,14 +54,28 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
   const body: Record<string, unknown> = {
     url,
     formats: ["markdown"],
-    rejectResourceTypes: ["image", "media", "font", "stylesheet"],
+    rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
     // Wait for JS-rendered pages to fully hydrate before extracting links/content
-    gotoOptions: { waitUntil: "networkidle0" },
+    gotoOptions: { waitUntil: "networkidle2" },
     // Declare crawl purposes per Cloudflare Content Signals policy.
     // "search" and "ai-input" — we index changelogs for search and AI summarization.
     // Explicitly excludes "ai_training" to respect site operator preferences.
     crawlPurposes: ["search", "ai-input"],
   };
+
+  if (options.maxAge !== undefined) {
+    body.maxAge = options.maxAge;
+  }
+
+  if (options.render === false) {
+    body.render = false;
+    // No need for gotoOptions when not rendering
+    delete body.gotoOptions;
+  }
+
+  if (options.source) {
+    body.source = options.source;
+  }
 
   if (options.includePatterns?.length) {
     body.options = { includePatterns: options.includePatterns };
@@ -87,6 +105,19 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
   return data.result;
 }
 
+interface CrawlRecord {
+  url: string;
+  status: string;
+  markdown?: string;
+  metadata?: { title?: string; status?: number };
+}
+
+function recordsToPages(records: CrawlRecord[]): CrawlPage[] {
+  return records
+    .filter((r) => r.status === "completed" && r.markdown?.trim())
+    .map((r) => ({ url: r.url, markdown: r.markdown!, title: r.metadata?.title }));
+}
+
 export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
   const url = `${crawlBaseUrl()}/${jobId}`;
   const deadline = Date.now() + POLL_TIMEOUT_MS;
@@ -103,13 +134,9 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
         status: string;
         total?: number;
         finished?: number;
-        records?: Array<{
-          url: string;
-          status: string;
-          markdown?: string;
-          metadata?: { title?: string; status?: number };
-        }>;
+        records?: CrawlRecord[];
       };
+      result_info?: { cursor?: string };
     };
 
     const jobStatus = data.result.status;
@@ -120,14 +147,22 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
         throw new CrawlJobError(jobId, jobStatus);
       }
 
-      // Filter to completed records with markdown content
-      const pages: CrawlPage[] = (data.result.records ?? [])
-        .filter((r) => r.status === "completed" && r.markdown?.trim())
-        .map((r) => ({
-          url: r.url,
-          markdown: r.markdown!,
-          title: r.metadata?.title,
-        }));
+      const pages = recordsToPages(data.result.records ?? []);
+
+      // Paginate if the API returns a cursor
+      if (data.result_info?.cursor) {
+        const pageUrl = new URL(url);
+        pageUrl.searchParams.set("status", "completed");
+        let cursor: string | undefined = data.result_info.cursor;
+        while (cursor) {
+          pageUrl.searchParams.set("cursor", cursor);
+          const pageRes = await fetch(pageUrl.toString(), { headers: cfHeaders() });
+          if (!pageRes.ok) break;
+          const pageData = await pageRes.json() as typeof data;
+          pages.push(...recordsToPages(pageData.result.records ?? []));
+          cursor = pageData.result_info?.cursor;
+        }
+      }
 
       return pages;
     }

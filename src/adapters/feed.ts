@@ -28,6 +28,9 @@ export interface SourceMetadata {
   crawlPattern?: string;
   lastCrawlJobId?: string;
   lastCrawlAt?: string;
+  crawlMaxAge?: number;       // seconds — Cloudflare R2 cache TTL (default 86400, max 604800)
+  crawlRender?: boolean;      // false = skip headless browser, fast HTML-only fetch
+  crawlSource?: "all" | "sitemaps" | "links"; // URL discovery method
 
   // Provider detection
   provider?: string;
