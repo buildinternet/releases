@@ -8,6 +8,7 @@ export interface ReleaseInput {
   content: string;
   version?: string;
   publishedAt?: string;
+  url?: string;
 }
 
 export function toReleaseInput(r: {
@@ -15,42 +16,57 @@ export function toReleaseInput(r: {
   content: string;
   version: string | null;
   publishedAt: string | null;
+  url: string | null;
 }): ReleaseInput {
   return {
     title: r.title,
     content: r.content,
     version: r.version ?? undefined,
     publishedAt: r.publishedAt ?? undefined,
+    url: r.url ?? undefined,
   };
 }
 
-export async function summarizeReleases(releases: ReleaseInput[]): Promise<string> {
+export async function summarizeReleases(
+  releases: ReleaseInput[],
+  options?: { instructions?: string },
+): Promise<string> {
   const client = getAnthropicClient();
 
   const releasesText = releases
     .map((r) => {
       const header = [r.title, r.version, r.publishedAt].filter(Boolean).join(" | ");
-      return `## ${header}\n${r.content}`;
+      const urlLine = r.url ? `\nSource: ${r.url}` : "";
+      return `## ${header}${urlLine}\n${r.content}`;
     })
     .join("\n\n---\n\n");
 
+  const extraInstruction = options?.instructions
+    ? `\nAdditional instructions from the reader: ${options.instructions}`
+    : "";
+
   try {
     const response = await client.messages.create({
-      model: config.queryModel(),
-      max_tokens: 2048,
-      system:
-        "You summarize software release notes. Provide a concise, human-readable summary that highlights the most important changes, new features, bug fixes, and breaking changes. Group related changes together. Use bullet points for clarity.",
+      model: config.ingestModel(),
+      max_tokens: 1024,
+      system: [
+        "You write brief executive summaries of software release notes.",
+        "Structure: Start with a 1-2 sentence overview of the release focus and trends across all releases. Then cover each release with a one-line headline and at most 3 bullets. Omit minor bug fixes entirely.",
+        "Brevity: Compress aggressively — aim for 1/5th the input length. Name changes and move on; never reproduce full details.",
+        "Sources: When a release has a source URL, include it as a markdown link on the release heading so the reader can follow up.",
+        "Tone: Plain language, not marketing copy.",
+      ].join("\n"),
       messages: [
         {
           role: "user",
-          content: `Summarize these releases:\n\n${releasesText}`,
+          content: `Summarize these releases. Be very brief — the reader wants the gist, not the full changelog.${extraInstruction}\n\n${releasesText}`,
         },
       ],
     });
 
     await logUsage({
       operation: "summarize",
-      model: config.queryModel(),
+      model: config.ingestModel(),
       inputTokens: response.usage.input_tokens,
       outputTokens: response.usage.output_tokens,
       releaseCount: releases.length,

@@ -185,8 +185,9 @@ server.registerTool("summarize_changes", {
   inputSchema: {
     product: z.string().describe("Product slug"),
     days: z.number().optional().describe("Look back this many days (default 30)"),
+    instructions: z.string().optional().describe("Additional guidance for the summary (e.g. what to focus on, audience, format)"),
   },
-}, async ({ product, days }) => {
+}, async ({ product, days, instructions }) => {
   const lookback = days ?? 30;
   const source = await findSourceBySlug(product);
   if (!source) {
@@ -199,7 +200,7 @@ server.registerTool("summarize_changes", {
     return textResult(`No releases found for "${product}" in the last ${lookback} days.`);
   }
 
-  const summary = await summarizeReleases(recentReleases.map(toReleaseInput));
+  const summary = await summarizeReleases(recentReleases.map(toReleaseInput), { instructions });
   return textResult(summary);
 });
 

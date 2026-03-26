@@ -53,6 +53,7 @@ released search "authentication"
 released latest --count 5
 released latest next-js
 released summary next-js --days 30
+released summary next-js --instructions "focus on API breaking changes"
 released compare next-js linear --days 30
 ```
 

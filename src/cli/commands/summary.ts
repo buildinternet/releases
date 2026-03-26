@@ -11,8 +11,9 @@ export function registerSummaryCommand(program: Command) {
     .argument("[slug]", "Source slug")
     .option("-d, --days <n>", "Number of days to look back", "30")
     .option("--org <identifier>", "Summarize across all sources in an organization")
+    .option("--instructions <text>", "Additional guidance for the summarizer (e.g. what to focus on, audience, format)")
     .option("--json", "Output as JSON")
-    .action(async (slug: string | undefined, opts: { days: string; org?: string; json?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { days: string; org?: string; instructions?: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
 
       if (!slug && !opts.org) {
@@ -64,7 +65,9 @@ export function registerSummaryCommand(program: Command) {
       }
 
       const startTime = performance.now();
-      const summary = await summarizeReleases(releaseInputs);
+      const summary = await summarizeReleases(releaseInputs, {
+        instructions: opts.instructions,
+      });
 
       if (opts.json) {
         console.log(JSON.stringify({ summary }, null, 2));
