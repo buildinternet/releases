@@ -33,7 +33,8 @@ export function registerAddCommand(program: Command) {
     .requiredOption("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--org <org>", "Organization name or slug (creates if not found)")
-    .action(async (name: string, opts: { type?: string; url: string; slug?: string; org?: string }) => {
+    .option("--feed-url <feedUrl>", "Explicit feed URL (skips auto-discovery)")
+    .action(async (name: string, opts: { type?: string; url: string; slug?: string; org?: string; feedUrl?: string }) => {
       if (opts.type && !isValidType(opts.type)) {
         console.error(chalk.red(`Invalid type "${opts.type}". Must be one of: ${VALID_TYPES.join(", ")}`));
         process.exit(1);
@@ -44,7 +45,13 @@ export function registerAddCommand(program: Command) {
       let discoveredFeedUrl: string | undefined;
       let discoveredFeedType: string | undefined;
 
-      if (opts.type) {
+      if (opts.feedUrl) {
+        // Explicit feed URL provided — skip discovery
+        sourceType = (opts.type as SourceType) ?? "scrape";
+        discoveredFeedUrl = opts.feedUrl;
+        discoveredFeedType = "unknown";
+        logger.info(`Using provided feed URL — ${sourceType} adapter`);
+      } else if (opts.type) {
         sourceType = opts.type as SourceType;
       } else if (isGitHubUrl(opts.url)) {
         sourceType = "github";
