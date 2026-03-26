@@ -199,6 +199,7 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
     version: entry.version,
     title: entry.title,
     content: entry.content,
+    url: source.url,
     publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
     isBreaking: entry.isBreaking,
   }));

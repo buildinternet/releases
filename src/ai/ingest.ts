@@ -53,6 +53,8 @@ const extractReleasesTool = {
   },
 };
 
+const PLACEHOLDER_RE = /^<?(unknown|none|n\/a|null|undefined)>?$/i;
+
 const SYSTEM_PROMPT = `You are a changelog parser. Given raw markdown from a changelog or release notes page, extract individual release entries using the extract_releases tool.
 
 Rules:
@@ -132,7 +134,12 @@ async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: 
     return [];
   }
 
-  return input.releases as ParsedRelease[];
+  // Sanitize: the model sometimes returns placeholder strings like "<UNKNOWN>"
+  // instead of omitting optional fields. Normalize these to undefined.
+  return (input.releases as ParsedRelease[]).map((r) => ({
+    ...r,
+    version: r.version && !PLACEHOLDER_RE.test(r.version.trim()) ? r.version : undefined,
+  }));
 }
 
 export async function parseChangelog(markdown: string, sourceSlug?: string): Promise<ParsedRelease[]> {
