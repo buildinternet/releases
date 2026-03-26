@@ -10,6 +10,13 @@ import { updateSourceMeta } from "../../adapters/feed.js";
 
 const VALID_TYPES = ["github", "scrape", "feed"] as const;
 
+function inferFeedTypeFromUrl(url: string): "rss" | "atom" | "jsonfeed" {
+  const lower = url.toLowerCase();
+  if (lower.endsWith(".json") || lower.includes("feed.json")) return "jsonfeed";
+  if (lower.includes("atom")) return "atom";
+  return "rss"; // safe default — RSS parser handles most XML feeds
+}
+
 export function registerEditCommand(program: Command) {
   program
     .command("edit")
@@ -90,13 +97,14 @@ export function registerEditCommand(program: Command) {
         await updateSourceMeta(source, { feedUrl: undefined, feedType: undefined, feedDiscoveredAt: undefined });
         changes.push("feed URL removed");
       } else if (typeof opts.feedUrl === "string") {
+        const feedType = inferFeedTypeFromUrl(opts.feedUrl);
         await updateSourceMeta(source, {
           feedUrl: opts.feedUrl,
-          feedType: "unknown" as any,
+          feedType,
           feedDiscoveredAt: new Date().toISOString(),
           noFeedFound: false,
         });
-        changes.push(`feed URL → ${opts.feedUrl}`);
+        changes.push(`feed URL → ${opts.feedUrl} (${feedType})`);
       }
 
       if (Object.keys(updates).length > 0) {

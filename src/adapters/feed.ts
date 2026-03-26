@@ -211,6 +211,16 @@ export async function fetchAndParseFeed(
     case "rss": releases = parseRss(body); break;
     case "atom": releases = parseAtom(body); break;
     case "jsonfeed": releases = parseJsonFeed(body); break;
+    default: {
+      // Unrecognized feed type — try to detect from content
+      const detected = detectFeedTypeFromContent(body);
+      if (detected) {
+        logger.info(`Feed type "${feedType}" unrecognized, detected ${detected} from content`);
+        releases = detected === "rss" ? parseRss(body) : detected === "atom" ? parseAtom(body) : parseJsonFeed(body);
+      } else {
+        throw new Error(`Cannot parse feed: unrecognized type "${feedType}" and content detection failed`);
+      }
+    }
   }
 
   if (options?.since) {
