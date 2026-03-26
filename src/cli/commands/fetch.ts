@@ -112,7 +112,9 @@ export function registerFetchCommand(program: Command) {
           if (!opts.json && deleted.length > 0) {
             logger.info(`Cleared ${deleted.length} existing release(s) for ${source.name}`);
           }
+          // Clear content hash and crawl timestamp so scrape/crawl doesn't skip unchanged content
           await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+          await updateSourceMeta(source, { lastCrawlAt: undefined });
           sourceModified = true;
         }
 

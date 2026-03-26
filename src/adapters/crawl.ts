@@ -51,8 +51,10 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
     url,
     formats: ["markdown"],
     rejectResourceTypes: ["image", "media", "font", "stylesheet"],
+    // Wait for JS-rendered pages to fully hydrate before extracting links/content
+    gotoOptions: { waitUntil: "networkidle0" },
     // Declare crawl purposes per Cloudflare Content Signals policy.
-    // "search" and "ai_input" — we index changelogs for search and AI summarization.
+    // "search" and "ai-input" — we index changelogs for search and AI summarization.
     // Explicitly excludes "ai_training" to respect site operator preferences.
     crawlPurposes: ["search", "ai-input"],
   };
@@ -60,7 +62,7 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
   if (options.includePatterns?.length) {
     body.options = { includePatterns: options.includePatterns };
   }
-  body.limit = options.limit ?? 50;
+  body.limit = options.limit ?? 20; // Conservative default — JS rendering eats browser time fast
   body.depth = 2; // Follow links one level deep from the starting page
   if (options.modifiedSince) {
     body.modifiedSince = options.modifiedSince;

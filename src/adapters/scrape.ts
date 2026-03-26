@@ -82,7 +82,22 @@ async function fetchViaCrawl(
   });
 
   logger.info(`Crawl started (job ${jobId}), polling for results...`);
-  const pages = await pollCrawlResults(jobId);
+  const allPages = await pollCrawlResults(jobId);
+
+  // Filter out the starting URL — we want sub-pages, not the index
+  const startingUrl = source.url.replace(/\?.*$/, ""); // strip query params for comparison
+  const pages = allPages.filter((p) => {
+    const pageBase = p.url.replace(/\?.*$/, "");
+    return pageBase !== startingUrl;
+  });
+
+  if (pages.length === 0 && allPages.length > 0) {
+    // Only got the index page — fall back to parsing it (better than nothing)
+    logger.info(`Crawl only returned the index page, parsing it directly`);
+    const releases = await parseCrawlPages(allPages, source.slug, options);
+    await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
+    return releases;
+  }
 
   if (pages.length === 0) {
     logger.info(`Crawl returned no pages`);
