@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { createHash } from "crypto";
-import { eq, count } from "drizzle-orm";
+import { eq, count, sql } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases, fetchLog, type Source } from "../../db/schema.js";
 import type { Adapter, RawRelease, FetchOptions } from "../../adapters/types.js";
@@ -9,7 +9,7 @@ import { github } from "../../adapters/github.js";
 import { scrape } from "../../adapters/scrape.js";
 import { feed, updateSourceMeta } from "../../adapters/feed.js";
 import { logger } from "../../lib/logger.js";
-import { elapsedSec } from "../../lib/dates.js";
+import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
 
 function getAdapter(type: string): Adapter | null {
   switch (type) {
@@ -37,19 +37,23 @@ export function registerFetchCommand(program: Command) {
     .argument("[slug]", "Fetch a specific source by slug, or all sources if omitted")
     .option("--json", "Output as JSON")
     .option("--since <date>", "Only fetch releases after this date (ISO 8601 or YYYY-MM-DD)")
-    .option("--max <n>", "Maximum number of releases to fetch per source (default: 100)", "100")
+    .option("--max <n>", "Maximum number of releases to fetch per source")
     .option("--all", "Fetch all releases with no limits")
     .option("--crawl", "Enable crawl mode for multi-page changelogs (scrape sources only, persists)")
     .option("--no-crawl", "One-off override to skip crawl mode for this invocation")
     .option("--crawl-pattern <pattern>", "URL pattern to scope crawl (e.g. https://example.com/changelog/*)")
     .option("--force", "Delete existing releases for the source before fetching (clean re-fetch)")
+    .option("--unfetched", "Only fetch sources that have never been fetched")
+    .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .action(async (slug: string | undefined, opts: {
       json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; force?: boolean;
+      unfetched?: boolean; concurrency?: string;
     }) => {
       const db = getDb();
+      const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
 
-      const fetchResults: Array<{ source: string; newReleases: number }> = [];
+      const fetchResults: Array<{ source: string; newReleases: number; error?: string }> = [];
       let targetSources: Source[];
 
       if (slug) {
@@ -59,6 +63,23 @@ export function registerFetchCommand(program: Command) {
           process.exit(1);
         }
         targetSources = found;
+      } else if (opts.unfetched) {
+        targetSources = await db.select().from(sources).where(sql`${sources.lastFetchedAt} IS NULL`);
+        if (targetSources.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.green("All sources have been fetched."));
+          }
+          return;
+        }
+        if (!opts.json) {
+          console.log(chalk.bold(`Fetching ${targetSources.length} unfetched source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
+        }
+        // Default to 30 days of history for unfetched sources unless overridden
+        if (!opts.since && !opts.all) {
+          opts.since = daysAgoIso(30).split("T")[0];
+        }
       } else {
         targetSources = await db.select().from(sources);
         if (targetSources.length === 0) {
@@ -77,12 +98,52 @@ export function registerFetchCommand(program: Command) {
         if (opts.since) {
           fetchOptions.since = new Date(opts.since);
         }
-        fetchOptions.maxEntries = parseInt(opts.max ?? "100", 10);
+        if (opts.max) {
+          fetchOptions.maxEntries = parseInt(opts.max, 10);
+        }
       }
 
-      for (let source of targetSources) {
+      let completed = 0;
+      let active = 0;
+      let totalInserted = 0;
+      let stopping = false;
+      const total = targetSources.length;
+      const fetchStartTime = performance.now();
+      const showProgress = !opts.json && total > 1 && concurrency > 1;
+      const showSummary = !opts.json && total > 1;
+
+      function onSigint() {
+        if (stopping) return;
+        stopping = true;
+        if (!opts.json) {
+          process.stderr.write(`\n${chalk.yellow(`Stopping gracefully — waiting for ${active} active fetch(es) to finish...`)}\n`);
+        }
+      }
+      process.on("SIGINT", onSigint);
+
+      let lastSourceName = "";
+
+      function printProgress(sourceName?: string) {
+        if (!showProgress) return;
+        if (sourceName) lastSourceName = sourceName;
+        const pct = Math.round((completed / total) * 100);
+        const elapsed = elapsedSec(fetchStartTime);
+        const bar = chalk.gray(`[${completed}/${total}]`);
+        const errCount = fetchResults.filter((r) => r.error).length;
+        const activeStr = active > 0 ? chalk.gray(` (${active} active)`) : "";
+        const errStr = errCount > 0 ? chalk.red(` ${errCount} failed`) : "";
+        const insertStr = totalInserted > 0 ? chalk.green(` ${totalInserted} new`) : "";
+        const current = lastSourceName ? ` ${chalk.cyan(lastSourceName)}` : "";
+        const time = chalk.gray(` ${elapsed}s`);
+        process.stderr.write(`\r${bar} ${pct}%${current}${activeStr}${insertStr}${errStr}${time}${"".padEnd(20)}`);
+      }
+
+      async function fetchOne(source: Source): Promise<void> {
         const adapter = getAdapter(source.type);
-        if (!adapter) continue;
+        if (!adapter) {
+          completed++;
+          return;
+        }
 
         let sourceModified = false;
 
@@ -112,7 +173,6 @@ export function registerFetchCommand(program: Command) {
           if (!opts.json && deleted.length > 0) {
             logger.info(`Cleared ${deleted.length} existing release(s) for ${source.name}`);
           }
-          // Clear content hash and crawl timestamp so scrape/crawl doesn't skip unchanged content
           await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
           await updateSourceMeta(source, { lastCrawlAt: undefined });
           sourceModified = true;
@@ -124,24 +184,26 @@ export function registerFetchCommand(program: Command) {
           if (reloaded) source = reloaded;
         }
 
-        // Pass crawl override to adapter
-        fetchOptions.crawl = opts.crawl;
+        // Build per-source fetch options (clone to avoid mutation across concurrent fetches)
+        const sourceFetchOptions: FetchOptions = { ...fetchOptions, crawl: opts.crawl };
 
-        if (!opts.json) {
+        if (!opts.json && !showProgress) {
           const limits = [];
-          if (fetchOptions.since) limits.push(`since ${fetchOptions.since.toISOString().split("T")[0]}`);
-          if (fetchOptions.maxEntries) limits.push(`max ${fetchOptions.maxEntries}`);
+          if (sourceFetchOptions.since) limits.push(`since ${sourceFetchOptions.since.toISOString().split("T")[0]}`);
+          if (sourceFetchOptions.maxEntries) limits.push(`max ${sourceFetchOptions.maxEntries}`);
           const limitStr = limits.length > 0 ? ` (${limits.join(", ")})` : "";
           logger.info(`Fetching releases from ${chalk.cyan(source.name)}${limitStr}...`);
         }
 
+        active++;
+        printProgress(source.name);
         const startTime = performance.now();
 
         try {
-          const rawReleases = await adapter.fetch(source, fetchOptions);
+          const rawReleases = await adapter.fetch(source, sourceFetchOptions);
 
           if (rawReleases.length === 0) {
-            if (!opts.json) {
+            if (!opts.json && !showProgress) {
               const msg = source.type === "scrape"
                 ? `No changes detected for ${source.name}`
                 : `No releases found for ${source.name}`;
@@ -155,7 +217,7 @@ export function registerFetchCommand(program: Command) {
               status: "no_change",
             });
             fetchResults.push({ source: source.name, newReleases: 0 });
-            continue;
+            return;
           }
 
           const [{ total: beforeCount }] = await db
@@ -184,6 +246,7 @@ export function registerFetchCommand(program: Command) {
             .where(eq(releases.sourceId, source.id));
 
           const inserted = afterCount - beforeCount;
+          totalInserted += inserted;
 
           await db
             .update(sources)
@@ -200,12 +263,14 @@ export function registerFetchCommand(program: Command) {
             status: inserted > 0 ? "success" : "no_change",
           });
 
-          if (!opts.json) {
+          if (!opts.json && !showProgress) {
             console.log(
               chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`),
             );
           }
         } catch (err) {
+          fetchResults.push({ source: source.name, newReleases: 0, error: err instanceof Error ? err.message : String(err) });
+
           await db.insert(fetchLog).values({
             sourceId: source.id,
             releasesFound: 0,
@@ -215,12 +280,58 @@ export function registerFetchCommand(program: Command) {
             error: err instanceof Error ? err.message : String(err),
           }).catch(() => {}); // don't fail the whole fetch if logging fails
 
-          logger.error(`Failed to fetch from ${source.name} (${elapsedSec(startTime)}s):`, err);
+          if (!showProgress) {
+            logger.error(`Failed to fetch from ${source.name} (${elapsedSec(startTime)}s):`, err);
+          }
+        } finally {
+          active--;
+          completed++;
+          printProgress();
         }
+      }
+
+      // Run with concurrency pool
+      if (concurrency <= 1) {
+        for (const source of targetSources) {
+          if (stopping) break;
+          await fetchOne(source);
+        }
+      } else {
+        const queue = [...targetSources];
+        const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+          while (queue.length > 0 && !stopping) {
+            const source = queue.shift()!;
+            await fetchOne(source);
+          }
+        });
+        await Promise.all(workers);
+      }
+
+      process.removeListener("SIGINT", onSigint);
+
+      // Clear progress line
+      if (showProgress) {
+        process.stderr.write("\r" + "".padEnd(80) + "\r");
       }
 
       if (opts.json) {
         console.log(JSON.stringify(fetchResults, null, 2));
+      } else if (showSummary) {
+        const successful = fetchResults.filter((r) => !r.error);
+        const failed = fetchResults.filter((r) => r.error);
+        const withReleases = successful.filter((r) => r.newReleases > 0);
+
+        const elapsed = elapsedSec(fetchStartTime);
+        const label = stopping ? `Fetch stopped early: ${completed}/${total} sources` : `Fetch complete: ${total} sources`;
+        console.log(chalk.bold(`\n${label}`) + chalk.gray(` (${elapsed}s)\n`));
+        console.log(`  ${chalk.green(`${withReleases.length} with new releases`)} (${totalInserted} total)`);
+        console.log(`  ${chalk.gray(`${successful.length - withReleases.length} unchanged`)}`);
+        if (failed.length > 0) {
+          console.log(`  ${chalk.red(`${failed.length} failed`)}`);
+          for (const f of failed) {
+            console.log(`    ${chalk.dim("•")} ${f.source}: ${chalk.red(f.error!)}`);
+          }
+        }
       }
     });
 }

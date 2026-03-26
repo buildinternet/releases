@@ -63,8 +63,10 @@ export function registerStatsCommand(program: Command) {
         .select({
           sourceName: sources.name,
           sourceSlug: sources.slug,
+          orgName: organizations.name,
           releasesFound: fetchLog.releasesFound,
           releasesInserted: fetchLog.releasesInserted,
+          totalReleases: sql<number>`(SELECT COUNT(*) FROM releases WHERE releases.source_id = ${sources.id})`,
           status: fetchLog.status,
           durationMs: fetchLog.durationMs,
           error: fetchLog.error,
@@ -72,6 +74,7 @@ export function registerStatsCommand(program: Command) {
         })
         .from(fetchLog)
         .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
+        .leftJoin(organizations, eq(sources.orgId, organizations.id))
         .orderBy(desc(fetchLog.createdAt))
         .limit(20);
 
@@ -153,9 +156,11 @@ export function registerStatsCommand(program: Command) {
         const activityTable = new Table({
           head: [
             chalk.cyan("Source"),
+            chalk.cyan("Org"),
             chalk.cyan("Status"),
             chalk.cyan("Found"),
             chalk.cyan("New"),
+            chalk.cyan("Total"),
             chalk.cyan("Duration"),
             chalk.cyan("When"),
           ],
@@ -168,9 +173,11 @@ export function registerStatsCommand(program: Command) {
               : chalk.dim("no change");
           activityTable.push([
             f.sourceName,
+            f.orgName ?? chalk.dim("—"),
             statusLabel,
             String(f.releasesFound),
             f.releasesInserted > 0 ? chalk.green(String(f.releasesInserted)) : chalk.dim("0"),
+            String(f.totalReleases),
             f.durationMs ? `${(f.durationMs / 1000).toFixed(1)}s` : chalk.dim("—"),
             timeAgo(f.createdAt),
           ]);
