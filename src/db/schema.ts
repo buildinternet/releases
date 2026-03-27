@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -60,6 +60,8 @@ export const releases = sqliteTable(
     contentHash: text("content_hash"),
     metadata: text("metadata").default("{}"),
     publishedAt: text("published_at"),
+    suppressed: integer("suppressed", { mode: "boolean" }).default(false),
+    suppressedReason: text("suppressed_reason"),
     fetchedAt: text("fetched_at").notNull().$defaultFn(() => new Date().toISOString()),
   },
   (table) => [
@@ -113,11 +115,25 @@ export type NewFetchLog = typeof fetchLog.$inferInsert;
 
 export const ignoredUrls = sqliteTable("ignored_urls", {
   id: text("id").primaryKey().$defaultFn(newIgnoredUrlId),
-  url: text("url").notNull().unique(),
-  orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  url: text("url").notNull(),
+  orgId: text("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
   reason: text("reason"),
   ignoredAt: text("ignored_at").notNull().$defaultFn(() => new Date().toISOString()),
+}, (table) => [
+  uniqueIndex("idx_ignored_urls_org_url").on(table.orgId, table.url),
+]);
+
+export const blockedUrls = sqliteTable("blocked_urls", {
+  id: text("id").primaryKey().$defaultFn(newBlockedUrlId),
+  pattern: text("pattern").notNull().unique(),
+  type: text("type", { enum: ["exact", "domain"] }).notNull().default("exact"),
+  reason: text("reason"),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 
 export type IgnoredUrl = typeof ignoredUrls.$inferSelect;
 export type NewIgnoredUrl = typeof ignoredUrls.$inferInsert;
+export type BlockedUrl = typeof blockedUrls.$inferSelect;
+export type NewBlockedUrl = typeof blockedUrls.$inferInsert;

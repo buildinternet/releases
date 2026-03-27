@@ -26,6 +26,7 @@ export function searchReleases(query: string, limit = 20): FtsResult[] {
     FROM releases_fts
     JOIN releases r ON r.rowid = releases_fts.rowid
     WHERE releases_fts MATCH ${query}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
     ORDER BY rank
     LIMIT ${limit}
   `);
@@ -59,6 +60,7 @@ export async function searchReleasesForApi(query: string, limit: number, offset:
     JOIN sources s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
     WHERE releases_fts MATCH ${query}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
     ORDER BY rank
     LIMIT ${limit}
     OFFSET ${offset}

@@ -6,7 +6,12 @@ import { getDb } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
 import { sources, releases, organizations, orgAccounts, fetchLog, type Source } from "../db/schema.js";
 import { searchReleases } from "../db/fts.js";
-import { findSourceBySlug, getRecentReleases, findOrg, getSourcesByOrg, listOrgs } from "../db/queries.js";
+import {
+  findSourceBySlug, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
+  isUrlExcluded, listIgnoredUrls, addIgnoredUrl, removeIgnoredUrl,
+  listBlockedUrls, addBlockedUrl, removeBlockedUrl,
+  suppressRelease, unsuppressRelease,
+} from "../db/queries.js";
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
 import { daysAgoIso } from "../lib/dates.js";
 import { toSlug } from "../lib/slug.js";
@@ -343,6 +348,13 @@ server.registerTool("add_source", {
     orgId = org.id;
   }
 
+  // Check if URL is blocked or ignored for this org
+  const exclusion = await isUrlExcluded(url, orgId ?? undefined);
+  if (exclusion.excluded) {
+    const label = exclusion.scope === "blocked" ? "globally blocked" : "ignored for this organization";
+    return textResult(`URL is ${label}: ${url}${exclusion.reason ? ` (${exclusion.reason})` : ""}`);
+  }
+
   await db.insert(sources).values({
     name,
     slug: sourceSlug,
@@ -536,6 +548,120 @@ server.registerTool("link_account", {
     .where(eq(organizations.id, org.id));
 
   return textResult(`Linked ${platform}/${handle} to ${org.name}`);
+});
+
+// ── list_ignored_urls ─────────────────────────────────────────────────
+server.registerTool("list_ignored_urls", {
+  description: "List URLs ignored for a specific organization (excluded from discovery)",
+  inputSchema: {
+    organization: z.string().describe("Organization slug, name, or domain"),
+  },
+}, async ({ organization }) => {
+  const org = await findOrg(organization);
+  if (!org) return textResult(`Organization not found: "${organization}"`);
+
+  const rows = await listIgnoredUrls(org.id);
+  if (rows.length === 0) return textResult(`No ignored URLs for ${org.name}.`);
+
+  const text = rows.map((r) => `- ${r.url}${r.reason ? ` — ${r.reason}` : ""}`).join("\n");
+  return textResult(`Ignored URLs for ${org.name}:\n${text}`);
+});
+
+// ── ignore_url ───────────────────────────────────────────────────────
+server.registerTool("ignore_url", {
+  description: "Ignore a URL for a specific organization to prevent re-discovery",
+  inputSchema: {
+    url: z.string().describe("URL to ignore"),
+    organization: z.string().describe("Organization slug, name, or domain"),
+    reason: z.string().optional().describe("Why this URL is being ignored"),
+  },
+}, async ({ url, organization, reason }) => {
+  const org = await findOrg(organization);
+  if (!org) return textResult(`Organization not found: "${organization}"`);
+
+  await addIgnoredUrl(url, org.id, reason);
+  return textResult(`Ignored for ${org.name}: ${url}`);
+});
+
+// ── unignore_url ─────────────────────────────────────────────────────
+server.registerTool("unignore_url", {
+  description: "Remove a URL from an organization's ignore list",
+  inputSchema: {
+    url: z.string().describe("URL to un-ignore"),
+    organization: z.string().describe("Organization slug, name, or domain"),
+  },
+}, async ({ url, organization }) => {
+  const org = await findOrg(organization);
+  if (!org) return textResult(`Organization not found: "${organization}"`);
+
+  await removeIgnoredUrl(url, org.id);
+  return textResult(`Un-ignored for ${org.name}: ${url}`);
+});
+
+// ── list_blocked_urls ────────────────────────────────────────────────
+server.registerTool("list_blocked_urls", {
+  description: "List globally blocked URL patterns (spam, aggregators, etc.)",
+  inputSchema: {},
+}, async () => {
+  const rows = await listBlockedUrls();
+  if (rows.length === 0) return textResult("No blocked patterns.");
+
+  const text = rows.map((r) => {
+    const typeLabel = r.type === "domain" ? "[domain]" : "[exact]";
+    return `- ${typeLabel} ${r.pattern}${r.reason ? ` — ${r.reason}` : ""}`;
+  }).join("\n");
+  return textResult(`Blocked patterns:\n${text}`);
+});
+
+// ── block_url ────────────────────────────────────────────────────────
+server.registerTool("block_url", {
+  description: "Globally block a URL or domain from being added as a source",
+  inputSchema: {
+    pattern: z.string().describe("URL or domain to block"),
+    type: z.enum(["exact", "domain"]).optional().describe("Block type: exact URL or entire domain (default: exact)"),
+    reason: z.string().optional().describe("Why this is being blocked"),
+  },
+}, async ({ pattern, type, reason }) => {
+  const resolvedType = type ?? "exact";
+  await addBlockedUrl(pattern, resolvedType, reason);
+  const label = resolvedType === "domain" ? "domain" : "URL";
+  return textResult(`Blocked ${label}: ${pattern}`);
+});
+
+// ── unblock_url ──────────────────────────────────────────────────────
+server.registerTool("unblock_url", {
+  description: "Remove a URL or domain from the global block list",
+  inputSchema: {
+    pattern: z.string().describe("URL or domain pattern to unblock"),
+  },
+}, async ({ pattern }) => {
+  await removeBlockedUrl(pattern);
+  return textResult(`Unblocked: ${pattern}`);
+});
+
+// ── suppress_release ─────────────────────────────────────────────────
+server.registerTool("suppress_release", {
+  description: "Suppress a release so it no longer appears in queries or search results. Useful for filtering out promotional content or non-changelog entries from an otherwise good source.",
+  inputSchema: {
+    id: z.string().describe("Release ID to suppress"),
+    reason: z.string().optional().describe("Why this release is being suppressed (e.g. 'promotional content')"),
+  },
+}, async ({ id, reason }) => {
+  const found = await suppressRelease(id, reason);
+  if (!found) return textResult(`Release not found: "${id}"`);
+  return textResult(`Suppressed release ${id}${reason ? ` (${reason})` : ""}`);
+});
+
+// ── unsuppress_release ───────────────────────────────────────────────
+server.registerTool("unsuppress_release", {
+  description: "Restore a suppressed release so it appears in queries again",
+  inputSchema: {
+    id: z.string().describe("Release ID to unsuppress"),
+  },
+}, async ({ id }) => {
+  const found = await unsuppressRelease(id);
+  if (!found) return textResult(`Release not found: "${id}"`);
+  return textResult(`Unsuppressed release ${id}`);
 });
 
 // ── Start function ───────────────────────────────────────────────────

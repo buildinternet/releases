@@ -38,10 +38,13 @@ export function registerRemoveCommand(program: Command) {
       // Optionally ignore URLs before deleting
       if (opts.ignore && existing.length > 0) {
         for (const source of existing) {
-          await addIgnoredUrl(source.url, {
-            orgId: source.orgId ?? undefined,
-            reason: opts.reason,
-          });
+          if (!source.orgId) {
+            if (!opts.json) {
+              logger.warn(chalk.yellow(`Cannot ignore ${source.url} — source has no organization. Use 'block add' for global blocking.`));
+            }
+            continue;
+          }
+          await addIgnoredUrl(source.url, source.orgId, opts.reason);
           if (!opts.json) {
             logger.info(chalk.yellow(`Ignored URL: ${source.url}${opts.reason ? ` (${opts.reason})` : ""}`));
           }

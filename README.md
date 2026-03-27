@@ -218,6 +218,44 @@ Claude Desktop config:
 | `fetch_source` | Trigger a fetch for one or all sources |
 | `add_organization` | Create a new organization |
 | `link_account` | Link a platform account to an organization |
+| `list_ignored_urls` | List ignored URLs for an organization |
+| `ignore_url` | Ignore a URL for an organization |
+| `unignore_url` | Remove a URL from an org's ignore list |
+| `list_blocked_urls` | List globally blocked URL patterns |
+| `block_url` | Block a URL or domain globally |
+| `unblock_url` | Remove a URL/domain from the global block list |
+| `suppress_release` | Suppress a release from queries and search |
+| `unsuppress_release` | Restore a suppressed release |
+
+### Ignored URLs & Blocked URLs
+
+Prevent unwanted sources from being re-discovered:
+
+```bash
+# Org-scoped: ignore a URL for a specific org (same URL can be valid for another org)
+released ignore add https://example.com/blog --org vercel --reason "Not a changelog"
+released ignore list --org vercel
+released ignore remove https://example.com/blog --org vercel
+
+# Global: block a URL or domain everywhere (spam, aggregators)
+released block add medium.com --domain --reason "Aggregator, not primary source"
+released block add https://spam.example.com/changelog --reason "SEO spam"
+released block list
+released block remove medium.com
+```
+
+When adding sources, both lists are checked automatically. The `remove --ignore` flag on source removal adds the URL to the org's ignore list.
+
+### Release Suppression
+
+Hide individual releases from queries without deleting them — useful when a source contains non-changelog content like promotional posts:
+
+```bash
+released release suppress rel_abc123 --reason "promotional content"
+released release unsuppress rel_abc123
+```
+
+Suppressed releases are filtered from all read paths (search, latest, stats, API) but remain in the database and can be restored at any time.
 
 ### Release Management
 

@@ -22,12 +22,12 @@ sourceRoutes.get("/sources", async (c) => {
       const [relCount] = await db
         .select({ n: count() })
         .from(releases)
-        .where(eq(releases.sourceId, src.id));
+        .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false)));
 
       const [latest] = await db
         .select({ version: releases.version, publishedAt: releases.publishedAt })
         .from(releases)
-        .where(and(eq(releases.sourceId, src.id), sql`${releases.publishedAt} IS NOT NULL`))
+        .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false), sql`${releases.publishedAt} IS NOT NULL`))
         .orderBy(desc(releases.publishedAt))
         .limit(1);
 
@@ -78,7 +78,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const [relCount] = await db
     .select({ n: count() })
     .from(releases)
-    .where(eq(releases.sourceId, src.id));
+    .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false)));
 
   const offset = (page - 1) * pageSize;
   const releaseRows = await db.all<{
@@ -90,7 +90,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     url: string | null;
   }>(sql`
     SELECT version, title, content_summary, content, published_at, url
-    FROM releases WHERE source_id = ${src.id}
+    FROM releases WHERE source_id = ${src.id} AND (suppressed IS NULL OR suppressed = 0)
     ORDER BY
       CASE WHEN published_at IS NOT NULL THEN 0 ELSE 1 END,
       published_at DESC, fetched_at DESC
@@ -108,10 +108,12 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     url: r.url,
   }));
 
+  const notSuppressed = eq(releases.suppressed, false);
+
   const [latest] = await db
     .select({ version: releases.version, publishedAt: releases.publishedAt })
     .from(releases)
-    .where(and(eq(releases.sourceId, src.id), sql`${releases.publishedAt} IS NOT NULL`))
+    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`))
     .orderBy(desc(releases.publishedAt))
     .limit(1);
 
@@ -120,7 +122,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     const [fallback] = await db
       .select({ version: releases.version })
       .from(releases)
-      .where(eq(releases.sourceId, src.id))
+      .where(and(eq(releases.sourceId, src.id), notSuppressed))
       .orderBy(desc(releases.fetchedAt))
       .limit(1);
     latestVersion = fallback?.version ?? null;
@@ -132,12 +134,12 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const [recent] = await db
     .select({ n: count() })
     .from(releases)
-    .where(and(eq(releases.sourceId, src.id), gte(releases.publishedAt, cutoff)));
+    .where(and(eq(releases.sourceId, src.id), notSuppressed, gte(releases.publishedAt, cutoff)));
 
   const [totals] = await db
     .select({ total: count(), oldest: min(releases.publishedAt) })
     .from(releases)
-    .where(and(eq(releases.sourceId, src.id), sql`${releases.publishedAt} IS NOT NULL`));
+    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`));
 
   const releasesLast30Days = recent.n;
   const avgReleasesPerWeek = computeAvgPerWeek(totals.total, totals.oldest);
@@ -272,4 +274,33 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ error: "insert_failed", message }, 500);
   }
+});
+
+// ── Release suppression ──
+
+sourceRoutes.post("/releases/:id/suppress", async (c) => {
+  const db = createDb(c.env.DB);
+  const id = c.req.param("id");
+  const body = await c.req.json<{ reason?: string }>().catch(() => ({}));
+
+  const [updated] = await db.update(releases).set({
+    suppressed: true,
+    suppressedReason: (body as { reason?: string }).reason ?? null,
+  }).where(eq(releases.id, id)).returning({ id: releases.id });
+
+  if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+  return c.json({ suppressed: true });
+});
+
+sourceRoutes.post("/releases/:id/unsuppress", async (c) => {
+  const db = createDb(c.env.DB);
+  const id = c.req.param("id");
+
+  const [updated] = await db.update(releases).set({
+    suppressed: false,
+    suppressedReason: null,
+  }).where(eq(releases.id, id)).returning({ id: releases.id });
+
+  if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+  return c.json({ unsuppressed: true });
 });

@@ -51,7 +51,8 @@ You have access to the Released CLI at: ${cliCmd}
 
 Available commands:
 - list: Show all indexed sources (use --json for machine-readable output)
-- ignore list --json: Show all ignored URLs (these will never be re-added)
+- ignore list --org <org> --json: Show ignored URLs for an organization (org-scoped, prevents re-discovery for that org only)
+- block list --json: Show globally blocked URLs/domains (blocked everywhere)
 - discover <domain>: Probe a domain for changelog URLs, feeds, and GitHub repos
 - add <url> --name <name> --type <type>: Add a new source (types: github, scrape, feed)
 - add --batch <file>: Add multiple sources from a JSON file (array of {url, name, type})
@@ -59,7 +60,7 @@ Available commands:
 - remove <slug1> <slug2> ... --ignore --reason <reason>: Remove sources and add their URLs to the ignore list
 
 Your workflow:
-0. Check ignored URLs with "ignore list --json" — skip any URLs that appear in the ignore list
+0. Check ignored URLs with "ignore list --org <company> --json" and blocked URLs with "block list --json" — skip any URLs that appear in either list
 1. Check what sources already exist with "list --json"
 2. Use web search to find the company's main website, changelog pages, and GitHub organization
 3. Use "discover" on the company's domain to find changelog surfaces

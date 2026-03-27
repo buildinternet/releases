@@ -6,26 +6,21 @@ import { logger } from "../../lib/logger.js";
 export function registerIgnoreCommand(program: Command) {
   const ignore = program
     .command("ignore")
-    .description("Manage ignored URLs to prevent re-discovery");
+    .description("Manage ignored URLs for an organization (prevents re-discovery)");
 
   ignore
     .command("list")
-    .description("List all ignored URLs")
-    .option("--org <org>", "Filter by organization slug, domain, or name")
+    .description("List ignored URLs for an organization")
+    .requiredOption("--org <org>", "Organization slug, domain, or name")
     .option("--json", "Output as JSON")
-    .action(async (opts: { org?: string; json?: boolean }) => {
-      let orgId: string | undefined;
-
-      if (opts.org) {
-        const org = await findOrg(opts.org);
-        if (!org) {
-          logger.error(`Organization not found: ${opts.org}`);
-          process.exit(1);
-        }
-        orgId = org.id;
+    .action(async (opts: { org: string; json?: boolean }) => {
+      const org = await findOrg(opts.org);
+      if (!org) {
+        logger.error(`Organization not found: ${opts.org}`);
+        process.exit(1);
       }
 
-      const rows = await listIgnoredUrls(orgId);
+      const rows = await listIgnoredUrls(org.id);
 
       if (opts.json) {
         console.log(JSON.stringify(rows, null, 2));
@@ -33,7 +28,7 @@ export function registerIgnoreCommand(program: Command) {
       }
 
       if (rows.length === 0) {
-        logger.info("No ignored URLs found.");
+        logger.info(`No ignored URLs for ${org.name}.`);
         return;
       }
 
@@ -45,30 +40,38 @@ export function registerIgnoreCommand(program: Command) {
 
   ignore
     .command("add <url>")
-    .description("Manually ignore a URL to prevent re-discovery")
+    .description("Ignore a URL for an organization")
+    .requiredOption("--org <org>", "Organization slug, domain, or name")
     .option("--reason <reason>", "Reason for ignoring this URL")
-    .option("--org <org>", "Associate with an organization")
-    .action(async (url: string, opts: { reason?: string; org?: string }) => {
-      let orgId: string | undefined;
-
-      if (opts.org) {
-        const org = await findOrg(opts.org);
-        if (!org) {
-          logger.error(`Organization not found: ${opts.org}`);
-          process.exit(1);
-        }
-        orgId = org.id;
+    .option("--dry-run", "Show what would be ignored without writing")
+    .action(async (url: string, opts: { org: string; reason?: string; dryRun?: boolean }) => {
+      const org = await findOrg(opts.org);
+      if (!org) {
+        logger.error(`Organization not found: ${opts.org}`);
+        process.exit(1);
       }
 
-      await addIgnoredUrl(url, { orgId, reason: opts.reason });
-      logger.info(chalk.green(`Ignored: ${url}${opts.reason ? ` (${opts.reason})` : ""}`));
+      if (opts.dryRun) {
+        logger.info(chalk.yellow(`[dry-run] Would ignore for ${org.name}: ${url}${opts.reason ? ` (${opts.reason})` : ""}`));
+        return;
+      }
+
+      await addIgnoredUrl(url, org.id, opts.reason);
+      logger.info(chalk.green(`Ignored for ${org.name}: ${url}${opts.reason ? ` (${opts.reason})` : ""}`));
     });
 
   ignore
     .command("remove <url>")
-    .description("Un-ignore a URL")
-    .action(async (url: string) => {
-      await removeIgnoredUrl(url);
-      logger.info(chalk.green(`Un-ignored: ${url}`));
+    .description("Un-ignore a URL for an organization")
+    .requiredOption("--org <org>", "Organization slug, domain, or name")
+    .action(async (url: string, opts: { org: string }) => {
+      const org = await findOrg(opts.org);
+      if (!org) {
+        logger.error(`Organization not found: ${opts.org}`);
+        process.exit(1);
+      }
+
+      await removeIgnoredUrl(url, org.id);
+      logger.info(chalk.green(`Un-ignored for ${org.name}: ${url}`));
     });
 }
