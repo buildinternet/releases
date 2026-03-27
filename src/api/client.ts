@@ -361,6 +361,22 @@ export async function getLatestReleases(opts: {
   return all.sort(byPublishedAtDesc).slice(0, opts.count);
 }
 
+// ── Source CRUD ──
+
+export async function createSource(data: {
+  name: string;
+  slug: string;
+  type: string;
+  url: string;
+  orgId?: string | null;
+  metadata?: string;
+}): Promise<Source> {
+  return apiFetch<Source>("/api/sources", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Org CRUD ──
 
 export async function createOrg(

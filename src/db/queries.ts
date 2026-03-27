@@ -150,6 +150,27 @@ export async function getOrgAccountByPlatform(
   return account ?? null;
 }
 
+export async function createSource(data: {
+  name: string;
+  slug: string;
+  type: string;
+  url: string;
+  orgId?: string | null;
+  metadata?: string;
+}): Promise<Source> {
+  if (isRemoteMode()) return apiClient.createSource(data);
+  const db = getDb();
+  const [created] = await db.insert(sources).values({
+    name: data.name,
+    slug: data.slug,
+    type: data.type as "github" | "scrape" | "feed" | "agent",
+    url: data.url,
+    orgId: data.orgId ?? null,
+    metadata: data.metadata,
+  }).returning();
+  return created;
+}
+
 export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
   if (urls.length === 0) return [];
   if (isRemoteMode()) return apiClient.findSourcesByUrls(urls);
