@@ -1,10 +1,10 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { eq, and } from "drizzle-orm";
-import { getDb } from "../../db/connection.js";
-import { organizations, orgAccounts } from "../../db/schema.js";
-import { findOrg, getSourcesByOrg, listOrgs } from "../../db/queries.js";
+import {
+  findOrg, getSourcesByOrg, listOrgs, createOrg, removeOrg,
+  getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
+} from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 
 export function registerOrgCommand(program: Command) {
@@ -21,7 +21,6 @@ export function registerOrgCommand(program: Command) {
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--json", "Output as JSON")
     .action(async (name: string, opts: { domain?: string; slug?: string; json?: boolean }) => {
-      const db = getDb();
       const slug = opts.slug ?? toSlug(name);
 
       const existing = await findOrg(slug);
@@ -30,14 +29,7 @@ export function registerOrgCommand(program: Command) {
         process.exit(1);
       }
 
-      const now = new Date().toISOString();
-      const [created] = await db.insert(organizations).values({
-        name,
-        slug,
-        domain: opts.domain ?? null,
-        createdAt: now,
-        updatedAt: now,
-      }).returning();
+      const created = await createOrg(name, { slug, domain: opts.domain });
 
       if (opts.json) {
         console.log(JSON.stringify(created, null, 2));
@@ -104,11 +96,7 @@ export function registerOrgCommand(program: Command) {
         process.exit(1);
       }
 
-      const db = getDb();
-      const accounts = await db
-        .select()
-        .from(orgAccounts)
-        .where(eq(orgAccounts.orgId, found.id));
+      const accounts = await getOrgAccountsBySlug(found.slug, found.id);
       const linkedSources = await getSourcesByOrg(found.id);
 
       if (opts.json) {
@@ -152,8 +140,7 @@ export function registerOrgCommand(program: Command) {
         process.exit(1);
       }
 
-      const db = getDb();
-      await db.delete(organizations).where(eq(organizations.id, found.id));
+      await removeOrg(found.id, found.slug);
 
       if (opts.json) {
         console.log(JSON.stringify({ removed: found.slug }, null, 2));
@@ -177,17 +164,7 @@ export function registerOrgCommand(program: Command) {
         process.exit(1);
       }
 
-      const db = getDb();
-      const [created] = await db.insert(orgAccounts).values({
-        orgId: found.id,
-        platform: opts.platform,
-        handle: opts.handle,
-      }).returning();
-
-      await db
-        .update(organizations)
-        .set({ updatedAt: new Date().toISOString() })
-        .where(eq(organizations.id, found.id));
+      const created = await linkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
 
       if (opts.json) {
         console.log(JSON.stringify(created, null, 2));
@@ -211,21 +188,7 @@ export function registerOrgCommand(program: Command) {
         process.exit(1);
       }
 
-      const db = getDb();
-      await db
-        .delete(orgAccounts)
-        .where(
-          and(
-            eq(orgAccounts.orgId, found.id),
-            eq(orgAccounts.platform, opts.platform),
-            eq(orgAccounts.handle, opts.handle),
-          ),
-        );
-
-      await db
-        .update(organizations)
-        .set({ updatedAt: new Date().toISOString() })
-        .where(eq(organizations.id, found.id));
+      await unlinkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
 
       if (opts.json) {
         console.log(JSON.stringify({ unlinked: `${opts.platform}/${opts.handle}` }, null, 2));

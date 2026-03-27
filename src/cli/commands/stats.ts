@@ -1,10 +1,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { sql, eq, gte, desc, count } from "drizzle-orm";
-import { getDb } from "../../db/connection.js";
-import { sources, releases, organizations, fetchLog } from "../../db/schema.js";
-import { daysAgoIso, timeAgo } from "../../lib/dates.js";
+import { timeAgo } from "../../lib/dates.js";
+import { getStatsSummary } from "../../db/queries.js";
 
 export function registerStatsCommand(program: Command) {
   program
@@ -13,87 +11,16 @@ export function registerStatsCommand(program: Command) {
     .option("--json", "Output as JSON")
     .option("--days <n>", "Period for recent activity (default: 30)", "30")
     .action(async (opts: { json?: boolean; days?: string }) => {
-      const db = getDb();
       const days = parseInt(opts.days ?? "30", 10);
-      const cutoff = daysAgoIso(days);
-
-      // ── Aggregate counts ─────────────────────────────────────
-      const [orgCount] = await db.select({ n: count() }).from(organizations);
-      const [sourceCount] = await db.select({ n: count() }).from(sources);
-      const [releaseCount] = await db.select({ n: count() }).from(releases);
-      const [recentReleaseCount] = await db
-        .select({ n: count() })
-        .from(releases)
-        .where(gte(releases.publishedAt, cutoff));
-
-      // Sources never fetched
-      const [neverFetched] = await db
-        .select({ n: count() })
-        .from(sources)
-        .where(sql`${sources.lastFetchedAt} IS NULL`);
-
-      // Sources fetched within the period
-      const [recentlyFetched] = await db
-        .select({ n: count() })
-        .from(sources)
-        .where(gte(sources.lastFetchedAt, cutoff));
-
-      // Stale sources (fetched, but not within the period)
-      const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
-
-      // ── Per-source release counts (top sources) ──────────────
-      const perSource = await db
-        .select({
-          sourceName: sources.name,
-          sourceSlug: sources.slug,
-          sourceType: sources.type,
-          orgName: organizations.name,
-          lastFetchedAt: sources.lastFetchedAt,
-          totalReleases: count(releases.id),
-          recentReleases: sql<number>`SUM(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 ELSE 0 END)`,
-        })
-        .from(sources)
-        .leftJoin(releases, eq(releases.sourceId, sources.id))
-        .leftJoin(organizations, eq(sources.orgId, organizations.id))
-        .groupBy(sources.id)
-        .orderBy(desc(sql`SUM(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 ELSE 0 END)`));
-
-      // ── Recent fetch activity ────────────────────────────────
-      const recentFetches = await db
-        .select({
-          sourceName: sources.name,
-          sourceSlug: sources.slug,
-          orgName: organizations.name,
-          releasesFound: fetchLog.releasesFound,
-          releasesInserted: fetchLog.releasesInserted,
-          totalReleases: sql<number>`(SELECT COUNT(*) FROM releases WHERE releases.source_id = ${sources.id})`,
-          status: fetchLog.status,
-          durationMs: fetchLog.durationMs,
-          error: fetchLog.error,
-          createdAt: fetchLog.createdAt,
-        })
-        .from(fetchLog)
-        .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
-        .leftJoin(organizations, eq(sources.orgId, organizations.id))
-        .orderBy(desc(fetchLog.createdAt))
-        .limit(20);
+      const data = await getStatsSummary(days);
 
       // ── JSON output ──────────────────────────────────────────
       if (opts.json) {
         console.log(JSON.stringify({
-          period: { days, cutoff },
-          totals: {
-            organizations: orgCount.n,
-            sources: sourceCount.n,
-            releases: releaseCount.n,
-            releasesInPeriod: recentReleaseCount.n,
-          },
-          sourceHealth: {
-            upToDate: recentlyFetched.n,
-            stale: staleCount,
-            neverFetched: neverFetched.n,
-          },
-          sources: perSource.map((s) => ({
+          period: data.period,
+          totals: data.totals,
+          sourceHealth: data.sourceHealth,
+          sources: data.sources.map((s) => ({
             name: s.sourceName,
             slug: s.sourceSlug,
             type: s.sourceType,
@@ -102,29 +29,29 @@ export function registerStatsCommand(program: Command) {
             totalReleases: s.totalReleases,
             recentReleases: s.recentReleases,
           })),
-          recentActivity: recentFetches,
+          recentActivity: data.recentActivity,
         }, null, 2));
         return;
       }
 
       // ── Human output ─────────────────────────────────────────
       console.log(chalk.bold("Overview\n"));
-      console.log(`  Organizations:  ${orgCount.n}`);
-      console.log(`  Sources:        ${sourceCount.n}`);
-      console.log(`  Releases:       ${releaseCount.n}`);
-      console.log(`  Last ${days} days:   ${recentReleaseCount.n} releases\n`);
+      console.log(`  Organizations:  ${data.totals.organizations}`);
+      console.log(`  Sources:        ${data.totals.sources}`);
+      console.log(`  Releases:       ${data.totals.releases}`);
+      console.log(`  Last ${days} days:   ${data.totals.releasesInPeriod} releases\n`);
 
       console.log(chalk.bold("Source Health\n"));
-      console.log(`  ${chalk.green(`${recentlyFetched.n} up to date`)} (fetched in last ${days} days)`);
-      if (staleCount > 0) {
-        console.log(`  ${chalk.yellow(`${staleCount} stale`)} (fetched, but not recently)`);
+      console.log(`  ${chalk.green(`${data.sourceHealth.upToDate} up to date`)} (fetched in last ${days} days)`);
+      if (data.sourceHealth.stale > 0) {
+        console.log(`  ${chalk.yellow(`${data.sourceHealth.stale} stale`)} (fetched, but not recently)`);
       }
-      if (neverFetched.n > 0) {
-        console.log(`  ${chalk.red(`${neverFetched.n} never fetched`)}`);
+      if (data.sourceHealth.neverFetched > 0) {
+        console.log(`  ${chalk.red(`${data.sourceHealth.neverFetched} never fetched`)}`);
       }
 
       // Top sources table
-      const activeSources = perSource.filter((s) => s.totalReleases > 0 || s.recentReleases > 0);
+      const activeSources = data.sources.filter((s) => s.totalReleases > 0 || s.recentReleases > 0);
       if (activeSources.length > 0) {
         console.log(chalk.bold("\nSources by Activity\n"));
         const sourceTable = new Table({
@@ -151,7 +78,7 @@ export function registerStatsCommand(program: Command) {
       }
 
       // Recent fetch activity
-      if (recentFetches.length > 0) {
+      if (data.recentActivity.length > 0) {
         console.log(chalk.bold("\nRecent Fetch Activity\n"));
         const activityTable = new Table({
           head: [
@@ -165,7 +92,7 @@ export function registerStatsCommand(program: Command) {
             chalk.cyan("When"),
           ],
         });
-        for (const f of recentFetches) {
+        for (const f of data.recentActivity) {
           const statusLabel = f.status === "dry_run"
             ? chalk.magenta("dry run")
             : f.status === "success"

@@ -12,7 +12,9 @@ export interface FtsResult {
 }
 
 export function searchReleases(query: string, limit = 20): FtsResult[] {
-  // TODO: add remote mode support for MCP search
+  if (isRemoteMode()) {
+    throw new Error("searchReleases() is not available in remote mode — use searchReleasesRemote() from queries.ts instead");
+  }
   const db = getDb();
   const results = db.all<FtsResult>(sql`
     SELECT

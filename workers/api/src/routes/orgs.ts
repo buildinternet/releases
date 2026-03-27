@@ -42,6 +42,7 @@ orgRoutes.get("/orgs", async (c) => {
         .where(and(eq(sources.orgId, org.id), sql`${releases.publishedAt} IS NOT NULL`));
 
       return {
+        id: org.id,
         slug: org.slug,
         name: org.name,
         domain: org.domain,
@@ -99,6 +100,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       }
 
       return {
+        id: src.id,
         slug: src.slug,
         name: src.name,
         type: src.type,
@@ -138,6 +140,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     .where(eq(sources.orgId, org.id));
 
   return c.json({
+    id: org.id,
     slug: org.slug,
     name: org.name,
     domain: org.domain,

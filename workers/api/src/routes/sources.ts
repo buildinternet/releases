@@ -41,6 +41,7 @@ sourceRoutes.get("/sources", async (c) => {
       }
 
       return {
+        id: src.id,
         slug: src.slug,
         name: src.name,
         type: src.type,
@@ -142,6 +143,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const totalPages = Math.ceil(relCount.n / pageSize);
 
   return c.json({
+    id: src.id,
     slug: src.slug,
     name: src.name,
     type: src.type,

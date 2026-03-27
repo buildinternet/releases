@@ -1,9 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { eq } from "drizzle-orm";
-import { getDb } from "../../db/connection.js";
-import { sources, organizations } from "../../db/schema.js";
+import { listSourcesWithOrg } from "../../db/queries.js";
 
 export function registerListCommand(program: Command) {
   program
@@ -11,19 +9,7 @@ export function registerListCommand(program: Command) {
     .description("List all configured changelog sources")
     .option("--json", "Output as JSON")
     .action(async (opts: { json?: boolean }) => {
-      const db = getDb();
-      const allSources = await db
-        .select({
-          id: sources.id,
-          name: sources.name,
-          slug: sources.slug,
-          type: sources.type,
-          url: sources.url,
-          lastFetchedAt: sources.lastFetchedAt,
-          orgName: organizations.name,
-        })
-        .from(sources)
-        .leftJoin(organizations, eq(sources.orgId, organizations.id));
+      const allSources = await listSourcesWithOrg();
 
       if (allSources.length === 0) {
         if (opts.json) {

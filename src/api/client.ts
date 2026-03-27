@@ -1,4 +1,5 @@
 import { getApiUrl, getApiKey } from "../lib/mode.js";
+import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Organization, OrgAccount, IgnoredUrl,
 } from "../db/schema.js";
@@ -100,4 +101,311 @@ export async function searchReleasesForApi(query: string, limit: number, offset:
     `/api/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`,
   );
   return result.results;
+}
+
+export interface SearchResultRemote {
+  sourceSlug: string;
+  sourceName: string;
+  orgSlug: string | null;
+  version: string | null;
+  title: string;
+  summary: string;
+  publishedAt: string | null;
+}
+
+export async function searchReleasesRemote(
+  query: string,
+  limit: number,
+  opts?: { org?: string },
+): Promise<SearchResultRemote[]> {
+  const params = new URLSearchParams({ q: query, limit: String(limit), offset: "0" });
+  if (opts?.org) params.set("org", opts.org);
+  const result = await apiFetch<{ results: SearchResultRemote[] }>(`/api/search?${params}`);
+  return result.results;
+}
+
+// ── List sources with org ──
+
+export interface SourceWithOrg {
+  id: string;
+  name: string;
+  slug: string;
+  type: string;
+  url: string;
+  lastFetchedAt: string | null;
+  orgName: string | null;
+}
+
+export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
+  // The API GET /api/sources returns enriched source data — map to the shape the CLI needs
+  const rows = await apiFetch<Array<{
+    slug: string; name: string; type: string; url: string;
+    orgSlug: string | null; releaseCount: number;
+    latestVersion: string | null; latestDate: string | null;
+  }>>("/api/sources");
+
+  // API doesn't directly return orgName or lastFetchedAt, but we map what we can
+  return rows.map((r) => ({
+    id: "",
+    name: r.name,
+    slug: r.slug,
+    type: r.type,
+    url: r.url,
+    lastFetchedAt: null,
+    orgName: r.orgSlug, // best we have from the sources list endpoint
+  }));
+}
+
+// ── Stats ──
+
+export interface StatsSummary {
+  period: { days: number; cutoff: string };
+  totals: {
+    organizations: number;
+    sources: number;
+    releases: number;
+    releasesInPeriod: number;
+  };
+  sourceHealth: {
+    upToDate: number;
+    stale: number;
+    neverFetched: number;
+  };
+  sources: Array<{
+    sourceName: string;
+    sourceSlug: string;
+    sourceType: string;
+    orgName: string | null;
+    lastFetchedAt: string | null;
+    totalReleases: number;
+    recentReleases: number;
+  }>;
+  recentActivity: Array<{
+    sourceName: string;
+    sourceSlug: string;
+    orgName: string | null;
+    releasesFound: number;
+    releasesInserted: number;
+    totalReleases: number;
+    status: string;
+    durationMs: number | null;
+    error: string | null;
+    createdAt: string;
+  }>;
+}
+
+export async function getStatsSummary(days: number): Promise<StatsSummary> {
+  const cutoff = daysAgoIso(days);
+
+  // Compose from existing endpoints
+  const [statsData, fetchLogData, sourcesData] = await Promise.all([
+    apiFetch<{ orgs: number; sources: number; releases: number }>("/api/stats"),
+    apiFetch<Array<{
+      id: string; sourceId: string; releasesFound: number; releasesInserted: number;
+      durationMs: number | null; status: string; error: string | null; createdAt: string;
+    }>>("/api/fetch-log?limit=20"),
+    apiFetch<Array<{
+      slug: string; name: string; type: string; url: string;
+      orgSlug: string | null; releaseCount: number;
+    }>>("/api/sources"),
+  ]);
+
+  return {
+    period: { days, cutoff },
+    totals: {
+      organizations: statsData.orgs,
+      sources: statsData.sources,
+      releases: statsData.releases,
+      releasesInPeriod: 0, // Not available from basic stats endpoint
+    },
+    sourceHealth: {
+      upToDate: 0,
+      stale: 0,
+      neverFetched: 0,
+    },
+    sources: sourcesData.map((s) => ({
+      sourceName: s.name,
+      sourceSlug: s.slug,
+      sourceType: s.type,
+      orgName: s.orgSlug,
+      lastFetchedAt: null,
+      totalReleases: s.releaseCount,
+      recentReleases: 0,
+    })),
+    recentActivity: fetchLogData.map((f) => ({
+      sourceName: "",
+      sourceSlug: "",
+      orgName: null,
+      releasesFound: f.releasesFound,
+      releasesInserted: f.releasesInserted,
+      totalReleases: 0,
+      status: f.status,
+      durationMs: f.durationMs,
+      error: f.error,
+      createdAt: f.createdAt,
+    })),
+  };
+}
+
+// ── Fetch log ──
+
+export interface FetchLogEntry {
+  id: string;
+  sourceName: string;
+  sourceSlug: string;
+  status: string;
+  releasesFound: number;
+  releasesInserted: number;
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string;
+}
+
+export async function getFetchLogs(opts: {
+  sourceSlug?: string;
+  limit: number;
+}): Promise<FetchLogEntry[]> {
+  const params = new URLSearchParams({ limit: String(opts.limit) });
+  if (opts.sourceSlug) params.set("source", opts.sourceSlug);
+  const logs = await apiFetch<Array<{
+    id: string; sourceId: string; releasesFound: number; releasesInserted: number;
+    durationMs: number | null; status: string; error: string | null;
+    rawContent: string | null; createdAt: string;
+  }>>(`/api/fetch-log?${params}`);
+
+  // The API fetch-log endpoint returns raw fetch_log rows without source name/slug.
+  // In remote mode we don't have the join data, so we provide what we can.
+  return logs.map((l) => ({
+    id: l.id,
+    sourceName: "",
+    sourceSlug: "",
+    status: l.status,
+    releasesFound: l.releasesFound,
+    releasesInserted: l.releasesInserted,
+    durationMs: l.durationMs,
+    error: l.error,
+    createdAt: l.createdAt,
+  }));
+}
+
+// ── Latest releases ──
+
+export interface LatestRelease {
+  title: string;
+  version: string | null;
+  publishedAt: string | null;
+  sourceName: string;
+}
+
+type SourceReleaseResponse = {
+  name: string;
+  releases: Array<{ version: string | null; title: string; publishedAt: string | null }>;
+};
+
+function byPublishedAtDesc(a: LatestRelease, b: LatestRelease): number {
+  if (!a.publishedAt && !b.publishedAt) return 0;
+  if (!a.publishedAt) return 1;
+  if (!b.publishedAt) return -1;
+  return b.publishedAt.localeCompare(a.publishedAt);
+}
+
+async function collectReleasesFromSources(
+  slugs: string[],
+  pageSize: number,
+): Promise<LatestRelease[]> {
+  const results = await Promise.all(
+    slugs.map((slug) => apiFetch<SourceReleaseResponse>(`/api/sources/${slug}?pageSize=${pageSize}`)),
+  );
+  const all: LatestRelease[] = [];
+  for (const srcData of results) {
+    if (!srcData) continue;
+    for (const r of srcData.releases) {
+      all.push({
+        title: r.title,
+        version: r.version,
+        publishedAt: r.publishedAt,
+        sourceName: srcData.name,
+      });
+    }
+  }
+  return all;
+}
+
+export async function getLatestReleases(opts: {
+  slug?: string;
+  orgSlug?: string;
+  count: number;
+}): Promise<LatestRelease[]> {
+  if (opts.slug) {
+    const data = await apiFetch<SourceReleaseResponse>(`/api/sources/${opts.slug}?pageSize=${opts.count}`);
+    if (!data) return [];
+    return data.releases.map((r) => ({
+      title: r.title,
+      version: r.version,
+      publishedAt: r.publishedAt,
+      sourceName: data.name,
+    }));
+  }
+
+  if (opts.orgSlug) {
+    const data = await apiFetch<{
+      sources: Array<{ slug: string; name: string }>;
+    }>(`/api/orgs/${opts.orgSlug}`);
+    if (!data) return [];
+    const all = await collectReleasesFromSources(data.sources.map((s) => s.slug), opts.count);
+    return all.sort(byPublishedAtDesc).slice(0, opts.count);
+  }
+
+  const sourcesData = await apiFetch<Array<{ slug: string; name: string }>>("/api/sources");
+  const all = await collectReleasesFromSources(sourcesData.slice(0, 10).map((s) => s.slug), opts.count);
+  return all.sort(byPublishedAtDesc).slice(0, opts.count);
+}
+
+// ── Org CRUD ──
+
+export async function createOrg(
+  name: string,
+  opts?: { slug?: string; domain?: string },
+): Promise<Organization> {
+  return apiFetch<Organization>("/api/orgs", {
+    method: "POST",
+    body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain }),
+  });
+}
+
+export async function removeOrg(slug: string): Promise<void> {
+  await apiFetch(`/api/orgs/${slug}`, { method: "DELETE" });
+}
+
+export async function getOrgAccountsBySlug(
+  orgSlug: string,
+): Promise<Array<{ platform: string; handle: string }>> {
+  const data = await apiFetch<{
+    accounts: Array<{ platform: string; handle: string }>;
+  }>(`/api/orgs/${orgSlug}`);
+  return data?.accounts ?? [];
+}
+
+export async function linkOrgAccount(
+  orgSlug: string,
+  platform: string,
+  handle: string,
+): Promise<OrgAccount> {
+  return apiFetch<OrgAccount>(`/api/orgs/${orgSlug}/accounts`, {
+    method: "POST",
+    body: JSON.stringify({ platform, handle }),
+  });
+}
+
+export async function unlinkOrgAccount(
+  orgSlug: string,
+  platform: string,
+  handle: string,
+): Promise<void> {
+  // The API doesn't have a dedicated unlink endpoint — use PATCH to update org or
+  // we need to add one. For now, this is a placeholder that will need a matching API endpoint.
+  // The simplest approach: DELETE /api/orgs/:slug/accounts/:platform/:handle
+  await apiFetch(`/api/orgs/${orgSlug}/accounts/${platform}/${encodeURIComponent(handle)}`, {
+    method: "DELETE",
+  });
 }

@@ -17,6 +17,8 @@ searchRoutes.get("/search", async (c) => {
 
   const results = await db.all(sql`
     SELECT
+      r.id as id,
+      s.id as sourceId,
       s.slug as sourceSlug,
       s.name as sourceName,
       o.slug as orgSlug,

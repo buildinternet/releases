@@ -1,10 +1,11 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { inArray } from "drizzle-orm";
+import { searchReleases } from "../../db/fts.js";
+import { findOrg, getSourcesByOrg, searchReleasesRemote } from "../../db/queries.js";
+import { isRemoteMode } from "../../lib/mode.js";
 import { getDb } from "../../db/connection.js";
 import { sources, releases } from "../../db/schema.js";
-import { searchReleases } from "../../db/fts.js";
-import { findOrg, getSourcesByOrg } from "../../db/queries.js";
 
 export function registerSearchCommand(program: Command) {
   program
@@ -16,6 +17,43 @@ export function registerSearchCommand(program: Command) {
     .option("--json", "Output as JSON")
     .action(async (query: string, opts: { limit: string; org?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
+
+      // ── Remote mode: use API search endpoint ──
+      if (isRemoteMode()) {
+        const results = await searchReleasesRemote(query, limit, { org: opts.org });
+
+        if (results.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.yellow("No results found."));
+          }
+          return;
+        }
+
+        if (opts.json) {
+          const jsonResults = results.map((r) => ({
+            title: r.title,
+            content: r.summary,
+            sourceName: r.sourceName,
+            publishedAt: r.publishedAt,
+          }));
+          console.log(JSON.stringify(jsonResults, null, 2));
+          return;
+        }
+
+        for (const result of results) {
+          console.log(chalk.cyan.bold(result.title));
+          console.log(chalk.dim(`  Source: ${result.sourceName}  |  Published: ${result.publishedAt ?? "No date"}`));
+          console.log(`  ${result.summary}${result.summary.length >= 150 ? "..." : ""}`);
+          console.log();
+        }
+
+        console.log(chalk.dim(`${results.length} result(s) found.`));
+        return;
+      }
+
+      // ── Local mode: use FTS ──
       const fetchLimit = opts.org ? limit * 5 : limit;
       const results = searchReleases(query, fetchLimit);
 
