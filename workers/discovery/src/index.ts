@@ -43,10 +43,6 @@ export default {
         return errorResponse("Missing required field: company", 400);
       }
 
-      if (body.dbSnapshot && typeof body.dbSnapshot !== "string") {
-        return errorResponse("dbSnapshot must be a base64 string", 400);
-      }
-
       const sessionId = crypto.randomUUID();
       const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
       const stub = env.DISCOVERY_SESSION.get(doId);
@@ -56,7 +52,6 @@ export default {
           company: body.company,
           domain: body.domain,
           githubOrg: body.githubOrg,
-          dbSnapshot: body.dbSnapshot,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

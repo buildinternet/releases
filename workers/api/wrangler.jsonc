@@ -1,0 +1,16 @@
+{
+  "name": "released-api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-03-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "released-db",
+      "database_id": "aca250e3-d0b4-467d-8b07-4f54b08c8abf"
+    }
+  ]
+}

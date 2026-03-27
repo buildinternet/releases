@@ -8,7 +8,6 @@ interface DiscoveryParams {
   company: string;
   domain?: string;
   githubOrg?: string;
-  dbSnapshot?: string;
 }
 
 const POLL_INTERVAL_MS = 15_000;
@@ -73,18 +72,14 @@ export class DiscoverySession extends DurableObject<Env> {
 
     try {
       console.log(`[discovery:${this.sessionId}] launchProcess: setting up sandbox`);
-      await sandbox.mkdir("/app/data", { recursive: true });
-      if (params.dbSnapshot) {
-        console.log(`[discovery:${this.sessionId}] writing dbSnapshot (${params.dbSnapshot.length} chars)`);
-        await sandbox.writeFile("/app/data/released.db", params.dbSnapshot, { encoding: "base64" });
-      }
-
-      // Worker secrets don't propagate into containers — write .env for Bun to auto-load
+      // Agent CLI inside the sandbox connects to D1 via the API Worker
       const envLines = [
         `ANTHROPIC_API_KEY=${this.env.ANTHROPIC_API_KEY}`,
         `CLOUDFLARE_ACCOUNT_ID=${this.env.CLOUDFLARE_ACCOUNT_ID}`,
         `CLOUDFLARE_API_TOKEN=${this.env.CLOUDFLARE_API_TOKEN}`,
         this.env.GITHUB_TOKEN ? `GITHUB_TOKEN=${this.env.GITHUB_TOKEN}` : "",
+        `RELEASED_API_URL=${this.env.RELEASED_API_URL}`,
+        `RELEASED_API_KEY=${this.env.RELEASED_API_KEY}`,
       ].filter(Boolean).join("\n");
       await sandbox.writeFile("/app/.env", envLines);
 

@@ -1,5 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "./connection.js";
+import { isRemoteMode } from "../lib/mode.js";
+import * as apiClient from "../api/client.js";
 
 export interface FtsResult {
   id: string;
@@ -10,6 +12,7 @@ export interface FtsResult {
 }
 
 export function searchReleases(query: string, limit = 20): FtsResult[] {
+  // TODO: add remote mode support for MCP search
   const db = getDb();
   const results = db.all<FtsResult>(sql`
     SELECT
@@ -37,7 +40,8 @@ export interface SearchApiResult {
   publishedAt: string | null;
 }
 
-export function searchReleasesForApi(query: string, limit: number, offset: number): SearchApiResult[] {
+export async function searchReleasesForApi(query: string, limit: number, offset: number): Promise<SearchApiResult[]> {
+  if (isRemoteMode()) return apiClient.searchReleasesForApi(query, limit, offset) as Promise<SearchApiResult[]>;
   const db = getDb();
   return db.all<SearchApiResult>(sql`
     SELECT
