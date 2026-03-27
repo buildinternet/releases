@@ -8,17 +8,27 @@ import { sourceRoutes } from "./routes/sources.js";
 import { searchRoutes } from "./routes/search.js";
 import { fetchLogRoutes } from "./routes/fetch-log.js";
 import { ignoreRoutes } from "./routes/ignore.js";
+import { statusRoutes } from "./routes/status.js";
+
+export { StatusHub } from "./status-hub.js";
 
 export type Env = {
   Bindings: {
     DB: D1Database;
     API_SECRET: string;
+    DEV_MODE: string;
+    STATUS_HUB: DurableObjectNamespace;
   };
 };
 
 const app = new Hono<Env>();
 
 app.use("*", cors());
+
+// Status routes mounted before auth — they use their own devModeMiddleware gate
+// and need to accept unauthenticated browser WebSocket/fetch connections
+app.route("/api", statusRoutes);
+
 app.use("/api/*", authMiddleware);
 app.use("/api/*", dbHealthCheck);
 

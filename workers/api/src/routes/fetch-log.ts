@@ -31,3 +31,49 @@ fetchLogRoutes.get("/fetch-log", async (c) => {
     .limit(limit);
   return c.json(logs);
 });
+
+fetchLogRoutes.post("/fetch-log", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json();
+
+  const [inserted] = await db.insert(fetchLog).values(body).returning();
+
+  // Best-effort notify StatusHub for live dashboard
+  if (c.env.STATUS_HUB) {
+    try {
+      // Resolve source name for the dashboard display
+      let sourceName: string | undefined;
+      let sourceSlug: string | undefined;
+      if (body.sourceId) {
+        const [src] = await db.select({ name: sources.name, slug: sources.slug })
+          .from(sources).where(eq(sources.id, body.sourceId));
+        sourceName = src?.name;
+        sourceSlug = src?.slug;
+      }
+
+      const id = c.env.STATUS_HUB.idFromName("global");
+      const stub = c.env.STATUS_HUB.get(id);
+      await stub.fetch(new Request("https://do/event", {
+        method: "POST",
+        body: JSON.stringify({
+          type: "fetch:complete",
+          id: inserted.id,
+          sourceId: body.sourceId,
+          sourceName,
+          sourceSlug,
+          releasesFound: body.releasesFound,
+          releasesInserted: body.releasesInserted,
+          durationMs: body.durationMs,
+          status: body.status,
+          error: body.error,
+          createdAt: inserted.createdAt,
+        }),
+        headers: { "Content-Type": "application/json" },
+      }));
+    } catch {
+      // Dashboard notification is best-effort
+    }
+  }
+
+  return c.json(inserted, 201);
+});
