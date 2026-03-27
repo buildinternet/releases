@@ -1,4 +1,3 @@
-import { getSandbox } from "@cloudflare/sandbox";
 import type { Env, OnboardRequest, OnboardResponse, StatusResponse } from "./types.js";
 
 export { Sandbox } from "@cloudflare/sandbox";
@@ -15,9 +14,22 @@ function errorResponse(message: string, status: number): Response {
   return jsonResponse({ error: message }, status);
 }
 
+function checkAuth(request: Request, env: Env): Response | null {
+  if (!env.API_SECRET) return null;
+  const header = request.headers.get("Authorization") ?? "";
+  const token = header.startsWith("Bearer ") ? header.slice(7) : "";
+  if (token !== env.API_SECRET) {
+    return errorResponse("Unauthorized", 401);
+  }
+  return null;
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    const authError = checkAuth(request, env);
+    if (authError) return authError;
 
     if (request.method === "POST" && url.pathname === "/onboard") {
       let body: OnboardRequest;
@@ -67,31 +79,6 @@ export default {
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return errorResponse(`Failed to get status: ${message}`, 500);
-      }
-    }
-
-    // Diagnostic endpoint — accepts optional {"cmd": "..."} body
-    if (request.method === "POST" && url.pathname === "/test") {
-      let cmd = "echo ok && bun --version";
-      try {
-        const body: Record<string, unknown> = await request.json();
-        if (body.cmd && typeof body.cmd === "string") cmd = body.cmd;
-      } catch { /* no body — use default */ }
-
-      const sandbox = getSandbox(env.Sandbox, "smoke-test", { sleepAfter: "1m" });
-      try {
-        const result = await sandbox.exec(cmd, { timeout: 30_000 });
-        return jsonResponse({
-          ok: result.exitCode === 0,
-          exitCode: result.exitCode,
-          stdout: result.stdout?.trim(),
-          stderr: result.stderr?.trim(),
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return errorResponse(`Sandbox test failed: ${message}`, 500);
-      } finally {
-        await sandbox.destroy();
       }
     }
 
