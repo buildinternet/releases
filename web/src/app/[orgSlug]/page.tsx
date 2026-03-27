@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
+import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
 import Link from "next/link";
@@ -16,7 +17,15 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
   let org;
   try {
     org = await api.orgDetail(orgSlug);
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiSetupError) {
+      return (
+        <div className="min-h-screen">
+          <Header />
+          <SetupMessage message={err.message} steps={err.setup} />
+        </div>
+      );
+    }
     notFound();
   }
 

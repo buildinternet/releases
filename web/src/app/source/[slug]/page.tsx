@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
-import { api } from "@/lib/api";
+import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
+import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { ReleaseListItem } from "@/components/release-item";
 import { Pagination } from "@/components/pagination";
@@ -30,7 +31,15 @@ export default async function IndependentSourcePage({
   let source;
   try {
     source = await api.sourceDetail(slug, page);
-  } catch {
+  } catch (err) {
+    if (err instanceof ApiSetupError) {
+      return (
+        <div className="min-h-screen">
+          <Header />
+          <SetupMessage message={err.message} steps={err.setup} />
+        </div>
+      );
+    }
     notFound();
   }
 
