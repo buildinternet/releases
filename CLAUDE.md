@@ -23,7 +23,7 @@ Type-check: `npx tsc --noEmit`
 ## Conventions
 
 - All logging goes to **stderr** (`src/lib/logger.ts`). stdout is reserved for MCP JSON-RPC in serve mode.
-- Source types: `github`, `scrape`, and `feed`. The `scrape` adapter auto-discovers RSS/Atom/JSON feeds before falling back to Cloudflare + AI. The `feed` type is for sources where the feed URL is known or discoverable. Feed metadata (URL, type, ETag) is cached in `source.metadata`.
+- Source types: `github`, `scrape`, `feed`, and `agent`. The `scrape` adapter auto-discovers RSS/Atom/JSON feeds before falling back to Cloudflare + AI. The `feed` type is for sources where the feed URL is known or discoverable. Feed metadata (URL, type, ETag) is cached in `source.metadata`.
 - Crawl mode (`--crawl`) uses Cloudflare's `/crawl` endpoint for multi-page changelogs. Persists in `source.metadata` as `crawlEnabled`. The crawl flow is synchronous (poll until done) — background mode is deferred. See `src/adapters/crawl.ts`.
 - Shared DB query helpers live in `src/db/queries.ts` — use them instead of inlining drizzle queries.
 - `toReleaseInput()` from `src/ai/query.ts` converts DB rows (nullable fields) to AI input shape — don't hand-roll this mapping.
@@ -31,6 +31,8 @@ Type-check: `npx tsc --noEmit`
 - CLI commands that return data support `--json` for machine-readable output.
 - Batch DB inserts in chunks of 500 (SQLite variable limit).
 - Dedup via `UNIQUE(source_id, url)` and `UNIQUE(source_id, content_hash)` with `onConflictDoNothing()`.
+- `released import <file>` bulk-imports orgs and sources from a JSON manifest. Used as the discovery agent handoff point. Supports `--dry-run`, `--json`, `--skip-existing`.
+- Smart fetch: `fetch --stale <hours>` respects backoff (`nextFetchAfter`) and `fetchPriority`. `fetch --retry-errors` retries sources whose last fetch failed. Backoff counters (`consecutiveNoChange`, `consecutiveErrors`) on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h).
 
 ## Remote Mode (D1)
 

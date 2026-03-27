@@ -58,6 +58,9 @@ released fetch             # all sources
 released fetch next-js     # one source
 released fetch --since 2025-01-01 --max 50
 released fetch --all       # no date/count limits
+released fetch --stale 24  # only stale sources, with backoff
+released fetch --retry-errors  # retry failed sources
+released fetch --unfetched --concurrency 5  # parallel fetch
 ```
 
 ### Crawl mode
@@ -71,6 +74,51 @@ released fetch linear --no-crawl                 # one-off skip, keeps setting
 ```
 
 Crawl mode persists on the source — subsequent `released fetch linear` calls will automatically crawl. Only works with `scrape` sources.
+
+### Import sources from manifest
+
+Bulk-import organizations and sources from a JSON file — the discovery agent handoff point:
+
+```bash
+released import manifest.json              # import orgs and sources
+released import manifest.json --dry-run    # preview what would be created
+released import manifest.json --skip-existing  # skip duplicate URLs silently
+released import manifest.json --json       # machine-readable output
+```
+
+Manifest format:
+
+```json
+{
+  "organizations": [
+    {
+      "name": "Vercel",
+      "slug": "vercel",
+      "domain": "vercel.com",
+      "accounts": [
+        { "platform": "github", "handle": "vercel" }
+      ],
+      "sources": [
+        { "name": "Vercel Changelog", "type": "scrape", "url": "https://vercel.com/changelog" }
+      ]
+    }
+  ],
+  "sources": [
+    { "name": "Standalone Source", "url": "https://example.com/changelog" }
+  ]
+}
+```
+
+Slugs are auto-derived from names. Source types are auto-detected from URLs (GitHub URLs become `github`, others default to `scrape`). Existing orgs are found-or-created by slug. Source URLs are deduped against the database.
+
+### Smart fetch
+
+```bash
+released fetch --stale 24          # only fetch sources older than 24h, respecting backoff
+released fetch --retry-errors      # only fetch sources whose last attempt failed
+```
+
+Sources that repeatedly return no changes back off automatically (1h → 2h → 4h → ... up to 48h). Error backoff caps at 72h. Successful fetches reset all counters. Paused sources (`fetchPriority = "paused"`) are always skipped by `--stale`.
 
 ### Query
 
