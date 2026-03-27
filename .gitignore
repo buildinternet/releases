@@ -52,3 +52,4 @@ data/preferences.json
 
 # Wrangler local state
 .wrangler
+.dev.vars

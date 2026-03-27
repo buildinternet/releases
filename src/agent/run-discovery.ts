@@ -4,6 +4,24 @@ const PROGRESS_FILE = "/tmp/discovery-progress.json";
 const STATE_FILE = "/tmp/discovery-state.json";
 const THROTTLE_MS = 5_000;
 
+// Best-effort WebSocket connection to sandbox log server (port 8081).
+// NOTE: This connects at module load time. In the sandbox container, sandbox-ws.ts
+// must be started first (see discovery-session.ts launchProcess). If the WS server
+// isn't up yet when this connects, the onerror handler nulls the socket and we
+// fall back to file-based polling. A short startup delay in launchProcess may help.
+let logSocket: WebSocket | null = null;
+try {
+  logSocket = new WebSocket("ws://localhost:8081");
+  logSocket.onopen = () => console.error("[discovery] Connected to log socket");
+  logSocket.onerror = () => { logSocket = null; };
+} catch { /* WS not available — file-based polling still works */ }
+
+function emitLog(line: string): void {
+  if (logSocket?.readyState === WebSocket.OPEN) {
+    logSocket.send(JSON.stringify({ logLine: line, timestamp: Date.now() }));
+  }
+}
+
 interface ProgressState {
   step: string;
   sourcesFound: number;
@@ -37,7 +55,40 @@ async function writeProgress(progress: ProgressState): Promise<void> {
   await Bun.write(PROGRESS_FILE, JSON.stringify(progress));
 }
 
-async function writeErrorState(opts: { company: string; domain?: string; githubOrg?: string }, error?: string): Promise<void> {
+type ErrorCategory = "provider" | "config" | "app";
+
+const PROVIDER_PATTERNS = [
+  /credit balance/i,
+  /rate limit/i,
+  /quota/i,
+  /billing/i,
+  /insufficient.*(funds|credits|balance)/i,
+  /api key.*(invalid|expired|revoked)/i,
+  /authentication.*failed/i,
+  /unauthorized/i,
+  /overloaded/i,
+  /503/,
+  /529/,
+];
+
+const CONFIG_PATTERNS = [
+  /ANTHROPIC_API_KEY.*required/i,
+  /missing.*key/i,
+  /not configured/i,
+  /ECONNREFUSED/i,
+];
+
+function classifyError(message: string): ErrorCategory {
+  if (PROVIDER_PATTERNS.some((p) => p.test(message))) return "provider";
+  if (CONFIG_PATTERNS.some((p) => p.test(message))) return "config";
+  return "app";
+}
+
+async function writeErrorState(
+  opts: { company: string; domain?: string; githubOrg?: string },
+  error?: string,
+  errorCategory?: ErrorCategory,
+): Promise<void> {
   const now = new Date().toISOString();
   const state = {
     product: opts.company,
@@ -48,9 +99,10 @@ async function writeErrorState(opts: { company: string; domain?: string; githubO
     status: "error" as const,
     sources: [],
     error: error ?? "unknown error",
+    errorCategory: errorCategory ?? "app",
   };
   await Bun.write(STATE_FILE, JSON.stringify(state, null, 2));
-  console.error(`Discovery failed: ${error ?? "unknown error"}`);
+  console.error(`[${state.errorCategory}] Discovery failed: ${error ?? "unknown error"}`);
 }
 
 async function main(): Promise<void> {
@@ -76,6 +128,12 @@ async function main(): Promise<void> {
           lastProgressWrite = now;
           writeProgress(progress).catch(() => {});
         }
+
+        // Emit first sentence as a log line
+        const firstLine = text.split(/[.\n]/)[0]?.trim();
+        if (firstLine && firstLine.length > 5 && firstLine.length < 150) {
+          emitLog(firstLine);
+        }
       },
       onToolUse: (toolName, command) => {
         if (toolName === "Bash" && command) {
@@ -88,6 +146,30 @@ async function main(): Promise<void> {
             progress.step = "validating";
             progress.sourcesValidated++;
           }
+
+          // Emit granular log lines for CLI commands
+          const shortCmd = command.length > 120 ? command.slice(0, 120) + "..." : command;
+          emitLog(`$ ${shortCmd}`);
+
+          // Structured events for key milestones
+          const addMatch = command.match(/source\s+add\s+\S+\s+(\S+)/);
+          if (addMatch) emitLog(`Added source: ${addMatch[1]}`);
+
+          if (command.includes("fetch") && command.includes("dry-run")) {
+            const slug = command.match(/fetch\s+(\S+)/)?.[1];
+            if (slug) emitLog(`Validating: ${slug}`);
+          }
+
+          if (command.includes("source") && command.includes("remove")) {
+            const slug = command.match(/remove\s+(\S+)/)?.[1];
+            if (slug) emitLog(`Removed: ${slug}`);
+          }
+        } else if (toolName === "WebSearch") {
+          emitLog("Searching web...");
+        } else if (toolName === "WebFetch") {
+          emitLog("Fetching URL...");
+        } else if (toolName === "Agent") {
+          emitLog("Delegating to source-validator");
         }
       },
     });
@@ -95,9 +177,13 @@ async function main(): Promise<void> {
     progress.step = "complete";
     progress.currentAction = "Discovery complete";
     await writeProgress(progress);
+    logSocket?.close();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    await writeErrorState({ company, domain, githubOrg }, message);
+    const category = classifyError(message);
+    emitLog(`[${category}] ${message}`);
+    await writeErrorState({ company, domain, githubOrg }, message, category);
+    logSocket?.close();
     process.exit(1);
   }
 }

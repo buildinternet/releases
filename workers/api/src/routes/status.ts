@@ -2,7 +2,6 @@ import { Hono } from "hono";
 import { desc, sql, gte } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources, usageLog } from "../../../../src/db/schema.js";
-import { devModeMiddleware } from "../middleware/dev-mode.js";
 import type { Env } from "../index.js";
 
 export const statusRoutes = new Hono<Env>();
@@ -10,8 +9,6 @@ export const statusRoutes = new Hono<Env>();
 function getStatusHub(env: Env["Bindings"]) {
   return env.STATUS_HUB.get(env.STATUS_HUB.idFromName("global"));
 }
-
-statusRoutes.use("/*", devModeMiddleware);
 
 statusRoutes.get("/status/ws", async (c) => {
   if (c.req.header("Upgrade") !== "websocket") {

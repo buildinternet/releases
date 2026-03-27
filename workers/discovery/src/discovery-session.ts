@@ -42,7 +42,8 @@ export class DiscoverySession extends DurableObject<Env> {
   private async notifyStatusHub(event: Record<string, unknown>): Promise<void> {
     try {
       const url = `${this.env.RELEASED_API_URL}/api/status/event`;
-      await fetch(url, {
+      console.log(`[status-hub] POST ${url}`, JSON.stringify(event).slice(0, 200));
+      const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -52,8 +53,11 @@ export class DiscoverySession extends DurableObject<Env> {
         },
         body: JSON.stringify(event),
       });
-    } catch {
-      // Status updates are best-effort — don't break discovery on failure
+      if (!res.ok) {
+        console.error(`[status-hub] Failed: ${res.status} ${await res.text()}`);
+      }
+    } catch (err) {
+      console.error(`[status-hub] Error: ${err instanceof Error ? err.message : String(err)}`);
     }
   }
 

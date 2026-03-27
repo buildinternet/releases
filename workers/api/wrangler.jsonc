@@ -8,7 +8,7 @@
   "observability": {
     "enabled": true
   },
-  "vars": { "DEV_MODE": "" },
+  "vars": {},
   "d1_databases": [
     {
       "binding": "DB",

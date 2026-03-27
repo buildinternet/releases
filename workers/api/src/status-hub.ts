@@ -1,5 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 
+const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark as error
+
 interface SessionState {
   sessionId: string;
   company: string;
@@ -9,6 +11,7 @@ interface SessionState {
   sourcesValidated?: number;
   currentAction?: string;
   startedAt: number;
+  lastUpdatedAt: number;
   error?: string;
 }
 
@@ -59,12 +62,14 @@ export class StatusHub extends DurableObject {
   async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {}
 
   private async handleEvent(event: StatusMessage): Promise<void> {
+    const now = Date.now();
     if (event.type === "session:start") {
       const session: SessionState = {
         sessionId: event.sessionId as string,
         company: event.company as string,
         status: "running",
-        startedAt: Date.now(),
+        startedAt: now,
+        lastUpdatedAt: now,
       };
       await this.ctx.storage.put(`session:${session.sessionId}`, session);
     } else if (event.type === "session:progress") {
@@ -74,12 +79,14 @@ export class StatusHub extends DurableObject {
         existing.sourcesFound = event.sourcesFound as number;
         existing.sourcesValidated = event.sourcesValidated as number;
         existing.currentAction = event.currentAction as string;
+        existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
     } else if (event.type === "session:complete") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
       if (existing) {
         existing.status = "complete";
+        existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
     } else if (event.type === "session:error") {
@@ -87,6 +94,7 @@ export class StatusHub extends DurableObject {
       if (existing) {
         existing.status = "error";
         existing.error = event.error as string;
+        existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
     }
@@ -102,7 +110,21 @@ export class StatusHub extends DurableObject {
 
   private async getSessions(): Promise<SessionState[]> {
     const entries = await this.ctx.storage.list<SessionState>({ prefix: "session:" });
-    const sessions = [...entries.values()];
+    const now = Date.now();
+    const sessions: SessionState[] = [];
+
+    for (const session of entries.values()) {
+      // Auto-expire stale running sessions
+      const lastUpdate = session.lastUpdatedAt || session.startedAt;
+      if (session.status === "running" && now - lastUpdate > STALE_SESSION_MS) {
+        session.status = "error";
+        session.error = "Session timed out (no updates received)";
+        session.lastUpdatedAt = now;
+        await this.ctx.storage.put(`session:${session.sessionId}`, session);
+      }
+      sessions.push(session);
+    }
+
     sessions.sort((a, b) => {
       if (a.status === "running" && b.status !== "running") return -1;
       if (b.status === "running" && a.status !== "running") return 1;
