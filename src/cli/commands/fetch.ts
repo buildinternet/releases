@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { eq, count, sql } from "drizzle-orm";
+import { eq, count, sql, and } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases, fetchLog, type Source } from "../../db/schema.js";
 import type { FetchOptions } from "../../adapters/types.js";
@@ -24,11 +24,13 @@ export function registerFetchCommand(program: Command) {
     .option("--dry-run", "Run the adapter but skip DB inserts — show what would be fetched")
     .option("--force", "Delete existing releases for the source before fetching (clean re-fetch)")
     .option("--unfetched", "Only fetch sources that have never been fetched")
+    .option("--stale <hours>", "Only fetch sources older than N hours, respecting backoff")
+    .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .action(async (slug: string | undefined, opts: {
       json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean;
-      unfetched?: boolean; concurrency?: string;
+      unfetched?: boolean; stale?: string; retryErrors?: boolean; concurrency?: string;
     }) => {
       const db = getDb();
       const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
@@ -59,6 +61,52 @@ export function registerFetchCommand(program: Command) {
         // Default to 30 days of history for unfetched sources unless overridden
         if (!opts.since && !opts.all) {
           opts.since = daysAgoIso(30).split("T")[0];
+        }
+      } else if (opts.stale) {
+        const hours = parseInt(opts.stale, 10);
+        const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
+        const now = new Date().toISOString();
+        targetSources = await db.select().from(sources).where(
+          and(
+            sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
+            sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
+            sql`${sources.fetchPriority} != 'paused'`
+          )
+        );
+        // Sort: normal priority first, then low; within each, oldest fetched first
+        targetSources.sort((a, b) => {
+          if (a.fetchPriority !== b.fetchPriority) return a.fetchPriority === 'normal' ? -1 : 1;
+          return (a.lastFetchedAt ?? '').localeCompare(b.lastFetchedAt ?? '');
+        });
+        if (targetSources.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.green("No stale sources found."));
+          }
+          return;
+        }
+        if (!opts.json) {
+          console.log(chalk.bold(`Fetching ${targetSources.length} stale source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
+        }
+      } else if (opts.retryErrors) {
+        targetSources = await db.select().from(sources).where(
+          sql`${sources.id} IN (
+            SELECT f.source_id FROM fetch_log f
+            WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
+            AND f.status = 'error'
+          )`
+        );
+        if (targetSources.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.green("No errored sources found."));
+          }
+          return;
+        }
+        if (!opts.json) {
+          console.log(chalk.bold(`Retrying ${targetSources.length} errored source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
         }
       } else {
         targetSources = await db.select().from(sources);
@@ -201,6 +249,16 @@ export function registerFetchCommand(program: Command) {
                 status: "no_change",
                 rawContent: rawContent ?? null,
               });
+
+              // Update backoff counters for no_change
+              const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
+              const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
+              const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
+              await db.update(sources).set({
+                consecutiveNoChange: newNoChange,
+                consecutiveErrors: 0,
+                nextFetchAfter: nextFetch,
+              }).where(eq(sources.id, source.id));
             }
             fetchResults.push({ source: source.name, newReleases: 0 });
             return;
@@ -277,6 +335,13 @@ export function registerFetchCommand(program: Command) {
             rawContent: rawContent ?? null,
           });
 
+          // Reset backoff counters on success
+          await db.update(sources).set({
+            consecutiveNoChange: 0,
+            consecutiveErrors: 0,
+            nextFetchAfter: null,
+          }).where(eq(sources.id, source.id));
+
           if (!opts.json && !showProgress) {
             console.log(
               chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`),
@@ -294,6 +359,17 @@ export function registerFetchCommand(program: Command) {
             error: err instanceof Error ? err.message : String(err),
             rawContent: rawContent ?? null,
           }).catch(() => {}); // don't fail the whole fetch if logging fails
+
+          // Update error backoff counter
+          if (!opts.dryRun) {
+            const newErrors = (source.consecutiveErrors ?? 0) + 1;
+            const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);
+            const nextFetchOnError = new Date(Date.now() + errorBackoffHours * 3600_000).toISOString();
+            await db.update(sources).set({
+              consecutiveErrors: newErrors,
+              nextFetchAfter: nextFetchOnError,
+            }).where(eq(sources.id, source.id)).catch(() => {});
+          }
 
           if (!showProgress) {
             logger.error(`Failed to fetch from ${source.name} (${elapsedSec(startTime)}s):`, err);

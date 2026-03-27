@@ -37,6 +37,10 @@ export const sources = sqliteTable("sources", {
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   lastFetchedAt: text("last_fetched_at"),
   lastContentHash: text("last_content_hash"),
+  fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }).default("normal"),
+  consecutiveNoChange: integer("consecutive_no_change").default(0),
+  consecutiveErrors: integer("consecutive_errors").default(0),
+  nextFetchAfter: text("next_fetch_after"),
 }, (table) => [
   index("idx_sources_org").on(table.orgId),
 ]);
