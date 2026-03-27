@@ -1,9 +1,10 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { runDiscovery, type DiscoveryState } from "../../agent/discovery.js";
+import { registerOnboardApplyCommand } from "./onboard-apply.js";
 
 export function registerOnboardCommand(program: Command) {
-  program
+  const onboard = program
     .command("onboard")
     .description("Discover and onboard changelog sources for a company using AI agent")
     .argument("<company>", "Company or product name to discover sources for")
@@ -50,6 +51,8 @@ export function registerOnboardCommand(program: Command) {
         printSummary(state);
       },
     );
+
+  registerOnboardApplyCommand(onboard);
 }
 
 function printSummary(state: DiscoveryState): void {

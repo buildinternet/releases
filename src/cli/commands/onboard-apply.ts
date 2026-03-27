@@ -1,0 +1,118 @@
+import { Command } from "commander";
+import chalk from "chalk";
+import type { DiscoveryState, AgentDiscoveredSource } from "../../agent/discovery.js";
+import { logger } from "../../lib/logger.js";
+import { getDb } from "../../db/connection.js";
+import { sources } from "../../db/schema.js";
+import { addIgnoredUrl } from "../../db/queries.js";
+
+interface ApplyResult {
+  slug: string;
+  url: string;
+  action: "added" | "ignored" | "skipped" | "error";
+  error?: string;
+}
+
+async function applySource(source: AgentDiscoveredSource): Promise<ApplyResult> {
+  const { url, type, slug, label } = source;
+
+  if (source.approved === false) {
+    const reason = source.validationError ?? "Rejected during discovery";
+    try {
+      await addIgnoredUrl(url, { reason });
+      return { slug, url, action: "ignored" };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return { slug, url, action: "error", error: `Failed to ignore: ${message}` };
+    }
+  }
+
+  if (source.approved !== true) {
+    return { slug, url, action: "skipped" };
+  }
+
+  const db = getDb();
+  try {
+    const [inserted] = await db.insert(sources).values({
+      name: label,
+      slug,
+      type,
+      url,
+    }).onConflictDoNothing().returning({ id: sources.id });
+    if (!inserted) {
+      return { slug, url, action: "skipped" };
+    }
+    return { slug, url, action: "added" };
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return { slug, url, action: "error", error: message };
+  }
+}
+
+export function registerOnboardApplyCommand(onboardCmd: Command) {
+  onboardCmd
+    .command("apply")
+    .description("Apply discovery results from a state file to the database")
+    .argument("<state-file>", "Path to a DiscoveryState JSON file (or - for stdin)")
+    .option("--json", "Output results as JSON")
+    .action(async (stateFile: string, opts: { json?: boolean }) => {
+      const raw = stateFile === "-"
+        ? await Bun.stdin.text()
+        : await Bun.file(stateFile).text();
+
+      let state: DiscoveryState;
+      try {
+        state = JSON.parse(raw);
+      } catch {
+        logger.error("Failed to parse state file as JSON");
+        process.exit(1);
+      }
+
+      if (!state.sources || !Array.isArray(state.sources)) {
+        logger.error("State file missing 'sources' array");
+        process.exit(1);
+      }
+
+      const results: ApplyResult[] = [];
+
+      for (const source of state.sources) {
+        const result = await applySource(source);
+        results.push(result);
+
+        if (!opts.json) {
+          switch (result.action) {
+            case "added":
+              logger.info(chalk.green(`Added: ${result.slug} (${result.url})`));
+              break;
+            case "ignored":
+              logger.info(chalk.yellow(`Ignored: ${result.slug} (${result.url})`));
+              break;
+            case "skipped":
+              logger.info(chalk.gray(`Skipped (no approval): ${result.slug}`));
+              break;
+            case "error":
+              logger.error(chalk.red(`Error: ${result.slug} -- ${result.error}`));
+              break;
+          }
+        }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        let added = 0, ignored = 0, errors = 0;
+        for (const r of results) {
+          if (r.action === "added") added++;
+          else if (r.action === "ignored") ignored++;
+          else if (r.action === "error") errors++;
+        }
+        logger.info(
+          chalk.bold(`\nApplied: ${added} added, ${ignored} ignored, ${errors} errors`),
+        );
+      }
+
+      if (results.some((r) => r.action === "error")) {
+        process.exit(1);
+      }
+    });
+}

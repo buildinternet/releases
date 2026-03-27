@@ -24,7 +24,7 @@ export interface DiscoveryState {
   githubOrg?: string;
   startedAt: string;
   updatedAt: string;
-  status: "discovering" | "awaiting_review" | "approved" | "fetching" | "complete";
+  status: "discovering" | "awaiting_review" | "approved" | "fetching" | "complete" | "error";
   sources: AgentDiscoveredSource[];
   agentSessionId?: string;
   costUsd?: number;
