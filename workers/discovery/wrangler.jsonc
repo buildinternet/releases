@@ -13,6 +13,13 @@
     "instance_type": "basic",
     "max_instances": 5
   }],
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "released-db",
+      "database_id": "aca250e3-d0b4-467d-8b07-4f54b08c8abf"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       { "class_name": "Sandbox", "name": "Sandbox" },

@@ -4,8 +4,11 @@ import {
   sources, releases, organizations, orgAccounts, ignoredUrls,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl,
 } from "./schema.js";
+import { isRemoteMode } from "../lib/mode.js";
+import * as apiClient from "../api/client.js";
 
 export async function findSourceBySlug(slug: string): Promise<Source | null> {
+  if (isRemoteMode()) return apiClient.findSourceBySlug(slug);
   const db = getDb();
   const [source] = await db.select().from(sources).where(eq(sources.slug, slug));
   return source ?? null;
@@ -15,6 +18,7 @@ export async function getRecentReleases(
   sourceId: string,
   cutoffIso: string,
 ): Promise<Release[]> {
+  // TODO: add remote mode support (used only by AI summary/compare; not yet implemented in API)
   const db = getDb();
   return db
     .select()
@@ -24,6 +28,7 @@ export async function getRecentReleases(
 }
 
 export async function findOrg(identifier: string): Promise<Organization | null> {
+  if (isRemoteMode()) return apiClient.findOrg(identifier);
   const db = getDb();
 
   // 1. Slug (exact)
@@ -55,6 +60,7 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
 }
 
 export async function getSourcesByOrg(orgId: string): Promise<Source[]> {
+  if (isRemoteMode()) return apiClient.getSourcesByOrg(orgId);
   const db = getDb();
   return db.select().from(sources).where(eq(sources.orgId, orgId));
 }
@@ -63,6 +69,7 @@ export async function getRecentReleasesByOrg(
   orgId: string,
   cutoffIso: string,
 ): Promise<Array<Release & { sourceName: string; sourceSlug: string }>> {
+  // TODO: add remote mode support (used only by AI summary/compare; not yet implemented in API)
   const db = getDb();
   const rows = await db
     .select({
@@ -91,6 +98,7 @@ export async function listOrgs(opts?: {
   query?: string;
   platform?: string;
 }): Promise<Organization[]> {
+  if (isRemoteMode()) return apiClient.listOrgs(opts);
   const db = getDb();
   let allOrgs = await db.select().from(organizations);
 
@@ -131,6 +139,7 @@ export async function getOrgAccountByPlatform(
   orgId: string,
   platform: string,
 ): Promise<OrgAccount | null> {
+  if (isRemoteMode()) return apiClient.getOrgAccountByPlatform(orgId, platform);
   const db = getDb();
   const [account] = await db
     .select()
@@ -141,17 +150,20 @@ export async function getOrgAccountByPlatform(
 
 export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
   if (urls.length === 0) return [];
+  if (isRemoteMode()) return apiClient.findSourcesByUrls(urls);
   const db = getDb();
   return db.select().from(sources).where(inArray(sources.url, urls));
 }
 
 export async function findIgnoredUrl(url: string): Promise<IgnoredUrl | null> {
+  if (isRemoteMode()) return apiClient.findIgnoredUrl(url);
   const db = getDb();
   const [row] = await db.select().from(ignoredUrls).where(eq(ignoredUrls.url, url));
   return row ?? null;
 }
 
 export async function addIgnoredUrl(url: string, opts?: { orgId?: string; reason?: string }): Promise<void> {
+  if (isRemoteMode()) return apiClient.addIgnoredUrl(url, opts);
   const db = getDb();
   await db.insert(ignoredUrls).values({
     url,
@@ -161,6 +173,7 @@ export async function addIgnoredUrl(url: string, opts?: { orgId?: string; reason
 }
 
 export async function listIgnoredUrls(orgId?: string): Promise<IgnoredUrl[]> {
+  if (isRemoteMode()) return apiClient.listIgnoredUrls(orgId);
   const db = getDb();
   if (orgId) {
     return db.select().from(ignoredUrls).where(eq(ignoredUrls.orgId, orgId));
@@ -169,6 +182,7 @@ export async function listIgnoredUrls(orgId?: string): Promise<IgnoredUrl[]> {
 }
 
 export async function removeIgnoredUrl(url: string): Promise<void> {
+  if (isRemoteMode()) return apiClient.removeIgnoredUrl(url);
   const db = getDb();
   await db.delete(ignoredUrls).where(eq(ignoredUrls.url, url));
 }
@@ -178,6 +192,7 @@ export async function checkContentHash(
   source: Source,
   contentHash: string,
 ): Promise<boolean> {
+  if (isRemoteMode()) return apiClient.checkContentHash(source, contentHash);
   if (source.lastContentHash === contentHash) return true;
   const db = getDb();
   await db.update(sources).set({ lastContentHash: contentHash }).where(eq(sources.id, source.id));

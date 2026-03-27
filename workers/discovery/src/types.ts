@@ -4,7 +4,6 @@ export interface OnboardRequest {
   company: string;
   domain?: string;
   githubOrg?: string;
-  dbSnapshot?: string; // base64-encoded SQLite DB file (optional — fresh DB if omitted)
 }
 
 export interface OnboardResponse {
@@ -27,9 +26,12 @@ export interface StatusResponse {
 export interface Env {
   Sandbox: DurableObjectNamespace<Sandbox>;
   DISCOVERY_SESSION: DurableObjectNamespace;
+  DB: D1Database;
   ANTHROPIC_API_KEY: string;
   CLOUDFLARE_ACCOUNT_ID: string;
   CLOUDFLARE_API_TOKEN: string;
   GITHUB_TOKEN?: string;
   API_SECRET?: string;
+  RELEASED_API_URL: string;
+  RELEASED_API_KEY: string;
 }

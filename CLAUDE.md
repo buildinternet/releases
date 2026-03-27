@@ -6,7 +6,8 @@ Changelog indexer for AI agents and developers. Context7-style tool for release 
 
 - **Runtime:** Bun
 - **Language:** TypeScript (strict mode)
-- **Database:** SQLite via Bun's built-in `bun:sqlite` + Drizzle ORM
+- **Database:** SQLite via Bun's built-in `bun:sqlite` + Drizzle ORM (local), Cloudflare D1 + Drizzle (remote)
+- **API:** Cloudflare Worker with Hono (`workers/api/`)
 - **CLI:** Commander
 - **MCP:** `@modelcontextprotocol/sdk` on stdio
 - **AI:** Anthropic SDK (`@anthropic-ai/sdk`)
@@ -30,6 +31,16 @@ Type-check: `npx tsc --noEmit`
 - CLI commands that return data support `--json` for machine-readable output.
 - Batch DB inserts in chunks of 500 (SQLite variable limit).
 - Dedup via `UNIQUE(source_id, url)` and `UNIQUE(source_id, content_hash)` with `onConflictDoNothing()`.
+
+## Remote Mode (D1)
+
+When `RELEASED_API_URL` is set, the CLI routes data operations through the API Worker instead of local SQLite. `RELEASED_API_KEY` is required alongside it. The switch point is `src/lib/mode.ts` — `isRemoteMode()` checks the env var once and caches the result. Query functions in `src/db/queries.ts` delegate to `src/api/client.ts` in remote mode.
+
+**Local mode** (default): No config needed. Uses `bun:sqlite` at `~/.released/released.db`.
+
+**Remote mode**: Set `RELEASED_API_URL` and `RELEASED_API_KEY`. All data operations go through the Cloudflare Worker API backed by D1.
+
+The API Worker lives at `workers/api/` and shares the Drizzle schema from `src/db/schema.ts`. D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
 
 ## Environment
 
