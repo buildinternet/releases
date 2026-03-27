@@ -73,23 +73,32 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const reconnectDelay = useRef(1000);
+  const intentionalClose = useRef(false);
 
-  // Hydrate initial state via HTTP
+  // Track tab visibility
+  const [visible, setVisible] = useState(true);
   useEffect(() => {
-    const base = apiUrl;
+    const onChange = () => setVisible(!document.hidden);
+    document.addEventListener("visibilitychange", onChange);
+    return () => document.removeEventListener("visibilitychange", onChange);
+  }, []);
+
+  // Hydrate state via HTTP — on mount and whenever the tab regains focus
+  const hydrate = useCallback(() => {
     const safeFetch = (url: string) => fetch(url).then((r) => r.ok ? r.json() : null);
-    Promise.all([
-      safeFetch(`${base}/api/status/sessions`),
-      safeFetch(`${base}/api/status/fetch-log?limit=50`),
-      safeFetch(`${base}/api/status/usage`),
+    return Promise.all([
+      safeFetch(`${apiUrl}/api/status/sessions`),
+      safeFetch(`${apiUrl}/api/status/fetch-log?limit=50`),
+      safeFetch(`${apiUrl}/api/status/usage`),
     ]).then(([s, f, u]) => {
       if (s) setSessions(s as SessionState[]);
       if (f) setFetchLogs(f as FetchLogEntry[]);
       if (u) setUsage(u as UsageEntry[]);
-    }).catch(() => {
-      // API unavailable — will retry on WS connect
-    });
+      return s as SessionState[] | null;
+    }).catch(() => null);
   }, [apiUrl]);
+
+  useEffect(() => { hydrate(); }, [hydrate]);
 
   // Handle incoming WebSocket messages
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -155,9 +164,25 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     }
   }, []);
 
-  // WebSocket connection with auto-reconnect
+  // Connect WebSocket only when tab is visible AND there are running sessions
+  const hasRunningSessions = sessions.some((s) => s.status === "running");
+  const needsWebSocket = visible && hasRunningSessions;
+
   useEffect(() => {
+    if (!needsWebSocket) {
+      // Tear down WebSocket when tab is hidden or nothing is running
+      if (wsRef.current) {
+        intentionalClose.current = true;
+        wsRef.current.close();
+        wsRef.current = null;
+        setConnected(false);
+      }
+      clearTimeout(reconnectTimer.current);
+      return;
+    }
+
     function connect() {
+      intentionalClose.current = false;
       const wsUrl = apiUrl.replace(/^http/, "ws") + "/api/status/ws";
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -171,6 +196,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
       ws.onclose = () => {
         setConnected(false);
+        if (intentionalClose.current) return;
         reconnectTimer.current = setTimeout(() => {
           reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30000);
           connect();
@@ -183,19 +209,25 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     connect();
 
     return () => {
+      intentionalClose.current = true;
       wsRef.current?.close();
+      wsRef.current = null;
       clearTimeout(reconnectTimer.current);
     };
-  }, [apiUrl, handleMessage]);
+  }, [needsWebSocket, apiUrl, handleMessage]);
 
-  // Update elapsed times every second while sessions are running
-  const hasRunningSessions = sessions.some((s) => s.status === "running");
+  // Re-hydrate via HTTP when tab becomes visible again
+  useEffect(() => {
+    if (visible) { hydrate(); }
+  }, [visible, hydrate]);
+
+  // Update elapsed times every second — only when visible and sessions are running
   const [, setTick] = useState(0);
   useEffect(() => {
-    if (!hasRunningSessions) return;
+    if (!hasRunningSessions || !visible) return;
     const interval = setInterval(() => setTick((t) => t + 1), 1000);
     return () => clearInterval(interval);
-  }, [hasRunningSessions]);
+  }, [hasRunningSessions, visible]);
 
   const runningCount = sessions.filter((s) => s.status === "running").length;
   const totalInput = usage.reduce((sum, u) => sum + u.totalInput, 0);
@@ -205,8 +237,10 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     <div>
       {/* Connection status */}
       <div className="flex items-center gap-2 mb-4">
-        <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : "bg-red-400"}`} />
-        <span className="text-xs text-stone-400">{connected ? "Connected" : "Reconnecting..."}</span>
+        <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : hasRunningSessions ? "bg-red-400" : "bg-stone-300"}`} />
+        <span className="text-xs text-stone-400">
+          {connected ? "Live" : hasRunningSessions ? "Reconnecting..." : "Idle"}
+        </span>
       </div>
 
       {/* Usage stats bar */}
