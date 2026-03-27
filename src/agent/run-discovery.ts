@@ -1,4 +1,4 @@
-import { runDiscovery, type DiscoveryState } from "./discovery.js";
+import { runDiscovery } from "./discovery.js";
 
 const PROGRESS_FILE = "/tmp/discovery-progress.json";
 const STATE_FILE = "/tmp/discovery-state.json";
@@ -39,14 +39,15 @@ async function writeProgress(progress: ProgressState): Promise<void> {
 
 async function writeErrorState(opts: { company: string; domain?: string; githubOrg?: string }, error?: string): Promise<void> {
   const now = new Date().toISOString();
-  const state: DiscoveryState = {
+  const state = {
     product: opts.company,
     domain: opts.domain,
     githubOrg: opts.githubOrg,
     startedAt: now,
     updatedAt: now,
-    status: "error",
+    status: "error" as const,
     sources: [],
+    error: error ?? "unknown error",
   };
   await Bun.write(STATE_FILE, JSON.stringify(state, null, 2));
   console.error(`Discovery failed: ${error ?? "unknown error"}`);

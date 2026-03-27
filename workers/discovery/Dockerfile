@@ -12,6 +12,9 @@ COPY . /app
 WORKDIR /app
 RUN bun install --frozen-lockfile
 
+# Sandbox SDK command timeout — 5 minutes for agent runs
+ENV COMMAND_TIMEOUT_MS=300000
+
 # Default data dir for Released CLI
 ENV RELEASED_DATA_DIR=/app/data
 RUN mkdir -p /app/data

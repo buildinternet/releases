@@ -1,7 +1,6 @@
 import { getSandbox } from "@cloudflare/sandbox";
 import type { Env, OnboardRequest, OnboardResponse, StatusResponse } from "./types.js";
 
-// Required re-exports for Cloudflare bindings
 export { Sandbox } from "@cloudflare/sandbox";
 export { DiscoverySession } from "./discovery-session.js";
 
@@ -71,15 +70,22 @@ export default {
       }
     }
 
-    // Lightweight sandbox smoke test — verifies container lifecycle without the agent
+    // Diagnostic endpoint — accepts optional {"cmd": "..."} body
     if (request.method === "POST" && url.pathname === "/test") {
-      const sandbox = getSandbox(env.Sandbox, "smoke-test", { keepAlive: true });
+      let cmd = "echo ok && bun --version";
       try {
-        const result = await sandbox.exec("echo ok && bun --version");
+        const body: Record<string, unknown> = await request.json();
+        if (body.cmd && typeof body.cmd === "string") cmd = body.cmd;
+      } catch { /* no body — use default */ }
+
+      const sandbox = getSandbox(env.Sandbox, "smoke-test", { sleepAfter: "1m" });
+      try {
+        const result = await sandbox.exec(cmd, { timeout: 30_000 });
         return jsonResponse({
           ok: result.exitCode === 0,
           exitCode: result.exitCode,
-          output: result.stdout?.trim(),
+          stdout: result.stdout?.trim(),
+          stderr: result.stderr?.trim(),
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
