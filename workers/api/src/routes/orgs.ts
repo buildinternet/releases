@@ -104,6 +104,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
         slug: src.slug,
         name: src.name,
         type: src.type,
+        url: src.url,
         releaseCount: relCount.n,
         latestVersion,
         latestDate: latest?.publishedAt ?? null,
@@ -139,6 +140,11 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     .innerJoin(sources, eq(releases.sourceId, sources.id))
     .where(eq(sources.orgId, org.id));
 
+  const [latestFetch] = await db
+    .select({ maxFetch: max(sources.lastFetchedAt) })
+    .from(sources)
+    .where(eq(sources.orgId, org.id));
+
   return c.json({
     id: org.id,
     slug: org.slug,
@@ -148,6 +154,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     releaseCount: totalReleases.n,
     releasesLast30Days,
     avgReleasesPerWeek,
+    lastFetchedAt: latestFetch.maxFetch ?? null,
     trackingSince: org.createdAt,
     accounts,
     sources: sourcesWithStats,

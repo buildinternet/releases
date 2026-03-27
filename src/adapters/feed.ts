@@ -35,6 +35,10 @@ export interface SourceMetadata {
   // Provider detection
   provider?: string;
   providerDetectedAt?: string;
+
+  // GitHub fields
+  changelogUrl?: string;
+  changelogDetectedAt?: string;
 }
 
 // ── Feed discovery ──────────────────────────────────────────────────

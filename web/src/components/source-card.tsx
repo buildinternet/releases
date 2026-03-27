@@ -7,9 +7,17 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function hostname(url?: string) {
+function shortUrl(url?: string) {
   if (!url) return null;
-  try { return new URL(url).hostname; } catch { return null; }
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, "");
+    // GitHub: show owner/repo shorthand instead of full URL
+    if (u.hostname === "github.com") {
+      return path.replace(/^\//, "") || u.hostname;
+    }
+    return path && path !== "/" ? u.hostname + path : u.hostname;
+  } catch { return null; }
 }
 
 export function SourceCard({ source, orgSlug }: { source: SourceListItem; orgSlug?: string }) {
@@ -20,9 +28,9 @@ export function SourceCard({ source, orgSlug }: { source: SourceListItem; orgSlu
         <span className="font-semibold text-[15px] text-stone-900">{source.name}</span>
         <SourceTypeIcon type={source.type} />
       </div>
-      {source.url && <div className="text-[13px] text-stone-500 mt-1">{hostname(source.url)}</div>}
-      <div className="text-xs text-stone-400 mt-2">
-        {source.latestVersion && <>Latest: {source.latestVersion}</>}
+      <div className="text-xs text-stone-400 mt-1.5">
+        {source.url && <>{shortUrl(source.url)}</>}
+        {source.latestVersion && <>{source.url ? " · " : ""}Latest: {source.latestVersion}</>}
         {source.latestDate && <> · {formatDate(source.latestDate)}</>}
         {source.releaseCount > 0 && <> · {source.releaseCount} releases</>}
       </div>

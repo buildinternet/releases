@@ -68,6 +68,7 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   const releasesFormatted = releaseRows.map((r) => ({
     version: r.version, title: r.title,
     summary: r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    content: r.content.length > 800 ? r.content.slice(0, 800) + "..." : r.content,
     publishedAt: r.published_at, url: r.url,
   }));
 
@@ -85,12 +86,17 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   const metrics = getSourceMetrics(src.id);
   const totalPages = Math.ceil(relCount.n / pageSize);
 
+  const meta = JSON.parse(src.metadata || "{}");
+
   return {
-    slug: src.slug, name: src.name, type: src.type, url: src.url, org,
+    slug: src.slug, name: src.name, type: src.type, url: src.url,
+    changelogUrl: meta.changelogUrl ?? null,
+    org,
     releaseCount: relCount.n,
     releasesLast30Days: metrics.releasesLast30Days,
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,
     latestVersion, latestDate: latest?.publishedAt ?? null,
+    lastFetchedAt: src.lastFetchedAt,
     trackingSince: src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },

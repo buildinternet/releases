@@ -103,6 +103,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     summary:
       r.content_summary ??
       (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    content: r.content.length > 800 ? r.content.slice(0, 800) + "..." : r.content,
     publishedAt: r.published_at,
     url: r.url,
   }));
@@ -154,6 +155,8 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     avgReleasesPerWeek,
     latestVersion,
     latestDate: latest?.publishedAt ?? null,
+    changelogUrl: (() => { try { const m = JSON.parse(src.metadata || "{}"); return m.changelogUrl ?? null; } catch { return null; } })(),
+    lastFetchedAt: src.lastFetchedAt,
     trackingSince: src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },

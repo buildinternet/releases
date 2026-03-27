@@ -12,6 +12,46 @@ function parseOwnerRepo(url: string): { owner: string; repo: string } {
   return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
 }
 
+const CHANGELOG_FILENAMES = [
+  "CHANGELOG.md",
+  "CHANGELOG.rst",
+  "CHANGELOG.txt",
+  "CHANGELOG",
+  "CHANGES.md",
+  "CHANGES.rst",
+  "HISTORY.md",
+  "RELEASES.md",
+  "NEWS.md",
+];
+
+export async function detectChangelogUrl(source: Source): Promise<string | null> {
+  const { owner, repo } = parseOwnerRepo(source.url);
+  const token = config.githubToken();
+
+  const headers: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+  };
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  for (const filename of CHANGELOG_FILENAMES) {
+    try {
+      const res = await fetch(
+        `https://api.github.com/repos/${owner}/${repo}/contents/${filename}`,
+        { method: "HEAD", headers },
+      );
+      if (res.ok) {
+        return `https://github.com/${owner}/${repo}/blob/HEAD/${filename}`;
+      }
+    } catch {
+      // Skip network errors for individual file checks
+    }
+  }
+
+  return null;
+}
+
 export function parseNextLink(linkHeader: string | null): string | null {
   if (!linkHeader) return null;
   const match = linkHeader.match(/<([^>]+)>;\s*rel="next"/);

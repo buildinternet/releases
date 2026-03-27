@@ -42,6 +42,7 @@ export interface OrgDetail {
   slug: string; name: string; domain: string | null;
   sourceCount: number; releaseCount: number;
   releasesLast30Days: number; avgReleasesPerWeek: number;
+  lastFetchedAt: string | null;
   trackingSince: string;
   accounts: { platform: string; handle: string }[];
   sources: SourceListItem[];
@@ -55,9 +56,11 @@ export interface SourceListItem {
 
 export interface SourceDetail {
   slug: string; name: string; type: string; url: string;
+  changelogUrl?: string | null;
   org: { slug: string; name: string } | null;
   releaseCount: number; releasesLast30Days: number; avgReleasesPerWeek: number;
   latestVersion: string | null; latestDate: string | null;
+  lastFetchedAt: string | null;
   trackingSince: string;
   releases: ReleaseItem[];
   pagination: { page: number; pageSize: number; totalPages: number; totalItems: number };
@@ -65,6 +68,7 @@ export interface SourceDetail {
 
 export interface ReleaseItem {
   version: string | null; title: string; summary: string;
+  content?: string;
   publishedAt: string | null; url: string | null;
 }
 

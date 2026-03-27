@@ -63,7 +63,7 @@ export function handleOrgDetail(slug: string) {
     })();
 
     return {
-      slug: src.slug, name: src.name, type: src.type,
+      slug: src.slug, name: src.name, type: src.type, url: src.url,
       releaseCount: relCount.n, latestVersion, latestDate: latest?.publishedAt ?? null,
     };
   });
@@ -73,11 +73,15 @@ export function handleOrgDetail(slug: string) {
     .innerJoin(sources, eq(releases.sourceId, sources.id))
     .where(eq(sources.orgId, org.id)).all();
 
+  const [latestFetch] = db.select({ maxFetch: max(sources.lastFetchedAt) })
+    .from(sources).where(eq(sources.orgId, org.id)).all();
+
   return {
     slug: org.slug, name: org.name, domain: org.domain,
     sourceCount: orgSources.length, releaseCount: totalReleases.n,
     releasesLast30Days: metrics.releasesLast30Days,
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,
+    lastFetchedAt: latestFetch.maxFetch ?? null,
     trackingSince: org.createdAt, accounts, sources: sourcesWithStats,
   };
 }

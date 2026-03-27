@@ -4,7 +4,8 @@ import { eq, count, sql, and } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, releases, fetchLog, type Source } from "../../db/schema.js";
 import type { FetchOptions } from "../../adapters/types.js";
-import { updateSourceMeta } from "../../adapters/feed.js";
+import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
+import { detectChangelogUrl } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
@@ -323,6 +324,18 @@ export function registerFetchCommand(program: Command) {
             .update(sources)
             .set({ lastFetchedAt: new Date().toISOString() })
             .where(eq(sources.id, source.id));
+
+          // Detect changelog URL for GitHub sources (one-time)
+          if (source.type === "github") {
+            const meta = getSourceMeta(source);
+            if (!meta.changelogUrl && !meta.changelogDetectedAt) {
+              const changelogUrl = await detectChangelogUrl(source);
+              await updateSourceMeta(source, {
+                changelogUrl: changelogUrl ?? undefined,
+                changelogDetectedAt: new Date().toISOString(),
+              });
+            }
+          }
 
           fetchResults.push({ source: source.name, newReleases: inserted });
 

@@ -13,8 +13,12 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function safeHostname(url: string) {
-  try { return new URL(url).hostname; } catch { return url; }
+function shortUrl(url: string) {
+  try {
+    const u = new URL(url);
+    const path = u.pathname.replace(/\/$/, "");
+    return path && path !== "/" ? u.hostname + path : u.hostname;
+  } catch { return url; }
 }
 
 export default async function IndependentSourcePage({
@@ -58,7 +62,9 @@ export default async function IndependentSourcePage({
     {
       items: [
         { label: "Latest", value: source.latestVersion, subtitle: formatDate(source.latestDate) },
-        { label: "Source", value: safeHostname(source.url), externalLink: source.url },
+        { label: "Source", value: shortUrl(source.url), externalLink: source.url },
+        ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),
+        { label: "Last Updated", value: formatDate(source.lastFetchedAt) },
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
     },

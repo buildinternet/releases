@@ -45,6 +45,7 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
     },
     {
       items: [
+        { label: "Last Updated", value: formatDate(org.lastFetchedAt) },
         { label: "Tracking Since", value: formatDate(org.trackingSince) },
       ],
     },
@@ -62,7 +63,11 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 mt-4">{org.name}</h1>
         <div className="flex gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0 space-y-2">
-            {org.sources.map((source) => (
+            {[...org.sources].sort((a, b) => {
+              if (a.type === "github" && b.type !== "github") return 1;
+              if (a.type !== "github" && b.type === "github") return -1;
+              return 0;
+            }).map((source) => (
               <SourceCard key={source.slug} source={source} orgSlug={org.slug} />
             ))}
           </div>
