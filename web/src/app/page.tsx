@@ -1,15 +1,29 @@
-import { api } from "@/lib/api";
+import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { SourceCard } from "@/components/source-card";
+import { SetupMessage } from "@/components/setup-message";
 import Link from "next/link";
 
 export default async function HomePage() {
-  const [stats, orgs, independentSources] = await Promise.all([
-    api.stats(),
-    api.orgs(),
-    api.sources(true),
-  ]);
+  let stats, orgs, independentSources;
+  try {
+    [stats, orgs, independentSources] = await Promise.all([
+      api.stats(),
+      api.orgs(),
+      api.sources(true),
+    ]);
+  } catch (err) {
+    if (err instanceof ApiSetupError) {
+      return (
+        <div className="min-h-screen">
+          <Header />
+          <SetupMessage message={err.message} steps={err.setup} />
+        </div>
+      );
+    }
+    throw err;
+  }
 
   return (
     <div className="min-h-screen">

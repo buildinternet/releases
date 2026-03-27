@@ -9,10 +9,22 @@
   "scripts": {
     "build": "bun build src/index.ts --outdir dist --target bun",
     "dev": "bun --watch src/index.ts",
-    "test": "bun test",
+    "dev:web": "cd web && bun run dev",
+    "dev:api": "wrangler dev --config workers/api/wrangler.jsonc",
+    "dev:discovery": "wrangler dev --config workers/discovery/wrangler.jsonc",
+    "api": "bun src/index.ts api",
+    "deploy:api": "wrangler deploy --config workers/api/wrangler.jsonc",
+    "deploy:discovery": "wrangler deploy --config workers/discovery/wrangler.jsonc",
+    "deploy": "bun run deploy:api && bun run deploy:discovery",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "db:studio": "bun drizzle-kit studio"
+    "db:migrate:local": "wrangler d1 migrations apply released-db --local --config workers/api/wrangler.jsonc",
+    "db:migrate:remote": "wrangler d1 migrations apply released-db --remote --config workers/api/wrangler.jsonc",
+    "db:studio": "bun drizzle-kit studio",
+    "db:studio:d1": "bun drizzle-kit studio --config drizzle-d1.config.ts",
+    "db:query": "wrangler d1 execute released-db --local --config workers/api/wrangler.jsonc --command",
+    "db:pull": "rm -rf workers/api/.wrangler/state/v3/d1 && wrangler d1 export released-db --remote --no-schema --table organizations --table org_accounts --table sources --table releases --table usage_log --table fetch_log --table ignored_urls --output /tmp/released-d1-export.sql --config workers/api/wrangler.jsonc && bun run db:migrate:local && sqlite3 $(find workers/api/.wrangler -name '*.sqlite' | head -1) < /tmp/released-d1-export.sql && rm /tmp/released-d1-export.sql",
+    "test": "bun test"
   },
   "keywords": [
     "changelog",
@@ -39,6 +51,7 @@
     "@types/bun": "^1.3.11",
     "better-sqlite3": "^12.8.0",
     "drizzle-kit": "^0.31.10",
-    "typescript": "^6.0.2"
+    "typescript": "^6.0.2",
+    "wrangler": "^4.14.0"
   }
 }

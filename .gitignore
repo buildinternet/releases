@@ -49,3 +49,6 @@ data/preferences.json
 
 # Git worktrees
 .worktrees
+
+# Wrangler local state
+.wrangler

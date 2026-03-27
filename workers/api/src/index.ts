@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authMiddleware } from "./middleware/auth.js";
+import { dbHealthCheck } from "./middleware/db-health.js";
 import { statsRoutes } from "./routes/stats.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { sourceRoutes } from "./routes/sources.js";
@@ -19,6 +20,7 @@ const app = new Hono<Env>();
 
 app.use("*", cors());
 app.use("/api/*", authMiddleware);
+app.use("/api/*", dbHealthCheck);
 
 app.route("/api", statsRoutes);
 app.route("/api", orgRoutes);

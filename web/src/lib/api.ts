@@ -1,7 +1,32 @@
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 
+export class ApiSetupError extends Error {
+  setup: string[];
+  constructor(message: string, setup: string[]) {
+    super(message);
+    this.name = "ApiSetupError";
+    this.setup = setup;
+  }
+}
+
 async function fetchApi<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, { next: { revalidate: 60 } });
+  let res: Response;
+  try {
+    res = await fetch(`${API_URL}${path}`, { next: { revalidate: 60 } });
+  } catch {
+    throw new ApiSetupError(
+      `Cannot connect to the API at ${API_URL}. Is the server running?`,
+      [`bun run dev:api    # start the Cloudflare worker API`, `# or`, `bun run api         # start the local Bun API server`]
+    );
+  }
+
+  if (res.status === 503) {
+    const body = await res.json().catch(() => null);
+    if (body?.error === "database_not_initialized") {
+      throw new ApiSetupError(body.message, body.setup);
+    }
+  }
+
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }

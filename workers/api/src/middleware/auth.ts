@@ -4,8 +4,11 @@ type Env = { Bindings: { API_SECRET: string } };
 
 export const authMiddleware: MiddlewareHandler<Env> = async (c, next) => {
   const secret = c.env.API_SECRET;
+
+  // No secret configured — skip auth (local dev)
   if (!secret) {
-    return c.json({ error: "unauthorized", message: "API not configured" }, 500);
+    await next();
+    return;
   }
 
   const header = c.req.header("Authorization") ?? "";

@@ -289,6 +289,40 @@ released usage --days 7    # last 7 days
 
 Data is stored in `~/.released/released.db` (configurable via `RELEASED_DATA_DIR`).
 
+## Deployment
+
+All workers can be deployed from the project root:
+
+```bash
+bun run deploy               # deploy all workers (API + Discovery)
+bun run deploy:api           # deploy API worker only
+bun run deploy:discovery     # deploy Discovery worker only
+bun run db:migrate:remote    # apply D1 migrations to production
+```
+
+Local development:
+
+```bash
+bun run db:migrate:local     # apply D1 migrations (required before first dev:api run)
+bun run api                  # start local API server on :3456 (uses local SQLite)
+bun run dev:web              # start Next.js frontend on :3000
+bun run dev:api              # start API worker locally on :8787 (uses local D1)
+bun run dev:discovery        # start Discovery worker locally (Cloudflare)
+```
+
+To use the Cloudflare worker API locally with the web frontend, set `RELEASED_API_URL=http://localhost:8787` in `web/.env.local`. The default (`localhost:3456`) uses the Bun-based local API server backed by SQLite.
+
+Workers live in `workers/api/` (Hono API backed by D1) and `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery). Both share the same D1 database.
+
+Database tools:
+
+```bash
+bun run db:studio            # browse local CLI database (Drizzle Studio)
+bun run db:studio:d1         # browse local D1 database (Drizzle Studio)
+bun run db:query "SQL"       # run a query against local D1
+bun run db:pull              # sync remote D1 data into local D1
+```
+
 ## Development
 
 ```bash
