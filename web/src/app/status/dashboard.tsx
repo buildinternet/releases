@@ -11,6 +11,7 @@ interface SessionState {
   sourcesValidated?: number;
   currentAction?: string;
   startedAt: number;
+  lastUpdatedAt?: number;
   error?: string;
 }
 
@@ -46,8 +47,9 @@ function formatTokens(n: number): string {
   return String(n);
 }
 
-function formatElapsed(startedAt: number): string {
-  const seconds = Math.floor((Date.now() - startedAt) / 1000);
+function formatElapsed(startedAt: number, endedAt?: number): string {
+  const end = endedAt ?? Date.now();
+  const seconds = Math.floor((end - startedAt) / 1000);
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -135,6 +137,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           s.sessionId === (msg.sessionId as string) ? { ...s, status: "error", error: msg.error as string } : s
         )
       );
+    } else if (msg.type === "session:dismissed") {
+      setSessions((prev) => prev.filter((s) => s.sessionId !== (msg.sessionId as string)));
     } else if (msg.type === "fetch:complete") {
       setFetchLogs((prev) => [{
         id: msg.id as string,
@@ -247,7 +251,9 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           sessions={sessions}
           expandedSession={expandedSession}
           sessionLogs={sessionLogs}
+          apiUrl={apiUrl}
           onToggle={(id) => setExpandedSession(expandedSession === id ? null : id)}
+          onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         />
       )}
       {tab === "fetch-log" && <FetchLogTable logs={fetchLogs} />}
@@ -259,12 +265,16 @@ function SessionsTable({
   sessions,
   expandedSession,
   sessionLogs,
+  apiUrl,
   onToggle,
+  onDismiss,
 }: {
   sessions: SessionState[];
   expandedSession: string | null;
   sessionLogs: Record<string, string[]>;
+  apiUrl: string;
   onToggle: (id: string) => void;
+  onDismiss: (id: string) => void;
 }) {
   if (sessions.length === 0) {
     return <div className="text-sm text-stone-400 py-8 text-center">No discovery sessions yet.</div>;
@@ -302,7 +312,25 @@ function SessionsTable({
                 </span>
               )}
             </div>
-            <div className="text-sm text-stone-400 text-right">{formatElapsed(session.startedAt)}</div>
+            <div className="text-sm text-stone-400 text-right flex items-center justify-end gap-2">
+              {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
+              {session.status !== "running" && (
+                <span
+                  role="button"
+                  tabIndex={0}
+                  className="text-stone-300 hover:text-stone-500 transition-colors"
+                  title="Dismiss"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" });
+                    onDismiss(session.sessionId);
+                  }}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
+                >
+                  &times;
+                </span>
+              )}
+            </div>
           </button>
           {expandedSession === session.sessionId && (
             <SessionLogPanel sessionId={session.sessionId} logs={sessionLogs[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />

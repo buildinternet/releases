@@ -66,6 +66,12 @@ statusRoutes.get("/status/usage", async (c) => {
   return c.json(rows);
 });
 
+statusRoutes.delete("/status/sessions/:sessionId", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}`, { method: "DELETE" }));
+  return c.json({ ok: true });
+});
+
 statusRoutes.post("/status/event", async (c) => {
   const event = await c.req.json();
   await getStatusHub(c.env).fetch(new Request("https://do/event", {

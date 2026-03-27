@@ -21,6 +21,7 @@ interface StatusMessage {
     | "session:progress"
     | "session:complete"
     | "session:error"
+    | "session:dismissed"
     | "fetch:complete"
     | "init";
   [key: string]: unknown;
@@ -52,6 +53,15 @@ export class StatusHub extends DurableObject {
       return new Response(JSON.stringify(sessions), {
         headers: { "Content-Type": "application/json" },
       });
+    }
+
+    // HTTP endpoint: dismiss a terminal session
+    const dismissMatch = url.pathname.match(/^\/sessions\/([^/]+)$/);
+    if (request.method === "DELETE" && dismissMatch) {
+      const sessionId = dismissMatch[1];
+      await this.ctx.storage.delete(`session:${sessionId}`);
+      this.broadcast({ type: "session:dismissed", sessionId });
+      return new Response("ok", { status: 200 });
     }
 
     return new Response("not found", { status: 404 });
