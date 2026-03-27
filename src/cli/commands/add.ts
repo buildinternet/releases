@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { eq, and } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
 import { sources, organizations, orgAccounts } from "../../db/schema.js";
-import { findOrg, findIgnoredUrl } from "../../db/queries.js";
+import { findOrg, isUrlExcluded } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { discoverFeed } from "../../adapters/feed.js";
@@ -206,11 +206,12 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
     }
   }
 
-  // Check if URL is on the ignore list before inserting
-  const ignoredEntry = await findIgnoredUrl(url);
-  if (ignoredEntry) {
-    logger.warn(`Skipping ignored URL: ${url}${ignoredEntry.reason ? ` (${ignoredEntry.reason})` : ""}`);
-    return { name, slug, type: sourceType, url, org: orgName ?? undefined, status: "ignored", reason: ignoredEntry.reason ?? undefined };
+  // Check if URL is blocked globally or ignored for this org
+  const exclusion = await isUrlExcluded(url, orgId ?? undefined);
+  if (exclusion.excluded) {
+    const scopeLabel = exclusion.scope === "blocked" ? "blocked" : "ignored";
+    logger.warn(`Skipping ${scopeLabel} URL: ${url}${exclusion.reason ? ` (${exclusion.reason})` : ""}`);
+    return { name, slug, type: sourceType, url, org: orgName ?? undefined, status: "ignored", reason: exclusion.reason };
   }
 
   try {
@@ -331,6 +332,13 @@ export function registerAddCommand(program: Command) {
           logger.error(chalk.red(result.error!));
         }
         process.exit(1);
+      }
+
+      if (result.status === "ignored") {
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+        }
+        return;
       }
 
       if (opts.json) {

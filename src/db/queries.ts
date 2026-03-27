@@ -1,8 +1,8 @@
-import { eq, desc, gte, and, sql, inArray, count } from "drizzle-orm";
+import { eq, desc, gte, and, or, sql, inArray, count } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, fetchLog,
-  type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog,
+  type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -25,7 +25,7 @@ export async function getRecentReleases(
   return db
     .select()
     .from(releases)
-    .where(and(eq(releases.sourceId, sourceId), gte(releases.publishedAt, cutoffIso)))
+    .where(and(eq(releases.sourceId, sourceId), gte(releases.publishedAt, cutoffIso), eq(releases.suppressed, false)))
     .orderBy(desc(releases.publishedAt));
 }
 
@@ -85,13 +85,15 @@ export async function getRecentReleasesByOrg(
       contentHash: releases.contentHash,
       metadata: releases.metadata,
       publishedAt: releases.publishedAt,
+      suppressed: releases.suppressed,
+      suppressedReason: releases.suppressedReason,
       fetchedAt: releases.fetchedAt,
       sourceName: sources.name,
       sourceSlug: sources.slug,
     })
     .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
-    .where(and(eq(sources.orgId, orgId), gte(releases.publishedAt, cutoffIso)))
+    .where(and(eq(sources.orgId, orgId), gte(releases.publishedAt, cutoffIso), eq(releases.suppressed, false)))
     .orderBy(desc(releases.publishedAt));
   return rows;
 }
@@ -178,36 +180,94 @@ export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
   return db.select().from(sources).where(inArray(sources.url, urls));
 }
 
-export async function findIgnoredUrl(url: string): Promise<IgnoredUrl | null> {
-  if (isRemoteMode()) return apiClient.findIgnoredUrl(url);
+// ── Ignored URLs (org-scoped) ──
+
+export async function findIgnoredUrl(url: string, orgId: string): Promise<IgnoredUrl | null> {
+  if (isRemoteMode()) return apiClient.findIgnoredUrl(url, orgId);
   const db = getDb();
-  const [row] = await db.select().from(ignoredUrls).where(eq(ignoredUrls.url, url));
+  const [row] = await db.select().from(ignoredUrls)
+    .where(and(eq(ignoredUrls.url, url), eq(ignoredUrls.orgId, orgId)));
   return row ?? null;
 }
 
-export async function addIgnoredUrl(url: string, opts?: { orgId?: string; reason?: string }): Promise<void> {
-  if (isRemoteMode()) return apiClient.addIgnoredUrl(url, opts);
+export async function addIgnoredUrl(url: string, orgId: string, reason?: string): Promise<void> {
+  if (isRemoteMode()) return apiClient.addIgnoredUrl(url, orgId, reason);
   const db = getDb();
   await db.insert(ignoredUrls).values({
     url,
-    orgId: opts?.orgId ?? null,
-    reason: opts?.reason ?? null,
+    orgId,
+    reason: reason ?? null,
   }).onConflictDoNothing();
 }
 
-export async function listIgnoredUrls(orgId?: string): Promise<IgnoredUrl[]> {
+export async function listIgnoredUrls(orgId: string): Promise<IgnoredUrl[]> {
   if (isRemoteMode()) return apiClient.listIgnoredUrls(orgId);
   const db = getDb();
-  if (orgId) {
-    return db.select().from(ignoredUrls).where(eq(ignoredUrls.orgId, orgId));
-  }
-  return db.select().from(ignoredUrls);
+  return db.select().from(ignoredUrls).where(eq(ignoredUrls.orgId, orgId));
 }
 
-export async function removeIgnoredUrl(url: string): Promise<void> {
-  if (isRemoteMode()) return apiClient.removeIgnoredUrl(url);
+export async function removeIgnoredUrl(url: string, orgId: string): Promise<void> {
+  if (isRemoteMode()) return apiClient.removeIgnoredUrl(url, orgId);
   const db = getDb();
-  await db.delete(ignoredUrls).where(eq(ignoredUrls.url, url));
+  await db.delete(ignoredUrls)
+    .where(and(eq(ignoredUrls.url, url), eq(ignoredUrls.orgId, orgId)));
+}
+
+// ── Blocked URLs (global) ──
+
+export async function findBlockedUrl(url: string): Promise<BlockedUrl | null> {
+  if (isRemoteMode()) return apiClient.findBlockedUrl(url);
+  const db = getDb();
+  let domain = "";
+  try { domain = new URL(url).hostname; } catch { /* not a valid URL, skip domain match */ }
+  const rows = await db.select().from(blockedUrls)
+    .where(
+      or(
+        and(eq(blockedUrls.pattern, url), eq(blockedUrls.type, "exact")),
+        ...(domain ? [and(eq(blockedUrls.pattern, domain), eq(blockedUrls.type, "domain"))] : []),
+      ),
+    )
+    .limit(2);
+  // Prefer exact match over domain match
+  return rows.find((r) => r.type === "exact") ?? rows[0] ?? null;
+}
+
+export async function addBlockedUrl(pattern: string, type: "exact" | "domain", reason?: string): Promise<void> {
+  if (isRemoteMode()) return apiClient.addBlockedUrl(pattern, type, reason);
+  const db = getDb();
+  await db.insert(blockedUrls).values({
+    pattern,
+    type,
+    reason: reason ?? null,
+  }).onConflictDoNothing();
+}
+
+export async function listBlockedUrls(): Promise<BlockedUrl[]> {
+  if (isRemoteMode()) return apiClient.listBlockedUrls();
+  const db = getDb();
+  return db.select().from(blockedUrls);
+}
+
+export async function removeBlockedUrl(pattern: string): Promise<void> {
+  if (isRemoteMode()) return apiClient.removeBlockedUrl(pattern);
+  const db = getDb();
+  await db.delete(blockedUrls).where(eq(blockedUrls.pattern, pattern));
+}
+
+/** Check if a URL is blocked globally OR ignored for a specific org */
+export async function isUrlExcluded(url: string, orgId?: string): Promise<{ excluded: boolean; reason?: string; scope?: "blocked" | "ignored" }> {
+  if (orgId) {
+    const [blocked, ignored] = await Promise.all([
+      findBlockedUrl(url),
+      findIgnoredUrl(url, orgId),
+    ]);
+    if (blocked) return { excluded: true, reason: blocked.reason ?? undefined, scope: "blocked" };
+    if (ignored) return { excluded: true, reason: ignored.reason ?? undefined, scope: "ignored" };
+    return { excluded: false };
+  }
+  const blocked = await findBlockedUrl(url);
+  if (blocked) return { excluded: true, reason: blocked.reason ?? undefined, scope: "blocked" };
+  return { excluded: false };
 }
 
 /** Returns true if content is unchanged (hash matches). Persists the new hash on change. */
@@ -416,9 +476,11 @@ export async function getLatestReleases(opts: {
     .limit(opts.count);
 
   if (opts.slug) {
-    query = query.where(eq(sources.slug, opts.slug)) as typeof query;
+    query = query.where(and(eq(sources.slug, opts.slug), eq(releases.suppressed, false))) as typeof query;
   } else if (orgSourceIds) {
-    query = query.where(inArray(releases.sourceId, orgSourceIds)) as typeof query;
+    query = query.where(and(inArray(releases.sourceId, orgSourceIds), eq(releases.suppressed, false))) as typeof query;
+  } else {
+    query = query.where(eq(releases.suppressed, false)) as typeof query;
   }
 
   return query;
@@ -513,6 +575,28 @@ export async function unlinkOrgAccount(
     .update(organizations)
     .set({ updatedAt: new Date().toISOString() })
     .where(eq(organizations.id, orgId));
+}
+
+// ── Release suppression ──
+
+export async function suppressRelease(releaseId: string, reason?: string): Promise<boolean> {
+  if (isRemoteMode()) return apiClient.suppressRelease(releaseId, reason);
+  const db = getDb();
+  const [updated] = await db.update(releases).set({
+    suppressed: true,
+    suppressedReason: reason ?? null,
+  }).where(eq(releases.id, releaseId)).returning({ id: releases.id });
+  return !!updated;
+}
+
+export async function unsuppressRelease(releaseId: string): Promise<boolean> {
+  if (isRemoteMode()) return apiClient.unsuppressRelease(releaseId);
+  const db = getDb();
+  const [updated] = await db.update(releases).set({
+    suppressed: false,
+    suppressedReason: null,
+  }).where(eq(releases.id, releaseId)).returning({ id: releases.id });
+  return !!updated;
 }
 
 // ── Search (remote-aware, for `search` command) ──

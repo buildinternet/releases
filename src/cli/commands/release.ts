@@ -4,7 +4,7 @@ import { createHash } from "crypto";
 import chalk from "chalk";
 import { getDb } from "../../db/connection.js";
 import { releases, sources } from "../../db/schema.js";
-import { findSourceBySlug } from "../../db/queries.js";
+import { findSourceBySlug, suppressRelease, unsuppressRelease } from "../../db/queries.js";
 
 export function registerReleaseCommand(program: Command) {
   const release = program
@@ -47,6 +47,7 @@ export function registerReleaseCommand(program: Command) {
       console.log(`  Source:    ${sourceName ?? chalk.dim("—")} (${sourceSlug ?? chalk.dim("—")})`);
       if (rel.publishedAt) console.log(`  Published: ${rel.publishedAt}`);
       console.log(`  Fetched:   ${rel.fetchedAt}`);
+      if (rel.suppressed) console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${rel.suppressedReason}` : ""}`);
       if (rel.url) console.log(`  URL:       ${rel.url}`);
 
       if (rel.contentSummary) {
@@ -172,6 +173,57 @@ export function registerReleaseCommand(program: Command) {
         for (const change of changes) {
           console.log(`  ${change}`);
         }
+      }
+    });
+
+  // ── release suppress ──
+  release
+    .command("suppress")
+    .description("Suppress a release from appearing in queries and search results")
+    .argument("<id>", "Release ID to suppress")
+    .option("--reason <reason>", "Reason for suppression (e.g. 'promotional content')")
+    .option("--dry-run", "Show what would be suppressed without writing")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { reason?: string; dryRun?: boolean; json?: boolean }) => {
+      if (opts.dryRun) {
+        if (opts.json) {
+          console.log(JSON.stringify({ id, suppressed: true, reason: opts.reason ?? null, dryRun: true }));
+        } else {
+          console.log(chalk.yellow(`[dry-run] Would suppress release ${id}${opts.reason ? ` (${opts.reason})` : ""}`));
+        }
+        return;
+      }
+
+      const found = await suppressRelease(id, opts.reason);
+      if (!found) {
+        console.error(chalk.red(`Release not found: ${id}`));
+        process.exit(1);
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify({ id, suppressed: true, reason: opts.reason ?? null }));
+      } else {
+        console.log(chalk.green(`Suppressed release ${id}${opts.reason ? ` (${opts.reason})` : ""}`));
+      }
+    });
+
+  // ── release unsuppress ──
+  release
+    .command("unsuppress")
+    .description("Restore a suppressed release so it appears in queries again")
+    .argument("<id>", "Release ID to unsuppress")
+    .option("--json", "Output as JSON")
+    .action(async (id: string, opts: { json?: boolean }) => {
+      const found = await unsuppressRelease(id);
+      if (!found) {
+        console.error(chalk.red(`Release not found: ${id}`));
+        process.exit(1);
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify({ id, suppressed: false }));
+      } else {
+        console.log(chalk.green(`Unsuppressed release ${id}`));
       }
     });
 }

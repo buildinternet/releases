@@ -1,7 +1,7 @@
 import { getApiUrl, getApiKey } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
-  Source, Organization, OrgAccount, IgnoredUrl,
+  Source, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
 } from "../db/schema.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -61,27 +61,65 @@ export async function getOrgAccountByPlatform(orgId: string, platform: string): 
   return apiFetch<OrgAccount | null>(`/api/orgs/${orgId}/accounts?platform=${platform}`);
 }
 
-// ── Ignore queries ──
+// ── Ignored URLs (org-scoped) ──
 
-export async function findIgnoredUrl(url: string): Promise<IgnoredUrl | null> {
+export async function findIgnoredUrl(url: string, orgId: string): Promise<IgnoredUrl | null> {
   const encoded = encodeURIComponent(url);
-  return apiFetch<IgnoredUrl | null>(`/api/ignore?url=${encoded}&single=true`);
+  return apiFetch<IgnoredUrl | null>(`/api/orgs/${orgId}/ignored-urls?url=${encoded}&single=true`);
 }
 
-export async function addIgnoredUrl(url: string, opts?: { orgId?: string; reason?: string }): Promise<void> {
-  await apiFetch("/api/ignore", {
+export async function addIgnoredUrl(url: string, orgId: string, reason?: string): Promise<void> {
+  await apiFetch(`/api/orgs/${orgId}/ignored-urls`, {
     method: "POST",
-    body: JSON.stringify({ url, orgId: opts?.orgId, reason: opts?.reason }),
+    body: JSON.stringify({ url, reason }),
   });
 }
 
-export async function listIgnoredUrls(orgId?: string): Promise<IgnoredUrl[]> {
-  const qs = orgId ? `?orgId=${orgId}` : "";
-  return apiFetch<IgnoredUrl[]>(`/api/ignore${qs}`);
+export async function listIgnoredUrls(orgId: string): Promise<IgnoredUrl[]> {
+  return apiFetch<IgnoredUrl[]>(`/api/orgs/${orgId}/ignored-urls`);
 }
 
-export async function removeIgnoredUrl(url: string): Promise<void> {
-  await apiFetch(`/api/ignore/${encodeURIComponent(url)}`, { method: "DELETE" });
+export async function removeIgnoredUrl(url: string, orgId: string): Promise<void> {
+  await apiFetch(`/api/orgs/${orgId}/ignored-urls/${encodeURIComponent(url)}`, { method: "DELETE" });
+}
+
+// ── Blocked URLs (global) ──
+
+export async function findBlockedUrl(url: string): Promise<BlockedUrl | null> {
+  const encoded = encodeURIComponent(url);
+  return apiFetch<BlockedUrl | null>(`/api/blocked-urls?url=${encoded}&single=true`);
+}
+
+export async function addBlockedUrl(pattern: string, type: "exact" | "domain", reason?: string): Promise<void> {
+  await apiFetch("/api/blocked-urls", {
+    method: "POST",
+    body: JSON.stringify({ pattern, type, reason }),
+  });
+}
+
+export async function listBlockedUrls(): Promise<BlockedUrl[]> {
+  return apiFetch<BlockedUrl[]>("/api/blocked-urls");
+}
+
+export async function removeBlockedUrl(pattern: string): Promise<void> {
+  await apiFetch(`/api/blocked-urls/${encodeURIComponent(pattern)}`, { method: "DELETE" });
+}
+
+// ── Release suppression ──
+
+export async function suppressRelease(releaseId: string, reason?: string): Promise<boolean> {
+  const result = await apiFetch<{ suppressed: boolean }>(`/api/releases/${releaseId}/suppress`, {
+    method: "POST",
+    body: JSON.stringify({ reason }),
+  });
+  return result?.suppressed ?? false;
+}
+
+export async function unsuppressRelease(releaseId: string): Promise<boolean> {
+  const result = await apiFetch<{ unsuppressed: boolean }>(`/api/releases/${releaseId}/unsuppress`, {
+    method: "POST",
+  });
+  return result?.unsuppressed ?? false;
 }
 
 // ── Content hash ──

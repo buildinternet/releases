@@ -36,6 +36,20 @@
       "when": 1774626495953,
       "tag": "0004_amusing_juggernaut",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1774641384601,
+      "tag": "0005_absurd_abomination",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1774642744801,
+      "tag": "0006_sloppy_starhawk",
+      "breakpoints": true
     }
   ]
 }

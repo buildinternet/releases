@@ -4,7 +4,7 @@ import type { DiscoveryState, AgentDiscoveredSource } from "../../agent/discover
 import { logger } from "../../lib/logger.js";
 import { getDb } from "../../db/connection.js";
 import { sources } from "../../db/schema.js";
-import { addIgnoredUrl } from "../../db/queries.js";
+import { addIgnoredUrl, findOrg } from "../../db/queries.js";
 
 interface ApplyResult {
   slug: string;
@@ -13,13 +13,16 @@ interface ApplyResult {
   error?: string;
 }
 
-async function applySource(source: AgentDiscoveredSource): Promise<ApplyResult> {
+async function applySource(source: AgentDiscoveredSource, orgId?: string): Promise<ApplyResult> {
   const { url, type, slug, label } = source;
 
   if (source.approved === false) {
+    if (!orgId) {
+      return { slug, url, action: "skipped" };
+    }
     const reason = source.validationError ?? "Rejected during discovery";
     try {
-      await addIgnoredUrl(url, { reason });
+      await addIgnoredUrl(url, orgId, reason);
       return { slug, url, action: "ignored" };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
@@ -73,10 +76,13 @@ export function registerOnboardApplyCommand(onboardCmd: Command) {
         process.exit(1);
       }
 
+      const org = await findOrg(state.product);
+      const orgId = org?.id;
+
       const results: ApplyResult[] = [];
 
       for (const source of state.sources) {
-        const result = await applySource(source);
+        const result = await applySource(source, orgId);
         results.push(result);
 
         if (!opts.json) {
