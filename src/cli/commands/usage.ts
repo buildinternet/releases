@@ -43,6 +43,10 @@ export function registerUsageCommand(program: Command) {
     .command("usage")
     .description("Show API token usage summary")
     .option("--days <n>", "Number of days to look back", "7")
+    .addHelpText("after", `
+Examples:
+  released usage
+  released usage --days 30`)
     .action(async (opts: { days: string }) => {
       const db = getDb();
       const days = parseInt(opts.days, 10) || 7;

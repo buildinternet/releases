@@ -11,6 +11,12 @@ export function registerLatestCommand(program: Command) {
     .option("-c, --count <n>", "Number of releases to show", "10")
     .option("--org <identifier>", "Filter to an organization")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released latest                         Latest releases across all sources
+  released latest my-source               Latest releases from one source
+  released latest --org acme --count 20   Latest 20 releases from an org
+  released latest --json                  Output as JSON`)
     .action(async (slug: string | undefined, opts: { count: string; org?: string; json?: boolean }) => {
       const count = parseInt(opts.count, 10);
 

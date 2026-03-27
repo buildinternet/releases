@@ -8,6 +8,10 @@ export function registerListCommand(program: Command) {
     .command("list")
     .description("List all configured changelog sources")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released list
+  released list --json`)
     .action(async (opts: { json?: boolean }) => {
       const allSources = await listSourcesWithOrg();
 

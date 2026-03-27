@@ -25,7 +25,19 @@ import { registerImportCommand } from "./commands/import.js";
 export const program = new Command()
   .name("released")
   .description("Context7-style changelog indexer for AI agents and developers")
-  .version("0.1.0");
+  .version("0.1.0")
+  .addHelpText("after", `
+Command Groups:
+  Sources:       add, edit, remove, list, import, discover
+  Fetching:      fetch, fetch-log, check
+  Querying:      search, latest, summary, compare, stats
+  Organizations: org (add, list, show, remove, link, unlink)
+  Releases:      release (show, edit, delete, suppress, unsuppress)
+  Blocking:      block (list, add, remove), ignore (list, add, remove)
+  Agents:        onboard, serve, api
+  Utilities:     usage
+
+Run "released <command> --help" for details on any command.`);
 
 registerAddCommand(program);
 registerEditCommand(program);

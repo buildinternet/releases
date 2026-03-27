@@ -13,8 +13,15 @@ export function registerRemoveCommand(program: Command) {
     .argument("<slugs...>", "Slugs of sources to remove")
     .option("--ignore", "Add each source URL to the ignored list before removing")
     .option("--reason <reason>", "Reason for ignoring (used with --ignore)")
+    .option("--dry-run", "Show what would be removed without deleting")
     .option("--json", "Output as JSON")
-    .action(async (slugs: string[], opts: { ignore?: boolean; reason?: string; json?: boolean }) => {
+    .addHelpText("after", `
+Examples:
+  released remove my-source
+  released remove source-a source-b source-c
+  released remove my-source --ignore --reason "no longer maintained"
+  released remove my-source --dry-run`)
+    .action(async (slugs: string[], opts: { ignore?: boolean; reason?: string; json?: boolean; dryRun?: boolean }) => {
       const db = getDb();
 
       const existing = await db
@@ -25,6 +32,31 @@ export function registerRemoveCommand(program: Command) {
       const foundSlugs = new Set(existing.map((s) => s.slug));
       const results: { slug: string; name?: string; url?: string; status: "removed" | "not_found"; ignored?: boolean }[] = [];
       let hasError = false;
+
+      // Dry-run mode
+      if (opts.dryRun) {
+        const dryResults = slugs.map((slug) => {
+          const found = existing.find((s) => s.slug === slug);
+          return found
+            ? { slug, name: found.name, url: found.url, status: "would_remove" as const }
+            : { slug, status: "not_found" as const };
+        });
+
+        if (opts.json) {
+          console.log(JSON.stringify(dryResults, null, 2));
+        } else {
+          for (const r of dryResults) {
+            if (r.status === "not_found") {
+              console.error(chalk.red(`Source not found: ${r.slug}`));
+            } else {
+              console.log(chalk.yellow(`[dry-run] Would remove: ${r.name} (${r.slug})`));
+            }
+          }
+        }
+
+        if (dryResults.some((r) => r.status === "not_found")) process.exit(1);
+        return;
+      }
 
       // Report not-found slugs
       for (const slug of slugs) {

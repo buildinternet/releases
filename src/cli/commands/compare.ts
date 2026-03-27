@@ -12,6 +12,11 @@ export function registerCompareCommand(program: Command) {
     .argument("<slugB>", "Second source slug")
     .option("-d, --days <n>", "Number of days to look back", "30")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released compare next-js remix
+  released compare next-js remix --days 7
+  released compare next-js remix --json`)
     .action(async (slugA: string, slugB: string, opts: { days: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
       const cutoff = daysAgoIso(days);

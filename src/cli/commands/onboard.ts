@@ -11,6 +11,11 @@ export function registerOnboardCommand(program: Command) {
     .option("--domain <domain>", "Seed the agent with the company's domain")
     .option("--github-org <org>", "Seed the agent with the company's GitHub organization")
     .option("--json", "Output results as JSON")
+    .addHelpText("after", `
+Examples:
+  released onboard "Vercel"
+  released onboard "Stripe" --domain stripe.com --github-org stripe
+  released onboard "Acme" --json`)
     .action(
       async (
         company: string,

@@ -10,6 +10,12 @@ export function registerFetchLogCommand(program: Command) {
     .description("Show fetch history for sources")
     .option("--limit <n>", "Number of log entries", "20")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released fetch-log                 Show recent fetch history
+  released fetch-log my-source       Show history for one source
+  released fetch-log --limit 50
+  released fetch-log --json`)
     .action(async (slug: string | undefined, opts: { limit?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit ?? "20", 10);
       const logs = await getFetchLogs({ sourceSlug: slug, limit });

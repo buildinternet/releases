@@ -137,6 +137,12 @@ export function registerImportCommand(program: Command) {
     .option("--dry-run", "Show what would be created without writing")
     .option("--json", "Output as JSON")
     .option("--skip-existing", "Skip sources that already exist (default: error)")
+    .addHelpText("after", `
+Examples:
+  released import manifest.json
+  released import manifest.json --dry-run
+  released import manifest.json --skip-existing
+  released import manifest.json --json`)
     .action(async (file: string, opts: { dryRun?: boolean; json?: boolean; skipExisting?: boolean }) => {
       // 1. Read and parse JSON file
       if (!existsSync(file)) {

@@ -20,6 +20,11 @@ export function registerOrgCommand(program: Command) {
     .option("--domain <domain>", "Primary domain (e.g. vercel.com)")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released org add "Acme Corp"
+  released org add "Acme Corp" --domain acme.com
+  released org add "Acme Corp" --slug acme --json`)
     .action(async (name: string, opts: { domain?: string; slug?: string; json?: boolean }) => {
       const slug = opts.slug ?? toSlug(name);
 
@@ -45,6 +50,11 @@ export function registerOrgCommand(program: Command) {
     .option("--query <text>", "Filter by name, slug, domain, or account handle")
     .option("--platform <platform>", "Filter to orgs with an account on this platform")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released org list
+  released org list --query vercel
+  released org list --platform github --json`)
     .action(async (opts: { query?: string; platform?: string; json?: boolean }) => {
       const allOrgs = await listOrgs({ query: opts.query, platform: opts.platform });
 
@@ -89,6 +99,11 @@ export function registerOrgCommand(program: Command) {
     .description("Show organization details")
     .argument("<identifier>", "Org slug, domain, name, or account handle")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released org show acme
+  released org show acme.com
+  released org show acme --json`)
     .action(async (identifier: string, opts: { json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -132,12 +147,27 @@ export function registerOrgCommand(program: Command) {
     .command("remove")
     .description("Remove an organization")
     .argument("<identifier>", "Org slug, domain, name, or account handle")
+    .option("--dry-run", "Show what would be removed without deleting")
     .option("--json", "Output as JSON")
-    .action(async (identifier: string, opts: { json?: boolean }) => {
+    .addHelpText("after", `
+Examples:
+  released org remove acme
+  released org remove acme --dry-run
+  released org remove acme --json`)
+    .action(async (identifier: string, opts: { json?: boolean; dryRun?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
         console.error(chalk.red(`Organization not found: ${identifier}`));
         process.exit(1);
+      }
+
+      if (opts.dryRun) {
+        if (opts.json) {
+          console.log(JSON.stringify({ wouldRemove: found.slug, name: found.name }, null, 2));
+        } else {
+          console.log(chalk.yellow(`[dry-run] Would remove organization: ${found.name} (${found.slug})`));
+        }
+        return;
       }
 
       await removeOrg(found.id, found.slug);
@@ -157,6 +187,10 @@ export function registerOrgCommand(program: Command) {
     .requiredOption("--platform <platform>", "Platform name (github, x, linkedin, etc.)")
     .requiredOption("--handle <handle>", "Account handle on the platform")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released org link acme --platform github --handle acme-corp
+  released org link acme --platform x --handle acmecorp --json`)
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -181,6 +215,9 @@ export function registerOrgCommand(program: Command) {
     .requiredOption("--platform <platform>", "Platform name")
     .requiredOption("--handle <handle>", "Account handle")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released org unlink acme --platform github --handle acme-corp`)
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {

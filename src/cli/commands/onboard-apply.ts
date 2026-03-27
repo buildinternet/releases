@@ -58,6 +58,11 @@ export function registerOnboardApplyCommand(onboardCmd: Command) {
     .description("Apply discovery results from a state file to the database")
     .argument("<state-file>", "Path to a DiscoveryState JSON file (or - for stdin)")
     .option("--json", "Output results as JSON")
+    .addHelpText("after", `
+Examples:
+  released onboard apply discovery-state.json
+  released onboard apply discovery-state.json --json
+  cat state.json | released onboard apply -`)
     .action(async (stateFile: string, opts: { json?: boolean }) => {
       const raw = stateFile === "-"
         ? await Bun.stdin.text()

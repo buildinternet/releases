@@ -17,6 +17,12 @@ export function registerDiscoverCommand(program: Command) {
     .option("--add", "Add all discovered sources (default: dry-run)")
     .option("--verify", "Use AI to verify candidates and suggest additional URLs")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released discover vercel.com
+  released discover --org acme
+  released discover vercel.com --add
+  released discover vercel.com --verify --json`)
     .action(async (domain: string | undefined, opts: { org?: string; add?: boolean; verify?: boolean; json?: boolean }) => {
       let scanDomain: string | undefined = domain;
       let githubHandle: string | undefined;
@@ -44,7 +50,9 @@ export function registerDiscoverCommand(program: Command) {
       }
 
       if (!scanDomain && !githubHandle) {
-        console.error(chalk.red("Provide a domain or use --org with a domain/GitHub-linked org."));
+        console.error("Error: provide a domain or use --org\n");
+        console.error("  released discover vercel.com");
+        console.error("  released discover --org acme");
         process.exit(1);
       }
 

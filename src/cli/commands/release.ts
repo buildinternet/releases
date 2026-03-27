@@ -17,6 +17,10 @@ export function registerReleaseCommand(program: Command) {
     .description("Show release details")
     .argument("<id>", "Release ID")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released release show abc123
+  released release show abc123 --json`)
     .action(async (id: string, opts: { json?: boolean }) => {
       const db = getDb();
 
@@ -73,13 +77,61 @@ export function registerReleaseCommand(program: Command) {
     .argument("[id]", "Release ID to delete")
     .option("--source <slug>", "Delete releases for a source")
     .option("--before <date>", "Delete releases published before this ISO date")
+    .option("--dry-run", "Show what would be deleted without deleting")
     .option("--json", "Output as JSON")
-    .action(async (id: string | undefined, opts: { source?: string; before?: string; json?: boolean }) => {
+    .addHelpText("after", `
+Examples:
+  released release delete abc123
+  released release delete --source my-source
+  released release delete --source my-source --before 2024-01-01
+  released release delete --source my-source --dry-run`)
+    .action(async (id: string | undefined, opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean }) => {
       const db = getDb();
 
       if (!id && !opts.source && !opts.before) {
-        console.error(chalk.red("Provide a release ID, --source, or --before."));
+        console.error("Error: provide a release ID, --source, or --before\n");
+        console.error("  released release delete abc123");
+        console.error("  released release delete --source my-source");
+        console.error("  released release delete --before 2024-01-01");
         process.exit(1);
+      }
+
+      // Dry-run mode
+      if (opts.dryRun) {
+        const conditions = [];
+        if (id) {
+          conditions.push(eq(releases.id, id));
+        } else {
+          if (opts.source) {
+            const source = await findSourceBySlug(opts.source);
+            if (!source) {
+              console.error(chalk.red(`Source not found: ${opts.source}`));
+              process.exit(1);
+            }
+            conditions.push(eq(releases.sourceId, source.id));
+          }
+          if (opts.before) {
+            conditions.push(lt(releases.publishedAt, opts.before));
+          }
+        }
+
+        const wouldDelete = await db
+          .select({ id: releases.id, title: releases.title })
+          .from(releases)
+          .where(and(...conditions));
+
+        if (opts.json) {
+          console.log(JSON.stringify({ wouldDelete: wouldDelete.length, releases: wouldDelete }, null, 2));
+        } else {
+          console.log(chalk.yellow(`[dry-run] Would delete ${wouldDelete.length} release(s)`));
+          for (const r of wouldDelete.slice(0, 10)) {
+            console.log(`  ${r.id}  ${r.title}`);
+          }
+          if (wouldDelete.length > 10) {
+            console.log(chalk.dim(`  ... and ${wouldDelete.length - 10} more`));
+          }
+        }
+        return;
       }
 
       let deleted: { id: string }[];
@@ -129,6 +181,11 @@ export function registerReleaseCommand(program: Command) {
     .option("--version <version>", "Update version")
     .option("--content <content>", "Update content (recomputes contentHash)")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released release edit abc123 --title "New Title"
+  released release edit abc123 --version "2.0.0"
+  released release edit abc123 --json`)
     .action(async (id: string, opts: { title?: string; version?: string; content?: string; json?: boolean }) => {
       const db = getDb();
 
@@ -184,6 +241,10 @@ export function registerReleaseCommand(program: Command) {
     .option("--reason <reason>", "Reason for suppression (e.g. 'promotional content')")
     .option("--dry-run", "Show what would be suppressed without writing")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released release suppress abc123 --reason "promotional content"
+  released release suppress abc123 --dry-run`)
     .action(async (id: string, opts: { reason?: string; dryRun?: boolean; json?: boolean }) => {
       if (opts.dryRun) {
         if (opts.json) {
@@ -213,6 +274,9 @@ export function registerReleaseCommand(program: Command) {
     .description("Restore a suppressed release so it appears in queries again")
     .argument("<id>", "Release ID to unsuppress")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released release unsuppress abc123`)
     .action(async (id: string, opts: { json?: boolean }) => {
       const found = await unsuppressRelease(id);
       if (!found) {

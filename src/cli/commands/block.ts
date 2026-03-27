@@ -12,6 +12,10 @@ export function registerBlockCommand(program: Command) {
     .command("list")
     .description("List all globally blocked patterns")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released block list
+  released block list --json`)
     .action(async (opts: { json?: boolean }) => {
       const rows = await listBlockedUrls();
 
@@ -38,24 +42,47 @@ export function registerBlockCommand(program: Command) {
     .option("--domain", "Treat pattern as a domain (blocks all URLs on that domain)")
     .option("--reason <reason>", "Reason for blocking")
     .option("--dry-run", "Show what would be blocked without writing")
-    .action(async (pattern: string, opts: { domain?: boolean; reason?: string; dryRun?: boolean }) => {
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released block add https://example.com/spam
+  released block add example.com --domain --reason "spam site"
+  released block add https://example.com/spam --dry-run`)
+    .action(async (pattern: string, opts: { domain?: boolean; reason?: string; dryRun?: boolean; json?: boolean }) => {
       const type = opts.domain ? "domain" as const : "exact" as const;
       const typeLabel = type === "domain" ? "domain" : "URL";
 
       if (opts.dryRun) {
-        logger.info(chalk.yellow(`[dry-run] Would block ${typeLabel}: ${pattern}${opts.reason ? ` (${opts.reason})` : ""}`));
+        if (opts.json) {
+          console.log(JSON.stringify({ pattern, type, reason: opts.reason ?? null, dryRun: true }, null, 2));
+        } else {
+          logger.info(chalk.yellow(`[dry-run] Would block ${typeLabel}: ${pattern}${opts.reason ? ` (${opts.reason})` : ""}`));
+        }
         return;
       }
 
       await addBlockedUrl(pattern, type, opts.reason);
-      logger.info(chalk.green(`Blocked ${typeLabel}: ${pattern}${opts.reason ? ` (${opts.reason})` : ""}`));
+      if (opts.json) {
+        console.log(JSON.stringify({ pattern, type, reason: opts.reason ?? null, status: "blocked" }, null, 2));
+      } else {
+        logger.info(chalk.green(`Blocked ${typeLabel}: ${pattern}${opts.reason ? ` (${opts.reason})` : ""}`));
+      }
     });
 
   block
     .command("remove <pattern>")
     .description("Unblock a URL or domain")
-    .action(async (pattern: string) => {
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released block remove https://example.com/spam
+  released block remove example.com`)
+    .action(async (pattern: string, opts: { json?: boolean }) => {
       await removeBlockedUrl(pattern);
-      logger.info(chalk.green(`Unblocked: ${pattern}`));
+      if (opts.json) {
+        console.log(JSON.stringify({ pattern, status: "unblocked" }, null, 2));
+      } else {
+        logger.info(chalk.green(`Unblocked: ${pattern}`));
+      }
     });
 }

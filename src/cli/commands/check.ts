@@ -95,6 +95,11 @@ export function registerCheckCommand(program: Command) {
     .command("check [slug]")
     .description("Check health and availability of changelog sources")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released check                     Check all sources
+  released check my-source           Check a specific source
+  released check --json              Output health data as JSON`)
     .action(async (slug: string | undefined, opts: { json?: boolean }) => {
       const db = getDb();
       let sourcesToCheck: Source[];

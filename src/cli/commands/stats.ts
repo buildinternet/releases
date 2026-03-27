@@ -10,6 +10,11 @@ export function registerStatsCommand(program: Command) {
     .description("Show index statistics and recent fetch activity")
     .option("--json", "Output as JSON")
     .option("--days <n>", "Period for recent activity (default: 30)", "30")
+    .addHelpText("after", `
+Examples:
+  released stats
+  released stats --days 7
+  released stats --json`)
     .action(async (opts: { json?: boolean; days?: string }) => {
       const days = parseInt(opts.days ?? "30", 10);
       const data = await getStatsSummary(days);

@@ -243,6 +243,13 @@ export function registerAddCommand(program: Command) {
     .option("--feed-url <feedUrl>", "Explicit feed URL (skips auto-discovery)")
     .option("--batch <file>", "JSON file with sources to add (use - for stdin)")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released add "Next.js" --url https://github.com/vercel/next.js
+  released add "Tailwind Blog" --url https://tailwindcss.com/blog --org "Tailwind Labs"
+  released add "Astro" --url https://astro.build/blog --type scrape
+  released add --batch sources.json
+  cat sources.json | released add --batch -`)
     .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; feedUrl?: string; batch?: string; json?: boolean }) => {
       // --- Batch mode ---
       if (opts.batch) {
@@ -308,11 +315,14 @@ export function registerAddCommand(program: Command) {
 
       // --- Single-add mode ---
       if (!name) {
-        logger.error("Missing required argument: name (or use --batch for batch mode)");
+        console.error("Error: missing required argument: name\n");
+        console.error("  released add \"My Source\" --url https://example.com/changelog");
+        console.error("  released add --batch sources.json");
         process.exit(1);
       }
       if (!opts.url) {
-        logger.error("Missing required option: --url");
+        console.error("Error: missing required option: --url\n");
+        console.error(`  released add "${name}" --url https://example.com/changelog`);
         process.exit(1);
       }
 

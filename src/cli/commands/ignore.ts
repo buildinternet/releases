@@ -13,6 +13,10 @@ export function registerIgnoreCommand(program: Command) {
     .description("List ignored URLs for an organization")
     .requiredOption("--org <org>", "Organization slug, domain, or name")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released ignore list --org acme
+  released ignore list --org acme --json`)
     .action(async (opts: { org: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
@@ -44,6 +48,11 @@ export function registerIgnoreCommand(program: Command) {
     .requiredOption("--org <org>", "Organization slug, domain, or name")
     .option("--reason <reason>", "Reason for ignoring this URL")
     .option("--dry-run", "Show what would be ignored without writing")
+    .addHelpText("after", `
+Examples:
+  released ignore add https://example.com/blog --org acme
+  released ignore add https://example.com/blog --org acme --reason "not a changelog"
+  released ignore add https://example.com/blog --org acme --dry-run`)
     .action(async (url: string, opts: { org: string; reason?: string; dryRun?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
@@ -64,7 +73,11 @@ export function registerIgnoreCommand(program: Command) {
     .command("remove <url>")
     .description("Un-ignore a URL for an organization")
     .requiredOption("--org <org>", "Organization slug, domain, or name")
-    .action(async (url: string, opts: { org: string }) => {
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released ignore remove https://example.com/blog --org acme`)
+    .action(async (url: string, opts: { org: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
         logger.error(`Organization not found: ${opts.org}`);
@@ -72,6 +85,10 @@ export function registerIgnoreCommand(program: Command) {
       }
 
       await removeIgnoredUrl(url, org.id);
-      logger.info(chalk.green(`Un-ignored for ${org.name}: ${url}`));
+      if (opts.json) {
+        console.log(JSON.stringify({ url, org: org.slug, status: "unignored" }, null, 2));
+      } else {
+        logger.info(chalk.green(`Un-ignored for ${org.name}: ${url}`));
+      }
     });
 }

@@ -13,11 +13,19 @@ export function registerSummaryCommand(program: Command) {
     .option("--org <identifier>", "Summarize across all sources in an organization")
     .option("--instructions <text>", "Additional guidance for the summarizer (e.g. what to focus on, audience, format)")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released summary my-source
+  released summary --org acme --days 7
+  released summary my-source --instructions "focus on breaking changes"
+  released summary my-source --json`)
     .action(async (slug: string | undefined, opts: { days: string; org?: string; instructions?: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
 
       if (!slug && !opts.org) {
-        console.error(chalk.red("Provide a source slug or use --org to summarize an organization."));
+        console.error("Error: provide a source slug or --org\n");
+        console.error("  released summary my-source");
+        console.error("  released summary --org acme");
         process.exit(1);
       }
 

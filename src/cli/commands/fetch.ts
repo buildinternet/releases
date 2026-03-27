@@ -28,6 +28,17 @@ export function registerFetchCommand(program: Command) {
     .option("--stale <hours>", "Only fetch sources older than N hours, respecting backoff")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
+    .addHelpText("after", `
+Examples:
+  released fetch                          Fetch all sources
+  released fetch my-source                Fetch a single source
+  released fetch --stale 6                Fetch sources not updated in 6+ hours
+  released fetch --unfetched              Fetch sources never fetched before
+  released fetch --retry-errors           Retry sources that errored last time
+  released fetch my-source --dry-run      Preview without writing to DB
+  released fetch my-source --force        Delete and re-fetch all releases
+  released fetch --concurrency 5          Fetch 5 sources in parallel
+  released fetch --json                   Output results as JSON`)
     .action(async (slug: string | undefined, opts: {
       json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean;

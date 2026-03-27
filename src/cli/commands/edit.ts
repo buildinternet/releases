@@ -30,9 +30,17 @@ export function registerEditCommand(program: Command) {
     .option("--no-org", "Remove organization association")
     .option("--feed-url <feedUrl>", "Set or update the feed URL")
     .option("--no-feed-url", "Remove stored feed URL")
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released edit my-source --name "New Name"
+  released edit my-source --url https://example.com/new-changelog
+  released edit my-source --org "Acme Corp"
+  released edit my-source --feed-url https://example.com/feed.xml
+  released edit my-source --no-org`)
     .action(async (slug: string, opts: {
       name?: string; url?: string; type?: string; slug?: string;
-      org?: string | boolean; feedUrl?: string | boolean;
+      org?: string | boolean; feedUrl?: string | boolean; json?: boolean;
     }) => {
       const db = getDb();
 
@@ -117,9 +125,15 @@ export function registerEditCommand(program: Command) {
       }
 
       const displaySlug = opts.slug ?? slug;
-      console.log(chalk.green(`Updated ${source.name} (${displaySlug}):`));
-      for (const change of changes) {
-        console.log(`  ${change}`);
+
+      if (opts.json) {
+        const [updated] = await db.select().from(sources).where(eq(sources.id, source.id));
+        console.log(JSON.stringify(updated, null, 2));
+      } else {
+        console.log(chalk.green(`Updated ${source.name} (${displaySlug}):`));
+        for (const change of changes) {
+          console.log(`  ${change}`);
+        }
       }
     });
 }

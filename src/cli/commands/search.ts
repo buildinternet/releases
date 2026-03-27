@@ -15,6 +15,11 @@ export function registerSearchCommand(program: Command) {
     .option("-l, --limit <n>", "Max results to return", "20")
     .option("--org <identifier>", "Filter to an organization")
     .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  released search "breaking change"
+  released search "authentication" --org acme
+  released search "deprecation" --limit 5 --json`)
     .action(async (query: string, opts: { limit: string; org?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
 
