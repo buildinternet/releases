@@ -18,3 +18,6 @@ ENV COMMAND_TIMEOUT_MS=300000
 # Default data dir for Released CLI
 ENV RELEASED_DATA_DIR=/app/data
 RUN mkdir -p /app/data
+
+# Expose WebSocket port for log streaming
+EXPOSE 8081

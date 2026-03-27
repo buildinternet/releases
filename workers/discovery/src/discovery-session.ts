@@ -39,6 +39,24 @@ export class DiscoverySession extends DurableObject<Env> {
     try { await this.getSandboxHandle().destroy(); } catch { /* container already gone */ }
   }
 
+  private async notifyStatusHub(event: Record<string, unknown>): Promise<void> {
+    try {
+      const url = `${this.env.RELEASED_API_URL}/api/status/event`;
+      await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(this.env.RELEASED_API_KEY
+            ? { Authorization: `Bearer ${this.env.RELEASED_API_KEY}` }
+            : {}),
+        },
+        body: JSON.stringify(event),
+      });
+    } catch {
+      // Status updates are best-effort — don't break discovery on failure
+    }
+  }
+
   async startDiscovery(params: DiscoveryParams): Promise<{ sessionId: string }> {
     const currentStatus = await this.getState<SessionStatus>("status", "idle");
     if (currentStatus === "running") {
@@ -51,6 +69,12 @@ export class DiscoverySession extends DurableObject<Env> {
     await this.ctx.storage.delete(["errorMessage", "result", "progress"]);
 
     await this.ctx.storage.setAlarm(Date.now());
+
+    await this.notifyStatusHub({
+      type: "session:start",
+      sessionId: this.sessionId,
+      company: params.company,
+    });
 
     return { sessionId: this.sessionId };
   }
@@ -83,6 +107,9 @@ export class DiscoverySession extends DurableObject<Env> {
       ].filter(Boolean).join("\n");
       await sandbox.writeFile("/app/.env", envLines);
 
+      // Start WebSocket log server in the sandbox
+      await sandbox.startProcess("bun /app/workers/discovery/src/sandbox-ws.ts &");
+
       const args = [JSON.stringify(params.company)];
       if (params.domain) args.push("--domain", params.domain);
       if (params.githubOrg) args.push("--github-org", params.githubOrg);
@@ -92,13 +119,58 @@ export class DiscoverySession extends DurableObject<Env> {
       await sandbox.startProcess(cmd);
       console.log(`[discovery:${this.sessionId}] process started`);
 
+      // Connect to sandbox log stream (best-effort — falls back to polling)
+      await this.connectToSandboxLogs();
+
       await this.ctx.storage.delete("params");
       await this.ctx.storage.setAlarm(Date.now() + POLL_INTERVAL_MS);
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err);
       console.error(`[discovery:${this.sessionId}] launchProcess failed: ${errMsg}`);
       await this.ctx.storage.put({ status: "error", errorMessage: errMsg });
+      await this.notifyStatusHub({
+        type: "session:error",
+        sessionId: this.sessionId,
+        error: errMsg,
+      });
       await this.destroySandbox();
+    }
+  }
+
+  private async connectToSandboxLogs(): Promise<void> {
+    try {
+      const sandbox = this.getSandboxHandle();
+      const ws = sandbox.wsConnect(8081);
+
+      ws.addEventListener("message", async (event) => {
+        const data = typeof event.data === "string" ? event.data : "";
+        try {
+          const logEntry = JSON.parse(data);
+          await this.notifyStatusHub({
+            type: "session:progress",
+            sessionId: this.sessionId,
+            ...logEntry,
+          });
+        } catch {
+          await this.notifyStatusHub({
+            type: "session:progress",
+            sessionId: this.sessionId,
+            currentAction: data,
+            logLine: data,
+            timestamp: Date.now(),
+          });
+        }
+      });
+
+      ws.addEventListener("close", () => {
+        console.log(`[discovery:${this.sessionId}] sandbox WS closed`);
+      });
+
+      ws.addEventListener("error", () => {
+        console.log(`[discovery:${this.sessionId}] sandbox WS error — falling back to polling`);
+      });
+    } catch {
+      console.log(`[discovery:${this.sessionId}] sandbox WS unavailable — using poll fallback`);
     }
   }
 
@@ -116,6 +188,15 @@ export class DiscoverySession extends DurableObject<Env> {
 
       await this.ctx.storage.put("progress", progress);
 
+      await this.notifyStatusHub({
+        type: "session:progress",
+        sessionId: this.sessionId,
+        step: progress.step,
+        sourcesFound: progress.sourcesFound,
+        sourcesValidated: progress.sourcesValidated,
+        currentAction: progress.currentAction,
+      });
+
       if (progress.step === "complete") {
         try {
           const stateFile = await sandbox.readFile("/tmp/discovery-state.json");
@@ -126,6 +207,10 @@ export class DiscoverySession extends DurableObject<Env> {
           console.log(`[discovery:${this.sessionId}] complete — no state file, stored progress`);
         }
         await this.ctx.storage.put("status", "complete");
+        await this.notifyStatusHub({
+          type: "session:complete",
+          sessionId: this.sessionId,
+        });
         await this.destroySandbox();
         return;
       }
@@ -142,6 +227,11 @@ export class DiscoverySession extends DurableObject<Env> {
         if (state.status === "error") {
           console.error(`[discovery:${this.sessionId}] agent error: ${JSON.stringify(state).slice(0, 500)}`);
           await this.ctx.storage.put({ status: "error", errorMessage: state.error || "Discovery agent failed", result: state });
+          await this.notifyStatusHub({
+            type: "session:error",
+            sessionId: this.sessionId,
+            error: state.error || "Discovery agent failed",
+          });
           await this.destroySandbox();
           return;
         }
@@ -152,12 +242,22 @@ export class DiscoverySession extends DurableObject<Env> {
       if (msg.includes("not running") || msg.includes("Sandbox error") || msg.includes("proxying request")) {
         console.error(`[discovery:${this.sessionId}] container terminated: ${msg}`);
         await this.ctx.storage.put({ status: "error", errorMessage: `Container terminated: ${msg}` });
+        await this.notifyStatusHub({
+          type: "session:error",
+          sessionId: this.sessionId,
+          error: `Container terminated: ${msg}`,
+        });
         return;
       }
 
       if (startedAt > 0 && Date.now() - startedAt > SESSION_TIMEOUT_MS) {
         console.error(`[discovery:${this.sessionId}] session timed out`);
         await this.ctx.storage.put({ status: "error", errorMessage: "Session timed out (no progress after 10 minutes)" });
+        await this.notifyStatusHub({
+          type: "session:error",
+          sessionId: this.sessionId,
+          error: "Session timed out (no progress after 10 minutes)",
+        });
         await this.destroySandbox();
         return;
       }

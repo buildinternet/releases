@@ -8,11 +8,20 @@
   "observability": {
     "enabled": true
   },
+  "vars": { "DEV_MODE": "" },
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "released-db",
       "database_id": "aca250e3-d0b4-467d-8b07-4f54b08c8abf"
     }
+  ],
+  "durable_objects": {
+    "bindings": [
+      { "class_name": "StatusHub", "name": "STATUS_HUB" }
+    ]
+  },
+  "migrations": [
+    { "new_classes": ["StatusHub"], "tag": "v1" }
   ]
 }
