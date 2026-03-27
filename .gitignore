@@ -46,3 +46,6 @@ data/*.db-shm
 # Session data
 data/sessions/
 data/preferences.json
+
+# Git worktrees
+.worktrees
