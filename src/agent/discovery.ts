@@ -24,7 +24,7 @@ export interface DiscoveryState {
   githubOrg?: string;
   startedAt: string;
   updatedAt: string;
-  status: "discovering" | "awaiting_review" | "approved" | "fetching" | "complete";
+  status: "discovering" | "awaiting_review" | "approved" | "fetching" | "complete" | "error";
   sources: AgentDiscoveredSource[];
   agentSessionId?: string;
   costUsd?: number;
@@ -138,8 +138,7 @@ export async function runDiscovery(options: DiscoveryOptions): Promise<Discovery
       model,
       cwd: projectRoot,
       systemPrompt,
-      permissionMode: "bypassPermissions",
-      allowDangerouslySkipPermissions: true,
+      permissionMode: "acceptEdits",
       maxTurns: 30,
       maxBudgetUsd: 2.0,
       tools: { type: "preset", preset: "claude_code" } as const,
