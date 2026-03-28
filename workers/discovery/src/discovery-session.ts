@@ -149,11 +149,41 @@ export class DiscoverySession extends DurableObject<Env> {
       ws.addEventListener("message", async (event) => {
         const data = typeof event.data === "string" ? event.data : "";
         try {
-          const logEntry = JSON.parse(data);
+          const msg = JSON.parse(data);
+
+          // Final state delivered over WS — store directly, no file polling needed
+          if (msg.type === "state" && msg.payload) {
+            const isError = msg.payload.status === "error";
+            console.log(`[discovery:${this.sessionId}] received state via WS (status=${msg.payload.status})`);
+
+            if (isError) {
+              await this.ctx.storage.put({
+                status: "error",
+                errorMessage: msg.payload.error || "Discovery agent failed",
+                result: msg.payload,
+              });
+              await this.notifyStatusHub({
+                type: "session:error",
+                sessionId: this.sessionId,
+                error: msg.payload.error || "Discovery agent failed",
+              });
+            } else {
+              await this.ctx.storage.put({ status: "complete", result: msg.payload });
+              await this.notifyStatusHub({
+                type: "session:complete",
+                sessionId: this.sessionId,
+              });
+            }
+            await this.ctx.storage.deleteAlarm();
+            await this.destroySandbox();
+            return;
+          }
+
+          // Regular log/progress message
           await this.notifyStatusHub({
             type: "session:progress",
             sessionId: this.sessionId,
-            ...logEntry,
+            ...msg,
           });
         } catch {
           await this.notifyStatusHub({

@@ -285,7 +285,40 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
   };
 }
 
-// ── Fetch log ──
+// ── Usage log ──
+
+export async function postUsageLog(entry: {
+  operation: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  sourceSlug?: string | null;
+  releaseCount?: number | null;
+}): Promise<void> {
+  await apiFetch("/api/usage-log", {
+    method: "POST",
+    body: JSON.stringify(entry),
+  });
+}
+
+// ── Fetch log write ──
+
+export async function postFetchLog(entry: {
+  sourceId: string;
+  releasesFound: number;
+  releasesInserted: number;
+  durationMs?: number | null;
+  status: "success" | "error" | "no_change" | "dry_run";
+  error?: string | null;
+  rawContent?: string | null;
+}): Promise<void> {
+  await apiFetch("/api/fetch-log", {
+    method: "POST",
+    body: JSON.stringify(entry),
+  });
+}
+
+// ── Fetch log read ──
 
 export interface FetchLogEntry {
   id: string;

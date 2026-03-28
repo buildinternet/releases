@@ -2,11 +2,12 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { eq, count, sql, and } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { sources, releases, fetchLog, type Source } from "../../db/schema.js";
+import { sources, releases, type Source } from "../../db/schema.js";
 import type { FetchOptions } from "../../adapters/types.js";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
 import { detectChangelogUrl } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";
+import { insertFetchLog } from "../../db/queries.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
 
@@ -253,7 +254,7 @@ Examples:
               console.log(chalk.yellow(`${msg} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`));
             }
             if (!opts.dryRun) {
-              await db.insert(fetchLog).values({
+              await insertFetchLog({
                 sourceId: source.id,
                 releasesFound: 0,
                 releasesInserted: 0,
@@ -282,7 +283,7 @@ Examples:
             totalInserted += rawReleases.length;
 
             // Log to fetch_log with dry_run status so stats shows it correctly
-            await db.insert(fetchLog).values({
+            await insertFetchLog({
               sourceId: source.id,
               releasesFound: rawReleases.length,
               releasesInserted: 0,
@@ -350,7 +351,7 @@ Examples:
 
           fetchResults.push({ source: source.name, newReleases: inserted });
 
-          await db.insert(fetchLog).values({
+          await insertFetchLog({
             sourceId: source.id,
             releasesFound: rawReleases.length,
             releasesInserted: inserted,
@@ -374,7 +375,7 @@ Examples:
         } catch (err) {
           fetchResults.push({ source: source.name, newReleases: 0, error: err instanceof Error ? err.message : String(err) });
 
-          await db.insert(fetchLog).values({
+          await insertFetchLog({
             sourceId: source.id,
             releasesFound: 0,
             releasesInserted: 0,

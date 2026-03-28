@@ -16,10 +16,18 @@ try {
   logSocket.onerror = () => { logSocket = null; };
 } catch { /* WS not available — file-based polling still works */ }
 
-function emitLog(line: string): void {
+function emit(payload: object): void {
   if (logSocket?.readyState === WebSocket.OPEN) {
-    logSocket.send(JSON.stringify({ logLine: line, timestamp: Date.now() }));
+    logSocket.send(JSON.stringify({ ...payload, timestamp: Date.now() }));
   }
+}
+
+function emitLog(line: string): void {
+  emit({ logLine: line });
+}
+
+function emitState(state: object): void {
+  emit({ type: "state", payload: state });
 }
 
 interface ProgressState {
@@ -177,14 +185,36 @@ async function main(): Promise<void> {
     progress.step = "complete";
     progress.currentAction = "Discovery complete";
     await writeProgress(progress);
-    logSocket?.close();
+
+    // Send final state over WS so the DO gets it immediately (no poll race)
+    try {
+      const stateContent = await Bun.file(STATE_FILE).text();
+      emitState(JSON.parse(stateContent));
+    } catch {
+      // State file may not exist if the agent didn't write one — send progress as fallback
+      emitState({ ...progress, product: company, status: "complete", sources: [] });
+    }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const category = classifyError(message);
     emitLog(`[${category}] ${message}`);
     await writeErrorState({ company, domain, githubOrg }, message, category);
-    logSocket?.close();
+
+    // Send error state over WS so the DO gets it immediately
+    emitState({
+      product: company,
+      domain,
+      githubOrg,
+      status: "error",
+      sources: [],
+      error: message,
+      errorCategory: category,
+    });
     process.exit(1);
+  } finally {
+    // Let the WS message flush before closing
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    logSocket?.close();
   }
 }
 

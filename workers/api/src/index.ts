@@ -7,6 +7,7 @@ import { orgRoutes } from "./routes/orgs.js";
 import { sourceRoutes } from "./routes/sources.js";
 import { searchRoutes } from "./routes/search.js";
 import { fetchLogRoutes } from "./routes/fetch-log.js";
+import { usageLogRoutes } from "./routes/usage-log.js";
 import { ignoreRoutes } from "./routes/ignore.js";
 import { statusRoutes } from "./routes/status.js";
 
@@ -35,6 +36,7 @@ app.route("/api", orgRoutes);
 app.route("/api", sourceRoutes);
 app.route("/api", searchRoutes);
 app.route("/api", fetchLogRoutes);
+app.route("/api", usageLogRoutes);
 app.route("/api", ignoreRoutes);
 
 export default app;

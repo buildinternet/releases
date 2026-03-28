@@ -16,6 +16,8 @@ Copy `.env.example` to `.env` and fill in:
 - `ANTHROPIC_API_KEY` — Required for AI-powered parsing and summaries
 - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` — Required for scraping changelog pages (only used as a fallback when no feed is available)
 - `GITHUB_TOKEN` — Optional, increases GitHub API rate limits
+- `RELEASED_API_URL` / `RELEASED_API_KEY` — Remote mode: route CLI data operations through the API Worker
+- `RELEASED_DISCOVERY_URL` — Remote onboarding: route `onboard` through the discovery worker (e.g. `https://released-discovery.rally-workers-test.workers.dev`)
 
 ## Usage
 
@@ -142,6 +144,34 @@ released add "Next.js" --type github --url https://github.com/vercel/next.js --o
 released org list
 released org show vercel
 ```
+
+### AI-powered onboarding
+
+Use the AI agent to discover, validate, and add changelog sources for a company:
+
+```bash
+released onboard "Vercel"                                    # local agent (default)
+released onboard "Stripe" --domain stripe.com --github-org stripe
+released onboard "Acme" --remote                             # run on the discovery worker
+released onboard "Acme" --local                              # force local even in remote mode
+released onboard "Acme" --json                               # machine-readable output
+```
+
+When `RELEASED_API_URL` and `RELEASED_DISCOVERY_URL` are set, `onboard` defaults to remote mode — the discovery runs on the Cloudflare discovery worker and progress appears on the `/status` dashboard. Use `--local` to override and run the agent in-process.
+
+**Discovery worker secrets** (required for remote onboarding):
+
+| Secret | Purpose |
+|--------|---------|
+| `ANTHROPIC_API_KEY` | Powers the AI agent inside the sandbox |
+| `CLOUDFLARE_ACCOUNT_ID` | Browser rendering for scrape sources |
+| `CLOUDFLARE_API_TOKEN` | Browser rendering for scrape sources |
+| `GITHUB_TOKEN` | GitHub API access (optional, increases rate limits) |
+| `API_SECRET` | Authenticates CLI requests to the discovery worker |
+| `RELEASED_API_URL` | API worker URL for data operations inside the sandbox |
+| `RELEASED_API_KEY` | API worker auth for data operations inside the sandbox |
+
+Set secrets with `cd workers/discovery && wrangler secret put <NAME>`.
 
 ### Discover sources
 

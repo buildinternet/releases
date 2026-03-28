@@ -610,3 +610,30 @@ export async function searchReleasesRemote(
 ): Promise<SearchResultRemote[]> {
   return apiClient.searchReleasesRemote(query, limit, opts);
 }
+
+// ── Fetch log ──
+
+export async function insertFetchLog(entry: {
+  sourceId: string;
+  releasesFound: number;
+  releasesInserted: number;
+  durationMs?: number | null;
+  status: "success" | "error" | "no_change" | "dry_run";
+  error?: string | null;
+  rawContent?: string | null;
+}): Promise<void> {
+  if (isRemoteMode()) {
+    await apiClient.postFetchLog(entry);
+    return;
+  }
+  const db = getDb();
+  await db.insert(fetchLog).values({
+    sourceId: entry.sourceId,
+    releasesFound: entry.releasesFound,
+    releasesInserted: entry.releasesInserted,
+    durationMs: entry.durationMs ?? null,
+    status: entry.status,
+    error: entry.error ?? null,
+    rawContent: entry.rawContent ?? null,
+  });
+}
