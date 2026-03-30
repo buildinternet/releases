@@ -22,6 +22,7 @@ import { registerIgnoreCommand } from "./commands/ignore.js";
 import { registerBlockCommand } from "./commands/block.js";
 import { registerImportCommand } from "./commands/import.js";
 import { registerEvaluateCommand } from "./commands/evaluate.js";
+import { registerSummarizeCommand } from "./commands/summarize.js";
 
 export const program = new Command()
   .name("released")
@@ -63,3 +64,4 @@ registerIgnoreCommand(program);
 registerBlockCommand(program);
 registerImportCommand(program);
 registerEvaluateCommand(program);
+registerSummarizeCommand(program);
