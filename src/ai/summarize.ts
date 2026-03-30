@@ -21,33 +21,39 @@ interface SummaryResult {
   releaseCount: number;
 }
 
-const ROLLING_SYSTEM_PROMPT = `You are a technical analyst summarizing software release activity.
+const ROLLING_SYSTEM_PROMPT = `You summarize what a software product has been shipping recently.
 
-Given a list of releases from a software product, write a concise summary that:
+Write for a developer audience at a casual, approachable reading level. Keep it clear and direct — like a knowledgeable colleague catching you up, not a press release or analyst report.
 
-1. Identifies THEMES and DIRECTIONAL TRENDS — not just a list of features
-   - Good: "Significant investment in developer tooling, including multi-file editing and a new MCP integration"
+Guidelines:
+
+1. Focus on what shipped and what direction the product is heading — group related changes into themes rather than listing features one by one
+   - Good: "Lots of work on developer tooling lately, including multi-file editing and a new MCP integration"
    - Bad: "Three major features shipped: multi-file editing, MCP integration, and performance improvements"
-2. Cites specific releases as evidence of themes when they add clarity
-3. Scales your response length to the volume of activity:
+2. Mention specific features or releases when they help illustrate a theme
+3. Scale your response to how much actually happened:
    - Quiet period (1-3 releases): 1-2 sentences
    - Moderate activity (4-10 releases): 2-4 sentences
-   - High activity (10+ releases): A short paragraph, possibly with thematic grouping
-4. Emphasizes recency — what happened this week/month matters more than older releases
-5. Calls out breaking changes or major version bumps if present
+   - Busy period (10+ releases): A short paragraph
+4. Prioritize the most recent and most impactful changes
+5. Call out breaking changes or major version bumps if present
+6. These are product releases, not blog posts or marketing content — describe what was built and shipped, not "content strategy" or "positioning"
 
-Write in third person, present tense. No headers, no bullet points, no markdown formatting — just clean prose.`;
+Write in third person, present tense. No headers, no bullet points, no markdown — just plain prose.`;
 
-const MONTHLY_SYSTEM_PROMPT = `You are a technical analyst writing a monthly archive summary of software release activity.
+const MONTHLY_SYSTEM_PROMPT = `You write monthly summaries of what a software product shipped.
 
-Given all releases from a specific month for a software product, write a concise summary that:
+Write for a developer audience at a casual, approachable reading level. Keep it clear and direct — like a knowledgeable colleague giving a recap.
 
-1. Identifies THEMES and DIRECTIONAL TRENDS for the month
-2. Cites specific releases as evidence
-3. Scales length to activity volume (1-2 sentences if quiet, a short paragraph if active)
-4. Notes any breaking changes or major version bumps
+Guidelines:
 
-Write in third person, past tense. No headers, no bullet points, no markdown formatting — just clean prose.`;
+1. Group related changes into themes — what direction did the product move this month?
+2. Mention specific features when they help illustrate the theme
+3. Scale length to how much happened (1-2 sentences if quiet, a short paragraph if busy)
+4. Note any breaking changes or major version bumps
+5. Describe what was built and shipped, not "content strategy" or "positioning"
+
+Write in third person, past tense. No headers, no bullet points, no markdown — just plain prose.`;
 
 function formatReleasesForPrompt(releases: Release[]): string {
   return releases
