@@ -29,6 +29,7 @@ export function registerFetchCommand(program: Command) {
     .option("--crawl-pattern <pattern>", "URL pattern to scope crawl (e.g. https://example.com/changelog/*)")
     .option("--dry-run", "Run the adapter but skip DB inserts — show what would be fetched")
     .option("--force", "Delete existing releases for the source before fetching (clean re-fetch)")
+    .option("--full", "Force full re-parse of all content (bypass incremental optimization)")
     .option("--unfetched", "Only fetch sources that have never been fetched")
     .option("--stale <hours>", "Only fetch sources older than N hours, respecting backoff")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
@@ -46,7 +47,7 @@ Examples:
   released fetch --json                   Output results as JSON`)
     .action(async (slugArg: string | undefined, opts: {
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
-      crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean;
+      crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
       unfetched?: boolean; stale?: string; retryErrors?: boolean; concurrency?: string;
     }) => {
       // Positional arg takes precedence over --source option
@@ -272,6 +273,7 @@ Examples:
         const sourceFetchOptions: FetchOptions = {
           ...fetchOptions,
           crawl: opts.crawl,
+          full: opts.full,
           onParseProgress: (completed, total) => {
             progressSession(`${source.name}: parsing chunk ${completed}/${total}`);
           },

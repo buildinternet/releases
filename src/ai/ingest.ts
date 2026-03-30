@@ -3,6 +3,7 @@ import { AIError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
+import { sanitizeVersion, releaseItemProperties, releaseItemRequired } from "./shared.js";
 
 export interface ParsedRelease {
   version?: string;
@@ -22,38 +23,14 @@ const extractReleasesTool = {
         type: "array" as const,
         items: {
           type: "object" as const,
-          properties: {
-            version: {
-              type: "string" as const,
-              description: "Version number or tag (e.g. v1.2.3). Omit if not present.",
-            },
-            title: {
-              type: "string" as const,
-              description: "Title of the release entry.",
-            },
-            content: {
-              type: "string" as const,
-              description:
-                "Full content of the release in markdown. Keep it concise — summarize long entries to their key changes. Preserve image URLs as markdown image links.",
-            },
-            publishedAt: {
-              type: "string" as const,
-              description: "Publication date in ISO 8601 format. Omit if not present.",
-            },
-            isBreaking: {
-              type: "boolean" as const,
-              description: "Whether this release contains breaking changes.",
-            },
-          },
-          required: ["title", "content", "isBreaking"],
+          properties: { ...releaseItemProperties },
+          required: [...releaseItemRequired],
         },
       },
     },
     required: ["releases"],
   },
 };
-
-const PLACEHOLDER_RE = /^<?(unknown|none|n\/a|null|undefined)>?$/i;
 
 const SYSTEM_PROMPT = `You are a changelog parser. Given raw markdown from a changelog or release notes page, extract individual release entries using the extract_releases tool.
 
@@ -262,7 +239,7 @@ async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: 
   // instead of omitting optional fields. Normalize these to undefined.
   return (input.releases as ParsedRelease[]).map((r) => ({
     ...r,
-    version: r.version && !PLACEHOLDER_RE.test(r.version.trim()) ? r.version : undefined,
+    version: sanitizeVersion(r.version),
   }));
 }
 

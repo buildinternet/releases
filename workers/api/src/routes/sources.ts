@@ -160,6 +160,30 @@ sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
   return c.json({ unchanged: false });
 });
 
+// ── Known releases for incremental parsing ──
+
+sourceRoutes.get("/sources/:slug/known-releases", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const limit = parseInt(c.req.query("limit") ?? "10", 10);
+
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select({
+      version: releases.version,
+      title: releases.title,
+      publishedAt: releases.publishedAt,
+    })
+    .from(releases)
+    .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false)))
+    .orderBy(desc(releases.publishedAt))
+    .limit(limit);
+
+  return c.json(rows);
+});
+
 sourceRoutes.get("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const page = parseInt(c.req.query("page") ?? "1", 10);

@@ -301,6 +301,7 @@ export interface SourceWithOrg {
   url: string;
   lastFetchedAt: string | null;
   orgName: string | null;
+  metadata: string | null;
 }
 
 export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
@@ -315,6 +316,7 @@ export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
       url: sources.url,
       lastFetchedAt: sources.lastFetchedAt,
       orgName: organizations.name,
+      metadata: sources.metadata,
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id));
@@ -493,6 +495,33 @@ export async function getLatestReleases(opts: {
   }
 
   return query;
+}
+
+// ── Known releases for incremental parsing ──
+
+export interface KnownRelease {
+  version: string | null;
+  title: string;
+  publishedAt: string | null;
+}
+
+export async function getKnownReleasesForSource(
+  sourceId: string,
+  sourceSlug: string,
+  limit = 10,
+): Promise<KnownRelease[]> {
+  if (isRemoteMode()) return apiClient.getKnownReleasesForSource(sourceSlug, limit);
+  const db = getDb();
+  return db
+    .select({
+      version: releases.version,
+      title: releases.title,
+      publishedAt: releases.publishedAt,
+    })
+    .from(releases)
+    .where(and(eq(releases.sourceId, sourceId), eq(releases.suppressed, false)))
+    .orderBy(desc(releases.publishedAt))
+    .limit(limit);
 }
 
 // ── Org CRUD (for `org` command) ──

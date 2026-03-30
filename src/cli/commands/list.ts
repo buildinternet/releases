@@ -3,6 +3,28 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { listSourcesWithOrg, findSourceBySlug } from "../../db/queries.js";
 
+/**
+ * Determine the fetch method for a source based on its type and metadata.
+ * Returns "feed", "ai", "github", or "-" (unknown).
+ */
+function getFetchMethod(type: string, metadata: string | null): string {
+  if (type === "github") return "github";
+  if (type === "feed") return "feed";
+
+  // For "scrape" and "agent" types, inspect metadata for feed discovery state
+  if (metadata) {
+    try {
+      const meta = JSON.parse(metadata);
+      if (meta.feedUrl) return "feed";
+      if (meta.noFeedFound) return "ai";
+    } catch {
+      // Malformed metadata — treat as unknown
+    }
+  }
+
+  return "-";
+}
+
 export function registerListCommand(program: Command) {
   program
     .command("list")
@@ -23,14 +45,17 @@ Examples:
           process.exit(1);
         }
         if (opts.json) {
-          console.log(JSON.stringify(source, null, 2));
+          const method = getFetchMethod(source.type, source.metadata ?? null);
+          console.log(JSON.stringify({ ...source, method }, null, 2));
           return;
         }
         const label = (key: string, val: string | null | undefined) =>
           `  ${chalk.bold(key.padEnd(16))} ${val ?? chalk.dim("—")}`;
+        const method = getFetchMethod(source.type, source.metadata ?? null);
         console.log(chalk.bold(`\n${source.name}\n`));
         console.log(label("Slug", source.slug));
         console.log(label("Type", source.type));
+        console.log(label("Method", method === "-" ? null : method));
         console.log(label("URL", source.url));
         console.log(label("Org", source.orgId ?? null));
         console.log(label("Last Fetched", source.lastFetchedAt));
@@ -52,19 +77,25 @@ Examples:
       }
 
       if (opts.json) {
-        console.log(JSON.stringify(allSources, null, 2));
+        const enriched = allSources.map((row) => ({
+          ...row,
+          method: getFetchMethod(row.type, row.metadata),
+        }));
+        console.log(JSON.stringify(enriched, null, 2));
         return;
       }
 
       const table = new Table({
-        head: ["Name", "Slug", "Type", "URL", "Org", "Last Fetched"],
+        head: ["Name", "Slug", "Type", "Method", "URL", "Org", "Last Fetched"],
       });
 
       for (const row of allSources) {
+        const method = getFetchMethod(row.type, row.metadata);
         table.push([
           row.name,
           row.slug,
           row.type,
+          method,
           row.url,
           row.orgName ?? chalk.dim("\u2014"),
           row.lastFetchedAt ?? chalk.dim("never"),

@@ -208,6 +208,7 @@ export interface SourceWithOrg {
   url: string;
   lastFetchedAt: string | null;
   orgName: string | null;
+  metadata: string | null;
 }
 
 export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
@@ -218,7 +219,7 @@ export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
     latestVersion: string | null; latestDate: string | null;
   }>>("/api/sources");
 
-  // API doesn't directly return orgName or lastFetchedAt, but we map what we can
+  // API doesn't directly return orgName, lastFetchedAt, or metadata, but we map what we can
   return rows.map((r) => ({
     id: "",
     name: r.name,
@@ -227,6 +228,7 @@ export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
     url: r.url,
     lastFetchedAt: null,
     orgName: r.orgSlug, // best we have from the sources list endpoint
+    metadata: null,
   }));
 }
 
@@ -484,6 +486,18 @@ export async function getLatestReleases(opts: {
   const sourcesData = await apiFetch<Array<{ slug: string; name: string }>>("/api/sources");
   const all = await collectReleasesFromSources(sourcesData.slice(0, 10).map((s) => s.slug), opts.count);
   return all.sort(byPublishedAtDesc).slice(0, opts.count);
+}
+
+// ── Known releases for incremental parsing ──
+
+export async function getKnownReleasesForSource(
+  sourceSlug: string,
+  limit: number,
+): Promise<Array<{ version: string | null; title: string; publishedAt: string | null }>> {
+  const data = await apiFetch<Array<{ version: string | null; title: string; publishedAt: string | null }>>(
+    `/api/sources/${sourceSlug}/known-releases?limit=${limit}`,
+  );
+  return data ?? [];
 }
 
 // ── Fetchable sources ──

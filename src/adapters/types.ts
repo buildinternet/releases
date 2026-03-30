@@ -16,6 +16,8 @@ export interface FetchOptions {
   maxEntries?: number;
   /** --crawl (true) / --no-crawl (false) / unset (use persisted setting) */
   crawl?: boolean;
+  /** Force full re-parse, bypassing incremental optimization */
+  full?: boolean;
   /** Called when a parsing chunk completes (for progress reporting) */
   onParseProgress?: (completed: number, total: number) => void;
 }

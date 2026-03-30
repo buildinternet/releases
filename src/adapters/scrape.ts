@@ -1,5 +1,5 @@
 import type { Source } from "../db/schema.js";
-import { checkContentHash } from "../db/queries.js";
+import { checkContentHash, getKnownReleasesForSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
@@ -7,6 +7,7 @@ import { CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
 import { sha256Hex } from "../lib/hash.js";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
+import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed } from "./feed.js";
 import { getSourceMeta, updateSourceMeta } from "./feed.js";
 import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
@@ -181,17 +182,49 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
     return { releases: [] };
   }
 
-  logger.info(`Parsing changelog with AI...`);
+  // ── Incremental vs. bulk parsing decision ──
+  const useIncremental = !options?.full;
   let parsed;
-  try {
-    parsed = await parseChangelog(markdown, source.slug, {
-      onChunkComplete: options?.onParseProgress,
-    });
-  } catch (error) {
-    logger.warn(
-      `AI parsing failed for ${source.url}: ${error instanceof Error ? error.message : String(error)}`,
-    );
-    return { releases: [], rawContent: markdown };
+
+  if (useIncremental) {
+    const knownReleases = await getKnownReleasesForSource(source.id, source.slug, 10);
+
+    if (knownReleases.length > 0) {
+      logger.info("Source has existing releases — trying incremental parse...");
+      try {
+        const result = await parseIncremental(markdown, source.id, source.slug, knownReleases);
+
+        if (result.boundaryFound) {
+          if (result.releases.length > 0) {
+            logger.info(`Incremental parse found ${result.releases.length} new release(s)`);
+          } else {
+            logger.info("Incremental parse confirmed no new releases");
+          }
+          parsed = result.releases;
+        } else {
+          logger.info("Incremental parse could not find boundary — falling back to bulk");
+        }
+      } catch (error) {
+        logger.warn(
+          `Incremental parse failed, falling back to bulk: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+    }
+  }
+
+  // Bulk fallback (or first-time fetch)
+  if (!parsed) {
+    logger.info("Parsing changelog with AI (bulk)...");
+    try {
+      parsed = await parseChangelog(markdown, source.slug, {
+        onChunkComplete: options?.onParseProgress,
+      });
+    } catch (error) {
+      logger.warn(
+        `AI parsing failed for ${source.url}: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return { releases: [], rawContent: markdown };
+    }
   }
 
   logger.info(`Parsed ${parsed.length} releases from ${source.url}`);

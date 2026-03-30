@@ -8,6 +8,7 @@ import { sha256Hex } from "../lib/hash.js";
 import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";
+import { sanitizeVersion, releaseItemProperties, releaseItemRequired } from "../ai/shared.js";
 import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
 
 // ── Tool schema for structured extraction ────────────────────────────
@@ -25,33 +26,13 @@ const extractReleasesTool: Anthropic.Tool = {
         items: {
           type: "object" as const,
           properties: {
-            version: {
-              type: "string" as const,
-              description: "Version number or tag (e.g. v1.2.3). Omit if not present.",
-            },
-            title: {
-              type: "string" as const,
-              description: "Title of the release entry.",
-            },
+            ...releaseItemProperties,
             url: {
               type: "string" as const,
               description: "URL to the individual entry page. Extract from <a href> links on the page. If no individual page exists, omit.",
             },
-            content: {
-              type: "string" as const,
-              description:
-                "Full content of the release in markdown. Keep it concise — summarize long entries to their key changes.",
-            },
-            publishedAt: {
-              type: "string" as const,
-              description: "Publication date in ISO 8601 format. Omit if not present.",
-            },
-            isBreaking: {
-              type: "boolean" as const,
-              description: "Whether this release contains breaking changes.",
-            },
           },
-          required: ["title", "content", "isBreaking"],
+          required: [...releaseItemRequired],
         },
       },
     },
@@ -84,8 +65,6 @@ ${EXTRACTION_RULES}`;
 const CLOUDFLARE_SYSTEM_PROMPT = `You are a changelog parser. Given the rendered markdown content of a changelog page, extract individual release entries using the extract_releases tool.
 
 ${EXTRACTION_RULES}`;
-
-const PLACEHOLDER_RE = /^<?(unknown|none|n\/a|null|undefined)>?$/i;
 
 interface ExtractedEntry {
   version?: string;
@@ -330,9 +309,7 @@ function mapEntries(entries: ExtractedEntry[], sourceUrl: string): RawRelease[] 
   return entries
     .filter((e) => e.title && e.content)
     .map((e) => {
-      const version = e.version && !PLACEHOLDER_RE.test(e.version.trim())
-        ? e.version
-        : undefined;
+      const version = sanitizeVersion(e.version);
 
       // Resolve relative URLs against the source
       let entryUrl: string;
