@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { runDiscovery, type DiscoveryState } from "../../agent/discovery.js";
+import { runDiscovery, type DiscoveryState } from "../../agent/released.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import { logger } from "../../lib/logger.js";
 import { registerOnboardApplyCommand } from "./onboard-apply.js";
