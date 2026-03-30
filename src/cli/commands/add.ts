@@ -18,6 +18,8 @@ export function isGitHubUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?github\.com\/[^/]+\/[^/]+/.test(url);
 }
 
+// All non-GitHub methods map to "scrape" — the scrape adapter reads metadata
+// (feedUrl, markdownUrl, evaluatedMethod) to pick its actual fetch strategy.
 function mapMethodToType(method: EvaluationResult["recommendedMethod"]): SourceType {
   if (method === "github") return "github";
   return "scrape";

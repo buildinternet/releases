@@ -26,21 +26,22 @@ export interface EvaluationResult {
 
 /** Build a SourceMetadata-compatible object from an evaluation result. */
 export function buildMetadataFromEvaluation(result: EvaluationResult): Record<string, unknown> {
+  const now = new Date().toISOString();
   const meta: Record<string, unknown> = {
     evaluatedMethod: result.recommendedMethod,
-    evaluatedAt: new Date().toISOString(),
+    evaluatedAt: now,
   };
 
   if (result.feedUrl) {
     meta.feedUrl = result.feedUrl;
     meta.feedType = result.feedType;
-    meta.feedDiscoveredAt = new Date().toISOString();
+    meta.feedDiscoveredAt = now;
     meta.noFeedFound = false;
   }
 
   if (result.provider) {
     meta.provider = result.provider;
-    meta.providerDetectedAt = new Date().toISOString();
+    meta.providerDetectedAt = now;
   }
 
   // Store markdown URL from alternatives or direct recommendation
