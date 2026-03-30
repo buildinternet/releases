@@ -1,7 +1,8 @@
-import { eq, desc, gte, and, or, sql, inArray, count } from "drizzle-orm";
+import { eq, desc, gte, lt, and, or, sql, inArray, count, isNotNull } from "drizzle-orm";
+import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
@@ -14,6 +15,14 @@ export async function findSourceBySlug(slug: string): Promise<Source | null> {
   const db = getDb();
   const [source] = await db.select().from(sources).where(eq(sources.slug, slug));
   return source ?? null;
+}
+
+export async function listAllSources(): Promise<Source[]> {
+  if (isRemoteMode()) {
+    return apiClient.listFetchableSources({ mode: "all" });
+  }
+  const db = getDb();
+  return db.select().from(sources);
 }
 
 export async function getRecentReleases(
@@ -609,6 +618,236 @@ export async function searchReleasesRemote(
   opts?: { org?: string },
 ): Promise<SearchResultRemote[]> {
   return apiClient.searchReleasesRemote(query, limit, opts);
+}
+
+// ── Source CRUD helpers ──
+
+export async function findSourcesBySlugs(slugs: string[]): Promise<Source[]> {
+  if (isRemoteMode()) {
+    const results = await Promise.all(slugs.map((s) => apiClient.findSourceBySlug(s)));
+    return results.filter((s): s is Source => s !== null);
+  }
+  const db = getDb();
+  return db.select().from(sources).where(inArray(sources.slug, slugs));
+}
+
+export async function deleteSources(slugs: string[]): Promise<void> {
+  if (isRemoteMode()) {
+    await Promise.all(slugs.map((s) => apiClient.deleteSource(s)));
+    return;
+  }
+  const db = getDb();
+  await db.delete(sources).where(inArray(sources.slug, slugs));
+}
+
+export async function updateSource(source: Source, data: Record<string, unknown>): Promise<Source> {
+  if (isRemoteMode()) {
+    return apiClient.updateSource(source.slug, data);
+  }
+  const db = getDb();
+  const [updated] = await db.update(sources).set(data).where(eq(sources.id, source.id)).returning();
+  return updated;
+}
+
+// ── Fetchable sources (for `fetch` command) ──
+
+export async function listFetchableSources(opts: {
+  mode: "unfetched" | "stale" | "retry_errors";
+  staleHours?: number;
+}): Promise<Source[]> {
+  if (isRemoteMode()) {
+    return apiClient.listFetchableSources(opts);
+  }
+  const db = getDb();
+  if (opts.mode === "unfetched") {
+    return db.select().from(sources).where(sql`${sources.lastFetchedAt} IS NULL`);
+  }
+  if (opts.mode === "stale" && opts.staleHours) {
+    const cutoff = new Date(Date.now() - opts.staleHours * 3600_000).toISOString();
+    const now = new Date().toISOString();
+    return db.select().from(sources).where(
+      and(
+        sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
+        sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
+        sql`${sources.fetchPriority} != 'paused'`
+      )
+    );
+  }
+  if (opts.mode === "retry_errors") {
+    return db.select().from(sources).where(
+      sql`${sources.id} IN (
+        SELECT f.source_id FROM fetch_log f
+        WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
+        AND f.status = 'error'
+      )`
+    );
+  }
+  return db.select().from(sources);
+}
+
+export async function deleteReleasesForSource(source: Source): Promise<number> {
+  if (isRemoteMode()) {
+    const result = await apiClient.deleteReleasesForSource(source.slug);
+    return result.deleted;
+  }
+  const db = getDb();
+  const deleted = await db.delete(releases).where(eq(releases.sourceId, source.id)).returning();
+  return deleted.length;
+}
+
+export async function insertReleases(source: Source, rows: Array<{
+  sourceId: string; version: string | null; title: string; content: string;
+  url: string | null; contentHash: string | null; publishedAt: string | null;
+}>): Promise<number> {
+  if (isRemoteMode()) {
+    const result = await apiClient.insertReleasesBatch(source.slug, rows);
+    return result.inserted;
+  }
+  const db = getDb();
+  // Batch insert in chunks of 500 (SQLite variable limit)
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += 500) {
+    const result = await db.insert(releases).values(rows.slice(i, i + 500)).onConflictDoNothing().returning({ id: releases.id });
+    inserted += result.length;
+  }
+  return inserted;
+}
+
+// ── Release CRUD (for `release` command) ──
+
+export interface ReleaseWithSource {
+  release: Release;
+  sourceName: string | null;
+  sourceSlug: string | null;
+}
+
+export async function getRelease(id: string): Promise<ReleaseWithSource | null> {
+  if (isRemoteMode()) {
+    const result = await apiClient.getRelease(id);
+    if (!result) return null;
+    const { sourceName, sourceSlug, ...rel } = result;
+    return { release: rel as Release, sourceName, sourceSlug };
+  }
+  const db = getDb();
+  const rows = await db
+    .select({
+      release: releases,
+      sourceName: sources.name,
+      sourceSlug: sources.slug,
+    })
+    .from(releases)
+    .leftJoin(sources, eq(releases.sourceId, sources.id))
+    .where(eq(releases.id, id));
+  if (rows.length === 0) return null;
+  return rows[0];
+}
+
+export async function deleteRelease(id: string): Promise<boolean> {
+  if (isRemoteMode()) {
+    return apiClient.deleteRelease(id);
+  }
+  const db = getDb();
+  const deleted = await db.delete(releases).where(eq(releases.id, id)).returning({ id: releases.id });
+  return deleted.length > 0;
+}
+
+export async function updateRelease(id: string, data: Record<string, unknown>): Promise<Release | null> {
+  if (isRemoteMode()) {
+    const result = await apiClient.updateRelease(id, data);
+    if (!result) return null;
+    return result as unknown as Release;
+  }
+  const db = getDb();
+  const [updated] = await db.update(releases).set(data).where(eq(releases.id, id)).returning();
+  return updated ?? null;
+}
+
+export async function deleteReleasesByFilter(opts: {
+  sourceId?: string;
+  before?: string;
+  dryRun?: boolean;
+}): Promise<{ deleted: number; releases: Array<{ id: string; title: string }> }> {
+  if (isRemoteMode()) {
+    throw new Error("deleteReleasesByFilter not yet supported in remote mode — delete individually");
+  }
+  const db = getDb();
+  const conditions = [];
+  if (opts.sourceId) conditions.push(eq(releases.sourceId, opts.sourceId));
+  if (opts.before) conditions.push(lt(releases.publishedAt, opts.before));
+
+  // Preview what would be deleted
+  const preview = await db
+    .select({ id: releases.id, title: releases.title })
+    .from(releases)
+    .where(and(...conditions));
+
+  if (opts.dryRun) {
+    return { deleted: 0, releases: preview };
+  }
+
+  const deleted = await db
+    .delete(releases)
+    .where(and(...conditions))
+    .returning({ id: releases.id });
+
+  return { deleted: deleted.length, releases: preview };
+}
+
+// ── Usage stats (for `usage` command) ──
+
+export type UsageBreakdownRow = apiClient.UsageBreakdownRow;
+
+export interface UsageStats {
+  totals: { totalInput: number; totalOutput: number; count: number };
+  byOperation: UsageBreakdownRow[];
+  byModel: UsageBreakdownRow[];
+  bySource: UsageBreakdownRow[];
+}
+
+function usageByColumn(db: ReturnType<typeof getDb>, column: SQLiteColumn, since: string) {
+  return db
+    .select({
+      label: column,
+      totalInput: sql<number>`COALESCE(SUM(${usageLog.inputTokens}), 0)`,
+      totalOutput: sql<number>`COALESCE(SUM(${usageLog.outputTokens}), 0)`,
+      count: sql<number>`COUNT(*)`,
+    })
+    .from(usageLog)
+    .where(gte(usageLog.createdAt, since))
+    .groupBy(column) as Promise<UsageBreakdownRow[]>;
+}
+
+export async function getUsageStats(days: number): Promise<UsageStats> {
+  if (isRemoteMode()) {
+    return apiClient.getUsageStats(days);
+  }
+  const db = getDb();
+  const since = daysAgoIso(days);
+
+  const [totals, byOperation, byModel, bySource] = await Promise.all([
+    db
+      .select({
+        totalInput: sql<number>`COALESCE(SUM(${usageLog.inputTokens}), 0)`,
+        totalOutput: sql<number>`COALESCE(SUM(${usageLog.outputTokens}), 0)`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(usageLog)
+      .where(gte(usageLog.createdAt, since)),
+    usageByColumn(db, usageLog.operation, since),
+    usageByColumn(db, usageLog.model, since),
+    db
+      .select({
+        label: usageLog.sourceSlug,
+        totalInput: sql<number>`COALESCE(SUM(${usageLog.inputTokens}), 0)`,
+        totalOutput: sql<number>`COALESCE(SUM(${usageLog.outputTokens}), 0)`,
+        count: sql<number>`COUNT(*)`,
+      })
+      .from(usageLog)
+      .where(and(gte(usageLog.createdAt, since), isNotNull(usageLog.sourceSlug)))
+      .groupBy(usageLog.sourceSlug) as Promise<UsageBreakdownRow[]>,
+  ]);
+
+  return { totals: totals[0], byOperation, byModel, bySource };
 }
 
 // ── Fetch log ──

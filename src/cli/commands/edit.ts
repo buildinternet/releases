@@ -1,9 +1,6 @@
 import { Command } from "commander";
-import { eq } from "drizzle-orm";
 import chalk from "chalk";
-import { getDb } from "../../db/connection.js";
-import { sources, organizations } from "../../db/schema.js";
-import { findOrg } from "../../db/queries.js";
+import { findSourceBySlug, findOrg, createOrg, updateSource } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { updateSourceMeta } from "../../adapters/feed.js";
@@ -42,9 +39,7 @@ Examples:
       name?: string; url?: string; type?: string; slug?: string;
       org?: string | boolean; feedUrl?: string | boolean; json?: boolean;
     }) => {
-      const db = getDb();
-
-      const [source] = await db.select().from(sources).where(eq(sources.slug, slug));
+      const source = await findSourceBySlug(slug);
       if (!source) {
         console.error(chalk.red(`Source not found: ${slug}`));
         process.exit(1);
@@ -85,15 +80,7 @@ Examples:
       } else if (typeof opts.org === "string") {
         let org = await findOrg(opts.org);
         if (!org) {
-          const orgSlug = toSlug(opts.org);
-          const now = new Date().toISOString();
-          const [created] = await db.insert(organizations).values({
-            name: opts.org,
-            slug: orgSlug,
-            createdAt: now,
-            updatedAt: now,
-          }).returning();
-          org = created;
+          org = await createOrg(opts.org, { slug: toSlug(opts.org) });
           logger.info(`Created organization: ${org.name} (${org.slug})`);
         }
         updates.orgId = org.id;
@@ -116,7 +103,7 @@ Examples:
       }
 
       if (Object.keys(updates).length > 0) {
-        await db.update(sources).set(updates).where(eq(sources.id, source.id));
+        await updateSource(source, updates);
       }
 
       if (changes.length === 0) {
@@ -127,7 +114,7 @@ Examples:
       const displaySlug = opts.slug ?? slug;
 
       if (opts.json) {
-        const [updated] = await db.select().from(sources).where(eq(sources.id, source.id));
+        const updated = await findSourceBySlug(displaySlug);
         console.log(JSON.stringify(updated, null, 2));
       } else {
         console.log(chalk.green(`Updated ${source.name} (${displaySlug}):`));

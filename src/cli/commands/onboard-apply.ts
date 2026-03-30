@@ -2,9 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import type { DiscoveryState, AgentDiscoveredSource } from "../../agent/discovery.js";
 import { logger } from "../../lib/logger.js";
-import { getDb } from "../../db/connection.js";
-import { sources } from "../../db/schema.js";
-import { addIgnoredUrl, findOrg } from "../../db/queries.js";
+import { addIgnoredUrl, findOrg, createSource } from "../../db/queries.js";
 
 interface ApplyResult {
   slug: string;
@@ -34,20 +32,20 @@ async function applySource(source: AgentDiscoveredSource, orgId?: string): Promi
     return { slug, url, action: "skipped" };
   }
 
-  const db = getDb();
   try {
-    const [inserted] = await db.insert(sources).values({
+    await createSource({
       name: label,
       slug,
       type,
       url,
-    }).onConflictDoNothing().returning({ id: sources.id });
-    if (!inserted) {
-      return { slug, url, action: "skipped" };
-    }
+    });
     return { slug, url, action: "added" };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    // Conflict (already exists) is treated as skipped, not error
+    if (message.includes("UNIQUE constraint") || message.includes("409") || message.includes("already exists")) {
+      return { slug, url, action: "skipped" };
+    }
     return { slug, url, action: "error", error: message };
   }
 }

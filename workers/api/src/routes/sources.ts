@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, min, gte, isNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations } from "../../../../src/db/schema.js";
+import { sources, releases, organizations, fetchLog } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
 import { toSlug } from "../../../../src/lib/slug.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
@@ -55,6 +55,91 @@ sourceRoutes.get("/sources", async (c) => {
   );
 
   return c.json(result);
+});
+
+// ── Fetchable sources (must be before :slug route) ──
+
+sourceRoutes.get("/sources/fetchable", async (c) => {
+  const db = createDb(c.env.DB);
+  const mode = c.req.query("mode"); // "unfetched" | "stale" | "retry_errors" | "all"
+  const staleHours = c.req.query("staleHours");
+
+  let rows: (typeof sources.$inferSelect)[];
+
+  if (mode === "unfetched") {
+    rows = await db.select().from(sources).where(sql`${sources.lastFetchedAt} IS NULL`);
+  } else if (mode === "stale" && staleHours) {
+    const hours = parseInt(staleHours, 10);
+    const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
+    const now = new Date().toISOString();
+    rows = await db.select().from(sources).where(
+      and(
+        sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
+        sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
+        sql`${sources.fetchPriority} != 'paused'`
+      )
+    );
+  } else if (mode === "retry_errors") {
+    rows = await db.select().from(sources).where(
+      sql`${sources.id} IN (
+        SELECT f.source_id FROM fetch_log f
+        WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
+        AND f.status = 'error'
+      )`
+    );
+  } else {
+    rows = await db.select().from(sources);
+  }
+
+  return c.json(rows);
+});
+
+// ── Batch release insert for fetch command ──
+
+sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found" }, 404);
+
+  const body = await c.req.json<{ releases: Array<{
+    version?: string | null; title: string; content: string;
+    url?: string | null; contentHash?: string; publishedAt?: string | null;
+  }> }>();
+
+  // Count before
+  const [{ n: before }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
+
+  // Batch insert in chunks of 500
+  for (let i = 0; i < body.releases.length; i += 500) {
+    const chunk = body.releases.slice(i, i + 500).map((r) => ({
+      sourceId: src.id,
+      version: r.version ?? null,
+      title: r.title,
+      content: r.content,
+      url: r.url ?? null,
+      contentHash: r.contentHash ?? null,
+      publishedAt: r.publishedAt ?? null,
+    }));
+    await db.insert(releases).values(chunk).onConflictDoNothing();
+  }
+
+  // Count after
+  const [{ n: after }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
+
+  return c.json({ inserted: after - before, total: after });
+});
+
+// ── Delete all releases for a source (for --force re-fetch) ──
+
+sourceRoutes.delete("/sources/:slug/releases", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found" }, 404);
+
+  const deleted = await db.delete(releases).where(eq(releases.sourceId, src.id)).returning();
+  return c.json({ deleted: deleted.length });
 });
 
 sourceRoutes.get("/sources/:slug", async (c) => {
@@ -211,7 +296,12 @@ sourceRoutes.post("/sources", async (c) => {
 sourceRoutes.patch("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; url?: string; metadata?: string; orgId?: string | null }>();
+  const body = await c.req.json<{
+    name?: string; url?: string; metadata?: string; orgId?: string | null;
+    lastFetchedAt?: string | null; lastContentHash?: string | null;
+    fetchPriority?: string; consecutiveNoChange?: number;
+    consecutiveErrors?: number; nextFetchAfter?: string | null;
+  }>();
 
   const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -221,6 +311,12 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.url !== undefined) updates.url = body.url;
   if (body.metadata !== undefined) updates.metadata = body.metadata;
   if (body.orgId !== undefined) updates.orgId = body.orgId;
+  if (body.lastFetchedAt !== undefined) updates.lastFetchedAt = body.lastFetchedAt;
+  if (body.lastContentHash !== undefined) updates.lastContentHash = body.lastContentHash;
+  if (body.fetchPriority !== undefined) updates.fetchPriority = body.fetchPriority;
+  if (body.consecutiveNoChange !== undefined) updates.consecutiveNoChange = body.consecutiveNoChange;
+  if (body.consecutiveErrors !== undefined) updates.consecutiveErrors = body.consecutiveErrors;
+  if (body.nextFetchAfter !== undefined) updates.nextFetchAfter = body.nextFetchAfter;
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   return c.json(updated);
@@ -274,6 +370,61 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     const message = err instanceof Error ? err.message : String(err);
     return c.json({ error: "insert_failed", message }, 500);
   }
+});
+
+// ── Release CRUD ──
+
+sourceRoutes.get("/releases/:id", async (c) => {
+  const db = createDb(c.env.DB);
+  const id = c.req.param("id");
+
+  const rows = await db
+    .select({
+      release: releases,
+      sourceName: sources.name,
+      sourceSlug: sources.slug,
+    })
+    .from(releases)
+    .leftJoin(sources, eq(releases.sourceId, sources.id))
+    .where(eq(releases.id, id));
+
+  if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+  const { release, sourceName, sourceSlug } = rows[0];
+  return c.json({ ...release, sourceName, sourceSlug });
+});
+
+sourceRoutes.delete("/releases/:id", async (c) => {
+  const db = createDb(c.env.DB);
+  const id = c.req.param("id");
+
+  const deleted = await db.delete(releases).where(eq(releases.id, id)).returning({ id: releases.id });
+  if (deleted.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+  return c.json({ deleted: true });
+});
+
+sourceRoutes.patch("/releases/:id", async (c) => {
+  const db = createDb(c.env.DB);
+  const id = c.req.param("id");
+  const body = await c.req.json<{
+    title?: string; version?: string; content?: string;
+    url?: string; publishedAt?: string; contentHash?: string;
+  }>();
+
+  const [existing] = await db.select().from(releases).where(eq(releases.id, id));
+  if (!existing) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+  const updates: Record<string, unknown> = {};
+  if (body.title !== undefined) updates.title = body.title;
+  if (body.version !== undefined) updates.version = body.version;
+  if (body.content !== undefined) updates.content = body.content;
+  if (body.url !== undefined) updates.url = body.url;
+  if (body.publishedAt !== undefined) updates.publishedAt = body.publishedAt;
+  if (body.contentHash !== undefined) updates.contentHash = body.contentHash;
+
+  const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
+  return c.json(updated);
 });
 
 // ── Release suppression ──

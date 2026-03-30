@@ -1,9 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { getDb } from "../../db/connection.js";
-import { sources } from "../../db/schema.js";
-import { findSourceBySlug } from "../../db/queries.js";
+import { findSourceBySlug, listAllSources } from "../../db/queries.js";
 import { timeAgo } from "../../lib/dates.js";
 import type { Source } from "../../db/schema.js";
 
@@ -101,7 +99,6 @@ Examples:
   released check my-source           Check a specific source
   released check --json              Output health data as JSON`)
     .action(async (slug: string | undefined, opts: { json?: boolean }) => {
-      const db = getDb();
       let sourcesToCheck: Source[];
 
       if (slug) {
@@ -112,7 +109,7 @@ Examples:
         }
         sourcesToCheck = [source];
       } else {
-        sourcesToCheck = await db.select().from(sources);
+        sourcesToCheck = await listAllSources();
         if (sourcesToCheck.length === 0) {
           if (opts.json) {
             console.log(JSON.stringify([], null, 2));

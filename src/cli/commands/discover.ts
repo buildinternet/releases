@@ -1,9 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { getDb } from "../../db/connection.js";
-import { sources as sourcesTable } from "../../db/schema.js";
-import { findOrg, getOrgAccountByPlatform, findSourcesByUrls } from "../../db/queries.js";
+import { findOrg, getOrgAccountByPlatform, findSourcesByUrls, createSource } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { discover, type DiscoveredSource } from "../../lib/discover.js";
@@ -115,7 +113,6 @@ Examples:
       }
 
       // Add sources — batch URL check to avoid N+1
-      const db = getDb();
       const existingSources = await findSourcesByUrls(results.map((r) => r.url));
       const existingUrls = new Set(existingSources.map((s) => s.url));
       let added = 0;
@@ -148,7 +145,7 @@ Examples:
         }
 
         try {
-          await db.insert(sourcesTable).values({
+          await createSource({
             name,
             slug,
             type: r.type,
@@ -162,7 +159,7 @@ Examples:
           // Likely a slug collision — try with a suffix
           const suffixedSlug = `${slug}-${r.method}`;
           try {
-            await db.insert(sourcesTable).values({
+            await createSource({
               name,
               slug: suffixedSlug,
               type: r.type,

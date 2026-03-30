@@ -1,10 +1,10 @@
 import { Command } from "commander";
-import { eq, and, lt } from "drizzle-orm";
 import { createHash } from "crypto";
 import chalk from "chalk";
-import { getDb } from "../../db/connection.js";
-import { releases, sources } from "../../db/schema.js";
-import { findSourceBySlug, suppressRelease, unsuppressRelease } from "../../db/queries.js";
+import {
+  findSourceBySlug, suppressRelease, unsuppressRelease,
+  getRelease, deleteRelease, updateRelease, deleteReleasesByFilter,
+} from "../../db/queries.js";
 
 export function registerReleaseCommand(program: Command) {
   const release = program
@@ -22,24 +22,14 @@ Examples:
   released release show abc123
   released release show abc123 --json`)
     .action(async (id: string, opts: { json?: boolean }) => {
-      const db = getDb();
+      const result = await getRelease(id);
 
-      const rows = await db
-        .select({
-          release: releases,
-          sourceName: sources.name,
-          sourceSlug: sources.slug,
-        })
-        .from(releases)
-        .leftJoin(sources, eq(releases.sourceId, sources.id))
-        .where(eq(releases.id, id));
-
-      if (rows.length === 0) {
+      if (!result) {
         console.error(chalk.red(`Release not found: ${id}`));
         process.exit(1);
       }
 
-      const { release: rel, sourceName, sourceSlug } = rows[0];
+      const { release: rel, sourceName, sourceSlug } = result;
 
       if (opts.json) {
         console.log(JSON.stringify({ ...rel, sourceName, sourceSlug }, null, 2));
@@ -86,8 +76,6 @@ Examples:
   released release delete --source my-source --before 2024-01-01
   released release delete --source my-source --dry-run`)
     .action(async (id: string | undefined, opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean }) => {
-      const db = getDb();
-
       if (!id && !opts.source && !opts.before) {
         console.error("Error: provide a release ID, --source, or --before\n");
         console.error("  released release delete abc123");
@@ -96,79 +84,85 @@ Examples:
         process.exit(1);
       }
 
-      // Dry-run mode
-      if (opts.dryRun) {
-        const conditions = [];
-        if (id) {
-          conditions.push(eq(releases.id, id));
-        } else {
-          if (opts.source) {
-            const source = await findSourceBySlug(opts.source);
-            if (!source) {
-              console.error(chalk.red(`Source not found: ${opts.source}`));
-              process.exit(1);
-            }
-            conditions.push(eq(releases.sourceId, source.id));
+      // Resolve source if needed
+      let sourceId: string | undefined;
+      if (opts.source) {
+        const source = await findSourceBySlug(opts.source);
+        if (!source) {
+          console.error(chalk.red(`Source not found: ${opts.source}`));
+          process.exit(1);
+        }
+        sourceId = source.id;
+      }
+
+      // Single release delete by ID
+      if (id) {
+        if (opts.dryRun) {
+          const existing = await getRelease(id);
+          if (!existing) {
+            console.error(chalk.red(`Release not found: ${id}`));
+            process.exit(1);
           }
-          if (opts.before) {
-            conditions.push(lt(releases.publishedAt, opts.before));
+          if (opts.json) {
+            console.log(JSON.stringify({ wouldDelete: 1, releases: [{ id, title: existing.release.title }] }, null, 2));
+          } else {
+            console.log(chalk.yellow(`[dry-run] Would delete 1 release(s)`));
+            console.log(`  ${id}  ${existing.release.title}`);
           }
+          return;
         }
 
-        const wouldDelete = await db
-          .select({ id: releases.id, title: releases.title })
-          .from(releases)
-          .where(and(...conditions));
-
+        const deleted = await deleteRelease(id);
+        if (!deleted) {
+          console.error(chalk.red("No matching releases found."));
+          process.exit(1);
+        }
         if (opts.json) {
-          console.log(JSON.stringify({ wouldDelete: wouldDelete.length, releases: wouldDelete }, null, 2));
+          console.log(JSON.stringify({ deleted: 1 }, null, 2));
         } else {
-          console.log(chalk.yellow(`[dry-run] Would delete ${wouldDelete.length} release(s)`));
-          for (const r of wouldDelete.slice(0, 10)) {
+          console.log(chalk.green(`Deleted 1 release.`));
+        }
+        return;
+      }
+
+      // Bulk delete by filter
+      const filterOpts: { sourceId?: string; before?: string; dryRun?: boolean } = {};
+      if (sourceId) filterOpts.sourceId = sourceId;
+      if (opts.before) filterOpts.before = opts.before;
+      if (opts.dryRun) filterOpts.dryRun = true;
+
+      let result: Awaited<ReturnType<typeof deleteReleasesByFilter>>;
+      try {
+        result = await deleteReleasesByFilter(filterOpts);
+      } catch (err) {
+        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+        process.exit(1);
+      }
+
+      if (opts.dryRun) {
+        if (opts.json) {
+          console.log(JSON.stringify({ wouldDelete: result.releases.length, releases: result.releases }, null, 2));
+        } else {
+          console.log(chalk.yellow(`[dry-run] Would delete ${result.releases.length} release(s)`));
+          for (const r of result.releases.slice(0, 10)) {
             console.log(`  ${r.id}  ${r.title}`);
           }
-          if (wouldDelete.length > 10) {
-            console.log(chalk.dim(`  ... and ${wouldDelete.length - 10} more`));
+          if (result.releases.length > 10) {
+            console.log(chalk.dim(`  ... and ${result.releases.length - 10} more`));
           }
         }
         return;
       }
 
-      let deleted: { id: string }[];
-
-      if (id) {
-        deleted = await db.delete(releases).where(eq(releases.id, id)).returning({ id: releases.id });
-      } else {
-        const conditions = [];
-
-        if (opts.source) {
-          const source = await findSourceBySlug(opts.source);
-          if (!source) {
-            console.error(chalk.red(`Source not found: ${opts.source}`));
-            process.exit(1);
-          }
-          conditions.push(eq(releases.sourceId, source.id));
-        }
-
-        if (opts.before) {
-          conditions.push(lt(releases.publishedAt, opts.before));
-        }
-
-        deleted = await db
-          .delete(releases)
-          .where(and(...conditions))
-          .returning({ id: releases.id });
-      }
-
-      if (deleted.length === 0) {
+      if (result.deleted === 0) {
         console.error(chalk.red("No matching releases found."));
         process.exit(1);
       }
 
       if (opts.json) {
-        console.log(JSON.stringify({ deleted: deleted.length }, null, 2));
+        console.log(JSON.stringify({ deleted: result.deleted }, null, 2));
       } else {
-        console.log(chalk.green(`Deleted ${deleted.length} release${deleted.length === 1 ? "" : "s"}.`));
+        console.log(chalk.green(`Deleted ${result.deleted} release${result.deleted === 1 ? "" : "s"}.`));
       }
     });
 
@@ -187,9 +181,7 @@ Examples:
   released release edit abc123 --version "2.0.0"
   released release edit abc123 --json`)
     .action(async (id: string, opts: { title?: string; version?: string; content?: string; json?: boolean }) => {
-      const db = getDb();
-
-      const [existing] = await db.select().from(releases).where(eq(releases.id, id));
+      const existing = await getRelease(id);
       if (!existing) {
         console.error(chalk.red(`Release not found: ${id}`));
         process.exit(1);
@@ -221,7 +213,7 @@ Examples:
         return;
       }
 
-      const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
+      const updated = await updateRelease(id, updates);
 
       if (opts.json) {
         console.log(JSON.stringify(updated, null, 2));

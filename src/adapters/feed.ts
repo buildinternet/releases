@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
 import type { Source } from "../db/schema.js";
-import { sources } from "../db/schema.js";
-import { getDb } from "../db/connection.js";
+import { updateSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { logger } from "../lib/logger.js";
 
@@ -465,8 +463,7 @@ export function getSourceMeta(source: Source): SourceMetadata {
 export async function updateSourceMeta(source: Source, meta: Partial<SourceMetadata>): Promise<void> {
   const existing = getSourceMeta(source);
   const merged = { ...existing, ...meta };
-  const db = getDb();
-  await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id));
+  await updateSource(source, { metadata: JSON.stringify(merged) });
 }
 
 // ── Feed adapter (standalone, for "feed" source type) ───────────────

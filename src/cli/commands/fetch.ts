@@ -1,13 +1,14 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { eq, count, sql, and } from "drizzle-orm";
-import { getDb } from "../../db/connection.js";
-import { sources, releases, type Source } from "../../db/schema.js";
+import type { Source } from "../../db/schema.js";
 import type { FetchOptions } from "../../adapters/types.js";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
 import { detectChangelogUrl } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";
-import { insertFetchLog } from "../../db/queries.js";
+import {
+  findSourceBySlug, listAllSources, listFetchableSources,
+  updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
+} from "../../db/queries.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
@@ -47,21 +48,20 @@ Examples:
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean;
       unfetched?: boolean; stale?: string; retryErrors?: boolean; concurrency?: string;
     }) => {
-      const db = getDb();
       const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
 
       const fetchResults: Array<{ source: string; newReleases: number; error?: string }> = [];
       let targetSources: Source[];
 
       if (slug) {
-        const found = await db.select().from(sources).where(eq(sources.slug, slug));
-        if (found.length === 0) {
+        const found = await findSourceBySlug(slug);
+        if (!found) {
           console.error(chalk.red(`Source not found: ${slug}`));
           process.exit(1);
         }
-        targetSources = found;
+        targetSources = [found];
       } else if (opts.unfetched) {
-        targetSources = await db.select().from(sources).where(sql`${sources.lastFetchedAt} IS NULL`);
+        targetSources = await listFetchableSources({ mode: "unfetched" });
         if (targetSources.length === 0) {
           if (opts.json) {
             console.log(JSON.stringify([], null, 2));
@@ -79,15 +79,7 @@ Examples:
         }
       } else if (opts.stale) {
         const hours = parseInt(opts.stale, 10);
-        const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
-        const now = new Date().toISOString();
-        targetSources = await db.select().from(sources).where(
-          and(
-            sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
-            sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
-            sql`${sources.fetchPriority} != 'paused'`
-          )
-        );
+        targetSources = await listFetchableSources({ mode: "stale", staleHours: hours });
         // Sort: normal priority first, then low; within each, oldest fetched first
         targetSources.sort((a, b) => {
           if (a.fetchPriority !== b.fetchPriority) return a.fetchPriority === 'normal' ? -1 : 1;
@@ -105,13 +97,7 @@ Examples:
           console.log(chalk.bold(`Fetching ${targetSources.length} stale source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
         }
       } else if (opts.retryErrors) {
-        targetSources = await db.select().from(sources).where(
-          sql`${sources.id} IN (
-            SELECT f.source_id FROM fetch_log f
-            WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
-            AND f.status = 'error'
-          )`
-        );
+        targetSources = await listFetchableSources({ mode: "retry_errors" });
         if (targetSources.length === 0) {
           if (opts.json) {
             console.log(JSON.stringify([], null, 2));
@@ -124,7 +110,7 @@ Examples:
           console.log(chalk.bold(`Retrying ${targetSources.length} errored source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
         }
       } else {
-        targetSources = await db.select().from(sources);
+        targetSources = await listAllSources();
         if (targetSources.length === 0) {
           if (opts.json) {
             console.log(JSON.stringify([], null, 2));
@@ -250,7 +236,7 @@ Examples:
             crawlEnabled: true,
             crawlPattern: pattern,
           });
-          await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+          await updateSource(source, { lastContentHash: null });
           sourceModified = true;
           if (!opts.json) {
             logger.info(`Crawl mode enabled for ${source.name} (pattern: ${pattern})`);
@@ -259,18 +245,18 @@ Examples:
 
         // --force: delete existing releases for a clean re-fetch
         if (opts.force && !opts.dryRun) {
-          const deleted = await db.delete(releases).where(eq(releases.sourceId, source.id)).returning();
-          if (!opts.json && deleted.length > 0) {
-            logger.info(`Cleared ${deleted.length} existing release(s) for ${source.name}`);
+          const deletedCount = await deleteReleasesForSource(source);
+          if (!opts.json && deletedCount > 0) {
+            logger.info(`Cleared ${deletedCount} existing release(s) for ${source.name}`);
           }
-          await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+          await updateSource(source, { lastContentHash: null });
           await updateSourceMeta(source, { lastCrawlAt: undefined });
           sourceModified = true;
         }
 
         // Reload source from DB if we modified metadata/columns so the adapter sees fresh data
         if (sourceModified) {
-          const [reloaded] = await db.select().from(sources).where(eq(sources.id, source.id));
+          const reloaded = await findSourceBySlug(source.slug);
           if (reloaded) source = reloaded;
         }
 
@@ -316,11 +302,11 @@ Examples:
               const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
               const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
               const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
-              await db.update(sources).set({
+              await updateSource(source, {
                 consecutiveNoChange: newNoChange,
                 consecutiveErrors: 0,
                 nextFetchAfter: nextFetch,
-              }).where(eq(sources.id, source.id));
+              });
             }
             fetchResults.push({ source: source.name, newReleases: 0 });
             return;
@@ -354,11 +340,6 @@ Examples:
             return;
           }
 
-          const [{ total: beforeCount }] = await db
-            .select({ total: count() })
-            .from(releases)
-            .where(eq(releases.sourceId, source.id));
-
           const rows = rawReleases.map((raw) => ({
             sourceId: source.id,
             version: raw.version ?? null,
@@ -369,23 +350,8 @@ Examples:
             publishedAt: raw.publishedAt?.toISOString() ?? null,
           }));
 
-          // Batch insert in chunks of 500 (SQLite variable limit)
-          for (let i = 0; i < rows.length; i += 500) {
-            await db.insert(releases).values(rows.slice(i, i + 500)).onConflictDoNothing();
-          }
-
-          const [{ total: afterCount }] = await db
-            .select({ total: count() })
-            .from(releases)
-            .where(eq(releases.sourceId, source.id));
-
-          const inserted = afterCount - beforeCount;
+          const inserted = await insertReleases(source, rows);
           totalInserted += inserted;
-
-          await db
-            .update(sources)
-            .set({ lastFetchedAt: new Date().toISOString() })
-            .where(eq(sources.id, source.id));
 
           // Detect changelog URL for GitHub sources (one-time)
           if (source.type === "github") {
@@ -412,12 +378,12 @@ Examples:
             rawContent: rawContent ?? null,
           });
 
-          // Reset backoff counters on success
-          await db.update(sources).set({
+          await updateSource(source, {
+            lastFetchedAt: new Date().toISOString(),
             consecutiveNoChange: 0,
             consecutiveErrors: 0,
             nextFetchAfter: null,
-          }).where(eq(sources.id, source.id));
+          });
 
           if (!opts.json && !showProgress) {
             console.log(
@@ -442,10 +408,10 @@ Examples:
             const newErrors = (source.consecutiveErrors ?? 0) + 1;
             const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);
             const nextFetchOnError = new Date(Date.now() + errorBackoffHours * 3600_000).toISOString();
-            await db.update(sources).set({
+            await updateSource(source, {
               consecutiveErrors: newErrors,
               nextFetchAfter: nextFetchOnError,
-            }).where(eq(sources.id, source.id)).catch(() => {});
+            }).catch(() => {});
           }
 
           if (!showProgress) {

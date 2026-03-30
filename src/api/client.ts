@@ -105,6 +105,42 @@ export async function removeBlockedUrl(pattern: string): Promise<void> {
   await apiFetch(`/api/blocked-urls/${encodeURIComponent(pattern)}`, { method: "DELETE" });
 }
 
+// ── Release CRUD ──
+
+export interface ReleaseWithSource {
+  id: string;
+  sourceId: string;
+  version: string | null;
+  title: string;
+  content: string;
+  contentSummary: string | null;
+  url: string | null;
+  contentHash: string | null;
+  metadata: string | null;
+  publishedAt: string | null;
+  suppressed: boolean;
+  suppressedReason: string | null;
+  fetchedAt: string;
+  sourceName: string | null;
+  sourceSlug: string | null;
+}
+
+export async function getRelease(id: string): Promise<ReleaseWithSource | null> {
+  return apiFetch<ReleaseWithSource | null>(`/api/releases/${id}`);
+}
+
+export async function deleteRelease(id: string): Promise<boolean> {
+  const result = await apiFetch<{ deleted: boolean } | null>(`/api/releases/${id}`, { method: "DELETE" });
+  return result?.deleted ?? false;
+}
+
+export async function updateRelease(id: string, data: Record<string, unknown>): Promise<ReleaseWithSource> {
+  return apiFetch<ReleaseWithSource>(`/api/releases/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // ── Release suppression ──
 
 export async function suppressRelease(releaseId: string, reason?: string): Promise<boolean> {
@@ -287,6 +323,24 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
 
 // ── Usage log ──
 
+export interface UsageBreakdownRow {
+  label: string | null;
+  totalInput: number;
+  totalOutput: number;
+  count: number;
+}
+
+export interface UsageStatsResponse {
+  totals: { totalInput: number; totalOutput: number; count: number };
+  byOperation: UsageBreakdownRow[];
+  byModel: UsageBreakdownRow[];
+  bySource: UsageBreakdownRow[];
+}
+
+export async function getUsageStats(days: number): Promise<UsageStatsResponse> {
+  return apiFetch<UsageStatsResponse>(`/api/usage-log/stats?days=${days}`);
+}
+
 export async function postUsageLog(entry: {
   operation: string;
   model: string;
@@ -432,7 +486,43 @@ export async function getLatestReleases(opts: {
   return all.sort(byPublishedAtDesc).slice(0, opts.count);
 }
 
+// ── Fetchable sources ──
+
+export async function listFetchableSources(opts: {
+  mode: "all" | "unfetched" | "stale" | "retry_errors";
+  staleHours?: number;
+}): Promise<Source[]> {
+  const params = new URLSearchParams({ mode: opts.mode });
+  if (opts.staleHours) params.set("staleHours", String(opts.staleHours));
+  return apiFetch<Source[]>(`/api/sources/fetchable?${params}`);
+}
+
 // ── Source CRUD ──
+
+export async function updateSource(slug: string, data: Record<string, unknown>): Promise<Source> {
+  return apiFetch<Source>(`/api/sources/${slug}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteSource(slug: string): Promise<void> {
+  await apiFetch(`/api/sources/${slug}`, { method: "DELETE" });
+}
+
+export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array<{
+  version?: string | null; title: string; content: string;
+  url?: string | null; contentHash?: string | null; publishedAt?: string | null;
+}>): Promise<{ inserted: number; total: number }> {
+  return apiFetch(`/api/sources/${sourceSlug}/releases/batch`, {
+    method: "POST",
+    body: JSON.stringify({ releases: releaseRows }),
+  });
+}
+
+export async function deleteReleasesForSource(sourceSlug: string): Promise<{ deleted: number }> {
+  return apiFetch(`/api/sources/${sourceSlug}/releases`, { method: "DELETE" });
+}
 
 export async function createSource(data: {
   name: string;

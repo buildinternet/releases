@@ -1,9 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { eq, and } from "drizzle-orm";
-import { getDb } from "../../db/connection.js";
-import { sources, organizations, orgAccounts } from "../../db/schema.js";
-import { findOrg, isUrlExcluded } from "../../db/queries.js";
+import { findOrg, createOrg, createSource, isUrlExcluded } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { discoverFeed } from "../../adapters/feed.js";
@@ -144,7 +141,6 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
   }
 
   const slug = input.slug ?? toSlug(name);
-  const db = getDb();
   let orgId: string | null = null;
   let orgName: string | null = null;
 
@@ -152,15 +148,7 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
   if (input.org) {
     let org = await findOrg(input.org);
     if (!org) {
-      const orgSlug = toSlug(input.org);
-      const now = new Date().toISOString();
-      const [created] = await db.insert(organizations).values({
-        name: input.org,
-        slug: orgSlug,
-        createdAt: now,
-        updatedAt: now,
-      }).returning();
-      org = created;
+      org = await createOrg(input.org, { slug: toSlug(input.org) });
       logger.info(`Created organization: ${org.name} (${org.slug})`);
     }
     orgId = org.id;
@@ -171,14 +159,10 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
   if (!input.org && sourceType === "github") {
     const owner = parseGitHubOwner(url);
     if (owner) {
-      const [account] = await db
-        .select({ orgId: orgAccounts.orgId, orgName: organizations.name })
-        .from(orgAccounts)
-        .innerJoin(organizations, eq(orgAccounts.orgId, organizations.id))
-        .where(and(eq(orgAccounts.platform, "github"), eq(orgAccounts.handle, owner)));
-      if (account) {
-        orgId = account.orgId;
-        orgName = account.orgName;
+      const org = await findOrg(owner);
+      if (org) {
+        orgId = org.id;
+        orgName = org.name;
         logger.info(`Auto-linked to organization "${orgName}"`);
       }
     }
@@ -215,7 +199,7 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
   }
 
   try {
-    await db.insert(sources).values({
+    await createSource({
       name,
       slug,
       type: sourceType,

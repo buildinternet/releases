@@ -1,9 +1,6 @@
 import { Command } from "commander";
-import { eq, inArray } from "drizzle-orm";
 import chalk from "chalk";
-import { getDb } from "../../db/connection.js";
-import { sources } from "../../db/schema.js";
-import { addIgnoredUrl } from "../../db/queries.js";
+import { findSourcesBySlugs, deleteSources, addIgnoredUrl } from "../../db/queries.js";
 import { logger } from "../../lib/logger.js";
 
 export function registerRemoveCommand(program: Command) {
@@ -22,12 +19,7 @@ Examples:
   released remove my-source --ignore --reason "no longer maintained"
   released remove my-source --dry-run`)
     .action(async (slugs: string[], opts: { ignore?: boolean; reason?: string; json?: boolean; dryRun?: boolean }) => {
-      const db = getDb();
-
-      const existing = await db
-        .select()
-        .from(sources)
-        .where(inArray(sources.slug, slugs));
+      const existing = await findSourcesBySlugs(slugs);
 
       const foundSlugs = new Set(existing.map((s) => s.slug));
       const results: { slug: string; name?: string; url?: string; status: "removed" | "not_found"; ignored?: boolean }[] = [];
@@ -83,10 +75,10 @@ Examples:
         }
       }
 
-      // Delete all found sources in one query
+      // Delete all found sources
       if (existing.length > 0) {
         const foundSlugList = existing.map((s) => s.slug);
-        await db.delete(sources).where(inArray(sources.slug, foundSlugList));
+        await deleteSources(foundSlugList);
 
         for (const source of existing) {
           results.push({
