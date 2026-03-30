@@ -1,0 +1,115 @@
+---
+name: managing-sources
+description: How to add, remove, list, validate, and manage changelog sources using the Released CLI — covers batch operations, ignored/blocked URLs, duplicate detection, and the validation workflow
+---
+
+# Managing Sources
+
+Operational guide for managing changelog sources via the Released CLI.
+
+## Listing Sources
+
+```bash
+released list --json                    # All sources with metadata
+released list <slug> --json             # Single source details
+released list --org <org> --json        # Sources for a specific org
+```
+
+The `--json` output includes source metadata (feed URLs, provider, evaluation results, fetch history).
+
+## Adding Sources
+
+### Single source
+
+```bash
+released add <name> --url <url>                    # Auto-detect type
+released add <name> --url <url> --type github       # Explicit type
+released add <name> --url <url> --org "Acme Corp"   # Associate with org
+released add <name> --url <url> --feed-url <feed>   # Explicit feed URL
+released add <name> --url <url> --skip-eval         # Skip evaluation
+```
+
+Types: `github`, `scrape`, `feed`, `agent`.
+
+When no `--type` is given, the CLI runs `evaluateChangelog()` to auto-detect the best method. Use `--skip-eval` for batch operations where you already know the type.
+
+### Batch add
+
+Write a JSON array to a temp file, then pass it:
+
+```bash
+cat > /tmp/sources.json << 'EOF'
+[
+  {"name": "Product A", "url": "https://example.com/changelog", "type": "scrape"},
+  {"name": "Product B", "url": "https://github.com/org/repo", "type": "github"}
+]
+EOF
+released add --batch /tmp/sources.json
+```
+
+Batch mode skips evaluation by default (uses basic heuristics).
+
+## Removing Sources
+
+```bash
+released remove <slug> --ignore --reason "duplicate of X"
+released remove <slug1> <slug2> --ignore --reason "no releases found"
+```
+
+Always use `--ignore --reason` when removing discovery results. This adds the URL to the org's ignore list so it won't be re-discovered.
+
+## Ignored URLs (org-scoped)
+
+A URL ignored for one org can still be valid for another org.
+
+```bash
+released ignore list --org <org> --json    # Show ignored URLs
+released ignore add --org <org> <url>      # Ignore a URL
+released ignore remove --org <org> <url>   # Un-ignore a URL
+```
+
+## Blocked URLs (global)
+
+For spam domains and known-bad URLs that should never be added for any org.
+
+```bash
+released block list --json                 # Show blocked URLs
+released block add <url>                   # Block a URL globally
+released block remove <url>               # Unblock
+```
+
+## Validation Workflow
+
+After adding a source, validate it before considering it good:
+
+1. **Add the source:** `released add <name> --url <url>`
+2. **Dry-run fetch:** `released fetch <slug> --dry-run`
+3. **Check results:** Does it find releases? Do they have titles, dates, content?
+4. **If bad:** `released remove <slug> --ignore --reason "no usable releases"`
+5. **If good:** The source is ready for production fetches
+
+## Duplicate Detection
+
+Before adding sources, check for overlapping URLs:
+
+```bash
+released list --json | jq '.[].url'
+```
+
+Common duplicates:
+- Same repo via GitHub URL vs changelog page (the GitHub source is usually better)
+- RSS feed URL vs the page it feeds from (keep the feed)
+- With and without trailing slash or `www.` prefix
+
+## Reading `--json` Output
+
+All data commands support `--json`. Key patterns:
+
+```bash
+released list --json                           # Array of source objects
+released fetch <slug> --dry-run --json         # Fetch result with releases
+released evaluate <url> --json                 # Evaluation recommendation
+released discover <domain> --json              # Discovery candidates
+```
+
+Pipe through `jq` for filtering when working with large datasets.

@@ -1,0 +1,8 @@
+.git
+web/
+docs/
+/*.md
+!CLAUDE.md
+.context/
+.env
+.env.*

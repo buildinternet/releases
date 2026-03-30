@@ -53,3 +53,6 @@ data/preferences.json
 # Wrangler local state
 .wrangler
 .dev.vars
+
+# Agent skills symlink (generated at runtime by released agent)
+.claude/skills

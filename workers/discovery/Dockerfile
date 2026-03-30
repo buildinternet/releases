@@ -12,6 +12,9 @@ COPY . /app
 WORKDIR /app
 RUN bun install --frozen-lockfile
 
+# Place agent skills where the Agent SDK discovers them
+RUN mkdir -p /app/.claude/skills && cp -r /app/src/agent/skills/* /app/.claude/skills/
+
 # Sandbox SDK command timeout — 5 minutes for agent runs
 ENV COMMAND_TIMEOUT_MS=300000
 

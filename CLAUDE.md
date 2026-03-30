@@ -56,6 +56,14 @@ When `RELEASED_API_URL` is set, the CLI routes data operations through the API W
 
 The API Worker lives at `workers/api/` and shares the Drizzle schema from `src/db/schema.ts`. D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
 
+## Agent Architecture
+
+The unified agent (`src/agent/released.ts`) handles all judgment-based changelog work: finding sources, evaluating them, onboarding, and validation. It replaces the separate discovery and evaluation agents.
+
+- **Agent skills** live in `src/agent/skills/` as application code (not in `.claude/`). Each skill is a `SKILL.md` with YAML frontmatter. The agent symlinks them to `.claude/skills/` at runtime so the Agent SDK discovers them via `settingSources: ["project"]`. In the sandbox container, the Dockerfile copies them into place.
+- **Deterministic pipeline** (ingest, incremental, enrich, summarize) stays as direct Messages API calls — not routed through the agent.
+- **`evaluate` CLI command** runs pre-checks only (provider detection, feed discovery). The agent handles deeper evaluation when needed.
+
 ## Environment
 
 Do not edit `.env` directly. Required vars documented in `.env.example`.

@@ -1,7 +1,7 @@
-import { runDiscovery } from "./discovery.js";
+import { runDiscovery, DISCOVERY_STATE_FILE } from "./released.js";
 
 const PROGRESS_FILE = "/tmp/discovery-progress.json";
-const STATE_FILE = "/tmp/discovery-state.json";
+const STATE_FILE = DISCOVERY_STATE_FILE;
 const THROTTLE_MS = 5_000;
 
 // Best-effort WebSocket connection to sandbox log server (port 8081).
@@ -177,7 +177,7 @@ async function main(): Promise<void> {
         } else if (toolName === "WebFetch") {
           emitLog("Fetching URL...");
         } else if (toolName === "Agent") {
-          emitLog("Delegating to source-validator");
+          emitLog("Delegating to bulk-worker");
         }
       },
     });

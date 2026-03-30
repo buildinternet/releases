@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import type { DiscoveryState, AgentDiscoveredSource } from "../../agent/discovery.js";
+import type { DiscoveryState, AgentDiscoveredSource } from "../../agent/released.js";
 import { logger } from "../../lib/logger.js";
 import { addIgnoredUrl, findOrg, createSource } from "../../db/queries.js";
 
