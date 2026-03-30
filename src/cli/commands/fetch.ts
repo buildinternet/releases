@@ -10,7 +10,7 @@ import {
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
 } from "../../db/queries.js";
 import { logger } from "../../lib/logger.js";
-import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
+import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";
 
@@ -211,14 +211,14 @@ Examples:
         if (!showProgress) return;
         if (sourceName) lastSourceName = sourceName;
         const pct = Math.round((completed / total) * 100);
-        const elapsed = elapsedSec(fetchStartTime);
+        const elapsed = elapsedFormatted(fetchStartTime);
         const bar = chalk.gray(`[${completed}/${total}]`);
         const errCount = fetchResults.filter((r) => r.error).length;
         const activeStr = active > 0 ? chalk.gray(` (${active} active)`) : "";
         const errStr = errCount > 0 ? chalk.red(` ${errCount} failed`) : "";
         const insertStr = totalInserted > 0 ? chalk.green(` ${totalInserted} new`) : "";
         const current = lastSourceName ? ` ${chalk.cyan(lastSourceName)}` : "";
-        const time = chalk.gray(` ${elapsed}s`);
+        const time = chalk.gray(` ${elapsed}`);
         process.stderr.write(`\r${bar} ${pct}%${current}${activeStr}${insertStr}${errStr}${time}${"".padEnd(20)}`);
       }
 
@@ -295,7 +295,7 @@ Examples:
               const msg = source.type === "scrape"
                 ? `No changes detected for ${source.name}`
                 : `No releases found for ${source.name}`;
-              console.log(chalk.yellow(`${msg} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`));
+              console.log(chalk.yellow(`${msg} ${chalk.dim(`(${elapsedFormatted(startTime)})`)}`));
             }
             if (!opts.dryRun) {
               await insertFetchLog({
@@ -339,7 +339,7 @@ Examples:
             });
 
             if (!opts.json) {
-              console.log(chalk.bold(`\n${source.name}: ${rawReleases.length} release(s) found ${chalk.dim(`(${elapsedSec(startTime)}s)`)}\n`));
+              console.log(chalk.bold(`\n${source.name}: ${rawReleases.length} release(s) found ${chalk.dim(`(${elapsedFormatted(startTime)})`)}\n`));
               for (const raw of rawReleases) {
                 const date = raw.publishedAt ? chalk.gray(raw.publishedAt.toISOString().split("T")[0]) : chalk.gray("no date");
                 const version = raw.version ? chalk.cyan(`[${raw.version}] `) : "";
@@ -378,7 +378,7 @@ Examples:
           fetchResults.push({ source: source.name, newReleases: inserted });
           sessionReleasesFound += rawReleases.length;
           sessionReleasesInserted += inserted;
-          progressSession(`${source.name}: ${inserted} new releases (${elapsedSec(startTime)}s)`);
+          progressSession(`${source.name}: ${inserted} new releases (${elapsedFormatted(startTime)})`);
 
           await insertFetchLog({
             sourceId: source.id,
@@ -398,7 +398,7 @@ Examples:
 
           if (!opts.json && !showProgress) {
             console.log(
-              chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedSec(startTime)}s)`)}`),
+              chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedFormatted(startTime)})`)}`),
             );
           }
         } catch (err) {
@@ -428,7 +428,7 @@ Examples:
           }
 
           if (!showProgress) {
-            logger.error(`Failed to fetch from ${source.name} (${elapsedSec(startTime)}s):`, err);
+            logger.error(`Failed to fetch from ${source.name} (${elapsedFormatted(startTime)}):`, err);
           }
         } finally {
           active--;
@@ -481,9 +481,9 @@ Examples:
         const failed = fetchResults.filter((r) => r.error);
         const withReleases = successful.filter((r) => r.newReleases > 0);
 
-        const elapsed = elapsedSec(fetchStartTime);
+        const elapsed = elapsedFormatted(fetchStartTime);
         const label = stopping ? `Fetch stopped early: ${completed}/${total} sources` : `Fetch complete: ${total} sources`;
-        console.log(chalk.bold(`\n${label}`) + chalk.gray(` (${elapsed}s)\n`));
+        console.log(chalk.bold(`\n${label}`) + chalk.gray(` (${elapsed})\n`));
         console.log(`  ${chalk.green(`${withReleases.length} with new releases`)} (${totalInserted} total)`);
         console.log(`  ${chalk.gray(`${successful.length - withReleases.length} unchanged`)}`);
         if (failed.length > 0) {

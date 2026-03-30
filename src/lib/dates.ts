@@ -2,6 +2,14 @@ export function elapsedSec(startTime: number): string {
   return ((performance.now() - startTime) / 1000).toFixed(1);
 }
 
+export function elapsedFormatted(startTime: number): string {
+  const totalSec = (performance.now() - startTime) / 1000;
+  if (totalSec < 60) return `${totalSec.toFixed(1)}s`;
+  const mins = Math.floor(totalSec / 60);
+  const secs = Math.round(totalSec % 60);
+  return `${mins}m ${secs}s`;
+}
+
 export function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }

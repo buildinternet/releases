@@ -67,17 +67,141 @@ Rules:
 - If no version is explicitly stated, omit the version field.
 - Always call the extract_releases tool with your results.`;
 
+// Use Haiku to identify version boundary line numbers in large markdown
+// that the regex-based chunker can't split effectively.
+async function detectVersionBoundaries(client: ReturnType<typeof getAnthropicClient>, markdown: string): Promise<number[]> {
+  // Send the first portion of each "page" of lines to identify patterns,
+  // then apply across the full document
+  const lines = markdown.split("\n");
+  // Sample first 500 lines to identify the pattern, then scan the rest
+  const sample = lines.slice(0, 500).map((l, i) => `${i}: ${l}`).join("\n");
+
+  const response = await client.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 4096,
+    messages: [{
+      role: "user",
+      content: `You are analyzing a changelog page to find where each version/release entry starts.
+
+Look at these numbered lines and return the line numbers where a new version or release entry begins. Each version entry typically starts with a heading, bold version number, date header, or similar pattern.
+
+Return ONLY a JSON array of line numbers, e.g. [0, 45, 89, 134]. Include line 0 if the document starts with a version entry.
+
+Lines:
+${sample}`,
+    }],
+  });
+
+  await logUsage({
+    operation: "ingest-boundary-detect",
+    model: "claude-haiku-4-5-20251001",
+    inputTokens: response.usage.input_tokens,
+    outputTokens: response.usage.output_tokens,
+  });
+
+  const text = response.content.find((b) => b.type === "text");
+  if (!text || text.type !== "text") return [];
+
+  // Extract the JSON array from the response
+  const match = text.text.match(/\[[\d,\s]+\]/);
+  if (!match) return [];
+
+  try {
+    const boundaries = JSON.parse(match[0]) as number[];
+    if (!Array.isArray(boundaries)) return [];
+
+    // If we only sampled 500 lines but the doc is longer, detect the pattern
+    // and extrapolate. Look at the identified boundary lines for common patterns.
+    if (lines.length > 500 && boundaries.length >= 2) {
+      const boundaryPatterns = boundaries.slice(0, 5).map((ln) => {
+        const line = lines[ln] ?? "";
+        // Extract a regex-like pattern from the boundary line
+        return line.replace(/\d+\.\d+(\.\d+)?/g, "\\d+\\.\\d+(\\.\\d+)?")
+                   .replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      });
+
+      // Find the most common pattern prefix (first 20 chars)
+      const prefixes = boundaryPatterns.map((p) => p.slice(0, 20));
+      const commonPrefix = prefixes.sort((a, b) =>
+        prefixes.filter((p) => p === b).length - prefixes.filter((p) => p === a).length
+      )[0];
+
+      if (commonPrefix && commonPrefix.length > 3) {
+        // Scan remaining lines for the same pattern
+        const re = new RegExp(commonPrefix.replace(/\\\\/g, "\\"));
+        for (let i = 500; i < lines.length; i++) {
+          try {
+            if (re.test(lines[i])) boundaries.push(i);
+          } catch { /* regex may be invalid */ }
+        }
+      }
+    }
+
+    return boundaries.sort((a, b) => a - b);
+  } catch {
+    return [];
+  }
+}
+
 // Split markdown into chunks at heading boundaries (##, ###, ---)
 // so each chunk is a self-contained section the model can parse.
-function chunkMarkdown(markdown: string, maxChunkChars = 15_000): string[] {
+// Falls back to AI-detected version boundaries for pages without standard headings.
+async function chunkMarkdown(markdown: string, client?: ReturnType<typeof getAnthropicClient>, maxChunkChars = 15_000): Promise<string[]> {
   if (markdown.length <= maxChunkChars) return [markdown];
 
-  const chunks: string[] = [];
-  // Split on ## headings or --- dividers that commonly separate changelog entries
-  const sections = markdown.split(/(?=^#{1,3}\s|\n---\n)/m);
+  // Try regex-based splitting first
+  const sections = markdown.split(/(?=^#{1,3}\s|\n---\n|\n(?=\*{2}v?\d+\.\d+))/m);
+  const hasOversizedSection = sections.some((s) => s.length > maxChunkChars);
 
+  // If regex produced oversized sections and we have a client, use AI to find boundaries
+  if (hasOversizedSection && client) {
+    logger.info("Regex chunker produced oversized sections, using AI to detect version boundaries...");
+    const boundaries = await detectVersionBoundaries(client, markdown);
+    if (boundaries.length >= 2) {
+      const lines = markdown.split("\n");
+      const aiSections: string[] = [];
+      for (let i = 0; i < boundaries.length; i++) {
+        const start = boundaries[i];
+        const end = i + 1 < boundaries.length ? boundaries[i + 1] : lines.length;
+        aiSections.push(lines.slice(start, end).join("\n"));
+      }
+      // Add any content before the first boundary
+      if (boundaries[0] > 0) {
+        aiSections.unshift(lines.slice(0, boundaries[0]).join("\n"));
+      }
+      logger.info(`AI detected ${boundaries.length} version boundaries → ${aiSections.length} sections`);
+      return assembleChunks(aiSections, maxChunkChars);
+    }
+    logger.warn("AI boundary detection returned insufficient results, falling back to force-split");
+  }
+
+  return assembleChunks(sections, maxChunkChars);
+}
+
+function assembleChunks(sections: string[], maxChunkChars: number): string[] {
+  const chunks: string[] = [];
   let current = "";
+
   for (const section of sections) {
+    // If a single section exceeds max, force-split it at line boundaries
+    if (section.length > maxChunkChars) {
+      if (current.length > 0) {
+        chunks.push(current);
+        current = "";
+      }
+      const lines = section.split("\n");
+      let part = "";
+      for (const line of lines) {
+        if (part.length + line.length + 1 > maxChunkChars && part.length > 0) {
+          chunks.push(part);
+          part = line;
+        } else {
+          part += (part.length > 0 ? "\n" : "") + line;
+        }
+      }
+      if (part.length > 0) current = part;
+      continue;
+    }
     if (current.length + section.length > maxChunkChars && current.length > 0) {
       chunks.push(current);
       current = section;
@@ -144,7 +268,7 @@ async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: 
 
 export async function parseChangelog(markdown: string, sourceSlug?: string): Promise<ParsedRelease[]> {
   const client = getAnthropicClient();
-  const chunks = chunkMarkdown(markdown);
+  const chunks = await chunkMarkdown(markdown, client);
 
   logger.debug(`Parsing changelog: ${markdown.length} chars in ${chunks.length} chunk(s)`);
 

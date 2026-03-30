@@ -516,8 +516,8 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
 }>): Promise<{ inserted: number; total: number }> {
   // Send in concurrent chunks to stay under D1/Worker request size limits
   const chunks: typeof releaseRows[] = [];
-  for (let i = 0; i < releaseRows.length; i += 25) {
-    chunks.push(releaseRows.slice(i, i + 25));
+  for (let i = 0; i < releaseRows.length; i += 5) {
+    chunks.push(releaseRows.slice(i, i + 5));
   }
   const results = await Promise.all(
     chunks.map((chunk) =>

@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { findSourceBySlug, getRecentReleases, findOrg, getRecentReleasesByOrg } from "../../db/queries.js";
 import { summarizeReleases, toReleaseInput } from "../../ai/query.js";
-import { daysAgoIso, elapsedSec } from "../../lib/dates.js";
+import { daysAgoIso, elapsedFormatted } from "../../lib/dates.js";
 
 export function registerSummaryCommand(program: Command) {
   program
@@ -81,7 +81,7 @@ Examples:
         console.log(JSON.stringify({ summary }, null, 2));
       } else {
         console.log(summary);
-        console.log(chalk.dim(`\n(${elapsedSec(startTime)}s)`));
+        console.log(chalk.dim(`\n(${elapsedFormatted(startTime)})`));
       }
     });
 }

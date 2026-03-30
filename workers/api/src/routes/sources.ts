@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, count, and, min, gte, isNull, sql } from "drizzle-orm";
+import { eq, desc, count, and, min, isNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { sources, releases, organizations, fetchLog } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
@@ -110,8 +110,8 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   try {
     // Batch insert in chunks — D1 limits query size to ~1MB
     let inserted = 0;
-    for (let i = 0; i < body.releases.length; i += 25) {
-      const chunk = body.releases.slice(i, i + 25).map((r) => ({
+    for (let i = 0; i < body.releases.length; i += 5) {
+      const chunk = body.releases.slice(i, i + 5).map((r) => ({
         sourceId: src.id,
         version: r.version ?? null,
         title: r.title,
@@ -206,12 +206,12 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     summary:
       r.content_summary ??
       (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    content: r.content.length > 800 ? r.content.slice(0, 800) + "..." : r.content,
+    content: r.content,
     publishedAt: r.published_at,
     url: r.url,
   }));
 
-  const notSuppressed = eq(releases.suppressed, false);
+  const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
 
   const [latest] = await db
     .select({ version: releases.version, publishedAt: releases.publishedAt })
@@ -231,18 +231,19 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     latestVersion = fallback?.version ?? null;
   }
 
-  // Compute source metrics inline
+  // Compute source metrics inline — use fetchedAt as fallback when publishedAt is NULL
   const cutoff = daysAgoIso(30);
+  const dateCol = sql`COALESCE(${releases.publishedAt}, ${releases.fetchedAt})`;
 
   const [recent] = await db
     .select({ n: count() })
     .from(releases)
-    .where(and(eq(releases.sourceId, src.id), notSuppressed, gte(releases.publishedAt, cutoff)));
+    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${dateCol} >= ${cutoff}`));
 
   const [totals] = await db
-    .select({ total: count(), oldest: min(releases.publishedAt) })
+    .select({ total: count(), oldest: min(dateCol) })
     .from(releases)
-    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`));
+    .where(and(eq(releases.sourceId, src.id), notSuppressed));
 
   const releasesLast30Days = recent.n;
   const avgReleasesPerWeek = computeAvgPerWeek(totals.total, totals.oldest);
