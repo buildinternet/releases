@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -8,6 +8,7 @@ export const organizations = sqliteTable("organizations", {
   domain: text("domain").unique(),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+  metadata: text("metadata").default("{}"),
 });
 
 export const orgAccounts = sqliteTable(
@@ -137,3 +138,29 @@ export type IgnoredUrl = typeof ignoredUrls.$inferSelect;
 export type NewIgnoredUrl = typeof ignoredUrls.$inferInsert;
 export type BlockedUrl = typeof blockedUrls.$inferSelect;
 export type NewBlockedUrl = typeof blockedUrls.$inferInsert;
+
+export const releaseSummaries = sqliteTable(
+  "release_summaries",
+  {
+    id: text("id").primaryKey().$defaultFn(newSummaryId),
+    sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    type: text("type", { enum: ["rolling", "monthly"] }).notNull(),
+    year: integer("year"),
+    month: integer("month"),
+    windowDays: integer("window_days"),
+    summary: text("summary").notNull(),
+    releaseCount: integer("release_count").notNull(),
+    generatedAt: text("generated_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_summaries_unique").on(table.sourceId, table.orgId, table.type, table.year, table.month),
+    index("idx_summaries_source_type").on(table.sourceId, table.type),
+    index("idx_summaries_org_type").on(table.orgId, table.type),
+  ],
+);
+
+export type ReleaseSummary = typeof releaseSummaries.$inferSelect;
+export type NewReleaseSummary = typeof releaseSummaries.$inferInsert;

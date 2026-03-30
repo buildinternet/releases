@@ -42,6 +42,9 @@ export interface SourceMetadata {
   // GitHub fields
   changelogUrl?: string;
   changelogDetectedAt?: string;
+
+  // Summary generation
+  summarize?: boolean; // false = opt-out of AI summaries
 }
 
 // ── Feed discovery ──────────────────────────────────────────────────
