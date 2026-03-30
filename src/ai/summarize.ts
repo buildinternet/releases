@@ -88,7 +88,13 @@ export async function generateSummary(input: SummaryInput): Promise<SummaryResul
     const response = await client.messages.create({
       model,
       max_tokens: 1024,
-      system: systemPrompt,
+      system: [
+        {
+          type: "text",
+          text: systemPrompt,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       messages: [{ role: "user", content: userMessage }],
     });
 

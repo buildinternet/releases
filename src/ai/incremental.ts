@@ -234,7 +234,13 @@ async function singlePass(
   const response = await client.messages.create({
     model: config.ingestModel(),
     max_tokens: 8192,
-    system: SINGLE_PASS_SYSTEM,
+    system: [
+      {
+        type: "text",
+        text: SINGLE_PASS_SYSTEM,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
     tools: [extractReleasesTool],
     tool_choice: { type: "tool", name: "extract_releases" },
     messages: [
@@ -294,7 +300,13 @@ async function fallbackToolLoop(
     const response = await client.messages.create({
       model: config.ingestModel(),
       max_tokens: 8192,
-      system: FALLBACK_SYSTEM,
+      system: [
+        {
+          type: "text",
+          text: FALLBACK_SYSTEM,
+          cache_control: { type: "ephemeral" },
+        },
+      ],
       tools,
       messages,
     });
