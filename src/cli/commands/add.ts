@@ -3,7 +3,8 @@ import chalk from "chalk";
 import { findOrg, createOrg, createSource, isUrlExcluded } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
-import { discoverFeed } from "../../adapters/feed.js";
+import { evaluateChangelog, buildMetadataFromEvaluation } from "../../ai/evaluate.js";
+import type { EvaluationResult } from "../../ai/evaluate.js";
 import { readFileSync } from "fs";
 
 const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;
@@ -17,64 +18,9 @@ export function isGitHubUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?github\.com\/[^/]+\/[^/]+/.test(url);
 }
 
-function parseGitHubOwner(url: string): string | null {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
-  return match ? match[1] : null;
-}
-
-/**
- * Detect if a changelog page is a blog-index (links to individual entry pages)
- * by fetching the HTML and counting child-path links.
- * Returns the crawl pattern if detected, null otherwise.
- */
-async function detectCrawlPattern(sourceUrl: string): Promise<string | null> {
-  try {
-    const res = await fetch(sourceUrl, {
-      headers: { "User-Agent": "released/0.1 (+https://releases.sh)" },
-      redirect: "follow",
-      signal: AbortSignal.timeout(10_000),
-    });
-    if (!res.ok) return null;
-
-    const html = await res.text();
-    const baseUrl = sourceUrl.replace(/\/$/, "");
-    const basePath = new URL(baseUrl).pathname.replace(/\/$/, "");
-
-    // Find all href values that are child paths of the source URL
-    const hrefPattern = /href=["']([^"']+)["']/g;
-    const childPaths = new Set<string>();
-
-    let match;
-    while ((match = hrefPattern.exec(html)) !== null) {
-      const href = match[1];
-      try {
-        // Resolve relative URLs
-        const resolved = new URL(href, sourceUrl);
-        // Must be same origin and a child path (deeper than the base)
-        if (resolved.origin === new URL(sourceUrl).origin) {
-          const path = resolved.pathname.replace(/\/$/, "");
-          if (
-            path.startsWith(basePath + "/") &&
-            path !== basePath &&
-            path.split("/").length > basePath.split("/").length
-          ) {
-            childPaths.add(path);
-          }
-        }
-      } catch {
-        // Skip malformed URLs
-      }
-    }
-
-    // If 3+ unique child paths found, this looks like a blog-index
-    if (childPaths.size >= 3) {
-      return `${baseUrl}/**`;
-    }
-
-    return null;
-  } catch {
-    return null;
-  }
+function mapMethodToType(method: EvaluationResult["recommendedMethod"]): SourceType {
+  if (method === "github") return "github";
+  return "scrape";
 }
 
 interface AddSourceInput {
@@ -84,6 +30,8 @@ interface AddSourceInput {
   slug?: string;
   org?: string;
   feedUrl?: string;
+  skipEval?: boolean;
+  batch?: boolean;
 }
 
 interface AddSourceResult {
@@ -104,40 +52,37 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
     return { name, slug: input.slug ?? toSlug(name), type: input.type, url, status: "error", error: `Invalid type "${input.type}". Must be one of: ${VALID_TYPES.join(", ")}` };
   }
 
-  // Auto-detect type from URL when not specified
+  // Determine source type and metadata
   let sourceType: SourceType;
-  let discoveredFeedUrl: string | undefined;
-  let discoveredFeedType: string | undefined;
+  const metadata: Record<string, unknown> = {};
+  let evaluationResult: EvaluationResult | null = null;
 
   if (input.feedUrl) {
-    // Explicit feed URL provided — skip discovery
+    // Explicit feed URL — skip evaluation
     sourceType = (input.type as SourceType) ?? "scrape";
-    discoveredFeedUrl = input.feedUrl;
-    discoveredFeedType = "unknown";
+    metadata.feedUrl = input.feedUrl;
+    metadata.feedType = "unknown";
+    metadata.feedDiscoveredAt = new Date().toISOString();
+    metadata.noFeedFound = false;
     logger.info(`Using provided feed URL — ${sourceType} adapter`);
   } else if (input.type) {
+    // Explicit type — skip evaluation
     sourceType = input.type as SourceType;
-  } else if (isGitHubUrl(url)) {
-    sourceType = "github";
-    logger.info(`Detected GitHub URL — using github adapter`);
-  } else {
-    // Probe for a feed to decide between scrape and feed
-    logger.info(`Detecting source type for ${url}...`);
-    try {
-      const feed = await discoverFeed(url);
-      if (feed) {
-        sourceType = "scrape";
-        discoveredFeedUrl = feed.url;
-        discoveredFeedType = feed.type;
-        logger.info(`Found ${feed.type} feed — using scrape adapter (feed-first with fallback)`);
-      } else {
-        sourceType = "scrape";
-        logger.info(`No feed found — using scrape adapter (Cloudflare + AI)`);
-      }
-    } catch {
-      sourceType = "scrape";
-      logger.info(`Feed detection failed — defaulting to scrape adapter`);
+  } else if (input.skipEval || input.batch) {
+    // Skip evaluation — basic heuristic only
+    sourceType = isGitHubUrl(url) ? "github" : "scrape";
+    if (sourceType === "github") {
+      logger.info("Detected GitHub URL — using github adapter");
+    } else {
+      logger.info("Skipping evaluation — using scrape adapter");
     }
+  } else {
+    // Run evaluation
+    logger.info("Evaluating changelog source...");
+    evaluationResult = await evaluateChangelog(url);
+    sourceType = mapMethodToType(evaluationResult.recommendedMethod);
+    Object.assign(metadata, buildMetadataFromEvaluation(evaluationResult));
+    logger.info(`Evaluation: ${evaluationResult.recommendedMethod} (${evaluationResult.confidence}) — using ${sourceType} adapter`);
   }
 
   const slug = input.slug ?? toSlug(name);
@@ -157,36 +102,26 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
 
   // Auto-association for GitHub sources (only if no org specified)
   if (!input.org && sourceType === "github") {
-    const owner = parseGitHubOwner(url);
-    if (owner) {
+    const ghRepo = evaluationResult?.githubRepo;
+    if (ghRepo) {
+      const owner = ghRepo.split("/")[0];
       const org = await findOrg(owner);
       if (org) {
         orgId = org.id;
         orgName = org.name;
         logger.info(`Auto-linked to organization "${orgName}"`);
       }
-    }
-  }
-
-  // Build initial metadata with discovered feed info
-  const metadata: Record<string, unknown> = {};
-  if (discoveredFeedUrl) {
-    metadata.feedUrl = discoveredFeedUrl;
-    metadata.feedType = discoveredFeedType;
-    metadata.feedDiscoveredAt = new Date().toISOString();
-    metadata.noFeedFound = false;
-  }
-
-  // For non-feed sources, detect if entries have individual pages
-  if ((sourceType === "scrape" || sourceType === "agent") && !discoveredFeedUrl) {
-    logger.info(`Checking for individual entry pages...`);
-    const crawlPattern = await detectCrawlPattern(url);
-    if (crawlPattern) {
-      if (sourceType === "scrape") {
-        sourceType = "agent";
-        logger.info(`Detected blog-index pattern — using agent adapter for better extraction`);
+    } else {
+      // Fallback: parse owner from URL directly (for skip-eval / batch paths)
+      const match = url.match(/github\.com\/([^/]+)\//);
+      if (match) {
+        const org = await findOrg(match[1]);
+        if (org) {
+          orgId = org.id;
+          orgName = org.name;
+          logger.info(`Auto-linked to organization "${orgName}"`);
+        }
       }
-      metadata.crawlPattern = crawlPattern;
     }
   }
 
@@ -226,6 +161,7 @@ export function registerAddCommand(program: Command) {
     .option("--org <org>", "Organization name or slug (creates if not found)")
     .option("--feed-url <feedUrl>", "Explicit feed URL (skips auto-discovery)")
     .option("--batch <file>", "JSON file with sources to add (use - for stdin)")
+    .option("--skip-eval", "Skip changelog evaluation (use basic type detection only)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
@@ -234,7 +170,7 @@ Examples:
   released add "Astro" --url https://astro.build/blog --type scrape
   released add --batch sources.json
   cat sources.json | released add --batch -`)
-    .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; feedUrl?: string; batch?: string; json?: boolean }) => {
+    .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; feedUrl?: string; batch?: string; skipEval?: boolean; json?: boolean }) => {
       // --- Batch mode ---
       if (opts.batch) {
         let raw: string;
@@ -269,7 +205,7 @@ Examples:
         let hasError = false;
 
         for (const entry of entries) {
-          const result = await addSingleSource(entry);
+          const result = await addSingleSource({ ...entry, batch: true });
           results.push(result);
 
           if (result.status === "error") {
@@ -317,6 +253,7 @@ Examples:
         slug: opts.slug,
         org: opts.org,
         feedUrl: opts.feedUrl,
+        skipEval: opts.skipEval,
       });
 
       if (result.status === "error") {
