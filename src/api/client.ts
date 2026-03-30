@@ -20,7 +20,7 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));
     const message = (body as { message?: string }).message ?? res.statusText;
-    throw new Error(`API error (${res.status}): ${message}`);
+    throw new Error(`API error (${res.status}) on ${opts?.method ?? "GET"} ${path}: ${message}`);
   }
 
   return res.json();
@@ -514,10 +514,22 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
   version?: string | null; title: string; content: string;
   url?: string | null; contentHash?: string | null; publishedAt?: string | null;
 }>): Promise<{ inserted: number; total: number }> {
-  return apiFetch(`/api/sources/${sourceSlug}/releases/batch`, {
-    method: "POST",
-    body: JSON.stringify({ releases: releaseRows }),
-  });
+  // Send in concurrent chunks to stay under D1/Worker request size limits
+  const chunks: typeof releaseRows[] = [];
+  for (let i = 0; i < releaseRows.length; i += 25) {
+    chunks.push(releaseRows.slice(i, i + 25));
+  }
+  const results = await Promise.all(
+    chunks.map((chunk) =>
+      apiFetch<{ inserted: number; total: number }>(`/api/sources/${sourceSlug}/releases/batch`, {
+        method: "POST",
+        body: JSON.stringify({ releases: chunk }),
+      })
+    )
+  );
+  const totalInserted = results.reduce((sum, r) => sum + r.inserted, 0);
+  const lastTotal = results[results.length - 1]?.total ?? 0;
+  return { inserted: totalInserted, total: lastTotal };
 }
 
 export async function deleteReleasesForSource(sourceSlug: string): Promise<{ deleted: number }> {

@@ -36,7 +36,13 @@ fetchLogRoutes.post("/fetch-log", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json();
 
-  const [inserted] = await db.insert(fetchLog).values(body).returning();
+  let inserted;
+  try {
+    [inserted] = await db.insert(fetchLog).values(body).returning();
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: "insert_failed", message }, 500);
+  }
 
   // Best-effort notify StatusHub for live dashboard
   if (c.env.STATUS_HUB) {

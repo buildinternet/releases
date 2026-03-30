@@ -107,27 +107,29 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
     url?: string | null; contentHash?: string; publishedAt?: string | null;
   }> }>();
 
-  // Count before
-  const [{ n: before }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
+  try {
+    // Batch insert in chunks — D1 limits query size to ~1MB
+    let inserted = 0;
+    for (let i = 0; i < body.releases.length; i += 25) {
+      const chunk = body.releases.slice(i, i + 25).map((r) => ({
+        sourceId: src.id,
+        version: r.version ?? null,
+        title: r.title,
+        content: r.content,
+        url: r.url ?? null,
+        contentHash: r.contentHash ?? null,
+        publishedAt: r.publishedAt ?? null,
+      }));
+      const rows = await db.insert(releases).values(chunk).onConflictDoNothing().returning({ id: releases.id });
+      inserted += rows.length;
+    }
 
-  // Batch insert in chunks of 500
-  for (let i = 0; i < body.releases.length; i += 500) {
-    const chunk = body.releases.slice(i, i + 500).map((r) => ({
-      sourceId: src.id,
-      version: r.version ?? null,
-      title: r.title,
-      content: r.content,
-      url: r.url ?? null,
-      contentHash: r.contentHash ?? null,
-      publishedAt: r.publishedAt ?? null,
-    }));
-    await db.insert(releases).values(chunk).onConflictDoNothing();
+    const [{ n: total }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
+    return c.json({ inserted, total });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: "insert_failed", message, releaseCount: body.releases.length }, 500);
   }
-
-  // Count after
-  const [{ n: after }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
-
-  return c.json({ inserted: after - before, total: after });
 });
 
 // ── Delete all releases for a source (for --force re-fetch) ──

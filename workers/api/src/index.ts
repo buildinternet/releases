@@ -23,6 +23,11 @@ export type Env = {
 
 const app = new Hono<Env>();
 
+app.onError((err, c) => {
+  const message = err instanceof Error ? err.message : String(err);
+  return c.json({ error: "internal_error", message }, 500);
+});
+
 app.use("*", cors());
 
 // Status routes mounted before auth — they accept unauthenticated browser WebSocket/fetch connections

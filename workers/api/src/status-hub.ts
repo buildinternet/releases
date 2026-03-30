@@ -122,15 +122,15 @@ export class StatusHub extends DurableObject {
       // Ensure cleanup alarm is scheduled
       const existingAlarm = await this.ctx.storage.getAlarm();
       if (!existingAlarm) {
-        await this.ctx.storage.setAlarm(Date.now() + CLEANUP_INTERVAL_MS);
+        await this.ctx.storage.setAlarm(now + CLEANUP_INTERVAL_MS);
       }
     } else if (event.type === "session:progress") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
       if (existing) {
-        existing.step = event.step as string;
-        existing.sourcesFound = event.sourcesFound as number;
-        existing.sourcesValidated = event.sourcesValidated as number;
-        existing.currentAction = event.currentAction as string;
+        if (event.step !== undefined) existing.step = event.step as string;
+        if (event.sourcesFound !== undefined) existing.sourcesFound = event.sourcesFound as number;
+        if (event.sourcesValidated !== undefined) existing.sourcesValidated = event.sourcesValidated as number;
+        if (event.currentAction !== undefined) existing.currentAction = event.currentAction as string;
         if (event.totalSources !== undefined) existing.totalSources = event.totalSources as number;
         if (event.sourcesFetched !== undefined) existing.sourcesFetched = event.sourcesFetched as number;
         if (event.releasesFound !== undefined) existing.releasesFound = event.releasesFound as number;

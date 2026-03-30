@@ -142,7 +142,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       );
       if (msg.logLine || msg.currentAction) {
         const line = (msg.logLine ?? msg.currentAction) as string;
-        const timestamp = new Date((msg.timestamp as number) || Date.now()).toLocaleTimeString("en-US", { hour12: false });
+        const timestamp = new Date((msg.timestamp as number) || Date.now()).toISOString().slice(11, 19);
         setSessionLogs((prev) => {
           const existing = prev[sid] ?? [];
           const updated = [...existing, `${timestamp}  ${line}`];
@@ -244,10 +244,12 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     return () => clearInterval(interval);
   }, [hasRunningSessions, visible]);
 
-  // Fetch persisted logs when expanding a session that has none loaded
+  // Fetch persisted logs once when expanding a session
+  const fetchedLogsRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!expandedSession) return;
-    if (sessionLogs[expandedSession]?.length) return;
+    if (fetchedLogsRef.current.has(expandedSession)) return;
+    fetchedLogsRef.current.add(expandedSession);
     fetch(`${apiUrl}/api/status/sessions/${expandedSession}/logs`)
       .then((r) => r.ok ? r.json() : null)
       .then((logs: string[] | null) => {
@@ -256,7 +258,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         }
       })
       .catch(() => {});
-  }, [expandedSession, apiUrl, sessionLogs]);
+  }, [expandedSession, apiUrl]);
 
   const runningCount = sessions.filter((s) => s.status === "running").length;
   const totalInput = usage.reduce((sum, u) => sum + u.totalInput, 0);
