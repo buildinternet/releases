@@ -5,7 +5,7 @@ import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { updateSourceMeta } from "../../adapters/feed.js";
 
-const VALID_TYPES = ["github", "scrape", "feed"] as const;
+const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;
 
 function inferFeedTypeFromUrl(url: string): "rss" | "atom" | "jsonfeed" {
   const lower = url.toLowerCase();
@@ -27,6 +27,9 @@ export function registerEditCommand(program: Command) {
     .option("--no-org", "Remove organization association")
     .option("--feed-url <feedUrl>", "Set or update the feed URL")
     .option("--no-feed-url", "Remove stored feed URL")
+    .option("--markdown-url <markdownUrl>", "Set the raw markdown URL for this source")
+    .option("--provider <provider>", "Set the detected provider (e.g., mintlify, docusaurus)")
+    .option("--fetch-method <fetchMethod>", "Set the recommended fetch method (feed, markdown, scrape, crawl, github)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
@@ -34,10 +37,13 @@ Examples:
   released edit my-source --url https://example.com/new-changelog
   released edit my-source --org "Acme Corp"
   released edit my-source --feed-url https://example.com/feed.xml
+  released edit my-source --markdown-url https://example.com/changelog.md
+  released edit my-source --fetch-method markdown
   released edit my-source --no-org`)
     .action(async (slug: string, opts: {
       name?: string; url?: string; type?: string; slug?: string;
       org?: string | boolean; feedUrl?: string | boolean; json?: boolean;
+      markdownUrl?: string; provider?: string; fetchMethod?: string;
     }) => {
       const source = await findSourceBySlug(slug);
       if (!source) {
@@ -47,6 +53,12 @@ Examples:
 
       if (opts.type && !(VALID_TYPES as readonly string[]).includes(opts.type)) {
         console.error(chalk.red(`Invalid type "${opts.type}". Must be one of: ${VALID_TYPES.join(", ")}`));
+        process.exit(1);
+      }
+
+      const VALID_METHODS = ["feed", "markdown", "scrape", "crawl", "github"];
+      if (opts.fetchMethod && !VALID_METHODS.includes(opts.fetchMethod)) {
+        console.error(chalk.red(`Invalid fetch method "${opts.fetchMethod}". Must be one of: ${VALID_METHODS.join(", ")}`));
         process.exit(1);
       }
 
@@ -100,6 +112,30 @@ Examples:
           noFeedFound: false,
         });
         changes.push(`feed URL → ${opts.feedUrl} (${feedType})`);
+      }
+
+      // Handle --markdown-url
+      if (opts.markdownUrl) {
+        await updateSourceMeta(source, { markdownUrl: opts.markdownUrl });
+        changes.push(`markdown URL → ${opts.markdownUrl}`);
+      }
+
+      // Handle --provider
+      if (opts.provider) {
+        await updateSourceMeta(source, {
+          provider: opts.provider,
+          providerDetectedAt: new Date().toISOString(),
+        });
+        changes.push(`provider → ${opts.provider}`);
+      }
+
+      // Handle --fetch-method
+      if (opts.fetchMethod) {
+        await updateSourceMeta(source, {
+          evaluatedMethod: opts.fetchMethod,
+          evaluatedAt: new Date().toISOString(),
+        });
+        changes.push(`fetch method → ${opts.fetchMethod}`);
       }
 
       if (Object.keys(updates).length > 0) {
