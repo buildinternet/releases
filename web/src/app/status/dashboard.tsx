@@ -244,6 +244,20 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     return () => clearInterval(interval);
   }, [hasRunningSessions, visible]);
 
+  // Fetch persisted logs when expanding a session that has none loaded
+  useEffect(() => {
+    if (!expandedSession) return;
+    if (sessionLogs[expandedSession]?.length) return;
+    fetch(`${apiUrl}/api/status/sessions/${expandedSession}/logs`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((logs: string[] | null) => {
+        if (logs?.length) {
+          setSessionLogs((prev) => ({ ...prev, [expandedSession]: logs }));
+        }
+      })
+      .catch(() => {});
+  }, [expandedSession, apiUrl, sessionLogs]);
+
   const runningCount = sessions.filter((s) => s.status === "running").length;
   const totalInput = usage.reduce((sum, u) => sum + u.totalInput, 0);
   const totalOutput = usage.reduce((sum, u) => sum + u.totalOutput, 0);
@@ -339,7 +353,7 @@ function SessionsTable({
       </div>
       {sessions.map((session) => {
         const isUpdate = session.type === "update";
-        return (<div key={session.sessionId} className={session.status !== "running" ? "opacity-50" : ""}>
+        return (<div key={session.sessionId}>
           <button
             onClick={() => onToggle(session.sessionId)}
             className="grid grid-cols-[2fr_1fr_1.5fr_1fr] px-4 py-3 w-full text-left border-b border-stone-100 hover:bg-stone-50 transition-colors"

@@ -1,6 +1,8 @@
 import { DurableObject } from "cloudflare:workers";
 
 const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark as error
+const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
+const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // run cleanup daily
 
 interface SessionState {
   sessionId: string;
@@ -18,6 +20,7 @@ interface SessionState {
   startedAt: number;
   lastUpdatedAt: number;
   error?: string;
+  dismissed?: boolean;
 }
 
 interface StatusMessage {
@@ -60,11 +63,25 @@ export class StatusHub extends DurableObject {
       });
     }
 
-    // HTTP endpoint: dismiss a terminal session
+    // HTTP endpoint: get logs for a session
+    const logsMatch = url.pathname.match(/^\/sessions\/([^/]+)\/logs$/);
+    if (request.method === "GET" && logsMatch) {
+      const sessionId = logsMatch[1];
+      const logs = (await this.ctx.storage.get<string[]>(`logs:${sessionId}`)) ?? [];
+      return new Response(JSON.stringify(logs), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // HTTP endpoint: dismiss a terminal session (hides from UI, retains data)
     const dismissMatch = url.pathname.match(/^\/sessions\/([^/]+)$/);
     if (request.method === "DELETE" && dismissMatch) {
       const sessionId = dismissMatch[1];
-      await this.ctx.storage.delete(`session:${sessionId}`);
+      const existing = await this.ctx.storage.get<SessionState>(`session:${sessionId}`);
+      if (existing) {
+        existing.dismissed = true;
+        await this.ctx.storage.put(`session:${sessionId}`, existing);
+      }
       this.broadcast({ type: "session:dismissed", sessionId });
       return new Response("ok", { status: 200 });
     }
@@ -75,6 +92,20 @@ export class StatusHub extends DurableObject {
   async webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): Promise<void> {}
   async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
   async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {}
+
+  async alarm(): Promise<void> {
+    const now = Date.now();
+    const entries = await this.ctx.storage.list<SessionState>({ prefix: "session:" });
+    for (const [key, session] of entries) {
+      const age = now - (session.lastUpdatedAt || session.startedAt);
+      if (age > RETENTION_MS && session.status !== "running") {
+        await this.ctx.storage.delete(key);
+        await this.ctx.storage.delete(`logs:${session.sessionId}`);
+      }
+    }
+    // Schedule next cleanup
+    await this.ctx.storage.setAlarm(now + CLEANUP_INTERVAL_MS);
+  }
 
   private async handleEvent(event: StatusMessage): Promise<void> {
     const now = Date.now();
@@ -88,6 +119,11 @@ export class StatusHub extends DurableObject {
         lastUpdatedAt: now,
       };
       await this.ctx.storage.put(`session:${session.sessionId}`, session);
+      // Ensure cleanup alarm is scheduled
+      const existingAlarm = await this.ctx.storage.getAlarm();
+      if (!existingAlarm) {
+        await this.ctx.storage.setAlarm(Date.now() + CLEANUP_INTERVAL_MS);
+      }
     } else if (event.type === "session:progress") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
       if (existing) {
@@ -101,6 +137,17 @@ export class StatusHub extends DurableObject {
         if (event.releasesInserted !== undefined) existing.releasesInserted = event.releasesInserted as number;
         existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
+      }
+      // Persist log lines
+      const line = (event.logLine ?? event.currentAction) as string | undefined;
+      if (line) {
+        const sid = event.sessionId as string;
+        const logs = (await this.ctx.storage.get<string[]>(`logs:${sid}`)) ?? [];
+        const timestamp = new Date(now).toISOString().slice(11, 19);
+        logs.push(`${timestamp}  ${line}`);
+        // Keep last 500 lines per session
+        const trimmed = logs.length > 500 ? logs.slice(-500) : logs;
+        await this.ctx.storage.put(`logs:${sid}`, trimmed);
       }
     } else if (event.type === "session:complete") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
@@ -142,7 +189,9 @@ export class StatusHub extends DurableObject {
         session.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${session.sessionId}`, session);
       }
-      sessions.push(session);
+      if (!session.dismissed) {
+        sessions.push(session);
+      }
     }
 
     sessions.sort((a, b) => {

@@ -66,6 +66,13 @@ statusRoutes.get("/status/usage", async (c) => {
   return c.json(rows);
 });
 
+statusRoutes.get("/status/sessions/:sessionId/logs", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}/logs`));
+  const logs = await res.json();
+  return c.json(logs);
+});
+
 statusRoutes.delete("/status/sessions/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
   await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}`, { method: "DELETE" }));
