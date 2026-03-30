@@ -24,7 +24,8 @@ export interface EvaluationResult {
 
 // ── Persist evaluation results to a source ─────────────────────────
 
-export async function applyEvaluation(source: Source, result: EvaluationResult): Promise<void> {
+/** Build a SourceMetadata-compatible object from an evaluation result. */
+export function buildMetadataFromEvaluation(result: EvaluationResult): Record<string, unknown> {
   const meta: Record<string, unknown> = {
     evaluatedMethod: result.recommendedMethod,
     evaluatedAt: new Date().toISOString(),
@@ -50,6 +51,11 @@ export async function applyEvaluation(source: Source, result: EvaluationResult):
     if (mdAlt) meta.markdownUrl = mdAlt.url;
   }
 
+  return meta;
+}
+
+export async function applyEvaluation(source: Source, result: EvaluationResult): Promise<void> {
+  const meta = buildMetadataFromEvaluation(result);
   await updateSourceMeta(source, meta);
 }
 
