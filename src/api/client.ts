@@ -496,3 +496,16 @@ export async function unlinkOrgAccount(
     method: "DELETE",
   });
 }
+
+// ── Status events ──
+
+export async function postStatusEvent(event: {
+  type: string;
+  sessionId: string;
+  [key: string]: unknown;
+}): Promise<void> {
+  await apiFetch("/api/status/event", {
+    method: "POST",
+    body: JSON.stringify(event),
+  });
+}

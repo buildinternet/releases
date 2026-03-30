@@ -5,10 +5,15 @@ import { useEffect, useRef, useState, useCallback } from "react";
 interface SessionState {
   sessionId: string;
   company: string;
+  type?: "onboard" | "update";
   status: "running" | "complete" | "error";
   step?: string;
   sourcesFound?: number;
   sourcesValidated?: number;
+  totalSources?: number;
+  sourcesFetched?: number;
+  releasesFound?: number;
+  releasesInserted?: number;
   currentAction?: string;
   startedAt: number;
   lastUpdatedAt?: number;
@@ -121,7 +126,17 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       setSessions((prev) =>
         prev.map((s) =>
           s.sessionId === sid
-            ? { ...s, step: msg.step as string, sourcesFound: msg.sourcesFound as number, sourcesValidated: msg.sourcesValidated as number, currentAction: msg.currentAction as string }
+            ? {
+                ...s,
+                step: msg.step as string,
+                sourcesFound: msg.sourcesFound as number,
+                sourcesValidated: msg.sourcesValidated as number,
+                currentAction: msg.currentAction as string,
+                totalSources: msg.totalSources as number | undefined,
+                sourcesFetched: msg.sourcesFetched as number | undefined,
+                releasesFound: msg.releasesFound as number | undefined,
+                releasesInserted: msg.releasesInserted as number | undefined,
+              }
             : s
         )
       );
@@ -311,7 +326,7 @@ function SessionsTable({
   onDismiss: (id: string) => void;
 }) {
   if (sessions.length === 0) {
-    return <div className="text-sm text-stone-400 py-8 text-center">No discovery sessions yet.</div>;
+    return <div className="text-sm text-stone-400 py-8 text-center">No sessions yet.</div>;
   }
 
   return (
@@ -322,8 +337,9 @@ function SessionsTable({
         <div>State</div>
         <div className="text-right">Elapsed</div>
       </div>
-      {sessions.map((session) => (
-        <div key={session.sessionId} className={session.status !== "running" ? "opacity-50" : ""}>
+      {sessions.map((session) => {
+        const isUpdate = session.type === "update";
+        return (<div key={session.sessionId} className={session.status !== "running" ? "opacity-50" : ""}>
           <button
             onClick={() => onToggle(session.sessionId)}
             className="grid grid-cols-[2fr_1fr_1.5fr_1fr] px-4 py-3 w-full text-left border-b border-stone-100 hover:bg-stone-50 transition-colors"
@@ -333,17 +349,29 @@ function SessionsTable({
               {session.company}
             </div>
             <div className="text-sm">
-              <StepBadge step={session.step} status={session.status} />
+              <StepBadge step={session.step} status={session.status} type={session.type} />
             </div>
             <div className="text-sm text-stone-500">
               {session.status === "error" ? (
                 <span className="text-red-500">{session.error?.slice(0, 40)}</span>
               ) : session.status === "complete" ? (
-                <span className="text-green-600">{session.sourcesFound ?? 0} sources added</span>
+                isUpdate ? (
+                  <span className="text-green-600">
+                    {session.sourcesFetched ?? 0} sources fetched, {session.releasesInserted ?? 0} new releases
+                  </span>
+                ) : (
+                  <span className="text-green-600">{session.sourcesFound ?? 0} sources added</span>
+                )
               ) : (
-                <span>
-                  {session.sourcesFound ?? 0} found, {session.sourcesValidated ?? 0} validated
-                </span>
+                isUpdate ? (
+                  <span>
+                    {session.sourcesFetched ?? 0}/{session.totalSources ?? "?"} sources, {session.releasesInserted ?? 0} new releases
+                  </span>
+                ) : (
+                  <span>
+                    {session.sourcesFound ?? 0} found, {session.sourcesValidated ?? 0} validated
+                  </span>
+                )
               )}
             </div>
             <div className="text-sm text-stone-400 text-right flex items-center justify-end gap-2">
@@ -369,16 +397,21 @@ function SessionsTable({
           {expandedSession === session.sessionId && (
             <SessionLogPanel sessionId={session.sessionId} logs={sessionLogs[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
           )}
-        </div>
-      ))}
+        </div>);
+      })}
     </div>
   );
 }
 
-function StepBadge({ step, status }: { step?: string; status: string }) {
+function StepBadge({ step, status, type }: { step?: string; status: string; type?: string }) {
   if (status === "complete") return <span className="text-green-600 text-xs">Complete</span>;
   if (status === "error") return <span className="text-red-500 text-xs">Error</span>;
   if (!step) return <span className="text-stone-400 text-xs">Starting...</span>;
+
+  if (type === "update") {
+    const color = step === "fetching" ? "text-blue-500" : "text-stone-500";
+    return <span className={`text-xs capitalize ${color}`}>{step}</span>;
+  }
 
   const color = step === "discovering" ? "text-amber-500" : step === "adding" ? "text-blue-500" : step === "validating" ? "text-green-500" : "text-stone-500";
   return <span className={`text-xs capitalize ${color}`}>{step}</span>;

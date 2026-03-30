@@ -10,6 +10,8 @@ import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import { insertFetchLog } from "../../db/queries.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedSec, daysAgoIso } from "../../lib/dates.js";
+import { isRemoteMode } from "../../lib/mode.js";
+import * as apiClient from "../../api/client.js";
 
 export function registerFetchCommand(program: Command) {
   program
@@ -142,6 +144,53 @@ Examples:
         if (opts.max) {
           fetchOptions.maxEntries = parseInt(opts.max, 10);
         }
+      }
+
+      // ── Session tracking for remote mode ──
+      const sessionId = crypto.randomUUID();
+      let sessionCompany = "";
+      let sessionReleasesFound = 0;
+      let sessionReleasesInserted = 0;
+      let sessionSourcesFetched = 0;
+      let lastProgressAt = 0;
+      const PROGRESS_INTERVAL_MS = 2000;
+
+      async function startSession() {
+        if (!isRemoteMode() || targetSources.length === 0) return;
+        sessionCompany = targetSources.length === 1
+          ? targetSources[0].name
+          : `${targetSources.length} sources`;
+        await apiClient.postStatusEvent({
+          type: "session:start",
+          sessionId,
+          company: sessionCompany,
+          sessionType: "update",
+        }).catch(() => {});
+      }
+
+      function progressSession() {
+        if (!isRemoteMode()) return;
+        const now = Date.now();
+        if (now - lastProgressAt < PROGRESS_INTERVAL_MS && sessionSourcesFetched < targetSources.length) return;
+        lastProgressAt = now;
+        apiClient.postStatusEvent({
+          type: "session:progress",
+          sessionId,
+          step: "fetching",
+          totalSources: targetSources.length,
+          sourcesFetched: sessionSourcesFetched,
+          releasesFound: sessionReleasesFound,
+          releasesInserted: sessionReleasesInserted,
+        }).catch(() => {});
+      }
+
+      async function endSession(error?: string) {
+        if (!isRemoteMode()) return;
+        await apiClient.postStatusEvent({
+          type: error ? "session:error" : "session:complete",
+          sessionId,
+          ...(error ? { error } : {}),
+        }).catch(() => {});
       }
 
       let completed = 0;
@@ -281,6 +330,7 @@ Examples:
           if (opts.dryRun) {
             fetchResults.push({ source: source.name, newReleases: rawReleases.length });
             totalInserted += rawReleases.length;
+            sessionReleasesFound += rawReleases.length;
 
             // Log to fetch_log with dry_run status so stats shows it correctly
             await insertFetchLog({
@@ -350,6 +400,8 @@ Examples:
           }
 
           fetchResults.push({ source: source.name, newReleases: inserted });
+          sessionReleasesFound += rawReleases.length;
+          sessionReleasesInserted += inserted;
 
           await insertFetchLog({
             sourceId: source.id,
@@ -403,8 +455,14 @@ Examples:
           active--;
           completed++;
           printProgress();
+          if (!opts.dryRun) {
+            sessionSourcesFetched++;
+            progressSession();
+          }
         }
       }
+
+      await startSession();
 
       // Run with concurrency pool
       if (concurrency <= 1) {
@@ -424,6 +482,13 @@ Examples:
       }
 
       process.removeListener("SIGINT", onSigint);
+
+      const fetchErrors = fetchResults.filter((r) => r.error);
+      if (fetchErrors.length === fetchResults.length && fetchResults.length > 0) {
+        await endSession(`All ${fetchResults.length} sources failed`);
+      } else {
+        await endSession();
+      }
 
       // Clear progress line
       if (showProgress) {

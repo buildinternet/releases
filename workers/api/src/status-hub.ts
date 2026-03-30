@@ -5,10 +5,15 @@ const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark a
 interface SessionState {
   sessionId: string;
   company: string;
+  type: "onboard" | "update";
   status: "running" | "complete" | "error";
   step?: string;
   sourcesFound?: number;
   sourcesValidated?: number;
+  totalSources?: number;
+  sourcesFetched?: number;
+  releasesFound?: number;
+  releasesInserted?: number;
   currentAction?: string;
   startedAt: number;
   lastUpdatedAt: number;
@@ -77,6 +82,7 @@ export class StatusHub extends DurableObject {
       const session: SessionState = {
         sessionId: event.sessionId as string,
         company: event.company as string,
+        type: (event.sessionType as SessionState["type"]) ?? "onboard",
         status: "running",
         startedAt: now,
         lastUpdatedAt: now,
@@ -89,6 +95,10 @@ export class StatusHub extends DurableObject {
         existing.sourcesFound = event.sourcesFound as number;
         existing.sourcesValidated = event.sourcesValidated as number;
         existing.currentAction = event.currentAction as string;
+        if (event.totalSources !== undefined) existing.totalSources = event.totalSources as number;
+        if (event.sourcesFetched !== undefined) existing.sourcesFetched = event.sourcesFetched as number;
+        if (event.releasesFound !== undefined) existing.releasesFound = event.releasesFound as number;
+        if (event.releasesInserted !== undefined) existing.releasesInserted = event.releasesInserted as number;
         existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
