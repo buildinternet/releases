@@ -71,6 +71,13 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
   return null;
 }
 
+export async function getOrgById(orgId: string): Promise<Organization | null> {
+  if (isRemoteMode()) return null; // Remote mode: no ID-based lookup; callers treat null as "not found → enabled"
+  const db = getDb();
+  const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+  return org ?? null;
+}
+
 export async function getSourcesByOrg(orgId: string): Promise<Source[]> {
   if (isRemoteMode()) return apiClient.getSourcesByOrg(orgId);
   const db = getDb();
