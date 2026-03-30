@@ -6,6 +6,8 @@ import { SourceTypeIcon } from "@/components/source-type-icon";
 import { ReleaseListItem } from "@/components/release-item";
 import { Pagination } from "@/components/pagination";
 import { Sidebar } from "@/components/sidebar";
+import { SourceTabs } from "@/components/source-tabs";
+import { HighlightsView } from "@/components/highlights-view";
 import Link from "next/link";
 
 function formatDate(iso: string | null) {
@@ -26,10 +28,10 @@ export default async function IndependentSourcePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string }>;
+  searchParams: Promise<{ page?: string; tab?: string }>;
 }) {
   const { slug } = await params;
-  const { page: pageParam } = await searchParams;
+  const { page: pageParam, tab } = await searchParams;
   const page = parseInt(pageParam ?? "1", 10) || 1;
 
   let source;
@@ -85,10 +87,20 @@ export default async function IndependentSourcePage({
         </div>
         <div className="flex gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0">
-            {source.releases.map((release, i) => (
-              <ReleaseListItem key={i} release={release} />
-            ))}
-            <Pagination page={source.pagination.page} totalPages={source.pagination.totalPages} basePath={`/source/${slug}`} />
+            <SourceTabs hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)} />
+            {(tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
+              <>
+                {source.releases.map((release, i) => (
+                  <ReleaseListItem key={i} release={release} />
+                ))}
+                <Pagination page={source.pagination.page} totalPages={source.pagination.totalPages} basePath={`/source/${slug}`} />
+              </>
+            ) : (
+              <HighlightsView
+                rolling={source.summaries?.rolling ?? null}
+                monthly={source.summaries?.monthly ?? []}
+              />
+            )}
           </div>
           <Sidebar sections={sidebarSections} />
         </div>
