@@ -157,10 +157,11 @@ Examples:
         }).catch(() => {});
       }
 
-      function progressSession() {
+      function progressSession(logLine?: string) {
         if (!isRemoteMode()) return;
         const now = Date.now();
-        if (now - lastProgressAt < PROGRESS_INTERVAL_MS && sessionSourcesFetched < targetSources.length) return;
+        // Always send if there's a log line, otherwise throttle
+        if (!logLine && now - lastProgressAt < PROGRESS_INTERVAL_MS && sessionSourcesFetched < targetSources.length) return;
         lastProgressAt = now;
         apiClient.postStatusEvent({
           type: "session:progress",
@@ -170,6 +171,7 @@ Examples:
           sourcesFetched: sessionSourcesFetched,
           releasesFound: sessionReleasesFound,
           releasesInserted: sessionReleasesInserted,
+          ...(logLine ? { logLine, currentAction: logLine } : {}),
         }).catch(() => {});
       }
 
@@ -276,6 +278,7 @@ Examples:
 
         active++;
         printProgress(source.name);
+        progressSession(`Fetching ${source.name}...`);
         const startTime = performance.now();
 
         let rawContent: string | undefined;
@@ -312,6 +315,7 @@ Examples:
               });
             }
             fetchResults.push({ source: source.name, newReleases: 0 });
+            progressSession(`${source.name}: no changes`);
             return;
           }
 
@@ -371,6 +375,7 @@ Examples:
           fetchResults.push({ source: source.name, newReleases: inserted });
           sessionReleasesFound += rawReleases.length;
           sessionReleasesInserted += inserted;
+          progressSession(`${source.name}: ${inserted} new releases (${elapsedSec(startTime)}s)`);
 
           await insertFetchLog({
             sourceId: source.id,
@@ -394,7 +399,9 @@ Examples:
             );
           }
         } catch (err) {
-          fetchResults.push({ source: source.name, newReleases: 0, error: err instanceof Error ? err.message : String(err) });
+          const errMsg = err instanceof Error ? err.message : String(err);
+          fetchResults.push({ source: source.name, newReleases: 0, error: errMsg });
+          progressSession(`${source.name}: error — ${errMsg.slice(0, 100)}`);
 
           await insertFetchLog({
             sourceId: source.id,
@@ -402,7 +409,7 @@ Examples:
             releasesInserted: 0,
             durationMs: Math.round(performance.now() - startTime),
             status: "error",
-            error: err instanceof Error ? err.message : String(err),
+            error: errMsg,
             rawContent: rawContent ?? null,
           }).catch(() => {}); // don't fail the whole fetch if logging fails
 

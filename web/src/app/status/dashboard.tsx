@@ -55,6 +55,7 @@ function formatTokens(n: number): string {
 function formatElapsed(startedAt: number, endedAt?: number): string {
   const end = endedAt ?? Date.now();
   const seconds = Math.floor((end - startedAt) / 1000);
+  if (seconds <= 0) return "—";
   if (seconds < 60) return `${seconds}s`;
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -73,8 +74,10 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [fetchLogs, setFetchLogs] = useState<FetchLogEntry[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
   const [connected, setConnected] = useState(false);
-  const [expandedSession, setExpandedSession] = useState<string | null>(null);
+  const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [sessionLogs, setSessionLogs] = useState<Record<string, string[]>>({});
+  const [sessionPage, setSessionPage] = useState(0);
+  const sessionsPerPage = 25;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const reconnectDelay = useRef(1000);
@@ -246,19 +249,18 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
   // Fetch persisted logs once when expanding a session
   const fetchedLogsRef = useRef<Set<string>>(new Set());
-  useEffect(() => {
-    if (!expandedSession) return;
-    if (fetchedLogsRef.current.has(expandedSession)) return;
-    fetchedLogsRef.current.add(expandedSession);
-    fetch(`${apiUrl}/api/status/sessions/${expandedSession}/logs`)
+  const fetchLogsForSession = useCallback((sid: string) => {
+    if (fetchedLogsRef.current.has(sid)) return;
+    fetchedLogsRef.current.add(sid);
+    fetch(`${apiUrl}/api/status/sessions/${sid}/logs`)
       .then((r) => r.ok ? r.json() : null)
       .then((logs: string[] | null) => {
         if (logs?.length) {
-          setSessionLogs((prev) => ({ ...prev, [expandedSession]: logs }));
+          setSessionLogs((prev) => ({ ...prev, [sid]: logs }));
         }
       })
       .catch(() => {});
-  }, [expandedSession, apiUrl]);
+  }, [apiUrl]);
 
   const runningCount = sessions.filter((s) => s.status === "running").length;
   const totalInput = usage.reduce((sum, u) => sum + u.totalInput, 0);
@@ -314,10 +316,21 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       {tab === "sessions" && (
         <SessionsTable
           sessions={sessions}
-          expandedSession={expandedSession}
+          expandedSessions={expandedSessions}
           sessionLogs={sessionLogs}
           apiUrl={apiUrl}
-          onToggle={(id) => setExpandedSession(expandedSession === id ? null : id)}
+          page={sessionPage}
+          perPage={sessionsPerPage}
+          onPageChange={setSessionPage}
+          onToggle={(id) => {
+            fetchLogsForSession(id);
+            setExpandedSessions((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            });
+          }}
           onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         />
       )}
@@ -326,18 +339,36 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   );
 }
 
+const timeFormatter = new Intl.DateTimeFormat("en-US", {
+  month: "short", day: "numeric",
+  hour: "2-digit", minute: "2-digit",
+  hour12: false, timeZoneName: "short",
+});
+
+function formatTime(ts: number): string {
+  const parts = timeFormatter.formatToParts(new Date(ts));
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+  return `${get("month")} ${get("day")}, ${get("hour")}:${get("minute")} ${get("timeZoneName")}`;
+}
+
 function SessionsTable({
   sessions,
-  expandedSession,
+  expandedSessions,
   sessionLogs,
   apiUrl,
+  page,
+  perPage,
+  onPageChange,
   onToggle,
   onDismiss,
 }: {
   sessions: SessionState[];
-  expandedSession: string | null;
+  expandedSessions: Set<string>;
   sessionLogs: Record<string, string[]>;
   apiUrl: string;
+  page: number;
+  perPage: number;
+  onPageChange: (page: number) => void;
   onToggle: (id: string) => void;
   onDismiss: (id: string) => void;
 }) {
@@ -345,92 +376,127 @@ function SessionsTable({
     return <div className="text-sm text-stone-400 py-8 text-center">No sessions yet.</div>;
   }
 
+  const totalPages = Math.ceil(sessions.length / perPage);
+  const paginated = sessions.slice(page * perPage, (page + 1) * perPage);
+
   return (
-    <div className="border border-stone-200 rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-medium uppercase tracking-wider text-stone-400">
-        <div>Company</div>
-        <div>Step</div>
-        <div>State</div>
-        <div className="text-right">Elapsed</div>
+    <div>
+      <div className="border border-stone-200 rounded-lg overflow-hidden">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-medium uppercase tracking-wider text-stone-400">
+          <div>Company</div>
+          <div>Started</div>
+          <div>Step</div>
+          <div>Result</div>
+          <div className="text-right">Elapsed</div>
+        </div>
+        {paginated.map((session) => {
+          const isUpdate = session.type === "update";
+          const isExpanded = expandedSessions.has(session.sessionId);
+          return (<div key={session.sessionId}>
+            <button
+              onClick={() => onToggle(session.sessionId)}
+              className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr] px-4 py-3 w-full text-left border-b border-stone-100 hover:bg-stone-50 transition-colors"
+            >
+              <div className="text-sm text-stone-900">
+                <span className="mr-1.5 text-stone-300">{isExpanded ? "▾" : "▸"}</span>
+                {session.company}
+              </div>
+              <div className="text-sm text-stone-500">
+                {formatTime(session.startedAt)}
+              </div>
+              <div className="text-sm">
+                <StepBadge step={session.step} status={session.status} type={session.type} />
+              </div>
+              <div className="text-sm text-stone-500">
+                {session.status === "error" ? (
+                  <span className="text-red-500">{session.error?.slice(0, 40)}</span>
+                ) : session.status === "complete" ? (
+                  isUpdate ? (
+                    <span className="text-green-600 font-mono">
+                      {(session.sourcesFetched ?? 0) > 0 && <span>{session.sourcesFetched} src</span>}
+                      {(session.releasesInserted ?? 0) > 0 && <span className="ml-1.5 text-green-700">+{session.releasesInserted}</span>}
+                      {(session.sourcesFetched ?? 0) === 0 && (session.releasesInserted ?? 0) === 0 && <span>no changes</span>}
+                    </span>
+                  ) : (
+                    <span className="text-green-600 font-mono">+{session.sourcesFound ?? 0} sources</span>
+                  )
+                ) : (
+                  isUpdate ? (
+                    <span className="font-mono">
+                      {session.sourcesFetched ?? 0}/{session.totalSources ?? "?"} src
+                      {(session.releasesInserted ?? 0) > 0 && <span className="ml-1.5 text-green-600">+{session.releasesInserted}</span>}
+                    </span>
+                  ) : (
+                    <span className="font-mono">
+                      {session.sourcesFound ?? 0} found, {session.sourcesValidated ?? 0} validated
+                    </span>
+                  )
+                )}
+              </div>
+              <div className="text-sm text-stone-400 text-right flex items-center justify-end gap-2">
+                {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
+                {session.status !== "running" && (
+                  <span
+                    role="button"
+                    tabIndex={0}
+                    className="text-stone-300 hover:text-stone-500 transition-colors"
+                    title="Dismiss"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" });
+                      onDismiss(session.sessionId);
+                    }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
+                  >
+                    &times;
+                  </span>
+                )}
+              </div>
+            </button>
+            {isExpanded && (
+              <SessionLogPanel sessionId={session.sessionId} logs={sessionLogs[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
+            )}
+          </div>);
+        })}
       </div>
-      {sessions.map((session) => {
-        const isUpdate = session.type === "update";
-        return (<div key={session.sessionId}>
-          <button
-            onClick={() => onToggle(session.sessionId)}
-            className="grid grid-cols-[2fr_1fr_1.5fr_1fr] px-4 py-3 w-full text-left border-b border-stone-100 hover:bg-stone-50 transition-colors"
-          >
-            <div className="text-sm font-medium text-stone-900">
-              <span className="mr-1.5 text-stone-300">{expandedSession === session.sessionId ? "▾" : "▸"}</span>
-              {session.company}
-            </div>
-            <div className="text-sm">
-              <StepBadge step={session.step} status={session.status} type={session.type} />
-            </div>
-            <div className="text-sm text-stone-500">
-              {session.status === "error" ? (
-                <span className="text-red-500">{session.error?.slice(0, 40)}</span>
-              ) : session.status === "complete" ? (
-                isUpdate ? (
-                  <span className="text-green-600">
-                    {session.sourcesFetched ?? 0} sources fetched, {session.releasesInserted ?? 0} new releases
-                  </span>
-                ) : (
-                  <span className="text-green-600">{session.sourcesFound ?? 0} sources added</span>
-                )
-              ) : (
-                isUpdate ? (
-                  <span>
-                    {session.sourcesFetched ?? 0}/{session.totalSources ?? "?"} sources, {session.releasesInserted ?? 0} new releases
-                  </span>
-                ) : (
-                  <span>
-                    {session.sourcesFound ?? 0} found, {session.sourcesValidated ?? 0} validated
-                  </span>
-                )
-              )}
-            </div>
-            <div className="text-sm text-stone-400 text-right flex items-center justify-end gap-2">
-              {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
-              {session.status !== "running" && (
-                <span
-                  role="button"
-                  tabIndex={0}
-                  className="text-stone-300 hover:text-stone-500 transition-colors"
-                  title="Dismiss"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" });
-                    onDismiss(session.sessionId);
-                  }}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
-                >
-                  &times;
-                </span>
-              )}
-            </div>
-          </button>
-          {expandedSession === session.sessionId && (
-            <SessionLogPanel sessionId={session.sessionId} logs={sessionLogs[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
-          )}
-        </div>);
-      })}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 text-xs text-stone-400">
+          <span>{sessions.length} sessions</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onPageChange(page - 1)}
+              disabled={page === 0}
+              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+            >
+              Prev
+            </button>
+            <span>{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages - 1}
+              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function StepBadge({ step, status, type }: { step?: string; status: string; type?: string }) {
-  if (status === "complete") return <span className="text-green-600 text-xs">Complete</span>;
-  if (status === "error") return <span className="text-red-500 text-xs">Error</span>;
-  if (!step) return <span className="text-stone-400 text-xs">Starting...</span>;
+  if (status === "complete") return <span className="text-green-600">Complete</span>;
+  if (status === "error") return <span className="text-red-500">Error</span>;
+  if (!step) return <span className="text-stone-400">Starting...</span>;
 
   if (type === "update") {
     const color = step === "fetching" ? "text-blue-500" : "text-stone-500";
-    return <span className={`text-xs capitalize ${color}`}>{step}</span>;
+    return <span className={`capitalize ${color}`}>{step}</span>;
   }
 
   const color = step === "discovering" ? "text-amber-500" : step === "adding" ? "text-blue-500" : step === "validating" ? "text-green-500" : "text-stone-500";
-  return <span className={`text-xs capitalize ${color}`}>{step}</span>;
+  return <span className={`capitalize ${color}`}>{step}</span>;
 }
 
 function SessionLogPanel({ sessionId, logs, currentAction, status }: { sessionId: string; logs: string[]; currentAction?: string; status: string }) {
@@ -446,7 +512,9 @@ function SessionLogPanel({ sessionId, logs, currentAction, status }: { sessionId
         <div className="text-stone-500">{currentAction}</div>
       )}
       {logs.length === 0 && !currentAction && (
-        <div className="text-stone-600">Waiting for log output...</div>
+        <div className="text-stone-600">
+          {status === "running" ? "Waiting for log output..." : "No logs recorded for this session."}
+        </div>
       )}
       {logs.map((line, i) => (
         <div key={`${sessionId}-${i}`}>{line}</div>
