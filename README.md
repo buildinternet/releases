@@ -29,11 +29,11 @@ released add "Linear" --url https://linear.app/changelog
 released add "My Blog" --url https://example.com/changelog
 ```
 
-By default, `add` runs an evaluation pipeline that determines the best ingestion method for a URL. This includes provider detection (Mintlify, Docusaurus, etc.), feed discovery, markdown suffix probing, and an AI agent that inspects the page:
-- **GitHub URLs** → uses the GitHub Releases API (no agent needed)
+By default, `add` runs automated pre-checks that determine the best ingestion method for a URL. This includes provider detection (Mintlify, Docusaurus, etc.), feed discovery, and markdown suffix probing:
+- **GitHub URLs** → uses the GitHub Releases API directly
 - **Other URLs** → evaluates and stores the recommended method (feed, markdown, scrape, or crawl) so the first `fetch` already knows the optimal path
 
-You can override detection with `--type github`, `--type scrape`, or `--type feed`. Use `--skip-eval` to bypass the evaluation agent and fall back to basic heuristic detection. Batch mode (`--batch`) skips evaluation by default for speed.
+You can override detection with `--type github`, `--type scrape`, or `--type feed`. Use `--skip-eval` to bypass evaluation and fall back to basic heuristic detection. Batch mode (`--batch`) skips evaluation by default for speed.
 
 If you know the feed URL and it isn't easily discoverable, provide it explicitly (skips evaluation):
 
@@ -387,6 +387,7 @@ released usage --days 7    # last 7 days
 - **SQLite** (Bun built-in + Drizzle ORM) with WAL mode and FTS5 for search
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, Cloudflare Browser Rendering for scraping
 - **AI Layer** — Anthropic SDK for changelog parsing (ingestion) and summarization (query)
+- **Agent** — Unified Agent SDK agent (`src/agent/released.ts`) handles discovery, evaluation, and onboarding. Domain knowledge lives in skill files at `src/agent/skills/`. The deterministic fetch pipeline (ingest, incremental, enrich, summarize) stays as direct Messages API calls.
 - **MCP Server** — `@modelcontextprotocol/sdk` on stdio
 - **API Server** — Bun HTTP server with read-only JSON endpoints, CORS enabled
 - **Web Frontend** — Next.js 15 (App Router) + Tailwind CSS in `web/`

@@ -290,6 +290,7 @@ export async function fetchViaFeed(
   }
 
   // Conditional fetch headers
+  const isFirstFetch = !meta.feedEtag && !meta.feedLastModified;
   const conditionalHeaders: Record<string, string> = {};
   if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
   if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;
@@ -302,6 +303,22 @@ export async function fetchViaFeed(
     options,
     Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
   );
+
+  // Guard: if this is the first real fetch (no prior ETag) and we got 0 releases,
+  // the feed URL is likely a non-standard format we can't parse. Clear it so the
+  // scrape adapter can take over on the next fetch (or this one, by returning null).
+  if (isFirstFetch && releases.length === 0) {
+    logger.warn(`Feed returned 0 releases on first fetch — clearing feed URL as untrustworthy`);
+    const cleanMeta = getSourceMeta(source);
+    delete cleanMeta.feedUrl;
+    delete cleanMeta.feedType;
+    delete cleanMeta.feedEtag;
+    delete cleanMeta.feedLastModified;
+    delete cleanMeta.feedDiscoveredAt;
+    cleanMeta.noFeedFound = true;
+    await updateSource(source, { metadata: JSON.stringify(cleanMeta) });
+    return null;
+  }
 
   if (etag) metaUpdates.feedEtag = etag;
   if (lastModified) metaUpdates.feedLastModified = lastModified;
