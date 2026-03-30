@@ -32,13 +32,13 @@ Type-check: `npx tsc --noEmit`
 - Batch DB inserts in chunks of 500 (SQLite variable limit).
 - Dedup via `UNIQUE(source_id, url)` and `UNIQUE(source_id, content_hash)` with `onConflictDoNothing()`.
 - `released import <file>` bulk-imports orgs and sources from a JSON manifest. Used as the discovery agent handoff point. Supports `--dry-run`, `--json`, `--skip-existing`.
-- Smart fetch: `fetch --stale <hours>` respects backoff (`nextFetchAfter`) and `fetchPriority`. `fetch --retry-errors` retries sources whose last fetch failed. Backoff counters (`consecutiveNoChange`, `consecutiveErrors`) on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h).
+- Smart fetch: `fetch --stale <hours>` respects backoff (`nextFetchAfter`) and `fetchPriority`. `fetch --retry-errors` retries sources whose last fetch failed. Backoff counters (`consecutiveNoChange`, `consecutiveErrors`) on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h). Default max of 200 releases per source prevents API pagination limits (e.g., GitHub's 10K cap). Use `--max <n>` to adjust or `--all` to remove the cap.
 - Ignored URLs are **org-scoped** — a URL ignored for one org can still be valid for another. The `ignored_urls` table requires `orgId`. CLI: `ignore list/add/remove --org <org>`. Blocked URLs (`blocked_urls` table) are **global** — for spam domains and known-bad URLs. CLI: `block list/add/remove`. Both lists are checked by `isUrlExcluded()` before adding sources.
 - Release suppression: individual releases can be suppressed (`release suppress <id> --reason "..."`) to hide them from queries and search without deleting. Suppressed releases are filtered out of all read paths (search, latest, stats, API). Use `release unsuppress <id>` to restore.
 
 ## Remote Mode (D1)
 
-When `RELEASED_API_URL` is set, the CLI routes data operations through the API Worker instead of local SQLite. `RELEASED_API_KEY` is required alongside it. The switch point is `src/lib/mode.ts` — `isRemoteMode()` checks the env var once and caches the result. Query functions in `src/db/queries.ts` delegate to `src/api/client.ts` in remote mode.
+When `RELEASED_API_URL` is set, the CLI routes data operations through the API Worker instead of local SQLite. `RELEASED_API_KEY` is required alongside it. The switch point is `src/lib/mode.ts` — `isRemoteMode()` checks the env var once and caches the result. Query functions in `src/db/queries.ts` delegate to `src/api/client.ts` in remote mode. All CLI commands support both modes — no command calls `getDb()` directly (except `search` for local FTS).
 
 **Local mode** (default): No config needed. Uses `bun:sqlite` at `~/.released/released.db`.
 

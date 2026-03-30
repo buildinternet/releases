@@ -21,8 +21,8 @@ export function registerFetchCommand(program: Command) {
     .argument("[slug]", "Fetch a specific source by slug, or all sources if omitted")
     .option("--json", "Output as JSON")
     .option("--since <date>", "Only fetch releases after this date (ISO 8601 or YYYY-MM-DD)")
-    .option("--max <n>", "Maximum number of releases to fetch per source")
-    .option("--all", "Fetch all releases with no limits")
+    .option("--max <n>", "Maximum number of releases to fetch per source (default: 200)")
+    .option("--all", "Fetch all releases with no limits (overrides --max default)")
     .option("--crawl", "Enable crawl mode for multi-page changelogs (scrape sources only, persists)")
     .option("--no-crawl", "One-off override to skip crawl mode for this invocation")
     .option("--crawl-pattern <pattern>", "URL pattern to scope crawl (e.g. https://example.com/changelog/*)")
@@ -122,6 +122,7 @@ Examples:
       }
 
       // Build fetch options with defaults
+      const DEFAULT_MAX_RELEASES = 200;
       const fetchOptions: FetchOptions = {};
       if (!opts.all) {
         if (opts.since) {
@@ -129,6 +130,8 @@ Examples:
         }
         if (opts.max) {
           fetchOptions.maxEntries = parseInt(opts.max, 10);
+        } else {
+          fetchOptions.maxEntries = DEFAULT_MAX_RELEASES;
         }
       }
 

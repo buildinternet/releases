@@ -56,14 +56,17 @@ released edit my-blog --no-feed-url             # clear stored feed URL
 ### Fetch releases
 
 ```bash
-released fetch             # all sources
+released fetch             # all sources (default max 200 releases per source)
 released fetch next-js     # one source
 released fetch --since 2025-01-01 --max 50
+released fetch --max 500   # fetch up to 500 releases per source
 released fetch --all       # no date/count limits
 released fetch --stale 24  # only stale sources, with backoff
 released fetch --retry-errors  # retry failed sources
 released fetch --unfetched --concurrency 5  # parallel fetch
 ```
+
+By default, fetch caps at 200 releases per source to avoid API pagination limits (e.g., GitHub's 10K result cap). Use `--max <n>` to request more, or `--all` to remove the cap entirely.
 
 ### Crawl mode
 
@@ -120,7 +123,7 @@ released fetch --stale 24          # only fetch sources older than 24h, respecti
 released fetch --retry-errors      # only fetch sources whose last attempt failed
 ```
 
-Sources that repeatedly return no changes back off automatically (1h → 2h → 4h → ... up to 48h). Error backoff caps at 72h. Successful fetches reset all counters. Paused sources (`fetchPriority = "paused"`) are always skipped by `--stale`.
+Sources that repeatedly return no changes back off automatically (1h → 2h → 4h → ... up to 48h). Error backoff caps at 72h. Successful fetches reset all counters. Paused sources (`fetchPriority = "paused"`) are always skipped by `--stale`. The default 200-release cap applies to smart fetch as well — use `--max` to adjust per-run.
 
 ### Query
 
