@@ -21,7 +21,7 @@ export function registerEditCommand(program: Command) {
     .argument("<slug>", "Slug of the source to edit")
     .option("--name <name>", "Update display name")
     .option("--url <url>", "Update source URL")
-    .option("--type <type>", "Update source type (github, scrape, feed)")
+    .option("--type <type>", "Update source type (github, scrape, feed, agent)")
     .option("--slug <newSlug>", "Update slug")
     .option("--org <org>", "Set organization (name or slug, creates if not found)")
     .option("--no-org", "Remove organization association")
@@ -99,43 +99,41 @@ Examples:
         changes.push(`org → ${org.name}`);
       }
 
+      // Accumulate metadata updates for a single write
+      const metaUpdates: Record<string, unknown> = {};
+
       // Handle --feed-url / --no-feed-url
       if (opts.feedUrl === false) {
-        await updateSourceMeta(source, { feedUrl: undefined, feedType: undefined, feedDiscoveredAt: undefined });
+        Object.assign(metaUpdates, { feedUrl: undefined, feedType: undefined, feedDiscoveredAt: undefined });
         changes.push("feed URL removed");
       } else if (typeof opts.feedUrl === "string") {
         const feedType = inferFeedTypeFromUrl(opts.feedUrl);
-        await updateSourceMeta(source, {
-          feedUrl: opts.feedUrl,
-          feedType,
-          feedDiscoveredAt: new Date().toISOString(),
-          noFeedFound: false,
-        });
+        Object.assign(metaUpdates, { feedUrl: opts.feedUrl, feedType, feedDiscoveredAt: new Date().toISOString(), noFeedFound: false });
         changes.push(`feed URL → ${opts.feedUrl} (${feedType})`);
       }
 
       // Handle --markdown-url
       if (opts.markdownUrl) {
-        await updateSourceMeta(source, { markdownUrl: opts.markdownUrl });
+        metaUpdates.markdownUrl = opts.markdownUrl;
         changes.push(`markdown URL → ${opts.markdownUrl}`);
       }
 
       // Handle --provider
       if (opts.provider) {
-        await updateSourceMeta(source, {
-          provider: opts.provider,
-          providerDetectedAt: new Date().toISOString(),
-        });
+        metaUpdates.provider = opts.provider;
+        metaUpdates.providerDetectedAt = new Date().toISOString();
         changes.push(`provider → ${opts.provider}`);
       }
 
       // Handle --fetch-method
       if (opts.fetchMethod) {
-        await updateSourceMeta(source, {
-          evaluatedMethod: opts.fetchMethod,
-          evaluatedAt: new Date().toISOString(),
-        });
+        metaUpdates.evaluatedMethod = opts.fetchMethod;
+        metaUpdates.evaluatedAt = new Date().toISOString();
         changes.push(`fetch method → ${opts.fetchMethod}`);
+      }
+
+      if (Object.keys(metaUpdates).length > 0) {
+        await updateSourceMeta(source, metaUpdates);
       }
 
       if (Object.keys(updates).length > 0) {
