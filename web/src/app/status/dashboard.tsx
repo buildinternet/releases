@@ -48,6 +48,31 @@ interface StatusMessage {
 }
 
 type Tab = "sessions" | "fetch-log";
+type DateRange = "today" | "week" | "month" | "all";
+
+function getDateRangeAfter(range: DateRange): string | null {
+  if (range === "all") return null;
+  const now = new Date();
+  if (range === "today") {
+    now.setHours(0, 0, 0, 0);
+  } else if (range === "week") {
+    const day = now.getDay();
+    const diff = day === 0 ? 6 : day - 1; // Monday as start of week
+    now.setDate(now.getDate() - diff);
+    now.setHours(0, 0, 0, 0);
+  } else if (range === "month") {
+    now.setDate(1);
+    now.setHours(0, 0, 0, 0);
+  }
+  return now.toISOString();
+}
+
+const dateRangeLabels: Record<DateRange, string> = {
+  today: "Today",
+  week: "This Week",
+  month: "This Month",
+  all: "All Time",
+};
 
 function formatModelName(model: string): string {
   // e.g. "claude-haiku-4-5-20251001" → "Haiku 4.5", "claude-sonnet-4-5-20250514" → "Sonnet 4.5"
@@ -87,6 +112,7 @@ function formatDuration(ms?: number | null): string {
 
 export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [tab, setTab] = useState<Tab>("sessions");
+  const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
   const [fetchLogs, setFetchLogs] = useState<FetchLogEntry[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
@@ -109,12 +135,17 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     return () => document.removeEventListener("visibilitychange", onChange);
   }, []);
 
-  // Hydrate state via HTTP — on mount and whenever the tab regains focus
+  // Hydrate state via HTTP — on mount, tab regain, and date range change
+  const after = getDateRangeAfter(dateRange);
+
   const hydrate = useCallback(() => {
     const safeFetch = (url: string) => fetch(url).then((r) => r.ok ? r.json() : null);
+    const fetchLogUrl = after
+      ? `${apiUrl}/api/status/fetch-log?after=${encodeURIComponent(after)}`
+      : `${apiUrl}/api/status/fetch-log`;
     return Promise.all([
       safeFetch(`${apiUrl}/api/status/sessions`),
-      safeFetch(`${apiUrl}/api/status/fetch-log?limit=50`),
+      safeFetch(fetchLogUrl),
       safeFetch(`${apiUrl}/api/status/usage`),
     ]).then(([s, f, u]) => {
       if (s) setSessions(s as SessionState[]);
@@ -122,7 +153,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       if (u) setUsage(u as UsageEntry[]);
       return s as SessionState[] | null;
     }).catch(() => null);
-  }, [apiUrl]);
+  }, [apiUrl, after]);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -280,6 +311,12 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       .catch(() => {});
   }, [apiUrl]);
 
+  // Filter sessions client-side by date range (sessions come from DO, not SQL)
+  const afterMs = after ? new Date(after).getTime() : 0;
+  const filteredSessions = after
+    ? sessions.filter((s) => s.startedAt >= afterMs)
+    : sessions;
+
   const runningCount = sessions.filter((s) => s.status === "running").length;
   const totalInput = usage.reduce((sum, u) => sum + u.totalInput, 0);
   const totalOutput = usage.reduce((sum, u) => sum + u.totalOutput, 0);
@@ -306,34 +343,51 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         </div>
       )}
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-stone-200 mb-4">
-        <button
-          onClick={() => setTab("sessions")}
-          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            tab === "sessions"
-              ? "border-stone-900 text-stone-900"
-              : "border-transparent text-stone-400 hover:text-stone-600"
-          }`}
-        >
-          Sessions{runningCount > 0 && ` (${runningCount})`}
-        </button>
-        <button
-          onClick={() => setTab("fetch-log")}
-          className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-            tab === "fetch-log"
-              ? "border-stone-900 text-stone-900"
-              : "border-transparent text-stone-400 hover:text-stone-600"
-          }`}
-        >
-          Fetch Log
-        </button>
+      {/* Date range + Tabs */}
+      <div className="flex items-center justify-between border-b border-stone-200 mb-4">
+        <div className="flex gap-1">
+          <button
+            onClick={() => setTab("sessions")}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "sessions"
+                ? "border-stone-900 text-stone-900"
+                : "border-transparent text-stone-400 hover:text-stone-600"
+            }`}
+          >
+            Sessions{runningCount > 0 && ` (${runningCount})`}
+          </button>
+          <button
+            onClick={() => setTab("fetch-log")}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "fetch-log"
+                ? "border-stone-900 text-stone-900"
+                : "border-transparent text-stone-400 hover:text-stone-600"
+            }`}
+          >
+            Fetch Log
+          </button>
+        </div>
+        <div className="flex gap-1 mb-px">
+          {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
+            <button
+              key={range}
+              onClick={() => { setDateRange(range); setSessionPage(0); setFetchLogPage(0); }}
+              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                dateRange === range
+                  ? "bg-stone-900 text-white"
+                  : "bg-stone-100 text-stone-500 hover:bg-stone-200"
+              }`}
+            >
+              {dateRangeLabels[range]}
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab content */}
       {tab === "sessions" && (
         <SessionsTable
-          sessions={sessions}
+          sessions={filteredSessions}
           expandedSessions={expandedSessions}
           sessionLogs={sessionLogs}
           apiUrl={apiUrl}
@@ -399,8 +453,8 @@ function SessionsTable({
 
   return (
     <div>
-      <div className="border border-stone-200 rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-medium uppercase tracking-wider text-stone-400">
+      <div className="border border-stone-200 rounded-lg overflow-hidden font-mono">
+        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-sans font-medium uppercase tracking-wider text-stone-400">
           <div>Company</div>
           <div>Started</div>
           <div>Step</div>
@@ -413,45 +467,45 @@ function SessionsTable({
           return (<div key={session.sessionId}>
             <button
               onClick={() => onToggle(session.sessionId)}
-              className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr] px-4 py-3 w-full text-left border-b border-stone-100 hover:bg-stone-50 transition-colors"
+              className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 hover:bg-stone-50 transition-colors"
             >
-              <div className="text-sm text-stone-900">
+              <div className="text-stone-900">
                 <span className="mr-1.5 text-stone-300">{isExpanded ? "▾" : "▸"}</span>
                 {session.company}
               </div>
-              <div className="text-sm text-stone-500">
+              <div className="text-stone-500">
                 {formatTime(session.startedAt)}
               </div>
-              <div className="text-sm">
+              <div>
                 <StepBadge step={session.step} status={session.status} type={session.type} />
               </div>
-              <div className="text-sm text-stone-500">
+              <div className="text-stone-500">
                 {session.status === "error" ? (
                   <span className="text-red-500">{session.error?.slice(0, 40)}</span>
                 ) : session.status === "complete" ? (
                   isUpdate ? (
-                    <span className="text-green-600 font-mono">
+                    <span className="text-green-600">
                       {(session.sourcesFetched ?? 0) > 0 && <span>{session.sourcesFetched} src</span>}
                       {(session.releasesInserted ?? 0) > 0 && <span className="ml-1.5 text-green-700">+{session.releasesInserted}</span>}
                       {(session.sourcesFetched ?? 0) === 0 && (session.releasesInserted ?? 0) === 0 && <span>no changes</span>}
                     </span>
                   ) : (
-                    <span className="text-green-600 font-mono">+{session.sourcesFound ?? 0} sources</span>
+                    <span className="text-green-600">+{session.sourcesFound ?? 0} sources</span>
                   )
                 ) : (
                   isUpdate ? (
-                    <span className="font-mono">
+                    <span>
                       {session.sourcesFetched ?? 0}/{session.totalSources ?? "?"} src
                       {(session.releasesInserted ?? 0) > 0 && <span className="ml-1.5 text-green-600">+{session.releasesInserted}</span>}
                     </span>
                   ) : (
-                    <span className="font-mono">
+                    <span>
                       {session.sourcesFound ?? 0} found, {session.sourcesValidated ?? 0} validated
                     </span>
                   )
                 )}
               </div>
-              <div className="text-sm text-stone-400 text-right flex items-center justify-end gap-2">
+              <div className="text-stone-400 text-right flex items-center justify-end gap-2">
                 {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
                 {session.status !== "running" && (
                   <span
@@ -594,8 +648,8 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
         })}
       </div>
 
-      <div className="border border-stone-200 rounded-lg overflow-hidden">
-        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-medium uppercase tracking-wider text-stone-400">
+      <div className="border border-stone-200 rounded-lg overflow-hidden font-mono">
+        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-sans font-medium uppercase tracking-wider text-stone-400">
           <div>Source</div>
           <div>Time</div>
           <div>Status</div>
@@ -613,30 +667,32 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
                   else next.add(log.id);
                   return next;
                 })}
-                className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-3 w-full text-left border-b border-stone-100 hover:bg-stone-50 transition-colors"
+                className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 hover:bg-stone-50 transition-colors"
               >
-                <div>
-                  <div className="text-sm text-stone-900">
-                    <span className="mr-1.5 text-stone-300">{isExpanded ? "▾" : "▸"}</span>
-                    {log.sourceSlug ? (
-                      <a href={`/source/${log.sourceSlug}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
-                        {log.sourceName ?? log.sourceSlug}
-                      </a>
-                    ) : (
-                      <span className="text-stone-500">{log.sourceName ?? log.sourceId}</span>
+                <div className="flex items-start gap-1.5">
+                  <span className="text-stone-300 shrink-0">{isExpanded ? "▾" : "▸"}</span>
+                  <div>
+                    <div className="text-stone-900">
+                      {log.sourceSlug ? (
+                        <a href={`/source/${log.sourceSlug}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                          {log.sourceName ?? log.sourceSlug}
+                        </a>
+                      ) : (
+                        <span className="text-stone-500">{log.sourceName ?? log.sourceId}</span>
+                      )}
+                    </div>
+                    {log.orgName && (
+                      <div className="text-stone-400">{log.orgName}</div>
                     )}
                   </div>
-                  {log.orgName && (
-                    <div className="text-xs text-stone-400 ml-5">{log.orgName}</div>
-                  )}
                 </div>
-                <div className="text-sm text-stone-500">
+                <div className="text-stone-500">
                   {formatTime(new Date(log.createdAt).getTime())}
                 </div>
-                <div className="text-sm">
+                <div>
                   <FetchStatusBadge status={log.status} />
                 </div>
-                <div className="text-sm text-stone-500 font-mono">
+                <div className="text-stone-500">
                   {log.status === "no_change" ? (
                     <span className="text-stone-400">no changes</span>
                   ) : log.status === "error" ? (
@@ -649,7 +705,7 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
                     </span>
                   )}
                 </div>
-                <div className="text-sm text-stone-400 text-right">{formatDuration(log.durationMs)}</div>
+                <div className="text-stone-400 text-right">{formatDuration(log.durationMs)}</div>
               </button>
               {isExpanded && <FetchLogDetail log={log} />}
             </div>

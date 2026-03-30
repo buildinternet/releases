@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { desc, sql, gte } from "drizzle-orm";
+import { and, desc, sql, gte, lte } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources, organizations, usageLog } from "../../../../src/db/schema.js";
 import type { Env } from "../index.js";
@@ -25,7 +25,13 @@ statusRoutes.get("/status/sessions", async (c) => {
 
 statusRoutes.get("/status/fetch-log", async (c) => {
   const db = createDb(c.env.DB);
-  const limit = parseInt(c.req.query("limit") ?? "50", 10);
+  const limit = parseInt(c.req.query("limit") ?? "200", 10);
+  const after = c.req.query("after");   // ISO date string
+  const before = c.req.query("before"); // ISO date string
+
+  const conditions = [];
+  if (after) conditions.push(gte(fetchLog.createdAt, after));
+  if (before) conditions.push(lte(fetchLog.createdAt, before));
 
   const logs = await db
     .select({
@@ -46,6 +52,7 @@ statusRoutes.get("/status/fetch-log", async (c) => {
     .from(fetchLog)
     .leftJoin(sources, sql`${fetchLog.sourceId} = ${sources.id}`)
     .leftJoin(organizations, sql`${sources.orgId} = ${organizations.id}`)
+    .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(fetchLog.createdAt))
     .limit(limit);
 
