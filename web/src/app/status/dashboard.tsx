@@ -77,7 +77,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [sessionLogs, setSessionLogs] = useState<Record<string, string[]>>({});
   const [sessionPage, setSessionPage] = useState(0);
-  const sessionsPerPage = 25;
+  const [fetchLogPage, setFetchLogPage] = useState(0);
+  const pageSize = 25;
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const reconnectDelay = useRef(1000);
@@ -320,7 +321,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           sessionLogs={sessionLogs}
           apiUrl={apiUrl}
           page={sessionPage}
-          perPage={sessionsPerPage}
+          perPage={pageSize}
           onPageChange={setSessionPage}
           onToggle={(id) => {
             fetchLogsForSession(id);
@@ -334,7 +335,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         />
       )}
-      {tab === "fetch-log" && <FetchLogTable logs={fetchLogs} />}
+      {tab === "fetch-log" && <FetchLogTable logs={fetchLogs} page={fetchLogPage} perPage={pageSize} onPageChange={setFetchLogPage} />}
     </div>
   );
 }
@@ -525,46 +526,83 @@ function SessionLogPanel({ sessionId, logs, currentAction, status }: { sessionId
   );
 }
 
-function FetchLogTable({ logs }: { logs: FetchLogEntry[] }) {
+function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEntry[]; page: number; perPage: number; onPageChange: (p: number) => void }) {
   if (logs.length === 0) {
     return <div className="text-sm text-stone-400 py-8 text-center">No fetch log entries yet.</div>;
   }
 
+  const totalPages = Math.ceil(logs.length / perPage);
+  const paginated = logs.slice(page * perPage, (page + 1) * perPage);
+
   return (
-    <div className="border border-stone-200 rounded-lg overflow-hidden">
-      <div className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr] px-4 py-2 border-b border-stone-100 text-xs font-medium uppercase tracking-wider text-stone-400">
-        <div>Source</div>
-        <div>Status</div>
-        <div>Releases</div>
-        <div>Duration</div>
-        <div className="text-right">Time</div>
+    <div>
+      <div className="border border-stone-200 rounded-lg overflow-hidden">
+        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-medium uppercase tracking-wider text-stone-400">
+          <div>Source</div>
+          <div>Time</div>
+          <div>Status</div>
+          <div>Result</div>
+          <div className="text-right">Duration</div>
+        </div>
+        {paginated.map((log) => (
+          <div
+            key={log.id}
+            className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-3 border-b border-stone-100 text-sm"
+          >
+            <div>
+              {log.sourceSlug ? (
+                <a href={`/source/${log.sourceSlug}`} className="text-stone-900 hover:underline">
+                  {log.sourceName ?? log.sourceSlug}
+                </a>
+              ) : (
+                <span className="text-stone-500">{log.sourceName ?? log.sourceId}</span>
+              )}
+            </div>
+            <div className="text-stone-500">
+              {formatTime(new Date(log.createdAt).getTime())}
+            </div>
+            <div>
+              <FetchStatusBadge status={log.status} />
+            </div>
+            <div className="text-stone-500 font-mono">
+              {log.status === "no_change" ? (
+                <span className="text-stone-400">no changes</span>
+              ) : log.status === "error" ? (
+                <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>
+              ) : (
+                <span>
+                  {log.releasesFound > 0 && <span>{log.releasesFound} found</span>}
+                  {log.releasesInserted > 0 && <span className="ml-1.5 text-green-600">+{log.releasesInserted}</span>}
+                  {log.releasesFound === 0 && log.releasesInserted === 0 && <span className="text-stone-400">—</span>}
+                </span>
+              )}
+            </div>
+            <div className="text-stone-400 text-right">{formatDuration(log.durationMs)}</div>
+          </div>
+        ))}
       </div>
-      {logs.map((log) => (
-        <div
-          key={log.id}
-          className="grid grid-cols-[2fr_1fr_1.5fr_1fr_1.5fr] px-4 py-2.5 border-b border-stone-100 text-sm"
-        >
-          <div>
-            {log.sourceSlug ? (
-              <a href={`/source/${log.sourceSlug}`} className="text-stone-900 hover:underline">
-                {log.sourceName ?? log.sourceSlug}
-              </a>
-            ) : (
-              <span className="text-stone-500">{log.sourceName ?? log.sourceId}</span>
-            )}
-          </div>
-          <div>
-            <FetchStatusBadge status={log.status} />
-          </div>
-          <div className="text-stone-500">
-            {log.releasesFound} found, {log.releasesInserted} inserted
-          </div>
-          <div className="text-stone-400">{formatDuration(log.durationMs)}</div>
-          <div className="text-stone-400 text-right">
-            {new Date(log.createdAt).toLocaleTimeString("en-US", { hour12: false })}
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 text-xs text-stone-400">
+          <span>{logs.length} entries</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onPageChange(page - 1)}
+              disabled={page === 0}
+              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+            >
+              Prev
+            </button>
+            <span>{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => onPageChange(page + 1)}
+              disabled={page >= totalPages - 1}
+              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+            >
+              Next
+            </button>
           </div>
         </div>
-      ))}
+      )}
     </div>
   );
 }
@@ -582,5 +620,5 @@ function FetchStatusBadge({ status }: { status: FetchLogEntry["status"] }) {
     no_change: "No change",
     dry_run: "Dry run",
   };
-  return <span className={`text-xs ${styles[status] ?? "text-stone-400"}`}>{labels[status] ?? status}</span>;
+  return <span className={`${styles[status] ?? "text-stone-400"}`}>{labels[status] ?? status}</span>;
 }
