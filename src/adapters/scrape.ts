@@ -8,6 +8,7 @@ import { sha256Hex } from "../lib/hash.js";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
+import { enrichSparseReleases } from "./enrich.js";
 import { fetchViaFeed } from "./feed.js";
 import { getSourceMeta, updateSourceMeta } from "./feed.js";
 import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
@@ -48,7 +49,8 @@ export const scrape: Adapter = {
         const feedResult = await fetchViaFeed(source, options);
         if (feedResult !== null) {
           logger.info(`Feed returned ${feedResult.length} releases (no AI needed)`);
-          return { releases: feedResult };
+          const enriched = await enrichSparseReleases(feedResult, source.slug);
+          return { releases: enriched };
         }
       } catch (err) {
         logger.warn(`Feed fetch/parse failed, falling back to Cloudflare + AI: ${err}`);

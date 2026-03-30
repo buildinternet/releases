@@ -120,7 +120,16 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
         contentHash: r.contentHash ?? null,
         publishedAt: r.publishedAt ?? null,
       }));
-      const rows = await db.insert(releases).values(chunk).onConflictDoNothing().returning({ id: releases.id });
+      const rows = await db.insert(releases).values(chunk)
+        .onConflictDoUpdate({
+          target: [releases.sourceId, releases.url],
+          set: {
+            content: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content ELSE releases.content END`,
+            contentHash: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_hash ELSE releases.content_hash END`,
+          },
+          where: sql`excluded.content != '' AND releases.content = ''`,
+        })
+        .returning({ id: releases.id });
       inserted += rows.length;
     }
 

@@ -9,7 +9,7 @@ import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired } from "../ai/shared.js";
-import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
+import { fetchCloudflareMarkdown } from "./cloudflare.js";
 
 // ── Tool schema for structured extraction ────────────────────────────
 // Claude calls this when it's done fetching/exploring and has extracted
@@ -220,34 +220,8 @@ async function fetchViaCloudflare(url: string): Promise<string | null> {
     return null;
   }
 
-  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/markdown`;
-
   logger.info(`Falling back to Cloudflare Browser Rendering...`);
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url,
-      rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
-      gotoOptions: { waitUntil: "networkidle2" },
-    }),
-  });
-
-  if (!res.ok) {
-    logger.warn(`Cloudflare returned ${res.status} — fallback failed`);
-    return null;
-  }
-
-  const data = await res.json() as { success: boolean; result: string };
-  if (!data.success || !data.result?.trim()) {
-    logger.warn("Cloudflare returned empty or failed result");
-    return null;
-  }
-
-  return data.result;
+  return fetchCloudflareMarkdown(url, accountId, apiToken);
 }
 
 async function extractFromMarkdown(

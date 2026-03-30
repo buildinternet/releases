@@ -744,10 +744,22 @@ export async function insertReleases(source: Source, rows: Array<{
     return result.inserted;
   }
   const db = getDb();
-  // Batch insert in chunks of 500 (SQLite variable limit)
+  // Batch insert in chunks of 500 (SQLite variable limit).
+  // On URL conflict, backfill content if the incoming row has non-empty content
+  // and the existing row is empty (lets feed enrichment update sparse releases).
   let inserted = 0;
   for (let i = 0; i < rows.length; i += 500) {
-    const result = await db.insert(releases).values(rows.slice(i, i + 500)).onConflictDoNothing().returning({ id: releases.id });
+    const chunk = rows.slice(i, i + 500);
+    const result = await db.insert(releases).values(chunk)
+      .onConflictDoUpdate({
+        target: [releases.sourceId, releases.url],
+        set: {
+          content: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content ELSE releases.content END`,
+          contentHash: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_hash ELSE releases.content_hash END`,
+        },
+        where: sql`excluded.content != '' AND releases.content = ''`,
+      })
+      .returning({ id: releases.id });
     inserted += result.length;
   }
   return inserted;

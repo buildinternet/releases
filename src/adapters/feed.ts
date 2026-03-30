@@ -1,6 +1,7 @@
 import type { Source } from "../db/schema.js";
 import { updateSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
+import { enrichSparseReleases } from "./enrich.js";
 import { logger } from "../lib/logger.js";
 
 // ── Feed types ──────────────────────────────────────────────────────
@@ -483,6 +484,9 @@ export const feed: Adapter = {
       logger.warn(`No feed found for ${source.url}`);
       return { releases: [] };
     }
-    return { releases };
+
+    // Enrich releases that have URLs but sparse/empty content
+    const enriched = await enrichSparseReleases(releases, source.slug);
+    return { releases: enriched };
   },
 };
