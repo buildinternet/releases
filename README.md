@@ -29,17 +29,23 @@ released add "Linear" --url https://linear.app/changelog
 released add "My Blog" --url https://example.com/changelog
 ```
 
-The source type is auto-detected from the URL:
-- **GitHub URLs** → uses the GitHub Releases API
-- **Other URLs** → probes for an RSS/Atom/JSON feed, then uses the scrape adapter (feed-first with Cloudflare + AI fallback)
+By default, `add` runs an evaluation pipeline that determines the best ingestion method for a URL. This includes provider detection (Mintlify, Docusaurus, etc.), feed discovery, markdown suffix probing, and an AI agent that inspects the page:
+- **GitHub URLs** → uses the GitHub Releases API (no agent needed)
+- **Other URLs** → evaluates and stores the recommended method (feed, markdown, scrape, or crawl) so the first `fetch` already knows the optimal path
 
-You can override detection with `--type github`, `--type scrape`, or `--type feed` if needed. Discovered feed URLs are cached so subsequent fetches skip discovery.
+You can override detection with `--type github`, `--type scrape`, or `--type feed`. Use `--skip-eval` to bypass the evaluation agent and fall back to basic heuristic detection. Batch mode (`--batch`) skips evaluation by default for speed.
 
-If you know the feed URL and it isn't easily discoverable, provide it explicitly:
+If you know the feed URL and it isn't easily discoverable, provide it explicitly (skips evaluation):
 
 ```bash
 released add "Claude Code" --url https://docs.anthropic.com/en/changelog \
   --feed-url https://docs.anthropic.com/en/changelog/rss.xml
+```
+
+To evaluate a URL without adding it as a source:
+
+```bash
+released evaluate https://linear.app/changelog
 ```
 
 ### Edit sources
@@ -51,6 +57,9 @@ released edit my-blog --org acme               # set organization
 released edit my-blog --no-org                  # remove organization
 released edit my-blog --type feed               # change adapter type
 released edit my-blog --no-feed-url             # clear stored feed URL
+released edit my-blog --markdown-url https://example.com/changelog.md
+released edit my-blog --fetch-method markdown   # set recommended fetch method
+released edit my-blog --provider mintlify       # set detected provider
 ```
 
 ### Fetch releases
