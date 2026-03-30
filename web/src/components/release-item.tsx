@@ -2,12 +2,15 @@
 
 import { useState } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ReleaseItem } from "@/lib/api";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
+
+const markdownClasses = "prose prose-sm prose-stone max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 [&_a]:no-underline [&_code]:text-xs [&_code]:bg-stone-100 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 
 export function ReleaseListItem({ release }: { release: ReleaseItem }) {
   const [expanded, setExpanded] = useState(false);
@@ -40,19 +43,28 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
         <span className="text-xs text-stone-400 whitespace-nowrap ml-4">{formatDate(release.publishedAt)}</span>
       </button>
       {showSubtitle && <div className="text-sm text-stone-600 mb-1 pl-5">{release.title}</div>}
-      {expanded ? (
-        <div className="pl-5">
-          <div className="prose prose-sm prose-stone max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 [&_a]:no-underline [&_code]:text-xs [&_code]:bg-stone-100 [&_code]:px-1 [&_code]:rounded">
-            <ReactMarkdown>{markdownContent}</ReactMarkdown>
+      <div
+        className="pl-5 cursor-pointer group relative"
+        onClick={() => setExpanded(!expanded)}
+      >
+        {expanded ? (
+          <div className={markdownClasses}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
           </div>
-        </div>
-      ) : (
-        <div className="relative max-h-[60px] overflow-hidden pl-5">
-          <div className="text-sm text-stone-500 line-clamp-2">
-            {release.summary || (markdownContent ? markdownContent.slice(0, 150) : "No release notes provided")}
-          </div>
-        </div>
-      )}
+        ) : (
+          <>
+            <div className="max-h-[4.5em] overflow-hidden">
+              <div className={`${markdownClasses} text-stone-500 [&_strong]:text-stone-500`}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
+              </div>
+            </div>
+            <div className="absolute bottom-0 left-5 right-0 h-6 bg-gradient-to-t from-white to-transparent" />
+            <div className="text-xs text-stone-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              Show more
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }

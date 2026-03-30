@@ -273,6 +273,12 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const avgReleasesPerWeek = computeAvgPerWeek(totals.total, totals.oldest);
   const totalPages = Math.ceil(relCount.n / pageSize);
 
+  // Earliest published_at across all releases — ignores fetched_at so we reflect actual release history
+  const [earliest] = await db
+    .select({ date: min(releases.publishedAt) })
+    .from(releases)
+    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`));
+
   return c.json({
     id: src.id,
     slug: src.slug,
@@ -287,7 +293,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     latestDate: latest?.publishedAt ?? null,
     changelogUrl: (() => { try { const m = JSON.parse(src.metadata || "{}"); return m.changelogUrl ?? null; } catch { return null; } })(),
     lastFetchedAt: src.lastFetchedAt,
-    trackingSince: src.createdAt,
+    trackingSince: earliest?.date ?? totals.oldest ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },
   });
