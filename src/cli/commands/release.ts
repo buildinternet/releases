@@ -3,7 +3,7 @@ import { createHash } from "crypto";
 import chalk from "chalk";
 import {
   findSourceBySlug, suppressRelease, unsuppressRelease,
-  getRelease, deleteRelease, updateRelease, deleteReleasesByFilter,
+  getRelease, deleteRelease, updateRelease, deleteReleasesByFilter, deleteReleasesForSource,
 } from "../../db/queries.js";
 
 export function registerReleaseCommand(program: Command) {
@@ -85,14 +85,15 @@ Examples:
       }
 
       // Resolve source if needed
+      let resolvedSource: Awaited<ReturnType<typeof findSourceBySlug>> | undefined;
       let sourceId: string | undefined;
       if (opts.source) {
-        const source = await findSourceBySlug(opts.source);
-        if (!source) {
+        resolvedSource = await findSourceBySlug(opts.source);
+        if (!resolvedSource) {
           console.error(chalk.red(`Source not found: ${opts.source}`));
           process.exit(1);
         }
-        sourceId = source.id;
+        sourceId = resolvedSource.id;
       }
 
       // Single release delete by ID
@@ -125,7 +126,28 @@ Examples:
         return;
       }
 
-      // Bulk delete by filter
+      // Bulk delete by source only (remote-mode compatible path)
+      if (resolvedSource && !opts.before) {
+        if (opts.dryRun) {
+          console.log(chalk.yellow(`[dry-run] Would delete all releases for source: ${resolvedSource.slug}`));
+          return;
+        }
+        let deleted: number;
+        try {
+          deleted = await deleteReleasesForSource(resolvedSource);
+        } catch (err) {
+          console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+          process.exit(1);
+        }
+        if (opts.json) {
+          console.log(JSON.stringify({ deleted }, null, 2));
+        } else {
+          console.log(chalk.green(`Deleted ${deleted} release${deleted === 1 ? "" : "s"}.`));
+        }
+        return;
+      }
+
+      // Bulk delete by filter (local mode only when --before is used)
       const filterOpts: { sourceId?: string; before?: string; dryRun?: boolean } = {};
       if (sourceId) filterOpts.sourceId = sourceId;
       if (opts.before) filterOpts.before = opts.before;

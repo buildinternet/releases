@@ -389,7 +389,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
   const body = await c.req.json<{
-    name?: string; url?: string; metadata?: string; orgId?: string | null;
+    name?: string; url?: string; type?: string; metadata?: string; orgId?: string | null;
     lastFetchedAt?: string | null; lastContentHash?: string | null;
     fetchPriority?: string; consecutiveNoChange?: number;
     consecutiveErrors?: number; nextFetchAfter?: string | null;
@@ -401,6 +401,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates.name = body.name;
   if (body.url !== undefined) updates.url = body.url;
+  if (body.type !== undefined) updates.type = body.type;
   if (body.metadata !== undefined) updates.metadata = body.metadata;
   if (body.orgId !== undefined) updates.orgId = body.orgId;
   if (body.lastFetchedAt !== undefined) updates.lastFetchedAt = body.lastFetchedAt;
