@@ -2,6 +2,7 @@ import { getApiUrl, getApiKey } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
+  ReleaseSummary, NewReleaseSummary,
 } from "../db/schema.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -624,4 +625,28 @@ export async function postStatusEvent(event: {
     method: "POST",
     body: JSON.stringify(event),
   });
+}
+
+// ── Release summaries ──
+
+export async function getSummariesForSource(sourceId: string): Promise<ReleaseSummary[]> {
+  return apiFetch<ReleaseSummary[]>(`/api/summaries?sourceId=${sourceId}`);
+}
+
+export async function upsertSummary(data: NewReleaseSummary): Promise<void> {
+  await apiFetch("/api/summaries", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function getMonthlySummary(
+  sourceId: string,
+  year: number,
+  month: number,
+): Promise<ReleaseSummary | undefined> {
+  const rows = await apiFetch<ReleaseSummary[]>(
+    `/api/summaries?sourceId=${sourceId}&type=monthly&year=${year}&month=${month}`,
+  );
+  return rows[0];
 }
