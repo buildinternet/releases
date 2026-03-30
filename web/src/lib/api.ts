@@ -1,4 +1,5 @@
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+const API_SECRET = process.env.API_SECRET;
 
 export class ApiSetupError extends Error {
   setup: string[];
@@ -11,8 +12,12 @@ export class ApiSetupError extends Error {
 
 async function fetchApi<T>(path: string): Promise<T> {
   let res: Response;
+  const headers: Record<string, string> = {};
+  if (API_SECRET) {
+    headers["Authorization"] = `Bearer ${API_SECRET}`;
+  }
   try {
-    res = await fetch(`${API_URL}${path}`, { next: { revalidate: 60 } });
+    res = await fetch(`${API_URL}${path}`, { headers, next: { revalidate: 60 } });
   } catch {
     throw new ApiSetupError(
       `Cannot connect to the API at ${API_URL}. Is the server running?`,
