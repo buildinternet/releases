@@ -1,7 +1,7 @@
 import { Hono } from "hono";
-import { eq, desc, count, and, min, isNull, sql } from "drizzle-orm";
+import { eq, desc, count, and, min, isNull, sql, gte } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, fetchLog } from "../../../../src/db/schema.js";
+import { sources, releases, organizations, fetchLog, releaseSummaries } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
 import { toSlug } from "../../../../src/lib/slug.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
@@ -160,6 +160,33 @@ sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
   return c.json({ unchanged: false });
 });
 
+// ── Recent releases (for summary generation) ──
+
+sourceRoutes.get("/sources/:slug/recent-releases", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const cutoff = c.req.query("cutoff");
+
+  if (!cutoff) return c.json({ error: "cutoff query param required" }, 400);
+
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found" }, 404);
+
+  const rows = await db
+    .select()
+    .from(releases)
+    .where(
+      and(
+        eq(releases.sourceId, src.id),
+        gte(releases.publishedAt, cutoff),
+        eq(releases.suppressed, false),
+      ),
+    )
+    .orderBy(desc(releases.publishedAt));
+
+  return c.json(rows);
+});
+
 // ── Known releases for incremental parsing ──
 
 sourceRoutes.get("/sources/:slug/known-releases", async (c) => {
@@ -279,13 +306,25 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     .from(releases)
     .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`));
 
+  // Fetch summaries for this source
+  const summaryRows = await db
+    .select()
+    .from(releaseSummaries)
+    .where(eq(releaseSummaries.sourceId, src.id))
+    .orderBy(desc(releaseSummaries.generatedAt));
+
+  const rollingSummary = summaryRows.find((s) => s.type === "rolling") ?? null;
+  const monthlySummaries = summaryRows.filter((s) => s.type === "monthly");
+
   return c.json({
     id: src.id,
     slug: src.slug,
     name: src.name,
     type: src.type,
     url: src.url,
+    orgId: src.orgId,
     org,
+    metadata: src.metadata,
     releaseCount: relCount.n,
     releasesLast30Days,
     avgReleasesPerWeek,
@@ -296,6 +335,10 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     trackingSince: earliest?.date ?? totals.oldest ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },
+    summaries: {
+      rolling: rollingSummary,
+      monthly: monthlySummaries,
+    },
   });
 });
 

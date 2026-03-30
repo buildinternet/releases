@@ -8,7 +8,10 @@ import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
   findSourceBySlug, listAllSources, listFetchableSources,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
+  upsertSummary, getMonthlySummary, getRecentReleases,
 } from "../../db/queries.js";
+import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
+import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { logger } from "../../lib/logger.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
@@ -403,6 +406,80 @@ Examples:
             consecutiveErrors: 0,
             nextFetchAfter: null,
           });
+
+          // Generate release summary if enabled
+          if (inserted > 0) {
+            try {
+              const summarizeEnabled = await isSummarizationEnabled(source);
+              if (summarizeEnabled) {
+                const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
+                const recentReleases = await getRecentReleases(source.id, cutoff, source.slug);
+
+                if (recentReleases.length > 0) {
+                  // Rolling summary
+                  const rolling = await generateSummary({
+                    sourceName: source.name,
+                    sourceSlug: source.slug,
+                    releases: recentReleases,
+                    windowDays: DEFAULT_WINDOW_DAYS,
+                    type: "rolling",
+                  });
+                  if (rolling) {
+                    await upsertSummary({
+                      sourceId: source.id,
+                      orgId: source.orgId,
+                      type: "rolling",
+                      windowDays: DEFAULT_WINDOW_DAYS,
+                      summary: rolling.summary,
+                      releaseCount: rolling.releaseCount,
+                      year: null,
+                      month: null,
+                    });
+                  }
+
+                  // Monthly summary — check if last month needs one
+                  const now = new Date();
+                  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                  const lmYear = lastMonth.getFullYear();
+                  const lmMonth = lastMonth.getMonth() + 1; // 1-indexed
+
+                  const existing = await getMonthlySummary(source.id, lmYear, lmMonth);
+                  if (!existing) {
+                    const monthStart = new Date(lmYear, lmMonth - 1, 1).toISOString();
+                    const monthEnd = new Date(lmYear, lmMonth, 1).toISOString();
+                    const monthlyReleases = recentReleases.filter(
+                      (r) => r.publishedAt && r.publishedAt >= monthStart && r.publishedAt < monthEnd,
+                    );
+                    if (monthlyReleases.length > 0) {
+                      const monthName = lastMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+                      const monthly = await generateSummary({
+                        sourceName: source.name,
+                        sourceSlug: source.slug,
+                        releases: monthlyReleases,
+                        type: "monthly",
+                        period: monthName,
+                      });
+                      if (monthly) {
+                        await upsertSummary({
+                          sourceId: source.id,
+                          orgId: source.orgId,
+                          type: "monthly",
+                          year: lmYear,
+                          month: lmMonth,
+                          summary: monthly.summary,
+                          releaseCount: monthly.releaseCount,
+                          windowDays: null,
+                        });
+                      }
+                    }
+                  }
+                }
+              }
+            } catch (err) {
+              // Summary generation is non-critical — log and continue
+              logger.warn(`Summary generation failed for ${source.name}: ${err}`);
+            }
+          }
 
           if (!opts.json && !showProgress) {
             console.log(

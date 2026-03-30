@@ -69,6 +69,21 @@ export interface SourceDetail {
   trackingSince: string;
   releases: ReleaseItem[];
   pagination: { page: number; pageSize: number; totalPages: number; totalItems: number };
+  summaries: {
+    rolling: ReleaseSummaryItem | null;
+    monthly: ReleaseSummaryItem[];
+  };
+}
+
+export interface ReleaseSummaryItem {
+  id: string;
+  type: "rolling" | "monthly";
+  year: number | null;
+  month: number | null;
+  windowDays: number | null;
+  summary: string;
+  releaseCount: number;
+  generatedAt: string;
 }
 
 export interface ReleaseItem {

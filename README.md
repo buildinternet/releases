@@ -324,6 +324,24 @@ released release delete --source next-js --before 2025-01-01
 released release delete --before 2024-01-01    # prune old releases across all sources
 ```
 
+### Release Summaries
+
+AI-generated thematic summaries of release activity, produced automatically at fetch time:
+
+```bash
+released summarize next-js                # generate rolling summary (last 90 days)
+released summarize next-js --window 30    # custom window
+released summarize next-js --monthly      # generate last month's archive summary
+released summarize next-js --json         # machine-readable output
+released summarize next-js --force        # override opt-out
+```
+
+Summaries identify themes and directional trends rather than listing features — e.g., "Significant investment in developer tooling" rather than "shipped X, Y, Z." Rolling summaries are regenerated each fetch; monthly summaries are write-once archives.
+
+**Opt-out:** Set `"summarize": false` in a source's metadata (`released edit <slug> --metadata '{"summarize": false}'`) or in an org's metadata to disable summary generation.
+
+**Web app:** Source detail pages show a Highlights tab (default) with the rolling summary and monthly archives, alongside an All Releases tab with the full changelog.
+
 ### Source Health Checks
 
 Probe source URLs to check availability and detect issues:
