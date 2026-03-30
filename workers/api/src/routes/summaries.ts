@@ -51,7 +51,7 @@ app.post("/", async (c) => {
 
   const { sourceId, orgId, type, year, month, windowDays, summary, releaseCount } = body;
 
-  if (!orgId || !type || !summary || releaseCount == null) {
+  if (!type || !summary || releaseCount == null) {
     return c.json({ error: "Missing required fields" }, 400);
   }
 
@@ -59,7 +59,7 @@ app.post("/", async (c) => {
     .insert(releaseSummaries)
     .values({
       sourceId: sourceId ?? null,
-      orgId,
+      orgId: orgId ?? null,
       type,
       year: year ?? null,
       month: month ?? null,
