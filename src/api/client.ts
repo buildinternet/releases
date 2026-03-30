@@ -161,11 +161,11 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
 // ── Content hash ──
 
 export async function checkContentHash(source: Source, contentHash: string): Promise<boolean> {
-  const result = await apiFetch<{ unchanged: boolean }>(`/api/sources/${source.slug}/content-hash`, {
+  const result = await apiFetch<{ unchanged: boolean } | null>(`/api/sources/${source.slug}/content-hash`, {
     method: "POST",
     body: JSON.stringify({ contentHash }),
   });
-  return result.unchanged;
+  return result?.unchanged ?? false;
 }
 
 // ── Search ──

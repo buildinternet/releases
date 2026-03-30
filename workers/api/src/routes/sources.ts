@@ -144,6 +144,22 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
   return c.json({ deleted: deleted.length });
 });
 
+sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
+  const slug = c.req.param("slug");
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<{ contentHash: string }>();
+
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  if (src.lastContentHash === body.contentHash) {
+    return c.json({ unchanged: true });
+  }
+
+  await db.update(sources).set({ lastContentHash: body.contentHash }).where(eq(sources.id, src.id));
+  return c.json({ unchanged: false });
+});
+
 sourceRoutes.get("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const page = parseInt(c.req.query("page") ?? "1", 10);
