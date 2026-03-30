@@ -21,6 +21,7 @@ import { registerOnboardCommand } from "./commands/onboard.js";
 import { registerIgnoreCommand } from "./commands/ignore.js";
 import { registerBlockCommand } from "./commands/block.js";
 import { registerImportCommand } from "./commands/import.js";
+import { registerEvaluateCommand } from "./commands/evaluate.js";
 
 export const program = new Command()
   .name("released")
@@ -28,7 +29,7 @@ export const program = new Command()
   .version("0.1.0")
   .addHelpText("after", `
 Command Groups:
-  Sources:       add, edit, remove, list, import, discover
+  Sources:       add, edit, remove, list, import, discover, evaluate
   Fetching:      fetch, fetch-log, check
   Querying:      search, latest, summary, compare, stats
   Organizations: org (add, list, show, remove, link, unlink)
@@ -61,3 +62,4 @@ registerOnboardCommand(program);
 registerIgnoreCommand(program);
 registerBlockCommand(program);
 registerImportCommand(program);
+registerEvaluateCommand(program);
