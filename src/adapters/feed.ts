@@ -34,6 +34,11 @@ export interface SourceMetadata {
   provider?: string;
   providerDetectedAt?: string;
 
+  // Evaluation fields (from `released evaluate`)
+  markdownUrl?: string;
+  evaluatedMethod?: string;
+  evaluatedAt?: string;
+
   // GitHub fields
   changelogUrl?: string;
   changelogDetectedAt?: string;

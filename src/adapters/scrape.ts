@@ -13,6 +13,12 @@ import { getSourceMeta, updateSourceMeta } from "./feed.js";
 import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
 import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
 
+function toFragmentUrl(baseUrl: string, version: string | undefined, title: string): string {
+  const raw = version ?? title;
+  const fragment = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  return `${baseUrl}#${fragment}`;
+}
+
 export const scrape: Adapter = {
   async fetch(source: Source, options?: FetchOptions): Promise<FetchResult> {
     const meta = getSourceMeta(source);
@@ -46,6 +52,16 @@ export const scrape: Adapter = {
         }
       } catch (err) {
         logger.warn(`Feed fetch/parse failed, falling back to Cloudflare + AI: ${err}`);
+      }
+    }
+
+    // ── Markdown path (direct fetch, no Cloudflare needed) ────
+    if (meta.markdownUrl) {
+      try {
+        const mdResult = await fetchViaMarkdown(source, meta.markdownUrl, options);
+        if (mdResult !== null) return mdResult;
+      } catch (err) {
+        logger.warn(`Markdown fetch failed, falling back to Cloudflare: ${err}`);
       }
     }
 
@@ -119,6 +135,70 @@ async function fetchViaCrawl(
 
   logger.info(`Parsed ${releases.length} release(s) from crawl`);
   return { releases, rawContent: buildRawContent(pages) };
+}
+
+async function fetchViaMarkdown(
+  source: Source,
+  markdownUrl: string,
+  options?: FetchOptions,
+): Promise<FetchResult | null> {
+  logger.info(`Fetching markdown directly from ${markdownUrl}...`);
+  const res = await fetch(markdownUrl, {
+    headers: { "User-Agent": "released/0.1 (+https://releases.sh)" },
+    redirect: "follow",
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (!res.ok) {
+    logger.warn(`Markdown URL returned ${res.status}`);
+    return null;
+  }
+
+  const markdown = await res.text();
+  if (!markdown.trim()) {
+    logger.warn("Markdown URL returned empty content");
+    return null;
+  }
+
+  logger.info(`Got ${markdown.length.toLocaleString()} chars of markdown (no Cloudflare needed)`);
+
+  const contentHash = sha256Hex(markdown);
+  if (await checkContentHash(source, contentHash)) {
+    logger.info("No changes detected (content hash unchanged)");
+    return { releases: [] };
+  }
+
+  // Use the same parsing pipeline as Cloudflare-rendered content
+  const knownReleases = await getKnownReleasesForSource(source.id, source.slug);
+  if (knownReleases.length > 0 && !options?.full) {
+    const incremental = await parseIncremental(markdown, source.id, source.slug, knownReleases);
+    if (incremental.boundaryFound) {
+      return {
+        releases: incremental.releases.map((r) => ({
+          title: r.title,
+          content: r.content,
+          url: toFragmentUrl(source.url, r.version, r.title),
+          version: r.version,
+          publishedAt: r.publishedAt ? new Date(r.publishedAt) : undefined,
+          isBreaking: r.isBreaking,
+        })),
+      };
+    }
+  }
+
+  const parsed = await parseChangelog(markdown, source.slug, {
+    onChunkComplete: options?.onParseProgress,
+  });
+  return {
+    releases: parsed.map((r) => ({
+      title: r.title,
+      content: r.content,
+      url: toFragmentUrl(source.url, r.version, r.title),
+      version: r.version,
+      publishedAt: r.publishedAt ? new Date(r.publishedAt) : undefined,
+      isBreaking: r.isBreaking,
+    })),
+  };
 }
 
 async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promise<FetchResult> {
@@ -230,15 +310,11 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
   logger.info(`Parsed ${parsed.length} releases from ${source.url}`);
 
   let mapped: RawRelease[] = parsed.map((entry) => {
-    // Generate a unique URL per entry so UNIQUE(source_id, url) doesn't collapse them
-    const fragment = entry.version
-      ? entry.version.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")
-      : entry.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
     return {
       version: entry.version,
       title: entry.title,
       content: entry.content,
-      url: `${source.url}#${fragment}`,
+      url: toFragmentUrl(source.url, entry.version, entry.title),
       publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
       isBreaking: entry.isBreaking,
     };
