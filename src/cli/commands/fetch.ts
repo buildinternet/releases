@@ -36,6 +36,7 @@ export function registerFetchCommand(program: Command) {
     .option("--unfetched", "Only fetch sources that have never been fetched")
     .option("--stale <hours>", "Only fetch sources older than N hours, respecting backoff")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
+    .option("--no-summarize", "Skip summary generation after fetching")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .addHelpText("after", `
 Examples:
@@ -52,6 +53,7 @@ Examples:
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
       unfetched?: boolean; stale?: string; retryErrors?: boolean; concurrency?: string;
+      summarize?: boolean;
     }) => {
       // Positional arg takes precedence over --source option
       const slug = slugArg ?? opts.source;
@@ -408,7 +410,7 @@ Examples:
           });
 
           // Generate release summary if enabled
-          if (inserted > 0) {
+          if (inserted > 0 && opts.summarize !== false) {
             try {
               const summarizeEnabled = await isSummarizationEnabled(source);
               if (summarizeEnabled) {

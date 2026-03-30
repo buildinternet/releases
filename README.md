@@ -73,6 +73,7 @@ released fetch --all       # no date/count limits
 released fetch --stale 24  # only stale sources, with backoff
 released fetch --retry-errors  # retry failed sources
 released fetch --unfetched --concurrency 5  # parallel fetch
+released fetch next-js --no-summarize      # skip summary generation
 ```
 
 By default, fetch caps at 200 releases per source to avoid API pagination limits (e.g., GitHub's 10K result cap). Use `--max <n>` to request more, or `--all` to remove the cap entirely.
