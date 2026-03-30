@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, min, isNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, fetchLog } from "../../../../src/db/schema.js";
+import { sources, releases, organizations, fetchLog, releaseSummaries } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
 import { toSlug } from "../../../../src/lib/slug.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
@@ -279,6 +279,16 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     .from(releases)
     .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`));
 
+  // Fetch summaries for this source
+  const summaryRows = await db
+    .select()
+    .from(releaseSummaries)
+    .where(eq(releaseSummaries.sourceId, src.id))
+    .orderBy(desc(releaseSummaries.generatedAt));
+
+  const rollingSummary = summaryRows.find((s) => s.type === "rolling") ?? null;
+  const monthlySummaries = summaryRows.filter((s) => s.type === "monthly");
+
   return c.json({
     id: src.id,
     slug: src.slug,
@@ -296,6 +306,10 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     trackingSince: earliest?.date ?? totals.oldest ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },
+    summaries: {
+      rolling: rollingSummary,
+      monthly: monthlySummaries,
+    },
   });
 });
 
