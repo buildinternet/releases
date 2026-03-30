@@ -269,7 +269,13 @@ Examples:
         }
 
         // Build per-source fetch options (clone to avoid mutation across concurrent fetches)
-        const sourceFetchOptions: FetchOptions = { ...fetchOptions, crawl: opts.crawl };
+        const sourceFetchOptions: FetchOptions = {
+          ...fetchOptions,
+          crawl: opts.crawl,
+          onParseProgress: (completed, total) => {
+            progressSession(`${source.name}: parsing chunk ${completed}/${total}`);
+          },
+        };
 
         if (!opts.json && !showProgress) {
           const limits = [];

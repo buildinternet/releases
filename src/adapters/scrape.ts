@@ -184,7 +184,9 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
   logger.info(`Parsing changelog with AI...`);
   let parsed;
   try {
-    parsed = await parseChangelog(markdown, source.slug);
+    parsed = await parseChangelog(markdown, source.slug, {
+      onChunkComplete: options?.onParseProgress,
+    });
   } catch (error) {
     logger.warn(
       `AI parsing failed for ${source.url}: ${error instanceof Error ? error.message : String(error)}`,

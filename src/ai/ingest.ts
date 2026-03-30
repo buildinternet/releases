@@ -266,27 +266,51 @@ async function parseChunk(client: ReturnType<typeof getAnthropicClient>, chunk: 
   }));
 }
 
-export async function parseChangelog(markdown: string, sourceSlug?: string): Promise<ParsedRelease[]> {
+export interface ParseOptions {
+  onChunkComplete?: (completed: number, total: number) => void;
+}
+
+export async function parseChangelog(markdown: string, sourceSlug?: string, options?: ParseOptions): Promise<ParsedRelease[]> {
   const client = getAnthropicClient();
   const chunks = await chunkMarkdown(markdown, client);
 
   logger.debug(`Parsing changelog: ${markdown.length} chars in ${chunks.length} chunk(s)`);
 
   const allReleases: ParsedRelease[] = [];
+  let completed = 0;
 
-  for (let i = 0; i < chunks.length; i++) {
-    const chunk = chunks[i];
-    if (chunks.length > 1) {
-      logger.info(`Parsing chunk ${i + 1}/${chunks.length} (${chunk.length.toLocaleString()} chars)...`);
-    }
+  if (chunks.length <= 1) {
+    // Single chunk — parse directly
     try {
-      const releases = await parseChunk(client, chunk, sourceSlug);
+      const releases = await parseChunk(client, chunks[0], sourceSlug);
       allReleases.push(...releases);
     } catch (error) {
-      logger.warn(
-        `Failed to parse chunk (${chunk.length} chars):`,
-        error instanceof Error ? error.message : String(error),
-      );
+      logger.warn(`Failed to parse chunk: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  } else {
+    // Multiple chunks — parse in parallel with concurrency limit
+    const concurrency = 5;
+    const results: ParsedRelease[][] = new Array(chunks.length);
+
+    for (let start = 0; start < chunks.length; start += concurrency) {
+      const batch = chunks.slice(start, start + concurrency);
+      const promises = batch.map(async (chunk, j) => {
+        const idx = start + j;
+        logger.info(`Parsing chunk ${idx + 1}/${chunks.length} (${chunk.length.toLocaleString()} chars)...`);
+        try {
+          results[idx] = await parseChunk(client, chunk, sourceSlug);
+        } catch (error) {
+          logger.warn(`Failed to parse chunk ${idx + 1} (${chunk.length} chars): ${error instanceof Error ? error.message : String(error)}`);
+          results[idx] = [];
+        }
+        completed++;
+        options?.onChunkComplete?.(completed, chunks.length);
+      });
+      await Promise.all(promises);
+    }
+
+    for (const r of results) {
+      if (r) allReleases.push(...r);
     }
   }
 
