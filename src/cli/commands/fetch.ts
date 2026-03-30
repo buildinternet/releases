@@ -19,6 +19,7 @@ export function registerFetchCommand(program: Command) {
     .command("fetch")
     .description("Fetch releases from configured sources")
     .argument("[slug]", "Fetch a specific source by slug, or all sources if omitted")
+    .option("--source <slug>", "Source slug (alternative to positional argument)")
     .option("--json", "Output as JSON")
     .option("--since <date>", "Only fetch releases after this date (ISO 8601 or YYYY-MM-DD)")
     .option("--max <n>", "Maximum number of releases to fetch per source (default: 200)")
@@ -43,11 +44,13 @@ Examples:
   released fetch my-source --force        Delete and re-fetch all releases
   released fetch --concurrency 5          Fetch 5 sources in parallel
   released fetch --json                   Output results as JSON`)
-    .action(async (slug: string | undefined, opts: {
-      json?: boolean; since?: string; max?: string; all?: boolean;
+    .action(async (slugArg: string | undefined, opts: {
+      source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean;
       unfetched?: boolean; stale?: string; retryErrors?: boolean; concurrency?: string;
     }) => {
+      // Positional arg takes precedence over --source option
+      const slug = slugArg ?? opts.source;
       const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
 
       const fetchResults: Array<{ source: string; newReleases: number; error?: string }> = [];
