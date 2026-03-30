@@ -2,8 +2,9 @@ import { eq, desc, gte, lt, and, or, sql, inArray, count, isNotNull } from "driz
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
+  type ReleaseSummary, type NewReleaseSummary,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -904,4 +905,64 @@ export async function insertFetchLog(entry: {
     error: entry.error ?? null,
     rawContent: entry.rawContent ?? null,
   });
+}
+
+// ── Release summaries ──
+
+export async function getSummariesForSource(
+  sourceId: string,
+): Promise<ReleaseSummary[]> {
+  if (isRemoteMode()) {
+    return apiClient.getSummariesForSource(sourceId);
+  }
+  const db = getDb();
+  return db
+    .select()
+    .from(releaseSummaries)
+    .where(eq(releaseSummaries.sourceId, sourceId))
+    .orderBy(desc(releaseSummaries.generatedAt));
+}
+
+export async function upsertSummary(
+  data: NewReleaseSummary,
+): Promise<void> {
+  if (isRemoteMode()) {
+    return apiClient.upsertSummary(data);
+  }
+  const db = getDb();
+  await db
+    .insert(releaseSummaries)
+    .values(data)
+    .onConflictDoUpdate({
+      target: [releaseSummaries.sourceId, releaseSummaries.orgId, releaseSummaries.type, releaseSummaries.year, releaseSummaries.month],
+      set: {
+        summary: data.summary,
+        releaseCount: data.releaseCount,
+        windowDays: data.windowDays,
+        generatedAt: new Date().toISOString(),
+      },
+    });
+}
+
+export async function getMonthlySummary(
+  sourceId: string,
+  year: number,
+  month: number,
+): Promise<ReleaseSummary | undefined> {
+  if (isRemoteMode()) {
+    return apiClient.getMonthlySummary(sourceId, year, month);
+  }
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(releaseSummaries)
+    .where(
+      and(
+        eq(releaseSummaries.sourceId, sourceId),
+        eq(releaseSummaries.type, "monthly"),
+        eq(releaseSummaries.year, year),
+        eq(releaseSummaries.month, month),
+      ),
+    );
+  return row;
 }
