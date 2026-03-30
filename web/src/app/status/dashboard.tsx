@@ -78,7 +78,11 @@ function formatElapsed(startedAt: number, endedAt?: number): string {
 function formatDuration(ms?: number | null): string {
   if (ms == null) return "-";
   if (ms < 1000) return `${ms}ms`;
-  return `${(ms / 1000).toFixed(1)}s`;
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${(ms / 1000).toFixed(1)}s`;
+  const minutes = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${minutes}m ${secs}s`;
 }
 
 export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
@@ -680,7 +684,7 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
 
 function FetchLogDetail({ log }: { log: FetchLogEntry }) {
   return (
-    <div className="bg-stone-900 text-stone-300 px-4 py-3 font-mono text-xs leading-relaxed border-b border-stone-200">
+    <div className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200">
       <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-2">
         <div><span className="text-stone-500">Source ID:</span> {log.sourceId}</div>
         <div><span className="text-stone-500">Duration:</span> {formatDuration(log.durationMs)}</div>
