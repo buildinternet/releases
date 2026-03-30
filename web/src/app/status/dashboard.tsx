@@ -25,11 +25,14 @@ interface FetchLogEntry {
   sourceId: string;
   sourceName?: string;
   sourceSlug?: string;
+  orgName?: string;
+  orgSlug?: string;
   releasesFound: number;
   releasesInserted: number;
   durationMs?: number;
   status: "success" | "error" | "no_change" | "dry_run";
   error?: string;
+  rawContent?: string;
   createdAt: string;
 }
 
@@ -45,6 +48,16 @@ interface StatusMessage {
 }
 
 type Tab = "sessions" | "fetch-log";
+
+function formatModelName(model: string): string {
+  // e.g. "claude-haiku-4-5-20251001" → "Haiku 4.5", "claude-sonnet-4-5-20250514" → "Sonnet 4.5"
+  const match = model.match(/claude-(\w+)-(\d+)-(\d+)/);
+  if (match) {
+    const name = match[1].charAt(0).toUpperCase() + match[1].slice(1);
+    return `${name} ${match[2]}.${match[3]}`;
+  }
+  return model;
+}
 
 function formatTokens(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -281,9 +294,9 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       {(totalInput > 0 || totalOutput > 0) && (
         <div className="text-xs text-stone-400 mb-4 px-3 py-2 bg-stone-100 rounded-md">
           Today: {formatTokens(totalInput)} input / {formatTokens(totalOutput)} output
-          {usage.length > 0 && (
+          {usage.length > 1 && (
             <span className="ml-3 text-stone-400">
-              {usage.map((u) => `${u.model.split("-").slice(-1)[0]}: ${formatTokens(u.totalInput + u.totalOutput)}`).join(" · ")}
+              {usage.map((u) => `${formatModelName(u.model)}: ${formatTokens(u.totalInput + u.totalOutput)}`).join(" · ")}
             </span>
           )}
         </div>
@@ -501,14 +514,19 @@ function StepBadge({ step, status, type }: { step?: string; status: string; type
 }
 
 function SessionLogPanel({ sessionId, logs, currentAction, status }: { sessionId: string; logs: string[]; currentAction?: string; status: string }) {
+  const containerRef = useRef<HTMLDivElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+    // Scroll within the log container only, not the page
+    const container = containerRef.current;
+    if (container) {
+      container.scrollTop = container.scrollHeight;
+    }
   }, [logs.length]);
 
   return (
-    <div className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200">
+    <div ref={containerRef} className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200">
       {logs.length === 0 && currentAction && (
         <div className="text-stone-500">{currentAction}</div>
       )}
@@ -526,16 +544,52 @@ function SessionLogPanel({ sessionId, logs, currentAction, status }: { sessionId
   );
 }
 
+type FetchStatusFilter = FetchLogEntry["status"] | "all";
+
 function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEntry[]; page: number; perPage: number; onPageChange: (p: number) => void }) {
+  const [filter, setFilter] = useState<FetchStatusFilter>("all");
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+
+  const filtered = filter === "all" ? logs : logs.filter((l) => l.status === filter);
+
   if (logs.length === 0) {
     return <div className="text-sm text-stone-400 py-8 text-center">No fetch log entries yet.</div>;
   }
 
-  const totalPages = Math.ceil(logs.length / perPage);
-  const paginated = logs.slice(page * perPage, (page + 1) * perPage);
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
+
+  const filterButtons: { value: FetchStatusFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "success", label: "Success" },
+    { value: "error", label: "Errors" },
+    { value: "no_change", label: "No change" },
+    { value: "dry_run", label: "Dry runs" },
+  ];
 
   return (
     <div>
+      {/* Status filter */}
+      <div className="flex gap-1 mb-3">
+        {filterButtons.map((f) => {
+          const count = f.value === "all" ? logs.length : logs.filter((l) => l.status === f.value).length;
+          if (count === 0 && f.value !== "all") return null;
+          return (
+            <button
+              key={f.value}
+              onClick={() => { setFilter(f.value); onPageChange(0); }}
+              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                filter === f.value
+                  ? "bg-stone-900 text-white"
+                  : "bg-stone-100 text-stone-500 hover:bg-stone-200"
+              }`}
+            >
+              {f.label} <span className="ml-0.5 opacity-60">{count}</span>
+            </button>
+          );
+        })}
+      </div>
+
       <div className="border border-stone-200 rounded-lg overflow-hidden">
         <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-medium uppercase tracking-wider text-stone-400">
           <div>Source</div>
@@ -544,46 +598,63 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
           <div>Result</div>
           <div className="text-right">Duration</div>
         </div>
-        {paginated.map((log) => (
-          <div
-            key={log.id}
-            className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-3 border-b border-stone-100 text-sm"
-          >
-            <div>
-              {log.sourceSlug ? (
-                <a href={`/source/${log.sourceSlug}`} className="text-stone-900 hover:underline">
-                  {log.sourceName ?? log.sourceSlug}
-                </a>
-              ) : (
-                <span className="text-stone-500">{log.sourceName ?? log.sourceId}</span>
-              )}
+        {paginated.map((log) => {
+          const isExpanded = expandedIds.has(log.id);
+          return (
+            <div key={log.id}>
+              <button
+                onClick={() => setExpandedIds((prev) => {
+                  const next = new Set(prev);
+                  if (next.has(log.id)) next.delete(log.id);
+                  else next.add(log.id);
+                  return next;
+                })}
+                className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-3 w-full text-left border-b border-stone-100 hover:bg-stone-50 transition-colors"
+              >
+                <div>
+                  <div className="text-sm text-stone-900">
+                    <span className="mr-1.5 text-stone-300">{isExpanded ? "▾" : "▸"}</span>
+                    {log.sourceSlug ? (
+                      <a href={`/source/${log.sourceSlug}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
+                        {log.sourceName ?? log.sourceSlug}
+                      </a>
+                    ) : (
+                      <span className="text-stone-500">{log.sourceName ?? log.sourceId}</span>
+                    )}
+                  </div>
+                  {log.orgName && (
+                    <div className="text-xs text-stone-400 ml-5">{log.orgName}</div>
+                  )}
+                </div>
+                <div className="text-sm text-stone-500">
+                  {formatTime(new Date(log.createdAt).getTime())}
+                </div>
+                <div className="text-sm">
+                  <FetchStatusBadge status={log.status} />
+                </div>
+                <div className="text-sm text-stone-500 font-mono">
+                  {log.status === "no_change" ? (
+                    <span className="text-stone-400">no changes</span>
+                  ) : log.status === "error" ? (
+                    <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>
+                  ) : (
+                    <span>
+                      {log.releasesFound > 0 && <span>{log.releasesFound} found</span>}
+                      {log.releasesInserted > 0 && <span className="ml-1.5 text-green-600">+{log.releasesInserted}</span>}
+                      {log.releasesFound === 0 && log.releasesInserted === 0 && <span className="text-stone-400">—</span>}
+                    </span>
+                  )}
+                </div>
+                <div className="text-sm text-stone-400 text-right">{formatDuration(log.durationMs)}</div>
+              </button>
+              {isExpanded && <FetchLogDetail log={log} />}
             </div>
-            <div className="text-stone-500">
-              {formatTime(new Date(log.createdAt).getTime())}
-            </div>
-            <div>
-              <FetchStatusBadge status={log.status} />
-            </div>
-            <div className="text-stone-500 font-mono">
-              {log.status === "no_change" ? (
-                <span className="text-stone-400">no changes</span>
-              ) : log.status === "error" ? (
-                <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>
-              ) : (
-                <span>
-                  {log.releasesFound > 0 && <span>{log.releasesFound} found</span>}
-                  {log.releasesInserted > 0 && <span className="ml-1.5 text-green-600">+{log.releasesInserted}</span>}
-                  {log.releasesFound === 0 && log.releasesInserted === 0 && <span className="text-stone-400">—</span>}
-                </span>
-              )}
-            </div>
-            <div className="text-stone-400 text-right">{formatDuration(log.durationMs)}</div>
-          </div>
-        ))}
+          );
+        })}
       </div>
       {totalPages > 1 && (
         <div className="flex items-center justify-between mt-3 text-xs text-stone-400">
-          <span>{logs.length} entries</span>
+          <span>{filtered.length} entries</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onPageChange(page - 1)}
@@ -602,6 +673,35 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
             </button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+function FetchLogDetail({ log }: { log: FetchLogEntry }) {
+  return (
+    <div className="bg-stone-900 text-stone-300 px-4 py-3 font-mono text-xs leading-relaxed border-b border-stone-200">
+      <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-2">
+        <div><span className="text-stone-500">Source ID:</span> {log.sourceId}</div>
+        <div><span className="text-stone-500">Duration:</span> {formatDuration(log.durationMs)}</div>
+        <div><span className="text-stone-500">Releases found:</span> {log.releasesFound}</div>
+        <div><span className="text-stone-500">Releases inserted:</span> {log.releasesInserted}</div>
+        {log.orgName && <div><span className="text-stone-500">Organization:</span> {log.orgName}</div>}
+      </div>
+      {log.error && (
+        <div className="mt-2">
+          <div className="text-stone-500 mb-1">Error:</div>
+          <div className="text-red-400 whitespace-pre-wrap">{log.error}</div>
+        </div>
+      )}
+      {log.rawContent && (
+        <div className="mt-2">
+          <div className="text-stone-500 mb-1">Raw content preview:</div>
+          <div className="max-h-48 overflow-y-auto text-stone-400 whitespace-pre-wrap">{log.rawContent.slice(0, 2000)}{log.rawContent.length > 2000 ? "\n..." : ""}</div>
+        </div>
+      )}
+      {!log.error && !log.rawContent && (
+        <div className="text-stone-600">No additional details available.</div>
       )}
     </div>
   );

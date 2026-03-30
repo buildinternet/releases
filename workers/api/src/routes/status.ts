@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { desc, sql, gte } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { fetchLog, sources, usageLog } from "../../../../src/db/schema.js";
+import { fetchLog, sources, organizations, usageLog } from "../../../../src/db/schema.js";
 import type { Env } from "../index.js";
 
 export const statusRoutes = new Hono<Env>();
@@ -33,15 +33,19 @@ statusRoutes.get("/status/fetch-log", async (c) => {
       sourceId: fetchLog.sourceId,
       sourceName: sources.name,
       sourceSlug: sources.slug,
+      orgName: organizations.name,
+      orgSlug: organizations.slug,
       releasesFound: fetchLog.releasesFound,
       releasesInserted: fetchLog.releasesInserted,
       durationMs: fetchLog.durationMs,
       status: fetchLog.status,
       error: fetchLog.error,
+      rawContent: fetchLog.rawContent,
       createdAt: fetchLog.createdAt,
     })
     .from(fetchLog)
     .leftJoin(sources, sql`${fetchLog.sourceId} = ${sources.id}`)
+    .leftJoin(organizations, sql`${sources.orgId} = ${organizations.id}`)
     .orderBy(desc(fetchLog.createdAt))
     .limit(limit);
 
