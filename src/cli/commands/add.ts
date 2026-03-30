@@ -54,6 +54,29 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
     return { name, slug: input.slug ?? toSlug(name), type: input.type, url, status: "error", error: `Invalid type "${input.type}". Must be one of: ${VALID_TYPES.join(", ")}` };
   }
 
+  const slug = input.slug ?? toSlug(name);
+  let orgId: string | null = null;
+  let orgName: string | null = null;
+
+  // Resolve org early so exclusion check has orgId context
+  if (input.org) {
+    let org = await findOrg(input.org);
+    if (!org) {
+      org = await createOrg(input.org, { slug: toSlug(input.org) });
+      logger.info(`Created organization: ${org.name} (${org.slug})`);
+    }
+    orgId = org.id;
+    orgName = org.name;
+  }
+
+  // Check exclusions before evaluation to avoid wasting an agent call on blocked URLs
+  const exclusion = await isUrlExcluded(url, orgId ?? undefined);
+  if (exclusion.excluded) {
+    const scopeLabel = exclusion.scope === "blocked" ? "blocked" : "ignored";
+    logger.warn(`Skipping ${scopeLabel} URL: ${url}${exclusion.reason ? ` (${exclusion.reason})` : ""}`);
+    return { name, slug, type: "scrape", url, org: orgName ?? undefined, status: "ignored", reason: exclusion.reason };
+  }
+
   // Determine source type and metadata
   let sourceType: SourceType;
   const metadata: Record<string, unknown> = {};
@@ -87,21 +110,6 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
     logger.info(`Evaluation: ${evaluationResult.recommendedMethod} (${evaluationResult.confidence}) — using ${sourceType} adapter`);
   }
 
-  const slug = input.slug ?? toSlug(name);
-  let orgId: string | null = null;
-  let orgName: string | null = null;
-
-  // Resolve or create org if provided
-  if (input.org) {
-    let org = await findOrg(input.org);
-    if (!org) {
-      org = await createOrg(input.org, { slug: toSlug(input.org) });
-      logger.info(`Created organization: ${org.name} (${org.slug})`);
-    }
-    orgId = org.id;
-    orgName = org.name;
-  }
-
   // Auto-association for GitHub sources (only if no org specified)
   if (!input.org && sourceType === "github") {
     const ghRepo = evaluationResult?.githubRepo;
@@ -125,14 +133,6 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
         }
       }
     }
-  }
-
-  // Check if URL is blocked globally or ignored for this org
-  const exclusion = await isUrlExcluded(url, orgId ?? undefined);
-  if (exclusion.excluded) {
-    const scopeLabel = exclusion.scope === "blocked" ? "blocked" : "ignored";
-    logger.warn(`Skipping ${scopeLabel} URL: ${url}${exclusion.reason ? ` (${exclusion.reason})` : ""}`);
-    return { name, slug, type: sourceType, url, org: orgName ?? undefined, status: "ignored", reason: exclusion.reason };
   }
 
   try {
