@@ -144,9 +144,7 @@ export const releaseSummaries = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newSummaryId),
     sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
-    orgId: text("org_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
+    orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
     type: text("type", { enum: ["rolling", "monthly"] }).notNull(),
     year: integer("year"),
     month: integer("month"),

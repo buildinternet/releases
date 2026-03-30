@@ -22,11 +22,6 @@ export function registerSummarizeCommand(program: Command) {
         process.exit(1);
       }
 
-      if (!source.orgId) {
-        console.error(chalk.red(`Source ${slug} has no organization — summaries require an org`));
-        process.exit(1);
-      }
-
       if (!opts.force) {
         const enabled = await isSummarizationEnabled(source);
         if (!enabled) {
@@ -46,7 +41,7 @@ export function registerSummarizeCommand(program: Command) {
         const monthEnd = new Date(year, month, 1).toISOString();
 
         const cutoff = daysAgoIso(windowDays);
-        const allRecent = await getRecentReleases(source.id, cutoff);
+        const allRecent = await getRecentReleases(source.id, cutoff, source.slug);
         const monthlyReleases = allRecent.filter(
           (r) => r.publishedAt && r.publishedAt >= monthStart && r.publishedAt < monthEnd,
         );
@@ -91,7 +86,7 @@ export function registerSummarizeCommand(program: Command) {
         }
       } else {
         const cutoff = daysAgoIso(windowDays);
-        const recentReleases = await getRecentReleases(source.id, cutoff);
+        const recentReleases = await getRecentReleases(source.id, cutoff, source.slug);
 
         if (recentReleases.length === 0) {
           console.error(chalk.yellow(`No releases in the last ${windowDays} days`));

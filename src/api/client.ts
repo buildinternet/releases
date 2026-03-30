@@ -1,7 +1,7 @@
 import { getApiUrl, getApiKey } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
-  Source, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
+  Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
   ReleaseSummary, NewReleaseSummary,
 } from "../db/schema.js";
 
@@ -625,6 +625,12 @@ export async function postStatusEvent(event: {
     method: "POST",
     body: JSON.stringify(event),
   });
+}
+
+// ── Recent releases ──
+
+export async function getRecentReleases(sourceSlug: string, cutoffIso: string): Promise<Release[]> {
+  return apiFetch<Release[]>(`/api/sources/${sourceSlug}/recent-releases?cutoff=${cutoffIso}`);
 }
 
 // ── Release summaries ──

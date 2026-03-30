@@ -29,8 +29,11 @@ export async function listAllSources(): Promise<Source[]> {
 export async function getRecentReleases(
   sourceId: string,
   cutoffIso: string,
+  sourceSlug?: string,
 ): Promise<Release[]> {
-  // TODO: add remote mode support (used only by AI summary/compare; not yet implemented in API)
+  if (isRemoteMode() && sourceSlug) {
+    return apiClient.getRecentReleases(sourceSlug, cutoffIso);
+  }
   const db = getDb();
   return db
     .select()

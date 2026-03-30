@@ -408,12 +408,12 @@ Examples:
           });
 
           // Generate release summary if enabled
-          if (inserted > 0 && source.orgId) {
+          if (inserted > 0) {
             try {
               const summarizeEnabled = await isSummarizationEnabled(source);
               if (summarizeEnabled) {
                 const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
-                const recentReleases = await getRecentReleases(source.id, cutoff);
+                const recentReleases = await getRecentReleases(source.id, cutoff, source.slug);
 
                 if (recentReleases.length > 0) {
                   // Rolling summary
