@@ -216,6 +216,61 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
   return c.json({ deleted: true });
 });
 
+orgRoutes.get("/orgs/:slug/accounts", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const platform = c.req.query("platform");
+
+  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  if (platform) {
+    const [account] = await db
+      .select()
+      .from(orgAccounts)
+      .where(and(eq(orgAccounts.orgId, org.id), eq(orgAccounts.platform, platform)));
+    return c.json(account ?? null);
+  }
+
+  const accounts = await db
+    .select()
+    .from(orgAccounts)
+    .where(eq(orgAccounts.orgId, org.id));
+  return c.json(accounts);
+});
+
+orgRoutes.delete("/orgs/:slug/accounts/:platform/:handle", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const platform = c.req.param("platform");
+  const handle = decodeURIComponent(c.req.param("handle"));
+
+  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  const deleted = await db
+    .delete(orgAccounts)
+    .where(
+      and(
+        eq(orgAccounts.orgId, org.id),
+        eq(orgAccounts.platform, platform),
+        eq(orgAccounts.handle, handle),
+      ),
+    )
+    .returning();
+
+  if (deleted.length === 0) {
+    return c.json({ error: "not_found", message: "Account not found" }, 404);
+  }
+
+  await db
+    .update(organizations)
+    .set({ updatedAt: new Date().toISOString() })
+    .where(eq(organizations.id, org.id));
+
+  return c.json({ deleted: true });
+});
+
 orgRoutes.post("/orgs/:slug/accounts", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");

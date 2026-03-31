@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, count, and, min, isNull, sql, gte } from "drizzle-orm";
+import { eq, desc, count, and, min, isNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { sources, releases, organizations, fetchLog, releaseSummaries } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
@@ -13,6 +13,22 @@ export const sourceRoutes = new Hono<Env>();
 sourceRoutes.get("/sources", async (c) => {
   const db = createDb(c.env.DB);
   const independent = c.req.query("independent") === "true";
+  const orgId = c.req.query("orgId");
+  const filterByUrls = c.req.query("filterByUrls") === "true";
+
+  // Filter by URLs — return raw source rows matching the provided url params
+  if (filterByUrls) {
+    const urls = c.req.queries("url") ?? [];
+    if (urls.length === 0) return c.json([]);
+    const rows = await db.select().from(sources).where(inArray(sources.url, urls));
+    return c.json(rows);
+  }
+
+  // Filter by org ID
+  if (orgId) {
+    const rows = await db.select().from(sources).where(eq(sources.orgId, orgId)).orderBy(sources.name);
+    return c.json(rows);
+  }
 
   const rows = await (independent
     ? db.select().from(sources).where(isNull(sources.orgId)).orderBy(sources.name)
