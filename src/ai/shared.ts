@@ -22,7 +22,7 @@ export const releaseItemProperties = {
   content: {
     type: "string" as const,
     description:
-      "Full content of the release in markdown. Keep it concise — summarize long entries to their key changes. Preserve image URLs as markdown image links.",
+      "Full content of the release in markdown. Keep it concise — summarize long entries to their key changes. Include only images that are part of the release body (screenshots, product images, diagrams) as markdown image links. Remove image references for site chrome — author avatars, navigation logos, footer icons, social badges, and tracking pixels.",
   },
   publishedAt: {
     type: "string" as const,
@@ -35,7 +35,7 @@ export const releaseItemProperties = {
   media: {
     type: "array" as const,
     description:
-      "Media items found in the release: images, GIFs, and video embeds. Extract the URL and type for each.",
+      "Media items from the release content only: product screenshots, feature demos, diagrams, hero images. Exclude site chrome — author avatars, navigation logos, footer icons, social badges, decorative separators, and tracking pixels.",
     items: {
       type: "object" as const,
       properties: {

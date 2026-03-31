@@ -28,6 +28,7 @@ export interface UploadResult {
 // ---------------------------------------------------------------------------
 
 const MAX_BYTES = 10 * 1024 * 1024; // 10 MB
+const MIN_BYTES = 5 * 1024; // 5 KB — skip tiny avatars and tracking pixels
 
 const UPLOADABLE_CONTENT_TYPES = new Set([
   "image/png",
@@ -53,6 +54,91 @@ const CONTENT_TYPE_EXT: Record<string, string> = {
 };
 
 const SKIP_DOMAINS = ["youtube", "vimeo", "loom"];
+
+/** URL path substrings that indicate site chrome, not release content. Case-insensitive. */
+const JUNK_PATH_PATTERNS = [
+  "/avatar", "/avatars/",
+  "/icon", "/icons/",
+  "/logo", "/logos/",
+  "/badge", "/badges/",
+  "/emoji", "/emojis/",
+  "/favicon",
+  "/sprite",
+  "/pixel", "/spacer", "/tracking", "/beacon",
+  "1x1",
+  "/wp-content/plugins/",
+];
+
+/** Domains known to serve tracking pixels, not real images. */
+const TRACKING_DOMAINS = [
+  "px.ads.linkedin.com",
+  "t.co",
+  "www.facebook.com/tr",
+  "analytics.twitter.com",
+  "bat.bing.com",
+];
+
+export interface FilterResult {
+  media: MediaRef[];
+  content: string;
+  dropped: Array<{ url: string; reason: string }>;
+}
+
+/**
+ * Filters junk images (avatars, logos, icons, tracking pixels) from media
+ * and strips their markdown image references from content.
+ */
+export function filterJunkMedia(
+  media: MediaRef[],
+  content: string,
+): FilterResult {
+  const dropped: Array<{ url: string; reason: string }> = [];
+  const kept: MediaRef[] = [];
+
+  for (const item of media) {
+    const reason = getJunkReason(item.url);
+    if (reason) {
+      dropped.push({ url: item.url, reason });
+    } else {
+      kept.push(item);
+    }
+  }
+
+  // Strip dropped image URLs from markdown content
+  let cleanContent = content;
+  for (const { url } of dropped) {
+    const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    cleanContent = cleanContent.replace(
+      new RegExp(`!\\[[^\\]]*\\]\\(${escaped}\\)`, "g"),
+      "",
+    );
+  }
+
+  // Clean up empty lines left by removed images
+  cleanContent = cleanContent.replace(/\n{3,}/g, "\n\n").trim();
+
+  return { media: kept, content: cleanContent, dropped };
+}
+
+/** Returns the reason a URL is junk, or null if it should be kept. */
+function getJunkReason(url: string): string | null {
+  const lower = url.toLowerCase();
+
+  for (const domain of TRACKING_DOMAINS) {
+    if (lower.includes(domain)) return `tracking domain: ${domain}`;
+  }
+
+  try {
+    const pathname = new URL(url).pathname.toLowerCase();
+    for (const pattern of JUNK_PATH_PATTERNS) {
+      if (pathname.includes(pattern)) return `path pattern: ${pattern}`;
+    }
+  } catch {
+    // Invalid URL — keep it, let downstream handle the error
+  }
+
+  return null;
+}
 
 const DOWNLOAD_TIMEOUT_MS = 15_000;
 
@@ -161,6 +247,16 @@ export async function uploadToR2(
       "uploadToR2: skipping — body size",
       body.byteLength,
       "exceeds 10 MB for",
+      mediaUrl
+    );
+    return undefined;
+  }
+
+  if (body.byteLength < MIN_BYTES) {
+    logger.debug(
+      "uploadToR2: skipping — body size",
+      body.byteLength,
+      "under 5 KB for",
       mediaUrl
     );
     return undefined;
