@@ -20,6 +20,10 @@ import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";
 
+const REMOTE_MAX_CONCURRENCY = 5;
+const REMOTE_DEFAULT_CONCURRENCY = 3;
+const CANCEL_MSG = "Session cancelled remotely — stopping...";
+
 export function registerFetchCommand(program: Command) {
   program
     .command("fetch")
@@ -62,6 +66,18 @@ Examples:
       const slug = slugArg ?? opts.source;
       const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
 
+      let effectiveConcurrency = concurrency;
+      if (isRemoteMode()) {
+        if (concurrency === 1 && !opts.concurrency) {
+          effectiveConcurrency = REMOTE_DEFAULT_CONCURRENCY;
+        } else if (concurrency > REMOTE_MAX_CONCURRENCY) {
+          effectiveConcurrency = REMOTE_MAX_CONCURRENCY;
+          if (!opts.json) {
+            logger.warn(`Remote concurrency capped at ${REMOTE_MAX_CONCURRENCY} (requested ${concurrency}).`);
+          }
+        }
+      }
+
       const fetchResults: Array<{ source: string; newReleases: number; error?: string }> = [];
       let targetSources: Source[];
 
@@ -83,7 +99,7 @@ Examples:
           return;
         }
         if (!opts.json) {
-          console.log(chalk.bold(`Fetching ${targetSources.length} unfetched source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
+          console.log(chalk.bold(`Fetching ${targetSources.length} unfetched source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
         }
         // Default to 30 days of history for unfetched sources unless overridden
         if (!opts.since && !opts.all) {
@@ -106,7 +122,7 @@ Examples:
           return;
         }
         if (!opts.json) {
-          console.log(chalk.bold(`Fetching ${targetSources.length} stale source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
+          console.log(chalk.bold(`Fetching ${targetSources.length} stale source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
         }
       } else if (opts.retryErrors) {
         targetSources = await listFetchableSources({ mode: "retry_errors" });
@@ -119,9 +135,14 @@ Examples:
           return;
         }
         if (!opts.json) {
-          console.log(chalk.bold(`Retrying ${targetSources.length} errored source${targetSources.length > 1 ? "s" : ""} (concurrency: ${concurrency})\n`));
+          console.log(chalk.bold(`Retrying ${targetSources.length} errored source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
         }
       } else {
+        if (isRemoteMode()) {
+          console.error(chalk.red("Remote fetch requires a filter to prevent expensive bulk operations."));
+          console.error(chalk.gray("Use one of: a source slug, --stale <hours>, --unfetched, or --retry-errors."));
+          process.exit(1);
+        }
         targetSources = await listAllSources();
         if (targetSources.length === 0) {
           if (opts.json) {
@@ -166,6 +187,7 @@ Examples:
           sessionId,
           company: sessionCompany,
           sessionType: "update",
+          activeSources: targetSources.map((s) => s.slug),
         }).catch(() => {});
       }
 
@@ -175,6 +197,7 @@ Examples:
         // Always send if there's a log line, otherwise throttle
         if (!logLine && now - lastProgressAt < PROGRESS_INTERVAL_MS && sessionSourcesFetched < targetSources.length) return;
         lastProgressAt = now;
+        const remainingSlugs = targetSources.slice(sessionSourcesFetched).map((s) => s.slug);
         apiClient.postStatusEvent({
           type: "session:progress",
           sessionId,
@@ -183,8 +206,25 @@ Examples:
           sourcesFetched: sessionSourcesFetched,
           releasesFound: sessionReleasesFound,
           releasesInserted: sessionReleasesInserted,
+          activeSources: remainingSlugs,
           ...(logLine ? { logLine, currentAction: logLine } : {}),
         }).catch(() => {});
+      }
+
+      let cancelCheckedAt = 0;
+      const CANCEL_CHECK_INTERVAL_MS = 5000;
+
+      async function checkCancelled(): Promise<boolean> {
+        if (!isRemoteMode()) return false;
+        const now = Date.now();
+        if (now - cancelCheckedAt < CANCEL_CHECK_INTERVAL_MS) return false;
+        cancelCheckedAt = now;
+        try {
+          const session = await apiClient.getSession(sessionId);
+          return session?.cancelRequested === true;
+        } catch {
+          return false;
+        }
       }
 
       async function endSession(error?: string) {
@@ -202,7 +242,7 @@ Examples:
       let stopping = false;
       const total = targetSources.length;
       const fetchStartTime = performance.now();
-      const showProgress = !opts.json && total > 1 && concurrency > 1;
+      const showProgress = !opts.json && total > 1 && effectiveConcurrency > 1;
       const showSummary = !opts.json && total > 1;
 
       function onSigint() {
@@ -596,18 +636,54 @@ Examples:
         }
       }
 
+      // ── Source-level duplicate detection (remote mode) ──
+      if (isRemoteMode() && targetSources.length > 0) {
+        try {
+          const { slugs: activeSlugs, sessionMap } = await apiClient.getActiveSources();
+          const targetSlugs = targetSources.map((s) => s.slug);
+          const overlapping = targetSlugs.filter((s) => activeSlugs.includes(s));
+          if (overlapping.length > 0) {
+            const overlapSessionId = sessionMap[overlapping[0]];
+            const sourceList = overlapping.length <= 3
+              ? overlapping.map((s) => `"${s}"`).join(", ")
+              : `${overlapping.length} sources`;
+            console.error(chalk.red(`Source ${sourceList} already being fetched in session ${overlapSessionId.slice(0, 8)}.`));
+            console.error(chalk.gray(`Use 'released task cancel ${overlapSessionId.slice(0, 8)}' to stop it first.`));
+            process.exit(1);
+          }
+        } catch {
+          if (!opts.json) {
+            logger.warn("Could not check for overlapping sessions — proceeding anyway.");
+          }
+        }
+      }
+
       await startSession();
 
       // Run with concurrency pool
-      if (concurrency <= 1) {
+      if (effectiveConcurrency <= 1) {
         for (const source of targetSources) {
           if (stopping) break;
+          if (await checkCancelled()) {
+            stopping = true;
+            if (!opts.json) {
+              process.stderr.write(`\n${chalk.yellow(CANCEL_MSG)}\n`);
+            }
+            break;
+          }
           await fetchOne(source);
         }
       } else {
         const queue = [...targetSources];
-        const workers = Array.from({ length: Math.min(concurrency, queue.length) }, async () => {
+        const workers = Array.from({ length: Math.min(effectiveConcurrency, queue.length) }, async () => {
           while (queue.length > 0 && !stopping) {
+            if (await checkCancelled()) {
+              stopping = true;
+              if (!opts.json) {
+                process.stderr.write(`\n${chalk.yellow(CANCEL_MSG)}\n`);
+              }
+              break;
+            }
             const source = queue.shift()!;
             await fetchOne(source);
           }
@@ -618,7 +694,12 @@ Examples:
       process.removeListener("SIGINT", onSigint);
 
       const fetchErrors = fetchResults.filter((r) => r.error);
-      if (fetchErrors.length === fetchResults.length && fetchResults.length > 0) {
+      if (stopping && await checkCancelled().catch(() => false)) {
+        await apiClient.postStatusEvent({
+          type: "session:cancelled",
+          sessionId,
+        }).catch(() => {});
+      } else if (fetchErrors.length === fetchResults.length && fetchResults.length > 0) {
         await endSession(`All ${fetchResults.length} sources failed`);
       } else {
         await endSession();

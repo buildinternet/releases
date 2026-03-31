@@ -67,7 +67,6 @@ released edit my-blog --no-primary              # unmark as primary
 ### Fetch releases
 
 ```bash
-released fetch             # all sources (default max 200 releases per source)
 released fetch next-js     # one source (or: released fetch --source next-js)
 released fetch --since 2025-01-01 --max 50
 released fetch --max 500   # fetch up to 500 releases per source
@@ -79,6 +78,8 @@ released fetch next-js --no-summarize      # skip summary generation
 ```
 
 By default, fetch caps at 200 releases per source to avoid API pagination limits (e.g., GitHub's 10K result cap). Use `--max <n>` to request more, or `--all` to remove the cap entirely.
+
+> **Remote mode:** bare `released fetch` (no slug or filter) is blocked to prevent expensive bulk operations. Use `--stale`, `--unfetched`, `--retry-errors`, or a source slug. Remote concurrency defaults to 3 (max 5). Duplicate source fetches are detected and blocked.
 
 ### Crawl mode
 
@@ -136,6 +137,18 @@ released fetch --retry-errors      # only fetch sources whose last attempt faile
 ```
 
 Sources that repeatedly return no changes back off automatically (1h → 2h → 4h → ... up to 48h). Error backoff caps at 72h. Successful fetches reset all counters. Paused sources (`fetchPriority = "paused"`) are always skipped by `--stale`. The default 200-release cap applies to smart fetch as well — use `--max` to adjust per-run.
+
+### Task management
+
+Manage remote fetch and discovery sessions (requires remote mode):
+
+```bash
+released task list                    # list active and recent sessions
+released task list --json             # machine-readable output
+released task cancel <sessionId>      # cancel a running session (prefix match supported)
+```
+
+Sessions track which sources are actively being fetched. The CLI blocks new fetches if overlapping sources are already in-flight — cancel the existing session first with `task cancel`.
 
 ### Inspect sources
 
@@ -268,7 +281,7 @@ Claude Desktop config:
 | `list_organizations` | List all organizations with their linked sources |
 | `add_source` | Add a new changelog source |
 | `remove_source` | Remove a source and its releases |
-| `fetch_source` | Trigger a fetch for one or all sources |
+| `fetch_source` | Trigger a fetch for a specific source by slug |
 | `add_organization` | Create a new organization |
 | `link_account` | Link a platform account to an organization |
 | `list_ignored_urls` | List ignored URLs for an organization |

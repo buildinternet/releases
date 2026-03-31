@@ -8,7 +8,7 @@ interface SessionState {
   sessionId: string;
   company: string;
   type: "onboard" | "update";
-  status: "running" | "complete" | "error";
+  status: "running" | "complete" | "error" | "cancelled";
   step?: string;
   sourcesFound?: number;
   sourcesValidated?: number;
@@ -21,6 +21,8 @@ interface SessionState {
   lastUpdatedAt: number;
   error?: string;
   dismissed?: boolean;
+  activeSources?: string[];
+  cancelRequested?: boolean;
 }
 
 interface StatusMessage {
@@ -29,6 +31,7 @@ interface StatusMessage {
     | "session:progress"
     | "session:complete"
     | "session:error"
+    | "session:cancelled"
     | "session:dismissed"
     | "fetch:complete"
     | "init";
@@ -73,6 +76,66 @@ export class StatusHub extends DurableObject {
       });
     }
 
+    // HTTP endpoint: cancel a running session
+    const cancelMatch = url.pathname.match(/^\/sessions\/([^/]+)\/cancel$/);
+    if (request.method === "POST" && cancelMatch) {
+      const sessionId = cancelMatch[1];
+      const existing = await this.ctx.storage.get<SessionState>(`session:${sessionId}`);
+      if (!existing) {
+        return new Response(JSON.stringify({ error: "not_found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      if (existing.status !== "running") {
+        return new Response(JSON.stringify({ error: "not_running", status: existing.status }), {
+          status: 409,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      existing.cancelRequested = true;
+      await this.ctx.storage.put(`session:${sessionId}`, existing);
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // HTTP endpoint: get active source slugs across all running sessions
+    if (request.method === "GET" && url.pathname === "/active-sources") {
+      const entries = await this.ctx.storage.list<SessionState>({ prefix: "session:" });
+      const now = Date.now();
+      const slugs = new Set<string>();
+      const sessionMap: Record<string, string> = {};
+      for (const session of entries.values()) {
+        const lastUpdate = session.lastUpdatedAt || session.startedAt;
+        if (session.status === "running" && now - lastUpdate <= STALE_SESSION_MS) {
+          for (const slug of session.activeSources ?? []) {
+            slugs.add(slug);
+            sessionMap[slug] = session.sessionId;
+          }
+        }
+      }
+      return new Response(JSON.stringify({ slugs: [...slugs], sessionMap }), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // HTTP endpoint: get a single session
+    const singleMatch = url.pathname.match(/^\/sessions\/([^/]+)$/);
+    if (request.method === "GET" && singleMatch) {
+      const sessionId = singleMatch[1];
+      const session = await this.ctx.storage.get<SessionState>(`session:${sessionId}`);
+      if (!session) {
+        return new Response(JSON.stringify({ error: "not_found" }), {
+          status: 404,
+          headers: { "Content-Type": "application/json" },
+        });
+      }
+      return new Response(JSON.stringify(session), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // HTTP endpoint: dismiss a terminal session (hides from UI, retains data)
     const dismissMatch = url.pathname.match(/^\/sessions\/([^/]+)$/);
     if (request.method === "DELETE" && dismissMatch) {
@@ -96,12 +159,15 @@ export class StatusHub extends DurableObject {
   async alarm(): Promise<void> {
     const now = Date.now();
     const entries = await this.ctx.storage.list<SessionState>({ prefix: "session:" });
+    const keysToDelete: string[] = [];
     for (const [key, session] of entries) {
       const age = now - (session.lastUpdatedAt || session.startedAt);
       if (age > RETENTION_MS && session.status !== "running") {
-        await this.ctx.storage.delete(key);
-        await this.ctx.storage.delete(`logs:${session.sessionId}`);
+        keysToDelete.push(key, `logs:${session.sessionId}`);
       }
+    }
+    if (keysToDelete.length > 0) {
+      await this.ctx.storage.delete(keysToDelete);
     }
     // Schedule next cleanup
     await this.ctx.storage.setAlarm(now + CLEANUP_INTERVAL_MS);
@@ -117,6 +183,7 @@ export class StatusHub extends DurableObject {
         status: "running",
         startedAt: now,
         lastUpdatedAt: now,
+        activeSources: (event.activeSources as string[]) ?? [],
       };
       await this.ctx.storage.put(`session:${session.sessionId}`, session);
       // Ensure cleanup alarm is scheduled
@@ -135,6 +202,7 @@ export class StatusHub extends DurableObject {
         if (event.sourcesFetched !== undefined) existing.sourcesFetched = event.sourcesFetched as number;
         if (event.releasesFound !== undefined) existing.releasesFound = event.releasesFound as number;
         if (event.releasesInserted !== undefined) existing.releasesInserted = event.releasesInserted as number;
+        if (event.activeSources !== undefined) existing.activeSources = event.activeSources as string[];
         existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
@@ -153,6 +221,15 @@ export class StatusHub extends DurableObject {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
       if (existing) {
         existing.status = "complete";
+        existing.activeSources = [];
+        existing.lastUpdatedAt = now;
+        await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
+      }
+    } else if (event.type === "session:cancelled") {
+      const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
+      if (existing) {
+        existing.status = "cancelled";
+        existing.activeSources = [];
         existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }

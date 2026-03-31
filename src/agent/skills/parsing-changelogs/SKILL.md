@@ -76,3 +76,5 @@ When adding a new source, always validate before committing:
 - **Backoff** — sources with consecutive unchanged fetches are checked less frequently (1h-48h)
 - **Error backoff** — sources with consecutive errors back off more aggressively (1h-72h)
 - **Priority** — `fetchPriority` field on sources controls ordering
+
+> **Remote mode guardrail:** Bare `released fetch` (no slug or filter) is blocked in remote mode. Always provide a slug or use `--stale`/`--unfetched`/`--retry-errors`. Use `released task list` to check for active sessions and `released task cancel <id>` to stop one.

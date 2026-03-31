@@ -677,3 +677,41 @@ export async function getMediaAssetStats(): Promise<{ count: number; totalBytes:
 export async function queryReleasesWithMedia(): Promise<{ id: string; sourceId: string; media: string }[]> {
   return apiFetch("/api/releases?hasMedia=true&fields=id,sourceId,media");
 }
+
+// ── Sessions ──
+
+export interface Session {
+  sessionId: string;
+  company: string;
+  type: "onboard" | "update";
+  status: "running" | "complete" | "error" | "cancelled";
+  step?: string;
+  totalSources?: number;
+  sourcesFetched?: number;
+  releasesFound?: number;
+  releasesInserted?: number;
+  currentAction?: string;
+  startedAt: number;
+  lastUpdatedAt: number;
+  error?: string;
+  activeSources?: string[];
+  cancelRequested?: boolean;
+}
+
+export async function listSessions(): Promise<Session[]> {
+  return apiFetch<Session[]>("/api/sessions");
+}
+
+export async function getSession(sessionId: string): Promise<Session | null> {
+  return apiFetch<Session | null>(`/api/sessions/${sessionId}`);
+}
+
+export async function getActiveSources(): Promise<{ slugs: string[]; sessionMap: Record<string, string> }> {
+  return apiFetch<{ slugs: string[]; sessionMap: Record<string, string> }>("/api/sessions/active-sources");
+}
+
+export async function cancelSession(sessionId: string): Promise<{ ok: boolean; error?: string }> {
+  return apiFetch<{ ok: boolean; error?: string }>(`/api/sessions/${sessionId}/cancel`, {
+    method: "POST",
+  });
+}

@@ -4,6 +4,7 @@ import { createDb } from "../db.js";
 import { sources, releases, organizations, fetchLog, releaseSummaries } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
 import { toSlug } from "../../../../src/lib/slug.js";
+import { getStatusHub } from "../utils.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
 import type { Env } from "../index.js";
 
@@ -221,6 +222,22 @@ sourceRoutes.get("/sources/:slug/known-releases", async (c) => {
     .limit(limit);
 
   return c.json(rows);
+});
+
+// ── Sessions involving a specific source slug ──
+
+sourceRoutes.get("/sources/:slug/sessions", async (c) => {
+  const slug = c.req.param("slug");
+  const hub = getStatusHub(c.env);
+  const res = await hub.fetch(new Request("https://do/active-sources"));
+  const data = (await res.json()) as { slugs: string[]; sessionMap: Record<string, string> };
+  const sessionId = data.sessionMap[slug];
+  if (!sessionId) return c.json({ sessions: [] });
+
+  const sessionRes = await hub.fetch(new Request(`https://do/sessions/${sessionId}`));
+  if (sessionRes.status === 404) return c.json({ sessions: [] });
+  const session = await sessionRes.json();
+  return c.json({ sessions: [session] });
 });
 
 sourceRoutes.get("/sources/:slug", async (c) => {

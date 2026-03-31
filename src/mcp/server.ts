@@ -385,111 +385,91 @@ server.registerTool("remove_source", {
 
 // ── fetch_source ─────────────────────────────────────────────────────
 server.registerTool("fetch_source", {
-  description: "Trigger a fetch for a specific source or all sources",
+  description: "Trigger a fetch for a specific source by slug",
   inputSchema: {
-    slug: z.string().optional().describe("Source slug to fetch (omit to fetch all sources)"),
+    slug: z.string().describe("Source slug to fetch (required)"),
     force: z.boolean().optional().describe("Delete existing releases before fetching (clean re-fetch)"),
   },
 }, async ({ slug, force }) => {
   const db = getDb();
-  let targetSources: Source[];
 
-  if (slug) {
-    const source = await findSourceBySlug(slug);
-    if (!source) {
-      return textResult(`Source not found: "${slug}"`);
-    }
-    targetSources = [source];
-  } else {
-    targetSources = await db.select().from(sources);
-    if (targetSources.length === 0) {
-      return textResult("No sources configured. Use add_source to add one.");
-    }
+  const foundSource = await findSourceBySlug(slug);
+  if (!foundSource) {
+    return textResult(`Source not found: "${slug}"`);
+  }
+  let source: Source = foundSource;
+
+  const adapter = getAdapter(source.type);
+  if (!adapter) {
+    return textResult(`Unknown adapter type: ${source.type}`);
   }
 
-  const results: Array<{ source: string; found: number; inserted: number; error?: string }> = [];
+  const startTime = performance.now();
 
-  for (let source of targetSources) {
-    const adapter = getAdapter(source.type);
-    if (!adapter) {
-      results.push({ source: source.name, found: 0, inserted: 0, error: `Unknown adapter type: ${source.type}` });
-      continue;
+  try {
+    if (force) {
+      await db.delete(releases).where(eq(releases.sourceId, source.id));
+      await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
+      source = { ...source, lastContentHash: null };
     }
 
-    const startTime = performance.now();
+    const result = await adapter.fetch(source);
+    const rawReleases = result.releases;
 
-    try {
-      if (force) {
-        await db.delete(releases).where(eq(releases.sourceId, source.id));
-        await db.update(sources).set({ lastContentHash: null }).where(eq(sources.id, source.id));
-        source = { ...source, lastContentHash: null };
-      }
-
-      const result = await adapter.fetch(source);
-      const rawReleases = result.releases;
-
-      if (rawReleases.length === 0) {
-        await db.insert(fetchLog).values({
-          sourceId: source.id,
-          releasesFound: 0,
-          releasesInserted: 0,
-          durationMs: Math.round(performance.now() - startTime),
-          status: "no_change",
-          rawContent: result.rawContent ?? null,
-        });
-        results.push({ source: source.name, found: 0, inserted: 0 });
-        continue;
-      }
-
-      const rows = rawReleases.map((raw) => ({
-        sourceId: source.id,
-        version: raw.version ?? null,
-        title: raw.title,
-        content: raw.content,
-        url: raw.url ?? null,
-        contentHash: contentHash(raw),
-        publishedAt: raw.publishedAt?.toISOString() ?? null,
-      }));
-
-      let inserted = 0;
-      for (let i = 0; i < rows.length; i += 500) {
-        const batch = await db.insert(releases).values(rows.slice(i, i + 500)).onConflictDoNothing().returning({ id: releases.id });
-        inserted += batch.length;
-      }
-
-      await db.update(sources).set({ lastFetchedAt: new Date().toISOString() }).where(eq(sources.id, source.id));
-
-      await db.insert(fetchLog).values({
-        sourceId: source.id,
-        releasesFound: rawReleases.length,
-        releasesInserted: inserted,
-        durationMs: Math.round(performance.now() - startTime),
-        status: inserted > 0 ? "success" : "no_change",
-        rawContent: result.rawContent ?? null,
-      });
-
-      results.push({ source: source.name, found: rawReleases.length, inserted });
-    } catch (err) {
-      const errMsg = err instanceof Error ? err.message : String(err);
+    if (rawReleases.length === 0) {
       await db.insert(fetchLog).values({
         sourceId: source.id,
         releasesFound: 0,
         releasesInserted: 0,
         durationMs: Math.round(performance.now() - startTime),
-        status: "error",
-        error: errMsg,
-        rawContent: null,
-      }).catch(() => {});
-      results.push({ source: source.name, found: 0, inserted: 0, error: errMsg });
+        status: "no_change",
+        rawContent: result.rawContent ?? null,
+      });
+      return textResult(`${source.name}: no changes`);
     }
+
+    const rows = rawReleases.map((raw) => ({
+      sourceId: source.id,
+      version: raw.version ?? null,
+      title: raw.title,
+      content: raw.content,
+      url: raw.url ?? null,
+      contentHash: contentHash(raw),
+      publishedAt: raw.publishedAt?.toISOString() ?? null,
+    }));
+
+    let inserted = 0;
+    for (let i = 0; i < rows.length; i += 500) {
+      const batch = await db.insert(releases).values(rows.slice(i, i + 500)).onConflictDoNothing().returning({ id: releases.id });
+      inserted += batch.length;
+    }
+
+    await db.update(sources).set({ lastFetchedAt: new Date().toISOString() }).where(eq(sources.id, source.id));
+
+    await db.insert(fetchLog).values({
+      sourceId: source.id,
+      releasesFound: rawReleases.length,
+      releasesInserted: inserted,
+      durationMs: Math.round(performance.now() - startTime),
+      status: inserted > 0 ? "success" : "no_change",
+      rawContent: result.rawContent ?? null,
+    });
+
+    const summary = `${source.name}: ${rawReleases.length} found, ${inserted} new`;
+    return textResult(summary);
+  } catch (err) {
+    const errMsg = err instanceof Error ? err.message : String(err);
+    await db.insert(fetchLog).values({
+      sourceId: source.id,
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs: Math.round(performance.now() - startTime),
+      status: "error",
+      error: errMsg,
+      rawContent: null,
+    }).catch(() => {});
+    return textResult(`${source.name}: error — ${errMsg}`);
   }
-
-  const summary = results.map((r) => {
-    if (r.error) return `${r.source}: error — ${r.error}`;
-    return `${r.source}: ${r.found} found, ${r.inserted} new`;
-  }).join("\n");
-
-  return textResult(summary);
 });
 
 // ── add_organization ─────────────────────────────────────────────────
