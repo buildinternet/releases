@@ -1,5 +1,13 @@
 import { Hono } from "hono";
-import type { Env } from "../index.js";
+
+type Env = {
+  Bindings: {
+    DB: D1Database;
+    API_SECRET: string;
+    STATUS_HUB: DurableObjectNamespace;
+    MEDIA: R2Bucket;
+  };
+};
 
 export const mediaRoutes = new Hono<Env>();
 

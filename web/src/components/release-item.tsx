@@ -2,7 +2,6 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
-import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ReleaseItem } from "@/lib/api";
 
@@ -23,19 +22,23 @@ function stripLeadingTitle(content: string, title: string | null): string {
   return content;
 }
 
-const markdownComponents: Components = {
-  img: ({ src, alt }) => {
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const markdownComponents: Record<string, any> = {
+  img: (props: any) => {
+    const src = props.src as string | undefined;
     if (!src || typeof src !== "string") return null;
     return (
       <img
         src={src}
-        alt={alt || ""}
+        alt={props.alt || ""}
         loading="lazy"
         className="rounded-md max-w-full h-auto my-2 max-h-80 object-contain"
       />
     );
   },
-  a: ({ href, children }) => {
+  a: (props: any) => {
+    const href = props.href as string | undefined;
+    const children = props.children;
     if (!href) return <>{children}</>;
 
     // YouTube embed
@@ -94,11 +97,12 @@ const markdownComponents: Components = {
   },
 };
 
-const collapsedMarkdownComponents: Components = {
+const collapsedMarkdownComponents: Record<string, any> = {
   ...markdownComponents,
   img: () => null,
-  a: ({ href, children }) => {
-    // In collapsed view, render video links as plain text
+  a: (props: any) => {
+    const href = props.href as string | undefined;
+    const children = props.children;
     if (href && /youtube|vimeo|loom/i.test(href)) return <>{children}</>;
     return <a href={href}>{children}</a>;
   },
@@ -192,14 +196,14 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
       >
         {expanded ? (
           <div className={markdownClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{markdownContent}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents as any}>{markdownContent}</ReactMarkdown>
             <MediaGallery media={release.media} content={markdownContent} />
           </div>
         ) : (
           <>
             <div ref={contentRef} className="max-h-[4.5em] overflow-hidden">
               <div className={`${markdownClasses} text-stone-500 [&_strong]:text-stone-500`}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={collapsedMarkdownComponents as any}>{markdownContent}</ReactMarkdown>
               </div>
             </div>
             {isOverflowing && (
