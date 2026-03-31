@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger.js";
 
 /** Resource types to block when rendering pages via Cloudflare Browser Rendering. */
-export const CF_REJECT_RESOURCE_TYPES = ["image", "media", "font", "stylesheet"] as const;
+export const CF_REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
 
 /**
  * Fetch a URL as markdown via Cloudflare Browser Rendering.
