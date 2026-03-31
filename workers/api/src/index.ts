@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authMiddleware } from "./middleware/auth.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
+import { cacheControl } from "./middleware/cache.js";
 import { statsRoutes } from "./routes/stats.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { sourceRoutes } from "./routes/sources.js";
@@ -24,6 +25,7 @@ export type Env = {
     STATUS_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
+    CACHE_DISABLED?: string;
   };
 };
 
@@ -44,6 +46,19 @@ app.route("/api", mediaRoutes);
 
 app.use("/api/*", authMiddleware);
 app.use("/api/*", dbHealthCheck);
+
+// Cache-Control for read-heavy GET endpoints (Cloudflare handles gzip/brotli automatically).
+// Set CACHE_DISABLED=1 in env to bypass (e.g. local dev).
+app.use("/api/stats", cacheControl(300, { staleWhileRevalidate: 60 }));
+app.use("/api/orgs", cacheControl(60, { staleWhileRevalidate: 30 }));
+app.use("/api/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
+app.use("/api/sources", cacheControl(60, { staleWhileRevalidate: 30 }));
+app.use("/api/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
+app.use("/api/search", cacheControl(30, { staleWhileRevalidate: 30 }));
+app.use("/api/releases/:id", cacheControl(120, { staleWhileRevalidate: 60 }));
+app.use("/api/summaries/*", cacheControl(300, { staleWhileRevalidate: 120 }));
+app.use("/api/status/fetch-log", cacheControl(15));
+app.use("/api/status/usage", cacheControl(30));
 
 app.route("/api", sessionRoutes);
 app.route("/api", statsRoutes);
