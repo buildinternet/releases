@@ -13,6 +13,16 @@ export interface MediaRef {
   r2Key?: string;
 }
 
+/** Metadata returned after a successful R2 upload, used to populate media_assets. */
+export interface UploadResult {
+  r2Key: string;
+  sourceUrl: string;
+  sourceFilename: string | null;
+  contentType: string;
+  contentHash: string;
+  byteSize: number;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -58,18 +68,30 @@ function isSkippedUrl(url: string): boolean {
   return SKIP_DOMAINS.some((d) => url.includes(d));
 }
 
+/** Extract filename from URL path, e.g. "cli.jpg" from "https://cdn.example.com/posts/cli.jpg" */
+function extractFilename(url: string): string | null {
+  try {
+    const pathname = new URL(url).pathname;
+    const lastSegment = pathname.split("/").pop();
+    if (lastSegment && /\.\w{2,5}$/.test(lastSegment)) return lastSegment;
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Core upload function
 // ---------------------------------------------------------------------------
 
 /**
  * Downloads one media file and uploads it to R2 via the API.
- * Returns the R2 key on success, or undefined if skipped / failed.
+ * Returns upload metadata on success, or undefined if skipped / failed.
  */
 export async function uploadToR2(
   mediaUrl: string,
   sourceSlug: string
-): Promise<string | undefined> {
+): Promise<UploadResult | undefined> {
   const apiUrl = config.apiUrl();
   const apiKey = config.apiKey();
 
@@ -145,9 +167,13 @@ export async function uploadToR2(
   }
 
   // Build deterministic R2 key
-  const hash = sha256HexBuffer(body).slice(0, 16);
+  const fullHash = sha256HexBuffer(body);
+  const hash = fullHash.slice(0, 16);
   const ext = CONTENT_TYPE_EXT[contentType] ?? "bin";
   const key = `sources/${sourceSlug}/${hash}.${ext}`;
+
+  // Extract filename from URL path
+  const sourceFilename = extractFilename(mediaUrl);
 
   // PUT to API
   try {
@@ -171,7 +197,14 @@ export async function uploadToR2(
     }
 
     logger.debug("uploadToR2: uploaded", key);
-    return key;
+    return {
+      r2Key: key,
+      sourceUrl: mediaUrl,
+      sourceFilename,
+      contentType,
+      contentHash: fullHash,
+      byteSize: body.byteLength,
+    };
   } catch (err) {
     logger.warn("uploadToR2: PUT request failed for key", key, err);
     return undefined;
@@ -185,12 +218,14 @@ export async function uploadToR2(
 /**
  * Processes a batch of media refs, uploading uploadable items to R2.
  * Mutates `media` in place by setting `r2Key` where uploads succeed.
+ * Returns upload results for media asset registration.
  */
 export async function processMediaForR2(
   media: MediaRef[],
   sourceSlug: string
-): Promise<void> {
+): Promise<UploadResult[]> {
   const uploadable = media.filter((m) => !isSkippedUrl(m.url));
+  const uploadResults: UploadResult[] = [];
 
   // Process in batches of 5
   const BATCH_SIZE = 5;
@@ -203,8 +238,11 @@ export async function processMediaForR2(
     for (let j = 0; j < batch.length; j++) {
       const result = results[j];
       if (result.status === "fulfilled" && result.value) {
-        batch[j].r2Key = result.value;
+        batch[j].r2Key = result.value.r2Key;
+        uploadResults.push(result.value);
       }
     }
   }
+
+  return uploadResults;
 }

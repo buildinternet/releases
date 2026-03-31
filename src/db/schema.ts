@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -165,3 +165,29 @@ export const releaseSummaries = sqliteTable(
 
 export type ReleaseSummary = typeof releaseSummaries.$inferSelect;
 export type NewReleaseSummary = typeof releaseSummaries.$inferInsert;
+
+export const mediaAssets = sqliteTable(
+  "media_assets",
+  {
+    id: text("id").primaryKey().$defaultFn(newMediaAssetId),
+    r2Key: text("r2_key").notNull().unique(),
+    sourceUrl: text("source_url").notNull(),
+    sourceFilename: text("source_filename"),
+    contentType: text("content_type").notNull(),
+    contentHash: text("content_hash").notNull().unique(),
+    byteSize: integer("byte_size").notNull(),
+    width: integer("width"),
+    height: integer("height"),
+    sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
+    releaseId: text("release_id").references(() => releases.id, { onDelete: "set null" }),
+    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    index("idx_media_assets_source").on(table.sourceId),
+    index("idx_media_assets_release").on(table.releaseId),
+    index("idx_media_assets_hash").on(table.contentHash),
+  ],
+);
+
+export type MediaAsset = typeof mediaAssets.$inferSelect;
+export type NewMediaAsset = typeof mediaAssets.$inferInsert;
