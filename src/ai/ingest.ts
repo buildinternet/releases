@@ -11,6 +11,7 @@ export interface ParsedRelease {
   content: string;
   publishedAt?: string; // ISO 8601
   isBreaking: boolean;
+  media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }>;
 }
 
 const extractReleasesTool = {

@@ -356,6 +356,7 @@ function parseRss(xml: string): RawRelease[] {
       publishedAt: pubDate ? new Date(pubDate) : undefined,
       version: extractVersionFromTitle(title),
       isBreaking: detectBreaking(title, description),
+      media: extractMedia(description),
     });
   }
   return releases;
@@ -378,6 +379,7 @@ function parseAtom(xml: string): RawRelease[] {
       publishedAt: updated ? new Date(updated) : undefined,
       version: extractVersionFromTitle(title),
       isBreaking: detectBreaking(title, content),
+      media: extractMedia(content),
     });
   }
   return releases;
@@ -402,6 +404,7 @@ function parseJsonFeed(json: string): RawRelease[] {
       publishedAt: item.date_published ? new Date(item.date_published) : undefined,
       version: extractVersionFromTitle(item.title!),
       isBreaking: detectBreaking(item.title!, item.content_text ?? item.content_html ?? ""),
+      media: item.content_html ? extractMedia(item.content_html) : [],
     }));
 }
 
@@ -459,6 +462,35 @@ function extractVersionFromTitle(title: string): string | undefined {
 function detectBreaking(title: string, content: string): boolean {
   const text = `${title} ${content}`.toLowerCase();
   return text.includes("breaking change") || text.includes("breaking:") || text.includes("⚠");
+}
+
+/** Extract structured media items from HTML content. */
+function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
+  const media: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> = [];
+
+  const imgRe = /<img[^>]*src=["']([^"']+)["'](?:[^>]*alt=["']([^"']*)["'])?[^>]*\/?>/gi;
+  let m;
+  while ((m = imgRe.exec(html)) !== null) {
+    const url = m[1];
+    const alt = m[2] || undefined;
+    const isGif = url.toLowerCase().endsWith(".gif");
+    media.push({ type: isGif ? "gif" : "image", url, alt });
+  }
+
+  const iframeRe = /<iframe[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((m = iframeRe.exec(html)) !== null) {
+    const src = m[1];
+    if (/youtube|vimeo|loom/i.test(src)) {
+      media.push({ type: "video", url: iframeSrcToWatchUrl(src) });
+    }
+  }
+
+  const videoRe = /<video[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((m = videoRe.exec(html)) !== null) {
+    media.push({ type: "video", url: m[1] });
+  }
+
+  return media;
 }
 
 /** Convert iframe embed URLs to user-facing watch URLs. */
