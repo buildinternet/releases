@@ -68,9 +68,17 @@ export class StatusHub extends DurableObject {
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
-    // HTTP endpoint: get current sessions (for page hydration)
+    // HTTP endpoint: get sessions, with optional ?status=running&type=onboard filtering
     if (request.method === "GET" && url.pathname === "/sessions") {
-      const sessions = await this.getSessions();
+      let sessions = await this.getSessions();
+      const filterStatus = url.searchParams.get("status");
+      const filterType = url.searchParams.get("type");
+      if (filterStatus) {
+        sessions = sessions.filter((s) => s.status === filterStatus);
+      }
+      if (filterType) {
+        sessions = sessions.filter((s) => s.type === filterType);
+      }
       return new Response(JSON.stringify(sessions), {
         headers: { "Content-Type": "application/json" },
       });
