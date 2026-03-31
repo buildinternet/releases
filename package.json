@@ -32,6 +32,7 @@
     "db:pull": "rm -rf workers/api/.wrangler/state/v3/d1 && wrangler d1 export released-db --remote --no-schema --table organizations --table org_accounts --table sources --table releases --table usage_log --table fetch_log --table ignored_urls --output /tmp/released-d1-export.sql --config workers/api/wrangler.jsonc && bun run db:migrate:local && sqlite3 $(find workers/api/.wrangler -name '*.sqlite' | head -1) < /tmp/released-d1-export.sql && rm /tmp/released-d1-export.sql",
     "test": "bun test"
   },
+  "workspaces": ["workers/*"],
   "keywords": [
     "changelog",
     "releases",

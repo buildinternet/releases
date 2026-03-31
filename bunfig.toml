@@ -1,4 +1,4 @@
 # Bun configuration for the CLI and local tooling.
-# Workers-specific runtimes are excluded so Bun never tries to resolve them.
-[install.external]
-cloudflare = ["cloudflare:workers", "cloudflare:sockets", "cloudflare:email"]
+# Workers are isolated via package.json "workspaces" so Bun treats them
+# as separate packages and won't resolve their Cloudflare-only imports
+# when running the CLI (bun src/index.ts).
