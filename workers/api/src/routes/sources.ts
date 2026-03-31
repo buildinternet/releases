@@ -273,7 +273,10 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     content: r.content,
     publishedAt: r.published_at,
     url: r.url,
-    media: JSON.parse(r.media ?? "[]"),
+    media: JSON.parse(r.media ?? "[]").map((m: any) => ({
+      ...m,
+      r2Url: m.r2Key ? `/api/media/${m.r2Key}` : undefined,
+    })),
   }));
 
   const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
