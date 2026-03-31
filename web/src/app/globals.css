@@ -1,2 +1,27 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+
+:root {
+  /* Product palette for multi-product charts */
+  --color-product-0: oklch(0.637 0.153 254.4);  /* blue-400 */
+  --color-product-1: oklch(0.723 0.191 149.6);  /* green-400 */
+  --color-product-2: oklch(0.769 0.168 70.08);  /* amber-500 */
+  --color-product-3: oklch(0.704 0.191 22.18);  /* red-400 */
+  --color-product-4: oklch(0.714 0.168 293.5);  /* purple-400 */
+  --color-product-5: oklch(0.718 0.176 349.8);  /* pink-400 */
+  --color-product-6: oklch(0.789 0.109 197.5);  /* cyan-400 */
+  --color-product-7: oklch(0.750 0.160 55.0);   /* orange-400 */
+}
+
+/* Range navigator bar states */
+[data-slot="range-navigator-bar"][data-state="in-range"] {
+  background-color: oklch(0.623 0.214 259.1); /* blue-500 */
+}
+[data-slot="range-navigator-bar"][data-state="out-of-range"] {
+  background-color: oklch(0.869 0.005 286.3); /* stone-200 */
+}
+
+/* Cadence sparkline empty bars */
+[data-slot="cadence-spark-bar"] {
+  background-color: oklch(0.869 0.005 286.3); /* stone-200 */
+}
