@@ -47,8 +47,8 @@ export default {
       try {
         const guardUrl = `${env.RELEASED_API_URL}/api/sessions?status=running&type=onboard`;
         const guardRes = await fetch(guardUrl, {
-          headers: env.RELEASED_API_KEY
-            ? { Authorization: `Bearer ${env.RELEASED_API_KEY}` }
+          headers: env.API_SECRET
+            ? { Authorization: `Bearer ${env.API_SECRET}` }
             : {},
         });
         if (guardRes.ok) {
