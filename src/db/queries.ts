@@ -10,6 +10,8 @@ import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import { toSlug } from "../lib/slug.js";
 import * as apiClient from "../api/client.js";
+import { processMediaForR2, type MediaRef } from "../lib/media.js";
+import { config } from "../lib/config.js";
 
 export async function findSourceBySlug(slug: string): Promise<Source | null> {
   if (isRemoteMode()) return apiClient.findSourceBySlug(slug);
@@ -746,6 +748,35 @@ export async function insertReleases(source: Source, rows: Array<{
     const result = await apiClient.insertReleasesBatch(source.slug, rows);
     return result.inserted;
   }
+  // Process media for R2 upload (remote mode only)
+  const apiUrl = config.apiUrl();
+  if (apiUrl) {
+    for (const release of rows) {
+      if (release.media) {
+        let media: MediaRef[];
+        try {
+          media = JSON.parse(release.media) as MediaRef[];
+        } catch {
+          media = [];
+        }
+        if (media.length > 0) {
+          await processMediaForR2(media, source.slug);
+
+          // Rewrite content URLs to use R2 where uploaded
+          let content = release.content;
+          for (const m of media) {
+            if (m.r2Key) {
+              const r2Url = `${apiUrl}/api/media/${m.r2Key}`;
+              content = content.replaceAll(m.url, r2Url);
+            }
+          }
+          release.content = content;
+          release.media = JSON.stringify(media);
+        }
+      }
+    }
+  }
+
   const db = getDb();
   // Batch insert in chunks of 500 (SQLite variable limit).
   // On URL conflict, backfill content if the incoming row has non-empty content
