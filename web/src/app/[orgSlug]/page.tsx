@@ -4,6 +4,7 @@ import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
+import { ReleaseTimeline } from "@/components/release-timeline";
 import Link from "next/link";
 
 function formatDate(iso: string | null) {
@@ -28,6 +29,8 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
     }
     notFound();
   }
+
+  const activity = await api.orgActivity(org.slug).catch(() => null);
 
   const sidebarSections = [
     {
@@ -61,6 +64,7 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
           <span className="text-stone-600 font-medium">{org.name}</span>
         </div>
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 mt-4">{org.name}</h1>
+        {activity && <ReleaseTimeline activity={activity} />}
         <div className="flex gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0 space-y-2">
             {[...org.sources].sort((a, b) => {

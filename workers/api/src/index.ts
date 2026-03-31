@@ -52,6 +52,7 @@ app.use("/api/*", dbHealthCheck);
 app.use("/api/stats", cacheControl(300, { staleWhileRevalidate: 60 }));
 app.use("/api/orgs", cacheControl(60, { staleWhileRevalidate: 30 }));
 app.use("/api/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
+app.use("/api/orgs/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
 app.use("/api/sources", cacheControl(60, { staleWhileRevalidate: 30 }));
 app.use("/api/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
 app.use("/api/search", cacheControl(30, { staleWhileRevalidate: 30 }));

@@ -99,6 +99,23 @@ export interface SearchResult {
 
 export interface SearchResponse { query: string; results: SearchResult[]; }
 
+export interface OrgActivitySource {
+  slug: string;
+  name: string;
+  releaseCount: number;
+  avgReleasesPerWeek: number;
+  latestVersion: string | null;
+  latestDate: string | null;
+  weeklyBuckets: Array<{ weekStart: string; count: number }>;
+}
+
+export interface OrgActivity {
+  org: { slug: string; name: string };
+  range: { from: string; to: string };
+  sources: OrgActivitySource[];
+  aggregateWeekly: Array<{ weekStart: string; count: number }>;
+}
+
 export const api = {
   stats: () => fetchApi<Stats>("/api/stats"),
   orgs: () => fetchApi<OrgListItem[]>("/api/orgs"),
@@ -108,4 +125,11 @@ export const api = {
     fetchApi<SourceDetail>(`/api/sources/${slug}?page=${page}&pageSize=${pageSize}`),
   search: (q: string, limit = 20, offset = 0) =>
     fetchApi<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+  orgActivity: (slug: string, from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return fetchApi<OrgActivity>(`/api/orgs/${slug}/activity${qs ? `?${qs}` : ""}`);
+  },
 };
