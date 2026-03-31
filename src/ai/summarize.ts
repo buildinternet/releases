@@ -23,20 +23,22 @@ interface SummaryResult {
   releaseCount: number;
 }
 
-const ROLLING_SYSTEM_PROMPT = `You summarize what a software product has been shipping recently.
+const ROLLING_SYSTEM_PROMPT = `You summarize what a software product shipped recently.
 
 Write for a developer audience. Identify the thread — what direction is the product moving? Open with the theme, then mention 2-3 specifics that illustrate it. Don't list features; tell the story of where the product is going.
 
 Guidelines:
 
 1. Scale to how much actually happened:
-   - Quiet period (1-3 releases): 1-2 sentences
-   - Moderate activity (4-10 releases): 2-4 sentences
-   - Busy period (10+ releases): 3-4 sentences
+   - Quiet period (1-3 releases): 1-2 sentences, ~40 words
+   - Moderate activity (4-10 releases): 2-3 sentences, ~60-80 words
+   - Busy period (10+ releases): 3-4 sentences, ~80-100 words
 2. Call out breaking changes or major version bumps if present
-3. Don't editorialize — no commentary on how "active" or "busy" the team has been, no judgments about strategy. Just describe what shipped and where it's heading.
+3. Don't editorialize — no meta-commentary on how "active" the team was, no strategy judgments, no wrap-up sentences that restate the theme. End on a concrete detail, not a thesis.
+4. Don't restate context the reader already has — they can see the product name, org, date range, and release count in the UI. Jump straight into substance.
+5. Past tense, active voice only — "shipped", "added", "expanded", "graduated". Never "is expanding", "is maturing", "while maturing", "has been shipping". No progressive or continuous forms at all.
 
-Write in third person, present tense. No headers, no bullet points, no markdown — just plain prose.`;
+No headers, no bullet points, no markdown — just plain prose.`;
 
 const MONTHLY_SYSTEM_PROMPT = `You write monthly summaries of what a software product shipped.
 
@@ -44,11 +46,13 @@ Write for a developer audience. Identify the theme — what did this month move 
 
 Guidelines:
 
-1. Scale length to how much happened (1-2 sentences if quiet, 2-3 sentences if busy)
+1. Scale length to how much happened (1-2 sentences if quiet, 2-3 sentences if busy, ~40-70 words max)
 2. Note any breaking changes or major version bumps
-3. Don't editorialize — no commentary on how active the team was, no judgments about strategy. Just describe what shipped.
+3. Don't editorialize — no meta-commentary on how active the team was, no strategy judgments, no wrap-up sentences. End on a concrete detail, not a thesis.
+4. Don't restate context the reader already has — they can see the product name, month, and release count in the UI. Don't open with "February brought...", "In February, [Product]...", or "[Month] saw...". Jump straight into what happened.
+5. Past tense, active voice only — "shipped", "added", "expanded", "graduated". Never "is expanding", "is maturing", "while maturing", "was enhanced". No progressive or continuous forms at all.
 
-Write in third person, past tense. No headers, no bullet points, no markdown — just plain prose.`;
+No headers, no bullet points, no markdown — just plain prose.`;
 
 function formatReleasesForPrompt(releases: Release[]): string {
   return releases
