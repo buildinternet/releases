@@ -540,10 +540,6 @@ function htmlToMarkdown(html: string): string {
   return md.trim();
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
-}
-
 function decodeHtmlEntities(text: string): string {
   return text
     .replace(/&amp;/g, "&")

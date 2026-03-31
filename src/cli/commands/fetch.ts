@@ -13,6 +13,8 @@ import {
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { logger } from "../../lib/logger.js";
+import { processMediaForR2, type MediaRef } from "../../lib/media.js";
+import { config } from "../../lib/config.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";
@@ -373,6 +375,24 @@ Examples:
             publishedAt: raw.publishedAt?.toISOString() ?? null,
             media: JSON.stringify(raw.media ?? []),
           }));
+
+          // Upload media to R2 and rewrite URLs (remote mode only)
+          const apiUrl = config.apiUrl();
+          if (apiUrl) {
+            await Promise.allSettled(rows.map(async (row) => {
+              if (!row.media || row.media === "[]") return;
+              let media: MediaRef[];
+              try { media = JSON.parse(row.media) as MediaRef[]; } catch { return; }
+              if (media.length === 0) return;
+              await processMediaForR2(media, source.slug);
+              let content = row.content;
+              for (const m of media) {
+                if (m.r2Key) content = content.replaceAll(m.url, `${apiUrl}/api/media/${m.r2Key}`);
+              }
+              row.content = content;
+              row.media = JSON.stringify(media);
+            }));
+          }
 
           const inserted = await insertReleases(source, rows);
           totalInserted += inserted;

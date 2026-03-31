@@ -104,7 +104,7 @@ const collapsedMarkdownComponents: Record<string, any> = {
     const href = props.href as string | undefined;
     const children = props.children;
     if (href && /youtube|vimeo|loom/i.test(href)) return <>{children}</>;
-    return <a href={href}>{children}</a>;
+    return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
   },
 };
 

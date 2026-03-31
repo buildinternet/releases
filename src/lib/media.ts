@@ -85,17 +85,12 @@ export async function uploadToR2(
 
   let response: Response;
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), DOWNLOAD_TIMEOUT_MS);
-
     response = await fetch(mediaUrl, {
-      signal: controller.signal,
+      signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
       headers: {
         "User-Agent": "released-bot/1.0 (+https://releases.sh)",
       },
     });
-
-    clearTimeout(timer);
   } catch (err) {
     logger.debug("uploadToR2: fetch failed for", mediaUrl, err);
     return undefined;
