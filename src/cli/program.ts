@@ -23,6 +23,7 @@ import { registerBlockCommand } from "./commands/block.js";
 import { registerImportCommand } from "./commands/import.js";
 import { registerEvaluateCommand } from "./commands/evaluate.js";
 import { registerSummarizeCommand } from "./commands/summarize.js";
+import { registerEnrichCommand } from "./commands/enrich.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 
@@ -34,6 +35,7 @@ export const program = new Command()
 Command Groups:
   Sources:       add, edit, remove, list, import, discover, evaluate
   Fetching:      fetch, fetch-log, check
+  Enrichment:    enrich
   Querying:      search, latest, summary, compare, stats
   Organizations: org (add, list, show, remove, link, unlink)
   Releases:      release (show, edit, delete, suppress, unsuppress)
@@ -68,5 +70,6 @@ registerBlockCommand(program);
 registerImportCommand(program);
 registerEvaluateCommand(program);
 registerSummarizeCommand(program);
+registerEnrichCommand(program);
 registerMediaCommand(program);
 registerTaskCommand(program);
