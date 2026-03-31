@@ -66,7 +66,7 @@ export default async function SourcePage({
     },
     {
       items: [
-        { label: "Latest", value: source.latestVersion, subtitle: formatDate(source.latestDate) },
+        { label: "Latest", value: source.latestVersion ?? formatDate(source.latestDate) },
         { label: "Organization", value: source.org.name, link: `/${source.org.slug}` },
         { label: "Source", value: shortUrl(source.url), externalLink: source.url },
         ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),

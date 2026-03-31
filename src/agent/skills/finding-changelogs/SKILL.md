@@ -9,6 +9,21 @@ Determine the best way to get structured release data from a changelog or releas
 
 Many pages have better-structured data sources behind them — RSS feeds, raw markdown files, or API endpoints. Finding those avoids the complexity of parsing rendered HTML.
 
+## Content Verification
+
+After discovering a feed or structured source, always spot-check the entries before accepting it. Sample a few entries and verify they are actual changelog or release content — not blog posts, marketing articles, tutorials, or unrelated editorial content.
+
+Red flags that a feed is wrong:
+- Entry URLs point to `/blog/` paths rather than `/changelog/` or `/releases/` paths
+- Titles read like articles or tutorials (e.g., "Choosing a logging library: The definitive guide")
+- No version numbers, semver patterns, or feature/fix language anywhere in the entries
+- The feed URL is site-wide (e.g., `/feed.xml`) rather than section-specific (e.g., `/changelog/feed.xml`)
+- Entry content discusses opinions, comparisons, or industry trends rather than product changes
+
+If the entries don't look like releases, the feed is likely the wrong one. Look for a more specific feed, or fall back to a different ingestion method.
+
+**Watch for redirects.** A URL like `blog.example.com/changelog/` may redirect to `example.com/changelog/`, but feed discovery may have already found the blog's site-wide feed before the redirect. Always check whether the discovered feed is scoped to the changelog section, not the entire site.
+
 ## Priority Order
 
 Feeds > GitHub Releases API > raw markdown > page scraping.
