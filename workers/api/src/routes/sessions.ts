@@ -7,7 +7,8 @@ export const sessionRoutes = new Hono<Env>();
 // ── List all sessions ──
 
 sessionRoutes.get("/sessions", async (c) => {
-  const res = await getStatusHub(c.env).fetch(new Request("https://do/sessions"));
+  const query = new URL(c.req.url).search;
+  const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions${query}`));
   const sessions = await res.json();
   return c.json(sessions);
 });

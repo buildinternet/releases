@@ -43,6 +43,41 @@ export default {
         return errorResponse("Missing required field: company", 400);
       }
 
+      // ── Discovery guardrails: check for duplicates and count cap ──
+      try {
+        const guardUrl = `${env.RELEASED_API_URL}/api/sessions?status=running&type=onboard`;
+        const guardRes = await fetch(guardUrl, {
+          headers: env.RELEASED_API_KEY
+            ? { Authorization: `Bearer ${env.RELEASED_API_KEY}` }
+            : {},
+        });
+        if (guardRes.ok) {
+          const sessions = (await guardRes.json()) as {
+            sessionId: string;
+            company: string;
+          }[];
+          const companyLower = body.company.toLowerCase();
+          const existing = sessions.find(
+            (s) => s.company.toLowerCase() === companyLower
+          );
+          if (existing) {
+            return errorResponse(
+              `Discovery already running for "${body.company}" (session ${existing.sessionId.slice(0, 8)})`,
+              409
+            );
+          }
+          if (sessions.length >= 5) {
+            return errorResponse(
+              `Maximum concurrent discovery sessions reached (${sessions.length}/5). Try again later.`,
+              429
+            );
+          }
+        }
+      } catch {
+        // Non-critical — proceed if StatusHub is unreachable
+        console.warn("[discovery] Could not check active onboards — proceeding anyway");
+      }
+
       const sessionId = crypto.randomUUID();
       const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
       const stub = env.DISCOVERY_SESSION.get(doId);
