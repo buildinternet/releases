@@ -371,6 +371,7 @@ Examples:
             url: raw.url ?? null,
             contentHash: contentHash(raw),
             publishedAt: raw.publishedAt?.toISOString() ?? null,
+            media: JSON.stringify(raw.media ?? []),
           }));
 
           const inserted = await insertReleases(source, rows);
