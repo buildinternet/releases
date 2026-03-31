@@ -363,8 +363,10 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     .where(eq(releaseSummaries.sourceId, src.id))
     .orderBy(desc(releaseSummaries.generatedAt));
 
-  const rollingSummary = summaryRows.find((s) => s.type === "rolling") ?? null;
-  const monthlySummaries = summaryRows.filter((s) => s.type === "monthly");
+  const rollingSummaryRow = summaryRows.find((s) => s.type === "rolling");
+  const monthlySummaryRows = summaryRows.filter((s) => s.type === "monthly");
+
+  const parsedMeta = JSON.parse(src.metadata || "{}");
 
   return c.json({
     id: src.id,
@@ -375,20 +377,24 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     orgId: src.orgId,
     org,
     isPrimary: src.isPrimary ?? false,
-    metadata: src.metadata,
+    metadata: parsedMeta,
     releaseCount: relCount.n,
     releasesLast30Days,
     avgReleasesPerWeek,
     latestVersion,
     latestDate: latest?.publishedAt ?? null,
-    changelogUrl: (() => { try { const m = JSON.parse(src.metadata || "{}"); return m.changelogUrl ?? null; } catch { return null; } })(),
+    changelogUrl: parsedMeta.changelogUrl ?? null,
     lastFetchedAt: src.lastFetchedAt,
     trackingSince: earliest?.date ?? totals.oldest ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },
     summaries: {
-      rolling: rollingSummary,
-      monthly: monthlySummaries,
+      rolling: rollingSummaryRow
+        ? { windowDays: rollingSummaryRow.windowDays, summary: rollingSummaryRow.summary, releaseCount: rollingSummaryRow.releaseCount, generatedAt: rollingSummaryRow.generatedAt }
+        : null,
+      monthly: monthlySummaryRows.map((s) => ({
+        year: s.year, month: s.month, summary: s.summary, releaseCount: s.releaseCount, generatedAt: s.generatedAt,
+      })),
     },
   });
 });

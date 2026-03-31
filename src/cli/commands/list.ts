@@ -46,7 +46,11 @@ Examples:
         }
         if (opts.json) {
           const method = getFetchMethod(source.type, source.metadata ?? null);
-          console.log(JSON.stringify({ ...source, method }, null, 2));
+          const parsed = { ...source, method };
+          if (typeof parsed.metadata === "string") {
+            try { parsed.metadata = JSON.parse(parsed.metadata); } catch {}
+          }
+          console.log(JSON.stringify(parsed, null, 2));
           return;
         }
         const label = (key: string, val: string | null | undefined) =>

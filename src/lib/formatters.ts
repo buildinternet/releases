@@ -17,10 +17,9 @@ export interface FormatRelease {
 }
 
 export interface FormatReleaseSummary {
-  type: "rolling" | "monthly";
-  year: number | null;
-  month: number | null;
-  windowDays: number | null;
+  year?: number | null;
+  month?: number | null;
+  windowDays?: number | null;
   summary: string;
   releaseCount: number;
   generatedAt: string;

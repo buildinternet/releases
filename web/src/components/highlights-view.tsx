@@ -43,7 +43,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
               return (b.month ?? 0) - (a.month ?? 0);
             })
             .map((m) => (
-              <div key={m.id} className="bg-stone-50 border border-stone-200 rounded-lg p-4">
+              <div key={`${m.year}-${m.month}`} className="bg-stone-50 border border-stone-200 rounded-lg p-4">
                 <div className="flex items-center justify-between mb-2">
                   <span className="text-[11px] uppercase tracking-wide text-stone-400 font-medium">
                     {m.year && m.month ? formatMonthYear(m.year, m.month) : "Monthly Summary"}
