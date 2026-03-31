@@ -3,9 +3,9 @@ import { SourceTypeIcon } from "./source-type-icon";
 
 interface SidebarItem { label: string; value: string | number | null; large?: boolean; subtitle?: string; link?: string; externalLink?: string; }
 interface SidebarSection { items: SidebarItem[]; }
-interface SidebarProps { sections: SidebarSection[]; accounts?: { platform: string; handle: string }[]; }
+interface SidebarProps { sections: SidebarSection[]; accounts?: { platform: string; handle: string }[]; formatPath?: string; }
 
-export function Sidebar({ sections, accounts }: SidebarProps) {
+export function Sidebar({ sections, accounts, formatPath }: SidebarProps) {
   return (
     <div className="w-[200px] shrink-0">
       {sections.map((section, si) => (
@@ -40,6 +40,13 @@ export function Sidebar({ sections, accounts }: SidebarProps) {
               </div>
             ))}
           </div>
+        </div>
+      )}
+      {formatPath && (
+        <div className="border-t border-stone-200 pt-5 mb-6 flex gap-2 text-[11px] text-stone-400">
+          <a href={`${formatPath}.json`} className="hover:text-stone-600">.json</a>
+          <span>·</span>
+          <a href={`${formatPath}.md`} className="hover:text-stone-600">.md</a>
         </div>
       )}
     </div>

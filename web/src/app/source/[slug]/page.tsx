@@ -102,7 +102,7 @@ export default async function IndependentSourcePage({
               />
             )}
           </div>
-          <Sidebar sections={sidebarSections} />
+          <Sidebar sections={sidebarSections} formatPath={`/source/${slug}`} />
         </div>
       </div>
     </div>

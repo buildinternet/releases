@@ -106,7 +106,7 @@ export default async function SourcePage({
               />
             )}
           </div>
-          <Sidebar sections={sidebarSections} />
+          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} />
         </div>
       </div>
     </div>

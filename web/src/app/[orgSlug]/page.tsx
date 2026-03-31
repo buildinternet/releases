@@ -73,7 +73,7 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
               <SourceCard key={source.slug} source={source} orgSlug={org.slug} />
             ))}
           </div>
-          <Sidebar sections={sidebarSections} accounts={org.accounts} />
+          <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} />
         </div>
       </div>
     </div>
