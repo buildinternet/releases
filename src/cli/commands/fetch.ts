@@ -13,6 +13,8 @@ import {
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { logger } from "../../lib/logger.js";
+import { processMediaForR2, type MediaRef } from "../../lib/media.js";
+import { config } from "../../lib/config.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";
@@ -371,7 +373,34 @@ Examples:
             url: raw.url ?? null,
             contentHash: contentHash(raw),
             publishedAt: raw.publishedAt?.toISOString() ?? null,
+            media: JSON.stringify(raw.media ?? []),
           }));
+
+          // Upload media to R2 and rewrite URLs (remote mode only)
+          const apiUrl = config.apiUrl();
+          if (apiUrl) {
+            // Parse all media from all rows, track which row they belong to
+            const parsed = rows.map((row) => {
+              if (!row.media || row.media === "[]") return [];
+              try { return JSON.parse(row.media) as MediaRef[]; } catch { return []; }
+            });
+            const allMedia = parsed.flat().filter(m => m.url);
+            if (allMedia.length > 0) {
+              // Single batched upload across all releases
+              await processMediaForR2(allMedia, source.slug);
+              // Rewrite URLs in content for each row
+              for (let i = 0; i < rows.length; i++) {
+                const media = parsed[i];
+                if (media.length === 0) continue;
+                let content = rows[i].content;
+                for (const m of media) {
+                  if (m.r2Key) content = content.replaceAll(m.url, `${apiUrl}/api/media/${m.r2Key}`);
+                }
+                rows[i].content = content;
+                rows[i].media = JSON.stringify(media);
+              }
+            }
+          }
 
           const inserted = await insertReleases(source, rows);
           totalInserted += inserted;

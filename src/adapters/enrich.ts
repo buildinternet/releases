@@ -96,7 +96,7 @@ async function enrichOne(
 
 const ENRICH_SYSTEM_PROMPT = `You are a release notes extractor. Given the markdown content of a release/changelog page, extract ONLY the release notes content. Strip navigation, headers, footers, sidebars, and other page chrome. Return just the release notes text as clean markdown.
 
-Be concise. Keep the essential information: what changed, new features, bug fixes, breaking changes. Remove boilerplate.`;
+Be concise. Keep the essential information: what changed, new features, bug fixes, breaking changes. Remove boilerplate. Preserve image URLs as markdown image links (![alt](url)).`;
 
 async function enrichViaAI(
   release: RawRelease,

@@ -10,6 +10,7 @@ import { fetchLogRoutes } from "./routes/fetch-log.js";
 import { usageLogRoutes } from "./routes/usage-log.js";
 import { ignoreRoutes } from "./routes/ignore.js";
 import { statusRoutes } from "./routes/status.js";
+import { mediaRoutes } from "./routes/media.js";
 import summaries from "./routes/summaries.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -19,6 +20,7 @@ export type Env = {
     DB: D1Database;
     API_SECRET: string;
     STATUS_HUB: DurableObjectNamespace;
+    MEDIA: R2Bucket;
   };
 };
 
@@ -33,6 +35,9 @@ app.use("*", cors());
 
 // Status routes mounted before auth — they accept unauthenticated browser WebSocket/fetch connections
 app.route("/api", statusRoutes);
+
+// Media routes mounted before auth — GET is public, PUT has its own auth check
+app.route("/api", mediaRoutes);
 
 app.use("/api/*", authMiddleware);
 app.use("/api/*", dbHealthCheck);

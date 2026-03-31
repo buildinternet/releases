@@ -24,6 +24,23 @@ export const scrape: Adapter = {
   async fetch(source: Source, options?: FetchOptions): Promise<FetchResult> {
     const meta = getSourceMeta(source);
     const crawlActive = options?.crawl === true || (options?.crawl !== false && meta.crawlEnabled);
+    const crawlForced = options?.crawl === true;
+
+    // ── Feed path (fast, free, deterministic) ─────────────────
+    // Try feed first even when crawl is enabled — it's cheaper and faster.
+    // Only skip feed when crawl is explicitly forced via --crawl flag.
+    if (!crawlForced) {
+      try {
+        const feedResult = await fetchViaFeed(source, options);
+        if (feedResult !== null) {
+          logger.info(`Feed returned ${feedResult.length} releases (no AI needed)`);
+          const enriched = await enrichSparseReleases(feedResult, source.slug);
+          return { releases: enriched };
+        }
+      } catch (err) {
+        logger.warn(`Feed fetch/parse failed, falling back to crawl/scrape: ${err}`);
+      }
+    }
 
     // ── Crawl path (multi-page, per-page AI parsing) ──────────
     if (crawlActive) {
@@ -40,20 +57,6 @@ export const scrape: Adapter = {
         } else {
           throw err;
         }
-      }
-    }
-
-    // ── Feed path (fast, free, deterministic) ─────────────────
-    if (!crawlActive) {
-      try {
-        const feedResult = await fetchViaFeed(source, options);
-        if (feedResult !== null) {
-          logger.info(`Feed returned ${feedResult.length} releases (no AI needed)`);
-          const enriched = await enrichSparseReleases(feedResult, source.slug);
-          return { releases: enriched };
-        }
-      } catch (err) {
-        logger.warn(`Feed fetch/parse failed, falling back to Cloudflare + AI: ${err}`);
       }
     }
 
@@ -183,6 +186,7 @@ async function fetchViaMarkdown(
           version: r.version,
           publishedAt: r.publishedAt ? new Date(r.publishedAt) : undefined,
           isBreaking: r.isBreaking,
+          media: r.media,
         })),
       };
     }
@@ -199,6 +203,7 @@ async function fetchViaMarkdown(
       version: r.version,
       publishedAt: r.publishedAt ? new Date(r.publishedAt) : undefined,
       isBreaking: r.isBreaking,
+      media: r.media,
     })),
   };
 }
@@ -319,6 +324,7 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
       url: toFragmentUrl(source.url, entry.version, entry.title),
       publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
       isBreaking: entry.isBreaking,
+      media: entry.media,
     };
   });
 

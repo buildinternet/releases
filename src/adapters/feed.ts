@@ -351,11 +351,12 @@ function parseRss(xml: string): RawRelease[] {
 
     releases.push({
       title,
-      content: decodeHtmlEntities(description),
+      content: htmlToMarkdown(decodeHtmlEntities(description)),
       url: link ?? undefined,
       publishedAt: pubDate ? new Date(pubDate) : undefined,
       version: extractVersionFromTitle(title),
       isBreaking: detectBreaking(title, description),
+      media: extractMedia(description),
     });
   }
   return releases;
@@ -373,11 +374,12 @@ function parseAtom(xml: string): RawRelease[] {
 
     releases.push({
       title,
-      content: decodeHtmlEntities(content),
+      content: htmlToMarkdown(decodeHtmlEntities(content)),
       url: link ?? undefined,
       publishedAt: updated ? new Date(updated) : undefined,
       version: extractVersionFromTitle(title),
       isBreaking: detectBreaking(title, content),
+      media: extractMedia(content),
     });
   }
   return releases;
@@ -397,11 +399,12 @@ function parseJsonFeed(json: string): RawRelease[] {
     .filter((item) => item.title)
     .map((item) => ({
       title: item.title!,
-      content: item.content_text ?? stripHtml(item.content_html ?? ""),
+      content: item.content_text ?? htmlToMarkdown(item.content_html ?? ""),
       url: item.url,
       publishedAt: item.date_published ? new Date(item.date_published) : undefined,
       version: extractVersionFromTitle(item.title!),
       isBreaking: detectBreaking(item.title!, item.content_text ?? item.content_html ?? ""),
+      media: item.content_html ? extractMedia(item.content_html) : [],
     }));
 }
 
@@ -461,8 +464,80 @@ function detectBreaking(title: string, content: string): boolean {
   return text.includes("breaking change") || text.includes("breaking:") || text.includes("⚠");
 }
 
-function stripHtml(html: string): string {
-  return html.replace(/<[^>]+>/g, "").replace(/&nbsp;/g, " ").trim();
+/** Extract structured media items from HTML content. */
+function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
+  const media: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> = [];
+
+  const imgRe = /<img[^>]*src=["']([^"']+)["'](?:[^>]*alt=["']([^"']*)["'])?[^>]*\/?>/gi;
+  let m;
+  while ((m = imgRe.exec(html)) !== null) {
+    const url = m[1];
+    const alt = m[2] || undefined;
+    const isGif = url.toLowerCase().endsWith(".gif");
+    media.push({ type: isGif ? "gif" : "image", url, alt });
+  }
+
+  const iframeRe = /<iframe[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((m = iframeRe.exec(html)) !== null) {
+    const src = m[1];
+    if (/youtube|vimeo|loom/i.test(src)) {
+      media.push({ type: "video", url: iframeSrcToWatchUrl(src) });
+    }
+  }
+
+  const videoRe = /<video[^>]*src=["']([^"']+)["'][^>]*>/gi;
+  while ((m = videoRe.exec(html)) !== null) {
+    media.push({ type: "video", url: m[1] });
+  }
+
+  return media;
+}
+
+/** Convert iframe embed URLs to user-facing watch URLs. */
+function iframeSrcToWatchUrl(src: string): string {
+  // YouTube: //www.youtube.com/embed/VIDEO_ID -> https://www.youtube.com/watch?v=VIDEO_ID
+  const ytMatch = src.match(/youtube\.com\/embed\/([^?&"]+)/);
+  if (ytMatch) return `https://www.youtube.com/watch?v=${ytMatch[1]}`;
+
+  // Vimeo: //player.vimeo.com/video/VIDEO_ID -> https://vimeo.com/VIDEO_ID
+  const vimeoMatch = src.match(/player\.vimeo\.com\/video\/([^?&"]+)/);
+  if (vimeoMatch) return `https://vimeo.com/${vimeoMatch[1]}`;
+
+  // Loom: //www.loom.com/embed/VIDEO_ID -> https://www.loom.com/share/VIDEO_ID
+  const loomMatch = src.match(/loom\.com\/embed\/([^?&"]+)/);
+  if (loomMatch) return `https://www.loom.com/share/${loomMatch[1]}`;
+
+  // Fallback: return the embed URL as-is
+  return src.startsWith("//") ? `https:${src}` : src;
+}
+
+/** Convert HTML to markdown, preserving images, links, and basic formatting. */
+function htmlToMarkdown(html: string): string {
+  let md = html;
+
+  // Convert images before stripping other tags
+  md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*\/?>/gi, "![$2]($1)");
+  md = md.replace(/<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "![$1]($2)");
+  md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "![]($1)");
+
+  // Convert links
+  md = md.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)");
+
+  // Convert iframes (YouTube, Vimeo embeds) to links
+  md = md.replace(/<iframe[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/iframe>/gi, (_, src) => {
+    const videoUrl = iframeSrcToWatchUrl(src);
+    return `\n[Video](${videoUrl})\n`;
+  });
+
+  // Convert video elements to links
+  md = md.replace(/<video[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/video>/gi, "\n[Video]($1)\n");
+  md = md.replace(/<video[^>]*>[\s\S]*?<source[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "\n[Video]($1)\n");
+
+  // Strip remaining HTML tags
+  md = md.replace(/<[^>]+>/g, "");
+  md = md.replace(/&nbsp;/g, " ");
+
+  return md.trim();
 }
 
 function decodeHtmlEntities(text: string): string {

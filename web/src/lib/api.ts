@@ -91,6 +91,7 @@ export interface ReleaseItem {
   version: string | null; title: string; summary: string;
   content?: string;
   publishedAt: string | null; url: string | null;
+  media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string; r2Url?: string }>;
 }
 
 export interface SearchResult {

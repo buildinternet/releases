@@ -22,6 +22,120 @@ function stripLeadingTitle(content: string, title: string | null): string {
   return content;
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const markdownComponents: Record<string, any> = {
+  img: (props: any) => {
+    const src = props.src as string | undefined;
+    if (!src || typeof src !== "string") return null;
+    return (
+      <img
+        src={src}
+        alt={props.alt || ""}
+        loading="lazy"
+        className="rounded-md max-w-full h-auto my-2 max-h-80 object-contain"
+      />
+    );
+  },
+  a: (props: any) => {
+    const href = props.href as string | undefined;
+    const children = props.children;
+    if (!href) return <>{children}</>;
+
+    // YouTube embed
+    const ytMatch = href.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/);
+    if (ytMatch) {
+      return (
+        <div className="my-3 aspect-video max-w-lg">
+          <iframe
+            src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+            className="w-full h-full rounded-md"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    // Vimeo embed
+    const vimeoMatch = href.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) {
+      return (
+        <div className="my-3 aspect-video max-w-lg">
+          <iframe
+            src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
+            className="w-full h-full rounded-md"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    // Loom embed
+    const loomMatch = href.match(/loom\.com\/share\/([^?&]+)/);
+    if (loomMatch) {
+      return (
+        <div className="my-3 aspect-video max-w-lg">
+          <iframe
+            src={`https://www.loom.com/embed/${loomMatch[1]}`}
+            className="w-full h-full rounded-md"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    // Regular link
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
+  },
+};
+
+const collapsedMarkdownComponents: Record<string, any> = {
+  ...markdownComponents,
+  img: () => null,
+  a: (props: any) => {
+    const href = props.href as string | undefined;
+    const children = props.children;
+    if (href && /youtube|vimeo|loom/i.test(href)) return <>{children}</>;
+    return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+  },
+};
+
+function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content: string }) {
+  if (!media || media.length === 0) return null;
+
+  // Filter out items already rendered inline via markdown content
+  const extra = media.filter(m => !content.includes(m.url));
+  if (extra.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {extra.map((item, i) => {
+        if (item.type === "image" || item.type === "gif") {
+          const src = item.r2Url ?? item.url;
+          return (
+            <img
+              key={i}
+              src={src}
+              alt={item.alt || ""}
+              loading="lazy"
+              className="rounded-md max-h-48 object-contain"
+            />
+          );
+        }
+        return null;
+      })}
+    </div>
+  );
+}
+
 const COLLAPSED_MAX_HEIGHT = 72; // ~4.5em at 16px
 
 const markdownClasses = "prose prose-sm prose-stone max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 [&_a]:no-underline [&_code]:text-xs [&_code]:bg-stone-100 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
@@ -82,13 +196,14 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
       >
         {expanded ? (
           <div className={markdownClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{markdownContent}</ReactMarkdown>
+            <MediaGallery media={release.media} content={markdownContent} />
           </div>
         ) : (
           <>
             <div ref={contentRef} className="max-h-[4.5em] overflow-hidden">
               <div className={`${markdownClasses} text-stone-500 [&_strong]:text-stone-500`}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
               </div>
             </div>
             {isOverflowing && (

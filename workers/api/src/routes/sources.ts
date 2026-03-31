@@ -106,6 +106,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   const body = await c.req.json<{ releases: Array<{
     version?: string | null; title: string; content: string;
     url?: string | null; contentHash?: string; publishedAt?: string | null;
+    media?: string | null;
   }> }>();
 
   try {
@@ -120,6 +121,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
         url: r.url ?? null,
         contentHash: r.contentHash ?? null,
         publishedAt: r.publishedAt ?? null,
+        media: r.media ?? "[]",
       }));
       const rows = await db.insert(releases).values(chunk)
         .onConflictDoUpdate({
@@ -252,8 +254,9 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     content: string;
     published_at: string | null;
     url: string | null;
+    media: string | null;
   }>(sql`
-    SELECT version, title, content_summary, content, published_at, url
+    SELECT version, title, content_summary, content, published_at, url, media
     FROM releases WHERE source_id = ${src.id} AND (suppressed IS NULL OR suppressed = 0)
     ORDER BY
       CASE WHEN published_at IS NOT NULL THEN 0 ELSE 1 END,
@@ -270,6 +273,10 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     content: r.content,
     publishedAt: r.published_at,
     url: r.url,
+    media: JSON.parse(r.media ?? "[]").map((m: any) => ({
+      ...m,
+      r2Url: m.r2Key ? `/api/media/${m.r2Key}` : undefined,
+    })),
   }));
 
   const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;

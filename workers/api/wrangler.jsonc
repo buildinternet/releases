@@ -16,6 +16,12 @@
       "database_id": "aca250e3-d0b4-467d-8b07-4f54b08c8abf"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "MEDIA",
+      "bucket_name": "released-media"
+    }
+  ],
   "durable_objects": {
     "bindings": [
       { "class_name": "StatusHub", "name": "STATUS_HUB" }

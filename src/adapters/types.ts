@@ -7,6 +7,7 @@ export interface RawRelease {
   url?: string;
   publishedAt?: Date;
   isBreaking?: boolean;
+  media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }>;
 }
 
 export interface FetchOptions {
