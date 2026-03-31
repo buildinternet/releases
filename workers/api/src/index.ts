@@ -11,6 +11,7 @@ import { usageLogRoutes } from "./routes/usage-log.js";
 import { ignoreRoutes } from "./routes/ignore.js";
 import { statusRoutes } from "./routes/status.js";
 import { mediaRoutes } from "./routes/media.js";
+import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -50,6 +51,7 @@ app.route("/api", searchRoutes);
 app.route("/api", fetchLogRoutes);
 app.route("/api", usageLogRoutes);
 app.route("/api", ignoreRoutes);
+app.route("/api", releaseRoutes);
 app.route("/api/summaries", summaries);
 
 export default app;

@@ -14,7 +14,7 @@ import {
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { logger } from "../../lib/logger.js";
-import { processMediaForR2, type MediaRef } from "../../lib/media.js";
+import { processMediaForR2, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { config } from "../../lib/config.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
@@ -387,7 +387,34 @@ Examples:
             });
             const allMedia = parsed.flat().filter(m => m.url);
             if (allMedia.length > 0) {
-              const uploadResults = await processMediaForR2(allMedia, source.slug);
+              const imageCount = allMedia.filter(m => m.type === "image" || m.type === "gif").length;
+              const videoCount = allMedia.filter(m => m.type === "video").length;
+              const releasesWithMedia = parsed.filter(m => m.length > 0).length;
+              progressSession(
+                `${source.name}: found ${imageCount} image${imageCount !== 1 ? "s" : ""}, ${videoCount} video${videoCount !== 1 ? "s" : ""} in ${releasesWithMedia} release${releasesWithMedia !== 1 ? "s" : ""}`,
+              );
+
+              const uploadResults = await processMediaForR2(allMedia, source.slug, (progress: MediaUploadProgress) => {
+                progressSession(
+                  `${source.name}: uploading ${progress.uploaded}/${progress.total} images to R2...`,
+                );
+              });
+
+              // Emit completion summary
+              const totalBytes = uploadResults.reduce((sum, r) => sum + r.byteSize, 0);
+              const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
+              const failedCount = allMedia.length - uploadResults.length;
+              if (uploadResults.length > 0) {
+                progressSession(
+                  `${source.name}: uploaded ${uploadResults.length} image${uploadResults.length !== 1 ? "s" : ""} (${totalMB} MB) to R2`,
+                );
+              }
+              if (failedCount > 0) {
+                progressSession(
+                  `${source.name}: failed to upload ${failedCount} image${failedCount !== 1 ? "s" : ""}`,
+                );
+              }
+
               for (let i = 0; i < rows.length; i++) {
                 const media = parsed[i];
                 if (media.length === 0) continue;

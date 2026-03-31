@@ -23,6 +23,7 @@ import { registerBlockCommand } from "./commands/block.js";
 import { registerImportCommand } from "./commands/import.js";
 import { registerEvaluateCommand } from "./commands/evaluate.js";
 import { registerSummarizeCommand } from "./commands/summarize.js";
+import { registerMediaCommand } from "./commands/media.js";
 
 export const program = new Command()
   .name("released")
@@ -37,6 +38,7 @@ Command Groups:
   Releases:      release (show, edit, delete, suppress, unsuppress)
   Blocking:      block (list, add, remove), ignore (list, add, remove)
   Agents:        onboard, serve, api
+  Media:         media (backfill)
   Utilities:     usage
 
 Run "released <command> --help" for details on any command.`);
@@ -65,3 +67,4 @@ registerBlockCommand(program);
 registerImportCommand(program);
 registerEvaluateCommand(program);
 registerSummarizeCommand(program);
+registerMediaCommand(program);

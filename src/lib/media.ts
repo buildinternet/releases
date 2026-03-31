@@ -69,7 +69,7 @@ function isSkippedUrl(url: string): boolean {
 }
 
 /** Extract filename from URL path, e.g. "cli.jpg" from "https://cdn.example.com/posts/cli.jpg" */
-function extractFilename(url: string): string | null {
+export function extractFilename(url: string): string | null {
   try {
     const pathname = new URL(url).pathname;
     const lastSegment = pathname.split("/").pop();
@@ -215,6 +215,13 @@ export async function uploadToR2(
 // Batch processor
 // ---------------------------------------------------------------------------
 
+export interface MediaUploadProgress {
+  uploaded: number;
+  total: number;
+  failed: number;
+  skipped: number;
+}
+
 /**
  * Processes a batch of media refs, uploading uploadable items to R2.
  * Mutates `media` in place by setting `r2Key` where uploads succeed.
@@ -222,10 +229,13 @@ export async function uploadToR2(
  */
 export async function processMediaForR2(
   media: MediaRef[],
-  sourceSlug: string
+  sourceSlug: string,
+  onProgress?: (progress: MediaUploadProgress) => void,
 ): Promise<UploadResult[]> {
   const uploadable = media.filter((m) => !isSkippedUrl(m.url));
   const uploadResults: UploadResult[] = [];
+  let failed = 0;
+  const skipped = media.length - uploadable.length;
 
   // Process in batches of 5
   const BATCH_SIZE = 5;
@@ -240,8 +250,17 @@ export async function processMediaForR2(
       if (result.status === "fulfilled" && result.value) {
         batch[j].r2Key = result.value.r2Key;
         uploadResults.push(result.value);
+      } else {
+        failed++;
       }
     }
+
+    onProgress?.({
+      uploaded: uploadResults.length,
+      total: uploadable.length,
+      failed,
+      skipped,
+    });
   }
 
   return uploadResults;

@@ -673,3 +673,7 @@ export async function insertMediaAssets(
 export async function getMediaAssetStats(): Promise<{ count: number; totalBytes: number }> {
   return apiFetch("/api/media/assets/stats");
 }
+
+export async function queryReleasesWithMedia(): Promise<{ id: string; sourceId: string; media: string }[]> {
+  return apiFetch("/api/releases?hasMedia=true&fields=id,sourceId,media");
+}
