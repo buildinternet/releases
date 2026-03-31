@@ -104,6 +104,7 @@ export async function getRecentReleasesByOrg(
       url: releases.url,
       contentHash: releases.contentHash,
       metadata: releases.metadata,
+      media: releases.media,
       publishedAt: releases.publishedAt,
       suppressed: releases.suppressed,
       suppressedReason: releases.suppressedReason,

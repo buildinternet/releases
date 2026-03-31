@@ -62,6 +62,7 @@ export const releases = sqliteTable(
     url: text("url"),
     contentHash: text("content_hash"),
     metadata: text("metadata").default("{}"),
+    media: text("media").default("[]"),
     publishedAt: text("published_at"),
     suppressed: integer("suppressed", { mode: "boolean" }).default(false),
     suppressedReason: text("suppressed_reason"),

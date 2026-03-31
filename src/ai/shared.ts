@@ -32,6 +32,20 @@ export const releaseItemProperties = {
     type: "boolean" as const,
     description: "Whether this release contains breaking changes.",
   },
+  media: {
+    type: "array" as const,
+    description:
+      "Media items found in the release: images, GIFs, and video embeds. Extract the URL and type for each.",
+    items: {
+      type: "object" as const,
+      properties: {
+        type: { type: "string" as const, enum: ["image", "video", "gif"], description: "Media type" },
+        url: { type: "string" as const, description: "Original URL of the media" },
+        alt: { type: "string" as const, description: "Alt text or caption, if available" },
+      },
+      required: ["type", "url"],
+    },
+  },
 };
 
 export const releaseItemRequired = ["title", "content", "isBreaking"] as const;
