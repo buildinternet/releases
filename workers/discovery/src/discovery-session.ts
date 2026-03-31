@@ -100,16 +100,16 @@ export class DiscoverySession extends DurableObject<Env> {
 
     try {
       console.log(`[discovery:${this.sessionId}] launchProcess: setting up sandbox`);
-      // Agent CLI inside the sandbox connects to D1 via the API Worker
-      const envLines = [
-        `ANTHROPIC_API_KEY=${this.env.ANTHROPIC_API_KEY}`,
-        `CLOUDFLARE_ACCOUNT_ID=${this.env.CLOUDFLARE_ACCOUNT_ID}`,
-        `CLOUDFLARE_API_TOKEN=${this.env.CLOUDFLARE_API_TOKEN}`,
-        this.env.GITHUB_TOKEN ? `GITHUB_TOKEN=${this.env.GITHUB_TOKEN}` : "",
-        `RELEASED_API_URL=${this.env.RELEASED_API_URL}`,
-        `RELEASED_API_KEY=${this.env.RELEASED_API_KEY}`,
-      ].filter(Boolean).join("\n");
-      await sandbox.writeFile("/app/.env", envLines);
+      // Set env vars on the container so all processes inherit them
+      const envVars: Record<string, string> = {
+        ANTHROPIC_API_KEY: this.env.ANTHROPIC_API_KEY,
+        CLOUDFLARE_ACCOUNT_ID: this.env.CLOUDFLARE_ACCOUNT_ID,
+        CLOUDFLARE_API_TOKEN: this.env.CLOUDFLARE_API_TOKEN,
+        RELEASED_API_URL: this.env.RELEASED_API_URL,
+        RELEASED_API_KEY: this.env.RELEASED_API_KEY,
+      };
+      if (this.env.GITHUB_TOKEN) envVars.GITHUB_TOKEN = this.env.GITHUB_TOKEN;
+      await sandbox.setEnvVars(envVars);
 
       // Start WebSocket log server in the sandbox
       await sandbox.startProcess("bun /app/workers/discovery/src/sandbox-ws.ts &");
