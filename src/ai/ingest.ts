@@ -39,7 +39,7 @@ Rules:
 - Parse the markdown into individual release entries. A page may contain a single release or an entire changelog history with many releases.
 - For each release, extract the version, title, content, publication date, and whether it contains breaking changes.
 - For the content field, keep it concise: include the key changes, features, and fixes but summarize verbose entries. Do not reproduce the entire raw text.
-- Preserve image URLs as markdown image links in the content field.
+- Include only content images (screenshots, product images, diagrams) as markdown image links. Remove images that are site chrome: author avatars, navigation logos, footer icons, social badges, decorative separators, and tracking/spacer pixels.
 - If a date is present, convert it to ISO 8601 format (YYYY-MM-DD or full datetime).
 - Mark isBreaking as true if the release mentions breaking changes, deprecations that remove functionality, or backwards-incompatible changes.
 - If no version is explicitly stated, omit the version field.

@@ -14,7 +14,7 @@ import {
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { logger } from "../../lib/logger.js";
-import { processMediaForR2, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
+import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { config } from "../../lib/config.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
@@ -404,6 +404,23 @@ Examples:
               }
             }
             return;
+          }
+
+          // Filter junk media (avatars, logos, tracking pixels) before storing
+          let totalDropped = 0;
+          for (const raw of rawReleases) {
+            if (raw.media && raw.media.length > 0) {
+              const filtered = filterJunkMedia(raw.media, raw.content);
+              raw.media = filtered.media;
+              raw.content = filtered.content;
+              totalDropped += filtered.dropped.length;
+              for (const d of filtered.dropped) {
+                logger.debug(`Filtered junk media: ${d.reason} — ${d.url}`);
+              }
+            }
+          }
+          if (totalDropped > 0) {
+            logger.info(`Filtered ${totalDropped} junk media item(s) for ${source.slug}`);
           }
 
           const rows = rawReleases.map((raw) => ({
