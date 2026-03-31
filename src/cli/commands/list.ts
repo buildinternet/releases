@@ -59,6 +59,7 @@ Examples:
         console.log(label("URL", source.url));
         console.log(label("Org", source.orgId ?? null));
         console.log(label("Last Fetched", source.lastFetchedAt));
+        console.log(label("Primary", source.isPrimary ? "yes" : null));
         console.log(label("Fetch Priority", source.fetchPriority));
         console.log("");
         return;

@@ -60,6 +60,8 @@ released edit my-blog --no-feed-url             # clear stored feed URL
 released edit my-blog --markdown-url https://example.com/changelog.md
 released edit my-blog --fetch-method markdown   # set recommended fetch method
 released edit my-blog --provider mintlify       # set detected provider
+released edit my-blog --primary                 # mark as org's primary changelog
+released edit my-blog --no-primary              # unmark as primary
 ```
 
 ### Fetch releases

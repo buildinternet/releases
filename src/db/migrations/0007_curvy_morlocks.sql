@@ -1,0 +1,1 @@
+ALTER TABLE `sources` ADD `is_primary` integer DEFAULT false;

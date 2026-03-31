@@ -57,6 +57,7 @@ export interface SourceListItem {
   slug: string; name: string; type: string; url?: string;
   orgSlug?: string | null; releaseCount: number;
   latestVersion: string | null; latestDate: string | null;
+  isPrimary?: boolean;
 }
 
 export interface SourceDetail {

@@ -50,6 +50,12 @@ If `released evaluate` returns `confidence: low` or `recommendedMethod: scrape`,
 4. **Look for raw markdown** — links to source `.md` files.
 5. **Classify the page structure** — is it a single-page changelog or an index of links to individual release pages?
 
+## Primary Changelogs
+
+When evaluating multiple changelog sources for an org, identify which one is the company's **primary changelog** — the top-level, platform-wide changelog that covers the product as a whole. This is typically a website changelog page (e.g., `example.com/changelog`) rather than individual GitHub repos or product-specific pages.
+
+After adding sources, mark the primary one with `released edit <slug> --primary`. Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
+
 ## When to Use Crawl
 
 Use `--crawl` (or set `crawlEnabled` in source metadata) when:

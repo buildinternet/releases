@@ -88,6 +88,17 @@ After adding a source, validate it before considering it good:
 4. **If bad:** `released remove <slug> --ignore --reason "no usable releases"`
 5. **If good:** The source is ready for production fetches
 
+## Primary Sources
+
+An org can have one source marked as its **primary changelog** — the main, company-wide changelog that covers the entire platform. Other sources (GitHub repos, product-specific changelogs) are secondary. The primary source appears first in the web app and is badged as "Primary".
+
+```bash
+released edit <slug> --primary          # mark as org's primary changelog
+released edit <slug> --no-primary       # unmark as primary
+```
+
+When onboarding an org, if you find a single top-level changelog (e.g., `example.com/changelog`) alongside product-specific or GitHub sources, mark the top-level one as primary.
+
 ## Duplicate Detection
 
 Before adding sources, check for overlapping URLs:

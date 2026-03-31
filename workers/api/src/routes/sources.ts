@@ -47,6 +47,7 @@ sourceRoutes.get("/sources", async (c) => {
         type: src.type,
         url: src.url,
         orgSlug,
+        isPrimary: src.isPrimary ?? false,
         releaseCount: relCount.n,
         latestVersion: latest?.version ?? null,
         latestDate: latest?.publishedAt ?? null,
@@ -333,6 +334,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     url: src.url,
     orgId: src.orgId,
     org,
+    isPrimary: src.isPrimary ?? false,
     metadata: src.metadata,
     releaseCount: relCount.n,
     releasesLast30Days,
@@ -402,6 +404,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
     lastFetchedAt?: string | null; lastContentHash?: string | null;
     fetchPriority?: string; consecutiveNoChange?: number;
     consecutiveErrors?: number; nextFetchAfter?: string | null;
+    isPrimary?: boolean;
   }>();
 
   const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
@@ -419,6 +422,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.consecutiveNoChange !== undefined) updates.consecutiveNoChange = body.consecutiveNoChange;
   if (body.consecutiveErrors !== undefined) updates.consecutiveErrors = body.consecutiveErrors;
   if (body.nextFetchAfter !== undefined) updates.nextFetchAfter = body.nextFetchAfter;
+  if (body.isPrimary !== undefined) updates.isPrimary = body.isPrimary;
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   return c.json(updated);

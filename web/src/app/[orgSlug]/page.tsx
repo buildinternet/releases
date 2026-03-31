@@ -64,6 +64,8 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
         <div className="flex gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0 space-y-2">
             {[...org.sources].sort((a, b) => {
+              if (a.isPrimary && !b.isPrimary) return -1;
+              if (!a.isPrimary && b.isPrimary) return 1;
               if (a.type === "github" && b.type !== "github") return 1;
               if (a.type !== "github" && b.type === "github") return -1;
               return 0;

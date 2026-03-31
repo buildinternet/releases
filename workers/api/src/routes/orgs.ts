@@ -105,6 +105,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
         name: src.name,
         type: src.type,
         url: src.url,
+        isPrimary: src.isPrimary ?? false,
         releaseCount: relCount.n,
         latestVersion,
         latestDate: latest?.publishedAt ?? null,

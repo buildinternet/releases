@@ -25,7 +25,12 @@ export function SourceCard({ source, orgSlug }: { source: SourceListItem; orgSlu
   return (
     <Link href={href} className="block bg-white border border-stone-200 rounded-lg p-4 hover:border-stone-300 transition-colors">
       <div className="flex justify-between items-center">
-        <span className="font-semibold text-[15px] text-stone-900">{source.name}</span>
+        <div className="flex items-center gap-2">
+          <span className="font-semibold text-[15px] text-stone-900">{source.name}</span>
+          {source.isPrimary && (
+            <span className="text-[10px] font-medium uppercase tracking-wide text-stone-500 bg-stone-100 px-1.5 py-0.5 rounded">Primary</span>
+          )}
+        </div>
         <SourceTypeIcon type={source.type} />
       </div>
       <div className="text-xs text-stone-400 mt-1.5">

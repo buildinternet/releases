@@ -30,12 +30,15 @@ export function registerEditCommand(program: Command) {
     .option("--markdown-url <markdownUrl>", "Set the raw markdown URL for this source")
     .option("--provider <provider>", "Set the detected provider (e.g., mintlify, docusaurus)")
     .option("--fetch-method <fetchMethod>", "Set the recommended fetch method (feed, markdown, scrape, crawl, github)")
+    .option("--primary", "Mark as the org's primary changelog source")
+    .option("--no-primary", "Unmark as primary")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
   released edit my-source --name "New Name"
   released edit my-source --url https://example.com/new-changelog
   released edit my-source --org "Acme Corp"
+  released edit my-source --primary
   released edit my-source --feed-url https://example.com/feed.xml
   released edit my-source --markdown-url https://example.com/changelog.md
   released edit my-source --fetch-method markdown
@@ -44,6 +47,7 @@ Examples:
       name?: string; url?: string; type?: string; slug?: string;
       org?: string | boolean; feedUrl?: string | boolean; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
+      primary?: boolean;
     }) => {
       const source = await findSourceBySlug(slug);
       if (!source) {
@@ -97,6 +101,12 @@ Examples:
         }
         updates.orgId = org.id;
         changes.push(`org → ${org.name}`);
+      }
+
+      // Handle --primary / --no-primary
+      if (opts.primary !== undefined) {
+        updates.isPrimary = opts.primary;
+        changes.push(opts.primary ? "marked as primary" : "unmarked as primary");
       }
 
       // Accumulate metadata updates for a single write
