@@ -424,6 +424,8 @@ To use the Cloudflare worker API locally with the web frontend, set `RELEASED_AP
 
 Workers live in `workers/api/` (Hono API backed by D1) and `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery). Both share the same D1 database.
 
+The discovery worker's sandbox container is built from the repo root (set by `image_build_context` in `wrangler.jsonc`). The root `.dockerignore` uses an **allowlist pattern** — everything is ignored by default, and only the files needed in the sandbox are explicitly included (`src/`, `workers/discovery/src/`, `package.json`, `bun.lock`, `tsconfig.json`, `CLAUDE.md`). To include new files in the container, add them to `.dockerignore` with a `!` prefix. Old container images are not auto-pruned — use `wrangler containers images list` and `wrangler containers images delete` periodically to clean up.
+
 Database tools:
 
 ```bash
