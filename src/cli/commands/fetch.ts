@@ -379,19 +379,27 @@ Examples:
           // Upload media to R2 and rewrite URLs (remote mode only)
           const apiUrl = config.apiUrl();
           if (apiUrl) {
-            await Promise.allSettled(rows.map(async (row) => {
-              if (!row.media || row.media === "[]") return;
-              let media: MediaRef[];
-              try { media = JSON.parse(row.media) as MediaRef[]; } catch { return; }
-              if (media.length === 0) return;
-              await processMediaForR2(media, source.slug);
-              let content = row.content;
-              for (const m of media) {
-                if (m.r2Key) content = content.replaceAll(m.url, `${apiUrl}/api/media/${m.r2Key}`);
+            // Parse all media from all rows, track which row they belong to
+            const parsed = rows.map((row) => {
+              if (!row.media || row.media === "[]") return [];
+              try { return JSON.parse(row.media) as MediaRef[]; } catch { return []; }
+            });
+            const allMedia = parsed.flat().filter(m => m.url);
+            if (allMedia.length > 0) {
+              // Single batched upload across all releases
+              await processMediaForR2(allMedia, source.slug);
+              // Rewrite URLs in content for each row
+              for (let i = 0; i < rows.length; i++) {
+                const media = parsed[i];
+                if (media.length === 0) continue;
+                let content = rows[i].content;
+                for (const m of media) {
+                  if (m.r2Key) content = content.replaceAll(m.url, `${apiUrl}/api/media/${m.r2Key}`);
+                }
+                rows[i].content = content;
+                rows[i].media = JSON.stringify(media);
               }
-              row.content = content;
-              row.media = JSON.stringify(media);
-            }));
+            }
           }
 
           const inserted = await insertReleases(source, rows);

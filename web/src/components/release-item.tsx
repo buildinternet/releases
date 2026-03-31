@@ -196,14 +196,14 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
       >
         {expanded ? (
           <div className={markdownClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents as any}>{markdownContent}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{markdownContent}</ReactMarkdown>
             <MediaGallery media={release.media} content={markdownContent} />
           </div>
         ) : (
           <>
             <div ref={contentRef} className="max-h-[4.5em] overflow-hidden">
               <div className={`${markdownClasses} text-stone-500 [&_strong]:text-stone-500`}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={collapsedMarkdownComponents as any}>{markdownContent}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
               </div>
             </div>
             {isOverflowing && (
