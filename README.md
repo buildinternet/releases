@@ -398,7 +398,7 @@ released usage --days 7    # last 7 days
 
 ## Architecture
 
-- **TypeScript + Bun** — single package, one CLI binary
+- **TypeScript + Bun** — single package, compiles to a self-contained binary via `bun build --compile`
 - **SQLite** (Bun built-in + Drizzle ORM) with WAL mode and FTS5 for search
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, Cloudflare Browser Rendering for scraping
 - **AI Layer** — Anthropic SDK for changelog parsing (ingestion) and summarization (query)
@@ -437,7 +437,7 @@ To use the Cloudflare worker API locally with the web frontend, set `RELEASED_AP
 
 Workers live in `workers/api/` (Hono API backed by D1) and `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery). Both share the same D1 database.
 
-The discovery worker's sandbox container is built from the repo root (set by `image_build_context` in `wrangler.jsonc`). The root `.dockerignore` uses an **allowlist pattern** — everything is ignored by default, and only the files needed in the sandbox are explicitly included (`src/`, `workers/discovery/src/`, `package.json`, `bun.lock`, `tsconfig.json`, `CLAUDE.md`). To include new files in the container, add them to `.dockerignore` with a `!` prefix. Old container images are not auto-pruned — use `wrangler containers images list` and `wrangler containers images delete` periodically to clean up.
+The discovery worker's sandbox container runs compiled binaries — no Bun runtime, source tree, or node_modules. Build with `bun run build:all:linux` before deploying. The root `.dockerignore` uses an **allowlist pattern** — only `dist/released`, `dist/released-mcp-browser`, and `src/agent/skills/` are included. Old container images are not auto-pruned — use `wrangler containers images list` and `wrangler containers images delete` periodically to clean up.
 
 Database tools:
 
@@ -455,4 +455,6 @@ bun src/index.ts <command>   # run directly without linking
 npx tsc --noEmit             # type-check (CLI)
 cd web && npx tsc --noEmit   # type-check (frontend)
 bun run db:generate          # generate migration after schema change
+bun run build                # compile CLI binary (current platform)
+bun run build:all:linux      # compile CLI + MCP server for sandbox container
 ```

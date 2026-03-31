@@ -1,26 +1,19 @@
 FROM docker.io/cloudflare/sandbox:0.8.0
 
-# Cache bust: force image rebuild
-ENV RELEASED_BUILD_VERSION=2
+# Copy compiled binaries
+COPY dist/released /usr/local/bin/released
+COPY dist/released-mcp-browser /usr/local/bin/released-mcp-browser
 
-# Install Bun
-RUN curl -fsSL https://bun.sh/install | bash
-ENV PATH="/root/.bun/bin:$PATH"
-
-# Copy project and install deps
-COPY . /app
-WORKDIR /app
-RUN bun install --frozen-lockfile
-
-# Place agent skills where the Agent SDK discovers them
-RUN mkdir -p /app/.claude/skills && cp -r /app/src/agent/skills/* /app/.claude/skills/
+# Skills live at the conventional path and are also pre-placed where the
+# Agent SDK discovers them (the SDK checks before ensureSkillsDiscoverable runs)
+COPY src/agent/skills/ /usr/share/released/skills/
+RUN mkdir -p /app/.claude/skills && cp -r /usr/share/released/skills/* /app/.claude/skills/
 
 # Sandbox SDK command timeout — 5 minutes for agent runs
 ENV COMMAND_TIMEOUT_MS=300000
 
-# Default data dir for Released CLI
+# Default data dir
 ENV RELEASED_DATA_DIR=/app/data
 RUN mkdir -p /app/data
 
-# Expose WebSocket port for log streaming
 EXPOSE 8081

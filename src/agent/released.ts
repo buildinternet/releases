@@ -1,5 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "path";
+import { homedir } from "os";
 import { existsSync, mkdirSync, symlinkSync } from "fs";
 import { config } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
@@ -45,8 +46,7 @@ export interface ReleasedAgentOptions {
 // ── Constants ──────────────────────────────────────────────────────
 
 export const DISCOVERY_STATE_FILE = "/tmp/discovery-state.json";
-const projectRoot = resolve(import.meta.dir, "../..");
-const cliCmd = `bun ${projectRoot}/src/index.ts`;
+const cliCmd = process.env.RELEASED_CLI_CMD ?? "released";
 
 // ── System prompt ──────────────────────────────────────────────────
 
@@ -108,16 +108,40 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
 
 // ── Skills setup ───────────────────────────────────────────────────
 
-/** Ensure agent skills are discoverable at .claude/skills/ relative to projectRoot. */
+/** Resolve the skills source directory using conventional paths with env override. */
+function resolveSkillsDir(): string | null {
+  // 1. Explicit override
+  const envDir = process.env.RELEASED_SKILLS_DIR;
+  if (envDir && existsSync(envDir)) return envDir;
+
+  // 2. Container convention
+  const containerDir = "/usr/share/released/skills";
+  if (existsSync(containerDir)) return containerDir;
+
+  // 3. Local user convention
+  const localDir = resolve(homedir(), ".released/skills");
+  if (existsSync(localDir)) return localDir;
+
+  // 4. Dev fallback — source tree (for running via bun src/index.ts)
+  const devDir = resolve(import.meta.dir, "skills");
+  if (existsSync(devDir)) return devDir;
+
+  return null;
+}
+
+/** Ensure agent skills are discoverable at .claude/skills/ in cwd. */
 function ensureSkillsDiscoverable(): void {
-  const skillsTarget = resolve(projectRoot, ".claude/skills");
+  const cwd = process.cwd();
+  const skillsTarget = resolve(cwd, ".claude/skills");
   if (existsSync(skillsTarget)) return;
 
-  // Skills live in src/agent/skills/ — symlink into .claude/skills/ for the SDK
-  const skillsSource = resolve(projectRoot, "src/agent/skills");
-  if (!existsSync(skillsSource)) return;
+  const skillsSource = resolveSkillsDir();
+  if (!skillsSource) {
+    logger.warn("No agent skills directory found — agent will run without skills");
+    return;
+  }
 
-  mkdirSync(resolve(projectRoot, ".claude"), { recursive: true });
+  mkdirSync(resolve(cwd, ".claude"), { recursive: true });
   symlinkSync(skillsSource, skillsTarget);
   logger.debug(`Symlinked agent skills: ${skillsSource} → ${skillsTarget}`);
 }
@@ -141,8 +165,8 @@ export async function runAgent(options: ReleasedAgentOptions): Promise<Discovery
   if (cfAccountId && cfApiToken) {
     mcpServers["cloudflare-browser"] = {
       type: "stdio",
-      command: "bun",
-      args: [resolve(projectRoot, "src/agent/mcp-cloudflare-browser.ts")],
+      command: process.env.RELEASED_MCP_BROWSER_CMD ?? "released-mcp-browser",
+      args: [],
       env: {
         CLOUDFLARE_ACCOUNT_ID: cfAccountId,
         CLOUDFLARE_API_TOKEN: cfApiToken,
@@ -156,7 +180,7 @@ export async function runAgent(options: ReleasedAgentOptions): Promise<Discovery
     prompt: options.prompt,
     options: {
       model,
-      cwd: projectRoot,
+      cwd: process.cwd(),
       systemPrompt,
       settingSources: ["project"],
       permissionMode: "acceptEdits",

@@ -20,6 +20,19 @@ bun src/index.ts <command>    # run directly during development
 
 Type-check: `npx tsc --noEmit`
 
+## Building
+
+The CLI compiles to a self-contained binary via `bun build --compile`:
+
+```bash
+bun run build                 # compile for current platform (macOS)
+bun run build:linux           # cross-compile for Linux (sandbox container)
+bun run build:all             # compile CLI + MCP browser server
+bun run build:all:linux       # cross-compile both for Linux
+```
+
+Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_URL`) — local SQLite mode is only supported via `bun src/index.ts`.
+
 ## Conventions
 
 - All logging goes to **stderr** (`src/lib/logger.ts`). stdout is reserved for MCP JSON-RPC in serve mode.
@@ -65,7 +78,7 @@ Session management: `task list` shows active sessions, `task cancel <id>` reques
 
 The unified agent (`src/agent/released.ts`) handles all judgment-based changelog work: finding sources, evaluating them, onboarding, and validation. It replaces the separate discovery and evaluation agents.
 
-- **Agent skills** live in `src/agent/skills/` as application code (not in `.claude/`). Each skill is a `SKILL.md` with YAML frontmatter. The agent symlinks them to `.claude/skills/` at runtime so the Agent SDK discovers them via `settingSources: ["project"]`. In the sandbox container, the Dockerfile copies them into place.
+- **Agent skills** live in `src/agent/skills/` as application code (not in `.claude/`). Each skill is a `SKILL.md` with YAML frontmatter. At runtime, `resolveSkillsDir()` finds skills via: `RELEASED_SKILLS_DIR` env var → `/usr/share/released/skills/` (container) → `~/.released/skills/` (local) → source tree fallback. The agent symlinks the resolved directory to `.claude/skills/` for SDK discovery.
 - **Deterministic pipeline** (ingest, incremental, enrich, summarize) stays as direct Messages API calls — not routed through the agent.
 - **`evaluate` CLI command** runs pre-checks only (provider detection, feed discovery). The agent handles deeper evaluation when needed.
 

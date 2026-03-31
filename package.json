@@ -7,7 +7,12 @@
     "released": "./src/index.ts"
   },
   "scripts": {
-    "build": "bun build src/index.ts --outdir dist --target bun",
+    "build": "bun build --compile src/index.ts --outfile dist/released",
+    "build:linux": "bun build --compile src/index.ts --outfile dist/released --target=bun-linux-x64",
+    "build:mcp-browser": "bun build --compile src/agent/mcp-cloudflare-browser.ts --outfile dist/released-mcp-browser",
+    "build:mcp-browser:linux": "bun build --compile src/agent/mcp-cloudflare-browser.ts --outfile dist/released-mcp-browser --target=bun-linux-x64",
+    "build:all": "bun run build && bun run build:mcp-browser",
+    "build:all:linux": "bun run build:linux && bun run build:mcp-browser:linux",
     "dev": "bun --watch src/index.ts",
     "dev:web": "cd web && bun run dev",
     "dev:api": "wrangler dev --config workers/api/wrangler.jsonc",
