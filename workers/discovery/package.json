@@ -11,8 +11,8 @@
     "@cloudflare/sandbox": "latest"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260301.0",
-    "wrangler": "^4.14.0",
+    "@cloudflare/workers-types": "^4.20260331.1",
+    "wrangler": "^4.79.0",
     "typescript": "^6.0.2"
   }
 }
