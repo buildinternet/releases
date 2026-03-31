@@ -19,6 +19,7 @@
     "dev:discovery": "wrangler dev --config workers/discovery/wrangler.jsonc",
     "api": "bun src/index.ts api",
     "deploy:api": "wrangler deploy --config workers/api/wrangler.jsonc",
+    "predeploy:discovery": "bun run build:all:linux",
     "deploy:discovery": "wrangler deploy --config workers/discovery/wrangler.jsonc",
     "deploy": "bun run deploy:api && bun run deploy:discovery",
     "db:generate": "drizzle-kit generate",
