@@ -340,10 +340,35 @@ export interface SourceWithOrg {
   metadata: string | null;
 }
 
-export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
-  if (isRemoteMode()) return apiClient.listSourcesWithOrg();
+export async function listSourcesWithOrg(opts?: {
+  orgSlug?: string;
+  hasFeed?: boolean;
+  enrichable?: boolean;
+}): Promise<SourceWithOrg[]> {
+  if (isRemoteMode()) return apiClient.listSourcesWithOrg(opts);
   const db = getDb();
-  return db
+
+  const conditions = [];
+
+  if (opts?.orgSlug) {
+    const org = await findOrg(opts.orgSlug);
+    if (!org) return [];
+    conditions.push(eq(sources.orgId, org.id));
+  }
+
+  if (opts?.hasFeed || opts?.enrichable) {
+    conditions.push(
+      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL AND json_extract(${sources.metadata}, '$.feedUrl') != ''`,
+    );
+  }
+
+  if (opts?.enrichable) {
+    conditions.push(
+      sql`(json_extract(${sources.metadata}, '$.feedContentDepth') IS NULL OR json_extract(${sources.metadata}, '$.feedContentDepth') = 'summary-only')`,
+    );
+  }
+
+  const query = db
     .select({
       id: sources.id,
       name: sources.name,
@@ -356,6 +381,11 @@ export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id));
+
+  if (conditions.length > 0) {
+    return query.where(and(...conditions));
+  }
+  return query;
 }
 
 // ── Stats summary (for `stats` command) ──

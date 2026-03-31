@@ -93,6 +93,19 @@ released fetch linear --no-crawl                 # one-off skip, keeps setting
 
 Crawl mode persists on the source — subsequent `released fetch linear` calls will automatically crawl. Only works with `scrape` sources.
 
+### Enrich releases
+
+For feed sources with sparse content (short summaries), hydrate releases with full page content:
+
+```bash
+released enrich sentry-changelog              # enrich sparse releases
+released enrich sentry-changelog --dry-run    # preview what would be enriched
+released enrich sentry-changelog --limit 5    # process at most 5 releases
+released enrich sentry-changelog --json       # machine-readable output
+```
+
+Enrichment uses AI triage (Haiku) to judge which releases need enrichment, then fetches and extracts full page content. Token usage is reported per run.
+
 ### Import sources from manifest
 
 Bulk-import organizations and sources from a JSON file — the discovery agent handoff point:
@@ -153,9 +166,13 @@ Sessions track which sources are actively being fetched. The CLI blocks new fetc
 ### Inspect sources
 
 ```bash
-released list                    # list all sources
-released list next-js            # show details for a single source
-released list next-js --json     # machine-readable output
+released list                          # list all sources
+released list next-js                  # show details for a single source
+released list next-js --json           # machine-readable output
+released list --org sentry             # filter by organization
+released list --has-feed               # sources with a discovered feed URL
+released list --enrichable             # sources eligible for content enrichment
+released list --has-feed --org sentry  # combine filters
 ```
 
 ### Query

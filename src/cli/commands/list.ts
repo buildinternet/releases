@@ -31,12 +31,18 @@ export function registerListCommand(program: Command) {
     .description("List all configured changelog sources, or show details for a single source")
     .argument("[slug]", "Show details for a specific source by slug")
     .option("--json", "Output as JSON")
+    .option("--org <org>", "Filter by organization slug")
+    .option("--has-feed", "Only show sources that have a discovered feed URL")
+    .option("--enrichable", "Only show sources eligible for content enrichment (have feed, missing or sparse content depth)")
     .addHelpText("after", `
 Examples:
-  released list                   List all sources
-  released list claude-code       Show details for a single source
-  released list --json            List all sources as JSON`)
-    .action(async (slug: string | undefined, opts: { json?: boolean }) => {
+  released list                       List all sources
+  released list claude-code           Show details for a single source
+  released list --json                List all sources as JSON
+  released list --has-feed            Sources with a discovered feed URL
+  released list --enrichable          Sources eligible for content enrichment
+  released list --has-feed --org sentry   Combine filters`)
+    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; hasFeed?: boolean; enrichable?: boolean }) => {
       // ── Single-source detail view ──
       if (slug) {
         const source = await findSourceBySlug(slug);
@@ -70,7 +76,11 @@ Examples:
       }
 
       // ── Full list view ──
-      const allSources = await listSourcesWithOrg();
+      const allSources = await listSourcesWithOrg({
+        orgSlug: opts.org,
+        hasFeed: opts.hasFeed,
+        enrichable: opts.enrichable,
+      });
 
       if (allSources.length === 0) {
         if (opts.json) {

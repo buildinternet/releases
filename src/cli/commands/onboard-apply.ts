@@ -33,12 +33,18 @@ async function applySource(source: AgentDiscoveredSource, orgId?: string): Promi
   }
 
   try {
+    const metadata = source.contentDepth
+      ? JSON.stringify({ feedContentDepth: source.contentDepth })
+      : undefined;
+
     await createSource({
       name: label,
       slug,
       type,
       url,
+      metadata,
     });
+
     return { slug, url, action: "added" };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
