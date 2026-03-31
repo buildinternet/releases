@@ -208,6 +208,8 @@ When `RELEASED_API_URL` and `RELEASED_DISCOVERY_URL` are set, `onboard` defaults
 
 Set secrets with `cd workers/discovery && wrangler secret put <NAME>`.
 
+**Discovery guardrails:** The discovery worker prevents duplicate sessions — starting onboard for a company that's already being discovered returns 409, and exceeding 5 concurrent discovery sessions returns 429.
+
 ### Discover sources
 
 Automatically find changelog and release-note pages for a domain:

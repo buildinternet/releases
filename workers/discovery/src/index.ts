@@ -53,8 +53,6 @@ export default {
         const guardRes = env.API_WORKER
           ? await env.API_WORKER.fetch(new Request(`https://api${guardPath}`, { headers: guardHeaders }))
           : await fetch(`${env.RELEASED_API_URL.replace(/\/+$/, "")}${guardPath}`, { headers: guardHeaders });
-        console.log(`[discovery] Guard response: ${guardRes.status} (${env.API_WORKER ? "binding" : "fetch"})`);
-        console.log(`[discovery] Guard response: ${guardRes.status}`);
         if (guardRes.ok) {
           const sessions = (await guardRes.json()) as {
             sessionId: string;
