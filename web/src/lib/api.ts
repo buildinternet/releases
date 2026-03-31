@@ -1,5 +1,5 @@
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
-const API_SECRET = process.env.API_SECRET;
+const API_SECRET = process.env.RELEASED_API_KEY;
 
 export class ApiSetupError extends Error {
   setup: string[];

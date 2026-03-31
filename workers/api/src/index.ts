@@ -20,7 +20,7 @@ export { StatusHub } from "./status-hub.js";
 export type Env = {
   Bindings: {
     DB: D1Database;
-    API_SECRET: string;
+    RELEASED_API_KEY: string;
     STATUS_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;

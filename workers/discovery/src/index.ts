@@ -15,10 +15,10 @@ function errorResponse(message: string, status: number): Response {
 }
 
 function checkAuth(request: Request, env: Env): Response | null {
-  if (!env.API_SECRET) return null;
+  if (!env.RELEASED_API_KEY) return null;
   const header = request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (token !== env.API_SECRET) {
+  if (token !== env.RELEASED_API_KEY) {
     return errorResponse("Unauthorized", 401);
   }
   return null;
@@ -47,8 +47,8 @@ export default {
       try {
         const guardUrl = `${env.RELEASED_API_URL}/api/sessions?status=running&type=onboard`;
         const guardRes = await fetch(guardUrl, {
-          headers: env.API_SECRET
-            ? { Authorization: `Bearer ${env.API_SECRET}` }
+          headers: env.RELEASED_API_KEY
+            ? { Authorization: `Bearer ${env.RELEASED_API_KEY}` }
             : {},
         });
         if (guardRes.ok) {

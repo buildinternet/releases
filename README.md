@@ -203,9 +203,8 @@ When `RELEASED_API_URL` and `RELEASED_DISCOVERY_URL` are set, `onboard` defaults
 | `CLOUDFLARE_ACCOUNT_ID` | Browser rendering for scrape sources |
 | `CLOUDFLARE_API_TOKEN` | Browser rendering for scrape sources |
 | `GITHUB_TOKEN` | GitHub API access (optional, increases rate limits) |
-| `API_SECRET` | Authenticates CLI requests to the discovery worker |
 | `RELEASED_API_URL` | API worker URL for data operations inside the sandbox |
-| `RELEASED_API_KEY` | API worker auth for data operations inside the sandbox |
+| `RELEASED_API_KEY` | Authenticates requests to the API worker |
 
 Set secrets with `cd workers/discovery && wrangler secret put <NAME>`.
 

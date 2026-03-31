@@ -8,7 +8,7 @@ import type { UploadResult } from "../../../../src/lib/media.js";
 type Env = {
   Bindings: {
     DB: D1Database;
-    API_SECRET: string;
+    RELEASED_API_KEY: string;
     STATUS_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
