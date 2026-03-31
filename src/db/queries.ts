@@ -42,6 +42,30 @@ export async function getRecentReleases(
     .orderBy(desc(releases.publishedAt));
 }
 
+export async function getEnrichableReleases(
+  sourceId: string,
+  sourceSlug?: string,
+  limit?: number,
+): Promise<Release[]> {
+  if (isRemoteMode() && sourceSlug) {
+    return apiClient.getEnrichableReleases(sourceSlug, limit);
+  }
+  const db = getDb();
+  const query = db
+    .select()
+    .from(releases)
+    .where(
+      and(
+        eq(releases.sourceId, sourceId),
+        isNotNull(releases.url),
+        eq(releases.suppressed, false),
+      ),
+    )
+    .orderBy(desc(releases.publishedAt));
+  if (limit) return query.limit(limit);
+  return query;
+}
+
 export async function findOrg(identifier: string): Promise<Organization | null> {
   if (isRemoteMode()) return apiClient.findOrg(identifier);
   const db = getDb();

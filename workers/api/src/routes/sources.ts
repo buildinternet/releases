@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, count, and, min, isNull, sql, gte, inArray } from "drizzle-orm";
+import { eq, desc, count, and, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { sources, releases, organizations, fetchLog, releaseSummaries } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
@@ -214,6 +214,36 @@ sourceRoutes.get("/sources/:slug/recent-releases", async (c) => {
     .orderBy(desc(releases.publishedAt));
 
   return c.json(rows);
+});
+
+// ── Enrichable releases (have URLs, not suppressed) ──
+
+sourceRoutes.get("/sources/:slug/releases", async (c) => {
+  const enrichable = c.req.query("enrichable");
+  if (enrichable !== "true") return c.json({ error: "enrichable=true query param required" }, 400);
+
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+
+  const limit = c.req.query("limit") ? parseInt(c.req.query("limit")!, 10) : undefined;
+
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found" }, 404);
+
+  const query = db
+    .select()
+    .from(releases)
+    .where(
+      and(
+        eq(releases.sourceId, src.id),
+        isNotNull(releases.url),
+        eq(releases.suppressed, false),
+      ),
+    )
+    .orderBy(desc(releases.publishedAt));
+
+  const rows = limit ? await query.limit(limit) : await query;
+  return c.json({ releases: rows });
 });
 
 // ── Known releases for incremental parsing ──

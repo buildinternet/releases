@@ -489,6 +489,15 @@ export async function getLatestReleases(opts: {
   return all.sort(byPublishedAtDesc).slice(0, opts.count);
 }
 
+// ── Enrichable releases ──
+
+export async function getEnrichableReleases(sourceSlug: string, limit?: number): Promise<Release[]> {
+  const params = new URLSearchParams({ enrichable: "true" });
+  if (limit) params.set("limit", String(limit));
+  const res = await apiFetch<{ releases: Release[] }>(`/api/sources/${sourceSlug}/releases?${params}`);
+  return res?.releases ?? [];
+}
+
 // ── Known releases for incremental parsing ──
 
 export async function getKnownReleasesForSource(

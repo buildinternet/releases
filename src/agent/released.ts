@@ -195,9 +195,9 @@ export async function runAgent(options: ReleasedAgentOptions): Promise<Discovery
       agents: {
         "bulk-worker": {
           description:
-            "Runs a Released CLI command and reports the result. Use for parallel validation, dry-run fetches, or any CLI task that doesn't need judgment.",
-          prompt: `Run the given Released CLI command, evaluate the output, and report back with a structured summary including: command run, exit code, key findings (release count, errors, quality assessment).`,
-          tools: ["Bash", "Read"],
+            "Runs Released CLI commands or fetches web pages and reports results. Use for parallel validation, dry-run fetches, content sampling, or any task that doesn't need parent-level judgment.",
+          prompt: `Run the given Released CLI command or web fetch task, evaluate the output, and report back with a structured summary including: command run, exit code, key findings (release count, errors, quality assessment).`,
+          tools: ["Bash", "Read", "WebFetch"],
           model: "haiku",
           maxTurns: 5,
         },

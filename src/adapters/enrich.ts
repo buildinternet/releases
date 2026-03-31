@@ -1,4 +1,6 @@
-import type { RawRelease } from "./types.js";
+import type { Release } from "../db/schema.js";
+import { updateRelease, getEnrichableReleases, findSourceBySlug } from "../db/queries.js";
+import type { default as Anthropic } from "@anthropic-ai/sdk";
 import { fetchCloudflareMarkdown } from "./cloudflare.js";
 import { config } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
@@ -7,147 +9,239 @@ import { getAnthropicClient } from "../ai/client.js";
 
 // ── Config ──────────────────────────────────────────────────────────
 
-/** Content shorter than this is considered "sparse" and worth enriching. */
-const SPARSE_THRESHOLD = 50;
-
 /** Max parallel page fetches. */
 const CONCURRENCY = 5;
 
 /** Max markdown length to send to AI for extraction. */
 const MAX_MARKDOWN_CHARS = 100_000;
 
+// ── Types ───────────────────────────────────────────────────────────
+
+export interface EnrichResult {
+  enriched: number;
+  skipped: number;
+  errors: number;
+  triageTokens: number;
+  extractTokens: number;
+  releases: Array<{
+    id: string;
+    title: string;
+    status: "enriched" | "skipped" | "error";
+    reason?: string;
+  }>;
+}
+
+export interface EnrichOptions {
+  dryRun?: boolean;
+  limit?: number;
+  sourceSlug: string;
+}
+
 // ── Public API ──────────────────────────────────────────────────────
 
 /**
- * Enrich feed releases that have sparse content by fetching their
- * individual page URLs via Cloudflare Browser Rendering + Haiku extraction.
+ * Enrich releases for a source by fetching individual page URLs.
+ * Uses Haiku to triage which releases need enrichment, then fetches
+ * and extracts content for those that do.
  */
-export async function enrichSparseReleases(
-  releases: RawRelease[],
-  sourceSlug?: string,
-): Promise<RawRelease[]> {
+export async function enrichReleases(options: EnrichOptions): Promise<EnrichResult> {
+  const source = await findSourceBySlug(options.sourceSlug);
+  if (!source) throw new Error(`Source not found: ${options.sourceSlug}`);
+
   const accountId = config.cloudflareAccountId();
   const apiToken = config.cloudflareApiToken();
+  if (!accountId || !apiToken) {
+    throw new Error("Cloudflare credentials required (CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_API_TOKEN)");
+  }
 
-  if (!accountId || !apiToken) return releases;
+  const apiKey = config.anthropicApiKey();
+  if (!apiKey) throw new Error("ANTHROPIC_API_KEY required for enrichment");
 
-  const sparse = releases.filter(
-    (r) => r.url && r.content.length < SPARSE_THRESHOLD,
-  );
+  const client = getAnthropicClient();
+  const model = config.ingestModel();
 
-  if (sparse.length === 0) return releases;
+  let candidates = await getEnrichableReleases(source.id, source.slug, options.limit);
 
-  logger.info(
-    `Enriching ${sparse.length}/${releases.length} sparse releases...`,
-  );
 
-  // Enrich with bounded concurrency
-  const enriched = await mapWithConcurrency(
-    sparse,
-    (release) => enrichOne(release, accountId, apiToken, sourceSlug),
+  if (candidates.length === 0) {
+    return { enriched: 0, skipped: 0, errors: 0, triageTokens: 0, extractTokens: 0, releases: [] };
+  }
+
+  logger.info(`Triaging ${candidates.length} releases for enrichment...`);
+
+  // Phase 1: Haiku triage — which releases need enrichment?
+  const triageResults = await mapWithConcurrency(
+    candidates,
+    (r) => triageRelease(r, client, model, options.sourceSlug),
     CONCURRENCY,
   );
 
-  // Build a url→content map from successful enrichments
-  const contentByUrl = new Map<string, string>();
-  for (const result of enriched) {
-    if (result.url && result.content.length >= SPARSE_THRESHOLD) {
-      contentByUrl.set(result.url, result.content);
-    }
-  }
+  const needsEnrichment = triageResults.filter((t) => t.needsEnrichment);
+  const skippedTriage = triageResults.filter((t) => !t.needsEnrichment);
 
-  logger.info(
-    `Enriched ${contentByUrl.size}/${sparse.length} releases successfully`,
+  logger.info(`Triage: ${needsEnrichment.length} need enrichment, ${skippedTriage.length} already rich`);
+
+  // Phase 2: Fetch and extract content for releases that need it
+  const extractResults = await mapWithConcurrency(
+    needsEnrichment,
+    (t) => extractAndUpdate(t.release, client, model, accountId, apiToken, options),
+    CONCURRENCY,
   );
 
-  // Merge enriched content back
-  return releases.map((r) => {
-    if (r.url && contentByUrl.has(r.url)) {
-      return { ...r, content: contentByUrl.get(r.url)! };
-    }
-    return r;
-  });
+  const result: EnrichResult = {
+    enriched: extractResults.filter((r) => r.status === "enriched").length,
+    skipped: skippedTriage.length + extractResults.filter((r) => r.status === "skipped").length,
+    errors: extractResults.filter((r) => r.status === "error").length,
+    triageTokens: triageResults.reduce((sum, t) => sum + t.tokens, 0),
+    extractTokens: extractResults.reduce((sum, r) => sum + r.tokens, 0),
+    releases: [
+      ...skippedTriage.map((t) => ({
+        id: t.release.id, title: t.release.title,
+        status: "skipped" as const, reason: t.reason,
+      })),
+      ...extractResults,
+    ],
+  };
+
+  return result;
 }
 
-// ── Single release enrichment ───────────────────────────────────────
+// ── Haiku triage ────────────────────────────────────────────────────
 
-async function enrichOne(
-  release: RawRelease,
+const TRIAGE_SYSTEM = `You are evaluating whether a release note entry needs enrichment. The entry was parsed from an RSS/Atom feed and may only contain a summary. A URL to the full release page exists.
+
+Answer with a JSON object: {"needsEnrichment": true/false, "reason": "brief explanation"}
+
+Return true if the content looks like a short summary or teaser that likely has a fuller version on the dedicated page (e.g., one sentence, no detail, no images, no code examples).
+Return false if the content already has meaningful detail (multiple paragraphs, code blocks, specific feature descriptions, images).`;
+
+interface TriageResult {
+  release: Release;
+  needsEnrichment: boolean;
+  reason: string;
+  tokens: number;
+}
+
+async function triageRelease(release: Release, client: Anthropic, model: string, sourceSlug: string): Promise<TriageResult> {
+  try {
+    const response = await client.messages.create({
+      model,
+      max_tokens: 128,
+      system: TRIAGE_SYSTEM,
+      messages: [{
+        role: "user",
+        content: `Title: ${release.title}\nContent: ${release.content}\nURL: ${release.url}`,
+      }],
+    });
+
+    const text = response.content.find(
+      (b): b is Extract<typeof b, { type: "text" }> => b.type === "text",
+    )?.text ?? "";
+
+    const tokens = response.usage.input_tokens + response.usage.output_tokens;
+
+    await logUsage({
+      operation: "enrich-judge",
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      sourceSlug,
+      releaseCount: 1,
+    });
+
+    try {
+      const parsed = JSON.parse(text);
+      return {
+        release,
+        needsEnrichment: parsed.needsEnrichment === true,
+        reason: parsed.reason ?? "",
+        tokens,
+      };
+    } catch {
+      // If Haiku returns non-JSON, assume needs enrichment if content is short
+      return { release, needsEnrichment: release.content.length < 200, reason: "triage parse error", tokens };
+    }
+  } catch (err) {
+    logger.debug(`Triage failed for ${release.title}: ${err instanceof Error ? err.message : String(err)}`);
+    return { release, needsEnrichment: false, reason: "triage error", tokens: 0 };
+  }
+}
+
+// ── Content extraction ──────────────────────────────────────────────
+
+const EXTRACT_SYSTEM = `You are a release notes extractor. Given the markdown content of a release/changelog page, extract ONLY the release notes content. Strip navigation, headers, footers, sidebars, and other page chrome. Return just the release notes text as clean markdown.
+
+Be concise. Keep the essential information: what changed, new features, bug fixes, breaking changes. Remove boilerplate. Preserve image URLs as markdown image links (![alt](url)). Preserve video embed URLs.`;
+
+interface ExtractResult {
+  id: string;
+  title: string;
+  status: "enriched" | "skipped" | "error";
+  reason?: string;
+  tokens: number;
+}
+
+async function extractAndUpdate(
+  release: Release,
+  client: Anthropic,
+  model: string,
   accountId: string,
   apiToken: string,
-  sourceSlug?: string,
-): Promise<RawRelease> {
-  const url = release.url!;
+  options: EnrichOptions,
+): Promise<ExtractResult> {
+  if (!release.url) {
+    return { id: release.id, title: release.title, status: "skipped", reason: "no url", tokens: 0 };
+  }
+  const url = release.url;
 
   try {
     const markdown = await fetchCloudflareMarkdown(url, accountId, apiToken);
-    if (!markdown) return release;
+    if (!markdown) {
+      return { id: release.id, title: release.title, status: "skipped", reason: "page fetch failed", tokens: 0 };
+    }
 
-    return await enrichViaAI(release, markdown, sourceSlug);
-  } catch (err) {
-    logger.debug(
-      `Failed to enrich ${url}: ${err instanceof Error ? err.message : String(err)}`,
-    );
-    return release;
-  }
-}
-
-// ── AI content extraction ───────────────────────────────────────────
-
-const ENRICH_SYSTEM_PROMPT = `You are a release notes extractor. Given the markdown content of a release/changelog page, extract ONLY the release notes content. Strip navigation, headers, footers, sidebars, and other page chrome. Return just the release notes text as clean markdown.
-
-Be concise. Keep the essential information: what changed, new features, bug fixes, breaking changes. Remove boilerplate. Preserve image URLs as markdown image links (![alt](url)).`;
-
-async function enrichViaAI(
-  release: RawRelease,
-  markdown: string,
-  sourceSlug?: string,
-): Promise<RawRelease> {
-  const apiKey = config.anthropicApiKey();
-  if (!apiKey) return release;
-
-  const client = getAnthropicClient();
-  const model = config.ingestModel(); // Haiku — cheapest
-
-  const truncated =
-    markdown.length > MAX_MARKDOWN_CHARS
+    const truncated = markdown.length > MAX_MARKDOWN_CHARS
       ? markdown.slice(0, MAX_MARKDOWN_CHARS) + "\n\n[truncated]"
       : markdown;
 
-  const response = await client.messages.create({
-    model,
-    max_tokens: 4096,
-    system: ENRICH_SYSTEM_PROMPT,
-    messages: [
-      {
+    const response = await client.messages.create({
+      model,
+      max_tokens: 4096,
+      system: EXTRACT_SYSTEM,
+      messages: [{
         role: "user",
         content: `Extract the release notes content from this page (title: "${release.title}"):\n\n${truncated}`,
-      },
-    ],
-  });
+      }],
+    });
 
-  const textBlock = response.content.find(
-    (b): b is Extract<typeof b, { type: "text" }> => b.type === "text",
-  );
-  const content = textBlock?.text.trim() ?? "";
+    const text = response.content.find(
+      (b): b is Extract<typeof b, { type: "text" }> => b.type === "text",
+    )?.text?.trim() ?? "";
 
-  await logUsage({
-    operation: "feed-enrich",
-    model,
-    inputTokens: response.usage.input_tokens,
-    outputTokens: response.usage.output_tokens,
-    sourceSlug,
-    releaseCount: 1,
-  });
+    const tokens = response.usage.input_tokens + response.usage.output_tokens;
 
-  if (content.length >= SPARSE_THRESHOLD) {
-    logger.debug(
-      `Enriched ${release.url} via AI (${content.length} chars, ${response.usage.input_tokens + response.usage.output_tokens} tokens)`,
-    );
-    return { ...release, content };
+    await logUsage({
+      operation: "enrich-extract",
+      model,
+      inputTokens: response.usage.input_tokens,
+      outputTokens: response.usage.output_tokens,
+      sourceSlug: options.sourceSlug,
+      releaseCount: 1,
+    });
+
+    if (text.length <= release.content.length) {
+      return { id: release.id, title: release.title, status: "skipped", reason: "extraction not richer", tokens };
+    }
+
+    if (!options.dryRun) {
+      await updateRelease(release.id, { content: text });
+    }
+
+    return { id: release.id, title: release.title, status: "enriched", tokens };
+  } catch (err) {
+    logger.debug(`Extract failed for ${url}: ${err instanceof Error ? err.message : String(err)}`);
+    return { id: release.id, title: release.title, status: "error", reason: String(err), tokens: 0 };
   }
-
-  return release;
 }
 
 // ── Concurrency helper ──────────────────────────────────────────────

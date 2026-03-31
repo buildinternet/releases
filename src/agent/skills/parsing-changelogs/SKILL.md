@@ -59,7 +59,36 @@ Enable with `--crawl` flag or by setting `metadata.crawlEnabled: true` on the so
 
 ## Enrichment
 
-For feed sources with sparse entries (title and date but little content), the enrichment step fetches each release's individual page URL to get the full content. This runs automatically when feed entries lack substantial body text.
+Use the `released enrich <slug>` command to hydrate releases that have sparse content. This uses Haiku to judge which releases need enrichment, then fetches and extracts full page content.
+
+`released enrich <slug> --dry-run` previews what would be enriched. `released enrich <slug> --limit 5` caps the batch size.
+
+## Feed Content Depth Assessment
+
+After fetching a feed source, assess whether the releases have meaningful content or just summaries. Many feeds (RSS/Atom) provide only a title and one-line description while the actual release pages have full write-ups with images and detail.
+
+**When to check:** After a feed fetch produces releases where most entries have short content (1-2 sentences) and each has a URL to an individual page.
+
+**How to check:** Dispatch a bulk-worker subagent to sample 2-3 release URLs. Prompt the subagent:
+
+> "Fetch these URLs with WebFetch and compare the page content against these feed summaries. For each URL, report: (1) how much content is on the page vs the feed summary, (2) whether there are images or media, (3) your assessment of whether the page has substantially more content. Summarize your findings."
+
+Do NOT fetch release URLs in the parent agent — always delegate to a subagent to keep your context window clean.
+
+**What to do based on the result:**
+
+If pages are richer than feed content:
+1. Record the finding: `released edit <slug> --metadata '{"feedContentDepth":"summary-only"}'`
+2. Dispatch a bulk-worker subagent to run: `released enrich <slug>`
+3. Verify a sample: `released list <slug> --json` — check content is now richer
+
+If feed already provides full content:
+1. Record: `released edit <slug> --metadata '{"feedContentDepth":"full"}'`
+2. No enrichment needed — skip `released enrich` for this source
+
+Once `feedContentDepth` is set, skip the sampling step on future encounters. For automated pipelines, run `released enrich <slug>` after fetch for `summary-only` sources.
+
+**Cost visibility:** The `released enrich` command reports token usage. Check aggregate costs with `released usage` filtered to `enrich-judge` and `enrich-extract` operations.
 
 ## Validation Workflow
 
