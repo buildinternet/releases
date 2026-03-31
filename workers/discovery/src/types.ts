@@ -33,4 +33,5 @@ export interface Env {
   GITHUB_TOKEN?: string;
   RELEASED_API_URL: string;
   RELEASED_API_KEY: string;
+  API_WORKER?: Fetcher;
 }

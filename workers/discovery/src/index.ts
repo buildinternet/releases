@@ -45,14 +45,15 @@ export default {
 
       // ── Discovery guardrails: check for duplicates and count cap ──
       try {
-        const apiBase = env.RELEASED_API_URL.replace(/\/+$/, "");
-        const guardUrl = `${apiBase}/api/sessions?status=running&type=onboard`;
-        console.log(`[discovery] Guard check: ${guardUrl}`);
-        const guardRes = await fetch(guardUrl, {
-          headers: env.RELEASED_API_KEY
-            ? { Authorization: `Bearer ${env.RELEASED_API_KEY}` }
-            : {},
-        });
+        const guardPath = "/api/sessions?status=running&type=onboard";
+        const guardHeaders: Record<string, string> = env.RELEASED_API_KEY
+          ? { Authorization: `Bearer ${env.RELEASED_API_KEY}` }
+          : {};
+        // Use service binding (Worker-to-Worker) when available, public URL as fallback
+        const guardRes = env.API_WORKER
+          ? await env.API_WORKER.fetch(new Request(`https://api${guardPath}`, { headers: guardHeaders }))
+          : await fetch(`${env.RELEASED_API_URL.replace(/\/+$/, "")}${guardPath}`, { headers: guardHeaders });
+        console.log(`[discovery] Guard response: ${guardRes.status} (${env.API_WORKER ? "binding" : "fetch"})`);
         console.log(`[discovery] Guard response: ${guardRes.status}`);
         if (guardRes.ok) {
           const sessions = (await guardRes.json()) as {
