@@ -225,10 +225,12 @@ sourceRoutes.get("/sources/:slug/releases", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
+  const limit = c.req.query("limit") ? parseInt(c.req.query("limit")!, 10) : undefined;
+
   const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
-  const rows = await db
+  const query = db
     .select()
     .from(releases)
     .where(
@@ -240,6 +242,7 @@ sourceRoutes.get("/sources/:slug/releases", async (c) => {
     )
     .orderBy(desc(releases.publishedAt));
 
+  const rows = limit ? await query.limit(limit) : await query;
   return c.json({ releases: rows });
 });
 

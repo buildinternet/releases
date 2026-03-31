@@ -1,5 +1,6 @@
 import type { Release } from "../db/schema.js";
 import { updateRelease, getEnrichableReleases, findSourceBySlug } from "../db/queries.js";
+import type { default as Anthropic } from "@anthropic-ai/sdk";
 import { fetchCloudflareMarkdown } from "./cloudflare.js";
 import { config } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
@@ -56,8 +57,11 @@ export async function enrichReleases(options: EnrichOptions): Promise<EnrichResu
   const apiKey = config.anthropicApiKey();
   if (!apiKey) throw new Error("ANTHROPIC_API_KEY required for enrichment");
 
-  let candidates = await getEnrichableReleases(source.id, source.slug);
-  if (options.limit) candidates = candidates.slice(0, options.limit);
+  const client = getAnthropicClient();
+  const model = config.ingestModel();
+
+  let candidates = await getEnrichableReleases(source.id, source.slug, options.limit);
+
 
   if (candidates.length === 0) {
     return { enriched: 0, skipped: 0, errors: 0, triageTokens: 0, extractTokens: 0, releases: [] };
@@ -68,7 +72,7 @@ export async function enrichReleases(options: EnrichOptions): Promise<EnrichResu
   // Phase 1: Haiku triage — which releases need enrichment?
   const triageResults = await mapWithConcurrency(
     candidates,
-    (r) => triageRelease(r, options.sourceSlug),
+    (r) => triageRelease(r, client, model, options.sourceSlug),
     CONCURRENCY,
   );
 
@@ -80,11 +84,10 @@ export async function enrichReleases(options: EnrichOptions): Promise<EnrichResu
   // Phase 2: Fetch and extract content for releases that need it
   const extractResults = await mapWithConcurrency(
     needsEnrichment,
-    (t) => extractAndUpdate(t.release, accountId, apiToken, options),
+    (t) => extractAndUpdate(t.release, client, model, accountId, apiToken, options),
     CONCURRENCY,
   );
 
-  // Tally results
   const result: EnrichResult = {
     enriched: extractResults.filter((r) => r.status === "enriched").length,
     skipped: skippedTriage.length + extractResults.filter((r) => r.status === "skipped").length,
@@ -119,10 +122,7 @@ interface TriageResult {
   tokens: number;
 }
 
-async function triageRelease(release: Release, sourceSlug: string): Promise<TriageResult> {
-  const client = getAnthropicClient();
-  const model = config.ingestModel();
-
+async function triageRelease(release: Release, client: Anthropic, model: string, sourceSlug: string): Promise<TriageResult> {
   try {
     const response = await client.messages.create({
       model,
@@ -183,11 +183,16 @@ interface ExtractResult {
 
 async function extractAndUpdate(
   release: Release,
+  client: Anthropic,
+  model: string,
   accountId: string,
   apiToken: string,
   options: EnrichOptions,
 ): Promise<ExtractResult> {
-  const url = release.url!;
+  if (!release.url) {
+    return { id: release.id, title: release.title, status: "skipped", reason: "no url", tokens: 0 };
+  }
+  const url = release.url;
 
   try {
     const markdown = await fetchCloudflareMarkdown(url, accountId, apiToken);
@@ -195,8 +200,6 @@ async function extractAndUpdate(
       return { id: release.id, title: release.title, status: "skipped", reason: "page fetch failed", tokens: 0 };
     }
 
-    const client = getAnthropicClient();
-    const model = config.ingestModel();
     const truncated = markdown.length > MAX_MARKDOWN_CHARS
       ? markdown.slice(0, MAX_MARKDOWN_CHARS) + "\n\n[truncated]"
       : markdown;

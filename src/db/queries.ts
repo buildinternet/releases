@@ -45,12 +45,13 @@ export async function getRecentReleases(
 export async function getEnrichableReleases(
   sourceId: string,
   sourceSlug?: string,
+  limit?: number,
 ): Promise<Release[]> {
   if (isRemoteMode() && sourceSlug) {
-    return apiClient.getEnrichableReleases(sourceSlug);
+    return apiClient.getEnrichableReleases(sourceSlug, limit);
   }
   const db = getDb();
-  return db
+  const query = db
     .select()
     .from(releases)
     .where(
@@ -61,6 +62,8 @@ export async function getEnrichableReleases(
       ),
     )
     .orderBy(desc(releases.publishedAt));
+  if (limit) return query.limit(limit);
+  return query;
 }
 
 export async function findOrg(identifier: string): Promise<Organization | null> {

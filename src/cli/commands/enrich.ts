@@ -1,7 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { enrichReleases, type EnrichResult } from "../../adapters/enrich.js";
-import { findSourceBySlug } from "../../db/queries.js";
 import { elapsedFormatted } from "../../lib/dates.js";
 
 export function registerEnrichCommand(program: Command) {
@@ -19,12 +18,6 @@ Examples:
   released enrich sentry-changelog --limit 5    Process at most 5 releases
   released enrich sentry-changelog --json       Machine-readable output`)
     .action(async (slug: string, opts: { dryRun?: boolean; limit?: string; json?: boolean }) => {
-      const source = await findSourceBySlug(slug);
-      if (!source) {
-        console.error(chalk.red(`Source not found: ${slug}`));
-        process.exit(1);
-      }
-
       const start = performance.now();
 
       try {

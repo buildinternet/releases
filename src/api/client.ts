@@ -491,8 +491,10 @@ export async function getLatestReleases(opts: {
 
 // ── Enrichable releases ──
 
-export async function getEnrichableReleases(sourceSlug: string): Promise<Release[]> {
-  const res = await apiFetch<{ releases: Release[] }>(`/api/sources/${sourceSlug}/releases?enrichable=true`);
+export async function getEnrichableReleases(sourceSlug: string, limit?: number): Promise<Release[]> {
+  const params = new URLSearchParams({ enrichable: "true" });
+  if (limit) params.set("limit", String(limit));
+  const res = await apiFetch<{ releases: Release[] }>(`/api/sources/${sourceSlug}/releases?${params}`);
   return res?.releases ?? [];
 }
 
