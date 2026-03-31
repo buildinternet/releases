@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
+import type { Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { ReleaseItem } from "@/lib/api";
 
@@ -20,6 +21,115 @@ function stripLeadingTitle(content: string, title: string | null): string {
     return content.slice(firstNewline + 1).trimStart();
   }
   return content;
+}
+
+const markdownComponents: Components = {
+  img: ({ src, alt }) => {
+    if (!src || typeof src !== "string") return null;
+    return (
+      <img
+        src={src}
+        alt={alt || ""}
+        loading="lazy"
+        className="rounded-md max-w-full h-auto my-2 max-h-80 object-contain"
+      />
+    );
+  },
+  a: ({ href, children }) => {
+    if (!href) return <>{children}</>;
+
+    // YouTube embed
+    const ytMatch = href.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/);
+    if (ytMatch) {
+      return (
+        <div className="my-3 aspect-video max-w-lg">
+          <iframe
+            src={`https://www.youtube.com/embed/${ytMatch[1]}`}
+            className="w-full h-full rounded-md"
+            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    // Vimeo embed
+    const vimeoMatch = href.match(/vimeo\.com\/(\d+)/);
+    if (vimeoMatch) {
+      return (
+        <div className="my-3 aspect-video max-w-lg">
+          <iframe
+            src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
+            className="w-full h-full rounded-md"
+            allow="autoplay; fullscreen; picture-in-picture"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    // Loom embed
+    const loomMatch = href.match(/loom\.com\/share\/([^?&]+)/);
+    if (loomMatch) {
+      return (
+        <div className="my-3 aspect-video max-w-lg">
+          <iframe
+            src={`https://www.loom.com/embed/${loomMatch[1]}`}
+            className="w-full h-full rounded-md"
+            allowFullScreen
+            loading="lazy"
+          />
+        </div>
+      );
+    }
+
+    // Regular link
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
+  },
+};
+
+const collapsedMarkdownComponents: Components = {
+  ...markdownComponents,
+  img: () => null,
+  a: ({ href, children }) => {
+    // In collapsed view, render video links as plain text
+    if (href && /youtube|vimeo|loom/i.test(href)) return <>{children}</>;
+    return <a href={href}>{children}</a>;
+  },
+};
+
+function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content: string }) {
+  if (!media || media.length === 0) return null;
+
+  // Filter out items already rendered inline via markdown content
+  const extra = media.filter(m => !content.includes(m.url));
+  if (extra.length === 0) return null;
+
+  return (
+    <div className="flex flex-wrap gap-2 mt-2">
+      {extra.map((item, i) => {
+        if (item.type === "image" || item.type === "gif") {
+          const src = item.r2Url ?? item.url;
+          return (
+            <img
+              key={i}
+              src={src}
+              alt={item.alt || ""}
+              loading="lazy"
+              className="rounded-md max-h-48 object-contain"
+            />
+          );
+        }
+        return null;
+      })}
+    </div>
+  );
 }
 
 const COLLAPSED_MAX_HEIGHT = 72; // ~4.5em at 16px
@@ -82,13 +192,14 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
       >
         {expanded ? (
           <div className={markdownClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>{markdownContent}</ReactMarkdown>
+            <MediaGallery media={release.media} content={markdownContent} />
           </div>
         ) : (
           <>
             <div ref={contentRef} className="max-h-[4.5em] overflow-hidden">
               <div className={`${markdownClasses} text-stone-500 [&_strong]:text-stone-500`}>
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{markdownContent}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
               </div>
             </div>
             {isOverflowing && (
