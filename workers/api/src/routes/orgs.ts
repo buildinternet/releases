@@ -17,6 +17,7 @@ orgRoutes.get("/orgs", async (c) => {
       slug: organizations.slug,
       name: organizations.name,
       domain: organizations.domain,
+      description: organizations.description,
       id: organizations.id,
     })
     .from(organizations)
@@ -46,6 +47,7 @@ orgRoutes.get("/orgs", async (c) => {
         slug: org.slug,
         name: org.name,
         domain: org.domain,
+        description: org.description,
         sourceCount: srcCount.n,
         releaseCount: relCount.n,
         lastActivity: latest.maxDate ?? null,
@@ -151,6 +153,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     slug: org.slug,
     name: org.name,
     domain: org.domain,
+    description: org.description,
     sourceCount: orgSources.length,
     releaseCount: totalReleases.n,
     releasesLast30Days,
@@ -164,7 +167,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
 orgRoutes.post("/orgs", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ name: string; slug?: string; domain?: string }>();
+  const body = await c.req.json<{ name: string; slug?: string; domain?: string; description?: string }>();
 
   if (!body.name) return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
 
@@ -174,7 +177,7 @@ orgRoutes.post("/orgs", async (c) => {
   try {
     const [org] = await db
       .insert(organizations)
-      .values({ name: body.name, slug, domain: body.domain ?? null, createdAt: now, updatedAt: now })
+      .values({ name: body.name, slug, domain: body.domain ?? null, description: body.description ?? null, createdAt: now, updatedAt: now })
       .returning();
     return c.json(org, 201);
   } catch (err) {
@@ -188,14 +191,15 @@ orgRoutes.post("/orgs", async (c) => {
 orgRoutes.patch("/orgs/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; domain?: string }>();
+  const body = await c.req.json<{ name?: string; domain?: string | null; description?: string | null }>();
 
   const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const updates: Record<string, string> = { updatedAt: new Date().toISOString() };
+  const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
   if (body.name) updates.name = body.name;
   if (body.domain !== undefined) updates.domain = body.domain;
+  if (body.description !== undefined) updates.description = body.description;
 
   const [updated] = await db.update(organizations).set(updates).where(eq(organizations.id, org.id)).returning();
   return c.json(updated);

@@ -11,6 +11,7 @@ export function handleOrgs() {
       slug: organizations.slug,
       name: organizations.name,
       domain: organizations.domain,
+      description: organizations.description,
       id: organizations.id,
     })
     .from(organizations)
@@ -30,6 +31,7 @@ export function handleOrgs() {
       slug: org.slug,
       name: org.name,
       domain: org.domain,
+      description: org.description,
       sourceCount: srcCount.n,
       releaseCount: relCount.n,
       lastActivity: latest.maxDate ?? null,
@@ -77,7 +79,7 @@ export function handleOrgDetail(slug: string) {
     .from(sources).where(eq(sources.orgId, org.id)).all();
 
   return {
-    slug: org.slug, name: org.name, domain: org.domain,
+    slug: org.slug, name: org.name, domain: org.domain, description: org.description,
     sourceCount: orgSources.length, releaseCount: totalReleases.n,
     releasesLast30Days: metrics.releasesLast30Days,
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,

@@ -19,13 +19,15 @@ export function registerOrgCommand(program: Command) {
     .argument("<name>", "Organization name")
     .option("--domain <domain>", "Primary domain (e.g. vercel.com)")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
+    .option("--description <text>", "Brief product description (one sentence)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
   released org add "Acme Corp"
   released org add "Acme Corp" --domain acme.com
+  released org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
   released org add "Acme Corp" --slug acme --json`)
-    .action(async (name: string, opts: { domain?: string; slug?: string; json?: boolean }) => {
+    .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; json?: boolean }) => {
       const slug = opts.slug ?? toSlug(name);
 
       const existing = await findOrg(slug);
@@ -34,7 +36,7 @@ Examples:
         process.exit(1);
       }
 
-      const created = await createOrg(name, { slug, domain: opts.domain });
+      const created = await createOrg(name, { slug, domain: opts.domain, description: opts.description });
 
       if (opts.json) {
         console.log(JSON.stringify(created, null, 2));
@@ -122,6 +124,7 @@ Examples:
       console.log(chalk.bold(found.name));
       console.log(`  Slug:    ${found.slug}`);
       console.log(`  Domain:  ${found.domain ?? chalk.dim("—")}`);
+      if (found.description) console.log(`  About:   ${found.description}`);
       console.log(`  Created: ${found.createdAt}`);
       console.log(`  Updated: ${found.updatedAt}`);
 

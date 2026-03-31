@@ -10,7 +10,7 @@ import {
   findSourceBySlug, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
   isUrlExcluded, listIgnoredUrls, addIgnoredUrl, removeIgnoredUrl,
   listBlockedUrls, addBlockedUrl, removeBlockedUrl,
-  suppressRelease, unsuppressRelease,
+  suppressRelease, unsuppressRelease, createOrg,
 } from "../db/queries.js";
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -499,9 +499,9 @@ server.registerTool("add_organization", {
     name: z.string().describe("Organization name"),
     domain: z.string().optional().describe("Primary domain (e.g. vercel.com)"),
     slug: z.string().optional().describe("Custom slug (auto-derived from name if omitted)"),
+    description: z.string().optional().describe("Brief product description, one sentence (e.g. 'Event-driven durable workflow engine for TypeScript')"),
   },
-}, async ({ name, domain, slug }) => {
-  const db = getDb();
+}, async ({ name, domain, slug, description }) => {
   const orgSlug = slug ?? toSlug(name);
 
   const existing = await findOrg(orgSlug);
@@ -509,15 +509,7 @@ server.registerTool("add_organization", {
     return textResult(`Organization with slug "${orgSlug}" already exists.`);
   }
 
-  const now = new Date().toISOString();
-  const [created] = await db.insert(organizations).values({
-    name,
-    slug: orgSlug,
-    domain: domain ?? null,
-    createdAt: now,
-    updatedAt: now,
-  }).returning();
-
+  const created = await createOrg(name, { slug: orgSlug, domain, description });
   return textResult(`Organization added: ${created.name} (${created.slug})`);
 });
 

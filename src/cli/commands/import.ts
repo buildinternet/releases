@@ -32,6 +32,7 @@ interface ManifestOrg {
   name: string;
   slug?: string;
   domain?: string;
+  description?: string;
   accounts?: ManifestAccount[];
   sources?: ManifestSource[];
 }
@@ -247,6 +248,7 @@ Examples:
               org = await createOrg(orgEntry.name, {
                 slug: orgSlug,
                 domain: orgEntry.domain,
+                description: orgEntry.description,
               });
               report.created.orgs++;
               if (!opts.json) {

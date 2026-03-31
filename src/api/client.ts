@@ -569,11 +569,11 @@ export async function createSource(data: {
 
 export async function createOrg(
   name: string,
-  opts?: { slug?: string; domain?: string },
+  opts?: { slug?: string; domain?: string; description?: string },
 ): Promise<Organization> {
   return apiFetch<Organization>("/api/orgs", {
     method: "POST",
-    body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain }),
+    body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain, description: opts?.description }),
   });
 }
 

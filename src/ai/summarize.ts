@@ -14,6 +14,8 @@ interface SummaryInput {
   type: "rolling" | "monthly";
   /** For monthly: "March 2026" */
   period?: string;
+  /** Brief product description to ground the summary for lesser-known products */
+  orgDescription?: string;
 }
 
 interface SummaryResult {
@@ -23,35 +25,28 @@ interface SummaryResult {
 
 const ROLLING_SYSTEM_PROMPT = `You summarize what a software product has been shipping recently.
 
-Write for a developer audience at a casual, approachable reading level. Keep it clear and direct — stick to what shipped and where the product is heading.
+Write for a developer audience. Identify the thread — what direction is the product moving? Open with the theme, then mention 2-3 specifics that illustrate it. Don't list features; tell the story of where the product is going.
 
 Guidelines:
 
-1. Focus on what shipped — group related changes into themes rather than listing features one by one
-   - Good: "Lots of work on developer tooling lately, including multi-file editing and a new MCP integration"
-   - Bad: "Three major features shipped: multi-file editing, MCP integration, and performance improvements"
-2. Mention specific features or releases when they help illustrate a theme
-3. Scale your response to how much actually happened:
+1. Scale to how much actually happened:
    - Quiet period (1-3 releases): 1-2 sentences
    - Moderate activity (4-10 releases): 2-4 sentences
-   - Busy period (10+ releases): A short paragraph
-4. Prioritize the most recent and most impactful changes
-5. Call out breaking changes or major version bumps if present
-6. Don't editorialize — no commentary on how "active" or "busy" the team has been, no judgments about strategy or positioning. Just describe what shipped.
+   - Busy period (10+ releases): 3-4 sentences
+2. Call out breaking changes or major version bumps if present
+3. Don't editorialize — no commentary on how "active" or "busy" the team has been, no judgments about strategy. Just describe what shipped and where it's heading.
 
 Write in third person, present tense. No headers, no bullet points, no markdown — just plain prose.`;
 
 const MONTHLY_SYSTEM_PROMPT = `You write monthly summaries of what a software product shipped.
 
-Write for a developer audience at a casual, approachable reading level. Stick to what shipped.
+Write for a developer audience. Identify the theme — what did this month move forward? Open with the direction, then name 1-2 specifics that illustrate it. Don't list features; tell the story of what the month was about.
 
 Guidelines:
 
-1. Group related changes into themes — what direction did the product move this month?
-2. Mention specific features when they help illustrate the theme
-3. Scale length to how much happened (1-2 sentences if quiet, a short paragraph if busy)
-4. Note any breaking changes or major version bumps
-5. Don't editorialize — no commentary on how active the team was, no judgments about strategy. Just describe what shipped.
+1. Scale length to how much happened (1-2 sentences if quiet, 2-3 sentences if busy)
+2. Note any breaking changes or major version bumps
+3. Don't editorialize — no commentary on how active the team was, no judgments about strategy. Just describe what shipped.
 
 Write in third person, past tense. No headers, no bullet points, no markdown — just plain prose.`;
 
@@ -69,7 +64,7 @@ function formatReleasesForPrompt(releases: Release[]): string {
 }
 
 export async function generateSummary(input: SummaryInput): Promise<SummaryResult | null> {
-  const { sourceName, sourceSlug, releases, type, period } = input;
+  const { sourceName, sourceSlug, releases, type, period, orgDescription } = input;
 
   if (releases.length === 0) {
     return null;
@@ -79,10 +74,12 @@ export async function generateSummary(input: SummaryInput): Promise<SummaryResul
   const model = config.summaryModel();
   const systemPrompt = type === "rolling" ? ROLLING_SYSTEM_PROMPT : MONTHLY_SYSTEM_PROMPT;
 
+  const productLabel = orgDescription?.trim() ? `${sourceName} (${orgDescription.trim()})` : sourceName;
+
   const userMessage =
     type === "rolling"
-      ? `Summarize the recent release activity for ${sourceName}. Here are the releases from the last ${input.windowDays ?? DEFAULT_WINDOW_DAYS} days:\n\n${formatReleasesForPrompt(releases)}`
-      : `Summarize the release activity for ${sourceName} during ${period}:\n\n${formatReleasesForPrompt(releases)}`;
+      ? `Summarize the recent release activity for ${productLabel}. Here are the releases from the last ${input.windowDays ?? DEFAULT_WINDOW_DAYS} days:\n\n${formatReleasesForPrompt(releases)}`
+      : `Summarize the release activity for ${productLabel} during ${period}:\n\n${formatReleasesForPrompt(releases)}`;
 
   try {
     const response = await client.messages.create({

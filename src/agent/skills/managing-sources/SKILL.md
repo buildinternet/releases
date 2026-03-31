@@ -29,6 +29,16 @@ released add <name> --url <url> --feed-url <feed>   # Explicit feed URL
 released add <name> --url <url> --skip-eval         # Skip evaluation
 ```
 
+### Organization descriptions
+
+When creating an org, include a brief one-sentence product description. This grounds AI summaries for lesser-known products:
+
+```bash
+released org add "Trigger.dev" --domain trigger.dev --description "Open-source background job framework for TypeScript"
+```
+
+The description is also supported in import manifests (`"description": "..."`) and the MCP `add_organization` tool.
+
 Types: `github`, `scrape`, `feed`, `agent`.
 
 When no `--type` is given, the CLI runs `evaluateChangelog()` to auto-detect the best method. Use `--skip-eval` for batch operations where you already know the type.

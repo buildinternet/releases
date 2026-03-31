@@ -8,7 +8,7 @@ import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
   findSourceBySlug, listAllSources, listFetchableSources,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
-  upsertSummary, getMonthlySummary, getRecentReleases,
+  upsertSummary, getMonthlySummary, getRecentReleases, getOrgById,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -412,10 +412,12 @@ Examples:
           // Generate release summary if enabled
           if (inserted > 0 && opts.summarize !== false) {
             try {
-              const summarizeEnabled = await isSummarizationEnabled(source);
+              const org = source.orgId ? await getOrgById(source.orgId) : null;
+              const summarizeEnabled = await isSummarizationEnabled(source, org);
               if (summarizeEnabled) {
                 const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
                 const recentReleases = await getRecentReleases(source.id, cutoff, source.slug);
+                const orgDescription = org?.description || undefined;
 
                 if (recentReleases.length > 0) {
                   // Rolling summary
@@ -425,6 +427,7 @@ Examples:
                     releases: recentReleases,
                     windowDays: DEFAULT_WINDOW_DAYS,
                     type: "rolling",
+                    orgDescription,
                   });
                   if (rolling) {
                     await upsertSummary({
@@ -460,6 +463,7 @@ Examples:
                         releases: monthlyReleases,
                         type: "monthly",
                         period: monthName,
+                        orgDescription,
                       });
                       if (monthly) {
                         await upsertSummary({

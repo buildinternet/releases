@@ -539,7 +539,7 @@ export async function getKnownReleasesForSource(
 
 export async function createOrg(
   name: string,
-  opts?: { slug?: string; domain?: string },
+  opts?: { slug?: string; domain?: string; description?: string },
 ): Promise<Organization> {
   if (isRemoteMode()) return apiClient.createOrg(name, opts);
   const db = getDb();
@@ -549,6 +549,7 @@ export async function createOrg(
     name,
     slug,
     domain: opts?.domain ?? null,
+    description: opts?.description ?? null,
     createdAt: now,
     updatedAt: now,
   }).returning();

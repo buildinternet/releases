@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { findSourceBySlug, getRecentReleases, upsertSummary } from "../../db/queries.js";
+import { findSourceBySlug, getRecentReleases, upsertSummary, getOrgById } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { daysAgoIso } from "../../lib/dates.js";
@@ -31,6 +31,8 @@ export function registerSummarizeCommand(program: Command) {
       }
 
       const windowDays = parseInt(opts.window ?? String(DEFAULT_WINDOW_DAYS));
+      const org = source.orgId ? await getOrgById(source.orgId) : null;
+      const orgDescription = org?.description || undefined;
 
       if (opts.monthly) {
         const now = new Date();
@@ -60,6 +62,7 @@ export function registerSummarizeCommand(program: Command) {
           releases: monthlyReleases,
           type: "monthly",
           period: monthName,
+          orgDescription,
         });
 
         if (!result) {
@@ -101,6 +104,7 @@ export function registerSummarizeCommand(program: Command) {
           releases: recentReleases,
           windowDays,
           type: "rolling",
+          orgDescription,
         });
 
         if (!result) {

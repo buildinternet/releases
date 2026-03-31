@@ -68,6 +68,10 @@ You have access to the Released CLI at: ${cliCmd}
 - ignore add --org <org> <url>: Ignore a URL for an org
 - block list --json: Show globally blocked URLs/domains
 - block add <url>: Block a URL globally
+- org add <name> [--domain <domain>] [--description <text>] [--slug <slug>]: Create an organization
+- org show <slug>: Show org details
+
+When creating an organization, always include a --description with a brief one-sentence product description (e.g. "Event-driven durable workflow engine for TypeScript"). This is used to ground AI summaries for lesser-known products.
 
 ## Subagents
 
