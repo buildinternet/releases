@@ -1,17 +1,9 @@
 # Ignore everything, then allowlist only what the sandbox needs
 *
 
-# Project config
-!CLAUDE.md
-!package.json
-!bun.lock
-!tsconfig.json
+# Compiled binaries
+!dist/released
+!dist/released-mcp-browser
 
-# Application source
-!src/
-
-# Agent skills (copied to .claude/skills/ in Dockerfile)
+# Agent skills (copied to /usr/share/released/skills/ and .claude/skills/ in Dockerfile)
 !src/agent/skills/
-
-# Sandbox WebSocket log server
-!workers/discovery/src/
