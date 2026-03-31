@@ -144,7 +144,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       ? `${apiUrl}/api/status/fetch-log?after=${encodeURIComponent(after)}`
       : `${apiUrl}/api/status/fetch-log`;
     return Promise.all([
-      safeFetch(`${apiUrl}/api/status/sessions`),
+      safeFetch(`${apiUrl}/api/sessions`),
       safeFetch(fetchLogUrl),
       safeFetch(`${apiUrl}/api/status/usage`),
     ]).then(([s, f, u]) => {
@@ -301,7 +301,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const fetchLogsForSession = useCallback((sid: string) => {
     if (fetchedLogsRef.current.has(sid)) return;
     fetchedLogsRef.current.add(sid);
-    fetch(`${apiUrl}/api/status/sessions/${sid}/logs`)
+    fetch(`${apiUrl}/api/sessions/${sid}/logs`)
       .then((r) => r.ok ? r.json() : null)
       .then((logs: string[] | null) => {
         if (logs?.length) {
@@ -515,10 +515,10 @@ function SessionsTable({
                     title="Dismiss"
                     onClick={(e) => {
                       e.stopPropagation();
-                      fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" });
+                      fetch(`${apiUrl}/api/sessions/${session.sessionId}`, { method: "DELETE" });
                       onDismiss(session.sessionId);
                     }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/api/status/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/api/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
                   >
                     &times;
                   </span>

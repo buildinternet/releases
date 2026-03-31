@@ -620,11 +620,17 @@ export async function postStatusEvent(event: {
   type: string;
   sessionId: string;
   [key: string]: unknown;
-}): Promise<void> {
-  await apiFetch("/api/status/event", {
-    method: "POST",
-    body: JSON.stringify(event),
-  });
+}): Promise<{ cancelRequested: boolean }> {
+  try {
+    const result = await apiFetch<{ cancelRequested?: boolean }>("/api/status/event", {
+      method: "POST",
+      body: JSON.stringify(event),
+    });
+    return { cancelRequested: result?.cancelRequested === true };
+  } catch {
+    // Graceful fallback if the response isn't JSON or the request fails
+    return { cancelRequested: false };
+  }
 }
 
 // ── Recent releases ──

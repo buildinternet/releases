@@ -46,7 +46,17 @@ export class StatusHub extends DurableObject {
     if (request.method === "POST" && url.pathname === "/event") {
       const event = (await request.json()) as StatusMessage;
       await this.handleEvent(event);
-      return new Response("ok", { status: 200 });
+      // Piggyback cancelRequested on the response so the CLI doesn't need a separate poll
+      let cancelRequested = false;
+      const sid = event.sessionId as string | undefined;
+      if (sid) {
+        const session = await this.ctx.storage.get<SessionState>(`session:${sid}`);
+        cancelRequested = session?.cancelRequested === true;
+      }
+      return new Response(JSON.stringify({ cancelRequested }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
     // WebSocket upgrade for browser clients

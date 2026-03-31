@@ -191,28 +191,38 @@ Examples:
         }).catch(() => {});
       }
 
-      function progressSession(logLine?: string) {
+      async function progressSession(logLine?: string) {
         if (!isRemoteMode()) return;
         const now = Date.now();
         // Always send if there's a log line, otherwise throttle
         if (!logLine && now - lastProgressAt < PROGRESS_INTERVAL_MS && sessionSourcesFetched < targetSources.length) return;
         lastProgressAt = now;
         const remainingSlugs = targetSources.slice(sessionSourcesFetched).map((s) => s.slug);
-        apiClient.postStatusEvent({
-          type: "session:progress",
-          sessionId,
-          step: "fetching",
-          totalSources: targetSources.length,
-          sourcesFetched: sessionSourcesFetched,
-          releasesFound: sessionReleasesFound,
-          releasesInserted: sessionReleasesInserted,
-          activeSources: remainingSlugs,
-          ...(logLine ? { logLine, currentAction: logLine } : {}),
-        }).catch(() => {});
+        try {
+          const result = await apiClient.postStatusEvent({
+            type: "session:progress",
+            sessionId,
+            step: "fetching",
+            totalSources: targetSources.length,
+            sourcesFetched: sessionSourcesFetched,
+            releasesFound: sessionReleasesFound,
+            releasesInserted: sessionReleasesInserted,
+            activeSources: remainingSlugs,
+            ...(logLine ? { logLine, currentAction: logLine } : {}),
+          });
+          if (result.cancelRequested && !stopping) {
+            stopping = true;
+            if (!opts.json) {
+              process.stderr.write(`\n${chalk.yellow(CANCEL_MSG)}\n`);
+            }
+          }
+        } catch {
+          // Non-critical — don't fail the fetch
+        }
       }
 
       let cancelCheckedAt = 0;
-      const CANCEL_CHECK_INTERVAL_MS = 5000;
+      const CANCEL_CHECK_INTERVAL_MS = 30000; // Fallback only — primary cancel detection is piggybacked on progress events
 
       async function checkCancelled(): Promise<boolean> {
         if (!isRemoteMode()) return false;
