@@ -10,6 +10,7 @@ import { fetchLogRoutes } from "./routes/fetch-log.js";
 import { usageLogRoutes } from "./routes/usage-log.js";
 import { ignoreRoutes } from "./routes/ignore.js";
 import { statusRoutes } from "./routes/status.js";
+import { sessionRoutes } from "./routes/sessions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
@@ -44,6 +45,7 @@ app.route("/api", mediaRoutes);
 app.use("/api/*", authMiddleware);
 app.use("/api/*", dbHealthCheck);
 
+app.route("/api", sessionRoutes);
 app.route("/api", statsRoutes);
 app.route("/api", orgRoutes);
 app.route("/api", sourceRoutes);

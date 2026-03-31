@@ -24,6 +24,7 @@ import { registerImportCommand } from "./commands/import.js";
 import { registerEvaluateCommand } from "./commands/evaluate.js";
 import { registerSummarizeCommand } from "./commands/summarize.js";
 import { registerMediaCommand } from "./commands/media.js";
+import { registerTaskCommand } from "./commands/task.js";
 
 export const program = new Command()
   .name("released")
@@ -37,7 +38,7 @@ Command Groups:
   Organizations: org (add, list, show, remove, link, unlink)
   Releases:      release (show, edit, delete, suppress, unsuppress)
   Blocking:      block (list, add, remove), ignore (list, add, remove)
-  Agents:        onboard, serve, api
+  Agents:        onboard, serve, api, task
   Media:         media (backfill)
   Utilities:     usage
 
@@ -68,3 +69,4 @@ registerImportCommand(program);
 registerEvaluateCommand(program);
 registerSummarizeCommand(program);
 registerMediaCommand(program);
+registerTaskCommand(program);

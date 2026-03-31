@@ -3,24 +3,15 @@ import { and, desc, sql, gte, lte } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources, organizations, usageLog } from "../../../../src/db/schema.js";
 import type { Env } from "../index.js";
+import { getStatusHub } from "../utils.js";
 
 export const statusRoutes = new Hono<Env>();
-
-function getStatusHub(env: Env["Bindings"]) {
-  return env.STATUS_HUB.get(env.STATUS_HUB.idFromName("global"));
-}
 
 statusRoutes.get("/status/ws", async (c) => {
   if (c.req.header("Upgrade") !== "websocket") {
     return c.text("Expected WebSocket upgrade", 426);
   }
   return getStatusHub(c.env).fetch(c.req.raw);
-});
-
-statusRoutes.get("/status/sessions", async (c) => {
-  const res = await getStatusHub(c.env).fetch(new Request("https://do/sessions"));
-  const sessions = await res.json();
-  return c.json(sessions);
 });
 
 statusRoutes.get("/status/fetch-log", async (c) => {
@@ -75,19 +66,6 @@ statusRoutes.get("/status/usage", async (c) => {
     .groupBy(usageLog.model);
 
   return c.json(rows);
-});
-
-statusRoutes.get("/status/sessions/:sessionId/logs", async (c) => {
-  const sessionId = c.req.param("sessionId");
-  const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}/logs`));
-  const logs = await res.json();
-  return c.json(logs);
-});
-
-statusRoutes.delete("/status/sessions/:sessionId", async (c) => {
-  const sessionId = c.req.param("sessionId");
-  await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}`, { method: "DELETE" }));
-  return c.json({ ok: true });
 });
 
 statusRoutes.post("/status/event", async (c) => {

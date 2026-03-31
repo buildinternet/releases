@@ -35,6 +35,7 @@ Type-check: `npx tsc --noEmit`
 - Smart fetch: `fetch --stale <hours>` respects backoff (`nextFetchAfter`) and `fetchPriority`. `fetch --retry-errors` retries sources whose last fetch failed. Backoff counters (`consecutiveNoChange`, `consecutiveErrors`) on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h). Default max of 200 releases per source prevents API pagination limits (e.g., GitHub's 10K cap). Use `--max <n>` to adjust or `--all` to remove the cap.
 - Ignored URLs are **org-scoped** — a URL ignored for one org can still be valid for another. The `ignored_urls` table requires `orgId`. CLI: `ignore list/add/remove --org <org>`. Blocked URLs (`blocked_urls` table) are **global** — for spam domains and known-bad URLs. CLI: `block list/add/remove`. Both lists are checked by `isUrlExcluded()` before adding sources.
 - Release suppression: individual releases can be suppressed (`release suppress <id> --reason "..."`) to hide them from queries and search without deleting. Suppressed releases are filtered out of all read paths (search, latest, stats, API). Use `release unsuppress <id>` to restore.
+- Remote mode fetch requires a filter (`--stale`, `--unfetched`, `--retry-errors`, or a source slug). Bare `fetch` is blocked in remote mode to prevent expensive bulk operations. Remote concurrency defaults to 3, capped at 5.
 
 ## Common CLI Patterns
 
@@ -42,6 +43,8 @@ Type-check: `npx tsc --noEmit`
 bun src/index.ts list <slug> --json     # Inspect a single source
 bun src/index.ts fetch <slug> --max 5   # Fetch limited releases for one source
 bun src/index.ts fetch-log <slug>       # Check recent fetch history for a source
+bun src/index.ts task list              # List active/recent remote sessions
+bun src/index.ts task cancel <id>       # Cancel a running remote session
 ```
 
 - Source slug is always a **positional argument** (e.g., `fetch claude-code`), not a flag. The `fetch` command also accepts `--source <slug>` as an alias for convenience.
@@ -55,6 +58,8 @@ When `RELEASED_API_URL` is set, the CLI routes data operations through the API W
 **Remote mode**: Set `RELEASED_API_URL` and `RELEASED_API_KEY`. All data operations go through the Cloudflare Worker API backed by D1.
 
 The API Worker lives at `workers/api/` and shares the Drizzle schema from `src/db/schema.ts`. D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
+
+Session management: `task list` shows active sessions, `task cancel <id>` requests cancellation. Sessions track active source slugs for duplicate detection — the CLI refuses to start a fetch if overlapping sources are already in-flight.
 
 ## Agent Architecture
 

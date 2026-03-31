@@ -11,6 +11,10 @@ export function isConflictError(err: unknown): boolean {
   return false;
 }
 
+export function getStatusHub(env: { STATUS_HUB: DurableObjectNamespace }) {
+  return env.STATUS_HUB.get(env.STATUS_HUB.idFromName("global"));
+}
+
 export function computeAvgPerWeek(totalReleases: number, oldestPublishedAt: string | null): number {
   if (totalReleases === 0 || !oldestPublishedAt) return 0;
   const weeks = (Date.now() - new Date(oldestPublishedAt).getTime()) / (7 * 24 * 60 * 60 * 1000);

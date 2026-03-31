@@ -134,3 +134,12 @@ released discover <domain> --json              # Discovery candidates
 ```
 
 Pipe through `jq` for filtering when working with large datasets.
+
+## Task Management
+
+Monitor and control remote fetch sessions:
+
+```bash
+released task list                             # Active remote sessions
+released task cancel <sessionId>               # Cancel a running session
+```
