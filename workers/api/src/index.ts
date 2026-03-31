@@ -21,6 +21,7 @@ export type Env = {
     API_SECRET: string;
     STATUS_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;
+    MEDIA_ORIGIN?: string;
   };
 };
 

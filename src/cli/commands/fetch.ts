@@ -9,6 +9,7 @@ import {
   findSourceBySlug, listAllSources, listFetchableSources,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById,
+  insertMediaAssets,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -378,17 +379,15 @@ Examples:
 
           // Upload media to R2 and rewrite URLs (remote mode only)
           const apiUrl = config.apiUrl();
+          let pendingAssets: Array<import("../../lib/media.js").UploadResult & { sourceId: string }> = [];
           if (apiUrl) {
-            // Parse all media from all rows, track which row they belong to
             const parsed = rows.map((row) => {
               if (!row.media || row.media === "[]") return [];
               try { return JSON.parse(row.media) as MediaRef[]; } catch { return []; }
             });
             const allMedia = parsed.flat().filter(m => m.url);
             if (allMedia.length > 0) {
-              // Single batched upload across all releases
-              await processMediaForR2(allMedia, source.slug);
-              // Rewrite URLs in content for each row
+              const uploadResults = await processMediaForR2(allMedia, source.slug);
               for (let i = 0; i < rows.length; i++) {
                 const media = parsed[i];
                 if (media.length === 0) continue;
@@ -399,10 +398,19 @@ Examples:
                 rows[i].content = content;
                 rows[i].media = JSON.stringify(media);
               }
+              pendingAssets = uploadResults.map((r) => ({ ...r, sourceId: source.id }));
             }
           }
 
-          const inserted = await insertReleases(source, rows);
+          // Insert releases and register media assets concurrently
+          const [inserted] = await Promise.all([
+            insertReleases(source, rows),
+            pendingAssets.length > 0
+              ? insertMediaAssets(pendingAssets).then((n) => {
+                  logger.info(`Registered ${n} media asset(s) for ${source.slug}`);
+                })
+              : Promise.resolve(),
+          ]);
           totalInserted += inserted;
 
           // Detect changelog URL for GitHub sources (one-time)

@@ -2,9 +2,9 @@ import { eq, desc, gte, lt, and, or, sql, inArray, count, isNotNull } from "driz
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
-  type ReleaseSummary, type NewReleaseSummary,
+  type ReleaseSummary, type NewReleaseSummary, type MediaAsset,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -990,4 +990,60 @@ export async function getMonthlySummary(
       ),
     );
   return row;
+}
+
+// ── Media Assets ──
+
+import type { UploadResult } from "../lib/media.js";
+
+export interface MediaAssetInput extends UploadResult {
+  sourceId?: string | null;
+  releaseId?: string | null;
+}
+
+/** Insert media assets, deduplicating by content_hash. Returns count of newly inserted rows. */
+export async function insertMediaAssets(assets: MediaAssetInput[]): Promise<number> {
+  if (assets.length === 0) return 0;
+
+  if (isRemoteMode()) {
+    const result = await apiClient.insertMediaAssets(assets);
+    return result.inserted;
+  }
+
+  const db = getDb();
+  let inserted = 0;
+  for (let i = 0; i < assets.length; i += 500) {
+    const chunk = assets.slice(i, i + 500);
+    const result = await db
+      .insert(mediaAssets)
+      .values(chunk.map((a) => ({
+        r2Key: a.r2Key,
+        sourceUrl: a.sourceUrl,
+        sourceFilename: a.sourceFilename,
+        contentType: a.contentType,
+        contentHash: a.contentHash,
+        byteSize: a.byteSize,
+        sourceId: a.sourceId ?? null,
+        releaseId: a.releaseId ?? null,
+      })))
+      .onConflictDoNothing()
+      .returning({ id: mediaAssets.id });
+    inserted += result.length;
+  }
+  return inserted;
+}
+
+/** Get total media asset count and byte size. */
+export async function getMediaAssetStats(): Promise<{ count: number; totalBytes: number }> {
+  if (isRemoteMode()) {
+    return apiClient.getMediaAssetStats();
+  }
+  const db = getDb();
+  const [row] = await db
+    .select({
+      count: count(),
+      totalBytes: sql<number>`COALESCE(SUM(${mediaAssets.byteSize}), 0)`,
+    })
+    .from(mediaAssets);
+  return { count: row?.count ?? 0, totalBytes: row?.totalBytes ?? 0 };
 }

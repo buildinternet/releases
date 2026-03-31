@@ -656,3 +656,20 @@ export async function getMonthlySummary(
   );
   return rows[0];
 }
+
+// ── Media Assets ──
+
+import type { MediaAssetInput } from "../db/queries.js";
+
+export async function insertMediaAssets(
+  assets: MediaAssetInput[],
+): Promise<{ inserted: number }> {
+  return apiFetch("/api/media/assets", {
+    method: "POST",
+    body: JSON.stringify({ assets }),
+  });
+}
+
+export async function getMediaAssetStats(): Promise<{ count: number; totalBytes: number }> {
+  return apiFetch("/api/media/assets/stats");
+}
