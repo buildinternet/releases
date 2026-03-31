@@ -20,6 +20,7 @@ export interface AgentDiscoveredSource {
   duplicateOf?: string;
   approved?: boolean;
   fetched?: boolean;
+  contentDepth?: "full" | "summary-only";
 }
 
 export interface DiscoveryState {
@@ -57,7 +58,7 @@ You have access to the Released CLI at: ${cliCmd}
 
 ## Available Commands
 
-- list [slug] [--json] [--org <org>]: Show indexed sources
+- list [slug] [--json] [--org <org>] [--has-feed] [--enrichable]: Show indexed sources
 - evaluate <url> [--json]: Evaluate a URL for the best ingestion method
 - discover <domain> [--json]: Probe a domain for changelog URLs, feeds, and GitHub repos
 - add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>] [--skip-eval] [--batch <file>]: Add source(s)
@@ -68,6 +69,7 @@ You have access to the Released CLI at: ${cliCmd}
 - ignore add --org <org> <url>: Ignore a URL for an org
 - block list --json: Show globally blocked URLs/domains
 - block add <url>: Block a URL globally
+- enrich <slug> [--dry-run] [--limit <n>] [--json]: Enrich sparse releases with full page content
 - org add <name> [--domain <domain>] [--description <text>] [--slug <slug>]: Create an organization
 - org show <slug>: Show org details
 
@@ -75,7 +77,17 @@ When creating an organization, always include a --description with a brief one-s
 
 ## Subagents
 
-Delegate CLI tasks to the "bulk-worker" subagent when you need to run multiple commands in parallel (e.g., validating several sources with dry-run fetches).
+Delegate CLI tasks to the "bulk-worker" subagent when you need to run multiple commands in parallel (e.g., validating several sources with dry-run fetches, enriching multiple sources).
+
+## Onboarding Workflow
+
+When onboarding a new company, follow this sequence:
+
+1. **Discover** — find changelog URLs, feeds, and GitHub repos
+2. **Add** — add sources with appropriate types
+3. **Validate** — dry-run fetch each source to check quality
+4. **Fetch** — persist releases for approved sources (only when explicitly told to fetch)
+5. **Enrich feed sources** — after fetching, assess feed content depth and enrich sparse sources. See the "Feed Content Depth Assessment" section in the parsing-changelogs skill. Delegate enrichment to the bulk-worker subagent.
 
 ## Output
 
@@ -100,7 +112,8 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
       "validated": true/false,
       "validationError": "<error message if validation failed>",
       "releaseCount": <number of releases found in dry-run>,
-      "duplicateOf": "<slug if this overlaps another source>"
+      "duplicateOf": "<slug if this overlaps another source>",
+      "contentDepth": "full|summary-only (for feed/scrape sources, based on dry-run content length)"
     }
   ]
 }`;
@@ -260,7 +273,7 @@ export async function runDiscovery(options: DiscoveryOptions): Promise<Discovery
   if (options.githubOrg) hints.push(`Their GitHub organization is ${options.githubOrg}.`);
   const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
 
-  const prompt = `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only.`;
+  const prompt = `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
 
   return runAgent({
     prompt,

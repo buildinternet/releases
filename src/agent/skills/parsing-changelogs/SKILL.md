@@ -67,7 +67,7 @@ Use the `released enrich <slug>` command to hydrate releases that have sparse co
 
 After fetching a feed source, assess whether the releases have meaningful content or just summaries. Many feeds (RSS/Atom) provide only a title and one-line description while the actual release pages have full write-ups with images and detail.
 
-**When to check:** After a feed fetch produces releases where most entries have short content (1-2 sentences) and each has a URL to an individual page.
+**When to check:** After a feed fetch produces releases where most entries have short content (1-2 sentences) and each has a URL to an individual page. This is a required step during onboarding for every feed and scrape source.
 
 **How to check:** Dispatch a bulk-worker subagent to sample 2-3 release URLs. Prompt the subagent:
 
@@ -87,6 +87,8 @@ If feed already provides full content:
 2. No enrichment needed — skip `released enrich` for this source
 
 Once `feedContentDepth` is set, skip the sampling step on future encounters. For automated pipelines, run `released enrich <slug>` after fetch for `summary-only` sources.
+
+**During onboarding:** This assessment is part of the standard onboarding workflow. After fetching each feed/scrape source, immediately assess content depth and enrich if needed before moving to the next source. Do not skip this step — sparse feed content significantly reduces the value of indexed releases.
 
 **Cost visibility:** The `released enrich` command reports token usage. Check aggregate costs with `released usage` filtered to `enrich-judge` and `enrich-extract` operations.
 

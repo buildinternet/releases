@@ -14,7 +14,10 @@ sourceRoutes.get("/sources", async (c) => {
   const db = createDb(c.env.DB);
   const independent = c.req.query("independent") === "true";
   const orgId = c.req.query("orgId");
+  const orgSlug = c.req.query("orgSlug");
   const filterByUrls = c.req.query("filterByUrls") === "true";
+  const hasFeed = c.req.query("has_feed") === "true";
+  const enrichable = c.req.query("enrichable") === "true";
 
   // Filter by URLs — return raw source rows matching the provided url params
   if (filterByUrls) {
@@ -30,9 +33,35 @@ sourceRoutes.get("/sources", async (c) => {
     return c.json(rows);
   }
 
-  const rows = await (independent
-    ? db.select().from(sources).where(isNull(sources.orgId)).orderBy(sources.name)
-    : db.select().from(sources).orderBy(sources.name));
+  // Build conditions for metadata-based filters
+  const conditions = [];
+
+  if (independent) {
+    conditions.push(isNull(sources.orgId));
+  }
+
+  // Resolve org by slug
+  if (orgSlug) {
+    const [org] = await db.select().from(organizations).where(eq(organizations.slug, orgSlug));
+    if (!org) return c.json([]);
+    conditions.push(eq(sources.orgId, org.id));
+  }
+
+  if (hasFeed || enrichable) {
+    conditions.push(
+      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL AND json_extract(${sources.metadata}, '$.feedUrl') != ''`,
+    );
+  }
+
+  if (enrichable) {
+    conditions.push(
+      sql`(json_extract(${sources.metadata}, '$.feedContentDepth') IS NULL OR json_extract(${sources.metadata}, '$.feedContentDepth') = 'summary-only')`,
+    );
+  }
+
+  const rows = conditions.length > 0
+    ? await db.select().from(sources).where(and(...conditions)).orderBy(sources.name)
+    : await db.select().from(sources).orderBy(sources.name);
 
   const result = await Promise.all(
     rows.map(async (src) => {
@@ -65,6 +94,7 @@ sourceRoutes.get("/sources", async (c) => {
         url: src.url,
         orgSlug,
         isPrimary: src.isPrimary ?? false,
+        metadata: src.metadata ?? null,
         releaseCount: relCount.n,
         latestVersion: latest?.version ?? null,
         latestDate: latest?.publishedAt ?? null,

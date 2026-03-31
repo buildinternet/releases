@@ -43,6 +43,9 @@ export interface SourceMetadata {
   changelogUrl?: string;
   changelogDetectedAt?: string;
 
+  // Content depth assessment
+  feedContentDepth?: "full" | "summary-only";
+
   // Summary generation
   summarize?: boolean; // false = opt-out of AI summaries
 }

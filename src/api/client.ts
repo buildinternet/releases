@@ -212,15 +212,25 @@ export interface SourceWithOrg {
   metadata: string | null;
 }
 
-export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
+export async function listSourcesWithOrg(opts?: {
+  orgSlug?: string;
+  hasFeed?: boolean;
+  enrichable?: boolean;
+}): Promise<SourceWithOrg[]> {
+  const params = new URLSearchParams();
+  if (opts?.orgSlug) params.set("orgSlug", opts.orgSlug);
+  if (opts?.hasFeed) params.set("has_feed", "true");
+  if (opts?.enrichable) params.set("enrichable", "true");
+  const qs = params.toString();
+
   // The API GET /api/sources returns enriched source data — map to the shape the CLI needs
   const rows = await apiFetch<Array<{
     slug: string; name: string; type: string; url: string;
     orgSlug: string | null; releaseCount: number;
     latestVersion: string | null; latestDate: string | null;
-  }>>("/api/sources");
+    metadata: string | null;
+  }>>(`/api/sources${qs ? `?${qs}` : ""}`);
 
-  // API doesn't directly return orgName, lastFetchedAt, or metadata, but we map what we can
   return rows.map((r) => ({
     id: "",
     name: r.name,
@@ -228,8 +238,8 @@ export async function listSourcesWithOrg(): Promise<SourceWithOrg[]> {
     type: r.type,
     url: r.url,
     lastFetchedAt: null,
-    orgName: r.orgSlug, // best we have from the sources list endpoint
-    metadata: null,
+    orgName: r.orgSlug,
+    metadata: r.metadata ?? null,
   }));
 }
 
