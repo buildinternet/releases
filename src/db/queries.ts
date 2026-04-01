@@ -1,4 +1,4 @@
-import { eq, desc, gte, lt, and, or, sql, inArray, count, isNotNull } from "drizzle-orm";
+import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
@@ -344,6 +344,7 @@ export async function listSourcesWithOrg(opts?: {
   orgSlug?: string;
   hasFeed?: boolean;
   enrichable?: boolean;
+  query?: string;
 }): Promise<SourceWithOrg[]> {
   if (isRemoteMode()) return apiClient.listSourcesWithOrg(opts);
   const db = getDb();
@@ -365,6 +366,17 @@ export async function listSourcesWithOrg(opts?: {
   if (opts?.enrichable) {
     conditions.push(
       sql`(json_extract(${sources.metadata}, '$.feedContentDepth') IS NULL OR json_extract(${sources.metadata}, '$.feedContentDepth') = 'summary-only')`,
+    );
+  }
+
+  if (opts?.query) {
+    const pattern = `%${opts.query.toLowerCase()}%`;
+    conditions.push(
+      or(
+        like(sql`lower(${sources.name})`, pattern),
+        like(sql`lower(${sources.slug})`, pattern),
+        like(sql`lower(${sources.url})`, pattern),
+      )!,
     );
   }
 

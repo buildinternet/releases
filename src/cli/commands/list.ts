@@ -34,6 +34,7 @@ export function registerListCommand(program: Command) {
     .option("--org <org>", "Filter by organization slug")
     .option("--has-feed", "Only show sources that have a discovered feed URL")
     .option("--enrichable", "Only show sources eligible for content enrichment (have feed, missing or sparse content depth)")
+    .option("--query <text>", "Filter by name, slug, or URL (case-insensitive substring match)")
     .addHelpText("after", `
 Examples:
   released list                       List all sources
@@ -41,8 +42,9 @@ Examples:
   released list --json                List all sources as JSON
   released list --has-feed            Sources with a discovered feed URL
   released list --enrichable          Sources eligible for content enrichment
+  released list --query shadcn        Filter sources by name, slug, or URL
   released list --has-feed --org sentry   Combine filters`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; hasFeed?: boolean; enrichable?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; hasFeed?: boolean; enrichable?: boolean; query?: string }) => {
       // ── Single-source detail view ──
       if (slug) {
         const source = await findSourceBySlug(slug);
@@ -80,6 +82,7 @@ Examples:
         orgSlug: opts.org,
         hasFeed: opts.hasFeed,
         enrichable: opts.enrichable,
+        query: opts.query,
       });
 
       if (allSources.length === 0) {
