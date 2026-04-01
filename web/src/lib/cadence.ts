@@ -45,6 +45,11 @@ export function getProductColor(index: number): string {
   return PRODUCT_COLORS[index % PRODUCT_COLORS.length];
 }
 
+/** Format a version string — prepend "v" only for semver-ish versions (starting with a digit). */
+export function fmtVersion(v: string): string {
+  return /^\d/.test(v) ? `v${v}` : v;
+}
+
 /** Bucket release dates into weekly counts for sparklines and overview charts. */
 export interface WeeklyBucket {
   weekStart: Date;

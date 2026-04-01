@@ -121,6 +121,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
   let releasesLast30Days = 0;
   let avgReleasesPerWeek = 0;
+  let oldestReleaseDate: string | null = null;
 
   if (orgSourceIds.length > 0) {
     const [recent] = await db
@@ -135,6 +136,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
     releasesLast30Days = recent.n;
     avgReleasesPerWeek = computeAvgPerWeek(totals.total, totals.oldest);
+    oldestReleaseDate = totals.oldest;
   }
 
   const [totalReleases] = await db
@@ -159,7 +161,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     releasesLast30Days,
     avgReleasesPerWeek,
     lastFetchedAt: latestFetch.maxFetch ?? null,
-    trackingSince: org.createdAt,
+    trackingSince: oldestReleaseDate ?? org.createdAt,
     accounts,
     sources: sourcesWithStats,
   });
@@ -335,7 +337,7 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   toDate.setUTCDate(toDate.getUTCDate() + 1);
   const toExclusive = toDate.toISOString().slice(0, 10);
 
-  const [bucketRows, statsRows, versionRows] = await Promise.all([
+  const [bucketRows, statsRows, versionRows, earliestVersionRows] = await Promise.all([
     db.all<{
       source_id: string;
       week_start: string;
@@ -391,8 +393,29 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
         WHERE source_id IN ${sourceIds}
           AND (suppressed IS NULL OR suppressed = 0)
           AND published_at IS NOT NULL
+          AND published_at >= ${from}
+          AND published_at < ${toExclusive}
         GROUP BY source_id
       ) latest ON r.source_id = latest.source_id AND r.published_at = latest.max_date
+      WHERE (r.suppressed IS NULL OR r.suppressed = 0)
+    `),
+
+    db.all<{
+      source_id: string;
+      version: string | null;
+    }>(sql`
+      SELECT r.source_id, r.version
+      FROM releases r
+      INNER JOIN (
+        SELECT source_id, MIN(published_at) AS min_date
+        FROM releases
+        WHERE source_id IN ${sourceIds}
+          AND (suppressed IS NULL OR suppressed = 0)
+          AND published_at IS NOT NULL
+          AND published_at >= ${from}
+          AND published_at < ${toExclusive}
+        GROUP BY source_id
+      ) earliest ON r.source_id = earliest.source_id AND r.published_at = earliest.min_date
       WHERE (r.suppressed IS NULL OR r.suppressed = 0)
     `),
   ]);
@@ -400,6 +423,11 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   const latestVersionBySource = new Map<string, string | null>();
   for (const row of versionRows) {
     latestVersionBySource.set(row.source_id, row.version);
+  }
+
+  const earliestVersionBySource = new Map<string, string | null>();
+  for (const row of earliestVersionRows) {
+    earliestVersionBySource.set(row.source_id, row.version);
   }
 
   // Index stats and buckets by source ID
@@ -423,6 +451,7 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
       name: src.name,
       releaseCount: total,
       avgReleasesPerWeek: computeAvgPerWeek(total, oldest),
+      earliestVersion: earliestVersionBySource.get(src.id) ?? null,
       latestVersion: latestVersionBySource.get(src.id) ?? null,
       latestDate,
       weeklyBuckets: bucketMap.get(src.id) ?? [],

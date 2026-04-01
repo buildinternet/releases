@@ -104,6 +104,7 @@ export interface OrgActivitySource {
   name: string;
   releaseCount: number;
   avgReleasesPerWeek: number;
+  earliestVersion: string | null;
   latestVersion: string | null;
   latestDate: string | null;
   weeklyBuckets: Array<{ weekStart: string; count: number }>;

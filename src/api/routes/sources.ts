@@ -97,7 +97,7 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,
     latestVersion, latestDate: latest?.publishedAt ?? null,
     lastFetchedAt: src.lastFetchedAt,
-    trackingSince: src.createdAt,
+    trackingSince: metrics.oldestPublishedAt ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },
   };

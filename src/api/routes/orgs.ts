@@ -84,6 +84,6 @@ export function handleOrgDetail(slug: string) {
     releasesLast30Days: metrics.releasesLast30Days,
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,
     lastFetchedAt: latestFetch.maxFetch ?? null,
-    trackingSince: org.createdAt, accounts, sources: sourcesWithStats,
+    trackingSince: metrics.oldestPublishedAt ?? org.createdAt, accounts, sources: sourcesWithStats,
   };
 }

@@ -6,6 +6,8 @@ import { daysAgoIso } from "../lib/dates.js";
 interface ActivityMetrics {
   releasesLast30Days: number;
   avgReleasesPerWeek: number;
+  /** Earliest release publishedAt — use for trackingSince. */
+  oldestPublishedAt: string | null;
 }
 
 export function getSourceMetrics(sourceId: string): ActivityMetrics {
@@ -24,6 +26,7 @@ export function getSourceMetrics(sourceId: string): ActivityMetrics {
   return {
     releasesLast30Days: recent.n,
     avgReleasesPerWeek: computeAvgPerWeek(totals.total, totals.oldest),
+    oldestPublishedAt: totals.oldest,
   };
 }
 
@@ -31,7 +34,7 @@ export function getOrgMetrics(orgId: string): ActivityMetrics {
   const db = getDb();
   const cutoff = daysAgoIso(30);
   const orgSources = db.select({ id: sources.id }).from(sources).where(eq(sources.orgId, orgId)).all();
-  if (orgSources.length === 0) return { releasesLast30Days: 0, avgReleasesPerWeek: 0 };
+  if (orgSources.length === 0) return { releasesLast30Days: 0, avgReleasesPerWeek: 0, oldestPublishedAt: null };
   const sourceIds = orgSources.map((s) => s.id);
   const inClause = sql`${releases.sourceId} IN (${sql.join(
     sourceIds.map((id) => sql`${id}`),
@@ -50,6 +53,7 @@ export function getOrgMetrics(orgId: string): ActivityMetrics {
   return {
     releasesLast30Days: recent.n,
     avgReleasesPerWeek: computeAvgPerWeek(totals.total, totals.oldest),
+    oldestPublishedAt: totals.oldest,
   };
 }
 

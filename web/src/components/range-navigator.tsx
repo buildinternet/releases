@@ -76,8 +76,8 @@ function pillCls(active: boolean) {
     "px-2 py-0.5 rounded text-[10px] transition-colors",
     "focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-1",
     active
-      ? "bg-blue-50 border border-blue-300 text-blue-600"
-      : "bg-stone-50 border border-stone-200 text-stone-500 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50",
+      ? "bg-blue-50 dark:bg-blue-950 border border-blue-300 dark:border-blue-700 text-blue-600 dark:text-blue-400"
+      : "bg-stone-50 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 text-stone-500 dark:text-stone-400 hover:border-blue-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-950",
   ].join(" ");
 }
 
@@ -144,7 +144,7 @@ function Root({
     <Ctx.Provider value={{ brushStart, brushEnd, setBrush, min, max, buckets, sourceBuckets: (sourceBuckets && sourceBuckets.length > 1) ? sourceBuckets : null, earliestRelease }}>
       <div
         data-slot="range-navigator"
-        className={`bg-white border border-stone-200 rounded-lg px-5 py-4 mb-5 ${className ?? ""}`}
+        className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5 ${className ?? ""}`}
         role="region"
         aria-label="Release timeline range selector"
       >
@@ -165,7 +165,7 @@ function Header({ title = "Releases over time" }: { title?: string }) {
 
   return (
     <div data-slot="range-navigator-header" className="flex justify-between items-center mb-3">
-      <div data-slot="range-navigator-title" className="text-[13px] font-semibold text-stone-900">
+      <div data-slot="range-navigator-title" className="text-[13px] font-semibold text-stone-900 dark:text-stone-100">
         {title}
       </div>
       <div
@@ -295,9 +295,9 @@ function DetailChart() {
         className="flex flex-col items-center justify-center text-stone-400 text-xs gap-1"
         style={{ height: DETAIL_HEIGHT }}
       >
-        <span className="text-stone-500 font-medium">No data in this range</span>
+        <span className="text-stone-500 dark:text-stone-400 font-medium">No data in this range</span>
         {isBeforeEarliest && (
-          <span className="text-stone-400">
+          <span className="text-stone-400 dark:text-stone-500">
             Earliest tracked release: {fmtDate(earliestRelease)}
           </span>
         )}
@@ -360,8 +360,8 @@ function DetailChart() {
                   data-state={visibleCount === 0 ? "empty" : "filled"}
                   className={`flex-1 rounded-t-sm transition-colors duration-75 ${
                     isStacked
-                      ? "data-[state=empty]:bg-stone-100"
-                      : "data-[state=filled]:bg-blue-500 data-[state=filled]:hover:bg-blue-600 data-[state=empty]:bg-stone-100"
+                      ? "data-[state=empty]:bg-stone-100 dark:data-[state=empty]:bg-stone-800"
+                      : "data-[state=filled]:bg-blue-500 data-[state=filled]:hover:bg-blue-600 data-[state=empty]:bg-stone-100 dark:data-[state=empty]:bg-stone-800"
                   }`}
                   style={{
                     height: `${h}px`,
@@ -387,17 +387,17 @@ function DetailChart() {
                   )}
                 </HoverCard.Trigger>
                 {bucket.count > 0 && (
-                  <HoverCard.Content className="bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
-                    <div className="text-[11px] font-medium text-stone-500 mb-1">
+                  <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
+                    <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
                       {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
                     </div>
-                    <div className="text-sm font-semibold text-stone-900">
+                    <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
                       {bucket.count} {bucket.count === 1 ? "release" : "releases"}
                     </div>
                     {isStacked && weekSegments && weekSegments.length > 0 && (
-                      <div className="mt-1.5 pt-1.5 border-t border-stone-100 space-y-0.5">
+                      <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-stone-800 space-y-0.5">
                         {weekSegments.map((seg, si) => (
-                          <div key={si} className="flex items-center gap-1.5 text-[11px] text-stone-600">
+                          <div key={si} className="flex items-center gap-1.5 text-[11px] text-stone-600 dark:text-stone-400">
                             <span
                               className="inline-block w-2 h-2 rounded-sm shrink-0"
                               style={{ backgroundColor: getProductColor(seg.colorIndex) }}
@@ -454,7 +454,7 @@ function DetailChart() {
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: getProductColor(src.colorIndex) }}
                 />
-                <span className={`text-[11px] text-stone-600 ${isHidden ? "line-through" : ""}`}>
+                <span className={`text-[11px] text-stone-600 dark:text-stone-400 ${isHidden ? "line-through" : ""}`}>
                   {src.name}
                 </span>
               </button>
@@ -623,7 +623,7 @@ function Overview() {
       <div
         ref={trackRef}
         data-slot="overview-track"
-        className="relative bg-stone-50 rounded cursor-pointer select-none border border-stone-100"
+        className="relative bg-stone-50 dark:bg-stone-800 rounded cursor-pointer select-none border border-stone-100 dark:border-stone-700"
         style={{ height: OVERVIEW_HEIGHT + 16 }}
         onClick={onTrackClick}
       >
@@ -634,7 +634,7 @@ function Overview() {
             return (
               <div
                 key={i}
-                className="flex-1 rounded-t-[1px] bg-stone-400"
+                className="flex-1 rounded-t-[1px] bg-stone-400 dark:bg-stone-500"
                 style={{ height: `${h}px`, alignSelf: "flex-end" }}
               />
             );
@@ -645,10 +645,10 @@ function Overview() {
         {yearLabels.map((yl) => (
           <div
             key={yl.year}
-            className="absolute top-0 bottom-0 border-l border-stone-400"
+            className="absolute top-0 bottom-0 border-l border-stone-400 dark:border-stone-500"
             style={{ left: `${yl.pct}%` }}
           >
-            <span className="absolute -top-0.5 left-1 text-[9px] font-bold text-stone-500 bg-stone-50 px-0.5 rounded-sm">
+            <span className="absolute -top-0.5 left-1 text-[9px] font-bold text-stone-500 dark:text-stone-400 bg-stone-50 dark:bg-stone-800 px-0.5 rounded-sm">
               {yl.year}
             </span>
           </div>
@@ -657,7 +657,7 @@ function Overview() {
         {/* Earliest release marker line */}
         {earliestRelease && totalMs > 0 && earliestRelease > min && earliestRelease < max && (
           <div
-            className="absolute top-0 bottom-0 border-l border-dashed border-stone-400 z-[1]"
+            className="absolute top-0 bottom-0 border-l border-dashed border-stone-400 dark:border-stone-500 z-[1]"
             style={{ left: `${((earliestRelease.getTime() - min.getTime()) / totalMs) * 100}%` }}
           />
         )}
@@ -665,14 +665,14 @@ function Overview() {
         {/* Left mask */}
         <div
           data-slot="brush-mask"
-          className="absolute top-0 bottom-0 left-0 bg-white/75 pointer-events-none rounded-l"
+          className="absolute top-0 bottom-0 left-0 bg-white/75 dark:bg-stone-950/75 pointer-events-none rounded-l"
           style={{ width: `${brushStart * 100}%` }}
         />
 
         {/* Right mask */}
         <div
           data-slot="brush-mask"
-          className="absolute top-0 bottom-0 right-0 bg-white/75 pointer-events-none rounded-r"
+          className="absolute top-0 bottom-0 right-0 bg-white/75 dark:bg-stone-950/75 pointer-events-none rounded-r"
           style={{ width: `${(1 - brushEnd) * 100}%` }}
         />
 
@@ -732,7 +732,7 @@ function Overview() {
         return (
           <div className="relative h-3 mt-0.5" aria-hidden="true">
             <span
-              className="absolute text-[9px] text-stone-500 whitespace-nowrap"
+              className="absolute text-[9px] text-stone-500 dark:text-stone-400 whitespace-nowrap"
               style={{
                 left: `${pct}%`,
                 transform: pct > 70 ? "translateX(-100%)" : "translateX(0)",
@@ -758,17 +758,21 @@ interface QuickRange {
 }
 
 const QUICK_RANGES: QuickRange[] = [
-  { label: "1w", days: 7 },
-  { label: "2w", days: 14 },
-  { label: "1m", days: 30 },
-  { label: "3m", days: 91 },
-  { label: "All", days: 0 },
+  { label: "1 week", days: 7 },
+  { label: "2 weeks", days: 14 },
+  { label: "1 month", days: 30 },
+  { label: "3 months", days: 91 },
+  { label: "6 months", days: 182 },
+  { label: "1 year", days: 365 },
+  { label: "All time", days: 0 },
 ];
 
 function QuickRanges({ defaultPreset }: { defaultPreset?: string }) {
   const { min, max, brushStart, brushEnd, setBrush } = useNav();
   const totalDays = (max.getTime() - min.getTime()) / DAY_MS;
   const [clickedLabel, setClickedLabel] = useState<string | null>(defaultPreset ?? null);
+  const [open, setOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Clear active preset when brush no longer matches any preset
   useEffect(() => {
@@ -781,26 +785,69 @@ function QuickRanges({ defaultPreset }: { defaultPreset?: string }) {
     setClickedLabel(match?.label ?? null);
   }, [brushStart, brushEnd, totalDays]);
 
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!open) return;
+    const onClick = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, [open]);
+
+  const applyRange = (qr: QuickRange) => {
+    setOpen(false);
+    if (qr.days === 0) {
+      setBrush(0, 1);
+    } else {
+      const frac = Math.min(qr.days / totalDays, 1);
+      setBrush(Math.max(0, 1 - frac), 1);
+    }
+  };
+
   return (
-    <div data-slot="quick-ranges" className="flex gap-1" role="group" aria-label="Quick range presets">
-      {QUICK_RANGES.map((qr) => (
-        <button
-          key={qr.label}
-          data-slot="quick-range-button"
-          className={`cursor-pointer ${pillCls(clickedLabel === qr.label)}`}
-          onClick={() => {
-            setClickedLabel(qr.label);
-            if (qr.days === 0) {
-              setBrush(0, 1);
-            } else {
-              const frac = Math.min(qr.days / totalDays, 1);
-              setBrush(Math.max(0, 1 - frac), 1);
-            }
-          }}
+    <div data-slot="quick-ranges" className="relative" ref={dropdownRef}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        className="cursor-pointer flex items-center gap-1.5 px-2.5 py-1 rounded-md text-[12px] font-medium border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-700 dark:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+      >
+        {clickedLabel ?? "Select range"}
+        <svg className="w-3.5 h-3.5 text-stone-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+          <path d="M4 6l4 4 4-4" />
+        </svg>
+      </button>
+      {open && (
+        <div
+          className="absolute top-full left-0 mt-1 bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg py-1 z-20 min-w-[140px]"
+          role="listbox"
+          aria-label="Time range"
         >
-          {qr.label}
-        </button>
-      ))}
+          {QUICK_RANGES.map((qr) => (
+            <button
+              key={qr.label}
+              type="button"
+              role="option"
+              aria-selected={clickedLabel === qr.label}
+              className={`cursor-pointer w-full text-left px-3 py-1.5 text-[12px] transition-colors flex items-center justify-between ${
+                clickedLabel === qr.label
+                  ? "text-stone-900 dark:text-stone-100 font-medium bg-stone-50 dark:bg-stone-800"
+                  : "text-stone-600 dark:text-stone-400 hover:bg-stone-50 dark:hover:bg-stone-800 hover:text-stone-900 dark:hover:text-stone-100"
+              }`}
+              onClick={() => applyRange(qr)}
+            >
+              {qr.label}
+              {clickedLabel === qr.label && (
+                <svg className="w-3.5 h-3.5 text-stone-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 8.5l3.5 3.5 6.5-8" />
+                </svg>
+              )}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -825,7 +872,7 @@ function YearSelector({ years, currentYear, orgSlug }: YearSelectorProps) {
         data-slot="year-button"
         className={`no-underline ${pillCls(isTrailing)}`}
       >
-        Last 12mo
+        Last 2yr
       </Link>
       {years.map((year) => {
         const isActive = currentYear === year;

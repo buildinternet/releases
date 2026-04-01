@@ -1,6 +1,6 @@
 "use client";
 
-import { type CadenceKey, type WeeklyBucket, getCadenceInfo, getProductColor, DAY_MS, fmtWeek } from "@/lib/cadence";
+import { type CadenceKey, type WeeklyBucket, getCadenceInfo, getProductColor, fmtVersion, DAY_MS, fmtWeek } from "@/lib/cadence";
 import { HoverCard } from "@/components/hover-card";
 
 /* ---------- Types ---------- */
@@ -14,10 +14,12 @@ interface CadenceCardData {
   /** Total release count for the source (before brush filtering). */
   totalReleaseCount: number;
   avgReleasesPerWeek: number;
+  earliestVersion: string | null;
   latestVersion: string | null;
   weeklyBuckets: WeeklyBucket[];
   colorIndex: number;
 }
+
 
 /* ---------- Root ---------- */
 
@@ -32,14 +34,14 @@ function Root({
   return (
     <article
       data-slot="cadence-card"
-      className={`bg-white border border-stone-200 rounded-lg p-4 transition-colors hover:border-blue-400 ${className ?? ""}`}
+      className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-4 transition-colors hover:border-blue-400 cursor-pointer ${className ?? ""}`}
       aria-label={`${data.name}: ${data.releaseCount}${data.totalReleaseCount >= FETCH_CAP ? "+" : ""} releases, ${cadence.label} cadence`}
       {...props}
     >
       <Header name={data.name} cadence={cadence} />
       <Stat count={data.releaseCount} capped={data.totalReleaseCount >= FETCH_CAP} color={color} />
       {data.weeklyBuckets.length > 0 && <Sparkline buckets={data.weeklyBuckets} color={color} />}
-      <Footer avgPerWeek={data.avgReleasesPerWeek} capped={data.totalReleaseCount >= FETCH_CAP} latestVersion={data.latestVersion} />
+      <Footer avgPerWeek={data.avgReleasesPerWeek} capped={data.totalReleaseCount >= FETCH_CAP} earliestVersion={data.earliestVersion} latestVersion={data.latestVersion} />
     </article>
   );
 }
@@ -49,7 +51,7 @@ function Root({
 function Header({ name, cadence }: { name: string; cadence: { label: string; key: CadenceKey } }) {
   return (
     <div data-slot="cadence-card-header" className="flex justify-between items-start mb-3">
-      <div data-slot="cadence-card-name" className="text-sm font-semibold text-stone-900">
+      <div data-slot="cadence-card-name" className="text-sm font-semibold text-stone-900 dark:text-stone-100">
         {name}
       </div>
       <Badge cadence={cadence.key} label={cadence.label} />
@@ -60,11 +62,11 @@ function Header({ name, cadence }: { name: string; cadence: { label: string; key
 /* ---------- Badge ---------- */
 
 const badgeStyles: Record<CadenceKey, string> = {
-  daily: "bg-green-50 text-green-600",
-  weekly: "bg-blue-50 text-blue-600",
-  biweekly: "bg-purple-50 text-purple-600",
-  monthly: "bg-amber-50 text-amber-600",
-  sparse: "bg-stone-100 text-stone-400",
+  daily: "bg-green-50 dark:bg-green-950 text-green-600 dark:text-green-400",
+  weekly: "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400",
+  biweekly: "bg-purple-50 dark:bg-purple-950 text-purple-600 dark:text-purple-400",
+  monthly: "bg-amber-50 dark:bg-amber-950 text-amber-600 dark:text-amber-400",
+  sparse: "bg-stone-100 dark:bg-stone-800 text-stone-400",
 };
 
 function Badge({ cadence, label }: { cadence: CadenceKey; label: string }) {
@@ -91,7 +93,7 @@ function Stat({ count, capped, color }: { count: number; capped: boolean; color:
       >
         {count}{capped && "+"}
       </div>
-      <div data-slot="cadence-stat-label" className="text-[11px] text-stone-500 mb-3">
+      <div data-slot="cadence-stat-label" className="text-[11px] text-stone-500 dark:text-stone-400 mb-3">
         releases in window
       </div>
     </>
@@ -124,8 +126,8 @@ function Sparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: string 
               }}
             />
             {bucket.count > 0 && (
-              <HoverCard.Content className="bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
-                <div className="text-[11px] font-medium text-stone-500 mb-1">
+              <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
+                <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
                   {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
                 </div>
                 <div className="text-sm font-semibold" style={{ color }}>
@@ -145,19 +147,28 @@ function Sparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: string 
 function Footer({
   avgPerWeek,
   capped,
+  earliestVersion,
   latestVersion,
 }: {
   avgPerWeek: number;
   capped: boolean;
+  earliestVersion: string | null;
   latestVersion: string | null;
 }) {
+  const showRange = earliestVersion && latestVersion && earliestVersion !== latestVersion;
+  const versionDisplay = showRange
+    ? `${fmtVersion(earliestVersion)} → ${fmtVersion(latestVersion)}`
+    : latestVersion
+      ? fmtVersion(latestVersion)
+      : "\u2014";
+
   return (
     <div
       data-slot="cadence-card-footer"
-      className="flex justify-between mt-3 text-[11px] text-stone-500"
+      className="flex justify-between mt-3 text-[11px] text-stone-500 dark:text-stone-400"
     >
-      <span>{capped ? `${avgPerWeek.toFixed(1)}+` : avgPerWeek.toFixed(1)}/week avg</span>
-      <span>{latestVersion ? `v${latestVersion}` : "\u2014"}</span>
+      <span>{capped ? `${Math.round(avgPerWeek)}+` : Math.round(avgPerWeek)}/week avg</span>
+      <span className="truncate ml-2">{versionDisplay}</span>
     </div>
   );
 }

@@ -47,9 +47,9 @@ export default async function OrgPage({
     activityFrom = `${yearParam}-01-01`;
     activityTo = `${yearParam}-12-31`;
   } else {
-    const oneYearAgo = new Date(now);
-    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
-    activityFrom = oneYearAgo.toISOString().slice(0, 10);
+    const twoYearsAgo = new Date(now);
+    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+    activityFrom = twoYearsAgo.toISOString().slice(0, 10);
   }
 
   const activity = await api.orgActivity(org.slug, activityFrom, activityTo).catch(() => null);
@@ -72,7 +72,7 @@ export default async function OrgPage({
     {
       items: [
         { label: "Last 30 Days", value: org.releasesLast30Days, large: true, subtitle: "releases" },
-        { label: "Avg per Week", value: org.avgReleasesPerWeek, large: true, subtitle: "releases" },
+        { label: "Avg per Week", value: Math.round(org.avgReleasesPerWeek), large: true, subtitle: "releases" },
       ],
     },
     {
@@ -87,12 +87,12 @@ export default async function OrgPage({
     <div className="min-h-screen">
       <Header />
       <div className="max-w-4xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400">
-          <Link href="/" className="hover:text-stone-600">Home</Link>
+        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">Home</Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-600 font-medium">{org.name}</span>
+          <span className="text-stone-600 dark:text-stone-300 font-medium">{org.name}</span>
         </div>
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 mt-4">{org.name}</h1>
+        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">{org.name}</h1>
         {activity && (
           <ReleaseTimeline
             activity={activity}

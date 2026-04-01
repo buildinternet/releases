@@ -58,7 +58,7 @@ export default async function IndependentSourcePage({
     {
       items: [
         { label: "Last 30 Days", value: source.releasesLast30Days, large: true, subtitle: "releases" },
-        { label: "Avg per Week", value: source.avgReleasesPerWeek, large: true, subtitle: "releases" },
+        { label: "Avg per Week", value: Math.round(source.avgReleasesPerWeek), large: true, subtitle: "releases" },
       ],
     },
     {
@@ -76,13 +76,13 @@ export default async function IndependentSourcePage({
     <div className="min-h-screen">
       <Header />
       <div className="max-w-4xl mx-auto px-6">
-        <div className="pt-5 text-[13px] text-stone-400">
-          <Link href="/" className="hover:text-stone-600">Home</Link>
+        <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
+          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">Home</Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-600 font-medium">{source.name}</span>
+          <span className="text-stone-600 dark:text-stone-300 font-medium">{source.name}</span>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900">{source.name}</h1>
+          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{source.name}</h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
         <div className="flex gap-10 mt-6 pb-12">

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
+import Link from "next/link";
 import { type OrgActivity } from "@/lib/api";
 import { type WeeklyBucket, WEEK_MS, DAY_MS } from "@/lib/cadence";
 import { CadenceCard } from "@/components/cadence-card";
@@ -24,10 +25,10 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
 
   const aggregateBuckets = useMemo(() => parseBuckets(activity.aggregateWeekly), [activity.aggregateWeekly]);
 
-  // Default brush to last 30 days (or full range if data span < 30 days)
+  // Default brush to last 3 months (or full range if data span < 91 days)
   const defaultBrushStart = useMemo(() => {
-    const thirtyDaysAgo = new Date(rangeEnd.getTime() - 30 * DAY_MS);
-    return thirtyDaysAgo > rangeStart ? thirtyDaysAgo : rangeStart;
+    const threeMonthsAgo = new Date(rangeEnd.getTime() - 91 * DAY_MS);
+    return threeMonthsAgo > rangeStart ? threeMonthsAgo : rangeStart;
   }, [rangeStart, rangeEnd]);
 
   const [brushRange, setBrushRange] = useState<[Date, Date]>([defaultBrushStart, rangeEnd]);
@@ -86,6 +87,7 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
           releaseCount: brushedCount,
           totalReleaseCount: source.releaseCount,
           avgReleasesPerWeek: source.avgReleasesPerWeek,
+          earliestVersion: source.earliestVersion,
           latestVersion: source.latestVersion,
           weeklyBuckets: completeBuckets,
           colorIndex: source.colorIndex,
@@ -93,6 +95,17 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
       })
       .sort((a, b) => b.releaseCount - a.releaseCount);
   }, [parsedSources, brushedWeekGrid]);
+
+  // Summary stats for the brushed window
+  const summaryStats = useMemo(() => {
+    const totalReleases = brushedWeekGrid.reduce((sum, b) => sum + b.count, 0);
+    const weeks = brushedWeekGrid.length || 1;
+    const avgPerWeek = totalReleases / weeks;
+    const avgPerMonth = avgPerWeek * (30 / 7);
+    const avgIntervalDays = totalReleases > 1 ? (weeks * 7) / totalReleases : null;
+
+    return { totalReleases, avgPerWeek, avgPerMonth, avgIntervalDays };
+  }, [brushedWeekGrid]);
 
   if (cardData.length === 0) return null;
 
@@ -110,7 +123,7 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
         <RangeNavigator.DetailChart />
         <RangeNavigator.Overview />
         <div className="flex items-center justify-between">
-          <RangeNavigator.QuickRanges defaultPreset="1m" />
+          <RangeNavigator.QuickRanges defaultPreset="3 months" />
           {availableYears.length > 1 && (
             <RangeNavigator.YearSelector
               years={availableYears}
@@ -121,9 +134,25 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
         </div>
       </RangeNavigator.Root>
 
+      {/* Overview stats */}
+      <div className="grid grid-cols-3 gap-3 mb-4">
+        {([
+          { label: "Total Releases", value: String(summaryStats.totalReleases) },
+          { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? `${Math.round(summaryStats.avgIntervalDays)}d` : "\u2014" },
+          { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk` },
+        ] as const).map((stat) => (
+          <div key={stat.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1">{stat.label}</div>
+            <div className="text-xl font-bold text-stone-900 dark:text-stone-100 tabular-nums">{stat.value}</div>
+          </div>
+        ))}
+      </div>
+
       <CadenceGrid>
         {cardData.map((data) => (
-          <CadenceCard.Root key={data.slug} data={data} />
+          <Link key={data.slug} href={`/${orgSlug}/${data.slug}`} className="no-underline">
+            <CadenceCard.Root data={data} />
+          </Link>
         ))}
       </CadenceGrid>
     </div>
