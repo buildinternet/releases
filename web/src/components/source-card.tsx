@@ -33,12 +33,18 @@ export function SourceCard({ source, orgSlug }: { source: SourceListItem; orgSlu
         </div>
         <SourceTypeIcon type={source.type} />
       </div>
-      <div className="text-xs text-stone-400 dark:text-stone-500 mt-1.5">
-        {source.url && <>{shortUrl(source.url)}</>}
-        {source.latestVersion && <>{source.url ? " · " : ""}Latest: {source.latestVersion}</>}
-        {source.latestDate && <> · {formatDate(source.latestDate)}</>}
-        {source.releaseCount > 0 && <> · {source.releaseCount} releases</>}
-      </div>
+      {source.url && (
+        <div className="text-xs text-stone-400 dark:text-stone-500 mt-1.5">
+          {shortUrl(source.url)}
+        </div>
+      )}
+      {(source.latestVersion || source.latestDate || source.releaseCount > 0) && (
+        <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
+          {source.latestVersion && <>Latest: {source.latestVersion}</>}
+          {source.latestDate && <>{source.latestVersion ? " · " : ""}{formatDate(source.latestDate)}</>}
+          {source.releaseCount > 0 && <>{(source.latestVersion || source.latestDate) ? " · " : ""}{source.releaseCount} releases</>}
+        </div>
+      )}
     </Link>
   );
 }

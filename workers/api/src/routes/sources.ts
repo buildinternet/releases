@@ -328,6 +328,106 @@ sourceRoutes.get("/sources/:slug/sessions", async (c) => {
   return c.json({ sessions: [session] });
 });
 
+// Weekly release activity for source timeline visualization
+sourceRoutes.get("/sources/:slug/activity", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  // Validate date params
+  const dateRe = /^\d{4}-\d{2}-\d{2}$/;
+  const fromParam = c.req.query("from");
+  const toParam = c.req.query("to");
+
+  if (fromParam && !dateRe.test(fromParam)) {
+    return c.json({ error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." }, 400);
+  }
+  if (toParam && !dateRe.test(toParam)) {
+    return c.json({ error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." }, 400);
+  }
+  if (fromParam && toParam && fromParam > toParam) {
+    return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
+  }
+
+  const notSuppressed = sql`(r.suppressed IS NULL OR r.suppressed = 0)`;
+
+  // Default range: oldest to newest release
+  let from = fromParam;
+  let to = toParam;
+  if (!from || !to) {
+    const [bounds] = await db.all<{ oldest: string | null; newest: string | null }>(sql`
+      SELECT MIN(r.published_at) AS oldest, MAX(r.published_at) AS newest
+      FROM releases r
+      WHERE r.source_id = ${src.id}
+        AND r.published_at IS NOT NULL
+        AND ${notSuppressed}
+    `);
+    const today = new Date().toISOString().slice(0, 10);
+    if (!from) from = bounds.oldest?.slice(0, 10) ?? today;
+    if (!to) to = bounds.newest?.slice(0, 10) ?? today;
+  }
+
+  // Compute exclusive upper bound for inclusive to-date
+  const toDate = new Date(to + "T00:00:00Z");
+  toDate.setUTCDate(toDate.getUTCDate() + 1);
+  const toExclusive = toDate.toISOString().slice(0, 10);
+
+  const bucketRows = await db.all<{
+    week_start: string;
+    cnt: number;
+    earliest_version: string | null;
+    latest_version: string | null;
+  }>(sql`
+    WITH bucketed AS (
+      SELECT
+        strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
+        COUNT(*) AS cnt,
+        MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
+        MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
+      FROM releases r
+      WHERE
+        r.source_id = ${src.id}
+        AND r.published_at IS NOT NULL
+        AND ${notSuppressed}
+        AND r.published_at >= ${from}
+        AND r.published_at < ${toExclusive}
+      GROUP BY week_start
+    )
+    SELECT week_start, cnt,
+      CASE WHEN earliest_tagged IS NOT NULL
+        THEN SUBSTR(earliest_tagged, INSTR(earliest_tagged, '|') + 1)
+        ELSE NULL END AS earliest_version,
+      CASE WHEN latest_tagged IS NOT NULL
+        THEN SUBSTR(latest_tagged, INSTR(latest_tagged, '|') + 1)
+        ELSE NULL END AS latest_version
+    FROM bucketed
+    ORDER BY week_start
+  `);
+
+  let orgSlug: string | null = null;
+  let orgName: string | null = null;
+  if (src.orgId) {
+    const [org] = await db
+      .select({ slug: organizations.slug, name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, src.orgId));
+    if (org) { orgSlug = org.slug; orgName = org.name; }
+  }
+
+  return c.json({
+    source: { slug: src.slug, name: src.name, orgSlug, orgName },
+    range: { from, to },
+    weeklyBuckets: bucketRows.map((r) => ({
+      weekStart: r.week_start,
+      count: r.cnt,
+      earliestVersion: r.earliest_version ?? null,
+      latestVersion: r.latest_version ?? null,
+    })),
+  });
+});
+
 sourceRoutes.get("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const page = parseInt(c.req.query("page") ?? "1", 10);

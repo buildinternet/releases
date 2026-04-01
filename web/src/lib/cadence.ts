@@ -54,6 +54,18 @@ export function fmtVersion(v: string): string {
 export interface WeeklyBucket {
   weekStart: Date;
   count: number;
+  earliestVersion?: string | null;
+  latestVersion?: string | null;
+}
+
+/** Parse raw weekly bucket data from API into WeeklyBucket objects. */
+export function parseBuckets(raw: Array<{ weekStart: string; count: number; earliestVersion?: string | null; latestVersion?: string | null }>): WeeklyBucket[] {
+  return raw.map((b) => ({
+    weekStart: new Date(b.weekStart),
+    count: b.count,
+    earliestVersion: b.earliestVersion ?? null,
+    latestVersion: b.latestVersion ?? null,
+  }));
 }
 
 export function bucketByWeek(

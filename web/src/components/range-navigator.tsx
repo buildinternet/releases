@@ -10,7 +10,6 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import Link from "next/link";
 import { type WeeklyBucket, getProductColor, DAY_MS, WEEK_MS, fmtWeek } from "@/lib/cadence";
 import { HoverCard } from "@/components/hover-card";
 
@@ -170,7 +169,7 @@ function Header({ title = "Releases over time" }: { title?: string }) {
       </div>
       <div
         data-slot="range-navigator-dates"
-        className="text-xs text-blue-500 font-mono"
+        className="text-xs text-stone-400 dark:text-stone-500 font-mono"
         aria-live="polite"
       >
         {fmtDate(startDate)} → {fmtDate(endDate)}
@@ -853,45 +852,6 @@ function QuickRanges({ defaultPreset }: { defaultPreset?: string }) {
 }
 
 /* ================================================================
-   YearSelector
-   ================================================================ */
-
-interface YearSelectorProps {
-  years: number[];
-  currentYear?: number;
-  orgSlug: string;
-}
-
-function YearSelector({ years, currentYear, orgSlug }: YearSelectorProps) {
-  const isTrailing = currentYear === undefined;
-
-  return (
-    <div data-slot="year-selector" className="flex gap-1" role="group" aria-label="Year selector">
-      <Link
-        href={`/${orgSlug}`}
-        data-slot="year-button"
-        className={`no-underline ${pillCls(isTrailing)}`}
-      >
-        Last 2yr
-      </Link>
-      {years.map((year) => {
-        const isActive = currentYear === year;
-        return (
-          <Link
-            key={year}
-            href={`/${orgSlug}?year=${year}`}
-            data-slot="year-button"
-            className={`no-underline ${pillCls(isActive)}`}
-          >
-            {year}
-          </Link>
-        );
-      })}
-    </div>
-  );
-}
-
-/* ================================================================
    Export
    ================================================================ */
 
@@ -901,5 +861,4 @@ export const RangeNavigator = {
   DetailChart,
   Overview,
   QuickRanges,
-  YearSelector,
 };

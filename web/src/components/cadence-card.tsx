@@ -118,10 +118,10 @@ function Sparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: string 
           <HoverCard.Root key={i}>
             <HoverCard.Trigger
               data-slot="cadence-spark-bar"
-              className="flex-1 rounded-sm min-h-px"
+              className={`flex-1 rounded-sm min-h-px ${bucket.count === 0 ? "bg-stone-100 dark:bg-stone-800" : ""}`}
               style={{
                 height: `${h}px`,
-                backgroundColor: bucket.count > 0 ? color : "var(--color-stone-200)",
+                backgroundColor: bucket.count > 0 ? color : undefined,
                 alignSelf: "flex-end",
               }}
             />

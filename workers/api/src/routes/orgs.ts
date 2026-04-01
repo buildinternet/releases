@@ -342,21 +342,36 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
       source_id: string;
       week_start: string;
       cnt: number;
+      earliest_version: string | null;
+      latest_version: string | null;
     }>(sql`
-      SELECT
-        s.id AS source_id,
-        strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
-        COUNT(*) AS cnt
-      FROM releases r
-      INNER JOIN sources s ON s.id = r.source_id
-      WHERE
-        s.org_id = ${org.id}
-        AND r.published_at IS NOT NULL
-        AND (r.suppressed IS NULL OR r.suppressed = 0)
-        AND r.published_at >= ${from}
-        AND r.published_at < ${toExclusive}
-      GROUP BY s.id, week_start
-      ORDER BY s.slug, week_start
+      WITH bucketed AS (
+        SELECT
+          s.id AS source_id,
+          s.slug AS source_slug,
+          strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
+          COUNT(*) AS cnt,
+          MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
+          MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
+        FROM releases r
+        INNER JOIN sources s ON s.id = r.source_id
+        WHERE
+          s.org_id = ${org.id}
+          AND r.published_at IS NOT NULL
+          AND (r.suppressed IS NULL OR r.suppressed = 0)
+          AND r.published_at >= ${from}
+          AND r.published_at < ${toExclusive}
+        GROUP BY s.id, week_start
+      )
+      SELECT source_id, week_start, cnt,
+        CASE WHEN earliest_tagged IS NOT NULL
+          THEN SUBSTR(earliest_tagged, INSTR(earliest_tagged, '|') + 1)
+          ELSE NULL END AS earliest_version,
+        CASE WHEN latest_tagged IS NOT NULL
+          THEN SUBSTR(latest_tagged, INSTR(latest_tagged, '|') + 1)
+          ELSE NULL END AS latest_version
+      FROM bucketed
+      ORDER BY source_slug, week_start
     `),
 
     db.all<{
@@ -432,11 +447,16 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
 
   // Index stats and buckets by source ID
   const statsMap = new Map(statsRows.map((r) => [r.source_id, r]));
-  const bucketMap = new Map<string, { weekStart: string; count: number }[]>();
+  const bucketMap = new Map<string, { weekStart: string; count: number; earliestVersion: string | null; latestVersion: string | null }[]>();
   for (const row of bucketRows) {
     let arr = bucketMap.get(row.source_id);
     if (!arr) { arr = []; bucketMap.set(row.source_id, arr); }
-    arr.push({ weekStart: row.week_start, count: row.cnt });
+    arr.push({
+      weekStart: row.week_start,
+      count: row.cnt,
+      earliestVersion: row.earliest_version ?? null,
+      latestVersion: row.latest_version ?? null,
+    });
   }
 
   // Assemble per-source response

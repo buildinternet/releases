@@ -3,23 +3,17 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { type OrgActivity } from "@/lib/api";
-import { type WeeklyBucket, WEEK_MS, DAY_MS } from "@/lib/cadence";
+import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets } from "@/lib/cadence";
 import { CadenceCard } from "@/components/cadence-card";
 import { CadenceGrid } from "@/components/cadence-grid";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 
-function parseBuckets(raw: Array<{ weekStart: string; count: number }>): WeeklyBucket[] {
-  return raw.map((b) => ({ weekStart: new Date(b.weekStart), count: b.count }));
-}
-
 interface ReleaseTimelineProps {
   activity: OrgActivity;
-  availableYears: number[];
-  currentYear?: number;
   orgSlug: string;
 }
 
-export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug }: ReleaseTimelineProps) {
+export function ReleaseTimeline({ activity, orgSlug }: ReleaseTimelineProps) {
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
   const rangeEnd = useMemo(() => new Date(activity.range.to), [activity.range.to]);
 
@@ -68,18 +62,30 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
     return parsedSources
       .map((source) => {
         // Build lookup from source's actual buckets (keyed by week-start timestamp)
-        const bucketMap = new Map<number, number>();
+        const bucketMap = new Map<number, WeeklyBucket>();
         for (const b of source.allBuckets) {
-          bucketMap.set(b.weekStart.getTime(), b.count);
+          bucketMap.set(b.weekStart.getTime(), b);
         }
 
         // Map onto the canonical grid so all cards have the same number of bars
-        const completeBuckets: WeeklyBucket[] = brushedWeekGrid.map((week) => ({
-          weekStart: week.weekStart,
-          count: bucketMap.get(week.weekStart.getTime()) ?? 0,
-        }));
+        const completeBuckets: WeeklyBucket[] = brushedWeekGrid.map((week) => {
+          const srcBucket = bucketMap.get(week.weekStart.getTime());
+          return {
+            weekStart: week.weekStart,
+            count: srcBucket?.count ?? 0,
+            earliestVersion: srcBucket?.earliestVersion ?? null,
+            latestVersion: srcBucket?.latestVersion ?? null,
+          };
+        });
 
-        const brushedCount = completeBuckets.reduce((sum, b) => sum + b.count, 0);
+        let brushedCount = 0;
+        let windowEarliestVersion: string | null = null;
+        let windowLatestVersion: string | null = null;
+        for (const b of completeBuckets) {
+          brushedCount += b.count;
+          if (b.earliestVersion && !windowEarliestVersion) windowEarliestVersion = b.earliestVersion;
+          if (b.latestVersion) windowLatestVersion = b.latestVersion;
+        }
 
         return {
           name: source.name,
@@ -87,8 +93,8 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
           releaseCount: brushedCount,
           totalReleaseCount: source.releaseCount,
           avgReleasesPerWeek: source.avgReleasesPerWeek,
-          earliestVersion: source.earliestVersion,
-          latestVersion: source.latestVersion,
+          earliestVersion: windowEarliestVersion,
+          latestVersion: windowLatestVersion,
           weeklyBuckets: completeBuckets,
           colorIndex: source.colorIndex,
         };
@@ -122,20 +128,10 @@ export function ReleaseTimeline({ activity, availableYears, currentYear, orgSlug
         <RangeNavigator.Header />
         <RangeNavigator.DetailChart />
         <RangeNavigator.Overview />
-        <div className="flex items-center justify-between">
-          <RangeNavigator.QuickRanges defaultPreset="3 months" />
-          {availableYears.length > 1 && (
-            <RangeNavigator.YearSelector
-              years={availableYears}
-              currentYear={currentYear}
-              orgSlug={orgSlug}
-            />
-          )}
-        </div>
+        <RangeNavigator.QuickRanges defaultPreset="3 months" />
       </RangeNavigator.Root>
 
-      {/* Overview stats */}
-      <div className="grid grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         {([
           { label: "Total Releases", value: String(summaryStats.totalReleases) },
           { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? `${Math.round(summaryStats.avgIntervalDays)}d` : "\u2014" },

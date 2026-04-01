@@ -3,11 +3,11 @@ import { SourceTypeIcon } from "./source-type-icon";
 
 interface SidebarItem { label: string; value: string | number | null; large?: boolean; subtitle?: string; link?: string; externalLink?: string; }
 interface SidebarSection { items: SidebarItem[]; }
-interface SidebarProps { sections: SidebarSection[]; accounts?: { platform: string; handle: string }[]; formatPath?: string; }
+interface SidebarProps { sections: SidebarSection[]; accounts?: { platform: string; handle: string }[]; formatPath?: string; footnote?: string | null; footnoteTitle?: string | null; }
 
-export function Sidebar({ sections, accounts, formatPath }: SidebarProps) {
+export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitle }: SidebarProps) {
   return (
-    <div className="w-[200px] shrink-0">
+    <div className="w-full md:w-[200px] shrink-0">
       {sections.map((section, si) => (
         <div key={si} className={si > 0 ? "border-t border-stone-200 dark:border-stone-800 pt-5" : ""}>
           {section.items.map((item, ii) => (
@@ -42,11 +42,18 @@ export function Sidebar({ sections, accounts, formatPath }: SidebarProps) {
           </div>
         </div>
       )}
-      {formatPath && (
-        <div className="border-t border-stone-200 dark:border-stone-800 pt-5 mb-6 flex gap-2 text-[11px] text-stone-400 dark:text-stone-500">
-          <a href={`${formatPath}.json`} className="hover:text-stone-600 dark:hover:text-stone-300">.json</a>
-          <span>·</span>
-          <a href={`${formatPath}.md`} className="hover:text-stone-600 dark:hover:text-stone-300">.md</a>
+      {(footnote || formatPath) && (
+        <div className="border-t border-stone-200 dark:border-stone-800 pt-4 mb-6">
+          {footnote && (
+            <div className="text-[11px] text-stone-400 dark:text-stone-500 mb-3 cursor-default" title={footnoteTitle ?? undefined}>{footnote}</div>
+          )}
+          {formatPath && (
+            <div className="flex gap-2 text-[11px] text-stone-400 dark:text-stone-500">
+              <a href={`${formatPath}.json`} className="hover:text-stone-600 dark:hover:text-stone-300">.json</a>
+              <span>·</span>
+              <a href={`${formatPath}.md`} className="hover:text-stone-600 dark:hover:text-stone-300">.md</a>
+            </div>
+          )}
         </div>
       )}
     </div>

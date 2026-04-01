@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger.js";
 import { handleStats } from "./routes/stats.js";
 import { handleOrgs, handleOrgDetail } from "./routes/orgs.js";
-import { handleSources, handleSourceDetail } from "./routes/sources.js";
+import { handleSources, handleSourceDetail, handleSourceActivity } from "./routes/sources.js";
 import { handleSearch } from "./routes/search.js";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -59,6 +59,14 @@ export function startApiServer(port: number) {
         // GET /api/sources
         if (pathname === "/api/sources") {
           return jsonResponse(handleSources(url.searchParams));
+        }
+
+        // GET /api/sources/:slug/activity
+        const sourceActivityMatch = pathname.match(/^\/api\/sources\/([^/]+)\/activity$/);
+        if (sourceActivityMatch) {
+          const result = handleSourceActivity(sourceActivityMatch[1], url.searchParams);
+          if (!result) return errorResponse("not_found", "Source not found", 404);
+          return jsonResponse(result);
         }
 
         // GET /api/sources/:slug

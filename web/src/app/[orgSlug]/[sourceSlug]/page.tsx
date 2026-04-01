@@ -8,6 +8,7 @@ import { Pagination } from "@/components/pagination";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { HighlightsView } from "@/components/highlights-view";
+import { SourceTimeline } from "@/components/source-timeline";
 import Link from "next/link";
 
 function formatDate(iso: string | null) {
@@ -34,9 +35,17 @@ export default async function SourcePage({
   const { page: pageParam, tab } = await searchParams;
   const page = parseInt(pageParam ?? "1", 10) || 1;
 
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  const activityFrom = twoYearsAgo.toISOString().slice(0, 10);
+
   let source;
+  let activity;
   try {
-    source = await api.sourceDetail(sourceSlug, page);
+    [source, activity] = await Promise.all([
+      api.sourceDetail(sourceSlug, page),
+      api.sourceActivity(sourceSlug, activityFrom).catch(() => null),
+    ]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -70,7 +79,6 @@ export default async function SourcePage({
         { label: "Organization", value: source.org.name, link: `/${source.org.slug}` },
         { label: "Source", value: shortUrl(source.url), externalLink: source.url },
         ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),
-        { label: "Last Updated", value: formatDate(source.lastFetchedAt) },
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
     },
@@ -89,7 +97,10 @@ export default async function SourcePage({
           <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{source.name}</h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
-        <div className="flex gap-10 mt-6 pb-12">
+        {activity && (
+          <SourceTimeline activity={activity} />
+        )}
+        <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0">
             <SourceTabs hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)} />
             {(tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
@@ -106,7 +117,7 @@ export default async function SourcePage({
               />
             )}
           </div>
-          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} />
+          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>
       </div>
     </div>

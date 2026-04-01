@@ -99,6 +99,12 @@ export interface SearchResult {
 
 export interface SearchResponse { query: string; results: SearchResult[]; }
 
+export interface SourceActivity {
+  source: { slug: string; name: string; orgSlug: string | null; orgName: string | null };
+  range: { from: string; to: string };
+  weeklyBuckets: Array<{ weekStart: string; count: number; earliestVersion: string | null; latestVersion: string | null }>;
+}
+
 export interface OrgActivitySource {
   slug: string;
   name: string;
@@ -107,7 +113,7 @@ export interface OrgActivitySource {
   earliestVersion: string | null;
   latestVersion: string | null;
   latestDate: string | null;
-  weeklyBuckets: Array<{ weekStart: string; count: number }>;
+  weeklyBuckets: Array<{ weekStart: string; count: number; earliestVersion: string | null; latestVersion: string | null }>;
 }
 
 export interface OrgActivity {
@@ -126,6 +132,13 @@ export const api = {
     fetchApi<SourceDetail>(`/api/sources/${slug}?page=${page}&pageSize=${pageSize}`),
   search: (q: string, limit = 20, offset = 0) =>
     fetchApi<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+  sourceActivity: (slug: string, from?: string, to?: string) => {
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+    const qs = params.toString();
+    return fetchApi<SourceActivity>(`/api/sources/${slug}/activity${qs ? `?${qs}` : ""}`);
+  },
   orgActivity: (slug: string, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);

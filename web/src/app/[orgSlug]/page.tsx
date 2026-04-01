@@ -14,18 +14,22 @@ function formatDate(iso: string | null) {
 
 export default async function OrgPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
-  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
   const { orgSlug } = await params;
-  const sp = await searchParams;
-  const yearParam = typeof sp.year === "string" ? parseInt(sp.year, 10) : undefined;
+
+  const twoYearsAgo = new Date();
+  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
+  const activityFrom = twoYearsAgo.toISOString().slice(0, 10);
 
   let org;
+  let activity;
   try {
-    org = await api.orgDetail(orgSlug);
+    [org, activity] = await Promise.all([
+      api.orgDetail(orgSlug),
+      api.orgActivity(orgSlug, activityFrom).catch(() => null),
+    ]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -36,29 +40,6 @@ export default async function OrgPage({
       );
     }
     notFound();
-  }
-
-  // Compute the activity window: specific year or trailing 12 months
-  const now = new Date();
-  let activityFrom: string | undefined;
-  let activityTo: string | undefined;
-
-  if (yearParam && yearParam >= 2000 && yearParam <= now.getFullYear()) {
-    activityFrom = `${yearParam}-01-01`;
-    activityTo = `${yearParam}-12-31`;
-  } else {
-    const twoYearsAgo = new Date(now);
-    twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-    activityFrom = twoYearsAgo.toISOString().slice(0, 10);
-  }
-
-  const activity = await api.orgActivity(org.slug, activityFrom, activityTo).catch(() => null);
-
-  // Determine available years for the year selector
-  const trackingStart = org.trackingSince ? new Date(org.trackingSince).getFullYear() : now.getFullYear();
-  const availableYears: number[] = [];
-  for (let y = now.getFullYear(); y >= trackingStart; y--) {
-    availableYears.push(y);
   }
 
   const sidebarSections = [
@@ -77,7 +58,6 @@ export default async function OrgPage({
     },
     {
       items: [
-        { label: "Last Updated", value: formatDate(org.lastFetchedAt) },
         { label: "Tracking Since", value: formatDate(org.trackingSince) },
       ],
     },
@@ -96,12 +76,10 @@ export default async function OrgPage({
         {activity && (
           <ReleaseTimeline
             activity={activity}
-            availableYears={availableYears}
-            currentYear={yearParam}
             orgSlug={org.slug}
           />
         )}
-        <div className="flex gap-10 mt-6 pb-12">
+        <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0 space-y-2">
             {[...org.sources].sort((a, b) => {
               if (a.isPrimary && !b.isPrimary) return -1;
@@ -113,7 +91,7 @@ export default async function OrgPage({
               <SourceCard key={source.slug} source={source} orgSlug={org.slug} />
             ))}
           </div>
-          <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} />
+          <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null} footnoteTitle={org.lastFetchedAt} />
         </div>
       </div>
     </div>

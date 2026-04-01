@@ -3,6 +3,87 @@ import { getDb } from "../../db/connection.js";
 import { sources, releases, organizations } from "../../db/schema.js";
 import { getSourceMetrics } from "../metrics.js";
 
+export function handleSourceActivity(slug: string, searchParams: URLSearchParams) {
+  const db = getDb();
+
+  const [src] = db.select().from(sources).where(eq(sources.slug, slug)).all();
+  if (!src) return null;
+
+  const fromParam = searchParams.get("from");
+  const toParam = searchParams.get("to");
+
+  // Default range: oldest to newest release
+  let from = fromParam;
+  let to = toParam;
+  if (!from || !to) {
+    const [bounds] = db.all<{ oldest: string | null; newest: string | null }>(sql`
+      SELECT MIN(published_at) AS oldest, MAX(published_at) AS newest
+      FROM releases
+      WHERE source_id = ${src.id}
+        AND published_at IS NOT NULL
+        AND (suppressed IS NULL OR suppressed = 0)
+    `);
+    const today = new Date().toISOString().slice(0, 10);
+    if (!from) from = bounds.oldest?.slice(0, 10) ?? today;
+    if (!to) to = bounds.newest?.slice(0, 10) ?? today;
+  }
+
+  const toDate = new Date(to + "T00:00:00Z");
+  toDate.setUTCDate(toDate.getUTCDate() + 1);
+  const toExclusive = toDate.toISOString().slice(0, 10);
+
+  const bucketRows = db.all<{
+    week_start: string;
+    cnt: number;
+    earliest_version: string | null;
+    latest_version: string | null;
+  }>(sql`
+    WITH bucketed AS (
+      SELECT
+        strftime('%Y-%m-%d', published_at, 'weekday 0', '-6 days') AS week_start,
+        COUNT(*) AS cnt,
+        MIN(CASE WHEN version IS NOT NULL THEN published_at || '|' || version END) AS earliest_tagged,
+        MAX(CASE WHEN version IS NOT NULL THEN published_at || '|' || version END) AS latest_tagged
+      FROM releases
+      WHERE
+        source_id = ${src.id}
+        AND published_at IS NOT NULL
+        AND (suppressed IS NULL OR suppressed = 0)
+        AND published_at >= ${from}
+        AND published_at < ${toExclusive}
+      GROUP BY week_start
+    )
+    SELECT week_start, cnt,
+      CASE WHEN earliest_tagged IS NOT NULL
+        THEN SUBSTR(earliest_tagged, INSTR(earliest_tagged, '|') + 1)
+        ELSE NULL END AS earliest_version,
+      CASE WHEN latest_tagged IS NOT NULL
+        THEN SUBSTR(latest_tagged, INSTR(latest_tagged, '|') + 1)
+        ELSE NULL END AS latest_version
+    FROM bucketed
+    ORDER BY week_start
+  `);
+
+  let orgSlug: string | null = null;
+  let orgName: string | null = null;
+  if (src.orgId) {
+    const [org] = db.select({ slug: organizations.slug, name: organizations.name })
+      .from(organizations).where(eq(organizations.id, src.orgId)).all();
+    if (org) { orgSlug = org.slug; orgName = org.name; }
+  }
+
+  return {
+    source: { slug: src.slug, name: src.name, orgSlug, orgName },
+    range: { from, to },
+    weeklyBuckets: bucketRows.map((r) => ({
+      weekStart: r.week_start,
+      count: r.cnt,
+      earliestVersion: r.earliest_version ?? null,
+      latestVersion: r.latest_version ?? null,
+    })),
+  };
+}
+
 export function handleSources(searchParams: URLSearchParams) {
   const db = getDb();
   const independent = searchParams.get("independent") === "true";
