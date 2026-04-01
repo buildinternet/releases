@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
@@ -10,6 +11,21 @@ import { SourceTabs } from "@/components/source-tabs";
 import { HighlightsView } from "@/components/highlights-view";
 import { SourceTimeline } from "@/components/source-timeline";
 import Link from "next/link";
+
+export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string; sourceSlug: string }> }): Promise<Metadata> {
+  const { orgSlug, sourceSlug } = await params;
+  try {
+    const source = await api.sourceDetail(sourceSlug);
+    const orgName = source.org?.name ?? orgSlug;
+    return {
+      title: `${source.name} — ${orgName}`,
+      description: `Release notes and changelog for ${source.name} by ${orgName}`,
+      openGraph: { type: "website" },
+    };
+  } catch {
+    return { title: sourceSlug };
+  }
+}
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -84,8 +100,20 @@ export default async function SourcePage({
     },
   ];
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": source.name,
+    "softwareVersion": source.latestVersion ?? undefined,
+    "url": `https://releases.sh/${orgSlug}/${sourceSlug}`,
+  };
+
   return (
     <div className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">

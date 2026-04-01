@@ -1,7 +1,10 @@
+import type { Metadata } from "next";
 import { api } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import Link from "next/link";
+
+export const metadata: Metadata = { title: "Search" };
 
 function formatDate(iso: string | null) {
   if (!iso) return null;

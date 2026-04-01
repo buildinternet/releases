@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
 
 function formatDate(iso: string | null) {
@@ -171,7 +172,7 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
   }, []);
 
   return (
-    <div className="border-b border-stone-200 dark:border-stone-800 py-4 first:pt-0 last:border-b-0 -mx-2 px-2 rounded">
+    <div className="group/item border-b border-stone-200 dark:border-stone-800 py-4 first:pt-0 last:border-b-0 -mx-2 px-2 rounded">
       <button
         onClick={() => isOverflowing && setExpanded(!expanded)}
         className={`flex justify-between items-baseline mb-1 w-full text-left${isOverflowing ? "" : " cursor-default"}`}
@@ -185,6 +186,16 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
           <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">{heading}</span>
           {release.url && (
             <a href={release.url} target="_blank" rel="noopener noreferrer" className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 text-xs" onClick={(e) => e.stopPropagation()}>↗</a>
+          )}
+          {release.id && (
+            <Link
+              href={`/release/${release.id}`}
+              className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 text-xs opacity-0 group-hover/item:opacity-100 transition-opacity"
+              onClick={(e) => e.stopPropagation()}
+              title="Permalink"
+            >
+              #
+            </Link>
           )}
         </div>
         <span className="text-xs text-stone-400 dark:text-stone-500 whitespace-nowrap ml-4">{formatDate(release.publishedAt)}</span>

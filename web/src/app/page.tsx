@@ -25,8 +25,20 @@ export default async function HomePage() {
     throw err;
   }
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "name": "Released",
+    "url": "https://releases.sh",
+    "description": "Changelog index for developers.",
+  };
+
   return (
     <div className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Header />
       <div className="pt-12 pb-8 text-center px-6">
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">Release notes, indexed</h1>

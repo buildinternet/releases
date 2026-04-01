@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
@@ -6,6 +7,20 @@ import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import Link from "next/link";
+
+export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
+  const { orgSlug } = await params;
+  try {
+    const org = await api.orgDetail(orgSlug);
+    return {
+      title: org.name,
+      description: `${org.name} changelog releases on Released`,
+      openGraph: { type: "website" },
+    };
+  } catch {
+    return { title: orgSlug };
+  }
+}
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
@@ -63,8 +78,19 @@ export default async function OrgPage({
     },
   ];
 
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": org.name,
+    "url": `https://releases.sh/${orgSlug}`,
+  };
+
   return (
     <div className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
