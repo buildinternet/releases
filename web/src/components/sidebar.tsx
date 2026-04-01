@@ -9,20 +9,20 @@ export function Sidebar({ sections, accounts, formatPath }: SidebarProps) {
   return (
     <div className="w-[200px] shrink-0">
       {sections.map((section, si) => (
-        <div key={si} className={si > 0 ? "border-t border-stone-200 pt-5" : ""}>
+        <div key={si} className={si > 0 ? "border-t border-stone-200 dark:border-stone-800 pt-5" : ""}>
           {section.items.map((item, ii) => (
             <div key={ii} className="mb-6">
-              <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 mb-1.5">{item.label}</div>
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1.5">{item.label}</div>
               {item.link ? (
-                <Link href={item.link} className="text-sm font-medium text-stone-900 hover:text-stone-600">{String(item.value)}</Link>
+                <Link href={item.link} className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300">{String(item.value)}</Link>
               ) : item.externalLink ? (
-                <a href={item.externalLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-stone-900 hover:text-stone-600">{String(item.value)}</a>
+                <a href={item.externalLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300">{String(item.value)}</a>
               ) : (
                 <>
-                  <div className={item.large ? "text-[22px] font-bold text-stone-900" : "text-sm font-medium text-stone-900"}>
+                  <div className={item.large ? "text-[22px] font-bold text-stone-900 dark:text-stone-100" : "text-sm font-medium text-stone-900 dark:text-stone-100"}>
                     {item.value ?? "—"}
                   </div>
-                  {item.subtitle && <div className="text-xs text-stone-400 mt-0.5">{item.subtitle}</div>}
+                  {item.subtitle && <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">{item.subtitle}</div>}
                 </>
               )}
             </div>
@@ -30,11 +30,11 @@ export function Sidebar({ sections, accounts, formatPath }: SidebarProps) {
         </div>
       ))}
       {accounts && accounts.length > 0 && (
-        <div className="border-t border-stone-200 pt-5 mb-6">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 mb-1.5">Accounts</div>
+        <div className="border-t border-stone-200 dark:border-stone-800 pt-5 mb-6">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1.5">Accounts</div>
           <div className="space-y-1.5">
             {accounts.map((acc, i) => (
-              <div key={i} className="flex items-center gap-1.5 text-[13px] text-stone-600">
+              <div key={i} className="flex items-center gap-1.5 text-[13px] text-stone-600 dark:text-stone-400">
                 <SourceTypeIcon type={acc.platform} size={13} />
                 <span>{acc.handle}</span>
               </div>
@@ -43,10 +43,10 @@ export function Sidebar({ sections, accounts, formatPath }: SidebarProps) {
         </div>
       )}
       {formatPath && (
-        <div className="border-t border-stone-200 pt-5 mb-6 flex gap-2 text-[11px] text-stone-400">
-          <a href={`${formatPath}.json`} className="hover:text-stone-600">.json</a>
+        <div className="border-t border-stone-200 dark:border-stone-800 pt-5 mb-6 flex gap-2 text-[11px] text-stone-400 dark:text-stone-500">
+          <a href={`${formatPath}.json`} className="hover:text-stone-600 dark:hover:text-stone-300">.json</a>
           <span>·</span>
-          <a href={`${formatPath}.md`} className="hover:text-stone-600">.md</a>
+          <a href={`${formatPath}.md`} className="hover:text-stone-600 dark:hover:text-stone-300">.md</a>
         </div>
       )}
     </div>

@@ -138,7 +138,7 @@ function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content
 
 const COLLAPSED_MAX_HEIGHT = 72; // ~4.5em at 16px
 
-const markdownClasses = "prose prose-sm prose-stone max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 [&_a]:no-underline [&_code]:text-xs [&_code]:bg-stone-100 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
+const markdownClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-xs [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 
 export function ReleaseListItem({ release }: { release: ReleaseItem }) {
   const [expanded, setExpanded] = useState(false);
@@ -171,25 +171,25 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
   }, []);
 
   return (
-    <div className="border-b border-stone-200 py-4 first:pt-0 last:border-b-0 -mx-2 px-2 rounded">
+    <div className="border-b border-stone-200 dark:border-stone-800 py-4 first:pt-0 last:border-b-0 -mx-2 px-2 rounded">
       <button
         onClick={() => isOverflowing && setExpanded(!expanded)}
         className={`flex justify-between items-baseline mb-1 w-full text-left${isOverflowing ? "" : " cursor-default"}`}
       >
         <div className="flex items-baseline gap-1.5">
           {isOverflowing ? (
-            <span className="text-stone-300 text-sm">{expanded ? "▾" : "▸"}</span>
+            <span className="text-stone-300 dark:text-stone-600 text-sm">{expanded ? "▾" : "▸"}</span>
           ) : (
-            <span className="text-stone-300 text-sm">·</span>
+            <span className="text-stone-300 dark:text-stone-600 text-sm">·</span>
           )}
-          <span className="font-semibold text-[15px] text-stone-900">{heading}</span>
+          <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">{heading}</span>
           {release.url && (
-            <a href={release.url} target="_blank" rel="noopener noreferrer" className="text-stone-300 hover:text-stone-500 text-xs" onClick={(e) => e.stopPropagation()}>↗</a>
+            <a href={release.url} target="_blank" rel="noopener noreferrer" className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 text-xs" onClick={(e) => e.stopPropagation()}>↗</a>
           )}
         </div>
-        <span className="text-xs text-stone-400 whitespace-nowrap ml-4">{formatDate(release.publishedAt)}</span>
+        <span className="text-xs text-stone-400 dark:text-stone-500 whitespace-nowrap ml-4">{formatDate(release.publishedAt)}</span>
       </button>
-      {showSubtitle && <div className="text-sm text-stone-600 mb-1 ml-2.5">{release.title}</div>}
+      {showSubtitle && <div className="text-sm text-stone-600 dark:text-stone-400 mb-1 ml-2.5">{release.title}</div>}
       <div
         className={`ml-2.5 group relative${isOverflowing ? " cursor-pointer" : ""}`}
         onClick={() => isOverflowing && setExpanded(!expanded)}
@@ -202,14 +202,14 @@ export function ReleaseListItem({ release }: { release: ReleaseItem }) {
         ) : (
           <>
             <div ref={contentRef} className="max-h-[4.5em] overflow-hidden">
-              <div className={`${markdownClasses} text-stone-500 [&_strong]:text-stone-500`}>
+              <div className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}>
                 <ReactMarkdown remarkPlugins={[remarkGfm]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
               </div>
             </div>
             {isOverflowing && (
               <>
-                <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-stone-50 to-transparent" />
-                <div className="text-xs text-stone-400 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-stone-50 dark:from-stone-950 to-transparent" />
+                <div className="text-xs text-stone-400 dark:text-stone-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
                   Show more
                 </div>
               </>

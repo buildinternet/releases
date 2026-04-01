@@ -16,7 +16,7 @@ export function SearchBar({ defaultValue }: { defaultValue?: string }) {
     <form onSubmit={handleSubmit} className="max-w-[480px] mx-auto">
       <input type="text" value={query} onChange={(e) => setQuery(e.target.value)}
         placeholder="Search releases..."
-        className="w-full bg-white border border-stone-300 rounded-lg px-4 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 outline-none focus:border-stone-400 transition-colors" />
+        className="w-full bg-white dark:bg-stone-900 border border-stone-300 dark:border-stone-700 rounded-lg px-4 py-2.5 text-sm text-stone-900 dark:text-stone-100 placeholder:text-stone-400 dark:placeholder:text-stone-500 outline-none focus:border-stone-400 dark:focus:border-stone-500 transition-colors" />
     </form>
   );
 }

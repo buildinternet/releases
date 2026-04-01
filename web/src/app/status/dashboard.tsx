@@ -325,15 +325,15 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     <div>
       {/* Connection status */}
       <div className="flex items-center gap-2 mb-4">
-        <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : hasRunningSessions ? "bg-red-400" : "bg-stone-300"}`} />
-        <span className="text-xs text-stone-400">
+        <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : hasRunningSessions ? "bg-red-400" : "bg-stone-300 dark:bg-stone-600"}`} />
+        <span className="text-xs text-stone-400 dark:text-stone-500">
           {connected ? "Live" : hasRunningSessions ? "Reconnecting..." : "Idle"}
         </span>
       </div>
 
       {/* Usage stats bar */}
       {(totalInput > 0 || totalOutput > 0) && (
-        <div className="text-xs text-stone-400 mb-4 px-3 py-2 bg-stone-100 rounded-md">
+        <div className="text-xs text-stone-400 dark:text-stone-500 mb-4 px-3 py-2 bg-stone-100 dark:bg-stone-800 rounded-md">
           Today: {formatTokens(totalInput)} input / {formatTokens(totalOutput)} output
           {usage.length > 1 && (
             <span className="ml-3 text-stone-400">
@@ -344,14 +344,14 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       )}
 
       {/* Date range + Tabs */}
-      <div className="flex items-center justify-between border-b border-stone-200 mb-4">
+      <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 mb-4">
         <div className="flex gap-1">
           <button
             onClick={() => setTab("sessions")}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === "sessions"
-                ? "border-stone-900 text-stone-900"
-                : "border-transparent text-stone-400 hover:text-stone-600"
+                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
+                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
             }`}
           >
             Sessions{runningCount > 0 && ` (${runningCount})`}
@@ -360,8 +360,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
             onClick={() => setTab("fetch-log")}
             className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
               tab === "fetch-log"
-                ? "border-stone-900 text-stone-900"
-                : "border-transparent text-stone-400 hover:text-stone-600"
+                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
+                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
             }`}
           >
             Fetch Log
@@ -374,8 +374,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
               onClick={() => { setDateRange(range); setSessionPage(0); setFetchLogPage(0); }}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 dateRange === range
-                  ? "bg-stone-900 text-white"
-                  : "bg-stone-100 text-stone-500 hover:bg-stone-200"
+                  ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+                  : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
               }`}
             >
               {dateRangeLabels[range]}
@@ -445,7 +445,7 @@ function SessionsTable({
   onDismiss: (id: string) => void;
 }) {
   if (sessions.length === 0) {
-    return <div className="text-sm text-stone-400 py-8 text-center">No sessions yet.</div>;
+    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No sessions yet.</div>;
   }
 
   const totalPages = Math.ceil(sessions.length / perPage);
@@ -453,8 +453,8 @@ function SessionsTable({
 
   return (
     <div>
-      <div className="border border-stone-200 rounded-lg overflow-hidden font-mono">
-        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-sans font-medium uppercase tracking-wider text-stone-400">
+      <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
+        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
           <div>Company</div>
           <div>Started</div>
           <div>Step</div>
@@ -467,13 +467,13 @@ function SessionsTable({
           return (<div key={session.sessionId}>
             <button
               onClick={() => onToggle(session.sessionId)}
-              className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 hover:bg-stone-50 transition-colors"
+              className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
             >
-              <div className="text-stone-900">
-                <span className="mr-1.5 text-stone-300">{isExpanded ? "▾" : "▸"}</span>
+              <div className="text-stone-900 dark:text-stone-100">
+                <span className="mr-1.5 text-stone-300 dark:text-stone-600">{isExpanded ? "▾" : "▸"}</span>
                 {session.company}
               </div>
-              <div className="text-stone-500">
+              <div className="text-stone-500 dark:text-stone-400">
                 {formatTime(session.startedAt)}
               </div>
               <div>
@@ -505,13 +505,13 @@ function SessionsTable({
                   )
                 )}
               </div>
-              <div className="text-stone-400 text-right flex items-center justify-end gap-2">
+              <div className="text-stone-400 dark:text-stone-500 text-right flex items-center justify-end gap-2">
                 {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
                 {session.status !== "running" && (
                   <span
                     role="button"
                     tabIndex={0}
-                    className="text-stone-300 hover:text-stone-500 transition-colors"
+                    className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 transition-colors"
                     title="Dismiss"
                     onClick={(e) => {
                       e.stopPropagation();
@@ -532,13 +532,13 @@ function SessionsTable({
         })}
       </div>
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-xs text-stone-400">
+        <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
           <span>{sessions.length} sessions</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page === 0}
-              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
             >
               Prev
             </button>
@@ -546,7 +546,7 @@ function SessionsTable({
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages - 1}
-              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
             >
               Next
             </button>
@@ -584,7 +584,7 @@ function SessionLogPanel({ sessionId, logs, currentAction, status }: { sessionId
   }, [logs.length]);
 
   return (
-    <div ref={containerRef} className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200">
+    <div ref={containerRef} className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200 dark:border-stone-800">
       {logs.length === 0 && currentAction && (
         <div className="text-stone-500">{currentAction}</div>
       )}
@@ -611,7 +611,7 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
   const filtered = filter === "all" ? logs : logs.filter((l) => l.status === filter);
 
   if (logs.length === 0) {
-    return <div className="text-sm text-stone-400 py-8 text-center">No fetch log entries yet.</div>;
+    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No fetch log entries yet.</div>;
   }
 
   const totalPages = Math.ceil(filtered.length / perPage);
@@ -638,8 +638,8 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
               onClick={() => { setFilter(f.value); onPageChange(0); }}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 filter === f.value
-                  ? "bg-stone-900 text-white"
-                  : "bg-stone-100 text-stone-500 hover:bg-stone-200"
+                  ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+                  : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
               }`}
             >
               {f.label} <span className="ml-0.5 opacity-60">{count}</span>
@@ -648,8 +648,8 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
         })}
       </div>
 
-      <div className="border border-stone-200 rounded-lg overflow-hidden font-mono">
-        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 text-xs font-sans font-medium uppercase tracking-wider text-stone-400">
+      <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
+        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
           <div>Source</div>
           <div>Time</div>
           <div>Status</div>
@@ -667,12 +667,12 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
                   else next.add(log.id);
                   return next;
                 })}
-                className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 hover:bg-stone-50 transition-colors"
+                className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
               >
                 <div className="flex items-start gap-1.5">
-                  <span className="text-stone-300 shrink-0">{isExpanded ? "▾" : "▸"}</span>
+                  <span className="text-stone-300 dark:text-stone-600 shrink-0">{isExpanded ? "▾" : "▸"}</span>
                   <div>
-                    <div className="text-stone-900">
+                    <div className="text-stone-900 dark:text-stone-100">
                       {log.sourceSlug ? (
                         <a href={`/source/${log.sourceSlug}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
                           {log.sourceName ?? log.sourceSlug}
@@ -713,13 +713,13 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
         })}
       </div>
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-xs text-stone-400">
+        <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
           <span>{filtered.length} entries</span>
           <div className="flex items-center gap-2">
             <button
               onClick={() => onPageChange(page - 1)}
               disabled={page === 0}
-              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
             >
               Prev
             </button>
@@ -727,7 +727,7 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages - 1}
-              className="px-2 py-1 rounded border border-stone-200 hover:bg-stone-50 disabled:opacity-30 disabled:cursor-default"
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
             >
               Next
             </button>
@@ -740,7 +740,7 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
 
 function FetchLogDetail({ log }: { log: FetchLogEntry }) {
   return (
-    <div className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200">
+    <div className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200 dark:border-stone-800">
       <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-2">
         <div><span className="text-stone-500">Source ID:</span> {log.sourceId}</div>
         <div><span className="text-stone-500">Duration:</span> {formatDuration(log.durationMs)}</div>

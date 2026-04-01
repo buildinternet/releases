@@ -1,5 +1,6 @@
 @import "tailwindcss";
 @plugin "@tailwindcss/typography";
+@custom-variant dark (&:where(.dark, .dark *));
 
 :root {
   /* Product palette for multi-product charts */
@@ -20,8 +21,14 @@
 [data-slot="range-navigator-bar"][data-state="out-of-range"] {
   background-color: oklch(0.869 0.005 286.3); /* stone-200 */
 }
+.dark [data-slot="range-navigator-bar"][data-state="out-of-range"] {
+  background-color: oklch(0.444 0.011 286.3); /* stone-700 */
+}
 
 /* Cadence sparkline empty bars */
 [data-slot="cadence-spark-bar"] {
   background-color: oklch(0.869 0.005 286.3); /* stone-200 */
+}
+.dark [data-slot="cadence-spark-bar"] {
+  background-color: oklch(0.444 0.011 286.3); /* stone-700 */
 }
