@@ -12,8 +12,16 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-export default async function OrgPage({ params }: { params: Promise<{ orgSlug: string }> }) {
+export default async function OrgPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ orgSlug: string }>;
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const { orgSlug } = await params;
+  const sp = await searchParams;
+  const yearParam = typeof sp.year === "string" ? parseInt(sp.year, 10) : undefined;
 
   let org;
   try {
@@ -30,7 +38,28 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
     notFound();
   }
 
-  const activity = await api.orgActivity(org.slug).catch(() => null);
+  // Compute the activity window: specific year or trailing 12 months
+  const now = new Date();
+  let activityFrom: string | undefined;
+  let activityTo: string | undefined;
+
+  if (yearParam && yearParam >= 2000 && yearParam <= now.getFullYear()) {
+    activityFrom = `${yearParam}-01-01`;
+    activityTo = `${yearParam}-12-31`;
+  } else {
+    const oneYearAgo = new Date(now);
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1);
+    activityFrom = oneYearAgo.toISOString().slice(0, 10);
+  }
+
+  const activity = await api.orgActivity(org.slug, activityFrom, activityTo).catch(() => null);
+
+  // Determine available years for the year selector
+  const trackingStart = org.trackingSince ? new Date(org.trackingSince).getFullYear() : now.getFullYear();
+  const availableYears: number[] = [];
+  for (let y = now.getFullYear(); y >= trackingStart; y--) {
+    availableYears.push(y);
+  }
 
   const sidebarSections = [
     {
@@ -64,7 +93,14 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
           <span className="text-stone-600 font-medium">{org.name}</span>
         </div>
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 mt-4">{org.name}</h1>
-        {activity && <ReleaseTimeline activity={activity} />}
+        {activity && (
+          <ReleaseTimeline
+            activity={activity}
+            availableYears={availableYears}
+            currentYear={yearParam}
+            orgSlug={org.slug}
+          />
+        )}
         <div className="flex gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0 space-y-2">
             {[...org.sources].sort((a, b) => {

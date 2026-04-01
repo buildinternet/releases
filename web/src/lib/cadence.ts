@@ -1,5 +1,12 @@
 /** Cadence classification and product color utilities for release timeline visualization. */
 
+export const DAY_MS = 24 * 60 * 60 * 1000;
+export const WEEK_MS = 7 * DAY_MS;
+
+export function fmtWeek(d: Date): string {
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export type CadenceKey = "daily" | "weekly" | "biweekly" | "monthly" | "sparse";
 
 export interface CadenceInfo {
@@ -49,7 +56,7 @@ export function bucketByWeek(
   rangeStart: Date,
   rangeEnd: Date,
 ): WeeklyBucket[] {
-  const weekMs = 7 * 24 * 60 * 60 * 1000;
+  const weekMs = WEEK_MS;
   const totalMs = rangeEnd.getTime() - rangeStart.getTime();
   const bucketCount = Math.max(1, Math.ceil(totalMs / weekMs));
   const buckets: WeeklyBucket[] = [];
