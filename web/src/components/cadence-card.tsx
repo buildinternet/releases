@@ -1,4 +1,7 @@
-import { type CadenceKey, type WeeklyBucket, getCadenceInfo, getProductColor } from "@/lib/cadence";
+"use client";
+
+import { type CadenceKey, type WeeklyBucket, getCadenceInfo, getProductColor, DAY_MS, fmtWeek } from "@/lib/cadence";
+import { HoverCard } from "@/components/hover-card";
 
 /* ---------- Types ---------- */
 
@@ -88,7 +91,7 @@ function Stat({ count, capped, color }: { count: number; capped: boolean; color:
       >
         {count}{capped && "+"}
       </div>
-      <div data-slot="cadence-stat-label" className="text-[11px] text-stone-400 mb-3">
+      <div data-slot="cadence-stat-label" className="text-[11px] text-stone-500 mb-3">
         releases in window
       </div>
     </>
@@ -104,20 +107,33 @@ function Sparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: string 
     <div
       data-slot="cadence-sparkline"
       className="flex items-end gap-px h-8"
-      aria-hidden="true"
     >
       {buckets.map((bucket, i) => {
         const h = bucket.count > 0 ? Math.max(2, (bucket.count / max) * 32) : 1;
+        const weekEnd = new Date(bucket.weekStart.getTime() + 6 * DAY_MS);
+
         return (
-          <div
-            key={i}
-            data-slot="cadence-spark-bar"
-            className="flex-1 rounded-sm min-h-px"
-            style={{
-              height: `${h}px`,
-              backgroundColor: bucket.count > 0 ? color : undefined,
-            }}
-          />
+          <HoverCard.Root key={i}>
+            <HoverCard.Trigger
+              data-slot="cadence-spark-bar"
+              className="flex-1 rounded-sm min-h-px"
+              style={{
+                height: `${h}px`,
+                backgroundColor: bucket.count > 0 ? color : "var(--color-stone-200)",
+                alignSelf: "flex-end",
+              }}
+            />
+            {bucket.count > 0 && (
+              <HoverCard.Content className="bg-white border border-stone-200 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
+                <div className="text-[11px] font-medium text-stone-500 mb-1">
+                  {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
+                </div>
+                <div className="text-sm font-semibold" style={{ color }}>
+                  {bucket.count} {bucket.count === 1 ? "release" : "releases"}
+                </div>
+              </HoverCard.Content>
+            )}
+          </HoverCard.Root>
         );
       })}
     </div>
@@ -138,7 +154,7 @@ function Footer({
   return (
     <div
       data-slot="cadence-card-footer"
-      className="flex justify-between mt-3 text-[11px] text-stone-400"
+      className="flex justify-between mt-3 text-[11px] text-stone-500"
     >
       <span>{capped ? `${avgPerWeek.toFixed(1)}+` : avgPerWeek.toFixed(1)}/week avg</span>
       <span>{latestVersion ? `v${latestVersion}` : "\u2014"}</span>
