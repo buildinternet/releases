@@ -36,14 +36,14 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                   const href = r.orgSlug ? `/${r.orgSlug}/${r.sourceSlug}` : `/source/${r.sourceSlug}`;
                   return (
                     <div key={i} className="border-b border-stone-200 dark:border-stone-800 py-4 first:pt-0 last:border-b-0">
-                      <div className="flex justify-between items-baseline mb-1">
-                        <div className="flex items-baseline gap-2">
-                          {r.version && <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">{r.version}</span>}
-                          <span className="text-sm text-stone-600 dark:text-stone-400">{r.title}</span>
+                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline mb-1 gap-0.5 sm:gap-2">
+                        <div className="flex items-baseline gap-2 min-w-0">
+                          {r.version && <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 shrink-0">{r.version}</span>}
+                          <span className="text-sm text-stone-600 dark:text-stone-400 truncate">{r.title}</span>
                         </div>
-                        <span className="text-xs text-stone-400 dark:text-stone-500 whitespace-nowrap ml-4">{formatDate(r.publishedAt)}</span>
+                        <span className="text-xs text-stone-400 dark:text-stone-500 whitespace-nowrap">{formatDate(r.publishedAt)}</span>
                       </div>
-                      <p className="text-[13px] text-stone-500 dark:text-stone-400 mb-1">{r.summary}</p>
+                      <p className="text-[13px] text-stone-500 dark:text-stone-400 mb-1 line-clamp-2">{r.summary}</p>
                       <Link href={href} className="text-xs text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300">{r.sourceName}</Link>
                     </div>
                   );

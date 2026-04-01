@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
 
+function stalenessColor(isoDate: string | null | undefined): string {
+  if (!isoDate) return "text-stone-400 dark:text-stone-500";
+  const ageMs = Date.now() - new Date(isoDate).getTime();
+  const ageDays = ageMs / (1000 * 60 * 60 * 24);
+  if (ageDays > 7) return "text-red-400 dark:text-red-500";
+  if (ageDays > 1) return "text-amber-500 dark:text-amber-400";
+  return "text-stone-400 dark:text-stone-500";
+}
+
 interface SidebarItem { label: string; value: string | number | null; large?: boolean; subtitle?: string; link?: string; externalLink?: string; }
 interface SidebarSection { items: SidebarItem[]; }
 interface SidebarProps { sections: SidebarSection[]; accounts?: { platform: string; handle: string }[]; formatPath?: string; footnote?: string | null; footnoteTitle?: string | null; }
@@ -45,7 +54,7 @@ export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitl
       {(footnote || formatPath) && (
         <div className="border-t border-stone-200 dark:border-stone-800 pt-4 mb-6">
           {footnote && (
-            <div className="text-[11px] text-stone-400 dark:text-stone-500 mb-3 cursor-default" title={footnoteTitle ?? undefined}>{footnote}</div>
+            <div className={`text-[11px] mb-3 cursor-default ${stalenessColor(footnoteTitle)}`} title={footnoteTitle ?? undefined}>{footnote}</div>
           )}
           {formatPath && (
             <div className="flex gap-2 text-[11px] text-stone-400 dark:text-stone-500">

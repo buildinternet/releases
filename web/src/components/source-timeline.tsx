@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from "react";
 import { type SourceActivity } from "@/lib/api";
-import { DAY_MS, WEEK_MS, parseBuckets } from "@/lib/cadence";
+import { DAY_MS, WEEK_MS, parseBuckets, fmtVersion } from "@/lib/cadence";
 import { RangeNavigator } from "@/components/range-navigator";
 
 interface SourceTimelineProps {
@@ -36,9 +36,21 @@ export function SourceTimeline({ activity }: SourceTimelineProps) {
     const weeks = brushedBuckets.length || 1;
     const avgPerWeek = totalReleases / weeks;
     const avgPerMonth = avgPerWeek * (30 / 7);
-    const avgIntervalDays = totalReleases > 1 ? (weeks * 7) / totalReleases : null;
 
-    return { totalReleases, avgPerWeek, avgPerMonth, avgIntervalDays };
+    let windowEarliestVersion: string | null = null;
+    let windowLatestVersion: string | null = null;
+    for (const b of brushedBuckets) {
+      if (b.earliestVersion && !windowEarliestVersion) windowEarliestVersion = b.earliestVersion;
+      if (b.latestVersion) windowLatestVersion = b.latestVersion;
+    }
+
+    const versionRange = windowEarliestVersion && windowLatestVersion && windowEarliestVersion !== windowLatestVersion
+      ? `${fmtVersion(windowEarliestVersion)} → ${fmtVersion(windowLatestVersion)}`
+      : windowLatestVersion
+        ? fmtVersion(windowLatestVersion)
+        : null;
+
+    return { totalReleases, avgPerWeek, avgPerMonth, versionRange };
   }, [brushedBuckets]);
 
   if (buckets.length === 0) return null;
@@ -61,7 +73,7 @@ export function SourceTimeline({ activity }: SourceTimelineProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         {([
           { label: "Total Releases", value: String(summaryStats.totalReleases) },
-          { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? `${Math.round(summaryStats.avgIntervalDays)}d` : "\u2014" },
+          { label: "Version Range", value: summaryStats.versionRange ?? "\u2014" },
           { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk` },
         ] as const).map((stat) => (
           <div key={stat.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
