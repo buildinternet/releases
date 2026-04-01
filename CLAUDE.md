@@ -54,6 +54,7 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 
 ```bash
 bun src/index.ts list <slug> --json     # Inspect a single source
+bun src/index.ts list --query <text>    # Filter sources by name, slug, or URL
 bun src/index.ts list --has-feed        # Sources with a discovered feed URL
 bun src/index.ts list --enrichable      # Sources eligible for content enrichment
 bun src/index.ts fetch <slug> --max 5   # Fetch limited releases for one source

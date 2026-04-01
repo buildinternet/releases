@@ -26,8 +26,10 @@ Copy `.env.example` to `.env` and fill in:
 ```bash
 released add "Next.js" --url https://github.com/vercel/next.js
 released add "Linear" --url https://linear.app/changelog
-released add "My Blog" --url https://example.com/changelog
+released add --name "My Blog" --url https://example.com/changelog
 ```
+
+The name can be a positional argument or passed via `--name`.
 
 By default, `add` runs automated pre-checks that determine the best ingestion method for a URL. This includes provider detection (Mintlify, Docusaurus, etc.), feed discovery, and markdown suffix probing:
 - **GitHub URLs** → uses the GitHub Releases API directly
@@ -170,6 +172,7 @@ released list                          # list all sources
 released list next-js                  # show details for a single source
 released list next-js --json           # machine-readable output
 released list --org sentry             # filter by organization
+released list --query shadcn           # filter by name, slug, or URL
 released list --has-feed               # sources with a discovered feed URL
 released list --enrichable             # sources eligible for content enrichment
 released list --has-feed --org sentry  # combine filters

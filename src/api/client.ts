@@ -216,11 +216,13 @@ export async function listSourcesWithOrg(opts?: {
   orgSlug?: string;
   hasFeed?: boolean;
   enrichable?: boolean;
+  query?: string;
 }): Promise<SourceWithOrg[]> {
   const params = new URLSearchParams();
   if (opts?.orgSlug) params.set("orgSlug", opts.orgSlug);
   if (opts?.hasFeed) params.set("has_feed", "true");
   if (opts?.enrichable) params.set("enrichable", "true");
+  if (opts?.query) params.set("query", opts.query);
   const qs = params.toString();
 
   // The API GET /api/sources returns enriched source data — map to the shape the CLI needs

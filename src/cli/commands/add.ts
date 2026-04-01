@@ -161,6 +161,7 @@ export function registerAddCommand(program: Command) {
     .option("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--org <org>", "Organization name or slug (creates if not found)")
+    .option("--name <name>", "Display name for the source (alternative to positional argument)")
     .option("--feed-url <feedUrl>", "Explicit feed URL (skips auto-discovery)")
     .option("--batch <file>", "JSON file with sources to add (use - for stdin)")
     .option("--skip-eval", "Skip changelog evaluation (use basic type detection only)")
@@ -170,9 +171,10 @@ Examples:
   released add "Next.js" --url https://github.com/vercel/next.js
   released add "Tailwind Blog" --url https://tailwindcss.com/blog --org "Tailwind Labs"
   released add "Astro" --url https://astro.build/blog --type scrape
+  released add --name "Astro" --url https://astro.build/blog
   released add --batch sources.json
   cat sources.json | released add --batch -`)
-    .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; feedUrl?: string; batch?: string; skipEval?: boolean; json?: boolean }) => {
+    .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; name?: string; feedUrl?: string; batch?: string; skipEval?: boolean; json?: boolean }) => {
       // --- Batch mode ---
       if (opts.batch) {
         let raw: string;
@@ -236,20 +238,22 @@ Examples:
       }
 
       // --- Single-add mode ---
-      if (!name) {
+      const effectiveName = name ?? opts.name;
+      if (!effectiveName) {
         console.error("Error: missing required argument: name\n");
         console.error("  released add \"My Source\" --url https://example.com/changelog");
+        console.error("  released add --name \"My Source\" --url https://example.com/changelog");
         console.error("  released add --batch sources.json");
         process.exit(1);
       }
       if (!opts.url) {
         console.error("Error: missing required option: --url\n");
-        console.error(`  released add "${name}" --url https://example.com/changelog`);
+        console.error(`  released add "${effectiveName}" --url https://example.com/changelog`);
         process.exit(1);
       }
 
       const result = await addSingleSource({
-        name,
+        name: effectiveName,
         url: opts.url,
         type: opts.type,
         slug: opts.slug,

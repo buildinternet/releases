@@ -13,6 +13,7 @@ Operational guide for managing changelog sources via the Released CLI.
 released list --json                    # All sources with metadata
 released list <slug> --json             # Single source details
 released list --org <org> --json        # Sources for a specific org
+released list --query <text> --json     # Filter by name, slug, or URL
 released list --has-feed --json         # Sources with a discovered feed URL
 released list --enrichable --json       # Sources eligible for content enrichment
 released list --enrichable --org <org> --json  # Combine filters
@@ -36,6 +37,7 @@ Use `--has-feed` to find all sources with a discovered feed URL, regardless of c
 
 ```bash
 released add <name> --url <url>                    # Auto-detect type
+released add --name <name> --url <url>              # Name as flag (alternative)
 released add <name> --url <url> --type github       # Explicit type
 released add <name> --url <url> --org "Acme Corp"   # Associate with org
 released add <name> --url <url> --feed-url <feed>   # Explicit feed URL

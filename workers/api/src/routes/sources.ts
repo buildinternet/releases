@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, count, and, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
+import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { sources, releases, organizations, fetchLog, releaseSummaries } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
@@ -18,6 +18,7 @@ sourceRoutes.get("/sources", async (c) => {
   const filterByUrls = c.req.query("filterByUrls") === "true";
   const hasFeed = c.req.query("has_feed") === "true";
   const enrichable = c.req.query("enrichable") === "true";
+  const queryText = c.req.query("query");
 
   // Filter by URLs — return raw source rows matching the provided url params
   if (filterByUrls) {
@@ -56,6 +57,17 @@ sourceRoutes.get("/sources", async (c) => {
   if (enrichable) {
     conditions.push(
       sql`(json_extract(${sources.metadata}, '$.feedContentDepth') IS NULL OR json_extract(${sources.metadata}, '$.feedContentDepth') = 'summary-only')`,
+    );
+  }
+
+  if (queryText) {
+    const pattern = `%${queryText.toLowerCase()}%`;
+    conditions.push(
+      or(
+        like(sql`lower(${sources.name})`, pattern),
+        like(sql`lower(${sources.slug})`, pattern),
+        like(sql`lower(${sources.url})`, pattern),
+      )!,
     );
   }
 
