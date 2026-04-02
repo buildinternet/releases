@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
+import { FETCH_CAP } from "@/lib/cadence";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
@@ -82,7 +83,7 @@ export default async function SourcePage({
   }
 
   const sidebarSections = [
-    { items: [{ label: "Releases", value: source.releaseCount, large: true }] },
+    { items: [{ label: "Releases", value: source.releaseCount >= FETCH_CAP ? `${FETCH_CAP}+` : source.releaseCount, large: true }] },
     {
       items: [
         { label: "Last 30 Days", value: source.releasesLast30Days, large: true, subtitle: "releases" },

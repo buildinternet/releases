@@ -1,12 +1,9 @@
 "use client";
 
-import { type CadenceKey, type WeeklyBucket, getCadenceInfo, getProductColor, fmtVersion, DAY_MS, fmtWeek } from "@/lib/cadence";
+import { type CadenceKey, type WeeklyBucket, getCadenceInfo, getProductColor, fmtVersion, DAY_MS, fmtWeek, FETCH_CAP } from "@/lib/cadence";
 import { HoverCard } from "@/components/hover-card";
 
 /* ---------- Types ---------- */
-
-/** Default fetch cap per source — counts at this value are likely truncated. */
-const FETCH_CAP = 200;
 
 interface CadenceCardData {
   name: string;

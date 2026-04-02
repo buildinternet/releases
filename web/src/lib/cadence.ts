@@ -3,6 +3,9 @@
 export const DAY_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * DAY_MS;
 
+/** Default fetch cap per source — counts at this value are likely truncated. */
+export const FETCH_CAP = 200;
+
 export function fmtWeek(d: Date): string {
   return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
 }
@@ -43,6 +46,14 @@ export const PRODUCT_COLORS = [
 
 export function getProductColor(index: number): string {
   return PRODUCT_COLORS[index % PRODUCT_COLORS.length];
+}
+
+/** Format an interval in days to a human-readable string with hours resolution. */
+export function fmtInterval(days: number): string {
+  const hours = days * 24;
+  if (hours < 1) return `${Math.round(hours * 60)}m`;
+  if (days < 2) return `${Math.round(hours)}h`;
+  return `${Math.round(days)}d`;
 }
 
 /** Format a version string — prepend "v" only for semver-ish versions (starting with a digit). */

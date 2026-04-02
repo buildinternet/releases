@@ -46,9 +46,7 @@ export function SourceTimeline({ activity }: SourceTimelineProps) {
 
     const versionRange = windowEarliestVersion && windowLatestVersion && windowEarliestVersion !== windowLatestVersion
       ? `${fmtVersion(windowEarliestVersion)} → ${fmtVersion(windowLatestVersion)}`
-      : windowLatestVersion
-        ? fmtVersion(windowLatestVersion)
-        : null;
+      : null;
 
     return { totalReleases, avgPerWeek, avgPerMonth, versionRange };
   }, [brushedBuckets]);

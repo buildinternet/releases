@@ -3,7 +3,7 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 import { type OrgActivity } from "@/lib/api";
-import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets } from "@/lib/cadence";
+import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
 import { CadenceCard } from "@/components/cadence-card";
 import { CadenceGrid } from "@/components/cadence-grid";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
@@ -11,9 +11,10 @@ import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navig
 interface ReleaseTimelineProps {
   activity: OrgActivity;
   orgSlug: string;
+  children?: React.ReactNode;
 }
 
-export function ReleaseTimeline({ activity, orgSlug }: ReleaseTimelineProps) {
+export function ReleaseTimeline({ activity, orgSlug, children }: ReleaseTimelineProps) {
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
   const rangeEnd = useMemo(() => new Date(activity.range.to), [activity.range.to]);
 
@@ -134,7 +135,7 @@ export function ReleaseTimeline({ activity, orgSlug }: ReleaseTimelineProps) {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
         {([
           { label: "Total Releases", value: String(summaryStats.totalReleases) },
-          { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? `${Math.round(summaryStats.avgIntervalDays)}d` : "\u2014" },
+          { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014" },
           { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk` },
         ] as const).map((stat) => (
           <div key={stat.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
@@ -143,6 +144,8 @@ export function ReleaseTimeline({ activity, orgSlug }: ReleaseTimelineProps) {
           </div>
         ))}
       </div>
+
+      {children}
 
       <CadenceGrid>
         {cardData.map((data) => (

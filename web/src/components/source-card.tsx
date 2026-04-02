@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
+import { FETCH_CAP } from "@/lib/cadence";
 import type { SourceListItem } from "@/lib/api";
 
 function formatDate(iso: string | null) {
@@ -42,7 +43,7 @@ export function SourceCard({ source, orgSlug }: { source: SourceListItem; orgSlu
         <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
           {source.latestVersion && <>Latest: {source.latestVersion}</>}
           {source.latestDate && <>{source.latestVersion ? " · " : ""}{formatDate(source.latestDate)}</>}
-          {source.releaseCount > 0 && <>{(source.latestVersion || source.latestDate) ? " · " : ""}{source.releaseCount} releases</>}
+          {source.releaseCount > 0 && <>{(source.latestVersion || source.latestDate) ? " · " : ""}{source.releaseCount >= FETCH_CAP ? `${FETCH_CAP}+` : source.releaseCount} releases</>}
         </div>
       )}
     </Link>
