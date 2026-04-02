@@ -19,6 +19,7 @@ export interface SourceMetadata {
   feedDiscoveredAt?: string;
   feedEtag?: string;
   feedLastModified?: string;
+  feedContentLength?: string;
   noFeedFound?: boolean;
 
   // Crawl fields
@@ -203,7 +204,7 @@ export async function fetchAndParseFeed(
   feedType: FeedType,
   options?: FetchOptions,
   headers?: Record<string, string>,
-): Promise<{ releases: RawRelease[]; etag?: string; lastModified?: string }> {
+): Promise<{ releases: RawRelease[]; etag?: string; lastModified?: string; contentLength?: string }> {
   const reqHeaders: Record<string, string> = {
     "User-Agent": "released/0.1",
     "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
@@ -221,6 +222,7 @@ export async function fetchAndParseFeed(
   const body = await res.text();
   const etag = res.headers.get("etag") ?? undefined;
   const lastModified = res.headers.get("last-modified") ?? undefined;
+  const contentLength = res.headers.get("content-length") ?? undefined;
 
   let releases: RawRelease[];
   switch (feedType) {
@@ -246,7 +248,75 @@ export async function fetchAndParseFeed(
     releases = releases.slice(0, options.maxEntries);
   }
 
-  return { releases, etag, lastModified };
+  return { releases, etag, lastModified, contentLength };
+}
+
+export type ChangeStatus = "changed" | "unchanged" | "unknown";
+
+export interface HeadCheckResult {
+  status: ChangeStatus;
+  etag?: string;
+  lastModified?: string;
+  contentLength?: string;
+  responseMs: number;
+}
+
+/**
+ * Send a HEAD request to a feed URL and compare response headers against
+ * stored values to detect changes without downloading the feed body.
+ */
+export async function headCheckFeed(
+  feedUrl: string,
+  stored: { etag?: string; lastModified?: string; contentLength?: string },
+): Promise<HeadCheckResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  const start = Date.now();
+
+  try {
+    const res = await fetch(feedUrl, {
+      method: "HEAD",
+      headers: { "User-Agent": "released/0.1" },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+
+    const responseMs = Date.now() - start;
+    const etag = res.headers.get("etag") ?? undefined;
+    const lastModified = res.headers.get("last-modified") ?? undefined;
+    const contentLength = res.headers.get("content-length") ?? undefined;
+
+    if (!res.ok) {
+      return { status: "unknown", etag, lastModified, contentLength, responseMs };
+    }
+
+    const hasStored = stored.etag || stored.lastModified || stored.contentLength;
+    if (!hasStored) {
+      return { status: "unknown", etag, lastModified, contentLength, responseMs };
+    }
+
+    const result = { etag, lastModified, contentLength, responseMs };
+    let anyCompared = false;
+
+    if (etag && stored.etag) {
+      anyCompared = true;
+      if (etag !== stored.etag) return { status: "changed", ...result };
+    }
+    if (lastModified && stored.lastModified) {
+      anyCompared = true;
+      if (lastModified !== stored.lastModified) return { status: "changed", ...result };
+    }
+    if (contentLength && stored.contentLength) {
+      anyCompared = true;
+      if (contentLength !== stored.contentLength) return { status: "changed", ...result };
+    }
+
+    return { status: anyCompared ? "unchanged" : "unknown", ...result };
+  } catch {
+    return { status: "unknown", responseMs: Date.now() - start };
+  } finally {
+    clearTimeout(timeout);
+  }
 }
 
 /**
@@ -297,9 +367,33 @@ export async function fetchViaFeed(
   if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
   if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;
 
+  // HEAD pre-check: skip full fetch if feed hasn't changed
+  const hasStoredHeaders = meta.feedEtag || meta.feedLastModified || meta.feedContentLength;
+  if (hasStoredHeaders && !options?.full) {
+    const headResult = await headCheckFeed(feedUrl, {
+      etag: meta.feedEtag,
+      lastModified: meta.feedLastModified,
+      contentLength: meta.feedContentLength,
+    });
+
+    if (headResult.contentLength) metaUpdates.feedContentLength = headResult.contentLength;
+    if (headResult.etag) metaUpdates.feedEtag = headResult.etag;
+    if (headResult.lastModified) metaUpdates.feedLastModified = headResult.lastModified;
+
+    if (headResult.status === "unchanged") {
+      logger.info(`HEAD check: feed unchanged, skipping full fetch`);
+      if (Object.keys(metaUpdates).length > 0) {
+        await updateSourceMeta(source, metaUpdates);
+      }
+      return [];
+    }
+
+    logger.info(`HEAD check: ${headResult.status}, proceeding to full fetch`);
+  }
+
   // Fetch and parse
   logger.info(`Fetching ${feedType} feed: ${feedUrl}`);
-  const { releases, etag, lastModified } = await fetchAndParseFeed(
+  const { releases, etag, lastModified, contentLength } = await fetchAndParseFeed(
     feedUrl,
     feedType!,
     options,
@@ -324,6 +418,7 @@ export async function fetchViaFeed(
 
   if (etag) metaUpdates.feedEtag = etag;
   if (lastModified) metaUpdates.feedLastModified = lastModified;
+  if (contentLength) metaUpdates.feedContentLength = contentLength;
 
   // Write all metadata changes in a single update
   if (Object.keys(metaUpdates).length > 0) {

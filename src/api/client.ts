@@ -540,6 +540,14 @@ export async function listFetchableSources(opts: {
   return apiFetch<Source[]>(`/api/sources/fetchable?${params}`);
 }
 
+export async function listFeedSources(): Promise<Source[]> {
+  return apiFetch<Source[]>("/api/sources/feeds");
+}
+
+export async function listSourcesWithChanges(): Promise<Source[]> {
+  return apiFetch<Source[]>("/api/sources/changes");
+}
+
 // ── Source CRUD ──
 
 export async function updateSource(slug: string, data: Record<string, unknown>): Promise<Source> {

@@ -493,6 +493,19 @@ released check --json      # machine-readable output
 
 Reports HTTP status, response time, and health classification (`healthy`, `degraded`, `error`). For feed sources, also probes the feed URL.
 
+### Feed Change Detection
+
+Lightweight check for upstream feed changes using HTTP HEAD requests — no content download or AI involved:
+
+```bash
+released poll                  # check all feed sources for changes
+released poll next-js          # check a single source
+released poll --changed        # only show sources with detected changes
+released poll --json           # machine-readable output
+```
+
+Compares ETag, Last-Modified, and Content-Length headers against stored values to flag sources that have upstream changes available. The `fetch` command also uses HEAD as a pre-filter to skip unchanged feeds automatically.
+
 ### Fetch History
 
 View recent fetch activity:

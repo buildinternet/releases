@@ -102,6 +102,7 @@ export const sources = sqliteTable("sources", {
   consecutiveNoChange: integer("consecutive_no_change").default(0),
   consecutiveErrors: integer("consecutive_errors").default(0),
   nextFetchAfter: text("next_fetch_after"),
+  changeDetectedAt: text("change_detected_at"),
   isPrimary: integer("is_primary", { mode: "boolean" }).default(false),
   isHidden: integer("is_hidden", { mode: "boolean" }).default(false),
 }, (table) => [
