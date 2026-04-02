@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, count, max, min, gte, and, sql, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, orgAccounts, sources, releases } from "../../../../src/db/schema.js";
+import { organizations, orgAccounts, sources, releases, products } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
 import { toSlug } from "../../../../src/lib/slug.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
@@ -86,6 +86,19 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     ORDER BY s.name
   `);
 
+  const productRows = await db
+    .select({
+      id: products.id,
+      slug: products.slug,
+      name: products.name,
+      url: products.url,
+      description: products.description,
+      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
+    })
+    .from(products)
+    .where(eq(products.orgId, org.id))
+    .orderBy(products.name);
+
   const orgSources = sourceRows;
 
   const sourcesWithStats = sourceRows.map((row) => ({
@@ -148,6 +161,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     lastFetchedAt: latestFetch.maxFetch ?? null,
     trackingSince: oldestReleaseDate ?? org.createdAt,
     accounts,
+    products: productRows,
     sources: sourcesWithStats,
   });
 });

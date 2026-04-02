@@ -15,6 +15,7 @@ import { sessionRoutes } from "./routes/sessions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
+import { productRoutes } from "./routes/products.js";
 
 export { StatusHub } from "./status-hub.js";
 
@@ -70,12 +71,15 @@ app.use("/api/status/fetch-log", cacheControl(15));
 app.use("/api/status/usage", cacheControl(30));
 app.use("/api/orgs/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30 }));
 app.use("/api/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60 }));
+app.use("/api/products", cacheControl(60, { staleWhileRevalidate: 30 }));
+app.use("/api/products/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
 app.use("/api/sources/fetchable", cacheControl(15));
 app.use("/api/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
 
 app.route("/api", sessionRoutes);
 app.route("/api", statsRoutes);
 app.route("/api", orgRoutes);
+app.route("/api", productRoutes);
 app.route("/api", sourceRoutes);
 app.route("/api", searchRoutes);
 app.route("/api", fetchLogRoutes);

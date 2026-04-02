@@ -201,6 +201,65 @@ released org list
 released org show vercel
 ```
 
+### Products
+
+Group sources under products within an organization — useful for multi-product orgs like Vercel (Next.js, Turborepo, v0):
+
+```bash
+released product add "Next.js" --org vercel --url https://nextjs.org
+released product add "Turborepo" --org vercel --url https://turbo.build
+released product list vercel
+released product edit nextjs --description "React framework for production"
+released product remove nextjs                    # sources become unlinked, not deleted
+```
+
+Assign sources to products:
+
+```bash
+released add "Next.js Releases" --url https://github.com/vercel/next.js/releases --org vercel --product nextjs
+released edit next-js-releases --product nextjs   # assign existing source
+released edit next-js-releases --no-product       # unlink from product
+released list --product nextjs                    # filter by product
+```
+
+Convert an org that should be a product (e.g., "Next.js" was added as a standalone org but should be under Vercel):
+
+```bash
+released product adopt nextjs --into vercel                    # convert org to product
+released product adopt nextjs --into vercel --dry-run          # preview changes
+released product adopt nextjs --into vercel --url https://nextjs.org  # override URL
+```
+
+Adopt creates the product, moves all sources and accounts to the target org, then deletes the source org.
+
+Products are also supported in import manifests:
+
+```json
+{
+  "organizations": [
+    {
+      "name": "Vercel",
+      "slug": "vercel",
+      "products": [
+        {
+          "name": "Next.js",
+          "slug": "nextjs",
+          "url": "https://nextjs.org",
+          "sources": [
+            { "name": "Next.js GitHub Releases", "url": "https://github.com/vercel/next.js/releases" }
+          ]
+        }
+      ],
+      "sources": [
+        { "name": "Vercel Changelog", "url": "https://vercel.com/changelog" }
+      ]
+    }
+  ]
+}
+```
+
+Org-level `sources` (no product) and product-level `sources` coexist in the same manifest.
+
 ### AI-powered onboarding
 
 Use the AI agent to discover, validate, and add changelog sources for a company:

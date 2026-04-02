@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findSourceBySlug, findOrg, createOrg, updateSource } from "../../db/queries.js";
+import { findSourceBySlug, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { updateSourceMeta } from "../../adapters/feed.js";
@@ -25,6 +25,8 @@ export function registerEditCommand(program: Command) {
     .option("--slug <newSlug>", "Update slug")
     .option("--org <org>", "Set organization (name or slug, creates if not found)")
     .option("--no-org", "Remove organization association")
+    .option("--product <product>", "Set product (slug)")
+    .option("--no-product", "Remove product association")
     .option("--feed-url <feedUrl>", "Set or update the feed URL")
     .option("--no-feed-url", "Remove stored feed URL")
     .option("--markdown-url <markdownUrl>", "Set the raw markdown URL for this source")
@@ -49,7 +51,7 @@ Examples:
   released edit my-source --no-org`)
     .action(async (slug: string, opts: {
       name?: string; url?: string; type?: string; slug?: string;
-      org?: string | boolean; feedUrl?: string | boolean; json?: boolean;
+      org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
       primary?: boolean;
       hidden?: boolean;
@@ -106,6 +108,20 @@ Examples:
         }
         updates.orgId = org.id;
         changes.push(`org → ${org.name}`);
+      }
+
+      // Handle --product / --no-product
+      if (opts.product === false) {
+        updates.productId = null;
+        changes.push("product removed");
+      } else if (typeof opts.product === "string") {
+        const prod = await findProduct(opts.product);
+        if (!prod) {
+          console.error(chalk.red(`Product not found: ${opts.product}`));
+          process.exit(1);
+        }
+        updates.productId = prod.id;
+        changes.push(`product → ${prod.name}`);
       }
 
       // Handle --primary / --no-primary

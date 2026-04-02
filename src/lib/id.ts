@@ -9,3 +9,4 @@ export const newIgnoredUrlId = () => `iu_${nanoid()}`;
 export const newBlockedUrlId = () => `bu_${nanoid()}`;
 export const newSummaryId = () => `sum_${nanoid()}`;
 export const newMediaAssetId = () => `ma_${nanoid()}`;
+export const newProductId = () => `prod_${nanoid()}`;

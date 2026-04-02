@@ -2,7 +2,7 @@ import { getApiUrl, getApiKey } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
-  ReleaseSummary, NewReleaseSummary,
+  ReleaseSummary, NewReleaseSummary, Product,
 } from "../db/schema.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -209,6 +209,8 @@ export interface SourceWithOrg {
   url: string;
   lastFetchedAt: string | null;
   orgName: string | null;
+  productName: string | null;
+  productSlug: string | null;
   metadata: string | null;
   isPrimary: boolean;
   isHidden?: boolean;
@@ -216,6 +218,7 @@ export interface SourceWithOrg {
 
 export async function listSourcesWithOrg(opts?: {
   orgSlug?: string;
+  productSlug?: string;
   hasFeed?: boolean;
   enrichable?: boolean;
   query?: string;
@@ -223,6 +226,7 @@ export async function listSourcesWithOrg(opts?: {
 }): Promise<SourceWithOrg[]> {
   const params = new URLSearchParams();
   if (opts?.orgSlug) params.set("orgSlug", opts.orgSlug);
+  if (opts?.productSlug) params.set("productSlug", opts.productSlug);
   if (opts?.hasFeed) params.set("has_feed", "true");
   if (opts?.enrichable) params.set("enrichable", "true");
   if (opts?.query) params.set("query", opts.query);
@@ -237,6 +241,8 @@ export async function listSourcesWithOrg(opts?: {
     metadata: string | null;
     isPrimary?: boolean;
     isHidden?: boolean;
+    productName?: string | null;
+    productSlug?: string | null;
   }>>(`/api/sources${qs ? `?${qs}` : ""}`);
 
   return rows.map((r) => ({
@@ -247,6 +253,8 @@ export async function listSourcesWithOrg(opts?: {
     url: r.url,
     lastFetchedAt: null,
     orgName: r.orgSlug,
+    productName: r.productName ?? null,
+    productSlug: r.productSlug ?? null,
     metadata: r.metadata ?? null,
     isPrimary: r.isPrimary ?? false,
     isHidden: r.isHidden ?? false,
@@ -586,6 +594,7 @@ export async function createSource(data: {
   type: string;
   url: string;
   orgId?: string | null;
+  productId?: string | null;
   metadata?: string;
 }): Promise<Source> {
   return apiFetch<Source>("/api/sources", {
@@ -641,6 +650,38 @@ export async function unlinkOrgAccount(
   await apiFetch(`/api/orgs/${orgSlug}/accounts/${platform}/${encodeURIComponent(handle)}`, {
     method: "DELETE",
   });
+}
+
+// ── Product queries ──
+
+export async function createProduct(
+  orgId: string,
+  name: string,
+  opts?: { slug?: string; url?: string; description?: string },
+): Promise<Product> {
+  return apiFetch<Product>(`/api/products`, {
+    method: "POST",
+    body: JSON.stringify({ orgId, name, slug: opts?.slug, url: opts?.url, description: opts?.description }),
+  });
+}
+
+export async function findProduct(identifier: string): Promise<Product | null> {
+  return apiFetch<Product | null>(`/api/products/${identifier}`);
+}
+
+export async function getProductsByOrg(orgId: string): Promise<Array<Product & { sourceCount: number }>> {
+  return apiFetch<Array<Product & { sourceCount: number }>>(`/api/products?orgId=${orgId}`);
+}
+
+export async function updateProduct(slug: string, data: Record<string, unknown>): Promise<Product> {
+  return apiFetch<Product>(`/api/products/${slug}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteProduct(productId: string): Promise<void> {
+  await apiFetch(`/api/products/${productId}`, { method: "DELETE" });
 }
 
 // ── Status events ──

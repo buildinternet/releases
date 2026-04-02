@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findOrg, createOrg, createSource, isUrlExcluded } from "../../db/queries.js";
+import { findOrg, createOrg, createSource, isUrlExcluded, findProduct } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { evaluateChangelog, buildMetadataFromEvaluation } from "../../ai/evaluate.js";
@@ -31,6 +31,7 @@ interface AddSourceInput {
   type?: string;
   slug?: string;
   org?: string;
+  product?: string;
   feedUrl?: string;
   skipEval?: boolean;
   batch?: boolean;
@@ -67,6 +68,18 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
     }
     orgId = org.id;
     orgName = org.name;
+  }
+
+  let productId: string | null = null;
+  if (input.product) {
+    const prod = await findProduct(input.product);
+    if (!prod) {
+      return { name, slug: input.slug ?? toSlug(name), type: "scrape", url, status: "error", error: `Product not found: "${input.product}"` };
+    }
+    productId = prod.id;
+    if (!orgId) {
+      orgId = prod.orgId;
+    }
   }
 
   // Check exclusions before evaluation to avoid wasting an agent call on blocked URLs
@@ -142,6 +155,7 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
       type: sourceType,
       url,
       orgId,
+      productId,
       metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : undefined,
     });
   } catch (err: unknown) {
@@ -161,6 +175,7 @@ export function registerAddCommand(program: Command) {
     .option("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--org <org>", "Organization name or slug (creates if not found)")
+    .option("--product <product>", "Product slug to assign this source to")
     .option("--name <name>", "Display name for the source (alternative to positional argument)")
     .option("--feed-url <feedUrl>", "Explicit feed URL (skips auto-discovery)")
     .option("--batch <file>", "JSON file with sources to add (use - for stdin)")
@@ -174,7 +189,7 @@ Examples:
   released add --name "Astro" --url https://astro.build/blog
   released add --batch sources.json
   cat sources.json | released add --batch -`)
-    .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; name?: string; feedUrl?: string; batch?: string; skipEval?: boolean; json?: boolean }) => {
+    .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; product?: string; name?: string; feedUrl?: string; batch?: string; skipEval?: boolean; json?: boolean }) => {
       // --- Batch mode ---
       if (opts.batch) {
         let raw: string;
@@ -258,6 +273,7 @@ Examples:
         type: opts.type,
         slug: opts.slug,
         org: opts.org,
+        product: opts.product,
         feedUrl: opts.feedUrl,
         skipEval: opts.skipEval,
       });

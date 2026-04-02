@@ -2,9 +2,9 @@ import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
-  type ReleaseSummary, type NewReleaseSummary, type MediaAsset,
+  type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -203,6 +203,7 @@ export async function createSource(data: {
   type: string;
   url: string;
   orgId?: string | null;
+  productId?: string | null;
   metadata?: string;
 }): Promise<Source> {
   if (isRemoteMode()) return apiClient.createSource(data);
@@ -213,6 +214,7 @@ export async function createSource(data: {
     type: data.type as "github" | "scrape" | "feed" | "agent",
     url: data.url,
     orgId: data.orgId ?? null,
+    productId: data.productId ?? null,
     metadata: data.metadata,
   }).returning();
   return created;
@@ -337,6 +339,8 @@ export interface SourceWithOrg {
   url: string;
   lastFetchedAt: string | null;
   orgName: string | null;
+  productName: string | null;
+  productSlug: string | null;
   metadata: string | null;
   isPrimary: boolean;
   isHidden?: boolean | null;
@@ -344,6 +348,7 @@ export interface SourceWithOrg {
 
 export async function listSourcesWithOrg(opts?: {
   orgSlug?: string;
+  productSlug?: string;
   hasFeed?: boolean;
   enrichable?: boolean;
   query?: string;
@@ -358,6 +363,12 @@ export async function listSourcesWithOrg(opts?: {
     const org = await findOrg(opts.orgSlug);
     if (!org) return [];
     conditions.push(eq(sources.orgId, org.id));
+  }
+
+  if (opts?.productSlug) {
+    const product = await findProduct(opts.productSlug);
+    if (!product) return [];
+    conditions.push(eq(sources.productId, product.id));
   }
 
   if (opts?.hasFeed || opts?.enrichable) {
@@ -398,12 +409,15 @@ export async function listSourcesWithOrg(opts?: {
       url: sources.url,
       lastFetchedAt: sources.lastFetchedAt,
       orgName: organizations.name,
+      productName: products.name,
+      productSlug: products.slug,
       metadata: sources.metadata,
       isPrimary: sql<boolean>`coalesce(${sources.isPrimary}, 0)`.as("isPrimary"),
       isHidden: sources.isHidden,
     })
     .from(sources)
-    .leftJoin(organizations, eq(sources.orgId, organizations.id));
+    .leftJoin(organizations, eq(sources.orgId, organizations.id))
+    .leftJoin(products, eq(sources.productId, products.id));
 
   if (conditions.length > 0) {
     return query.where(and(...conditions));
@@ -660,6 +674,71 @@ export async function getOrgAccountsBySlug(
     .select()
     .from(orgAccounts)
     .where(eq(orgAccounts.orgId, orgId));
+}
+
+// ── Product queries ──
+
+export async function createProduct(
+  orgId: string,
+  name: string,
+  opts?: { slug?: string; url?: string; description?: string },
+): Promise<Product> {
+  if (isRemoteMode()) return apiClient.createProduct(orgId, name, opts);
+  const db = getDb();
+  const slug = opts?.slug ?? toSlug(name);
+  const [created] = await db.insert(products).values({
+    name,
+    slug,
+    orgId,
+    url: opts?.url ?? null,
+    description: opts?.description ?? null,
+  }).returning();
+  return created;
+}
+
+export async function findProduct(identifier: string): Promise<Product | null> {
+  if (isRemoteMode()) return apiClient.findProduct(identifier);
+  const db = getDb();
+  const [bySlug] = await db.select().from(products).where(eq(products.slug, identifier));
+  if (bySlug) return bySlug;
+  if (identifier.startsWith("prod_")) {
+    const [byId] = await db.select().from(products).where(eq(products.id, identifier));
+    if (byId) return byId;
+  }
+  return null;
+}
+
+export async function getProductsByOrg(orgId: string): Promise<Array<Product & { sourceCount: number }>> {
+  if (isRemoteMode()) return apiClient.getProductsByOrg(orgId);
+  const db = getDb();
+  const rows = await db
+    .select({
+      id: products.id,
+      name: products.name,
+      slug: products.slug,
+      orgId: products.orgId,
+      url: products.url,
+      description: products.description,
+      createdAt: products.createdAt,
+      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
+    })
+    .from(products)
+    .where(eq(products.orgId, orgId))
+    .orderBy(products.name);
+  return rows;
+}
+
+export async function updateProduct(product: Product, data: Record<string, unknown>): Promise<Product> {
+  if (isRemoteMode()) return apiClient.updateProduct(product.slug, data);
+  const db = getDb();
+  const [updated] = await db.update(products).set(data).where(eq(products.id, product.id)).returning();
+  return updated;
+}
+
+export async function deleteProduct(productId: string): Promise<void> {
+  if (isRemoteMode()) return apiClient.deleteProduct(productId);
+  const db = getDb();
+  await db.delete(products).where(eq(products.id, productId));
 }
 
 export async function linkOrgAccount(

@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -28,6 +28,20 @@ export const orgAccounts = sqliteTable(
   ],
 );
 
+export const products = sqliteTable("products", {
+  id: text("id").primaryKey().$defaultFn(newProductId),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  orgId: text("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  url: text("url"),
+  description: text("description"),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+}, (table) => [
+  index("idx_products_org").on(table.orgId),
+]);
+
 export const sources = sqliteTable("sources", {
   id: text("id").primaryKey().$defaultFn(newSourceId),
   name: text("name").notNull(),
@@ -35,6 +49,7 @@ export const sources = sqliteTable("sources", {
   type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
   url: text("url").notNull(),
   orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
   metadata: text("metadata").default("{}"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   lastFetchedAt: text("last_fetched_at"),
@@ -48,6 +63,7 @@ export const sources = sqliteTable("sources", {
 }, (table) => [
   index("idx_sources_org").on(table.orgId),
   index("idx_sources_org_hidden").on(table.orgId, table.isHidden),
+  index("idx_sources_product").on(table.productId),
 ]);
 
 export const releases = sqliteTable(
@@ -122,6 +138,8 @@ export type Organization = typeof organizations.$inferSelect;
 export type NewOrganization = typeof organizations.$inferInsert;
 export type OrgAccount = typeof orgAccounts.$inferSelect;
 export type NewOrgAccount = typeof orgAccounts.$inferInsert;
+export type Product = typeof products.$inferSelect;
+export type NewProduct = typeof products.$inferInsert;
 export type FetchLog = typeof fetchLog.$inferSelect;
 export type NewFetchLog = typeof fetchLog.$inferInsert;
 
