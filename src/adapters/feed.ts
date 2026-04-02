@@ -154,7 +154,7 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
   return null;
 }
 
-function parseFeedLinks(head: string, baseUrl: string): DiscoveredFeed | null {
+export function parseFeedLinks(head: string, baseUrl: string): DiscoveredFeed | null {
   const linkRe = /<link\s[^>]*rel=["']alternate["'][^>]*>/gi;
   const candidates: DiscoveredFeed[] = [];
   let match;
@@ -178,7 +178,7 @@ function parseFeedLinks(head: string, baseUrl: string): DiscoveredFeed | null {
 }
 
 /** Classify a MIME type or Content-Type header value as a feed type. */
-function classifyFeedMime(ct: string): FeedType | null {
+export function classifyFeedMime(ct: string): FeedType | null {
   ct = ct.toLowerCase();
   if (ct.includes("feed+json")) return "jsonfeed";
   if (ct.includes("rss")) return "rss";
@@ -188,7 +188,7 @@ function classifyFeedMime(ct: string): FeedType | null {
   return null;
 }
 
-function detectFeedTypeFromContent(body: string): FeedType | null {
+export function detectFeedTypeFromContent(body: string): FeedType | null {
   const trimmed = body.trimStart().slice(0, 500);
   if (trimmed.startsWith("{")) return "jsonfeed";
   if (trimmed.includes("<feed") && trimmed.includes("xmlns")) return "atom";
@@ -341,7 +341,7 @@ export async function fetchViaFeed(
 
 // ── Feed parsers ────────────────────────────────────────────────────
 
-function parseRss(xml: string): RawRelease[] {
+export function parseRss(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
   for (const item of extractAllBetween(xml, "<item>", "</item>")) {
     const title = extractText(item, "title");
@@ -364,7 +364,7 @@ function parseRss(xml: string): RawRelease[] {
   return releases;
 }
 
-function parseAtom(xml: string): RawRelease[] {
+export function parseAtom(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
   for (const entry of extractAllBetween(xml, "<entry>", "</entry>")) {
     const title = extractText(entry, "title");
@@ -387,7 +387,7 @@ function parseAtom(xml: string): RawRelease[] {
   return releases;
 }
 
-function parseJsonFeed(json: string): RawRelease[] {
+export function parseJsonFeed(json: string): RawRelease[] {
   const feed = JSON.parse(json);
   const items: Array<{
     title?: string;
@@ -456,12 +456,12 @@ function extractAtomLink(entry: string): string | null {
   return hrefMatch ? hrefMatch[1] : null;
 }
 
-function extractVersionFromTitle(title: string): string | undefined {
+export function extractVersionFromTitle(title: string): string | undefined {
   const match = title.match(/v?(\d+\.\d+(?:\.\d+)?(?:-[\w.]+)?)/);
   return match ? match[1] : undefined;
 }
 
-function detectBreaking(title: string, content: string): boolean {
+export function detectBreaking(title: string, content: string): boolean {
   const text = `${title} ${content}`.toLowerCase();
   return text.includes("breaking change") || text.includes("breaking:") || text.includes("⚠");
 }
@@ -479,7 +479,7 @@ function isSafeLinkHref(raw: string): boolean {
 }
 
 /** Extract structured media items from HTML content. */
-function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
+export function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
   const media: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> = [];
 
   const imgRe = /<img[^>]*src=["']([^"']+)["'](?:[^>]*alt=["']([^"']*)["'])?[^>]*\/?>/gi;
@@ -511,7 +511,7 @@ function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; ur
 }
 
 /** Convert iframe embed URLs to user-facing watch URLs. */
-function iframeSrcToWatchUrl(src: string): string {
+export function iframeSrcToWatchUrl(src: string): string {
   // YouTube: //www.youtube.com/embed/VIDEO_ID -> https://www.youtube.com/watch?v=VIDEO_ID
   const ytMatch = src.match(/youtube\.com\/embed\/([^?&"]+)/);
   if (ytMatch) return `https://www.youtube.com/watch?v=${ytMatch[1]}`;
@@ -529,7 +529,7 @@ function iframeSrcToWatchUrl(src: string): string {
 }
 
 /** Convert HTML to markdown, preserving images, links, and basic formatting. */
-function htmlToMarkdown(html: string): string {
+export function htmlToMarkdown(html: string): string {
   let md = html;
 
   // Convert images before stripping other tags
@@ -559,7 +559,7 @@ function htmlToMarkdown(html: string): string {
   return md.trim();
 }
 
-function decodeHtmlEntities(text: string): string {
+export function decodeHtmlEntities(text: string): string {
   return text
     .replace(/&amp;/g, "&")
     .replace(/&lt;/g, "<")

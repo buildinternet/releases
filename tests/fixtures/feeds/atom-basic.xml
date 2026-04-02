@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Acme Releases</title>
+  <link href="https://acme.com/releases" rel="alternate"/>
+  <entry>
+    <title>v3.0.0 — Breaking: New Auth System</title>
+    <link href="https://acme.com/releases/v3-0-0" rel="alternate"/>
+    <updated>2024-03-01T10:00:00Z</updated>
+    <content type="html"><![CDATA[<p>Replaced the old auth system with <a href="https://acme.com/docs/auth">OAuth 2.0</a>.</p>]]></content>
+  </entry>
+  <entry>
+    <title>v2.5.0 — Performance Improvements</title>
+    <link href="https://acme.com/releases/v2-5-0" rel="alternate"/>
+    <updated>2024-02-15T08:00:00Z</updated>
+    <summary>Improved query performance by 40%.</summary>
+  </entry>
+</feed>
