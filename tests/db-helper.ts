@@ -6,6 +6,7 @@ import { fileURLToPath } from "url";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import * as schema from "../src/db/schema.js";
+import { patchSchemaMetadataColumn } from "./db-patch.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = join(__dirname, "..", "src", "db", "migrations");
@@ -33,14 +34,7 @@ export function createTestDb(): TestDatabase {
 
   migrate(db, { migrationsFolder });
 
-  // Patch schema drift: organizations.metadata exists in schema.ts but has
-  // no migration yet. Add the column if missing so tests match the schema.
-  const cols = sqlite
-    .prepare("PRAGMA table_info(organizations)")
-    .all() as { name: string }[];
-  if (!cols.some((c) => c.name === "metadata")) {
-    sqlite.run("ALTER TABLE organizations ADD COLUMN metadata TEXT DEFAULT '{}'");
-  }
+  patchSchemaMetadataColumn(sqlite);
 
   return {
     db,
