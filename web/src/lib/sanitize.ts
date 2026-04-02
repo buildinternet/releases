@@ -14,3 +14,8 @@ export function isSafeImgSrc(src: string | undefined | null): src is string {
   if (!src || typeof src !== "string") return false;
   return SAFE_IMG_PATTERN.test(src.trim());
 }
+
+/** Returns true if the image URL can be optimized via next/image (matches our remotePatterns). */
+export function isOptimizableImage(url: string): boolean {
+  return url.includes("githubusercontent.com") || url.includes("/api/media/") || url.includes("github.com/");
+}

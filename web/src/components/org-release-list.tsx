@@ -57,7 +57,7 @@ export function OrgReleaseList({
           }
           sourceByline={
             multipleSourcesExist
-              ? { name: release.source.name, slug: release.source.slug, orgSlug }
+              ? { name: release.source.name, slug: release.source.slug, orgSlug, type: release.source.type }
               : undefined
           }
         />

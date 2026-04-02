@@ -1,10 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
-import { isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { isSafeHref, isSafeImgSrc, isOptimizableImage } from "@/lib/sanitize";
 
 interface MediaItem {
   type: "image" | "video" | "gif";
@@ -114,12 +115,14 @@ function MediaGallery({
         if (item.type === "image" || item.type === "gif") {
           const src = item.r2Url ?? item.url;
           return (
-            <img
+            <Image
               key={i}
               src={src}
               alt={item.alt || ""}
-              loading="lazy"
-              className="rounded-md max-w-full h-auto"
+              width={600}
+              height={320}
+              className="rounded-md object-contain max-h-80 w-auto"
+              unoptimized={!isOptimizableImage(src)}
             />
           );
         }

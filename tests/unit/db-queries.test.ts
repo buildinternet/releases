@@ -103,6 +103,28 @@ describe("Organizations CRUD", () => {
         .run();
     }).toThrow();
   });
+
+  it("persists avatarUrl on insert", () => {
+    const db = getDb();
+    db.insert(organizations)
+      .values({ name: "Avatar Org", slug: "avatar-org", avatarUrl: "https://example.com/logo.png" })
+      .run();
+
+    const row = db.select().from(organizations).where(eq(organizations.slug, "avatar-org")).get();
+    expect(row).toBeDefined();
+    expect(row!.avatarUrl).toBe("https://example.com/logo.png");
+  });
+
+  it("avatarUrl defaults to null when not provided", () => {
+    const db = getDb();
+    db.insert(organizations)
+      .values({ name: "No Avatar", slug: "no-avatar" })
+      .run();
+
+    const row = db.select().from(organizations).where(eq(organizations.slug, "no-avatar")).get();
+    expect(row).toBeDefined();
+    expect(row!.avatarUrl).toBeNull();
+  });
 });
 
 // ---------------------------------------------------------------------------
