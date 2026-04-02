@@ -10,6 +10,7 @@ import { OrgTabs } from "@/components/org-tabs";
 import { OrgReleaseList } from "@/components/org-release-list";
 import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
+import { groupSourcesByProduct } from "@/lib/sources";
 
 export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
   const { orgSlug } = await params;
@@ -39,11 +40,54 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
     return 0;
   });
 
+  if (org.products.length === 0) {
+    return (
+      <div className="space-y-2">
+        {sortedSources.map((source) => (
+          <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
+        ))}
+      </div>
+    );
+  }
+
+  const { grouped, ungrouped } = groupSourcesByProduct(sortedSources, org.products);
+
   return (
-    <div className="space-y-2">
-      {sortedSources.map((source) => (
-        <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
+    <div className="space-y-6">
+      {grouped.map(({ product, sources }) => (
+        <div key={product.slug}>
+          <Link
+            href={`/${orgSlug}/product/${product.slug}`}
+            className="flex items-center gap-2 mb-2 group"
+          >
+            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 group-hover:text-stone-900 dark:group-hover:text-stone-100">
+              {product.name}
+            </h3>
+            {product.description && (
+              <span className="text-xs text-stone-400 dark:text-stone-500 hidden sm:inline">
+                {product.description}
+              </span>
+            )}
+          </Link>
+          <div className="space-y-2">
+            {sources.map((source) => (
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={sources.length > 1 || source.name !== product.name} />
+            ))}
+          </div>
+        </div>
       ))}
+      {ungrouped.length > 0 && (
+        <div>
+          {grouped.length > 0 && (
+            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">Other Sources</h3>
+          )}
+          <div className="space-y-2">
+            {ungrouped.map((source) => (
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={false} />
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -94,6 +138,7 @@ export default async function OrgPage({
     {
       items: [
         ...(org.domain ? [{ label: "Domain", value: org.domain }] : []),
+        ...(org.products.length > 0 ? [{ label: "Products", value: org.products.length, large: true }] : []),
         { label: "Sources", value: org.sourceCount, large: true },
         { label: "Total Releases", value: org.releaseCount, large: true },
       ],
@@ -146,26 +191,33 @@ export default async function OrgPage({
         )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            <OrgTabs />
             {showReleases ? (
-              initialReleases ? (
-                <OrgReleaseList
-                  orgSlug={orgSlug}
-                  initialReleases={initialReleases.releases}
-                  initialCursor={initialReleases.pagination.nextCursor}
-                  multipleSourcesExist={org.sources.length > 1}
-                />
-              ) : (
-                <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
-                  No releases yet.
-                </div>
-              )
+              <>
+                <OrgTabs />
+                {initialReleases ? (
+                  <OrgReleaseList
+                    orgSlug={orgSlug}
+                    initialReleases={initialReleases.releases}
+                    initialCursor={initialReleases.pagination.nextCursor}
+                    multipleSourcesExist={org.sources.length > 1}
+                  />
+                ) : (
+                  <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
+                    No releases yet.
+                  </div>
+                )}
+              </>
             ) : activity ? (
-              <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} />
+              <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} products={org.products}>
+                <OrgTabs />
+              </ReleaseTimeline>
             ) : (
-              <div className="mt-6">
-                <SourceList org={org} orgSlug={orgSlug} />
-              </div>
+              <>
+                <OrgTabs />
+                <div className="mt-6">
+                  <SourceList org={org} orgSlug={orgSlug} />
+                </div>
+              </>
             )}
           </div>
           <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null} footnoteTitle={org.lastFetchedAt} />

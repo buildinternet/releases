@@ -30,7 +30,7 @@ export function OrgTabs() {
   return (
     <div className="flex gap-5 border-b border-stone-200 dark:border-stone-800 mt-5">
       <button onClick={() => setTab("sources")} className={tabClass("sources")}>
-        Sources
+        Overview
       </button>
       <button onClick={() => setTab("releases")} className={tabClass("releases")}>
         Releases

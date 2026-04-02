@@ -1,18 +1,76 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { type OrgActivity, type SourceListItem } from "@/lib/api";
+import { type OrgActivity, type SourceListItem, type OrgDetail } from "@/lib/api";
 import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
+import { groupSourcesByProduct } from "@/lib/sources";
+
+/** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
+function mergeBuckets(bucketArrays: WeeklyBucket[][]): WeeklyBucket[] {
+  const map = new Map<number, number>();
+  for (const arr of bucketArrays) {
+    for (const b of arr) {
+      const ts = b.weekStart.getTime();
+      map.set(ts, (map.get(ts) ?? 0) + b.count);
+    }
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a - b)
+    .map(([ts, count]) => ({ weekStart: new Date(ts), count }));
+}
 
 interface ReleaseTimelineProps {
   activity: OrgActivity;
   orgSlug: string;
   sources: SourceListItem[];
+  products: OrgDetail["products"];
+  children?: React.ReactNode;
 }
 
-export function ReleaseTimeline({ activity, orgSlug, sources }: ReleaseTimelineProps) {
+function ProductGroupedSources({
+  sources,
+  products,
+  orgSlug,
+  cadenceMap,
+}: {
+  sources: SourceListItem[];
+  products: OrgDetail["products"];
+  orgSlug: string;
+  cadenceMap: Map<string, SourceCadenceData>;
+}) {
+  const { grouped, ungrouped } = groupSourcesByProduct(sources, products);
+
+  return (
+    <div className="space-y-6">
+      {grouped.map(({ product, sources: srcs }) => (
+        <div key={product.slug}>
+          <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">{product.name}</h3>
+          <div className="space-y-2">
+            {srcs.map((source) => (
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} showProductBadge={srcs.length > 1 || source.name !== product.name} />
+            ))}
+          </div>
+        </div>
+      ))}
+      {ungrouped.length > 0 && (
+        <div>
+          {grouped.length > 0 && (
+            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">Other Sources</h3>
+          )}
+          <div className="space-y-2">
+            {ungrouped.map((source) => (
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} showProductBadge={false} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function ReleaseTimeline({ activity, orgSlug, sources, products, children }: ReleaseTimelineProps) {
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
   const rangeEnd = useMemo(() => new Date(activity.range.to), [activity.range.to]);
 
@@ -47,6 +105,42 @@ export function ReleaseTimeline({ activity, orgSlug, sources }: ReleaseTimelineP
       buckets: src.allBuckets,
     }));
   }, [parsedSources]);
+
+  // Per-product bucket data for stacked bar chart (aggregate sources by product)
+  const productBuckets = useMemo<SourceBucketEntry[] | null>(() => {
+    if (products.length === 0 || parsedSources.length <= 1) return null;
+
+    // Build a slug→productSlug lookup from the sources prop
+    const sourceToProduct = new Map<string, string>();
+    for (const s of sources) {
+      if (s.productSlug) sourceToProduct.set(s.slug, s.productSlug);
+    }
+
+    // Group parsed sources by product (ungrouped → "other")
+    const groups = new Map<string, typeof parsedSources>();
+    for (const src of parsedSources) {
+      const key = sourceToProduct.get(src.slug) ?? "other";
+      if (!groups.has(key)) groups.set(key, []);
+      groups.get(key)!.push(src);
+    }
+
+    // Merge buckets within each product group
+    let colorIdx = 0;
+    const result: SourceBucketEntry[] = [];
+    for (const product of products) {
+      const srcs = groups.get(product.slug);
+      if (!srcs || srcs.length === 0) continue;
+      const merged = mergeBuckets(srcs.map((s) => s.allBuckets));
+      result.push({ name: product.name, slug: product.slug, colorIndex: colorIdx++, buckets: merged });
+    }
+    const otherSrcs = groups.get("other");
+    if (otherSrcs && otherSrcs.length > 0) {
+      const merged = mergeBuckets(otherSrcs.map((s) => s.allBuckets));
+      result.push({ name: "Other", slug: "other", colorIndex: colorIdx++, buckets: merged });
+    }
+
+    return result.length > 1 ? result : null;
+  }, [parsedSources, products, sources]);
 
   // Use aggregate buckets as the canonical week grid (properly aligned by the API)
   const brushedWeekGrid = useMemo(() => {
@@ -154,6 +248,7 @@ export function ReleaseTimeline({ activity, orgSlug, sources }: ReleaseTimelineP
         max={rangeEnd}
         buckets={aggregateBuckets}
         sourceBuckets={sourceBuckets}
+        productBuckets={productBuckets}
         value={brushRange}
         onValueChange={setBrushRange}
       >
@@ -163,7 +258,7 @@ export function ReleaseTimeline({ activity, orgSlug, sources }: ReleaseTimelineP
         <RangeNavigator.QuickRanges defaultPreset="3 months" />
       </RangeNavigator.Root>
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         {([
           { label: "Total Releases", value: String(summaryStats.totalReleases) },
           { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014" },
@@ -176,10 +271,23 @@ export function ReleaseTimeline({ activity, orgSlug, sources }: ReleaseTimelineP
         ))}
       </div>
 
-      <div className="space-y-2">
-        {sortedSources.map((source) => (
-          <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
-        ))}
+      {children}
+
+      <div className="mt-5">
+        {products.length > 0 ? (
+          <ProductGroupedSources
+            sources={sortedSources}
+            products={products}
+            orgSlug={orgSlug}
+            cadenceMap={cadenceMap}
+          />
+        ) : (
+          <div className="space-y-2">
+            {sortedSources.map((source) => (
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
+            ))}
+          </div>
+        )}
       </div>
 
     </div>

@@ -76,7 +76,7 @@ function InlineSparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: s
   );
 }
 
-export function SourceCard({ source, orgSlug, cadence }: { source: SourceListItem; orgSlug?: string; cadence?: SourceCadenceData }) {
+export function SourceCard({ source, orgSlug, cadence, showProductBadge = true }: { source: SourceListItem; orgSlug?: string; cadence?: SourceCadenceData; showProductBadge?: boolean }) {
   const href = orgSlug ? `/${orgSlug}/${source.slug}` : `/source/${source.slug}`;
   const cadenceInfo = cadence ? getCadenceInfo(cadence.avgReleasesPerWeek) : null;
   const color = cadence ? getProductColor(cadence.colorIndex) : undefined;
@@ -89,6 +89,11 @@ export function SourceCard({ source, orgSlug, cadence }: { source: SourceListIte
           <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">{source.name}</span>
           {source.isPrimary && (
             <span className="text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">Primary</span>
+          )}
+          {showProductBadge && source.productName && (
+            <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+              {source.productName}
+            </span>
           )}
           {cadenceInfo && (
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeStyles[cadenceInfo.key]}`}>
