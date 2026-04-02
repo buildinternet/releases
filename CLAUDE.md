@@ -1,6 +1,6 @@
 # Released
 
-Changelog indexer for AI agents and developers. Context7-style tool for release notes.
+Changelog indexer and registry for AI agents and developers.
 
 ## Stack
 
