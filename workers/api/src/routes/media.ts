@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { sql, count } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { mediaAssets } from "../../../../src/db/schema.js";
+import { mediaAssets } from "@released/db/schema.js";
 import { authMiddleware } from "../middleware/auth.js";
-import type { UploadResult } from "../../../../src/lib/media.js";
+import type { UploadResult } from "@released/lib/media.js";
 
 type Env = {
   Bindings: {

@@ -6,7 +6,10 @@
     "strict": true,
     "skipLibCheck": true,
     "lib": ["ESNext"],
-    "types": ["@cloudflare/workers-types"]
+    "types": ["@cloudflare/workers-types"],
+    "paths": {
+      "@released/*": ["../../src/*"]
+    }
   },
   "include": ["src/**/*.ts"],
   "files": ["../../src/db/schema.ts", "../../src/lib/id.ts", "../../src/lib/dates.ts", "../../src/lib/slug.ts"]

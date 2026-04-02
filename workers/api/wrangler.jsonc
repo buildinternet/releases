@@ -3,6 +3,9 @@
   "name": "released-api",
   "account_id": "4beb6b6e1d55800c0c27b92fb79496ed",
   "main": "src/index.ts",
+  "alias": {
+    "@released": "../../src"
+  },
   "compatibility_date": "2026-03-27",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
