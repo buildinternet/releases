@@ -1,6 +1,9 @@
+import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 import { Header } from "@/components/header";
 import { StatusDashboard } from "./dashboard";
+
+export const metadata: Metadata = { title: "Status" };
 
 export default async function StatusPage() {
   if (process.env.RELEASED_DEV_MODE !== "true") {

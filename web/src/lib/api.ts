@@ -86,10 +86,28 @@ export interface ReleaseSummaryItem {
 }
 
 export interface ReleaseItem {
+  id?: string;
   version: string | null; title: string; summary: string;
   content?: string;
   publishedAt: string | null; url: string | null;
   media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string; r2Url?: string }>;
+}
+
+export interface ReleaseDetail {
+  id: string;
+  sourceId: string;
+  version: string | null;
+  title: string;
+  content: string;
+  contentSummary: string | null;
+  url: string | null;
+  media: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string; r2Url?: string }>;
+  publishedAt: string | null;
+  fetchedAt: string;
+  sourceName: string;
+  sourceSlug: string;
+  sourceType: string;
+  org: { slug: string; name: string } | null;
 }
 
 export interface SearchResult {
@@ -146,4 +164,5 @@ export const api = {
     const qs = params.toString();
     return fetchApi<OrgActivity>(`/api/orgs/${slug}/activity${qs ? `?${qs}` : ""}`);
   },
+  release: (id: string) => fetchApi<ReleaseDetail>(`/api/releases/${id}`),
 };

@@ -62,7 +62,9 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(
+    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug)
+  );
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const accounts = await db

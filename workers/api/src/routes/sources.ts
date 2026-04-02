@@ -434,7 +434,9 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
   const db = createDb(c.env.DB);
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(
+    slug.startsWith("src_") ? eq(sources.id, slug) : eq(sources.slug, slug)
+  );
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   let org: { slug: string; name: string } | null = null;
@@ -453,6 +455,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
 
   const offset = (page - 1) * pageSize;
   const releaseRows = await db.all<{
+    id: string;
     version: string | null;
     title: string;
     content_summary: string | null;
@@ -461,7 +464,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     url: string | null;
     media: string | null;
   }>(sql`
-    SELECT version, title, content_summary, content, published_at, url, media
+    SELECT id, version, title, content_summary, content, published_at, url, media
     FROM releases WHERE source_id = ${src.id} AND (suppressed IS NULL OR suppressed = 0)
     ORDER BY
       CASE WHEN published_at IS NOT NULL THEN 0 ELSE 1 END,
@@ -470,6 +473,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   `);
 
   const releasesFormatted = releaseRows.map((r) => ({
+    id: r.id,
     version: r.version,
     title: r.title,
     summary:
@@ -707,15 +711,26 @@ sourceRoutes.get("/releases/:id", async (c) => {
       release: releases,
       sourceName: sources.name,
       sourceSlug: sources.slug,
+      sourceType: sources.type,
+      orgSlug: organizations.slug,
+      orgName: organizations.name,
     })
     .from(releases)
     .leftJoin(sources, eq(releases.sourceId, sources.id))
+    .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .where(eq(releases.id, id));
 
   if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
 
-  const { release, sourceName, sourceSlug } = rows[0];
-  return c.json({ ...release, sourceName, sourceSlug });
+  const { release, sourceName, sourceSlug, sourceType, orgSlug, orgName } = rows[0];
+  const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
+
+  const media = JSON.parse((release.media as string) ?? "[]").map((m: any) => ({
+    ...m,
+    r2Url: m.r2Key ? `/api/media/${m.r2Key}` : undefined,
+  }));
+
+  return c.json({ ...release, media, sourceName, sourceSlug, sourceType, org });
 });
 
 sourceRoutes.delete("/releases/:id", async (c) => {

@@ -4,8 +4,20 @@ import { ThemeScript } from "@/components/theme-script";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "releases.sh",
-  description: "Release notes, indexed. Track changelogs across the tools and libraries you depend on.",
+  title: {
+    default: "Released — Changelog Index",
+    template: "%s — Released",
+  },
+  description: "Changelog index for developers. Track release notes across tools, frameworks, and services.",
+  metadataBase: new URL("https://releases.sh"),
+  openGraph: {
+    type: "website",
+    siteName: "Released",
+    locale: "en_US",
+  },
+  twitter: {
+    card: "summary",
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
