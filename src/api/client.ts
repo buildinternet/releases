@@ -4,7 +4,7 @@ import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
   ReleaseSummary, NewReleaseSummary, Product, Tag,
 } from "../db/schema.js";
-import type { SearchResult, SourceListItem, Stats } from "./types.js";
+import type { SourceListItem, Stats, UnifiedSearchResponse } from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${getApiUrl()}${path}`;
@@ -187,22 +187,14 @@ export async function checkContentHash(source: Source, contentHash: string): Pro
 
 // ── Search ──
 
-export async function searchReleasesForApi(query: string, limit: number, offset: number) {
-  const result = await apiFetch<{ results: unknown[] }>(
-    `/api/search?q=${encodeURIComponent(query)}&limit=${limit}&offset=${offset}`,
-  );
-  return result.results;
-}
-
-export async function searchReleasesRemote(
+export async function unifiedSearch(
   query: string,
   limit: number,
   opts?: { org?: string },
-): Promise<SearchResult[]> {
-  const params = new URLSearchParams({ q: query, limit: String(limit), offset: "0" });
+): Promise<UnifiedSearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (opts?.org) params.set("org", opts.org);
-  const result = await apiFetch<{ results: SearchResult[] }>(`/api/search?${params}`);
-  return result.results;
+  return apiFetch<UnifiedSearchResponse>(`/api/search?${params}`);
 }
 
 // ── List sources with org ──

@@ -140,7 +140,32 @@ export interface ReleaseSummaryItem {
 
 // ── Search ──
 
-export interface SearchResult {
+export interface SearchOrgHit {
+  slug: string;
+  name: string;
+  domain: string | null;
+  avatarUrl: string | null;
+  category: string | null;
+}
+
+export interface SearchProductHit {
+  slug: string;
+  name: string;
+  orgSlug: string | null;
+  orgName: string | null;
+  category: string | null;
+}
+
+export interface SearchSourceHit {
+  slug: string;
+  name: string;
+  type: string;
+  orgSlug: string | null;
+  orgName: string | null;
+  productSlug: string | null;
+}
+
+export interface SearchReleaseHit {
   sourceSlug: string;
   sourceName: string;
   orgSlug: string | null;
@@ -150,6 +175,17 @@ export interface SearchResult {
   publishedAt: string | null;
 }
 
+export interface UnifiedSearchResponse {
+  query: string;
+  orgs: SearchOrgHit[];
+  products: SearchProductHit[];
+  sources: SearchSourceHit[];
+  releases: SearchReleaseHit[];
+}
+
+/** @deprecated Use UnifiedSearchResponse */
+export type SearchResult = SearchReleaseHit;
+/** @deprecated Use UnifiedSearchResponse */
 export interface SearchResponse {
   query: string;
   results: SearchResult[];

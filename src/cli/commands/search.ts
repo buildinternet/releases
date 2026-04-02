@@ -1,150 +1,92 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { inArray } from "drizzle-orm";
-import { searchReleases } from "../../db/fts.js";
-import { findOrg, getSourcesByOrg, searchReleasesRemote } from "../../db/queries.js";
-import { orgNotFound } from "../suggest.js";
-import { isRemoteMode } from "../../lib/mode.js";
+import { unifiedSearch } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { getDb } from "../../db/connection.js";
-import { sources, releases } from "../../db/schema.js";
+import type { UnifiedSearchResponse } from "../../api/types.js";
 
 export function registerSearchCommand(program: Command) {
   program
     .command("search")
-    .description("Full-text search across all indexed releases")
+    .description("Search across organizations, products, sources, and releases")
     .argument("<query>", "Search query")
-    .option("-l, --limit <n>", "Max results to return", "20")
-    .option("--org <identifier>", "Filter to an organization")
+    .option("-l, --limit <n>", "Max results per type", "10")
+    .option("--type <type>", "Limit to a result type: orgs, products, sources, releases")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released search "breaking change"
-  released search "authentication" --org acme
-  released search "deprecation" --limit 5 --json`)
-    .action(async (query: string, opts: { limit: string; org?: string; json?: boolean }) => {
+  released search "vercel"
+  released search "breaking change" --type releases
+  released search "authentication" --limit 5 --json`)
+    .action(async (query: string, opts: { limit: string; type?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
 
-      // ── Remote mode: use API search endpoint ──
-      if (isRemoteMode()) {
-        const results = await searchReleasesRemote(query, limit, { org: opts.org });
+      const response = await unifiedSearch(query, limit);
 
-        if (results.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.yellow("No results found."));
-          }
-          return;
+      // Filter to specific type if requested
+      const types = opts.type
+        ? [opts.type as keyof Omit<UnifiedSearchResponse, "query">]
+        : (["orgs", "products", "sources", "releases"] as const);
+
+      if (opts.json) {
+        const filtered: Record<string, unknown> = { query: response.query };
+        for (const t of types) filtered[t] = response[t];
+        console.log(JSON.stringify(filtered, null, 2));
+        return;
+      }
+
+      let totalResults = 0;
+
+      // ── Orgs ──
+      if (types.includes("orgs") && response.orgs.length > 0) {
+        console.log(chalk.bold.underline("Organizations"));
+        for (const org of response.orgs) {
+          const meta = [org.category, org.domain].filter(Boolean).join(" | ");
+          console.log(`  ${chalk.cyan.bold(stripAnsi(org.name))} ${chalk.dim(`(${org.slug})`)}`);
+          if (meta) console.log(`  ${chalk.dim(meta)}`);
         }
+        console.log();
+        totalResults += response.orgs.length;
+      }
 
-        if (opts.json) {
-          const jsonResults = results.map((r) => ({
-            title: r.title,
-            content: r.summary,
-            sourceName: r.sourceName,
-            publishedAt: r.publishedAt,
-          }));
-          console.log(JSON.stringify(jsonResults, null, 2));
-          return;
+      // ── Products ──
+      if (types.includes("products") && response.products.length > 0) {
+        console.log(chalk.bold.underline("Products"));
+        for (const p of response.products) {
+          const org = p.orgName ? ` ${chalk.dim(`by ${stripAnsi(p.orgName)}`)}` : "";
+          console.log(`  ${chalk.cyan.bold(stripAnsi(p.name))} ${chalk.dim(`(${p.slug})`)}${org}`);
         }
+        console.log();
+        totalResults += response.products.length;
+      }
 
-        for (const result of results) {
-          console.log(chalk.cyan.bold(stripAnsi(result.title)));
-          console.log(chalk.dim(`  Source: ${stripAnsi(result.sourceName)}  |  Published: ${result.publishedAt ?? "No date"}`));
-          const summary = stripAnsi(result.summary);
+      // ── Sources ──
+      if (types.includes("sources") && response.sources.length > 0) {
+        console.log(chalk.bold.underline("Sources"));
+        for (const s of response.sources) {
+          const org = s.orgName ? ` ${chalk.dim(`— ${stripAnsi(s.orgName)}`)}` : "";
+          console.log(`  ${chalk.cyan.bold(stripAnsi(s.name))} ${chalk.dim(`(${s.slug})`)}${org}`);
+        }
+        console.log();
+        totalResults += response.sources.length;
+      }
+
+      // ── Releases ──
+      if (types.includes("releases") && response.releases.length > 0) {
+        console.log(chalk.bold.underline("Releases"));
+        for (const r of response.releases) {
+          console.log(`  ${chalk.cyan.bold(stripAnsi(r.title))}`);
+          console.log(chalk.dim(`  Source: ${stripAnsi(r.sourceName)}  |  Published: ${r.publishedAt ?? "No date"}`));
+          const summary = stripAnsi(r.summary);
           console.log(`  ${summary}${summary.length >= 150 ? "..." : ""}`);
           console.log();
         }
-
-        console.log(chalk.dim(`${results.length} result(s) found.`));
-        return;
+        totalResults += response.releases.length;
       }
 
-      // ── Local mode: use FTS ──
-      const fetchLimit = opts.org ? limit * 5 : limit;
-      const results = searchReleases(query, fetchLimit);
-
-      if (results.length === 0) {
-        if (opts.json) {
-          console.log(JSON.stringify([], null, 2));
-        } else {
-          console.log(chalk.yellow("No results found."));
-        }
-        return;
+      if (totalResults === 0) {
+        console.log(chalk.yellow("No results found."));
+      } else {
+        console.log(chalk.dim(`${totalResults} result(s) found.`));
       }
-
-      const db = getDb();
-
-      // Batch fetch release metadata and source names
-      const releaseIds = results.map((r) => r.id);
-      const releaseRows = await db
-        .select({ id: releases.id, sourceId: releases.sourceId, publishedAt: releases.publishedAt })
-        .from(releases)
-        .where(inArray(releases.id, releaseIds));
-
-      const sourceIds = [...new Set(releaseRows.map((r) => r.sourceId))];
-      const sourceRows = await db
-        .select({ id: sources.id, name: sources.name })
-        .from(sources)
-        .where(inArray(sources.id, sourceIds));
-
-      const releaseMap = new Map(releaseRows.map((r) => [r.id, r]));
-      const sourceMap = new Map(sourceRows.map((s) => [s.id, s.name]));
-
-      // Filter by org if requested
-      let filteredResults = results;
-      if (opts.org) {
-        const org = await findOrg(opts.org);
-        if (!org) {
-          return orgNotFound(opts.org);
-        }
-        const orgSources = await getSourcesByOrg(org.id);
-        const orgSourceIdSet = new Set(orgSources.map((s) => s.id));
-        filteredResults = results.filter((r) => {
-          const release = releaseMap.get(r.id);
-          return release && orgSourceIdSet.has(release.sourceId);
-        });
-
-        if (filteredResults.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.yellow("No results found."));
-          }
-          return;
-        }
-      }
-
-      if (opts.json) {
-        const jsonResults = filteredResults.map((result) => {
-          const release = releaseMap.get(result.id);
-          const sourceName = release ? sourceMap.get(release.sourceId) ?? "Unknown" : "Unknown";
-          const preview = result.content.replace(/\n/g, " ").slice(0, 150);
-          return {
-            id: result.id,
-            title: result.title,
-            content: preview,
-            sourceName,
-            publishedAt: release?.publishedAt ?? null,
-          };
-        });
-        console.log(JSON.stringify(jsonResults, null, 2));
-        return;
-      }
-
-      for (const result of filteredResults) {
-        const release = releaseMap.get(result.id);
-        const sourceName = release ? sourceMap.get(release.sourceId) ?? "Unknown" : "Unknown";
-        const date = release?.publishedAt ?? "No date";
-        const preview = stripAnsi(result.content).replace(/\n/g, " ").slice(0, 150);
-
-        console.log(chalk.cyan.bold(stripAnsi(result.title)));
-        console.log(chalk.dim(`  Source: ${stripAnsi(sourceName)}  |  Published: ${date}`));
-        console.log(`  ${preview}${result.content.length > 150 ? "..." : ""}`);
-        console.log();
-      }
-
-      console.log(chalk.dim(`${filteredResults.length} result(s) found.`));
     });
 }

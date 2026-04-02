@@ -939,16 +939,18 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
   return !!updated;
 }
 
-// ── Search (remote-aware, for `search` command) ──
+// ── Search ──
 
-export type SearchResultRemote = apiClient.SearchResult;
-
-export async function searchReleasesRemote(
+export async function unifiedSearch(
   query: string,
   limit: number,
   opts?: { org?: string },
-): Promise<SearchResultRemote[]> {
-  return apiClient.searchReleasesRemote(query, limit, opts);
+): Promise<import("../api/types.js").UnifiedSearchResponse> {
+  if (isRemoteMode()) {
+    return apiClient.unifiedSearch(query, limit, opts);
+  }
+  const { unifiedSearchLocal } = await import("./fts.js");
+  return { query, ...unifiedSearchLocal(query, limit, 0) };
 }
 
 // ── Source CRUD helpers ──
