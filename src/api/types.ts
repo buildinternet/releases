@@ -49,6 +49,14 @@ export interface OrgDetail {
   lastFetchedAt: string | null;
   trackingSince: string;
   accounts: { platform: string; handle: string }[];
+  products: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    url: string | null;
+    description: string | null;
+    sourceCount: number;
+  }>;
   sources: SourceListItem[];
 }
 

@@ -90,6 +90,11 @@ export function SourceCard({ source, orgSlug, cadence }: { source: SourceListIte
           {source.isPrimary && (
             <span className="text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">Primary</span>
           )}
+          {source.productName && (
+            <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+              {source.productName}
+            </span>
+          )}
           {cadenceInfo && (
             <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeStyles[cadenceInfo.key]}`}>
               {cadenceInfo.label}

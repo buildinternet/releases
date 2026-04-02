@@ -16,6 +16,7 @@ import type {
   OrgActivity,
   OrgReleasesResponse,
   ReleaseDetail,
+  ProductDetail,
 } from "@shared/api/types";
 
 export type {
@@ -29,6 +30,7 @@ export type {
   OrgActivity,
   OrgReleasesResponse,
   ReleaseDetail,
+  ProductDetail,
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
@@ -100,4 +102,5 @@ export const api = {
     return fetchApi<OrgReleasesResponse>(`/api/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },
   release: (id: string) => fetchApi<ReleaseDetail>(`/api/releases/${id}`),
+  productDetail: (slug: string) => fetchApi<ProductDetail>(`/api/products/${slug}`),
 };
