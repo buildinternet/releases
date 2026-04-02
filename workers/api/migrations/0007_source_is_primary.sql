@@ -1,1 +1,0 @@
-ALTER TABLE sources ADD COLUMN is_primary INTEGER DEFAULT 0;

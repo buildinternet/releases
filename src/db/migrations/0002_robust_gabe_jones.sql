@@ -1,1 +1,0 @@
-ALTER TABLE `fetch_log` ADD `raw_content` text;
