@@ -497,6 +497,132 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   });
 });
 
+// Combined release feed for an org
+orgRoutes.get("/orgs/:slug/releases", async (c) => {
+  const slug = c.req.param("slug");
+  const cursorParam = c.req.query("cursor") ?? null;
+  const parsedLimit = parseInt(c.req.query("limit") ?? "20", 10);
+  const limit = isNaN(parsedLimit) || parsedLimit < 1 ? 20 : Math.min(parsedLimit, 100);
+
+  const db = createDb(c.env.DB);
+
+  // Resolve org
+  const org = await db
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(
+      slug.startsWith("org_")
+        ? eq(organizations.id, slug)
+        : eq(organizations.slug, slug)
+    )
+    .get();
+
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  // Get all source IDs for this org
+  const orgSources = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.orgId, org.id))
+    .all();
+
+  if (orgSources.length === 0) {
+    return c.json({ releases: [], pagination: { nextCursor: null, limit } });
+  }
+
+  const sourceIds = orgSources.map((s) => s.id);
+  const placeholders = sourceIds.map(() => "?").join(", ");
+
+  // Parse cursor — format is "publishedAt|id"
+  let cursorWhere = "";
+  const cursorBindings: string[] = [];
+  if (cursorParam) {
+    const pipeIdx = cursorParam.indexOf("|");
+    const cursorDate = pipeIdx > 0 ? cursorParam.slice(0, pipeIdx) : (pipeIdx === -1 ? cursorParam : "");
+    const cursorId = pipeIdx >= 0 ? cursorParam.slice(pipeIdx + 1) : "";
+    if (cursorDate && cursorId) {
+      cursorWhere = `AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))`;
+      cursorBindings.push(cursorDate, cursorDate, cursorId);
+    } else if (cursorId) {
+      // id-only cursor for releases without publishedAt
+      cursorWhere = `AND (r.published_at IS NOT NULL OR r.id < ?)`;
+      cursorBindings.push(cursorId);
+    } else if (cursorDate) {
+      cursorWhere = `AND r.published_at < ?`;
+      cursorBindings.push(cursorDate);
+    }
+  }
+
+  const stmt = c.env.DB.prepare(`
+    SELECT r.id, r.version, r.title, r.content, r.content_summary,
+           r.published_at, r.fetched_at, r.url, r.media,
+           s.slug AS source_slug, s.name AS source_name, s.type AS source_type
+    FROM releases r
+    INNER JOIN sources s ON s.id = r.source_id
+    WHERE r.source_id IN (${placeholders})
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${cursorWhere}
+    ORDER BY
+      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
+      r.published_at DESC,
+      r.fetched_at DESC,
+      r.id DESC
+    LIMIT ?
+  `).bind(...sourceIds, ...cursorBindings, limit + 1);
+
+  const { results } = await stmt.all<{
+    id: string;
+    version: string | null;
+    title: string;
+    content: string;
+    content_summary: string | null;
+    published_at: string | null;
+    url: string | null;
+    media: string | null;
+    source_slug: string;
+    source_name: string;
+    source_type: string;
+  }>();
+
+  const hasMore = results.length > limit;
+  const pageRows = hasMore ? results.slice(0, limit) : results;
+
+  // Build next cursor from last item
+  let nextCursor: string | null = null;
+  if (hasMore && pageRows.length > 0) {
+    const last = pageRows[pageRows.length - 1];
+    nextCursor = last.published_at
+      ? `${last.published_at}|${last.id}`
+      : `|${last.id}`;
+  }
+
+  const releasesFormatted = pageRows.map((r) => ({
+    id: r.id,
+    version: r.version,
+    title: r.title,
+    summary: r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    content: r.content,
+    publishedAt: r.published_at,
+    url: r.url,
+    media: (() => {
+      try { return JSON.parse(r.media ?? "[]"); } catch { return []; }
+    })().map((m: any) => ({
+      ...m,
+      r2Url: m.r2Key ? `/api/media/${m.r2Key}` : undefined,
+    })),
+    source: {
+      slug: r.source_slug,
+      name: r.source_name,
+      type: r.source_type,
+    },
+  }));
+
+  return c.json({
+    releases: releasesFormatted,
+    pagination: { nextCursor, limit },
+  });
+});
+
 orgRoutes.post("/orgs/:slug/accounts", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
