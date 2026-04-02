@@ -1,7 +1,7 @@
 {
   "name": "released",
-  "version": "0.1.0",
-  "description": "Context7-style changelog indexer for AI agents and developers",
+  "version": "0.9.0",
+  "description": "Changelog indexer and registry for AI agents and developers",
   "type": "module",
   "bin": {
     "released": "./src/index.ts"
