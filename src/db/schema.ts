@@ -47,6 +47,7 @@ export const sources = sqliteTable("sources", {
   isHidden: integer("is_hidden", { mode: "boolean" }).default(false),
 }, (table) => [
   index("idx_sources_org").on(table.orgId),
+  index("idx_sources_org_hidden").on(table.orgId, table.isHidden),
 ]);
 
 export const releases = sqliteTable(
@@ -74,6 +75,12 @@ export const releases = sqliteTable(
     uniqueIndex("idx_releases_source_hash").on(table.sourceId, table.contentHash),
     index("idx_releases_source_published").on(table.sourceId, table.publishedAt),
     index("idx_releases_published").on(table.publishedAt),
+    index("idx_releases_source_suppressed_published").on(
+      table.sourceId,
+      table.suppressed,
+      table.publishedAt,
+    ),
+    index("idx_releases_fetched_at").on(table.fetchedAt),
   ],
 );
 

@@ -11,57 +11,40 @@ export const orgRoutes = new Hono<Env>();
 
 orgRoutes.get("/orgs", async (c) => {
   const db = createDb(c.env.DB);
+  const cutoff30d = daysAgoIso(30);
 
-  const rows = await db
-    .select({
-      slug: organizations.slug,
-      name: organizations.name,
-      domain: organizations.domain,
-      description: organizations.description,
-      id: organizations.id,
-    })
-    .from(organizations)
-    .orderBy(organizations.name);
+  const rows = await db.all<{
+    id: string;
+    slug: string;
+    name: string;
+    domain: string | null;
+    description: string | null;
+    source_count: number;
+    release_count: number;
+    last_activity: string | null;
+    recent_release_count: number;
+  }>(sql`
+    SELECT
+      o.id, o.slug, o.name, o.domain, o.description,
+      (SELECT COUNT(*) FROM sources s WHERE s.org_id = o.id) AS source_count,
+      (SELECT COUNT(*) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
+      (SELECT MAX(r.published_at) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND r.published_at IS NOT NULL) AS last_activity,
+      (SELECT COUNT(*) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND r.published_at >= ${cutoff30d} AND (r.suppressed IS NULL OR r.suppressed = 0)) AS recent_release_count
+    FROM organizations o
+    ORDER BY o.name
+  `);
 
-  const result = await Promise.all(
-    rows.map(async (org) => {
-      const [srcCount] = await db
-        .select({ n: count() })
-        .from(sources)
-        .where(eq(sources.orgId, org.id));
-
-      const [relCount] = await db
-        .select({ n: count() })
-        .from(releases)
-        .innerJoin(sources, eq(releases.sourceId, sources.id))
-        .where(eq(sources.orgId, org.id));
-
-      const [latest] = await db
-        .select({ maxDate: max(releases.publishedAt) })
-        .from(releases)
-        .innerJoin(sources, eq(releases.sourceId, sources.id))
-        .where(and(eq(sources.orgId, org.id), sql`${releases.publishedAt} IS NOT NULL`));
-
-      const cutoff30d = daysAgoIso(30);
-      const [recentCount] = await db
-        .select({ n: count() })
-        .from(releases)
-        .innerJoin(sources, eq(releases.sourceId, sources.id))
-        .where(and(eq(sources.orgId, org.id), gte(releases.publishedAt, cutoff30d)));
-
-      return {
-        id: org.id,
-        slug: org.slug,
-        name: org.name,
-        domain: org.domain,
-        description: org.description,
-        sourceCount: srcCount.n,
-        releaseCount: relCount.n,
-        recentReleaseCount: recentCount.n,
-        lastActivity: latest.maxDate ?? null,
-      };
-    }),
-  );
+  const result = rows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    domain: row.domain,
+    description: row.description,
+    sourceCount: row.source_count,
+    releaseCount: row.release_count,
+    recentReleaseCount: row.recent_release_count,
+    lastActivity: row.last_activity ?? null,
+  }));
 
   return c.json(result);
 });
@@ -80,50 +63,42 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     .from(orgAccounts)
     .where(eq(orgAccounts.orgId, org.id));
 
-  const orgSources = await db
-    .select()
-    .from(sources)
-    .where(eq(sources.orgId, org.id))
-    .orderBy(sources.name);
+  const sourceRows = await db.all<{
+    id: string;
+    slug: string;
+    name: string;
+    type: string;
+    url: string;
+    is_primary: number | null;
+    release_count: number;
+    latest_version_by_date: string | null;
+    latest_date: string | null;
+    latest_version_by_fetch: string | null;
+  }>(sql`
+    SELECT
+      s.id, s.slug, s.name, s.type, s.url, s.is_primary,
+      (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
+      (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND r2.published_at IS NOT NULL AND (r2.suppressed IS NULL OR r2.suppressed = 0) ORDER BY r2.published_at DESC LIMIT 1) AS latest_version_by_date,
+      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND r3.published_at IS NOT NULL AND (r3.suppressed IS NULL OR r3.suppressed = 0) ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
+      (SELECT r4.version FROM releases r4 WHERE r4.source_id = s.id AND (r4.suppressed IS NULL OR r4.suppressed = 0) ORDER BY r4.fetched_at DESC LIMIT 1) AS latest_version_by_fetch
+    FROM sources s
+    WHERE s.org_id = ${org.id}
+    ORDER BY s.name
+  `);
 
-  const sourcesWithStats = await Promise.all(
-    orgSources.map(async (src) => {
-      const [relCount] = await db
-        .select({ n: count() })
-        .from(releases)
-        .where(eq(releases.sourceId, src.id));
+  const orgSources = sourceRows;
 
-      const [latest] = await db
-        .select({ version: releases.version, publishedAt: releases.publishedAt })
-        .from(releases)
-        .where(and(eq(releases.sourceId, src.id), sql`${releases.publishedAt} IS NOT NULL`))
-        .orderBy(desc(releases.publishedAt))
-        .limit(1);
-
-      let latestVersion = latest?.version ?? null;
-      if (!latestVersion) {
-        const [fallback] = await db
-          .select({ version: releases.version })
-          .from(releases)
-          .where(eq(releases.sourceId, src.id))
-          .orderBy(desc(releases.fetchedAt))
-          .limit(1);
-        latestVersion = fallback?.version ?? null;
-      }
-
-      return {
-        id: src.id,
-        slug: src.slug,
-        name: src.name,
-        type: src.type,
-        url: src.url,
-        isPrimary: src.isPrimary ?? false,
-        releaseCount: relCount.n,
-        latestVersion,
-        latestDate: latest?.publishedAt ?? null,
-      };
-    }),
-  );
+  const sourcesWithStats = sourceRows.map((row) => ({
+    id: row.id,
+    slug: row.slug,
+    name: row.name,
+    type: row.type,
+    url: row.url,
+    isPrimary: row.is_primary ? true : false,
+    releaseCount: row.release_count,
+    latestVersion: row.latest_version_by_date ?? row.latest_version_by_fetch ?? null,
+    latestDate: row.latest_date ?? null,
+  }));
 
   // Compute org metrics inline
   const cutoff = daysAgoIso(30);

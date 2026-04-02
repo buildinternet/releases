@@ -60,6 +60,10 @@ app.use("/api/releases/:id", cacheControl(120, { staleWhileRevalidate: 60 }));
 app.use("/api/summaries/*", cacheControl(300, { staleWhileRevalidate: 120 }));
 app.use("/api/status/fetch-log", cacheControl(15));
 app.use("/api/status/usage", cacheControl(30));
+app.use("/api/orgs/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30 }));
+app.use("/api/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60 }));
+app.use("/api/sources/fetchable", cacheControl(15));
+app.use("/api/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
 
 app.route("/api", sessionRoutes);
 app.route("/api", statsRoutes);
