@@ -21,6 +21,12 @@ export function runMigrations() {
   // CHECK constraints so we drop it to avoid manual work on new type additions.
   const droppedFts = removeLegacyCheckConstraint(db);
 
+  // Bridge metadata column drift: the column was added to the schema and
+  // snapshot at 0007 but no migration SQL was generated. If the column was
+  // added out-of-band (e.g. ALTER TABLE patch), pre-mark migration 0011 as
+  // applied so the migrator doesn't fail on a duplicate column.
+  bridgeMetadataColumnDrift(db);
+
   // Run Drizzle-managed schema migrations
   migrate(db, { migrationsFolder });
 
@@ -80,6 +86,50 @@ function bridgeLegacyMigrations(db: ReturnType<typeof getDb>) {
 
   // Clear user_version — Drizzle owns migration state now
   db.run(sql`PRAGMA user_version = 0`);
+}
+
+/**
+ * The organizations.metadata column was added to the Drizzle schema and
+ * snapshot at migration 0007 but was never included in a migration SQL file.
+ * Migration 0011 adds the ALTER TABLE, but databases that already have the
+ * column (patched manually or via test helpers) would fail. If the column
+ * already exists and 0011 hasn't been applied yet, mark it as applied.
+ */
+function bridgeMetadataColumnDrift(db: ReturnType<typeof getDb>) {
+  // Check if the __drizzle_migrations table exists at all
+  const tables = db.all<{ name: string }>(
+    sql`SELECT name FROM sqlite_master WHERE type='table' AND name='__drizzle_migrations'`,
+  );
+  if (tables.length === 0) return; // Fresh DB — migrator will handle everything
+
+  // Check if the column already exists
+  const cols = db.all<{ name: string }>(
+    sql`SELECT name FROM pragma_table_info('organizations') WHERE name='metadata'`,
+  );
+  if (cols.length === 0) return; // Column doesn't exist — migration will add it
+
+  // Read the journal to find migration 0011's timestamp
+  const journalPath = join(migrationsFolder, "meta", "_journal.json");
+  const journal = JSON.parse(readFileSync(journalPath, "utf-8"));
+  const entry = journal.entries.find(
+    (e: { tag: string }) => e.tag === "0011_add_organizations_metadata",
+  );
+  if (!entry) return;
+
+  // Compute the hash the same way Drizzle does
+  const sqlPath = join(migrationsFolder, `${entry.tag}.sql`);
+  const sqlContent = readFileSync(sqlPath, "utf-8");
+  const hash = createHash("sha256").update(sqlContent).digest("hex");
+
+  // Only insert if not already present
+  const existing = db.all<{ hash: string }>(
+    sql`SELECT hash FROM __drizzle_migrations WHERE hash = ${hash}`,
+  );
+  if (existing.length === 0) {
+    db.run(
+      sql`INSERT INTO __drizzle_migrations (hash, created_at) VALUES (${hash}, ${entry.when})`,
+    );
+  }
 }
 
 /**
