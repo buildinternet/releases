@@ -141,6 +141,15 @@ export interface OrgActivity {
   aggregateWeekly: Array<{ weekStart: string; count: number }>;
 }
 
+export interface OrgReleaseItem extends ReleaseItem {
+  source: { slug: string; name: string; type: string };
+}
+
+export interface OrgReleasesResponse {
+  releases: OrgReleaseItem[];
+  pagination: { nextCursor: string | null; limit: number };
+}
+
 export const api = {
   stats: () => fetchApi<Stats>("/api/stats"),
   orgs: () => fetchApi<OrgListItem[]>("/api/orgs"),
@@ -163,6 +172,13 @@ export const api = {
     if (to) params.set("to", to);
     const qs = params.toString();
     return fetchApi<OrgActivity>(`/api/orgs/${slug}/activity${qs ? `?${qs}` : ""}`);
+  },
+  orgReleases: (slug: string, cursor?: string, limit = 20) => {
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit !== 20) params.set("limit", String(limit));
+    const qs = params.toString();
+    return fetchApi<OrgReleasesResponse>(`/api/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },
   release: (id: string) => fetchApi<ReleaseDetail>(`/api/releases/${id}`),
 };

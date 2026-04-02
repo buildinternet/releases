@@ -6,6 +6,8 @@ import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
 import { ReleaseTimeline } from "@/components/release-timeline";
+import { OrgTabs } from "@/components/org-tabs";
+import { OrgReleaseList } from "@/components/org-release-list";
 import Link from "next/link";
 
 export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
@@ -47,10 +49,14 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
 
 export default async function OrgPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ orgSlug: string }>;
+  searchParams: Promise<{ tab?: string }>;
 }) {
   const { orgSlug } = await params;
+  const { tab } = await searchParams;
+  const showReleases = tab === "releases";
 
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -58,11 +64,19 @@ export default async function OrgPage({
 
   let org;
   let activity;
+  let initialReleases: import("@/lib/api").OrgReleasesResponse | null = null;
   try {
-    [org, activity] = await Promise.all([
-      api.orgDetail(orgSlug),
-      api.orgActivity(orgSlug, activityFrom).catch(() => null),
-    ]);
+    if (showReleases) {
+      [org, initialReleases] = await Promise.all([
+        api.orgDetail(orgSlug),
+        api.orgReleases(orgSlug).catch(() => null),
+      ]);
+    } else {
+      [org, activity] = await Promise.all([
+        api.orgDetail(orgSlug),
+        api.orgActivity(orgSlug, activityFrom).catch(() => null),
+      ]);
+    }
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -119,7 +133,21 @@ export default async function OrgPage({
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">{org.name}</h1>
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            {activity ? (
+            <OrgTabs />
+            {showReleases ? (
+              initialReleases ? (
+                <OrgReleaseList
+                  orgSlug={orgSlug}
+                  initialReleases={initialReleases.releases}
+                  initialCursor={initialReleases.pagination.nextCursor}
+                  multipleSourcesExist={org.sources.length > 1}
+                />
+              ) : (
+                <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
+                  No releases yet.
+                </div>
+              )
+            ) : activity ? (
               <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} />
             ) : (
               <div className="mt-6">
