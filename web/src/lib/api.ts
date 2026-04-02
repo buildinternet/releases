@@ -1,17 +1,10 @@
-export type {
-  ReleaseSummaryItem,
-  ReleaseItem,
-  SearchResult,
-  OrgReleaseItem,
-} from "@shared/api/types";
-
 import type {
   Stats,
   OrgListItem,
   OrgDetail,
   SourceListItem,
   SourceDetail,
-  SearchResponse,
+  UnifiedSearchResponse,
   SourceActivity,
   OrgActivity,
   OrgReleasesResponse,
@@ -20,12 +13,22 @@ import type {
 } from "@shared/api/types";
 
 export type {
+  ReleaseSummaryItem,
+  ReleaseItem,
+  SearchReleaseHit,
+  SearchOrgHit,
+  SearchProductHit,
+  SearchSourceHit,
+  OrgReleaseItem,
+} from "@shared/api/types";
+
+export type {
   Stats,
   OrgListItem,
   OrgDetail,
   SourceListItem,
   SourceDetail,
-  SearchResponse,
+  UnifiedSearchResponse,
   SourceActivity,
   OrgActivity,
   OrgReleasesResponse,
@@ -79,7 +82,7 @@ export const api = {
   sourceDetail: (slug: string, page = 1, pageSize = 20) =>
     fetchApi<SourceDetail>(`/api/sources/${slug}?page=${page}&pageSize=${pageSize}`),
   search: (q: string, limit = 20, offset = 0) =>
-    fetchApi<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+    fetchApi<UnifiedSearchResponse>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
   sourceActivity: (slug: string, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
