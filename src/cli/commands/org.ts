@@ -24,6 +24,7 @@ export function registerOrgCommand(program: Command) {
     .option("--description <text>", "Brief product description (one sentence)")
     .option("--category <category>", "Category (e.g. ai, cloud, framework)")
     .option("--tags <tags>", "Comma-separated tags (e.g. typescript,react)")
+    .option("--avatar <url>", "Set avatar image URL")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
@@ -31,7 +32,7 @@ Examples:
   released org add "Acme Corp" --domain acme.com
   released org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
   released org add "Acme Corp" --slug acme --json`)
-    .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; category?: string; tags?: string; json?: boolean }) => {
+    .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; category?: string; tags?: string; avatar?: string; json?: boolean }) => {
       const slug = opts.slug ?? toSlug(name);
 
       const existing = await findOrg(slug);
@@ -45,7 +46,7 @@ Examples:
         process.exit(1);
       }
 
-      const created = await createOrg(name, { slug, domain: opts.domain, description: opts.description, category: opts.category });
+      const created = await createOrg(name, { slug, domain: opts.domain, description: opts.description, category: opts.category, avatarUrl: opts.avatar });
 
       if (opts.tags) {
         const tagList = opts.tags.split(",").map((t: string) => t.trim()).filter(Boolean);
@@ -186,8 +187,10 @@ Examples:
     .option("--description <text>", "Update description")
     .option("--category <category>", "Set category")
     .option("--no-category", "Clear category")
+    .option("--avatar <url>", "Set avatar image URL")
+    .option("--no-avatar", "Clear avatar URL")
     .option("--json", "Output as JSON")
-    .action(async (identifier: string, opts: { name?: string; domain?: string; description?: string; category?: string | boolean; json?: boolean }) => {
+    .action(async (identifier: string, opts: { name?: string; domain?: string; description?: string; category?: string | boolean; avatar?: string | boolean; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
         console.error(chalk.red(`Organization not found: ${identifier}`));
@@ -209,8 +212,14 @@ Examples:
         updates.category = opts.category;
       }
 
+      if (opts.avatar === false) {
+        updates.avatarUrl = null;
+      } else if (typeof opts.avatar === "string") {
+        updates.avatarUrl = opts.avatar;
+      }
+
       if (Object.keys(updates).length === 0) {
-        console.error(chalk.yellow("No fields to update. Use --name, --domain, --description, or --category."));
+        console.error(chalk.yellow("No fields to update. Use --name, --domain, --description, --category, or --avatar."));
         process.exit(1);
       }
 
