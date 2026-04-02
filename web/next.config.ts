@@ -19,6 +19,9 @@ const nextConfig: NextConfig = {
   },
   turbopack: {
     root: path.resolve(__dirname, ".."),
+    resolveAlias: {
+      "@shared/formatters": "../src/lib/formatters.ts",
+    },
   },
   webpack: (config) => {
     config.resolve.alias = {

@@ -10,7 +10,7 @@ import {
   findSourceBySlug, listAllSources, listFetchableSources,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById,
-  insertMediaAssets,
+  insertMediaAssets, clearChangeDetected,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -383,6 +383,7 @@ Examples:
                 consecutiveErrors: 0,
                 nextFetchAfter: nextFetch,
               });
+              await clearChangeDetected(source);
             }
             fetchResults.push({ source: source.name, newReleases: 0 });
             progressSession(`${source.name}: no changes`);
@@ -540,6 +541,7 @@ Examples:
             consecutiveErrors: 0,
             nextFetchAfter: null,
           });
+          await clearChangeDetected(source);
 
           // Generate release summary if enabled
           if (inserted > 0 && opts.summarize !== false) {

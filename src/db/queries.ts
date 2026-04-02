@@ -1020,6 +1020,53 @@ export async function listFetchableSources(opts: {
   return db.select().from(sources).where(notDisabled);
 }
 
+/** List sources that have a discovered feed URL in metadata. */
+export async function listFeedSources(): Promise<Source[]> {
+  if (isRemoteMode()) {
+    return apiClient.listFeedSources();
+  }
+  const db = getDb();
+  return db.select().from(sources).where(
+    and(
+      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
+      sql`${sources.fetchPriority} != 'paused'`,
+      notDisabled,
+    )
+  );
+}
+
+export async function setChangeDetected(source: Source): Promise<void> {
+  const now = new Date().toISOString();
+  if (isRemoteMode()) {
+    await apiClient.updateSource(source.slug, { changeDetectedAt: now });
+    return;
+  }
+  const db = getDb();
+  await db.update(sources).set({ changeDetectedAt: now }).where(eq(sources.id, source.id));
+}
+
+export async function clearChangeDetected(source: Source): Promise<void> {
+  if (isRemoteMode()) {
+    await apiClient.updateSource(source.slug, { changeDetectedAt: null });
+    return;
+  }
+  const db = getDb();
+  await db.update(sources).set({ changeDetectedAt: null }).where(eq(sources.id, source.id));
+}
+
+export async function listSourcesWithChanges(): Promise<Source[]> {
+  if (isRemoteMode()) {
+    return apiClient.listSourcesWithChanges();
+  }
+  const db = getDb();
+  return db.select().from(sources).where(
+    and(
+      sql`${sources.changeDetectedAt} IS NOT NULL`,
+      notDisabled,
+    )
+  );
+}
+
 export async function deleteReleasesForSource(source: Source): Promise<number> {
   if (isRemoteMode()) {
     const result = await apiClient.deleteReleasesForSource(source.slug);

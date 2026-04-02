@@ -1,0 +1,1 @@
+ALTER TABLE `sources` ADD `change_detected_at` text;

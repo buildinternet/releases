@@ -50,6 +50,7 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 - Products are an **optional** grouping layer between organizations and sources. Multi-product orgs (e.g., Vercel → Next.js, Turborepo) use products to group their sources. Sources have a nullable `productId` — simple orgs skip this layer. CLI: `product list/add/edit/remove/adopt`. The `product adopt` command converts an org that should be a product into a product under another org, moving sources and accounts. Products have an optional canonical `url` field.
 - Ignored URLs are **org-scoped** — a URL ignored for one org can still be valid for another. The `ignored_urls` table requires `orgId`. CLI: `ignore list/add/remove --org <org>`. Blocked URLs (`blocked_urls` table) are **global** — for spam domains and known-bad URLs. CLI: `block list/add/remove`. Both lists are checked by `isUrlExcluded()` before adding sources.
 - Release suppression: individual releases can be suppressed (`release suppress <id> --reason "..."`) to hide them from queries and search without deleting. Suppressed releases are filtered out of all read paths (search, latest, stats, API). Use `release unsuppress <id>` to restore.
+- Feed change detection: `released poll` uses HTTP HEAD requests to flag sources with upstream changes (`changeDetectedAt` column). The `fetch` command uses HEAD as a pre-filter to skip unchanged feeds. Both are purely mechanical — no AI or content parsing involved.
 - Remote mode fetch requires a filter (`--stale`, `--unfetched`, `--retry-errors`, or a source slug). Bare `fetch` is blocked in remote mode to prevent expensive bulk operations. Remote concurrency defaults to 3, capped at 5.
 
 ## Common CLI Patterns
@@ -75,6 +76,9 @@ bun src/index.ts org tag list acme
 bun src/index.ts product add "CLI" --org acme --category developer-tools --tags golang
 bun src/index.ts product tag add acme-cli testing
 bun src/index.ts list --category ai     # Filter sources by category
+bun src/index.ts poll                   # Check all feed sources for upstream changes
+bun src/index.ts poll --changed         # Show only sources with detected changes
+bun src/index.ts poll --json            # Machine-readable output
 ```
 
 - Source slug is always a **positional argument** (e.g., `fetch claude-code`), not a flag. The `fetch` command also accepts `--source <slug>` as an alias for convenience.

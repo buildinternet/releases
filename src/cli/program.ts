@@ -28,6 +28,7 @@ import { registerSummarizeCommand } from "./commands/summarize.js";
 import { registerEnrichCommand } from "./commands/enrich.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
+import { registerPollCommand } from "./commands/poll.js";
 import { CATEGORIES } from "../lib/categories.js";
 
 export const VERSION = "0.9.0";
@@ -68,6 +69,7 @@ function printStyledHelp(): string {
   lines.push(row("fetch [slug]", "Fetch releases from sources"));
   lines.push(row("fetch-log [slug]", "View recent fetch history"));
   lines.push(row("check <slug>", "Check a source URL for changes"));
+  lines.push(row("poll [slug]", "Poll feed sources for upstream changes"));
   lines.push(row("enrich <slug>", "Enrich sparse releases with full content"));
   lines.push(row("search <query>", "Full-text search across releases"));
   lines.push(row("latest [slug]", "Show latest releases"));
@@ -140,6 +142,7 @@ registerSummarizeCommand(program);
 registerEnrichCommand(program);
 registerMediaCommand(program);
 registerTaskCommand(program);
+registerPollCommand(program);
 
 program
   .command("help")
