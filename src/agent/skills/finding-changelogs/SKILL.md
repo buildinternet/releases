@@ -26,7 +26,83 @@ If the entries don't look like releases, the feed is likely the wrong one. Look 
 
 ## Priority Order
 
-Feeds > GitHub Releases API > raw markdown > page scraping.
+Well-known files > Link relations > Feeds > GitHub Releases API > raw markdown > page scraping.
+
+## Well-Known Files & Link Relations
+
+The discovery pipeline checks for standardized changelog metadata before falling back to heuristic methods.
+
+### Well-known files (highest priority)
+
+Checked in cascade — stops as soon as a tier produces results:
+1. `/.well-known/changelog.json` — JSON manifest (primary)
+2. `/.well-known/releases.json` — JSON manifest (alias)
+3. `/.well-known/changelog.txt` — text format (security.txt-style fallback)
+4. `/AGENTS.md`, `/AGENTS.txt` — AI agent instruction files with changelog references
+5. `/changelog.md`, `/changelog.txt`, `/releases.md`, `/releases.txt` (and uppercase variants) — root-level files
+
+**JSON manifest format** (`/.well-known/changelog.json`):
+
+Single product:
+```json
+{
+  "version": 1,
+  "url": "https://example.com/changelog",
+  "feed": "https://example.com/changelog/feed.xml"
+}
+```
+
+Multi-product:
+```json
+{
+  "version": 1,
+  "changelogs": [
+    { "name": "Platform", "url": "https://example.com/changelog", "feed": "https://example.com/changelog.rss" },
+    { "name": "API", "url": "https://example.com/api/changelog" }
+  ]
+}
+```
+
+**Text manifest format** (`/.well-known/changelog.txt`):
+```
+# Changelog discovery — see https://releases.sh/well-known
+Changelog: https://example.com/changelog
+Feed: https://example.com/changelog/feed.xml
+```
+
+Lines starting with `#` are comments. Keys are `Changelog:` and `Feed:`, one per line.
+
+**AGENTS.md / AGENTS.txt** — AI agent instruction files may reference changelogs. The parser detects:
+- Key-value lines: `Changelog: https://example.com/changelog`
+- Markdown links: `[Our Changelog](https://example.com/changelog)`
+- Bare URLs on lines mentioning "changelog", "release notes", etc.
+
+**Root changelog/releases files** — `/changelog.md`, `/changelog.txt`, `/releases.md`, `/releases.txt` (and uppercase variants) are probed via HEAD request. Only accepted if the server returns text content (not an HTML error page).
+
+### Link relations
+
+The discovery pipeline detects these `<link>` tags in the HTML `<head>`:
+
+```html
+<link rel="changelog" href="/changelog">
+<link rel="releases" href="/releases">
+<link rel="release-notes" href="/docs/release-notes">
+```
+
+If the tag includes a feed `type` attribute, the URL is treated as a feed source:
+```html
+<link rel="changelog" type="application/atom+xml" href="/changelog.atom">
+```
+
+These are distinct from standard feed autodiscovery (`rel="alternate"`) — they point directly to changelog pages or feeds, not generic site feeds.
+
+### Discovery method labels
+
+Sources found via these mechanisms are tagged:
+- `method: "well-known"` — from `/.well-known/` manifest files
+- `method: "link-rel"` — from HTML `<link rel="changelog|releases|release-notes">`
+
+Both carry `confidence: "high"` since they represent explicit publisher intent.
 
 ## Using the CLI
 

@@ -9,7 +9,7 @@ import { logUsage } from "./usage.js";
 // ── Types ────────────────────────────────────────────────────────────
 
 export type DiscoveredType = "github" | "feed" | "scrape";
-export type DiscoveryMethod = "sitemap" | "feed" | "html-link" | "github-api" | "provider-hint" | "ai-verified" | "ai-suggested";
+export type DiscoveryMethod = "sitemap" | "feed" | "html-link" | "github-api" | "provider-hint" | "ai-verified" | "ai-suggested" | "well-known" | "link-rel";
 export type Confidence = "high" | "medium" | "low";
 
 export interface DiscoveredSource {
@@ -277,17 +277,52 @@ async function discoverFeeds(
 
 // ── HTML link analysis ───────────────────────────────────────────────
 
+/**
+ * Scan the origin page for changelog signals:
+ * 1. <link rel="changelog|releases|release-notes"> in <head> (link-rel method)
+ * 2. <a> links matching changelog URL/text patterns (html-link method)
+ *
+ * Fetches the page once, extracts both signal types from a single response.
+ */
 async function discoverFromHtmlLinks(origin: string): Promise<DiscoveredSource[]> {
   const results: DiscoveredSource[] = [];
 
   const html = await fetchText(origin);
   if (!html) return results;
 
-  const linkRe = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
-  let match;
-  const seen = new Set<string>();
+  // ── Link relations from <head> ──
+  const headEnd = html.indexOf("</head>");
+  const head = headEnd > -1 ? html.slice(0, headEnd) : html.slice(0, 32_000);
 
-  while ((match = linkRe.exec(html)) !== null) {
+  const linkRelRe = /<link\s[^>]*rel=["'](changelog|releases|release-notes)["'][^>]*>/gi;
+  let lrMatch;
+  while ((lrMatch = linkRelRe.exec(head)) !== null) {
+    const tag = lrMatch[0];
+    const rel = lrMatch[1].toLowerCase();
+    const hrefMatch = tag.match(/href=["']([^"']+)["']/);
+    if (!hrefMatch) continue;
+
+    try {
+      const url = new URL(hrefMatch[1], origin).toString();
+      const typeMatch = tag.match(/type=["']([^"']+)["']/);
+      const isLikelyFeed = typeMatch && /rss|atom|feed\+json/i.test(typeMatch[1]);
+
+      results.push({
+        url,
+        type: isLikelyFeed ? "feed" : "scrape",
+        method: "link-rel",
+        confidence: "high",
+        label: `<link rel="${rel}">`,
+      });
+    } catch { /* skip malformed URLs */ }
+  }
+
+  // ── Anchor links from <body> ──
+  const anchorRe = /<a\s[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let match;
+  const seen = new Set<string>(results.map((r) => r.url));
+
+  while ((match = anchorRe.exec(html)) !== null) {
     const href = match[1];
     const text = match[2].replace(/<[^>]+>/g, "").trim();
 
@@ -316,6 +351,283 @@ async function discoverFromHtmlLinks(origin: string): Promise<DiscoveredSource[]
   }
 
   return results;
+}
+
+// ── Well-known file discovery ───────────────────────────────────────
+
+/**
+ * Well-known changelog manifest schema (/.well-known/changelog.json).
+ *
+ * Simple case (single product):
+ *   { "version": 1, "url": "https://example.com/changelog", "feed": "..." }
+ *
+ * Multi-product:
+ *   { "version": 1, "changelogs": [{ "name": "...", "url": "...", "feed": "..." }] }
+ */
+interface WellKnownManifest {
+  version?: number;
+  url?: string;
+  feed?: string;
+  changelogs?: Array<{
+    name?: string;
+    url?: string;
+    feed?: string;
+  }>;
+}
+
+/** Text format keys (security.txt-style): "Changelog:", "Feed:" */
+function parseWellKnownText(text: string, origin: string): DiscoveredSource[] {
+  const results: DiscoveredSource[] = [];
+  const lines = text.split("\n");
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("#") || !trimmed) continue;
+
+    const changelogMatch = trimmed.match(/^Changelog:\s*(.+)/i);
+    if (changelogMatch) {
+      try {
+        const url = new URL(changelogMatch[1].trim(), origin).toString();
+        results.push({
+          url,
+          type: "scrape",
+          method: "well-known",
+          confidence: "high",
+          label: "well-known changelog",
+        });
+      } catch { /* skip malformed */ }
+    }
+
+    const feedMatch = trimmed.match(/^Feed:\s*(.+)/i);
+    if (feedMatch) {
+      try {
+        const url = new URL(feedMatch[1].trim(), origin).toString();
+        results.push({
+          url,
+          type: "feed",
+          method: "well-known",
+          confidence: "high",
+          label: "well-known feed",
+        });
+      } catch { /* skip malformed */ }
+    }
+  }
+
+  return results;
+}
+
+function parseWellKnownJson(raw: string, origin: string): DiscoveredSource[] {
+  let manifest: WellKnownManifest;
+  try {
+    manifest = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+
+  const results: DiscoveredSource[] = [];
+
+  // Single-product shorthand
+  if (manifest.url) {
+    try {
+      results.push({
+        url: new URL(manifest.url, origin).toString(),
+        type: "scrape",
+        method: "well-known",
+        confidence: "high",
+        label: "well-known changelog",
+      });
+    } catch { /* skip */ }
+  }
+  if (manifest.feed) {
+    try {
+      results.push({
+        url: new URL(manifest.feed, origin).toString(),
+        type: "feed",
+        method: "well-known",
+        confidence: "high",
+        label: "well-known feed",
+      });
+    } catch { /* skip */ }
+  }
+
+  // Multi-product array
+  for (const entry of manifest.changelogs ?? []) {
+    const name = entry.name ?? "changelog";
+    if (entry.url) {
+      try {
+        results.push({
+          url: new URL(entry.url, origin).toString(),
+          type: "scrape",
+          method: "well-known",
+          confidence: "high",
+          label: `well-known: ${name}`,
+        });
+      } catch { /* skip */ }
+    }
+    if (entry.feed) {
+      try {
+        results.push({
+          url: new URL(entry.feed, origin).toString(),
+          type: "feed",
+          method: "well-known",
+          confidence: "high",
+          label: `well-known feed: ${name}`,
+        });
+      } catch { /* skip */ }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Extract changelog URLs from AGENTS.md or AGENTS.txt.
+ * These files describe how AI agents should interact with a site and may
+ * include references to changelogs, release notes, or feeds.
+ */
+function parseAgentsFile(text: string, origin: string): DiscoveredSource[] {
+  const results: DiscoveredSource[] = [];
+  const lines = text.split("\n");
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Key-value format: "Changelog: https://..." or "Release-Notes: https://..."
+    const kvMatch = trimmed.match(/^(?:Changelog|Release[- ]?Notes|Releases|Changes):\s*(.+)/i);
+    if (kvMatch) {
+      try {
+        const url = new URL(kvMatch[1].trim(), origin).toString();
+        results.push({
+          url,
+          type: "scrape",
+          method: "well-known",
+          confidence: "high",
+          label: "AGENTS file changelog",
+        });
+      } catch { /* skip */ }
+      continue;
+    }
+
+    // Markdown links containing changelog-related terms
+    const mdLinkRe = /\[([^\]]*(?:changelog|release.?notes|releases|changes)[^\]]*)\]\(([^)]+)\)/gi;
+    let mdMatch;
+    while ((mdMatch = mdLinkRe.exec(trimmed)) !== null) {
+      try {
+        const url = new URL(mdMatch[2].trim(), origin).toString();
+        results.push({
+          url,
+          type: "scrape",
+          method: "well-known",
+          confidence: "high",
+          label: `AGENTS file: ${mdMatch[1].trim()}`,
+        });
+      } catch { /* skip */ }
+    }
+
+    // Bare URLs on changelog-related lines — only if the URL path itself matches
+    const urlMatch = trimmed.match(/https?:\/\/[^\s)>"]+/);
+    if (urlMatch && !results.some((r) => r.url === urlMatch[0]) && matchesChangelogPattern(urlMatch[0])) {
+      try {
+        const url = new URL(urlMatch[0], origin).toString();
+        results.push({
+          url,
+          type: "scrape",
+          method: "well-known",
+          confidence: "medium",
+          label: "AGENTS file URL",
+        });
+      } catch { /* skip */ }
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Check if root-level changelog/releases files exist (e.g., /changelog.md, /releases.txt).
+ * Analogous to robots.txt or security.txt — a simple file at a conventional path.
+ * Uses lowercase paths only — web servers are typically case-insensitive for these.
+ */
+async function probeRootChangelog(origin: string): Promise<DiscoveredSource[]> {
+  const paths = ["/changelog.md", "/changelog.txt", "/releases.md", "/releases.txt"];
+
+  const results = await Promise.allSettled(
+    paths.map(async (path) => {
+      const url = `${origin}${path}`;
+      const exists = await probeUrl(url);
+      return exists ? { url, path } : null;
+    }),
+  );
+
+  for (const r of results) {
+    if (r.status === "fulfilled" && r.value) {
+      return [{
+        url: r.value.url,
+        type: "scrape" as const,
+        method: "well-known" as const,
+        confidence: "high" as const,
+        label: `root ${r.value.path}`,
+      }];
+    }
+  }
+  return [];
+}
+
+/**
+ * Check well-known file locations for changelog manifests.
+ *
+ * Cascading — stops as soon as a tier produces results:
+ * 1. /.well-known/ files (changelog.json, releases.json, changelog.txt — all parallel)
+ * 2. /AGENTS.md, /AGENTS.txt (AI agent instruction files with changelog refs)
+ * 3. /changelog.md, /changelog.txt, /releases.md, /releases.txt (root-level files)
+ */
+async function discoverFromWellKnown(origin: string): Promise<DiscoveredSource[]> {
+  // Tier 1: All /.well-known/ paths in parallel (JSON preferred over text)
+  const wellKnownResults = await Promise.allSettled([
+    fetchText(`${origin}/.well-known/changelog.json`, 8_000).then(
+      (body) => body ? parseWellKnownJson(body, origin) : [],
+    ),
+    fetchText(`${origin}/.well-known/releases.json`, 8_000).then(
+      (body) => body ? parseWellKnownJson(body, origin) : [],
+    ),
+    fetchText(`${origin}/.well-known/changelog.txt`, 8_000).then(
+      (body) => body ? parseWellKnownText(body, origin) : [],
+    ),
+  ]);
+  // Prefer JSON over text — check in order
+  for (const r of wellKnownResults) {
+    if (r.status === "fulfilled" && r.value.length > 0) {
+      logger.info(`Found well-known changelog manifest`);
+      return r.value;
+    }
+  }
+
+  // Tier 3: AGENTS files (may contain changelog refs among other instructions)
+  const [agentsMdResult, agentsTxtResult] = await Promise.allSettled([
+    fetchText(`${origin}/AGENTS.md`, 8_000).then(
+      (body) => body ? parseAgentsFile(body, origin) : [],
+    ),
+    fetchText(`${origin}/AGENTS.txt`, 8_000).then(
+      (body) => body ? parseAgentsFile(body, origin) : [],
+    ),
+  ]);
+  const agentsSources: DiscoveredSource[] = [];
+  for (const r of [agentsMdResult, agentsTxtResult]) {
+    if (r.status === "fulfilled") agentsSources.push(...r.value);
+  }
+  if (agentsSources.length > 0) {
+    logger.info(`Found changelog reference(s) in AGENTS file`);
+    return dedup(agentsSources);
+  }
+
+  // Tier 4: Root changelog files (lowest signal — convention-based)
+  const rootSources = await probeRootChangelog(origin);
+  if (rootSources.length > 0) {
+    logger.info(`Found root changelog file`);
+    return rootSources;
+  }
+
+  return [];
 }
 
 // ── GitHub org repos ─────────────────────────────────────────────────
@@ -618,13 +930,16 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
     }
 
     // Run evidence-based discovery methods in parallel
-    const [sitemapResults, feedResults, htmlResults] = await Promise.allSettled([
+    // Well-known files checked alongside existing methods; link relations
+    // are extracted from the same page fetch as HTML link analysis
+    const [wellKnownResults, sitemapResults, feedResults, htmlResults] = await Promise.allSettled([
+      discoverFromWellKnown(origin),
       discoverFromSitemap(origin),
       discoverFeeds(origin, provider),
       discoverFromHtmlLinks(origin),
     ]);
 
-    for (const r of [sitemapResults, feedResults, htmlResults]) {
+    for (const r of [wellKnownResults, sitemapResults, feedResults, htmlResults]) {
       if (r.status === "fulfilled") all.push(...r.value);
     }
 
