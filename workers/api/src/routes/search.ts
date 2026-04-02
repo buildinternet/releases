@@ -34,6 +34,7 @@ searchRoutes.get("/search", async (c) => {
       LEFT JOIN organizations o ON o.id = s.org_id
       WHERE releases_fts MATCH ${q}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
+        AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       ORDER BY rank
       LIMIT ${limit}
       OFFSET ${offset}

@@ -2,6 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import { findOrg, findSourceBySlug, getLatestReleases } from "../../db/queries.js";
+import { orgNotFound, sourceNotFound } from "../suggest.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerLatestCommand(program: Command) {
@@ -24,8 +25,7 @@ Examples:
       if (slug) {
         const source = await findSourceBySlug(slug);
         if (!source) {
-          console.error(chalk.red(`Source not found: ${slug}`));
-          process.exit(1);
+          return sourceNotFound(slug);
         }
       }
 
@@ -33,8 +33,7 @@ Examples:
       if (opts.org) {
         const org = await findOrg(opts.org);
         if (!org) {
-          console.error(chalk.red(`Organization not found: ${opts.org}`));
-          process.exit(1);
+          return orgNotFound(opts.org);
         }
         orgSlug = org.slug;
       }

@@ -1,6 +1,7 @@
 import type { Command } from "commander";
 import chalk from "chalk";
 import { findSourceBySlug, getRecentReleases, upsertSummary, getOrgById } from "../../db/queries.js";
+import { sourceNotFound } from "../suggest.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { daysAgoIso } from "../../lib/dates.js";
@@ -19,8 +20,7 @@ export function registerSummarizeCommand(program: Command) {
     .action(async (slug: string, opts: { monthly?: boolean; window?: string; json?: boolean; force?: boolean }) => {
       const source = await findSourceBySlug(slug);
       if (!source) {
-        console.error(chalk.red(`Source not found: ${slug}`));
-        process.exit(1);
+        return sourceNotFound(slug);
       }
 
       if (!opts.force) {

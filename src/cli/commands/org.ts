@@ -6,6 +6,7 @@ import {
   getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
   getProductsByOrg, addTagsToOrg, removeTagsFromOrg, getTagsForOrg, updateOrg,
 } from "../../db/queries.js";
+import { orgNotFound } from "../suggest.js";
 import { toSlug } from "../../lib/slug.js";
 import { isValidCategory, CATEGORIES } from "../../lib/categories.js";
 
@@ -126,8 +127,7 @@ Examples:
     .action(async (identifier: string, opts: { json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
 
       const [accounts, orgProducts, linkedSources, orgTags] = await Promise.all([
@@ -172,7 +172,18 @@ Examples:
         console.log();
         console.log(chalk.bold("Sources:"));
         for (const s of linkedSources) {
-          console.log(`  ${chalk.cyan(s.slug)}  ${s.name}  (${s.type})`);
+          const statusLabel = s.isHidden
+            ? "disabled"
+            : s.consecutiveErrors && s.consecutiveErrors > 0
+              ? "erroring"
+              : "active";
+          const statusColor = s.isHidden ? chalk.red : s.consecutiveErrors ? chalk.yellow : chalk.green;
+          const status = statusColor(statusLabel.padEnd(16));
+          const fetched = s.lastFetchedAt
+            ? chalk.dim(s.lastFetchedAt.replace("T", " ").replace(/\.\d+Z$/, ""))
+            : chalk.dim("never fetched");
+          console.log(`  ${chalk.cyan(s.slug.padEnd(30))} ${status} ${fetched}`);
+          console.log(`  ${" ".repeat(30)} ${chalk.dim(s.url)}`);
         }
       }
     });
@@ -193,8 +204,7 @@ Examples:
     .action(async (identifier: string, opts: { name?: string; domain?: string; description?: string; category?: string | boolean; avatar?: string | boolean; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
 
       const updates: Record<string, unknown> = {};
@@ -247,8 +257,7 @@ Examples:
     .action(async (identifier: string, opts: { json?: boolean; dryRun?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
 
       if (opts.dryRun) {
@@ -284,8 +293,7 @@ Examples:
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
 
       const created = await linkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
@@ -311,8 +319,7 @@ Examples:
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
 
       await unlinkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
@@ -336,8 +343,7 @@ Examples:
     .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
       await addTagsToOrg(found.id, tagNames);
       if (opts.json) {
@@ -357,8 +363,7 @@ Examples:
     .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
       await removeTagsFromOrg(found.id, tagNames);
       if (opts.json) {
@@ -377,8 +382,7 @@ Examples:
     .action(async (identifier: string, opts: { json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
+        return orgNotFound(identifier);
       }
       const allTags = await getTagsForOrg(found.id);
       if (opts.json) {

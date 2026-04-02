@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { inArray } from "drizzle-orm";
 import { searchReleases } from "../../db/fts.js";
 import { findOrg, getSourcesByOrg, searchReleasesRemote } from "../../db/queries.js";
+import { orgNotFound } from "../suggest.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { getDb } from "../../db/connection.js";
@@ -96,8 +97,7 @@ Examples:
       if (opts.org) {
         const org = await findOrg(opts.org);
         if (!org) {
-          console.error(chalk.red(`Organization not found: ${opts.org}`));
-          process.exit(1);
+          return orgNotFound(opts.org);
         }
         const orgSources = await getSourcesByOrg(org.id);
         const orgSourceIdSet = new Set(orgSources.map((s) => s.id));

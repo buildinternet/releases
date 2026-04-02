@@ -11,10 +11,14 @@ import { daysAgoIso } from "../lib/dates.js";
 import { toSlug } from "../lib/slug.js";
 import * as apiClient from "../api/client.js";
 
+/** Reusable SQL condition: exclude disabled (hidden) sources. */
+const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
+
 export async function findSourceBySlug(slug: string): Promise<Source | null> {
-  if (isRemoteMode()) return apiClient.findSourceBySlug(slug);
+  const normalized = slug.toLowerCase();
+  if (isRemoteMode()) return apiClient.findSourceBySlug(normalized);
   const db = getDb();
-  const [source] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [source] = await db.select().from(sources).where(eq(sources.slug, normalized));
   return source ?? null;
 }
 
@@ -67,11 +71,11 @@ export async function getEnrichableReleases(
 }
 
 export async function findOrg(identifier: string): Promise<Organization | null> {
-  if (isRemoteMode()) return apiClient.findOrg(identifier);
+  if (isRemoteMode()) return apiClient.findOrg(identifier.toLowerCase());
   const db = getDb();
 
-  // 1. Slug (exact)
-  const [bySlug] = await db.select().from(organizations).where(eq(organizations.slug, identifier));
+  // 1. Slug (case-insensitive — slugs are always lowercase)
+  const [bySlug] = await db.select().from(organizations).where(eq(organizations.slug, identifier.toLowerCase()));
   if (bySlug) return bySlug;
 
   // 2. Domain (exact)
@@ -96,6 +100,34 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
   if (byHandle) return byHandle.org;
 
   return null;
+}
+
+export async function suggestOrgs(term: string, limit = 5): Promise<Array<{ slug: string; name: string }>> {
+  const lower = term.toLowerCase();
+  if (isRemoteMode()) return apiClient.suggestOrgs(lower, limit);
+  const db = getDb();
+  return db
+    .select({ slug: organizations.slug, name: organizations.name })
+    .from(organizations)
+    .where(or(
+      like(organizations.slug, `%${lower}%`),
+      sql`LOWER(${organizations.name}) LIKE ${"%" + lower + "%"}`,
+    ))
+    .limit(limit);
+}
+
+export async function suggestSources(term: string, limit = 5): Promise<Array<{ slug: string; name: string }>> {
+  const lower = term.toLowerCase();
+  if (isRemoteMode()) return apiClient.suggestSources(lower, limit);
+  const db = getDb();
+  return db
+    .select({ slug: sources.slug, name: sources.name })
+    .from(sources)
+    .where(or(
+      like(sources.slug, `%${lower}%`),
+      sql`LOWER(${sources.name}) LIKE ${"%" + lower + "%"}`,
+    ))
+    .limit(limit);
 }
 
 export async function getOrgById(orgId: string): Promise<Organization | null> {
@@ -138,7 +170,7 @@ export async function getRecentReleasesByOrg(
     })
     .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
-    .where(and(eq(sources.orgId, orgId), gte(releases.publishedAt, cutoffIso), eq(releases.suppressed, false)))
+    .where(and(eq(sources.orgId, orgId), gte(releases.publishedAt, cutoffIso), eq(releases.suppressed, false), notDisabled))
     .orderBy(desc(releases.publishedAt));
   return rows;
 }
@@ -395,7 +427,7 @@ export async function listSourcesWithOrg(opts?: {
 
   if (!opts?.includeHidden) {
     conditions.push(
-      sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
+      notDisabled,
     );
   }
 
@@ -482,6 +514,7 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
     .from(sources)
     .leftJoin(releases, eq(releases.sourceId, sources.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
+    .where(notDisabled)
     .groupBy(sources.id)
     .orderBy(desc(sql`SUM(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 ELSE 0 END)`));
 
@@ -582,7 +615,7 @@ export async function getLatestReleases(opts: {
   if (opts.orgSlug) {
     const org = await findOrg(opts.orgSlug);
     if (!org) return [];
-    const orgSources = await db.select({ id: sources.id }).from(sources).where(eq(sources.orgId, org.id));
+    const orgSources = await db.select({ id: sources.id }).from(sources).where(and(eq(sources.orgId, org.id), notDisabled));
     orgSourceIds = orgSources.map((s) => s.id);
     if (orgSourceIds.length === 0) return [];
   }
@@ -604,7 +637,7 @@ export async function getLatestReleases(opts: {
   } else if (orgSourceIds) {
     query = query.where(and(inArray(releases.sourceId, orgSourceIds), eq(releases.suppressed, false))) as typeof query;
   } else {
-    query = query.where(eq(releases.suppressed, false)) as typeof query;
+    query = query.where(and(eq(releases.suppressed, false), notDisabled)) as typeof query;
   }
 
   return query;
@@ -958,7 +991,7 @@ export async function listFetchableSources(opts: {
   }
   const db = getDb();
   if (opts.mode === "unfetched") {
-    return db.select().from(sources).where(sql`${sources.lastFetchedAt} IS NULL`);
+    return db.select().from(sources).where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
   }
   if (opts.mode === "stale" && opts.staleHours) {
     const cutoff = new Date(Date.now() - opts.staleHours * 3600_000).toISOString();
@@ -967,20 +1000,24 @@ export async function listFetchableSources(opts: {
       and(
         sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
         sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
-        sql`${sources.fetchPriority} != 'paused'`
+        sql`${sources.fetchPriority} != 'paused'`,
+        notDisabled
       )
     );
   }
   if (opts.mode === "retry_errors") {
     return db.select().from(sources).where(
-      sql`${sources.id} IN (
-        SELECT f.source_id FROM fetch_log f
-        WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
-        AND f.status = 'error'
-      )`
+      and(
+        sql`${sources.id} IN (
+          SELECT f.source_id FROM fetch_log f
+          WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
+          AND f.status = 'error'
+        )`,
+        notDisabled
+      )
     );
   }
-  return db.select().from(sources);
+  return db.select().from(sources).where(notDisabled);
 }
 
 export async function deleteReleasesForSource(source: Source): Promise<number> {
