@@ -42,6 +42,13 @@ orgRoutes.get("/orgs", async (c) => {
         .innerJoin(sources, eq(releases.sourceId, sources.id))
         .where(and(eq(sources.orgId, org.id), sql`${releases.publishedAt} IS NOT NULL`));
 
+      const cutoff30d = daysAgoIso(30);
+      const [recentCount] = await db
+        .select({ n: count() })
+        .from(releases)
+        .innerJoin(sources, eq(releases.sourceId, sources.id))
+        .where(and(eq(sources.orgId, org.id), gte(releases.publishedAt, cutoff30d)));
+
       return {
         id: org.id,
         slug: org.slug,
@@ -50,6 +57,7 @@ orgRoutes.get("/orgs", async (c) => {
         description: org.description,
         sourceCount: srcCount.n,
         releaseCount: relCount.n,
+        recentReleaseCount: recentCount.n,
         lastActivity: latest.maxDate ?? null,
       };
     }),

@@ -40,7 +40,8 @@ export interface Stats { orgs: number; sources: number; releases: number; }
 
 export interface OrgListItem {
   slug: string; name: string; domain: string | null;
-  sourceCount: number; releaseCount: number; lastActivity: string | null;
+  sourceCount: number; releaseCount: number; recentReleaseCount: number;
+  lastActivity: string | null;
 }
 
 export interface OrgDetail {

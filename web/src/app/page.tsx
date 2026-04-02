@@ -3,7 +3,7 @@ import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { SourceCard } from "@/components/source-card";
 import { SetupMessage } from "@/components/setup-message";
-import Link from "next/link";
+import { OrgTable } from "@/components/org-table";
 
 export default async function HomePage() {
   let stats, orgs, independentSources;
@@ -53,21 +53,7 @@ export default async function HomePage() {
       <div className="max-w-4xl mx-auto px-6 pb-12">
         {orgs.length > 0 && (
           <div className="mb-8">
-            <div className="text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">Organizations</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {orgs.map((org) => (
-                <Link key={org.slug} href={`/${org.slug}`}
-                  className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3.5 hover:border-stone-300 dark:hover:border-stone-600 transition-colors">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <div className="font-semibold text-sm text-stone-900 dark:text-stone-100">{org.name}</div>
-                      {org.domain && <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">{org.domain}</div>}
-                    </div>
-                    <div className="text-xs text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-2 py-0.5 rounded">{org.sourceCount} sources</div>
-                  </div>
-                </Link>
-              ))}
-            </div>
+            <OrgTable orgs={orgs} />
           </div>
         )}
         {independentSources.length > 0 && (
