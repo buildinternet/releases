@@ -8,6 +8,13 @@
       "when": 1775151517299,
       "tag": "0000_shallow_fantastic_four",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1775158097366,
+      "tag": "0001_daffy_serpent_society",
+      "breakpoints": true
     }
   ]
 }
