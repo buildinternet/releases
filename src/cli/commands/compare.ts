@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { findSourceBySlug, getRecentReleases } from "../../db/queries.js";
 import { compareProducts, toReleaseInput } from "../../ai/query.js";
 import { daysAgoIso } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerCompareCommand(program: Command) {
   program
@@ -63,7 +64,7 @@ Examples:
       if (opts.json) {
         console.log(JSON.stringify({ comparison }, null, 2));
       } else {
-        console.log(comparison);
+        console.log(stripAnsi(comparison));
       }
     });
 }

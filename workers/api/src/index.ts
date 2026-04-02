@@ -38,6 +38,14 @@ app.onError((err, c) => {
 
 app.use("*", cors());
 
+// Security response headers
+app.use("*", async (c, next) => {
+  await next();
+  c.res.headers.set("X-Content-Type-Options", "nosniff");
+  c.res.headers.set("X-Frame-Options", "DENY");
+  c.res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+});
+
 // Status routes mounted before auth — they accept unauthenticated browser WebSocket/fetch connections
 app.route("/api", statusRoutes);
 

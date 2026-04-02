@@ -3,6 +3,7 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { findSourceBySlug, listAllSources } from "../../db/queries.js";
 import { timeAgo } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 import type { Source } from "../../db/schema.js";
 
 interface CheckResult {
@@ -140,7 +141,7 @@ Examples:
 
       for (const r of results) {
         table.push([
-          r.name,
+          stripAnsi(r.name),
           r.type,
           statusLabel(r.httpStatus),
           String(r.responseMs),
@@ -150,7 +151,7 @@ Examples:
 
         if (r.feedUrl) {
           table.push([
-            chalk.dim(`  feed: ${r.feedUrl}`),
+            chalk.dim(`  feed: ${stripAnsi(r.feedUrl)}`),
             chalk.dim("feed"),
             statusLabel(r.feedHttpStatus ?? null),
             String(r.feedResponseMs ?? 0),

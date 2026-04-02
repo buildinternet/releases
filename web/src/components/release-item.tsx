@@ -6,6 +6,7 @@ import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
+import { isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
@@ -28,7 +29,7 @@ function stripLeadingTitle(content: string, title: string | null): string {
 const markdownComponents: Record<string, any> = {
   img: (props: any) => {
     const src = props.src as string | undefined;
-    if (!src || typeof src !== "string") return null;
+    if (!isSafeImgSrc(src)) return null;
     return (
       <img
         src={src}
@@ -41,7 +42,7 @@ const markdownComponents: Record<string, any> = {
   a: (props: any) => {
     const href = props.href as string | undefined;
     const children = props.children;
-    if (!href) return <>{children}</>;
+    if (!isSafeHref(href)) return <>{children}</>;
 
     // YouTube embed
     const ytMatch = href.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/);
@@ -105,7 +106,8 @@ const collapsedMarkdownComponents: Record<string, any> = {
   a: (props: any) => {
     const href = props.href as string | undefined;
     const children = props.children;
-    if (href && /youtube|vimeo|loom/i.test(href)) return <>{children}</>;
+    if (!isSafeHref(href)) return <>{children}</>;
+    if (/youtube|vimeo|loom/i.test(href)) return <>{children}</>;
     return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
   },
 };

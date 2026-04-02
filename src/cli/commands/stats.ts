@@ -2,6 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import { timeAgo } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 import { getStatsSummary } from "../../db/queries.js";
 
 export function registerStatsCommand(program: Command) {
@@ -71,8 +72,8 @@ Examples:
         });
         for (const s of activeSources) {
           sourceTable.push([
-            s.sourceName,
-            s.orgName ?? chalk.dim("—"),
+            stripAnsi(s.sourceName),
+            s.orgName ? stripAnsi(s.orgName) : chalk.dim("—"),
             s.sourceType,
             String(s.totalReleases),
             s.recentReleases > 0 ? chalk.green(String(s.recentReleases)) : chalk.dim("0"),
@@ -106,8 +107,8 @@ Examples:
                 ? chalk.red("error")
                 : chalk.dim("no change");
           activityTable.push([
-            f.sourceName,
-            f.orgName ?? chalk.dim("—"),
+            stripAnsi(f.sourceName),
+            f.orgName ? stripAnsi(f.orgName) : chalk.dim("—"),
             statusLabel,
             String(f.releasesFound),
             f.releasesInserted > 0 ? chalk.green(String(f.releasesInserted)) : chalk.dim("0"),

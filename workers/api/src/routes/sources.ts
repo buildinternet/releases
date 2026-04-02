@@ -206,8 +206,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
     const [{ n: total }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
     return c.json({ inserted, total });
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: "insert_failed", message, releaseCount: body.releases.length }, 500);
+    return c.json({ error: "insert_failed", message: "Failed to insert releases" }, 500);
   }
 });
 
@@ -705,8 +704,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
       .returning();
     return c.json(release ?? { skipped: true }, release ? 201 : 200);
   } catch (err) {
-    const message = err instanceof Error ? err.message : String(err);
-    return c.json({ error: "insert_failed", message }, 500);
+    return c.json({ error: "insert_failed", message: "Failed to insert release" }, 500);
   }
 });
 

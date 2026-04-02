@@ -4,6 +4,7 @@ import { useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import { isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
 
 interface MediaItem {
   type: "image" | "video" | "gif";
@@ -27,7 +28,7 @@ function stripLeadingTitle(content: string, title: string | null): string {
 const markdownComponents: Record<string, any> = {
   img: (props: any) => {
     const src = props.src as string | undefined;
-    if (!src || typeof src !== "string") return null;
+    if (!isSafeImgSrc(src)) return null;
     return (
       <img
         src={src}
@@ -40,7 +41,7 @@ const markdownComponents: Record<string, any> = {
   a: (props: any) => {
     const href = props.href as string | undefined;
     const children = props.children;
-    if (!href) return <>{children}</>;
+    if (!isSafeHref(href)) return <>{children}</>;
 
     const ytMatch = href.match(
       /(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/

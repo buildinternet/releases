@@ -3,6 +3,7 @@ import chalk from "chalk";
 import { findSourceBySlug, getRecentReleases, findOrg, getRecentReleasesByOrg } from "../../db/queries.js";
 import { summarizeReleases, toReleaseInput } from "../../ai/query.js";
 import { daysAgoIso, elapsedFormatted } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerSummaryCommand(program: Command) {
   program
@@ -80,7 +81,7 @@ Examples:
       if (opts.json) {
         console.log(JSON.stringify({ summary }, null, 2));
       } else {
-        console.log(summary);
+        console.log(stripAnsi(summary));
         console.log(chalk.dim(`\n(${elapsedFormatted(startTime)})`));
       }
     });

@@ -4,6 +4,7 @@ import { inArray } from "drizzle-orm";
 import { searchReleases } from "../../db/fts.js";
 import { findOrg, getSourcesByOrg, searchReleasesRemote } from "../../db/queries.js";
 import { isRemoteMode } from "../../lib/mode.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 import { getDb } from "../../db/connection.js";
 import { sources, releases } from "../../db/schema.js";
 
@@ -48,9 +49,10 @@ Examples:
         }
 
         for (const result of results) {
-          console.log(chalk.cyan.bold(result.title));
-          console.log(chalk.dim(`  Source: ${result.sourceName}  |  Published: ${result.publishedAt ?? "No date"}`));
-          console.log(`  ${result.summary}${result.summary.length >= 150 ? "..." : ""}`);
+          console.log(chalk.cyan.bold(stripAnsi(result.title)));
+          console.log(chalk.dim(`  Source: ${stripAnsi(result.sourceName)}  |  Published: ${result.publishedAt ?? "No date"}`));
+          const summary = stripAnsi(result.summary);
+          console.log(`  ${summary}${summary.length >= 150 ? "..." : ""}`);
           console.log();
         }
 
@@ -135,10 +137,10 @@ Examples:
         const release = releaseMap.get(result.id);
         const sourceName = release ? sourceMap.get(release.sourceId) ?? "Unknown" : "Unknown";
         const date = release?.publishedAt ?? "No date";
-        const preview = result.content.replace(/\n/g, " ").slice(0, 150);
+        const preview = stripAnsi(result.content).replace(/\n/g, " ").slice(0, 150);
 
-        console.log(chalk.cyan.bold(result.title));
-        console.log(chalk.dim(`  Source: ${sourceName}  |  Published: ${date}`));
+        console.log(chalk.cyan.bold(stripAnsi(result.title)));
+        console.log(chalk.dim(`  Source: ${stripAnsi(sourceName)}  |  Published: ${date}`));
         console.log(`  ${preview}${result.content.length > 150 ? "..." : ""}`);
         console.log();
       }

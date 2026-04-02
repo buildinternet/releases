@@ -466,6 +466,18 @@ function detectBreaking(title: string, content: string): boolean {
   return text.includes("breaking change") || text.includes("breaking:") || text.includes("⚠");
 }
 
+/** Check if a URL has a safe scheme (http or https only). Decodes entities first. */
+function isSafeMediaUrl(raw: string): boolean {
+  const url = decodeHtmlEntities(raw).trim();
+  return /^https?:\/\//i.test(url);
+}
+
+/** Check if a link href has an allowed scheme. Decodes entities first. */
+function isSafeLinkHref(raw: string): boolean {
+  const url = decodeHtmlEntities(raw).trim();
+  return /^https?:\/\//i.test(url) || /^mailto:/i.test(url) || url.startsWith("/");
+}
+
 /** Extract structured media items from HTML content. */
 function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
   const media: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> = [];
@@ -474,6 +486,7 @@ function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; ur
   let m;
   while ((m = imgRe.exec(html)) !== null) {
     const url = m[1];
+    if (!isSafeMediaUrl(url)) continue;
     const alt = m[2] || undefined;
     const isGif = url.toLowerCase().endsWith(".gif");
     media.push({ type: isGif ? "gif" : "image", url, alt });
@@ -482,6 +495,7 @@ function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; ur
   const iframeRe = /<iframe[^>]*src=["']([^"']+)["'][^>]*>/gi;
   while ((m = iframeRe.exec(html)) !== null) {
     const src = m[1];
+    if (!isSafeMediaUrl(src)) continue;
     if (/youtube|vimeo|loom/i.test(src)) {
       media.push({ type: "video", url: iframeSrcToWatchUrl(src) });
     }
@@ -489,6 +503,7 @@ function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; ur
 
   const videoRe = /<video[^>]*src=["']([^"']+)["'][^>]*>/gi;
   while ((m = videoRe.exec(html)) !== null) {
+    if (!isSafeMediaUrl(m[1])) continue;
     media.push({ type: "video", url: m[1] });
   }
 
@@ -522,8 +537,10 @@ function htmlToMarkdown(html: string): string {
   md = md.replace(/<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "![$1]($2)");
   md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "![]($1)");
 
-  // Convert links
-  md = md.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, "[$2]($1)");
+  // Convert links (only safe schemes become markdown links)
+  md = md.replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href, text) => {
+    return isSafeLinkHref(href) ? `[${text}](${href})` : text;
+  });
 
   // Convert iframes (YouTube, Vimeo embeds) to links
   md = md.replace(/<iframe[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/iframe>/gi, (_, src) => {
@@ -549,7 +566,9 @@ function decodeHtmlEntities(text: string): string {
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
-    .replace(/&apos;/g, "'");
+    .replace(/&apos;/g, "'")
+    .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+    .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)));
 }
 
 // ── Source metadata helpers ──────────────────────────────────────────

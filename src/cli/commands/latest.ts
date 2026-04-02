@@ -2,6 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import { findOrg, findSourceBySlug, getLatestReleases } from "../../db/queries.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerLatestCommand(program: Command) {
   program
@@ -65,9 +66,9 @@ Examples:
 
       for (const row of rows) {
         table.push([
-          row.sourceName,
-          row.title,
-          row.version ?? "-",
+          stripAnsi(row.sourceName),
+          stripAnsi(row.title),
+          row.version ? stripAnsi(row.version) : "-",
           row.publishedAt ?? "-",
         ]);
       }

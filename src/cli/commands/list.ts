@@ -2,6 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import { listSourcesWithOrg, findSourceBySlug } from "../../db/queries.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 /**
  * Determine the fetch method for a source based on its type and metadata.
@@ -66,7 +67,7 @@ Examples:
         const label = (key: string, val: string | null | undefined) =>
           `  ${chalk.bold(key.padEnd(16))} ${val ?? chalk.dim("—")}`;
         const method = getFetchMethod(source.type, source.metadata ?? null);
-        console.log(chalk.bold(`\n${source.name}\n`));
+        console.log(chalk.bold(`\n${stripAnsi(source.name)}\n`));
         console.log(label("Slug", source.slug));
         console.log(label("Type", source.type));
         console.log(label("Method", method === "-" ? null : method));
@@ -113,13 +114,14 @@ Examples:
 
       for (const row of allSources) {
         const method = getFetchMethod(row.type, row.metadata);
+        const name = stripAnsi(row.name);
         table.push([
-          row.isPrimary ? `${row.name} ${chalk.yellow("\u2605")}` : row.name,
+          row.isPrimary ? `${name} ${chalk.yellow("\u2605")}` : name,
           row.slug,
           row.type,
           method,
           row.url,
-          row.orgName ?? chalk.dim("\u2014"),
+          row.orgName ? stripAnsi(row.orgName) : chalk.dim("\u2014"),
           row.lastFetchedAt ?? chalk.dim("never"),
         ]);
       }

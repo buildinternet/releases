@@ -2,6 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { enrichReleases, type EnrichResult } from "../../adapters/enrich.js";
 import { elapsedFormatted } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerEnrichCommand(program: Command) {
   program
@@ -67,14 +68,14 @@ function printResult(result: EnrichResult, slug: string, elapsed: string, dryRun
   if (result.releases.some((r) => r.status === "enriched")) {
     console.log(`\n  ${chalk.dim("Enriched releases:")}`);
     for (const r of result.releases.filter((r) => r.status === "enriched")) {
-      console.log(`    ${chalk.green("✓")} ${r.title}`);
+      console.log(`    ${chalk.green("✓")} ${stripAnsi(r.title)}`);
     }
   }
 
   if (result.errors > 0) {
     console.log(`\n  ${chalk.dim("Errors:")}`);
     for (const r of result.releases.filter((r) => r.status === "error")) {
-      console.log(`    ${chalk.red("✗")} ${r.title}: ${r.reason}`);
+      console.log(`    ${chalk.red("✗")} ${stripAnsi(r.title)}: ${r.reason ? stripAnsi(r.reason) : ""}`);
     }
   }
 
