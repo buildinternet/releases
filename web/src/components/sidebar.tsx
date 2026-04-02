@@ -28,7 +28,7 @@ export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitl
                 <a href={item.externalLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300">{String(item.value)}</a>
               ) : (
                 <>
-                  <div className={item.large ? "text-[22px] font-bold text-stone-900 dark:text-stone-100" : "text-sm font-medium text-stone-900 dark:text-stone-100"}>
+                  <div className={item.large ? "text-[22px] font-bold tabular-nums text-stone-900 dark:text-stone-100" : "text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100"}>
                     {item.value ?? "—"}
                   </div>
                   {item.subtitle && <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">{item.subtitle}</div>}

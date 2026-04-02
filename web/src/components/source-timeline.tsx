@@ -45,7 +45,7 @@ export function SourceTimeline({ activity }: SourceTimelineProps) {
     }
 
     const versionRange = windowEarliestVersion && windowLatestVersion && windowEarliestVersion !== windowLatestVersion
-      ? `${fmtVersion(windowEarliestVersion)} → ${fmtVersion(windowLatestVersion)}`
+      ? { from: fmtVersion(windowEarliestVersion), to: fmtVersion(windowLatestVersion), rawFrom: windowEarliestVersion, rawTo: windowLatestVersion }
       : null;
 
     return { totalReleases, avgPerWeek, avgPerMonth, versionRange };
@@ -69,16 +69,31 @@ export function SourceTimeline({ activity }: SourceTimelineProps) {
       </RangeNavigator.Root>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
-        {([
-          { label: "Total Releases", value: String(summaryStats.totalReleases) },
-          { label: "Version Range", value: summaryStats.versionRange ?? "\u2014" },
-          { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk` },
-        ] as const).map((stat) => (
-          <div key={stat.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1">{stat.label}</div>
-            <div className="text-xl font-bold text-stone-900 dark:text-stone-100 tabular-nums">{stat.value}</div>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1">Releases</div>
+          <div className="text-xl font-bold text-stone-900 dark:text-stone-100 tabular-nums">{summaryStats.totalReleases}</div>
+        </div>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1">Version Range</div>
+          {summaryStats.versionRange ? (
+            <div
+              className="text-sm font-bold text-stone-900 dark:text-stone-100 tabular-nums"
+              title={`${summaryStats.versionRange.rawFrom} → ${summaryStats.versionRange.rawTo}`}
+            >
+              <span className="block truncate">{summaryStats.versionRange.from}</span>
+              <span className="text-stone-400 dark:text-stone-500 font-normal mx-0.5">{" → "}</span>
+              <span className="block truncate">{summaryStats.versionRange.to}</span>
+            </div>
+          ) : (
+            <div className="text-sm font-bold text-stone-900 dark:text-stone-100">{"\u2014"}</div>
+          )}
+        </div>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1">Avg Cadence</div>
+          <div className="text-xl font-bold text-stone-900 dark:text-stone-100 tabular-nums">
+            {summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk`}
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );
