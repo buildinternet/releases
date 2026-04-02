@@ -11,6 +11,7 @@ import { registerCompareCommand } from "./commands/compare.js";
 import { registerServeCommand } from "./commands/serve.js";
 import { registerUsageCommand } from "./commands/usage.js";
 import { registerOrgCommand } from "./commands/org.js";
+import { registerProductCommand } from "./commands/product.js";
 import { registerDiscoverCommand } from "./commands/discover.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerApiCommand } from "./commands/api.js";
@@ -38,6 +39,7 @@ Command Groups:
   Enrichment:    enrich
   Querying:      search, latest, summary, compare, stats
   Organizations: org (add, list, show, remove, link, unlink)
+  Products:      product (list, add, edit, remove, adopt)
   Releases:      release (show, edit, delete, suppress, unsuppress)
   Blocking:      block (list, add, remove), ignore (list, add, remove)
   Agents:        onboard, serve, api, task
@@ -58,6 +60,7 @@ registerCompareCommand(program);
 registerServeCommand(program);
 registerUsageCommand(program);
 registerOrgCommand(program);
+registerProductCommand(program);
 registerDiscoverCommand(program);
 registerStatsCommand(program);
 registerApiCommand(program);

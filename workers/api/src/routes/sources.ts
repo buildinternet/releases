@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, fetchLog, releaseSummaries } from "../../../../src/db/schema.js";
+import { sources, releases, organizations, fetchLog, releaseSummaries, products } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
 import { toSlug } from "../../../../src/lib/slug.js";
 import { getStatusHub } from "../utils.js";
@@ -47,6 +47,13 @@ sourceRoutes.get("/sources", async (c) => {
     const [org] = await db.select().from(organizations).where(eq(organizations.slug, orgSlug));
     if (!org) return c.json([]);
     conditions.push(eq(sources.orgId, org.id));
+  }
+
+  const productSlug = c.req.query("productSlug");
+  if (productSlug) {
+    const [product] = await db.select().from(products).where(eq(products.slug, productSlug));
+    if (!product) return c.json([]);
+    conditions.push(eq(sources.productId, product.id));
   }
 
   if (!includeHidden) {
@@ -630,6 +637,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const body = await c.req.json<{
     name?: string; url?: string; type?: string; metadata?: string; orgId?: string | null;
+    productId?: string | null;
     lastFetchedAt?: string | null; lastContentHash?: string | null;
     fetchPriority?: string; consecutiveNoChange?: number;
     consecutiveErrors?: number; nextFetchAfter?: string | null;
@@ -646,6 +654,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.type !== undefined) updates.type = body.type;
   if (body.metadata !== undefined) updates.metadata = body.metadata;
   if (body.orgId !== undefined) updates.orgId = body.orgId;
+  if (body.productId !== undefined) updates.productId = body.productId;
   if (body.lastFetchedAt !== undefined) updates.lastFetchedAt = body.lastFetchedAt;
   if (body.lastContentHash !== undefined) updates.lastContentHash = body.lastContentHash;
   if (body.fetchPriority !== undefined) updates.fetchPriority = body.fetchPriority;

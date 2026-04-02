@@ -4,6 +4,7 @@ import Table from "cli-table3";
 import {
   findOrg, getSourcesByOrg, listOrgs, createOrg, removeOrg,
   getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
+  getProductsByOrg,
 } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 
@@ -114,10 +115,11 @@ Examples:
       }
 
       const accounts = await getOrgAccountsBySlug(found.slug, found.id);
+      const orgProducts = await getProductsByOrg(found.id);
       const linkedSources = await getSourcesByOrg(found.id);
 
       if (opts.json) {
-        console.log(JSON.stringify({ ...found, accounts, sources: linkedSources }, null, 2));
+        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources }, null, 2));
         return;
       }
 
@@ -133,6 +135,15 @@ Examples:
         console.log(chalk.bold("Accounts:"));
         for (const a of accounts) {
           console.log(`  ${chalk.cyan(a.platform)}  ${a.handle}`);
+        }
+      }
+
+      if (orgProducts.length > 0) {
+        console.log();
+        console.log(chalk.bold("Products:"));
+        for (const p of orgProducts) {
+          const urlLabel = p.url ? chalk.dim(` ${p.url}`) : "";
+          console.log(`  ${chalk.cyan(p.slug)}  ${p.name}  (${p.sourceCount} sources)${urlLabel}`);
         }
       }
 

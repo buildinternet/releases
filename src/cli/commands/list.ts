@@ -33,6 +33,7 @@ export function registerListCommand(program: Command) {
     .argument("[slug]", "Show details for a specific source by slug")
     .option("--json", "Output as JSON")
     .option("--org <org>", "Filter by organization slug")
+    .option("--product <product>", "Filter by product slug")
     .option("--has-feed", "Only show sources that have a discovered feed URL")
     .option("--enrichable", "Only show sources eligible for content enrichment (have feed, missing or sparse content depth)")
     .option("--query <text>", "Filter by name, slug, or URL (case-insensitive substring match)")
@@ -47,7 +48,7 @@ Examples:
   released list --query shadcn        Filter sources by name, slug, or URL
   released list --include-hidden          Include hidden sources
   released list --has-feed --org sentry   Combine filters`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeHidden?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeHidden?: boolean }) => {
       // ── Single-source detail view ──
       if (slug) {
         const source = await findSourceBySlug(slug);
@@ -84,6 +85,7 @@ Examples:
       // ── Full list view ──
       const allSources = await listSourcesWithOrg({
         orgSlug: opts.org,
+        productSlug: opts.product,
         hasFeed: opts.hasFeed,
         enrichable: opts.enrichable,
         query: opts.query,
@@ -109,7 +111,7 @@ Examples:
       }
 
       const table = new Table({
-        head: ["Name", "Slug", "Type", "Method", "URL", "Org", "Last Fetched"],
+        head: ["Name", "Slug", "Type", "Method", "URL", "Org", "Product", "Last Fetched"],
       });
 
       for (const row of allSources) {
@@ -122,6 +124,7 @@ Examples:
           method,
           row.url,
           row.orgName ? stripAnsi(row.orgName) : chalk.dim("\u2014"),
+          row.productName ?? chalk.dim("\u2014"),
           row.lastFetchedAt ?? chalk.dim("never"),
         ]);
       }

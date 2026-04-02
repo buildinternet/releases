@@ -12,6 +12,8 @@ import {
   getOrgAccountByPlatform,
   linkOrgAccount,
   createSource,
+  findProduct,
+  createProduct,
 } from "../../db/queries.js";
 
 // ── Manifest types ──
@@ -28,12 +30,21 @@ interface ManifestSource {
   url: string;
 }
 
+interface ManifestProduct {
+  name: string;
+  slug?: string;
+  url?: string;
+  description?: string;
+  sources?: ManifestSource[];
+}
+
 interface ManifestOrg {
   name: string;
   slug?: string;
   domain?: string;
   description?: string;
   accounts?: ManifestAccount[];
+  products?: ManifestProduct[];
   sources?: ManifestSource[];
 }
 
@@ -43,7 +54,7 @@ interface Manifest {
 }
 
 interface ImportReport {
-  created: { orgs: number; accounts: number; sources: number };
+  created: { orgs: number; accounts: number; products: number; sources: number };
   skipped: number;
   errors: string[];
 }
@@ -93,6 +104,20 @@ function validateManifest(data: unknown): Manifest {
           }
         }
       }
+      if (org.products) {
+        for (const [k, prod] of org.products.entries()) {
+          if (!prod.name) {
+            throw new Error(`organizations[${i}].products[${k}] is missing required 'name' field`);
+          }
+          if (prod.sources) {
+            for (const [j, src] of prod.sources.entries()) {
+              if (!src.name || !src.url) {
+                throw new Error(`organizations[${i}].products[${k}].sources[${j}] is missing required 'name' or 'url' field`);
+              }
+            }
+          }
+        }
+      }
     }
   }
 
@@ -116,6 +141,15 @@ function collectAllUrls(manifest: Manifest): string[] {
       if (org.sources) {
         for (const src of org.sources) {
           urls.push(src.url);
+        }
+      }
+      if (org.products) {
+        for (const prod of org.products) {
+          if (prod.sources) {
+            for (const src of prod.sources) {
+              urls.push(src.url);
+            }
+          }
         }
       }
     }
@@ -182,7 +216,7 @@ Examples:
       const existingUrlSet = new Set(existingSources.map((s) => s.url));
 
       const report: ImportReport = {
-        created: { orgs: 0, accounts: 0, sources: 0 },
+        created: { orgs: 0, accounts: 0, products: 0, sources: 0 },
         skipped: 0,
         errors: [],
       };
@@ -213,6 +247,31 @@ Examples:
                   logger.info(chalk.green(`[dry-run] Would link account: ${acc.platform}/${acc.handle} -> ${orgSlug}`));
                 }
                 report.created.accounts++;
+              }
+            }
+
+            if (orgEntry.products) {
+              for (const prodEntry of orgEntry.products) {
+                report.created.products++;
+                if (!opts.json) {
+                  logger.info(chalk.green(`[dry-run] Would create product: ${prodEntry.name} -> ${orgSlug}`));
+                }
+                if (prodEntry.sources) {
+                  for (const srcEntry of prodEntry.sources) {
+                    if (existingUrlSet.has(srcEntry.url)) {
+                      report.skipped++;
+                      if (!opts.json) {
+                        logger.info(chalk.yellow(`[dry-run] Source URL already exists, would skip: ${srcEntry.url}`));
+                      }
+                    } else {
+                      report.created.sources++;
+                      const srcType = resolveSourceType(srcEntry);
+                      if (!opts.json) {
+                        logger.info(chalk.green(`[dry-run] Would create source: ${srcEntry.name} [${srcType}] -> ${prodEntry.name}`));
+                      }
+                    }
+                  }
+                }
               }
             }
 
@@ -284,6 +343,82 @@ Examples:
                   report.errors.push(msg);
                   if (!opts.json) {
                     logger.error(chalk.red(msg));
+                  }
+                }
+              }
+            }
+          }
+
+          if (orgEntry.products) {
+            for (const prodEntry of orgEntry.products) {
+              const prodSlug = prodEntry.slug ?? toSlug(prodEntry.name);
+              let prod = await findProduct(prodSlug);
+
+              if (prod) {
+                if (!opts.json) {
+                  logger.info(chalk.yellow(`Product already exists: ${prod.name} (${prod.slug})`));
+                }
+              } else {
+                try {
+                  prod = await createProduct(org.id, prodEntry.name, {
+                    slug: prodSlug,
+                    url: prodEntry.url,
+                    description: prodEntry.description,
+                  });
+                  report.created.products++;
+                  if (!opts.json) {
+                    logger.info(chalk.green(`Created product: ${prod.name} (${prod.slug}) -> ${org.slug}`));
+                  }
+                } catch (err) {
+                  const msg = `Failed to create product "${prodEntry.name}": ${err instanceof Error ? err.message : String(err)}`;
+                  report.errors.push(msg);
+                  if (!opts.json) {
+                    logger.error(chalk.red(msg));
+                  }
+                  continue;
+                }
+              }
+
+              if (prodEntry.sources) {
+                for (const srcEntry of prodEntry.sources) {
+                  if (existingUrlSet.has(srcEntry.url)) {
+                    report.skipped++;
+                    if (opts.skipExisting) {
+                      if (!opts.json) {
+                        logger.info(chalk.yellow(`Skipped existing source: ${srcEntry.url}`));
+                      }
+                    } else {
+                      const msg = `Source URL already exists: ${srcEntry.url}`;
+                      report.errors.push(msg);
+                      if (!opts.json) {
+                        logger.error(chalk.red(msg));
+                      }
+                    }
+                    continue;
+                  }
+
+                  const srcSlug = srcEntry.slug ?? toSlug(srcEntry.name);
+                  const srcType = resolveSourceType(srcEntry);
+
+                  try {
+                    await createSource({
+                      name: srcEntry.name,
+                      slug: srcSlug,
+                      type: srcType,
+                      url: srcEntry.url,
+                      orgId: org.id,
+                      productId: prod.id,
+                    });
+                    report.created.sources++;
+                    if (!opts.json) {
+                      logger.info(chalk.green(`Created source: ${srcEntry.name} (${srcSlug}) [${srcType}] -> ${prod.slug}`));
+                    }
+                  } catch (err) {
+                    const msg = `Failed to create source "${srcEntry.name}": ${err instanceof Error ? err.message : String(err)}`;
+                    report.errors.push(msg);
+                    if (!opts.json) {
+                      logger.error(chalk.red(msg));
+                    }
                   }
                 }
               }
@@ -404,6 +539,7 @@ Examples:
         console.log(chalk.bold(`${prefix}Import summary:`));
         console.log(`  Organizations created: ${report.created.orgs}`);
         console.log(`  Accounts linked:       ${report.created.accounts}`);
+        console.log(`  Products created:      ${report.created.products}`);
         console.log(`  Sources created:       ${report.created.sources}`);
         console.log(`  Sources skipped:       ${report.skipped}`);
         if (report.errors.length > 0) {
