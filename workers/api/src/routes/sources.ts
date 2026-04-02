@@ -82,45 +82,45 @@ sourceRoutes.get("/sources", async (c) => {
     ? await db.select().from(sources).where(and(...conditions)).orderBy(sources.name)
     : await db.select().from(sources).orderBy(sources.name);
 
-  const result = await Promise.all(
-    rows.map(async (src) => {
-      const [relCount] = await db
-        .select({ n: count() })
-        .from(releases)
-        .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false)));
+  if (rows.length === 0) return c.json([]);
 
-      const [latest] = await db
-        .select({ version: releases.version, publishedAt: releases.publishedAt })
-        .from(releases)
-        .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false), sql`${releases.publishedAt} IS NOT NULL`))
-        .orderBy(desc(releases.publishedAt))
-        .limit(1);
+  const statsRows = await db.all<{
+    source_id: string;
+    release_count: number;
+    latest_version: string | null;
+    latest_date: string | null;
+    org_slug: string | null;
+  }>(sql`
+    SELECT
+      s.id AS source_id,
+      (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
+      (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND (r2.suppressed IS NULL OR r2.suppressed = 0) AND r2.published_at IS NOT NULL ORDER BY r2.published_at DESC LIMIT 1) AS latest_version,
+      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND (r3.suppressed IS NULL OR r3.suppressed = 0) AND r3.published_at IS NOT NULL ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
+      o.slug AS org_slug
+    FROM sources s
+    LEFT JOIN organizations o ON o.id = s.org_id
+    WHERE s.id IN (${sql.join(rows.map(r => sql`${r.id}`), sql`,`)})
+  `);
 
-      let orgSlug: string | null = null;
-      if (src.orgId) {
-        const [org] = await db
-          .select({ slug: organizations.slug })
-          .from(organizations)
-          .where(eq(organizations.id, src.orgId));
-        orgSlug = org?.slug ?? null;
-      }
+  const statsMap = new Map(statsRows.map(s => [s.source_id, s]));
 
-      return {
-        id: src.id,
-        slug: src.slug,
-        name: src.name,
-        type: src.type,
-        url: src.url,
-        orgSlug,
-        isPrimary: src.isPrimary ?? false,
-        isHidden: src.isHidden ?? false,
-        metadata: src.metadata ?? null,
-        releaseCount: relCount.n,
-        latestVersion: latest?.version ?? null,
-        latestDate: latest?.publishedAt ?? null,
-      };
-    }),
-  );
+  const result = rows.map((src) => {
+    const stats = statsMap.get(src.id);
+    return {
+      id: src.id,
+      slug: src.slug,
+      name: src.name,
+      type: src.type,
+      url: src.url,
+      orgSlug: stats?.org_slug ?? null,
+      isPrimary: src.isPrimary ?? false,
+      isHidden: src.isHidden ?? false,
+      metadata: src.metadata ?? null,
+      releaseCount: stats?.release_count ?? 0,
+      latestVersion: stats?.latest_version ?? null,
+      latestDate: stats?.latest_date ?? null,
+    };
+  });
 
   return c.json(result);
 });
