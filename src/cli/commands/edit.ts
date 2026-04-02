@@ -32,6 +32,8 @@ export function registerEditCommand(program: Command) {
     .option("--fetch-method <fetchMethod>", "Set the recommended fetch method (feed, markdown, scrape, crawl, github)")
     .option("--primary", "Mark as the org's primary changelog source")
     .option("--no-primary", "Unmark as primary")
+    .option("--hidden", "Hide source from default list/search results")
+    .option("--no-hidden", "Unhide source (restore to default visibility)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
@@ -42,12 +44,15 @@ Examples:
   released edit my-source --feed-url https://example.com/feed.xml
   released edit my-source --markdown-url https://example.com/changelog.md
   released edit my-source --fetch-method markdown
+  released edit my-source --hidden
+  released edit my-source --no-hidden
   released edit my-source --no-org`)
     .action(async (slug: string, opts: {
       name?: string; url?: string; type?: string; slug?: string;
       org?: string | boolean; feedUrl?: string | boolean; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
       primary?: boolean;
+      hidden?: boolean;
     }) => {
       const source = await findSourceBySlug(slug);
       if (!source) {
@@ -107,6 +112,12 @@ Examples:
       if (opts.primary !== undefined) {
         updates.isPrimary = opts.primary;
         changes.push(opts.primary ? "marked as primary" : "unmarked as primary");
+      }
+
+      // Handle --hidden / --no-hidden
+      if (opts.hidden !== undefined) {
+        updates.isHidden = opts.hidden;
+        changes.push(opts.hidden ? "marked as hidden" : "unmarked as hidden");
       }
 
       // Accumulate metadata updates for a single write

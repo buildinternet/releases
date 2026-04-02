@@ -44,6 +44,7 @@ export const sources = sqliteTable("sources", {
   consecutiveErrors: integer("consecutive_errors").default(0),
   nextFetchAfter: text("next_fetch_after"),
   isPrimary: integer("is_primary", { mode: "boolean" }).default(false),
+  isHidden: integer("is_hidden", { mode: "boolean" }).default(false),
 }, (table) => [
   index("idx_sources_org").on(table.orgId),
 ]);

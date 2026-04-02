@@ -338,6 +338,8 @@ export interface SourceWithOrg {
   lastFetchedAt: string | null;
   orgName: string | null;
   metadata: string | null;
+  isPrimary: boolean;
+  isHidden?: boolean | null;
 }
 
 export async function listSourcesWithOrg(opts?: {
@@ -345,6 +347,7 @@ export async function listSourcesWithOrg(opts?: {
   hasFeed?: boolean;
   enrichable?: boolean;
   query?: string;
+  includeHidden?: boolean;
 }): Promise<SourceWithOrg[]> {
   if (isRemoteMode()) return apiClient.listSourcesWithOrg(opts);
   const db = getDb();
@@ -369,6 +372,12 @@ export async function listSourcesWithOrg(opts?: {
     );
   }
 
+  if (!opts?.includeHidden) {
+    conditions.push(
+      sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
+    );
+  }
+
   if (opts?.query) {
     const pattern = `%${opts.query.toLowerCase()}%`;
     conditions.push(
@@ -390,6 +399,8 @@ export async function listSourcesWithOrg(opts?: {
       lastFetchedAt: sources.lastFetchedAt,
       orgName: organizations.name,
       metadata: sources.metadata,
+      isPrimary: sql<boolean>`coalesce(${sources.isPrimary}, 0)`.as("isPrimary"),
+      isHidden: sources.isHidden,
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id));

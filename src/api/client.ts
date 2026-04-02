@@ -210,6 +210,8 @@ export interface SourceWithOrg {
   lastFetchedAt: string | null;
   orgName: string | null;
   metadata: string | null;
+  isPrimary: boolean;
+  isHidden?: boolean;
 }
 
 export async function listSourcesWithOrg(opts?: {
@@ -217,12 +219,14 @@ export async function listSourcesWithOrg(opts?: {
   hasFeed?: boolean;
   enrichable?: boolean;
   query?: string;
+  includeHidden?: boolean;
 }): Promise<SourceWithOrg[]> {
   const params = new URLSearchParams();
   if (opts?.orgSlug) params.set("orgSlug", opts.orgSlug);
   if (opts?.hasFeed) params.set("has_feed", "true");
   if (opts?.enrichable) params.set("enrichable", "true");
   if (opts?.query) params.set("query", opts.query);
+  if (opts?.includeHidden) params.set("include_hidden", "true");
   const qs = params.toString();
 
   // The API GET /api/sources returns enriched source data — map to the shape the CLI needs
@@ -231,6 +235,8 @@ export async function listSourcesWithOrg(opts?: {
     orgSlug: string | null; releaseCount: number;
     latestVersion: string | null; latestDate: string | null;
     metadata: string | null;
+    isPrimary?: boolean;
+    isHidden?: boolean;
   }>>(`/api/sources${qs ? `?${qs}` : ""}`);
 
   return rows.map((r) => ({
@@ -242,6 +248,8 @@ export async function listSourcesWithOrg(opts?: {
     lastFetchedAt: null,
     orgName: r.orgSlug,
     metadata: r.metadata ?? null,
+    isPrimary: r.isPrimary ?? false,
+    isHidden: r.isHidden ?? false,
   }));
 }
 

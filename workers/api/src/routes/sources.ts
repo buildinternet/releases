@@ -19,6 +19,7 @@ sourceRoutes.get("/sources", async (c) => {
   const hasFeed = c.req.query("has_feed") === "true";
   const enrichable = c.req.query("enrichable") === "true";
   const queryText = c.req.query("query");
+  const includeHidden = c.req.query("include_hidden") === "true";
 
   // Filter by URLs — return raw source rows matching the provided url params
   if (filterByUrls) {
@@ -46,6 +47,12 @@ sourceRoutes.get("/sources", async (c) => {
     const [org] = await db.select().from(organizations).where(eq(organizations.slug, orgSlug));
     if (!org) return c.json([]);
     conditions.push(eq(sources.orgId, org.id));
+  }
+
+  if (!includeHidden) {
+    conditions.push(
+      sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
+    );
   }
 
   if (hasFeed || enrichable) {
@@ -106,6 +113,7 @@ sourceRoutes.get("/sources", async (c) => {
         url: src.url,
         orgSlug,
         isPrimary: src.isPrimary ?? false,
+        isHidden: src.isHidden ?? false,
         metadata: src.metadata ?? null,
         releaseCount: relCount.n,
         latestVersion: latest?.version ?? null,
@@ -627,6 +635,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
     fetchPriority?: string; consecutiveNoChange?: number;
     consecutiveErrors?: number; nextFetchAfter?: string | null;
     isPrimary?: boolean;
+    isHidden?: boolean;
   }>();
 
   const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
@@ -645,6 +654,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.consecutiveErrors !== undefined) updates.consecutiveErrors = body.consecutiveErrors;
   if (body.nextFetchAfter !== undefined) updates.nextFetchAfter = body.nextFetchAfter;
   if (body.isPrimary !== undefined) updates.isPrimary = body.isPrimary;
+  if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   return c.json(updated);

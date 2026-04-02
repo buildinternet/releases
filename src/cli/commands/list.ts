@@ -35,6 +35,7 @@ export function registerListCommand(program: Command) {
     .option("--has-feed", "Only show sources that have a discovered feed URL")
     .option("--enrichable", "Only show sources eligible for content enrichment (have feed, missing or sparse content depth)")
     .option("--query <text>", "Filter by name, slug, or URL (case-insensitive substring match)")
+    .option("--include-hidden", "Include hidden sources in the list")
     .addHelpText("after", `
 Examples:
   released list                       List all sources
@@ -43,8 +44,9 @@ Examples:
   released list --has-feed            Sources with a discovered feed URL
   released list --enrichable          Sources eligible for content enrichment
   released list --query shadcn        Filter sources by name, slug, or URL
+  released list --include-hidden          Include hidden sources
   released list --has-feed --org sentry   Combine filters`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; hasFeed?: boolean; enrichable?: boolean; query?: string }) => {
+    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeHidden?: boolean }) => {
       // ── Single-source detail view ──
       if (slug) {
         const source = await findSourceBySlug(slug);
@@ -72,6 +74,7 @@ Examples:
         console.log(label("Org", source.orgId ?? null));
         console.log(label("Last Fetched", source.lastFetchedAt));
         console.log(label("Primary", source.isPrimary ? "yes" : null));
+        console.log(label("Hidden", source.isHidden ? "yes" : null));
         console.log(label("Fetch Priority", source.fetchPriority));
         console.log("");
         return;
@@ -83,6 +86,7 @@ Examples:
         hasFeed: opts.hasFeed,
         enrichable: opts.enrichable,
         query: opts.query,
+        includeHidden: opts.includeHidden,
       });
 
       if (allSources.length === 0) {
@@ -110,7 +114,7 @@ Examples:
       for (const row of allSources) {
         const method = getFetchMethod(row.type, row.metadata);
         table.push([
-          row.name,
+          row.isPrimary ? `${row.name} ${chalk.yellow("\u2605")}` : row.name,
           row.slug,
           row.type,
           method,
