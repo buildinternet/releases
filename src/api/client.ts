@@ -4,6 +4,7 @@ import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
   ReleaseSummary, NewReleaseSummary, Product, Tag,
 } from "../db/schema.js";
+import type { SearchResult, SourceListItem, Stats } from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${getApiUrl()}${path}`;
@@ -178,24 +179,14 @@ export async function searchReleasesForApi(query: string, limit: number, offset:
   return result.results;
 }
 
-export interface SearchResultRemote {
-  sourceSlug: string;
-  sourceName: string;
-  orgSlug: string | null;
-  version: string | null;
-  title: string;
-  summary: string;
-  publishedAt: string | null;
-}
-
 export async function searchReleasesRemote(
   query: string,
   limit: number,
   opts?: { org?: string },
-): Promise<SearchResultRemote[]> {
+): Promise<SearchResult[]> {
   const params = new URLSearchParams({ q: query, limit: String(limit), offset: "0" });
   if (opts?.org) params.set("org", opts.org);
-  const result = await apiFetch<{ results: SearchResultRemote[] }>(`/api/search?${params}`);
+  const result = await apiFetch<{ results: SearchResult[] }>(`/api/search?${params}`);
   return result.results;
 }
 
@@ -236,25 +227,16 @@ export async function listSourcesWithOrg(opts?: {
   const qs = params.toString();
 
   // The API GET /api/sources returns enriched source data — map to the shape the CLI needs
-  const rows = await apiFetch<Array<{
-    slug: string; name: string; type: string; url: string;
-    orgSlug: string | null; releaseCount: number;
-    latestVersion: string | null; latestDate: string | null;
-    metadata: string | null;
-    isPrimary?: boolean;
-    isHidden?: boolean;
-    productName?: string | null;
-    productSlug?: string | null;
-  }>>(`/api/sources${qs ? `?${qs}` : ""}`);
+  const rows = await apiFetch<Array<SourceListItem & { isHidden?: boolean }>>(`/api/sources${qs ? `?${qs}` : ""}`);
 
   return rows.map((r) => ({
     id: "",
     name: r.name,
     slug: r.slug,
     type: r.type,
-    url: r.url,
+    url: r.url ?? "",
     lastFetchedAt: null,
-    orgName: r.orgSlug,
+    orgName: r.orgSlug ?? null,
     productName: r.productName ?? null,
     productSlug: r.productSlug ?? null,
     metadata: r.metadata ?? null,
@@ -306,7 +288,7 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
 
   // Compose from existing endpoints
   const [statsData, fetchLogData, sourcesData] = await Promise.all([
-    apiFetch<{ orgs: number; sources: number; releases: number }>("/api/stats"),
+    apiFetch<Stats>("/api/stats"),
     apiFetch<Array<{
       id: string; sourceId: string; releasesFound: number; releasesInserted: number;
       durationMs: number | null; status: string; error: string | null; createdAt: string;
@@ -845,3 +827,5 @@ export async function cancelSession(sessionId: string): Promise<{ ok: boolean; e
     method: "POST",
   });
 }
+
+export type { SearchResult, Stats, SourceListItem } from "./types.js";

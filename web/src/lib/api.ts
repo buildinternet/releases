@@ -1,3 +1,36 @@
+export type {
+  ReleaseSummaryItem,
+  ReleaseItem,
+  SearchResult,
+  OrgReleaseItem,
+} from "@shared/api/types";
+
+import type {
+  Stats,
+  OrgListItem,
+  OrgDetail,
+  SourceListItem,
+  SourceDetail,
+  SearchResponse,
+  SourceActivity,
+  OrgActivity,
+  OrgReleasesResponse,
+  ReleaseDetail,
+} from "@shared/api/types";
+
+export type {
+  Stats,
+  OrgListItem,
+  OrgDetail,
+  SourceListItem,
+  SourceDetail,
+  SearchResponse,
+  SourceActivity,
+  OrgActivity,
+  OrgReleasesResponse,
+  ReleaseDetail,
+};
+
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 const API_SECRET = process.env.RELEASED_API_KEY;
 
@@ -34,121 +67,6 @@ async function fetchApi<T>(path: string): Promise<T> {
 
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
-}
-
-export interface Stats { orgs: number; sources: number; releases: number; }
-
-export interface OrgListItem {
-  slug: string; name: string; domain: string | null;
-  sourceCount: number; releaseCount: number; recentReleaseCount: number;
-  lastActivity: string | null;
-}
-
-export interface OrgDetail {
-  slug: string; name: string; domain: string | null;
-  sourceCount: number; releaseCount: number;
-  releasesLast30Days: number; avgReleasesPerWeek: number;
-  lastFetchedAt: string | null;
-  trackingSince: string;
-  accounts: { platform: string; handle: string }[];
-  sources: SourceListItem[];
-}
-
-export interface SourceListItem {
-  slug: string; name: string; type: string; url?: string;
-  orgSlug?: string | null; releaseCount: number;
-  latestVersion: string | null; latestDate: string | null;
-  isPrimary?: boolean;
-}
-
-export interface SourceDetail {
-  slug: string; name: string; type: string; url: string;
-  changelogUrl?: string | null;
-  org: { slug: string; name: string } | null;
-  releaseCount: number; releasesLast30Days: number; avgReleasesPerWeek: number;
-  latestVersion: string | null; latestDate: string | null;
-  lastFetchedAt: string | null;
-  trackingSince: string;
-  releases: ReleaseItem[];
-  pagination: { page: number; pageSize: number; totalPages: number; totalItems: number };
-  summaries: {
-    rolling: ReleaseSummaryItem | null;
-    monthly: ReleaseSummaryItem[];
-  };
-}
-
-export interface ReleaseSummaryItem {
-  year?: number | null;
-  month?: number | null;
-  windowDays?: number | null;
-  summary: string;
-  releaseCount: number;
-  generatedAt: string;
-}
-
-export interface ReleaseItem {
-  id?: string;
-  version: string | null; title: string; summary: string;
-  content?: string;
-  publishedAt: string | null; url: string | null;
-  media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string; r2Url?: string }>;
-}
-
-export interface ReleaseDetail {
-  id: string;
-  sourceId: string;
-  version: string | null;
-  title: string;
-  content: string;
-  contentSummary: string | null;
-  url: string | null;
-  media: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string; r2Url?: string }>;
-  publishedAt: string | null;
-  fetchedAt: string;
-  sourceName: string;
-  sourceSlug: string;
-  sourceType: string;
-  org: { slug: string; name: string } | null;
-}
-
-export interface SearchResult {
-  sourceSlug: string; sourceName: string; orgSlug: string | null;
-  version: string | null; title: string; summary: string; publishedAt: string | null;
-}
-
-export interface SearchResponse { query: string; results: SearchResult[]; }
-
-export interface SourceActivity {
-  source: { slug: string; name: string; orgSlug: string | null; orgName: string | null };
-  range: { from: string; to: string };
-  weeklyBuckets: Array<{ weekStart: string; count: number; earliestVersion: string | null; latestVersion: string | null }>;
-}
-
-export interface OrgActivitySource {
-  slug: string;
-  name: string;
-  releaseCount: number;
-  avgReleasesPerWeek: number;
-  earliestVersion: string | null;
-  latestVersion: string | null;
-  latestDate: string | null;
-  weeklyBuckets: Array<{ weekStart: string; count: number; earliestVersion: string | null; latestVersion: string | null }>;
-}
-
-export interface OrgActivity {
-  org: { slug: string; name: string };
-  range: { from: string; to: string };
-  sources: OrgActivitySource[];
-  aggregateWeekly: Array<{ weekStart: string; count: number }>;
-}
-
-export interface OrgReleaseItem extends ReleaseItem {
-  source: { slug: string; name: string; type: string };
-}
-
-export interface OrgReleasesResponse {
-  releases: OrgReleaseItem[];
-  pagination: { nextCursor: string | null; limit: number };
 }
 
 export const api = {

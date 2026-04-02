@@ -5,70 +5,20 @@
  * the CLI, MCP server, and web frontend.
  */
 
-// ── Types (mirror the API response contract) ────────────────────────
+import type {
+  ReleaseItem,
+  ReleaseSummaryItem,
+  SourceDetail,
+  SourceListItem,
+  OrgDetail,
+} from "../api/types.js";
 
-export interface FormatRelease {
-  version: string | null;
-  title: string;
-  summary: string;
-  content?: string;
-  publishedAt: string | null;
-  url: string | null;
-}
-
-export interface FormatReleaseSummary {
-  year?: number | null;
-  month?: number | null;
-  windowDays?: number | null;
-  summary: string;
-  releaseCount: number;
-  generatedAt: string;
-}
-
-export interface FormatSourceDetail {
-  slug: string;
-  name: string;
-  type: string;
-  url: string;
-  changelogUrl?: string | null;
-  org: { slug: string; name: string } | null;
-  releaseCount: number;
-  latestVersion: string | null;
-  latestDate: string | null;
-  lastFetchedAt: string | null;
-  trackingSince: string;
-  releases: FormatRelease[];
-  pagination: { page: number; pageSize: number; totalPages: number; totalItems: number };
-  summaries: {
-    rolling: FormatReleaseSummary | null;
-    monthly: FormatReleaseSummary[];
-  };
-}
-
-export interface FormatSourceListItem {
-  slug: string;
-  name: string;
-  type: string;
-  url?: string;
-  releaseCount: number;
-  latestVersion: string | null;
-  latestDate: string | null;
-  isPrimary?: boolean;
-}
-
-export interface FormatOrgDetail {
-  slug: string;
-  name: string;
-  domain: string | null;
-  sourceCount: number;
-  releaseCount: number;
-  releasesLast30Days: number;
-  avgReleasesPerWeek: number;
-  lastFetchedAt: string | null;
-  trackingSince: string;
-  accounts: { platform: string; handle: string }[];
-  sources: FormatSourceListItem[];
-}
+// Re-export under the old names for any callers still using them
+export type FormatRelease = ReleaseItem;
+export type FormatReleaseSummary = ReleaseSummaryItem;
+export type FormatSourceDetail = SourceDetail;
+export type FormatSourceListItem = SourceListItem;
+export type FormatOrgDetail = OrgDetail;
 
 export interface FormatOptions {
   /** Base URL for canonical links (e.g. "https://releases.sh") */
