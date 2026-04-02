@@ -1,20 +1,18 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import Link from "next/link";
-import { type OrgActivity } from "@/lib/api";
+import { type OrgActivity, type SourceListItem } from "@/lib/api";
 import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
-import { CadenceCard } from "@/components/cadence-card";
-import { CadenceGrid } from "@/components/cadence-grid";
+import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 
 interface ReleaseTimelineProps {
   activity: OrgActivity;
   orgSlug: string;
-  children?: React.ReactNode;
+  sources: SourceListItem[];
 }
 
-export function ReleaseTimeline({ activity, orgSlug, children }: ReleaseTimelineProps) {
+export function ReleaseTimeline({ activity, orgSlug, sources }: ReleaseTimelineProps) {
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
   const rangeEnd = useMemo(() => new Date(activity.range.to), [activity.range.to]);
 
@@ -114,6 +112,39 @@ export function ReleaseTimeline({ activity, orgSlug, children }: ReleaseTimeline
     return { totalReleases, avgPerWeek, avgPerMonth, avgIntervalDays };
   }, [brushedWeekGrid]);
 
+  // Build a cadence lookup map by slug for the source list
+  const cadenceMap = useMemo(() => {
+    const map = new Map<string, SourceCadenceData>();
+    for (const d of cardData) {
+      map.set(d.slug, {
+        releaseCount: d.releaseCount,
+        totalReleaseCount: d.totalReleaseCount,
+        avgReleasesPerWeek: d.avgReleasesPerWeek,
+        earliestVersion: d.earliestVersion,
+        latestVersion: d.latestVersion,
+        weeklyBuckets: d.weeklyBuckets,
+        colorIndex: d.colorIndex,
+      });
+    }
+    return map;
+  }, [cardData]);
+
+  // Sort sources: primary first, then by cadence release count (desc), non-github before github
+  const sortedSources = useMemo(() => {
+    return [...sources].sort((a, b) => {
+      if (a.isPrimary && !b.isPrimary) return -1;
+      if (!a.isPrimary && b.isPrimary) return 1;
+      const aCadence = cadenceMap.get(a.slug);
+      const bCadence = cadenceMap.get(b.slug);
+      const aCount = aCadence?.releaseCount ?? 0;
+      const bCount = bCadence?.releaseCount ?? 0;
+      if (bCount !== aCount) return bCount - aCount;
+      if (a.type === "github" && b.type !== "github") return 1;
+      if (a.type !== "github" && b.type === "github") return -1;
+      return 0;
+    });
+  }, [sources, cadenceMap]);
+
   if (cardData.length === 0) return null;
 
   return (
@@ -145,15 +176,12 @@ export function ReleaseTimeline({ activity, orgSlug, children }: ReleaseTimeline
         ))}
       </div>
 
-      {children}
-
-      <CadenceGrid>
-        {cardData.map((data) => (
-          <Link key={data.slug} href={`/${orgSlug}/${data.slug}`} className="no-underline">
-            <CadenceCard.Root data={data} />
-          </Link>
+      <div className="space-y-2">
+        {sortedSources.map((source) => (
+          <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
         ))}
-      </CadenceGrid>
+      </div>
+
     </div>
   );
 }

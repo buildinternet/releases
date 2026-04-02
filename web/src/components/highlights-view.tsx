@@ -1,3 +1,5 @@
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type { ReleaseSummaryItem } from "@/lib/api";
 
 interface HighlightsViewProps {
@@ -5,9 +7,11 @@ interface HighlightsViewProps {
   monthly: ReleaseSummaryItem[];
 }
 
-function formatMonthYear(year: number, month: number): string {
+const summaryClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_code]:text-xs [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
+
+function formatMonth(year: number, month: number): string {
   const date = new Date(year, month - 1);
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
 }
 
 export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
@@ -19,10 +23,16 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
     );
   }
 
+  const sortedMonthly = [...monthly].sort((a, b) => {
+    if (a.year !== b.year) return (b.year ?? 0) - (a.year ?? 0);
+    return (b.month ?? 0) - (a.month ?? 0);
+  });
+
   return (
-    <div className="space-y-4 pt-4">
+    <div className="pt-4">
+      {/* Rolling summary — card format */}
       {rolling && (
-        <div className="bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-4">
+        <div className="bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-4 mb-4">
           <div className="flex items-center justify-between mb-2">
             <span className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
               Recent Highlights
@@ -31,32 +41,37 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
               {rolling.releaseCount} releases · last {rolling.windowDays ?? 90} days
             </span>
           </div>
-          <p className="text-[13px] text-stone-700 dark:text-stone-300 leading-relaxed">{rolling.summary}</p>
+          <div className={summaryClasses}>
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>{rolling.summary}</ReactMarkdown>
+          </div>
         </div>
       )}
 
-      {monthly.length > 0 && (
-        <div className="space-y-3">
-          {monthly
-            .sort((a, b) => {
-              if (a.year !== b.year) return (b.year ?? 0) - (a.year ?? 0);
-              return (b.month ?? 0) - (a.month ?? 0);
-            })
-            .map((m) => (
-              <div key={`${m.year}-${m.month}`} className="bg-stone-50 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
-                    {m.year && m.month ? formatMonthYear(m.year, m.month) : "Monthly Summary"}
-                  </span>
-                  <span className="text-[11px] text-stone-300 dark:text-stone-600">
-                    {m.releaseCount} releases
-                  </span>
-                </div>
-                <p className="text-[13px] text-stone-700 dark:text-stone-300 leading-relaxed">{m.summary}</p>
-              </div>
-            ))}
+      {/* Monthly summaries */}
+      {sortedMonthly.map((m) => (
+        <div key={`${m.year}-${m.month}`} className="flex gap-0 relative">
+          <div className="w-[100px] shrink-0 relative flex flex-col items-end pr-5 pt-4">
+            <span className="text-[12px] text-stone-400 dark:text-stone-500 whitespace-nowrap tabular-nums">
+              {m.year && m.month ? formatMonth(m.year, m.month) : ""}
+            </span>
+            <div className="absolute right-0 top-[20px] w-[7px] h-[7px] rounded-full bg-stone-300 dark:bg-stone-600 translate-x-[3px] z-10" />
+          </div>
+          <div className="absolute left-[100px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800" />
+          <div className="flex-1 min-w-0 border-t border-stone-200 dark:border-stone-800 py-4 pl-5">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[11px] uppercase tracking-wide text-stone-400 dark:text-stone-500 font-medium">
+                {m.year && m.month ? formatMonth(m.year, m.month) : "Monthly Summary"}
+              </span>
+              <span className="text-[11px] text-stone-300 dark:text-stone-600">
+                {m.releaseCount} releases
+              </span>
+            </div>
+            <div className={summaryClasses}>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.summary}</ReactMarkdown>
+            </div>
+          </div>
         </div>
-      )}
+      ))}
     </div>
   );
 }

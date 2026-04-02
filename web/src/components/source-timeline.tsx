@@ -54,7 +54,7 @@ export function SourceTimeline({ activity }: SourceTimelineProps) {
   if (buckets.length === 0) return null;
 
   return (
-    <div className="mt-8 mb-2">
+    <div className="mb-6">
       <RangeNavigator.Root
         min={rangeStart}
         max={rangeEnd}

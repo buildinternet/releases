@@ -126,16 +126,16 @@ export default async function SourcePage({
           <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{source.name}</h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
-        {activity && (
-          <SourceTimeline activity={activity} />
-        )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0">
+            {activity && (
+              <SourceTimeline activity={activity} />
+            )}
             <SourceTabs hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)} />
             {(tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
               <>
                 {source.releases.map((release, i) => (
-                  <ReleaseListItem key={i} release={release} />
+                  <ReleaseListItem key={i} release={release} hideDate={i > 0 && release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)} />
                 ))}
                 <Pagination page={source.pagination.page} totalPages={source.pagination.totalPages} basePath={`/${orgSlug}/${sourceSlug}`} />
               </>

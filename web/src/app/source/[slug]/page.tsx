@@ -129,7 +129,7 @@ export default async function IndependentSourcePage({
             {(tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
               <>
                 {source.releases.map((release, i) => (
-                  <ReleaseListItem key={i} release={release} />
+                  <ReleaseListItem key={i} release={release} hideDate={i > 0 && release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)} />
                 ))}
                 <Pagination page={source.pagination.page} totalPages={source.pagination.totalPages} basePath={`/source/${slug}`} />
               </>

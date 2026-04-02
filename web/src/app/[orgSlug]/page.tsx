@@ -27,7 +27,7 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
 }
 
-function SourceListWithSidebar({ org, orgSlug, sidebarSections }: { org: OrgDetail; orgSlug: string; sidebarSections: { items: { label: string; value: string | number | null; large?: boolean; subtitle?: string }[] }[] }) {
+function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
   const sortedSources = [...org.sources].sort((a, b) => {
     if (a.isPrimary && !b.isPrimary) return -1;
     if (!a.isPrimary && b.isPrimary) return 1;
@@ -37,13 +37,10 @@ function SourceListWithSidebar({ org, orgSlug, sidebarSections }: { org: OrgDeta
   });
 
   return (
-    <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
-      <div className="flex-1 min-w-0 space-y-2">
-        {sortedSources.map((source) => (
-          <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
-        ))}
-      </div>
-      <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null} footnoteTitle={org.lastFetchedAt} />
+    <div className="space-y-2">
+      {sortedSources.map((source) => (
+        <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
+      ))}
     </div>
   );
 }
@@ -120,13 +117,18 @@ export default async function OrgPage({
           <span className="text-stone-600 dark:text-stone-300 font-medium">{org.name}</span>
         </div>
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">{org.name}</h1>
-        {activity ? (
-          <ReleaseTimeline activity={activity} orgSlug={org.slug}>
-            <SourceListWithSidebar org={org} orgSlug={orgSlug} sidebarSections={sidebarSections} />
-          </ReleaseTimeline>
-        ) : (
-          <SourceListWithSidebar org={org} orgSlug={orgSlug} sidebarSections={sidebarSections} />
-        )}
+        <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
+          <div className="flex-1 min-w-0">
+            {activity ? (
+              <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} />
+            ) : (
+              <div className="mt-6">
+                <SourceList org={org} orgSlug={orgSlug} />
+              </div>
+            )}
+          </div>
+          <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null} footnoteTitle={org.lastFetchedAt} />
+        </div>
       </div>
     </div>
   );
