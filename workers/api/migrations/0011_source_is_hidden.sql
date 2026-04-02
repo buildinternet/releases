@@ -1,1 +1,0 @@
-ALTER TABLE sources ADD COLUMN is_hidden INTEGER DEFAULT 0;

@@ -5,85 +5,8 @@
     {
       "idx": 0,
       "version": "6",
-      "when": 1774539355041,
-      "tag": "0000_abnormal_kulan_gath",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "6",
-      "when": 1774549784569,
-      "tag": "0001_true_magus",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "6",
-      "when": 1774554711022,
-      "tag": "0002_robust_gabe_jones",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "6",
-      "when": 1774567655715,
-      "tag": "0003_short_moonstone",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "6",
-      "when": 1774626495953,
-      "tag": "0004_amusing_juggernaut",
-      "breakpoints": true
-    },
-    {
-      "idx": 5,
-      "version": "6",
-      "when": 1774641384601,
-      "tag": "0005_absurd_abomination",
-      "breakpoints": true
-    },
-    {
-      "idx": 6,
-      "version": "6",
-      "when": 1774642744801,
-      "tag": "0006_sloppy_starhawk",
-      "breakpoints": true
-    },
-    {
-      "idx": 7,
-      "version": "6",
-      "when": 1774914827838,
-      "tag": "0007_curvy_morlocks",
-      "breakpoints": true
-    },
-    {
-      "idx": 8,
-      "version": "6",
-      "when": 1774957523537,
-      "tag": "0008_worthless_kulan_gath",
-      "breakpoints": true
-    },
-    {
-      "idx": 9,
-      "version": "6",
-      "when": 1775138091915,
-      "tag": "0009_glossy_silver_surfer",
-      "breakpoints": true
-    },
-    {
-      "idx": 10,
-      "version": "6",
-      "when": 1775143655512,
-      "tag": "0010_mean_mysterio",
-      "breakpoints": true
-    },
-    {
-      "idx": 11,
-      "version": "6",
-      "when": 1775260800000,
-      "tag": "0011_add_organizations_metadata",
+      "when": 1775151517299,
+      "tag": "0000_shallow_fantastic_four",
       "breakpoints": true
     }
   ]

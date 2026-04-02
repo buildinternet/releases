@@ -1,1 +1,0 @@
-ALTER TABLE `organizations` ADD `metadata` text DEFAULT '{}';
