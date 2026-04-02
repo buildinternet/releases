@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, desc, sql, gte, lte } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { fetchLog, sources, organizations, usageLog } from "../../../../src/db/schema.js";
+import { fetchLog, sources, organizations, usageLog } from "@released/db/schema.js";
 import type { Env } from "../index.js";
 import { getStatusHub } from "../utils.js";
 

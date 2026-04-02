@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { tags } from "../../../src/db/schema.js";
-import { toSlug } from "../../../src/lib/slug.js";
+import { tags } from "@released/db/schema.js";
+import { toSlug } from "@released/lib/slug.js";
 
 /**
  * D1 wraps SQLite errors as "Failed query: ..." without preserving the

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { releaseSummaries, sources } from "../../../../src/db/schema.js";
+import { releaseSummaries, sources } from "@released/db/schema.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();

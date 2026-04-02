@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, fetchLog, releaseSummaries, products } from "../../../../src/db/schema.js";
-import { daysAgoIso } from "../../../../src/lib/dates.js";
-import { toSlug } from "../../../../src/lib/slug.js";
+import { sources, releases, organizations, fetchLog, releaseSummaries, products } from "@released/db/schema.js";
+import { daysAgoIso } from "@released/lib/dates.js";
+import { toSlug } from "@released/lib/slug.js";
 import { getStatusHub } from "../utils.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
 import type { Env } from "../index.js";
