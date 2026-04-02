@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import type { Source } from "../../db/schema.js";
+import { sourceNotFound } from "../suggest.js";
 import type { FetchOptions } from "../../adapters/types.js";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
 import { detectChangelogUrl } from "../../adapters/github.js";
@@ -85,8 +86,7 @@ Examples:
       if (slug) {
         const found = await findSourceBySlug(slug);
         if (!found) {
-          console.error(chalk.red(`Source not found: ${slug}`));
-          process.exit(1);
+          return sourceNotFound(slug);
         }
         targetSources = [found];
       } else if (opts.unfetched) {

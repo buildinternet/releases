@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { findSourceBySlug, getRecentReleases, findOrg, getRecentReleasesByOrg } from "../../db/queries.js";
+import { orgNotFound, sourceNotFound } from "../suggest.js";
 import { summarizeReleases, toReleaseInput } from "../../ai/query.js";
 import { daysAgoIso, elapsedFormatted } from "../../lib/dates.js";
 import { stripAnsi } from "../../lib/sanitize.js";
@@ -36,8 +37,7 @@ Examples:
       if (opts.org && !slug) {
         const org = await findOrg(opts.org);
         if (!org) {
-          console.error(chalk.red(`Organization not found: ${opts.org}`));
-          process.exit(1);
+          return orgNotFound(opts.org);
         }
         const orgReleases = await getRecentReleasesByOrg(org.id, daysAgoIso(days));
         if (orgReleases.length === 0) {
@@ -53,8 +53,7 @@ Examples:
       } else {
         const source = await findSourceBySlug(slug!);
         if (!source) {
-          console.error(chalk.red(`Source not found: ${slug}`));
-          process.exit(1);
+          return sourceNotFound(slug!);
         }
         const recentReleases = await getRecentReleases(source.id, daysAgoIso(days));
         if (recentReleases.length === 0) {

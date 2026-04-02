@@ -2,6 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import { listSourcesWithOrg, findSourceBySlug } from "../../db/queries.js";
+import { sourceNotFound } from "../suggest.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 
 /**
@@ -38,7 +39,7 @@ export function registerListCommand(program: Command) {
     .option("--enrichable", "Only show sources eligible for content enrichment (have feed, missing or sparse content depth)")
     .option("--query <text>", "Filter by name, slug, or URL (case-insensitive substring match)")
     .option("--category <category>", "Filter by organization or product category")
-    .option("--include-hidden", "Include hidden sources in the list")
+    .option("--include-disabled", "Include disabled sources in the list")
     .addHelpText("after", `
 Examples:
   released list                       List all sources
@@ -47,15 +48,14 @@ Examples:
   released list --has-feed            Sources with a discovered feed URL
   released list --enrichable          Sources eligible for content enrichment
   released list --query shadcn        Filter sources by name, slug, or URL
-  released list --include-hidden          Include hidden sources
+  released list --include-disabled        Include disabled sources
   released list --has-feed --org sentry   Combine filters`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeHidden?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeDisabled?: boolean }) => {
       // ── Single-source detail view ──
       if (slug) {
         const source = await findSourceBySlug(slug);
         if (!source) {
-          console.error(chalk.red(`Source not found: ${slug}`));
-          process.exit(1);
+          return sourceNotFound(slug);
         }
         if (opts.json) {
           const method = getFetchMethod(source.type, source.metadata ?? null);
@@ -77,7 +77,7 @@ Examples:
         console.log(label("Org", source.orgId ?? null));
         console.log(label("Last Fetched", source.lastFetchedAt));
         console.log(label("Primary", source.isPrimary ? "yes" : null));
-        console.log(label("Hidden", source.isHidden ? "yes" : null));
+        console.log(label("Status", source.isHidden ? "disabled" : "active"));
         console.log(label("Fetch Priority", source.fetchPriority));
         console.log("");
         return;
@@ -91,7 +91,7 @@ Examples:
         hasFeed: opts.hasFeed,
         enrichable: opts.enrichable,
         query: opts.query,
-        includeHidden: opts.includeHidden,
+        includeHidden: opts.includeDisabled,
       });
 
       if (allSources.length === 0) {

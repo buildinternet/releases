@@ -47,6 +47,21 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
   return apiFetch<Organization | null>(`/api/orgs/${identifier}`);
 }
 
+async function suggestEntities(
+  endpoint: string,
+  term: string,
+  limit: number,
+): Promise<Array<{ slug: string; name: string }>> {
+  const all = await apiFetch<Array<{ slug: string; name: string }>>(`${endpoint}?limit=200`) ?? [];
+  const lower = term.toLowerCase();
+  return all
+    .filter((e) => e.slug.includes(lower) || e.name.toLowerCase().includes(lower))
+    .slice(0, limit);
+}
+
+export const suggestOrgs = (term: string, limit: number) => suggestEntities("/api/orgs", term, limit);
+export const suggestSources = (term: string, limit: number) => suggestEntities("/api/sources", term, limit);
+
 export async function getSourcesByOrg(orgId: string): Promise<Source[]> {
   return apiFetch<Source[]>(`/api/sources?orgId=${orgId}`);
 }
