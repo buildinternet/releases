@@ -260,7 +260,7 @@ export function ReleaseTimeline({ activity, orgSlug, sources, products, children
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         {([
-          { label: "Total Releases", value: String(summaryStats.totalReleases) },
+          { label: "Releases", value: String(summaryStats.totalReleases) },
           { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014" },
           { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk` },
         ] as const).map((stat) => (

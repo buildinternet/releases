@@ -24,10 +24,12 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
     );
   }
 
-  const sortedMonthly = [...monthly].sort((a, b) => {
-    if (a.year !== b.year) return (b.year ?? 0) - (a.year ?? 0);
-    return (b.month ?? 0) - (a.month ?? 0);
-  });
+  const sortedMonthly = [...monthly]
+    .sort((a, b) => {
+      if (a.year !== b.year) return (b.year ?? 0) - (a.year ?? 0);
+      return (b.month ?? 0) - (a.month ?? 0);
+    })
+    .filter((m, i, arr) => i === 0 || `${m.year}-${m.month}` !== `${arr[i - 1].year}-${arr[i - 1].month}`);
 
   return (
     <div className="pt-4">
@@ -45,6 +47,11 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
           <div className={summaryClasses}>
             <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{rolling.summary}</ReactMarkdown>
           </div>
+          {rolling.generatedAt && (
+            <div className="text-[10px] text-stone-400 dark:text-stone-600 mt-3 tabular-nums">
+              Generated {new Date(rolling.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+            </div>
+          )}
         </div>
       )}
 

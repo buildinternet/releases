@@ -138,9 +138,6 @@ export default async function OrgPage({
     {
       items: [
         ...(org.domain ? [{ label: "Domain", value: org.domain }] : []),
-        ...(org.products.length > 0 ? [{ label: "Products", value: org.products.length, large: true }] : []),
-        { label: "Sources", value: org.sourceCount, large: true },
-        { label: "Total Releases", value: org.releaseCount, large: true },
       ],
     },
     {
