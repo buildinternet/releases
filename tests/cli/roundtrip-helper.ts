@@ -2,6 +2,9 @@ import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { runCli } from "../utils.js";
+import { stripAnsi } from "../../src/lib/sanitize.js";
+
+const CLI_PATH = join(import.meta.dirname, "..", "..", "src", "index.ts");
 
 // runCli() in tests/utils.ts already clears RELEASED_API_URL and
 // RELEASED_API_KEY, so we only need the data-dir override here.
@@ -41,4 +44,39 @@ export function cliJson<T = unknown>(
     );
   }
   return JSON.parse(result.stdout) as T;
+}
+
+/**
+ * Async CLI runner that doesn't block the event loop.
+ * Use this when an in-process Bun.serve fixture server must stay responsive
+ * during CLI execution (spawnSync would deadlock it).
+ */
+export async function cliAsync(
+  dataDir: string,
+  args: string[],
+  options?: { timeout?: number },
+): Promise<{ stdout: string; stderr: string; exitCode: number }> {
+  const proc = Bun.spawn(["bun", CLI_PATH, ...args], {
+    env: {
+      ...process.env,
+      RELEASED_DATA_DIR: dataDir,
+      RELEASED_API_URL: "",
+      RELEASED_API_KEY: "",
+    },
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const timeoutMs = options?.timeout ?? 30_000;
+  const timer = new Promise<never>((_, reject) =>
+    setTimeout(() => reject(new Error(`CLI timed out after ${timeoutMs}ms`)), timeoutMs),
+  );
+
+  await Promise.race([proc.exited, timer]);
+
+  const stdout = stripAnsi(await new Response(proc.stdout).text());
+  const stderr = stripAnsi(await new Response(proc.stderr).text());
+
+  return { stdout, stderr, exitCode: proc.exitCode ?? 1 };
 }

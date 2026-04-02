@@ -907,7 +907,7 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
 
 // ── Search (remote-aware, for `search` command) ──
 
-export type SearchResultRemote = apiClient.SearchResultRemote;
+export type SearchResultRemote = apiClient.SearchResult;
 
 export async function searchReleasesRemote(
   query: string,
