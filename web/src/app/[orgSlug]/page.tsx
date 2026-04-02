@@ -71,7 +71,7 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
           </Link>
           <div className="space-y-2">
             {sources.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={sources.length > 1 || source.name !== product.name} />
             ))}
           </div>
         </div>
@@ -83,7 +83,7 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
           )}
           <div className="space-y-2">
             {ungrouped.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={false} />
             ))}
           </div>
         </div>
@@ -191,26 +191,33 @@ export default async function OrgPage({
         )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            <OrgTabs />
             {showReleases ? (
-              initialReleases ? (
-                <OrgReleaseList
-                  orgSlug={orgSlug}
-                  initialReleases={initialReleases.releases}
-                  initialCursor={initialReleases.pagination.nextCursor}
-                  multipleSourcesExist={org.sources.length > 1}
-                />
-              ) : (
-                <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
-                  No releases yet.
-                </div>
-              )
+              <>
+                <OrgTabs />
+                {initialReleases ? (
+                  <OrgReleaseList
+                    orgSlug={orgSlug}
+                    initialReleases={initialReleases.releases}
+                    initialCursor={initialReleases.pagination.nextCursor}
+                    multipleSourcesExist={org.sources.length > 1}
+                  />
+                ) : (
+                  <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
+                    No releases yet.
+                  </div>
+                )}
+              </>
             ) : activity ? (
-              <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} products={org.products} />
+              <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} products={org.products}>
+                <OrgTabs />
+              </ReleaseTimeline>
             ) : (
-              <div className="mt-6">
-                <SourceList org={org} orgSlug={orgSlug} />
-              </div>
+              <>
+                <OrgTabs />
+                <div className="mt-6">
+                  <SourceList org={org} orgSlug={orgSlug} />
+                </div>
+              </>
             )}
           </div>
           <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null} footnoteTitle={org.lastFetchedAt} />

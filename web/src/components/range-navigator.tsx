@@ -107,6 +107,8 @@ interface RangeNavigatorCtx {
   buckets: WeeklyBucket[];
   /** Per-source bucket data for stacked view — only when multiple sources */
   sourceBuckets: SourceBucketEntry[] | null;
+  /** Per-product bucket data for product-grouped stacked view */
+  productBuckets: SourceBucketEntry[] | null;
   /** Earliest bucket with data — derived from buckets */
   earliestRelease: Date | null;
   /** Whether to show AI model launch annotations */
@@ -164,6 +166,7 @@ interface RootProps {
   max: Date;
   buckets: WeeklyBucket[];
   sourceBuckets?: SourceBucketEntry[] | null;
+  productBuckets?: SourceBucketEntry[] | null;
   value?: [Date, Date];
   defaultValue?: [Date, Date];
   onValueChange?: (range: [Date, Date]) => void;
@@ -176,6 +179,7 @@ function Root({
   max,
   buckets,
   sourceBuckets,
+  productBuckets,
   value,
   defaultValue,
   onValueChange,
@@ -217,7 +221,7 @@ function Root({
   );
 
   return (
-    <Ctx.Provider value={{ brushStart, brushEnd, setBrush, min, max, buckets, sourceBuckets: (sourceBuckets && sourceBuckets.length > 1) ? sourceBuckets : null, earliestRelease, showAnnotations, toggleAnnotations }}>
+    <Ctx.Provider value={{ brushStart, brushEnd, setBrush, min, max, buckets, sourceBuckets: (sourceBuckets && sourceBuckets.length > 1) ? sourceBuckets : null, productBuckets: productBuckets ?? null, earliestRelease, showAnnotations, toggleAnnotations }}>
       <div
         data-slot="range-navigator"
         className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5 ${className ?? ""}`}
@@ -278,12 +282,21 @@ function Header({ title = "Releases over time" }: { title?: string }) {
 
 const DETAIL_HEIGHT = 120;
 
+type StackMode = "all" | "source" | "product";
+
 function DetailChart() {
-  const { buckets, sourceBuckets, brushStart, brushEnd, min, max, earliestRelease, showAnnotations } = useNav();
-  const [stacked, setStacked] = useState(false);
+  const { buckets, sourceBuckets, productBuckets, brushStart, brushEnd, min, max, earliestRelease, showAnnotations } = useNav();
+  const [stackMode, setStackModeRaw] = useState<StackMode>("all");
   const [hiddenSources, setHiddenSources] = useState<Set<string>>(new Set());
 
+  const setStackMode = useCallback((mode: StackMode) => {
+    setStackModeRaw(mode);
+    setHiddenSources(new Set());
+  }, []);
+
   const showToggle = sourceBuckets !== null && sourceBuckets.length > 1;
+  const showProductToggle = productBuckets !== null && productBuckets.length > 0;
+  const activeStackBuckets = stackMode === "product" ? productBuckets : sourceBuckets;
 
   // Build a complete week grid for the brushed window using aggregate data
   const brushedBuckets = useMemo(() => {
@@ -315,10 +328,10 @@ function DetailChart() {
     return complete;
   }, [buckets, brushStart, brushEnd, min, max]);
 
-  // Per-source breakdown for each brushed week (only computed when sourceBuckets exist)
+  // Per-source (or per-product) breakdown for each brushed week
   const stackedData = useMemo(() => {
-    if (!sourceBuckets) return null;
-    const sourceMaps = sourceBuckets.map((src) => {
+    if (!activeStackBuckets) return null;
+    const sourceMaps = activeStackBuckets.map((src) => {
       const map = new Map<number, number>();
       for (const b of src.buckets) {
         map.set(b.weekStart.getTime(), b.count);
@@ -339,7 +352,7 @@ function DetailChart() {
       const visibleTotal = segments.reduce((sum, s) => sum + s.count, 0);
       return { weekStart: bucket.weekStart, total: visibleTotal, segments };
     });
-  }, [sourceBuckets, brushedBuckets, hiddenSources]);
+  }, [activeStackBuckets, brushedBuckets, hiddenSources]);
 
   const maxCount = Math.max(...brushedBuckets.map((b) => b.count), 1);
 
@@ -405,24 +418,33 @@ function DetailChart() {
     );
   }
 
-  const isStacked = stacked && stackedData !== null;
+  const isStacked = stackMode !== "all" && stackedData !== null;
 
   return (
     <div data-slot="detail-chart" className="mb-3">
       {showToggle && (
-        <div className="flex justify-end mb-1.5">
+        <div className="flex justify-end mb-3">
           <div className="flex gap-0">
             <button
               type="button"
-              onClick={() => setStacked(false)}
-              className={`cursor-pointer rounded-r-none ${pillCls(!stacked)}`}
+              onClick={() => setStackMode("all")}
+              className={`cursor-pointer ${showProductToggle ? "rounded-r-none" : "rounded-r-none"} ${pillCls(stackMode === "all")}`}
             >
               All
             </button>
+            {showProductToggle && (
+              <button
+                type="button"
+                onClick={() => setStackMode("product")}
+                className={`cursor-pointer rounded-none border-l-0 ${pillCls(stackMode === "product")}`}
+              >
+                By product
+              </button>
+            )}
             <button
               type="button"
-              onClick={() => setStacked(true)}
-              className={`cursor-pointer rounded-l-none border-l-0 ${pillCls(stacked)}`}
+              onClick={() => setStackMode("source")}
+              className={`cursor-pointer rounded-l-none border-l-0 ${pillCls(stackMode === "source")}`}
             >
               By source
             </button>
@@ -561,9 +583,9 @@ function DetailChart() {
       )}
 
       {/* Legend for stacked mode */}
-      {isStacked && sourceBuckets && (
+      {isStacked && activeStackBuckets && (
         <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2 ml-8">
-          {sourceBuckets.map((src) => {
+          {activeStackBuckets.map((src) => {
             const isHidden = hiddenSources.has(src.slug);
             return (
               <button
