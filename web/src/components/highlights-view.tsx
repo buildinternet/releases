@@ -1,5 +1,6 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import rehypeHighlight from "rehype-highlight";
 import type { ReleaseSummaryItem } from "@/lib/api";
 
 interface HighlightsViewProps {
@@ -7,7 +8,7 @@ interface HighlightsViewProps {
   monthly: ReleaseSummaryItem[];
 }
 
-const summaryClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_code]:text-xs [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
+const summaryClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
 
 function formatMonth(year: number, month: number): string {
   const date = new Date(year, month - 1);
@@ -42,7 +43,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
             </span>
           </div>
           <div className={summaryClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{rolling.summary}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{rolling.summary}</ReactMarkdown>
           </div>
         </div>
       )}
@@ -67,7 +68,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
               </span>
             </div>
             <div className={summaryClasses}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>{m.summary}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>{m.summary}</ReactMarkdown>
             </div>
           </div>
         </div>
