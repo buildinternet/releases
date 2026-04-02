@@ -5,8 +5,10 @@ import {
   findOrg, findProduct, getProductsByOrg, createProduct, updateProduct,
   deleteProduct, getSourcesByOrg, updateSource, removeOrg,
   getOrgAccountsBySlug, linkOrgAccount,
+  addTagsToProduct, removeTagsFromProduct, getTagsForProduct,
 } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
+import { isValidCategory, CATEGORIES } from "../../lib/categories.js";
 
 export function registerProductCommand(program: Command) {
   const product = program
@@ -81,13 +83,15 @@ Examples:
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--url <url>", "Product URL")
     .option("--description <text>", "Brief product description")
+    .option("--category <category>", "Category (e.g. ai, framework, developer-tools)")
+    .option("--tags <tags>", "Comma-separated tags (e.g. react,ssr)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
   released product add "Acme CLI" --org acme
   released product add "Acme CLI" --org acme --slug acme-cli --url https://acme.com/cli
   released product add "Acme CLI" --org acme --description "Command-line tool for Acme" --json`)
-    .action(async (name: string, opts: { org: string; slug?: string; url?: string; description?: string; json?: boolean }) => {
+    .action(async (name: string, opts: { org: string; slug?: string; url?: string; description?: string; category?: string; tags?: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
         console.error(chalk.red(`Organization not found: ${opts.org}`));
@@ -96,12 +100,18 @@ Examples:
 
       const slug = opts.slug ?? toSlug(name);
 
+      if (opts.category && !isValidCategory(opts.category)) {
+        console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
+        process.exit(1);
+      }
+
       let created;
       try {
         created = await createProduct(org.id, name, {
           slug,
           url: opts.url,
           description: opts.description,
+          category: opts.category,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -111,6 +121,13 @@ Examples:
           console.error(chalk.red(`Failed to create product: ${msg}`));
         }
         process.exit(1);
+      }
+
+      if (opts.tags) {
+        const tagList = opts.tags.split(",").map((t: string) => t.trim()).filter(Boolean);
+        if (tagList.length > 0) {
+          await addTagsToProduct(created.id, tagList);
+        }
       }
 
       if (opts.json) {
@@ -128,12 +145,14 @@ Examples:
     .option("--name <name>", "New product name")
     .option("--url <url>", "New product URL")
     .option("--description <text>", "New product description")
+    .option("--category <category>", "Set category")
+    .option("--no-category", "Clear category")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
   released product edit acme-cli --name "Acme CLI v2"
   released product edit acme-cli --url https://acme.com/cli --json`)
-    .action(async (slug: string, opts: { name?: string; url?: string; description?: string; json?: boolean }) => {
+    .action(async (slug: string, opts: { name?: string; url?: string; description?: string; category?: string | boolean; json?: boolean }) => {
       const found = await findProduct(slug);
       if (!found) {
         console.error(chalk.red(`Product not found: ${slug}`));
@@ -145,8 +164,18 @@ Examples:
       if (opts.url !== undefined) updates.url = opts.url;
       if (opts.description !== undefined) updates.description = opts.description;
 
+      if (opts.category === false) {
+        updates.category = null;
+      } else if (typeof opts.category === "string") {
+        if (!isValidCategory(opts.category)) {
+          console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
+          process.exit(1);
+        }
+        updates.category = opts.category;
+      }
+
       if (Object.keys(updates).length === 0) {
-        console.error(chalk.yellow("No fields to update. Use --name, --url, or --description."));
+        console.error(chalk.yellow("No fields to update. Use --name, --url, --description, or --category."));
         process.exit(1);
       }
 
@@ -292,6 +321,72 @@ Examples:
         if (sources.length > 0) {
           console.log(`  Moved ${sources.length} source(s) to ${targetOrg.name}`);
         }
+      }
+    });
+
+  // ── product tag ──
+  const tag = product.command("tag").description("Manage product tags");
+
+  tag
+    .command("add")
+    .description("Add tags to a product")
+    .argument("<slug>", "Product slug")
+    .argument("<tags...>", "Tag names to add")
+    .option("--json", "Output as JSON")
+    .action(async (slug: string, tagNames: string[], opts: { json?: boolean }) => {
+      const found = await findProduct(slug);
+      if (!found) {
+        console.error(chalk.red(`Product not found: ${slug}`));
+        process.exit(1);
+      }
+      await addTagsToProduct(found.id, tagNames);
+      if (opts.json) {
+        const allTags = await getTagsForProduct(found.id);
+        console.log(JSON.stringify({ tags: allTags }, null, 2));
+      } else {
+        console.log(chalk.green(`Added tags to ${found.name}: ${tagNames.join(", ")}`));
+      }
+    });
+
+  tag
+    .command("remove")
+    .description("Remove tags from a product")
+    .argument("<slug>", "Product slug")
+    .argument("<tags...>", "Tag names to remove")
+    .option("--json", "Output as JSON")
+    .action(async (slug: string, tagNames: string[], opts: { json?: boolean }) => {
+      const found = await findProduct(slug);
+      if (!found) {
+        console.error(chalk.red(`Product not found: ${slug}`));
+        process.exit(1);
+      }
+      await removeTagsFromProduct(found.id, tagNames);
+      if (opts.json) {
+        const allTags = await getTagsForProduct(found.id);
+        console.log(JSON.stringify({ tags: allTags }, null, 2));
+      } else {
+        console.log(chalk.green(`Removed tags from ${found.name}: ${tagNames.join(", ")}`));
+      }
+    });
+
+  tag
+    .command("list")
+    .description("List tags for a product")
+    .argument("<slug>", "Product slug")
+    .option("--json", "Output as JSON")
+    .action(async (slug: string, opts: { json?: boolean }) => {
+      const found = await findProduct(slug);
+      if (!found) {
+        console.error(chalk.red(`Product not found: ${slug}`));
+        process.exit(1);
+      }
+      const allTags = await getTagsForProduct(found.id);
+      if (opts.json) {
+        console.log(JSON.stringify(allTags, null, 2));
+      } else if (allTags.length === 0) {
+        console.log(chalk.yellow(`No tags for ${found.name}`));
+      } else {
+        console.log(allTags.join(", "));
       }
     });
 }

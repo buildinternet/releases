@@ -27,6 +27,7 @@ import { registerSummarizeCommand } from "./commands/summarize.js";
 import { registerEnrichCommand } from "./commands/enrich.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
+import { CATEGORIES } from "../lib/categories.js";
 
 export const program = new Command()
   .name("released")
@@ -40,6 +41,7 @@ Command Groups:
   Querying:      search, latest, summary, compare, stats
   Organizations: org (add, list, show, remove, link, unlink)
   Products:      product (list, add, edit, remove, adopt)
+  Categories:    categories
   Releases:      release (show, edit, delete, suppress, unsuppress)
   Blocking:      block (list, add, remove), ignore (list, add, remove)
   Agents:        onboard, serve, api, task
@@ -76,3 +78,17 @@ registerSummarizeCommand(program);
 registerEnrichCommand(program);
 registerMediaCommand(program);
 registerTaskCommand(program);
+
+program
+  .command("categories")
+  .description("List valid category values")
+  .option("--json", "Output as JSON")
+  .action((opts: { json?: boolean }) => {
+    if (opts.json) {
+      console.log(JSON.stringify(CATEGORIES, null, 2));
+    } else {
+      for (const cat of CATEGORIES) {
+        console.log(cat);
+      }
+    }
+  });

@@ -20,6 +20,7 @@ sourceRoutes.get("/sources", async (c) => {
   const enrichable = c.req.query("enrichable") === "true";
   const queryText = c.req.query("query");
   const includeHidden = c.req.query("include_hidden") === "true";
+  const categoryFilter = c.req.query("category");
 
   // Filter by URLs — return raw source rows matching the provided url params
   if (filterByUrls) {
@@ -82,6 +83,15 @@ sourceRoutes.get("/sources", async (c) => {
         like(sql`lower(${sources.slug})`, pattern),
         like(sql`lower(${sources.url})`, pattern),
       )!,
+    );
+  }
+
+  if (categoryFilter) {
+    conditions.push(
+      sql`(
+        EXISTS (SELECT 1 FROM organizations o WHERE o.id = sources.org_id AND o.category = ${categoryFilter})
+        OR EXISTS (SELECT 1 FROM products p WHERE p.id = sources.product_id AND p.category = ${categoryFilter})
+      )`,
     );
   }
 

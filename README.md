@@ -260,6 +260,47 @@ Products are also supported in import manifests:
 
 Org-level `sources` (no product) and product-level `sources` coexist in the same manifest.
 
+### Categories & Tags
+
+Organize entities with a controlled category vocabulary and freeform tags:
+
+```bash
+released categories                                  # list valid categories
+released categories --json                           # as JSON
+
+# Categories on orgs and products
+released org add "Acme" --category cloud --tags typescript,edge
+released org edit acme --category developer-tools
+released org edit acme --no-category                 # clear category
+released product add "CLI" --org acme --category developer-tools --tags golang
+
+# Manage tags separately
+released org tag add acme react serverless           # add tags
+released org tag remove acme react                   # remove tags
+released org tag list acme                           # list tags
+released product tag add acme-cli testing            # same for products
+
+# Filter by category
+released list --category ai                          # sources in AI orgs/products
+```
+
+Categories and tags are also supported in import manifests:
+
+```json
+{
+  "organizations": [{
+    "name": "Vercel",
+    "category": "cloud",
+    "tags": ["typescript", "edge-computing"],
+    "products": [{
+      "name": "Next.js",
+      "category": "framework",
+      "tags": ["react", "ssr"]
+    }]
+  }]
+}
+```
+
 ### AI-powered onboarding
 
 Use the AI agent to discover, validate, and add changelog sources for a company:

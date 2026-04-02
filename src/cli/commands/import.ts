@@ -5,6 +5,7 @@ import { existsSync } from "fs";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { isGitHubUrl } from "./add.js";
+import { isValidCategory } from "../../lib/categories.js";
 import {
   findOrg,
   createOrg,
@@ -14,6 +15,8 @@ import {
   createSource,
   findProduct,
   createProduct,
+  addTagsToOrg,
+  addTagsToProduct,
 } from "../../db/queries.js";
 
 // ── Manifest types ──
@@ -35,6 +38,8 @@ interface ManifestProduct {
   slug?: string;
   url?: string;
   description?: string;
+  category?: string;
+  tags?: string[];
   sources?: ManifestSource[];
 }
 
@@ -43,6 +48,8 @@ interface ManifestOrg {
   slug?: string;
   domain?: string;
   description?: string;
+  category?: string;
+  tags?: string[];
   accounts?: ManifestAccount[];
   products?: ManifestProduct[];
   sources?: ManifestSource[];
@@ -104,10 +111,16 @@ function validateManifest(data: unknown): Manifest {
           }
         }
       }
+      if (org.category && !isValidCategory(org.category)) {
+        throw new Error(`organizations[${i}].category "${org.category}" is not a valid category`);
+      }
       if (org.products) {
         for (const [k, prod] of org.products.entries()) {
           if (!prod.name) {
             throw new Error(`organizations[${i}].products[${k}] is missing required 'name' field`);
+          }
+          if (prod.category && !isValidCategory(prod.category)) {
+            throw new Error(`organizations[${i}].products[${k}].category "${prod.category}" is not a valid category`);
           }
           if (prod.sources) {
             for (const [j, src] of prod.sources.entries()) {
@@ -308,6 +321,7 @@ Examples:
                 slug: orgSlug,
                 domain: orgEntry.domain,
                 description: orgEntry.description,
+                category: orgEntry.category,
               });
               report.created.orgs++;
               if (!opts.json) {
@@ -320,6 +334,9 @@ Examples:
                 logger.error(chalk.red(msg));
               }
               continue;
+            }
+            if (orgEntry.tags && orgEntry.tags.length > 0) {
+              await addTagsToOrg(org.id, orgEntry.tags);
             }
           }
 
@@ -364,6 +381,7 @@ Examples:
                     slug: prodSlug,
                     url: prodEntry.url,
                     description: prodEntry.description,
+                    category: prodEntry.category,
                   });
                   report.created.products++;
                   if (!opts.json) {
@@ -376,6 +394,9 @@ Examples:
                     logger.error(chalk.red(msg));
                   }
                   continue;
+                }
+                if (prodEntry.tags && prodEntry.tags.length > 0) {
+                  await addTagsToProduct(prod.id, prodEntry.tags);
                 }
               }
 

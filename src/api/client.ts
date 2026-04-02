@@ -2,7 +2,7 @@ import { getApiUrl, getApiKey } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
-  ReleaseSummary, NewReleaseSummary, Product,
+  ReleaseSummary, NewReleaseSummary, Product, Tag,
 } from "../db/schema.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
@@ -223,6 +223,7 @@ export async function listSourcesWithOrg(opts?: {
   enrichable?: boolean;
   query?: string;
   includeHidden?: boolean;
+  category?: string;
 }): Promise<SourceWithOrg[]> {
   const params = new URLSearchParams();
   if (opts?.orgSlug) params.set("orgSlug", opts.orgSlug);
@@ -231,6 +232,7 @@ export async function listSourcesWithOrg(opts?: {
   if (opts?.enrichable) params.set("enrichable", "true");
   if (opts?.query) params.set("query", opts.query);
   if (opts?.includeHidden) params.set("include_hidden", "true");
+  if (opts?.category) params.set("category", opts.category);
   const qs = params.toString();
 
   // The API GET /api/sources returns enriched source data — map to the shape the CLI needs
@@ -607,16 +609,23 @@ export async function createSource(data: {
 
 export async function createOrg(
   name: string,
-  opts?: { slug?: string; domain?: string; description?: string },
+  opts?: { slug?: string; domain?: string; description?: string; category?: string },
 ): Promise<Organization> {
   return apiFetch<Organization>("/api/orgs", {
     method: "POST",
-    body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain, description: opts?.description }),
+    body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain, description: opts?.description, category: opts?.category }),
   });
 }
 
 export async function removeOrg(slug: string): Promise<void> {
   await apiFetch(`/api/orgs/${slug}`, { method: "DELETE" });
+}
+
+export async function updateOrg(slug: string, data: Record<string, unknown>): Promise<Organization> {
+  return apiFetch<Organization>(`/api/orgs/${slug}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
 }
 
 export async function getOrgAccountsBySlug(
@@ -657,11 +666,11 @@ export async function unlinkOrgAccount(
 export async function createProduct(
   orgId: string,
   name: string,
-  opts?: { slug?: string; url?: string; description?: string },
+  opts?: { slug?: string; url?: string; description?: string; category?: string },
 ): Promise<Product> {
   return apiFetch<Product>(`/api/products`, {
     method: "POST",
-    body: JSON.stringify({ orgId, name, slug: opts?.slug, url: opts?.url, description: opts?.description }),
+    body: JSON.stringify({ orgId, name, slug: opts?.slug, url: opts?.url, description: opts?.description, category: opts?.category }),
   });
 }
 
@@ -682,6 +691,51 @@ export async function updateProduct(slug: string, data: Record<string, unknown>)
 
 export async function deleteProduct(productId: string): Promise<void> {
   await apiFetch(`/api/products/${productId}`, { method: "DELETE" });
+}
+
+// ── Tags ──
+
+export async function getOrCreateTag(name: string): Promise<Tag> {
+  return apiFetch<Tag>("/api/tags", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+}
+
+export async function getTagsForOrg(orgId: string): Promise<string[]> {
+  return apiFetch<string[]>(`/api/orgs/${orgId}/tags`);
+}
+
+export async function addTagsToOrg(orgId: string, tagNames: string[]): Promise<void> {
+  await apiFetch(`/api/orgs/${orgId}/tags`, {
+    method: "PUT",
+    body: JSON.stringify({ tags: tagNames }),
+  });
+}
+
+export async function removeTagsFromOrg(orgId: string, tagNames: string[]): Promise<void> {
+  await apiFetch(`/api/orgs/${orgId}/tags`, {
+    method: "DELETE",
+    body: JSON.stringify({ tags: tagNames }),
+  });
+}
+
+export async function getTagsForProduct(productId: string): Promise<string[]> {
+  return apiFetch<string[]>(`/api/products/${productId}/tags`);
+}
+
+export async function addTagsToProduct(productId: string, tagNames: string[]): Promise<void> {
+  await apiFetch(`/api/products/${productId}/tags`, {
+    method: "PUT",
+    body: JSON.stringify({ tags: tagNames }),
+  });
+}
+
+export async function removeTagsFromProduct(productId: string, tagNames: string[]): Promise<void> {
+  await apiFetch(`/api/products/${productId}/tags`, {
+    method: "DELETE",
+    body: JSON.stringify({ tags: tagNames }),
+  });
 }
 
 // ── Status events ──

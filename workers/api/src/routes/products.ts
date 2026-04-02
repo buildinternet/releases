@@ -1,9 +1,10 @@
 import { Hono } from "hono";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { products, sources, organizations, orgAccounts } from "../../../../src/db/schema.js";
+import { products, sources, organizations, orgAccounts, tags, productTags } from "../../../../src/db/schema.js";
 import { toSlug } from "../../../../src/lib/slug.js";
-import { isConflictError } from "../utils.js";
+import { isValidCategory } from "../../../../src/lib/categories.js";
+import { isConflictError, getOrCreateTagD1 } from "../utils.js";
 import type { Env } from "../index.js";
 
 export const productRoutes = new Hono<Env>();
@@ -22,6 +23,7 @@ productRoutes.get("/products", async (c) => {
       url: products.url,
       description: products.description,
       createdAt: products.createdAt,
+      category: products.category,
       sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
     })
     .from(products)
@@ -125,13 +127,20 @@ productRoutes.get("/products/:identifier", async (c) => {
     .where(eq(sources.productId, product.id))
     .orderBy(sources.name);
 
-  return c.json({ ...product, sources: productSources });
+  const tagRows = await db
+    .select({ name: tags.name })
+    .from(productTags)
+    .innerJoin(tags, eq(productTags.tagId, tags.id))
+    .where(eq(productTags.productId, product.id))
+    .orderBy(tags.name);
+
+  return c.json({ ...product, sources: productSources, tags: tagRows.map((t) => t.name) });
 });
 
 // Create product
 productRoutes.post("/products", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ orgId: string; name: string; slug?: string; url?: string; description?: string }>();
+  const body = await c.req.json<{ orgId: string; name: string; slug?: string; url?: string; description?: string; category?: string; tags?: string[] }>();
 
   if (!body.orgId || !body.name) {
     return c.json({ error: "bad_request", message: "Missing required fields: orgId, name" }, 400);
@@ -139,6 +148,10 @@ productRoutes.post("/products", async (c) => {
 
   const [org] = await db.select().from(organizations).where(eq(organizations.id, body.orgId));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  if (body.category && !isValidCategory(body.category)) {
+    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+  }
 
   const slug = body.slug ?? toSlug(body.name);
 
@@ -151,8 +164,18 @@ productRoutes.post("/products", async (c) => {
         orgId: body.orgId,
         url: body.url ?? null,
         description: body.description ?? null,
+        category: body.category ?? null,
       })
       .returning();
+
+    // Handle tags
+    if (body.tags && body.tags.length > 0) {
+      for (const tagName of body.tags) {
+        const tag = await getOrCreateTagD1(db, tagName);
+        await db.insert(productTags).values({ productId: created.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+      }
+    }
+
     return c.json(created, 201);
   } catch (err) {
     if (isConflictError(err)) {
@@ -166,7 +189,7 @@ productRoutes.post("/products", async (c) => {
 productRoutes.patch("/products/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; url?: string | null; description?: string | null }>();
+  const body = await c.req.json<{ name?: string; url?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
 
   const [product] = await db.select().from(products).where(eq(products.slug, slug));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
@@ -176,12 +199,81 @@ productRoutes.patch("/products/:slug", async (c) => {
   if (body.url !== undefined) updates.url = body.url;
   if (body.description !== undefined) updates.description = body.description;
 
-  if (Object.keys(updates).length === 0) {
+  if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
+    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+  }
+  if (body.category !== undefined) updates.category = body.category;
+
+  if (Object.keys(updates).length === 0 && body.tags === undefined) {
     return c.json(product);
   }
 
-  const [updated] = await db.update(products).set(updates).where(eq(products.id, product.id)).returning();
+  let updated = product;
+  if (Object.keys(updates).length > 0) {
+    [updated] = await db.update(products).set(updates).where(eq(products.id, product.id)).returning();
+  }
+
+  if (body.tags !== undefined) {
+    await db.delete(productTags).where(eq(productTags.productId, product.id));
+    for (const tagName of body.tags) {
+      const tag = await getOrCreateTagD1(db, tagName);
+      await db.insert(productTags).values({ productId: product.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+    }
+  }
+
   return c.json(updated);
+});
+
+productRoutes.get("/products/:identifier/tags", async (c) => {
+  const db = createDb(c.env.DB);
+  const identifier = c.req.param("identifier");
+  const [product] = await db.select().from(products).where(
+    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+  );
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+  const rows = await db
+    .select({ name: tags.name })
+    .from(productTags)
+    .innerJoin(tags, eq(productTags.tagId, tags.id))
+    .where(eq(productTags.productId, product.id))
+    .orderBy(tags.name);
+  return c.json(rows.map((r) => r.name));
+});
+
+productRoutes.put("/products/:identifier/tags", async (c) => {
+  const db = createDb(c.env.DB);
+  const identifier = c.req.param("identifier");
+  const body = await c.req.json<{ tags: string[] }>();
+  const [product] = await db.select().from(products).where(
+    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+  );
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+  for (const tagName of body.tags) {
+    const tag = await getOrCreateTagD1(db, tagName);
+    await db.insert(productTags).values({ productId: product.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+  }
+  return c.json({ ok: true });
+});
+
+productRoutes.delete("/products/:identifier/tags", async (c) => {
+  const db = createDb(c.env.DB);
+  const identifier = c.req.param("identifier");
+  const body = await c.req.json<{ tags: string[] }>();
+  const [product] = await db.select().from(products).where(
+    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+  );
+  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+
+  for (const tagName of body.tags) {
+    const tagSlug = toSlug(tagName);
+    const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+    if (tag) {
+      await db.delete(productTags).where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
+    }
+  }
+  return c.json({ ok: true });
 });
 
 // Delete product

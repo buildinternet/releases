@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -7,6 +7,7 @@ export const organizations = sqliteTable("organizations", {
   slug: text("slug").notNull().unique(),
   domain: text("domain").unique(),
   description: text("description"),
+  category: text("category"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
   metadata: text("metadata").default("{}"),
@@ -37,10 +38,52 @@ export const products = sqliteTable("products", {
     .references(() => organizations.id, { onDelete: "cascade" }),
   url: text("url"),
   description: text("description"),
+  category: text("category"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 }, (table) => [
   index("idx_products_org").on(table.orgId),
 ]);
+
+export const tags = sqliteTable("tags", {
+  id: text("id").primaryKey().$defaultFn(newTagId),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+});
+
+export const orgTags = sqliteTable(
+  "org_tags",
+  {
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_org_tags_pk").on(table.orgId, table.tagId),
+    index("idx_org_tags_tag").on(table.tagId),
+  ],
+);
+
+export const productTags = sqliteTable(
+  "product_tags",
+  {
+    productId: text("product_id")
+      .notNull()
+      .references(() => products.id, { onDelete: "cascade" }),
+    tagId: text("tag_id")
+      .notNull()
+      .references(() => tags.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_product_tags_pk").on(table.productId, table.tagId),
+    index("idx_product_tags_tag").on(table.tagId),
+  ],
+);
 
 export const sources = sqliteTable("sources", {
   id: text("id").primaryKey().$defaultFn(newSourceId),
@@ -140,6 +183,8 @@ export type OrgAccount = typeof orgAccounts.$inferSelect;
 export type NewOrgAccount = typeof orgAccounts.$inferInsert;
 export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
+export type Tag = typeof tags.$inferSelect;
+export type NewTag = typeof tags.$inferInsert;
 export type FetchLog = typeof fetchLog.$inferSelect;
 export type NewFetchLog = typeof fetchLog.$inferInsert;
 
