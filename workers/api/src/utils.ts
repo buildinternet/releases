@@ -1,3 +1,7 @@
+import { eq } from "drizzle-orm";
+import { tags } from "../../../src/db/schema.js";
+import { toSlug } from "../../../src/lib/slug.js";
+
 /**
  * D1 wraps SQLite errors as "Failed query: ..." without preserving the
  * original constraint violation message. We detect conflicts by checking
@@ -13,6 +17,18 @@ export function isConflictError(err: unknown): boolean {
 
 export function getStatusHub(env: { STATUS_HUB: DurableObjectNamespace }) {
   return env.STATUS_HUB.get(env.STATUS_HUB.idFromName("global"));
+}
+
+/** Get-or-create a tag by name. Shared across org and product routes. */
+export async function getOrCreateTagD1(
+  db: ReturnType<typeof import("./db.js").createDb>,
+  name: string,
+) {
+  const slug = toSlug(name);
+  const [existing] = await db.select().from(tags).where(eq(tags.slug, slug));
+  if (existing) return existing;
+  const [created] = await db.insert(tags).values({ name, slug, createdAt: new Date().toISOString() }).returning();
+  return created;
 }
 
 export function computeAvgPerWeek(totalReleases: number, oldestPublishedAt: string | null): number {

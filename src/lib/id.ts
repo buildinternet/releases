@@ -10,3 +10,4 @@ export const newBlockedUrlId = () => `bu_${nanoid()}`;
 export const newSummaryId = () => `sum_${nanoid()}`;
 export const newMediaAssetId = () => `ma_${nanoid()}`;
 export const newProductId = () => `prod_${nanoid()}`;
+export const newTagId = () => `tag_${nanoid()}`;

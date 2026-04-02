@@ -5,6 +5,7 @@ import { existsSync, mkdirSync, symlinkSync } from "fs";
 import { config } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import type { Confidence } from "../lib/discover.js";
+import { CATEGORIES } from "../lib/categories.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -70,10 +71,31 @@ You have access to the Released CLI at: ${cliCmd}
 - block list --json: Show globally blocked URLs/domains
 - block add <url>: Block a URL globally
 - enrich <slug> [--dry-run] [--limit <n>] [--json]: Enrich sparse releases with full page content
-- org add <name> [--domain <domain>] [--description <text>] [--slug <slug>]: Create an organization
+- org add <name> [--domain <domain>] [--description <text>] [--slug <slug>] [--category <cat>] [--tags <t1,t2>]: Create an organization
+- org edit <slug> [--category <cat>] [--no-category]: Edit an organization
 - org show <slug>: Show org details
+- org tag add <slug> <tag1> [tag2...]: Add tags to an organization
+- org tag remove <slug> <tag1> [tag2...]: Remove tags from an organization
+- product add <name> --org <org> [--category <cat>] [--tags <t1,t2>] [--url <url>] [--description <text>]: Create a product
+- product edit <slug> [--category <cat>] [--no-category]: Edit a product
+- product tag add <slug> <tag1> [tag2...]: Add tags to a product
+- categories [--json]: List valid category values
 
 When creating an organization, always include a --description with a brief one-sentence product description (e.g. "Event-driven durable workflow engine for TypeScript"). This is used to ground AI summaries for lesser-known products.
+
+## Categories
+
+Valid categories for organizations and products: ${CATEGORIES.join(", ")}
+
+When onboarding, assign a category to the organization and to each product if multiple products are detected. Use --category on org add and product add. Use org tag add / product tag add for freeform tags describing tech stack, ecosystem, or use case.
+
+## Multi-Product Organizations
+
+Some organizations ship multiple distinct products (e.g., Vercel ships Next.js, Turborepo, v0). When you discover sources that clearly belong to different products:
+
+- **High confidence** (separate GitHub repos, separate domains, distinct names): Create products using \`product add\` and assign sources using \`edit <source-slug> --product <product-slug>\`
+- **Medium confidence** (some signals but ambiguous): Note the suggested product groupings in the state file under \`suggestedProducts\` but don't auto-create
+- **Low confidence** (unclear): Leave sources at the org level
 
 ## Subagents
 
@@ -99,6 +121,8 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
   "product": "<company name>",
   "domain": "<discovered domain or null>",
   "githubOrg": "<discovered GitHub org or null>",
+  "category": "<org category>",
+  "tags": ["<tag1>", "<tag2>"],
   "startedAt": "<ISO timestamp>",
   "updatedAt": "<ISO timestamp>",
   "status": "awaiting_review",
@@ -113,7 +137,18 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
       "validationError": "<error message if validation failed>",
       "releaseCount": <number of releases found in dry-run>,
       "duplicateOf": "<slug if this overlaps another source>",
-      "contentDepth": "full|summary-only (for feed/scrape sources, based on dry-run content length)"
+      "contentDepth": "full|summary-only (for feed/scrape sources, based on dry-run content length)",
+      "productSlug": "<product slug if assigned to auto-created product>"
+    }
+  ],
+  "suggestedProducts": [
+    {
+      "name": "<product name>",
+      "confidence": "medium",
+      "reason": "<why this is suggested>",
+      "suggestedSources": ["<slug1>", "<slug2>"],
+      "suggestedCategory": "<category>",
+      "suggestedTags": ["<tag1>"]
     }
   ]
 }`;

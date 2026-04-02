@@ -2,9 +2,9 @@ import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
-  type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product,
+  type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -353,6 +353,7 @@ export async function listSourcesWithOrg(opts?: {
   enrichable?: boolean;
   query?: string;
   includeHidden?: boolean;
+  category?: string;
 }): Promise<SourceWithOrg[]> {
   if (isRemoteMode()) return apiClient.listSourcesWithOrg(opts);
   const db = getDb();
@@ -369,6 +370,15 @@ export async function listSourcesWithOrg(opts?: {
     const product = await findProduct(opts.productSlug);
     if (!product) return [];
     conditions.push(eq(sources.productId, product.id));
+  }
+
+  if (opts?.category) {
+    conditions.push(
+      or(
+        eq(organizations.category, opts.category),
+        eq(products.category, opts.category),
+      )!,
+    );
   }
 
   if (opts?.hasFeed || opts?.enrichable) {
@@ -631,7 +641,7 @@ export async function getKnownReleasesForSource(
 
 export async function createOrg(
   name: string,
-  opts?: { slug?: string; domain?: string; description?: string },
+  opts?: { slug?: string; domain?: string; description?: string; category?: string },
 ): Promise<Organization> {
   if (isRemoteMode()) return apiClient.createOrg(name, opts);
   const db = getDb();
@@ -642,6 +652,7 @@ export async function createOrg(
     slug,
     domain: opts?.domain ?? null,
     description: opts?.description ?? null,
+    category: opts?.category ?? null,
     createdAt: now,
     updatedAt: now,
   }).returning();
@@ -652,6 +663,14 @@ export async function removeOrg(orgId: string, orgSlug: string): Promise<void> {
   if (isRemoteMode()) return apiClient.removeOrg(orgSlug);
   const db = getDb();
   await db.delete(organizations).where(eq(organizations.id, orgId));
+}
+
+export async function updateOrg(org: Organization, data: Record<string, unknown>): Promise<Organization> {
+  if (isRemoteMode()) return apiClient.updateOrg(org.slug, data);
+  const db = getDb();
+  data.updatedAt = new Date().toISOString();
+  const [updated] = await db.update(organizations).set(data).where(eq(organizations.id, org.id)).returning();
+  return updated;
 }
 
 export async function getOrgAccountsBySlug(
@@ -681,7 +700,7 @@ export async function getOrgAccountsBySlug(
 export async function createProduct(
   orgId: string,
   name: string,
-  opts?: { slug?: string; url?: string; description?: string },
+  opts?: { slug?: string; url?: string; description?: string; category?: string },
 ): Promise<Product> {
   if (isRemoteMode()) return apiClient.createProduct(orgId, name, opts);
   const db = getDb();
@@ -692,6 +711,7 @@ export async function createProduct(
     orgId,
     url: opts?.url ?? null,
     description: opts?.description ?? null,
+    category: opts?.category ?? null,
   }).returning();
   return created;
 }
@@ -719,6 +739,7 @@ export async function getProductsByOrg(orgId: string): Promise<Array<Product & {
       orgId: products.orgId,
       url: products.url,
       description: products.description,
+      category: products.category,
       createdAt: products.createdAt,
       sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
     })
@@ -739,6 +760,84 @@ export async function deleteProduct(productId: string): Promise<void> {
   if (isRemoteMode()) return apiClient.deleteProduct(productId);
   const db = getDb();
   await db.delete(products).where(eq(products.id, productId));
+}
+
+// ── Tag queries ──
+
+export async function getOrCreateTag(name: string): Promise<Tag> {
+  if (isRemoteMode()) return apiClient.getOrCreateTag(name);
+  const db = getDb();
+  const slug = toSlug(name);
+  const [existing] = await db.select().from(tags).where(eq(tags.slug, slug));
+  if (existing) return existing;
+  const [created] = await db.insert(tags).values({ name, slug }).returning();
+  return created;
+}
+
+export async function getTagsForOrg(orgId: string): Promise<string[]> {
+  if (isRemoteMode()) return apiClient.getTagsForOrg(orgId);
+  const db = getDb();
+  const rows = await db
+    .select({ name: tags.name })
+    .from(orgTags)
+    .innerJoin(tags, eq(orgTags.tagId, tags.id))
+    .where(eq(orgTags.orgId, orgId))
+    .orderBy(tags.name);
+  return rows.map((r) => r.name);
+}
+
+export async function addTagsToOrg(orgId: string, tagNames: string[]): Promise<void> {
+  if (isRemoteMode()) return apiClient.addTagsToOrg(orgId, tagNames);
+  const db = getDb();
+  for (const name of tagNames) {
+    const tag = await getOrCreateTag(name);
+    await db.insert(orgTags).values({ orgId, tagId: tag.id }).onConflictDoNothing();
+  }
+}
+
+export async function removeTagsFromOrg(orgId: string, tagNames: string[]): Promise<void> {
+  if (isRemoteMode()) return apiClient.removeTagsFromOrg(orgId, tagNames);
+  const db = getDb();
+  for (const name of tagNames) {
+    const slug = toSlug(name);
+    const [tag] = await db.select().from(tags).where(eq(tags.slug, slug));
+    if (tag) {
+      await db.delete(orgTags).where(and(eq(orgTags.orgId, orgId), eq(orgTags.tagId, tag.id)));
+    }
+  }
+}
+
+export async function getTagsForProduct(productId: string): Promise<string[]> {
+  if (isRemoteMode()) return apiClient.getTagsForProduct(productId);
+  const db = getDb();
+  const rows = await db
+    .select({ name: tags.name })
+    .from(productTags)
+    .innerJoin(tags, eq(productTags.tagId, tags.id))
+    .where(eq(productTags.productId, productId))
+    .orderBy(tags.name);
+  return rows.map((r) => r.name);
+}
+
+export async function addTagsToProduct(productId: string, tagNames: string[]): Promise<void> {
+  if (isRemoteMode()) return apiClient.addTagsToProduct(productId, tagNames);
+  const db = getDb();
+  for (const name of tagNames) {
+    const tag = await getOrCreateTag(name);
+    await db.insert(productTags).values({ productId, tagId: tag.id }).onConflictDoNothing();
+  }
+}
+
+export async function removeTagsFromProduct(productId: string, tagNames: string[]): Promise<void> {
+  if (isRemoteMode()) return apiClient.removeTagsFromProduct(productId, tagNames);
+  const db = getDb();
+  for (const name of tagNames) {
+    const slug = toSlug(name);
+    const [tag] = await db.select().from(tags).where(eq(tags.slug, slug));
+    if (tag) {
+      await db.delete(productTags).where(and(eq(productTags.productId, productId), eq(productTags.tagId, tag.id)));
+    }
+  }
 }
 
 export async function linkOrgAccount(

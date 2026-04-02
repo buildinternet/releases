@@ -96,3 +96,11 @@ Detected automatically in pre-checks. Listed for reference:
 | Beamer | `/feed` | — | — |
 | LaunchNotes | `/rss` | — | — |
 | GitBook, Notion, Intercom, Zendesk, etc. | — | — | No feeds; use crawl or scrape |
+
+## Products, Categories, and Tags
+
+Organizations can have multiple distinct products (e.g., Vercel → Next.js, Turborepo, v0). When discovering sources for an org, consider whether they belong to separate products.
+
+Use the `product add`, `product tag add`, `org tag add`, and `categories` CLI commands to organize what you find. The full list of valid categories is provided in your system prompt.
+
+Don't force product groupings when sources are ambiguous — leave them at the org level and note suggestions in the state file.

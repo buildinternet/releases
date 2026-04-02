@@ -4,9 +4,10 @@ import Table from "cli-table3";
 import {
   findOrg, getSourcesByOrg, listOrgs, createOrg, removeOrg,
   getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
-  getProductsByOrg,
+  getProductsByOrg, addTagsToOrg, removeTagsFromOrg, getTagsForOrg, updateOrg,
 } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
+import { isValidCategory, CATEGORIES } from "../../lib/categories.js";
 
 export function registerOrgCommand(program: Command) {
   const org = program
@@ -21,6 +22,8 @@ export function registerOrgCommand(program: Command) {
     .option("--domain <domain>", "Primary domain (e.g. vercel.com)")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--description <text>", "Brief product description (one sentence)")
+    .option("--category <category>", "Category (e.g. ai, cloud, framework)")
+    .option("--tags <tags>", "Comma-separated tags (e.g. typescript,react)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
@@ -28,7 +31,7 @@ Examples:
   released org add "Acme Corp" --domain acme.com
   released org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
   released org add "Acme Corp" --slug acme --json`)
-    .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; json?: boolean }) => {
+    .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; category?: string; tags?: string; json?: boolean }) => {
       const slug = opts.slug ?? toSlug(name);
 
       const existing = await findOrg(slug);
@@ -37,7 +40,19 @@ Examples:
         process.exit(1);
       }
 
-      const created = await createOrg(name, { slug, domain: opts.domain, description: opts.description });
+      if (opts.category && !isValidCategory(opts.category)) {
+        console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
+        process.exit(1);
+      }
+
+      const created = await createOrg(name, { slug, domain: opts.domain, description: opts.description, category: opts.category });
+
+      if (opts.tags) {
+        const tagList = opts.tags.split(",").map((t: string) => t.trim()).filter(Boolean);
+        if (tagList.length > 0) {
+          await addTagsToOrg(created.id, tagList);
+        }
+      }
 
       if (opts.json) {
         console.log(JSON.stringify(created, null, 2));
@@ -114,12 +129,15 @@ Examples:
         process.exit(1);
       }
 
-      const accounts = await getOrgAccountsBySlug(found.slug, found.id);
-      const orgProducts = await getProductsByOrg(found.id);
-      const linkedSources = await getSourcesByOrg(found.id);
+      const [accounts, orgProducts, linkedSources, orgTags] = await Promise.all([
+        getOrgAccountsBySlug(found.slug, found.id),
+        getProductsByOrg(found.id),
+        getSourcesByOrg(found.id),
+        getTagsForOrg(found.id),
+      ]);
 
       if (opts.json) {
-        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources }, null, 2));
+        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources, tags: orgTags }, null, 2));
         return;
       }
 
@@ -129,6 +147,8 @@ Examples:
       if (found.description) console.log(`  About:   ${found.description}`);
       console.log(`  Created: ${found.createdAt}`);
       console.log(`  Updated: ${found.updatedAt}`);
+      if (found.category) console.log(`  Category: ${found.category}`);
+      if (orgTags.length > 0) console.log(`  Tags:    ${orgTags.join(", ")}`);
 
       if (accounts.length > 0) {
         console.log();
@@ -153,6 +173,53 @@ Examples:
         for (const s of linkedSources) {
           console.log(`  ${chalk.cyan(s.slug)}  ${s.name}  (${s.type})`);
         }
+      }
+    });
+
+  // ── org edit ──
+  org
+    .command("edit")
+    .description("Edit an organization")
+    .argument("<identifier>", "Org slug, domain, or name")
+    .option("--name <name>", "Update display name")
+    .option("--domain <domain>", "Update domain")
+    .option("--description <text>", "Update description")
+    .option("--category <category>", "Set category")
+    .option("--no-category", "Clear category")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, opts: { name?: string; domain?: string; description?: string; category?: string | boolean; json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) {
+        console.error(chalk.red(`Organization not found: ${identifier}`));
+        process.exit(1);
+      }
+
+      const updates: Record<string, unknown> = {};
+      if (opts.name !== undefined) updates.name = opts.name;
+      if (opts.domain !== undefined) updates.domain = opts.domain;
+      if (opts.description !== undefined) updates.description = opts.description;
+
+      if (opts.category === false) {
+        updates.category = null;
+      } else if (typeof opts.category === "string") {
+        if (!isValidCategory(opts.category)) {
+          console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
+          process.exit(1);
+        }
+        updates.category = opts.category;
+      }
+
+      if (Object.keys(updates).length === 0) {
+        console.error(chalk.yellow("No fields to update. Use --name, --domain, --description, or --category."));
+        process.exit(1);
+      }
+
+      const updated = await updateOrg(found, updates);
+
+      if (opts.json) {
+        console.log(JSON.stringify(updated, null, 2));
+      } else {
+        console.log(chalk.green(`Updated organization: ${updated.name} (${updated.slug})`));
       }
     });
 
@@ -245,6 +312,72 @@ Examples:
         console.log(JSON.stringify({ unlinked: `${opts.platform}/${opts.handle}` }, null, 2));
       } else {
         console.log(chalk.green(`Unlinked ${opts.platform}/${opts.handle} from ${found.name}`));
+      }
+    });
+
+  // ── org tag ──
+  const tag = org.command("tag").description("Manage organization tags");
+
+  tag
+    .command("add")
+    .description("Add tags to an organization")
+    .argument("<identifier>", "Org slug")
+    .argument("<tags...>", "Tag names to add")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) {
+        console.error(chalk.red(`Organization not found: ${identifier}`));
+        process.exit(1);
+      }
+      await addTagsToOrg(found.id, tagNames);
+      if (opts.json) {
+        const allTags = await getTagsForOrg(found.id);
+        console.log(JSON.stringify({ tags: allTags }, null, 2));
+      } else {
+        console.log(chalk.green(`Added tags to ${found.name}: ${tagNames.join(", ")}`));
+      }
+    });
+
+  tag
+    .command("remove")
+    .description("Remove tags from an organization")
+    .argument("<identifier>", "Org slug")
+    .argument("<tags...>", "Tag names to remove")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) {
+        console.error(chalk.red(`Organization not found: ${identifier}`));
+        process.exit(1);
+      }
+      await removeTagsFromOrg(found.id, tagNames);
+      if (opts.json) {
+        const allTags = await getTagsForOrg(found.id);
+        console.log(JSON.stringify({ tags: allTags }, null, 2));
+      } else {
+        console.log(chalk.green(`Removed tags from ${found.name}: ${tagNames.join(", ")}`));
+      }
+    });
+
+  tag
+    .command("list")
+    .description("List tags for an organization")
+    .argument("<identifier>", "Org slug")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, opts: { json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) {
+        console.error(chalk.red(`Organization not found: ${identifier}`));
+        process.exit(1);
+      }
+      const allTags = await getTagsForOrg(found.id);
+      if (opts.json) {
+        console.log(JSON.stringify(allTags, null, 2));
+      } else if (allTags.length === 0) {
+        console.log(chalk.yellow(`No tags for ${found.name}`));
+      } else {
+        console.log(allTags.join(", "));
       }
     });
 }

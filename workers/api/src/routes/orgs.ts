@@ -1,10 +1,11 @@
 import { Hono } from "hono";
 import { eq, desc, count, max, min, gte, and, sql, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, orgAccounts, sources, releases, products } from "../../../../src/db/schema.js";
+import { organizations, orgAccounts, sources, releases, products, tags, orgTags } from "../../../../src/db/schema.js";
 import { daysAgoIso } from "../../../../src/lib/dates.js";
+import { isValidCategory } from "../../../../src/lib/categories.js";
 import { toSlug } from "../../../../src/lib/slug.js";
-import { isConflictError, computeAvgPerWeek } from "../utils.js";
+import { isConflictError, computeAvgPerWeek, getOrCreateTagD1 } from "../utils.js";
 import type { Env } from "../index.js";
 
 export const orgRoutes = new Hono<Env>();
@@ -19,13 +20,14 @@ orgRoutes.get("/orgs", async (c) => {
     name: string;
     domain: string | null;
     description: string | null;
+    category: string | null;
     source_count: number;
     release_count: number;
     last_activity: string | null;
     recent_release_count: number;
   }>(sql`
     SELECT
-      o.id, o.slug, o.name, o.domain, o.description,
+      o.id, o.slug, o.name, o.domain, o.description, o.category,
       (SELECT COUNT(*) FROM sources s WHERE s.org_id = o.id) AS source_count,
       (SELECT COUNT(*) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
       (SELECT MAX(r.published_at) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND r.published_at IS NOT NULL) AS last_activity,
@@ -40,6 +42,7 @@ orgRoutes.get("/orgs", async (c) => {
     name: row.name,
     domain: row.domain,
     description: row.description,
+    category: row.category,
     sourceCount: row.source_count,
     releaseCount: row.release_count,
     recentReleaseCount: row.recent_release_count,
@@ -62,6 +65,13 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
     .from(orgAccounts)
     .where(eq(orgAccounts.orgId, org.id));
+
+  const tagRows = await db
+    .select({ name: tags.name })
+    .from(orgTags)
+    .innerJoin(tags, eq(orgTags.tagId, tags.id))
+    .where(eq(orgTags.orgId, org.id))
+    .orderBy(tags.name);
 
   const sourceRows = await db.all<{
     id: string;
@@ -154,6 +164,8 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     name: org.name,
     domain: org.domain,
     description: org.description,
+    category: org.category,
+    tags: tagRows.map((t) => t.name),
     sourceCount: orgSources.length,
     releaseCount: totalReleases.n,
     releasesLast30Days,
@@ -168,9 +180,13 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
 orgRoutes.post("/orgs", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ name: string; slug?: string; domain?: string; description?: string }>();
+  const body = await c.req.json<{ name: string; slug?: string; domain?: string; description?: string; category?: string; tags?: string[] }>();
 
   if (!body.name) return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+
+  if (body.category && !isValidCategory(body.category)) {
+    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+  }
 
   const slug = body.slug ?? toSlug(body.name);
   const now = new Date().toISOString();
@@ -178,8 +194,16 @@ orgRoutes.post("/orgs", async (c) => {
   try {
     const [org] = await db
       .insert(organizations)
-      .values({ name: body.name, slug, domain: body.domain ?? null, description: body.description ?? null, createdAt: now, updatedAt: now })
+      .values({ name: body.name, slug, domain: body.domain ?? null, description: body.description ?? null, category: body.category ?? null, createdAt: now, updatedAt: now })
       .returning();
+
+    if (body.tags && body.tags.length > 0) {
+      for (const tagName of body.tags) {
+        const tag = await getOrCreateTagD1(db, tagName);
+        await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+      }
+    }
+
     return c.json(org, 201);
   } catch (err) {
     if (isConflictError(err)) {
@@ -192,7 +216,11 @@ orgRoutes.post("/orgs", async (c) => {
 orgRoutes.patch("/orgs/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; domain?: string | null; description?: string | null }>();
+  const body = await c.req.json<{ name?: string; domain?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
+
+  if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
+    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+  }
 
   const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
@@ -201,8 +229,18 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
   if (body.name) updates.name = body.name;
   if (body.domain !== undefined) updates.domain = body.domain;
   if (body.description !== undefined) updates.description = body.description;
+  if (body.category !== undefined) updates.category = body.category;
 
   const [updated] = await db.update(organizations).set(updates).where(eq(organizations.id, org.id)).returning();
+
+  if (body.tags !== undefined) {
+    await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
+    for (const tagName of body.tags) {
+      const tag = await getOrCreateTagD1(db, tagName);
+      await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+    }
+  }
+
   return c.json(updated);
 });
 
@@ -270,6 +308,71 @@ orgRoutes.delete("/orgs/:slug/accounts/:platform/:handle", async (c) => {
     .where(eq(organizations.id, org.id));
 
   return c.json({ deleted: true });
+});
+
+orgRoutes.get("/orgs/:slug/tags", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const [org] = await db.select().from(organizations).where(
+    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
+  );
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  const rows = await db
+    .select({ name: tags.name })
+    .from(orgTags)
+    .innerJoin(tags, eq(orgTags.tagId, tags.id))
+    .where(eq(orgTags.orgId, org.id))
+    .orderBy(tags.name);
+  return c.json(rows.map((r) => r.name));
+});
+
+orgRoutes.put("/orgs/:slug/tags", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const body = await c.req.json<{ tags: string[] }>();
+  const [org] = await db.select().from(organizations).where(
+    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
+  );
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  for (const tagName of body.tags) {
+    const tag = await getOrCreateTagD1(db, tagName);
+    await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+  }
+  return c.json({ ok: true });
+});
+
+orgRoutes.delete("/orgs/:slug/tags", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const body = await c.req.json<{ tags: string[] }>();
+  const [org] = await db.select().from(organizations).where(
+    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
+  );
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  for (const tagName of body.tags) {
+    const tagSlug = toSlug(tagName);
+    const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+    if (tag) {
+      await db.delete(orgTags).where(and(eq(orgTags.orgId, org.id), eq(orgTags.tagId, tag.id)));
+    }
+  }
+  return c.json({ ok: true });
+});
+
+orgRoutes.post("/tags", async (c) => {
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<{ name: string }>();
+  if (!body.name) return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+
+  const tagSlug = toSlug(body.name);
+  const [existing] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+  if (existing) return c.json(existing);
+
+  const [created] = await db.insert(tags).values({ name: body.name, slug: tagSlug, createdAt: new Date().toISOString() }).returning();
+  return c.json(created, 201);
 });
 
 // Weekly release activity for timeline visualization
