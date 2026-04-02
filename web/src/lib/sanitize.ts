@@ -1,0 +1,16 @@
+/** Sanitize URLs from user-generated markdown to prevent XSS via javascript: and other dangerous schemes. */
+
+const SAFE_LINK_PATTERN = /^(https?:\/\/|mailto:|\/(?!\/))/ ;
+const SAFE_IMG_PATTERN = /^https?:\/\//;
+
+/** Returns true if the href is safe for use in an <a> tag. */
+export function isSafeHref(href: string | undefined | null): href is string {
+  if (!href || typeof href !== "string") return false;
+  return SAFE_LINK_PATTERN.test(href.trim());
+}
+
+/** Returns true if the src is safe for use in an <img> tag. */
+export function isSafeImgSrc(src: string | undefined | null): src is string {
+  if (!src || typeof src !== "string") return false;
+  return SAFE_IMG_PATTERN.test(src.trim());
+}

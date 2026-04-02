@@ -41,10 +41,13 @@ mediaRoutes.get("/media/:key{.+}", async (c) => {
   // If we have a MEDIA_ORIGIN (R2 custom domain) and this is a raster image,
   // use Cloudflare Image Transformations for automatic resize + format negotiation.
   if (mediaOrigin && RASTER_IMAGE_TYPES.has(contentType)) {
-    return fetch(`${mediaOrigin}/${key}`, {
+    const transformed = await fetch(`${mediaOrigin}/${key}`, {
       headers: { Accept: c.req.header("Accept") ?? "image/*" },
       cf: { image: { width: 1200, fit: "scale-down", quality: 80, format: "auto" } },
     } as unknown as RequestInit);
+    const resp = new Response(transformed.body, transformed);
+    resp.headers.set("X-Content-Type-Options", "nosniff");
+    return resp;
   }
 
   // Serve directly from R2
@@ -66,6 +69,9 @@ mediaRoutes.get("/media/:key{.+}", async (c) => {
   if (object.httpMetadata?.contentLanguage) {
     headers.set("content-language", object.httpMetadata.contentLanguage);
   }
+
+  headers.set("X-Content-Type-Options", "nosniff");
+  headers.set("Content-Disposition", "attachment");
 
   return new Response(object.body, { headers });
 });

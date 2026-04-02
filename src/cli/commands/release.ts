@@ -5,6 +5,7 @@ import {
   findSourceBySlug, suppressRelease, unsuppressRelease,
   getRelease, deleteRelease, updateRelease, deleteReleasesByFilter, deleteReleasesForSource,
 } from "../../db/queries.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerReleaseCommand(program: Command) {
   const release = program
@@ -36,27 +37,28 @@ Examples:
         return;
       }
 
-      console.log(chalk.bold(rel.title));
-      if (rel.version) console.log(`  Version:   ${rel.version}`);
-      console.log(`  Source:    ${sourceName ?? chalk.dim("—")} (${sourceSlug ?? chalk.dim("—")})`);
+      console.log(chalk.bold(stripAnsi(rel.title)));
+      if (rel.version) console.log(`  Version:   ${stripAnsi(rel.version)}`);
+      console.log(`  Source:    ${sourceName ? stripAnsi(sourceName) : chalk.dim("—")} (${sourceSlug ?? chalk.dim("—")})`);
       if (rel.publishedAt) console.log(`  Published: ${rel.publishedAt}`);
       console.log(`  Fetched:   ${rel.fetchedAt}`);
-      if (rel.suppressed) console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${rel.suppressedReason}` : ""}`);
+      if (rel.suppressed) console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`);
       if (rel.url) console.log(`  URL:       ${rel.url}`);
 
       if (rel.contentSummary) {
         console.log();
         console.log(chalk.bold("Summary:"));
-        console.log(rel.contentSummary);
+        console.log(stripAnsi(rel.contentSummary));
       }
 
       console.log();
       console.log(chalk.bold("Content:"));
-      if (rel.content.length > 2000) {
-        console.log(rel.content.slice(0, 2000));
-        console.log(chalk.dim(`\n... truncated (${rel.content.length} chars total)`));
+      const sanitizedContent = stripAnsi(rel.content);
+      if (sanitizedContent.length > 2000) {
+        console.log(sanitizedContent.slice(0, 2000));
+        console.log(chalk.dim(`\n... truncated (${sanitizedContent.length} chars total)`));
       } else {
-        console.log(rel.content);
+        console.log(sanitizedContent);
       }
     });
 
@@ -108,7 +110,7 @@ Examples:
             console.log(JSON.stringify({ wouldDelete: 1, releases: [{ id, title: existing.release.title }] }, null, 2));
           } else {
             console.log(chalk.yellow(`[dry-run] Would delete 1 release(s)`));
-            console.log(`  ${id}  ${existing.release.title}`);
+            console.log(`  ${id}  ${stripAnsi(existing.release.title)}`);
           }
           return;
         }
@@ -167,7 +169,7 @@ Examples:
         } else {
           console.log(chalk.yellow(`[dry-run] Would delete ${result.releases.length} release(s)`));
           for (const r of result.releases.slice(0, 10)) {
-            console.log(`  ${r.id}  ${r.title}`);
+            console.log(`  ${r.id}  ${stripAnsi(r.title)}`);
           }
           if (result.releases.length > 10) {
             console.log(chalk.dim(`  ... and ${result.releases.length - 10} more`));

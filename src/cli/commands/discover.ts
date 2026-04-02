@@ -5,6 +5,7 @@ import { findOrg, getOrgAccountByPlatform, findSourcesByUrls, createSource } fro
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 import { discover, type DiscoveredSource } from "../../lib/discover.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerDiscoverCommand(program: Command) {
   program
@@ -93,11 +94,11 @@ Examples:
 
         for (const r of results) {
           table.push([
-            r.url,
-            r.type,
-            r.method,
+            stripAnsi(r.url),
+            stripAnsi(r.type),
+            stripAnsi(r.method),
             confidenceColor(r.confidence),
-            r.label ?? chalk.dim("—"),
+            r.label ? stripAnsi(r.label) : chalk.dim("—"),
           ]);
         }
 

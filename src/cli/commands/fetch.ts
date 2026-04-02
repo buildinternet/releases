@@ -18,6 +18,7 @@ import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProg
 import { config } from "../../lib/config.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 import * as apiClient from "../../api/client.js";
 
 const REMOTE_MAX_CONCURRENCY = 5;
@@ -276,7 +277,7 @@ Examples:
         const activeStr = active > 0 ? chalk.gray(` (${active} active)`) : "";
         const errStr = errCount > 0 ? chalk.red(` ${errCount} failed`) : "";
         const insertStr = totalInserted > 0 ? chalk.green(` ${totalInserted} new`) : "";
-        const current = lastSourceName ? ` ${chalk.cyan(lastSourceName)}` : "";
+        const current = lastSourceName ? ` ${chalk.cyan(stripAnsi(lastSourceName))}` : "";
         const time = chalk.gray(` ${elapsed}`);
         process.stderr.write(`\r${bar} ${pct}%${current}${activeStr}${insertStr}${errStr}${time}${"".padEnd(20)}`);
       }
@@ -409,8 +410,8 @@ Examples:
               for (const raw of rawReleases) {
                 const date = raw.publishedAt ? chalk.gray(raw.publishedAt.toISOString().split("T")[0]) : chalk.gray("no date");
                 const version = raw.version ? chalk.cyan(`[${raw.version}] `) : "";
-                console.log(`  ${version}${raw.title}  ${date}`);
-                if (raw.url) console.log(`    ${chalk.dim(raw.url)}`);
+                console.log(`  ${version}${stripAnsi(raw.title)}  ${date}`);
+                if (raw.url) console.log(`    ${chalk.dim(stripAnsi(raw.url))}`);
               }
             }
             return;
@@ -752,7 +753,7 @@ Examples:
         if (failed.length > 0) {
           console.log(`  ${chalk.red(`${failed.length} failed`)}`);
           for (const f of failed) {
-            console.log(`    ${chalk.dim("•")} ${f.source}: ${chalk.red(f.error!)}`);
+            console.log(`    ${chalk.dim("•")} ${f.source}: ${chalk.red(stripAnsi(f.error!))}`);
           }
         }
       }

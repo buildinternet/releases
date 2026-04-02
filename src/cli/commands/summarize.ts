@@ -4,6 +4,7 @@ import { findSourceBySlug, getRecentReleases, upsertSummary, getOrgById } from "
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { daysAgoIso } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 import { logger } from "../../lib/logger.js";
 
 export function registerSummarizeCommand(program: Command) {
@@ -85,7 +86,7 @@ export function registerSummarizeCommand(program: Command) {
           console.log(JSON.stringify({ type: "monthly", year, month, summary: result.summary, releaseCount: result.releaseCount }));
         } else {
           console.log(chalk.green(`Monthly summary for ${monthName}:`));
-          console.log(result.summary);
+          console.log(stripAnsi(result.summary));
         }
       } else {
         const cutoff = daysAgoIso(windowDays);
@@ -127,7 +128,7 @@ export function registerSummarizeCommand(program: Command) {
           console.log(JSON.stringify({ type: "rolling", windowDays, summary: result.summary, releaseCount: result.releaseCount }));
         } else {
           console.log(chalk.green(`Rolling summary (${windowDays} days):`));
-          console.log(result.summary);
+          console.log(stripAnsi(result.summary));
         }
       }
     });

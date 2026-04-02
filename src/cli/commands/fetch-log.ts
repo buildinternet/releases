@@ -3,6 +3,7 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { getFetchLogs } from "../../db/queries.js";
 import { timeAgo } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerFetchLogCommand(program: Command) {
   program
@@ -56,7 +57,7 @@ Examples:
               : chalk.dim("no change");
 
         const errorText = log.error
-          ? chalk.red(log.error.length > 40 ? log.error.slice(0, 40) + "..." : log.error)
+          ? chalk.red(stripAnsi(log.error.length > 40 ? log.error.slice(0, 40) + "..." : log.error))
           : chalk.dim("—");
 
         table.push([
