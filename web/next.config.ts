@@ -1,12 +1,26 @@
 import type { NextConfig } from "next";
 import path from "path";
 
+const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+let apiHostname: string;
+try {
+  apiHostname = new URL(apiUrl).hostname;
+} catch {
+  apiHostname = "localhost";
+}
+
 const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "github.com", pathname: "/*.png" },
+      { protocol: "https", hostname: "*.githubusercontent.com" },
+      { protocol: apiHostname === "localhost" ? "http" : "https", hostname: apiHostname },
+    ],
+  },
   turbopack: {
     root: path.resolve(__dirname, ".."),
   },
   webpack: (config) => {
-    // Allow importing shared code from the parent src/lib directory
     config.resolve.alias = {
       ...config.resolve.alias,
       "@shared": path.resolve(__dirname, "../src/lib"),

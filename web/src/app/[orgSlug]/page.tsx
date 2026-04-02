@@ -9,6 +9,7 @@ import { ReleaseTimeline } from "@/components/release-timeline";
 import { OrgTabs } from "@/components/org-tabs";
 import { OrgReleaseList } from "@/components/org-release-list";
 import Link from "next/link";
+import { OrgAvatar } from "@/components/org-avatar";
 
 export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
   const { orgSlug } = await params;
@@ -130,7 +131,19 @@ export default async function OrgPage({
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{org.name}</span>
         </div>
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">{org.name}</h1>
+        {org.avatarUrl || org.accounts.some(a => a.platform === "github") ? (
+          <div className="flex items-center gap-3 mt-4">
+            <OrgAvatar
+              avatarUrl={org.avatarUrl}
+              githubHandle={org.accounts.find(a => a.platform === "github")?.handle ?? null}
+              name={org.name}
+              size={40}
+            />
+            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{org.name}</h1>
+          </div>
+        ) : (
+          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">{org.name}</h1>
+        )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
             <OrgTabs />

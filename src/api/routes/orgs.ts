@@ -11,12 +11,20 @@ export function handleOrgs() {
       slug: organizations.slug,
       name: organizations.name,
       domain: organizations.domain,
+      avatarUrl: organizations.avatarUrl,
       description: organizations.description,
       id: organizations.id,
     })
     .from(organizations)
     .orderBy(organizations.name)
     .all();
+
+  // Batch-fetch all GitHub handles to avoid N+1
+  const ghAccounts = db.select({ orgId: orgAccounts.orgId, handle: orgAccounts.handle })
+    .from(orgAccounts)
+    .where(eq(orgAccounts.platform, "github"))
+    .all();
+  const ghByOrgId = new Map(ghAccounts.map(a => [a.orgId, a.handle]));
 
   return rows.map((org) => {
     const [srcCount] = db.select({ n: count() }).from(sources).where(eq(sources.orgId, org.id)).all();
@@ -31,6 +39,8 @@ export function handleOrgs() {
       slug: org.slug,
       name: org.name,
       domain: org.domain,
+      avatarUrl: org.avatarUrl ?? null,
+      githubHandle: ghByOrgId.get(org.id) ?? null,
       description: org.description,
       sourceCount: srcCount.n,
       releaseCount: relCount.n,
@@ -79,7 +89,7 @@ export function handleOrgDetail(slug: string) {
     .from(sources).where(eq(sources.orgId, org.id)).all();
 
   return {
-    slug: org.slug, name: org.name, domain: org.domain, description: org.description,
+    slug: org.slug, name: org.name, domain: org.domain, avatarUrl: org.avatarUrl ?? null, description: org.description,
     sourceCount: orgSources.length, releaseCount: totalReleases.n,
     releasesLast30Days: metrics.releasesLast30Days,
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,

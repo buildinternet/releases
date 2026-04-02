@@ -135,4 +135,37 @@ describe("CLI org lifecycle", () => {
     const updated = JSON.parse(result.stdout);
     expect(updated.description).toBe("Updated description");
   });
+
+  it("org add with avatar", () => {
+    const result = cli(dataDir, [
+      "org", "add", "Avatar Org",
+      "--avatar", "https://example.com/logo.png",
+      "--json",
+    ]);
+    expect(result.exitCode).toBe(0);
+    const org = JSON.parse(result.stdout);
+    expect(org.avatarUrl).toBe("https://example.com/logo.png");
+  });
+
+  it("edits org avatar", () => {
+    const result = cli(dataDir, [
+      "org", "edit", "avatar-org",
+      "--avatar", "https://example.com/new-logo.png",
+      "--json",
+    ]);
+    expect(result.exitCode).toBe(0);
+    const updated = JSON.parse(result.stdout);
+    expect(updated.avatarUrl).toBe("https://example.com/new-logo.png");
+  });
+
+  it("clears org avatar with --no-avatar", () => {
+    const result = cli(dataDir, [
+      "org", "edit", "avatar-org",
+      "--no-avatar",
+      "--json",
+    ]);
+    expect(result.exitCode).toBe(0);
+    const updated = JSON.parse(result.stdout);
+    expect(updated.avatarUrl).toBeNull();
+  });
 });

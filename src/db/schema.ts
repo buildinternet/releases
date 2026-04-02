@@ -8,6 +8,7 @@ export const organizations = sqliteTable("organizations", {
   domain: text("domain").unique(),
   description: text("description"),
   category: text("category"),
+  avatarUrl: text("avatar_url"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
   metadata: text("metadata").default("{}"),

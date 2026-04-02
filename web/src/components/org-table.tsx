@@ -9,9 +9,21 @@ type SortDir = "asc" | "desc";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   if (!active) {
-    return <span className="ml-1 text-stone-300 dark:text-stone-600">↕</span>;
+    return (
+      <svg className="inline ml-1 text-stone-300 dark:text-stone-600" width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+        <path d="M5 0L9 5H1L5 0Z" opacity="0.5" />
+        <path d="M5 14L1 9H9L5 14Z" opacity="0.5" />
+      </svg>
+    );
   }
-  return <span className="ml-1">{dir === "asc" ? "↑" : "↓"}</span>;
+  return (
+    <svg className="inline ml-1" width="10" height="14" viewBox="0 0 10 14" fill="currentColor">
+      {dir === "asc"
+        ? <path d="M5 0L9 5H1L5 0Z" />
+        : <path d="M5 14L1 9H9L5 14Z" />
+      }
+    </svg>
+  );
 }
 
 export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {

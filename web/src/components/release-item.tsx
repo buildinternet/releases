@@ -4,9 +4,11 @@ import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
+import Image from "next/image";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
-import { isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { isSafeHref, isSafeImgSrc, isOptimizableImage } from "@/lib/sanitize";
+import { SourceTypeIcon } from "./source-type-icon";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
@@ -125,12 +127,14 @@ function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content
         if (item.type === "image" || item.type === "gif") {
           const src = item.r2Url ?? item.url;
           return (
-            <img
+            <Image
               key={i}
               src={src}
               alt={item.alt || ""}
-              loading="lazy"
-              className="rounded-md max-h-48 object-contain"
+              width={400}
+              height={192}
+              className="rounded-md object-contain max-h-48 w-auto"
+              unoptimized={!isOptimizableImage(src)}
             />
           );
         }
@@ -144,7 +148,7 @@ const COLLAPSED_MAX_HEIGHT = 72; // ~4.5em at 16px
 
 const markdownClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-2 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-2 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-1.5 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 
-export function ReleaseListItem({ release, hideDate, sourceByline }: { release: ReleaseItem; hideDate?: boolean; sourceByline?: { name: string; slug: string; orgSlug?: string } }) {
+export function ReleaseListItem({ release, hideDate, sourceByline }: { release: ReleaseItem; hideDate?: boolean; sourceByline?: { name: string; slug: string; orgSlug?: string; type?: string } }) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
   const contentRef = useRef<HTMLDivElement>(null);
@@ -207,8 +211,9 @@ export function ReleaseListItem({ release, hideDate, sourceByline }: { release: 
         </button>
         {showSubtitle && <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{release.title}</div>}
         {sourceByline && (
-          <div className="text-[12px] text-stone-400 dark:text-stone-500 mb-1">
-            via{" "}
+          <div className="text-[12px] text-stone-400 dark:text-stone-500 mb-1 flex items-center gap-1">
+            <span>via</span>
+            {sourceByline.type && <SourceTypeIcon type={sourceByline.type} size={12} />}
             {sourceByline.orgSlug ? (
               <Link href={`/${sourceByline.orgSlug}/${sourceByline.slug}`} className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300" onClick={(e) => e.stopPropagation()}>
                 {sourceByline.name}

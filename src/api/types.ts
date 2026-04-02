@@ -29,6 +29,8 @@ export interface OrgListItem {
   slug: string;
   name: string;
   domain: string | null;
+  avatarUrl: string | null;
+  githubHandle: string | null;
   sourceCount: number;
   releaseCount: number;
   recentReleaseCount: number;
@@ -39,6 +41,7 @@ export interface OrgDetail {
   slug: string;
   name: string;
   domain: string | null;
+  avatarUrl: string | null;
   sourceCount: number;
   releaseCount: number;
   releasesLast30Days: number;
