@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Acme Changelog</title>
+    <link>https://acme.com/changelog</link>
+    <item>
+      <title>v2.1.0 — Dashboard Redesign</title>
+      <description><![CDATA[<p>Completely redesigned the dashboard with <strong>new widgets</strong>.</p><p>Breaking change: removed legacy API endpoint.</p><img src="https://acme.com/img/dashboard.png" alt="New dashboard" />]]></description>
+      <link>https://acme.com/changelog/v2-1-0</link>
+      <pubDate>Mon, 15 Jan 2024 12:00:00 GMT</pubDate>
+    </item>
+    <item>
+      <title>v2.0.0 — Initial Release</title>
+      <description>First public release with core features.</description>
+      <link>https://acme.com/changelog/v2-0-0</link>
+      <pubDate>Wed, 01 Jan 2024 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

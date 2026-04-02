@@ -390,7 +390,7 @@ async function fetchHttpSignals(url: string): Promise<HttpSignals | null> {
   }
 }
 
-function detectFromHttpSignals(signals: HttpSignals): ProviderDef | null {
+export function detectFromHttpSignals(signals: HttpSignals): ProviderDef | null {
   for (const provider of PROVIDERS) {
     // Check headers
     if (provider.headers) {
@@ -417,7 +417,7 @@ function detectFromHttpSignals(signals: HttpSignals): ProviderDef | null {
 
 // ── URL-based detection (fast, no network) ───────────────────────────
 
-function detectFromUrl(url: string): ProviderDef | null {
+export function detectFromUrl(url: string): ProviderDef | null {
   try {
     const hostname = new URL(url).hostname;
     for (const provider of PROVIDERS) {

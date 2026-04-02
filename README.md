@@ -581,3 +581,33 @@ bun run db:generate          # generate migration after schema change
 bun run build                # compile CLI binary (current platform)
 bun run build:all:linux      # compile CLI + MCP server for sandbox container
 ```
+
+### Testing
+
+Tests use Bun's built-in test runner — no extra dependencies required.
+
+```bash
+bun test                     # run all tests
+bun test tests/unit/         # run unit tests only
+bun test tests/cli/          # run CLI integration tests only
+bun test --watch             # re-run on file changes
+```
+
+Tests live in `tests/` with this structure:
+
+```
+tests/
+  utils.ts              # runCli() helper, ANSI stripping
+  tsconfig.json         # separate type-check config for tests
+  fixtures/
+    feeds/              # RSS, Atom, JSON Feed samples
+    html/               # HTML pages for parser testing
+  unit/                 # pure function tests (dates, slug, hash, feed parsers, etc.)
+  cli/                  # integration tests that shell out to the real CLI
+```
+
+Type-check tests separately (they have their own tsconfig):
+
+```bash
+npx tsc --noEmit --project tests/tsconfig.json
+```

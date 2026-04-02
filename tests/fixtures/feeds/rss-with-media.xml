@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Media Test Feed</title>
+    <item>
+      <title>Media-Rich Release</title>
+      <description><![CDATA[
+        <p>Check out the new features:</p>
+        <img src="https://acme.com/screenshot.png" alt="Screenshot" />
+        <img src="https://acme.com/demo.gif" alt="Demo" />
+        <iframe src="https://www.youtube.com/embed/dQw4w9WgXcQ" width="560" height="315"></iframe>
+        <iframe src="https://player.vimeo.com/video/123456789" width="640" height="360"></iframe>
+        <iframe src="https://www.loom.com/embed/abc123def456" width="640" height="360"></iframe>
+        <video src="https://acme.com/video.mp4"></video>
+        <img src="javascript:alert(1)" alt="XSS attempt" />
+      ]]></description>
+      <pubDate>Mon, 01 Apr 2024 00:00:00 GMT</pubDate>
+    </item>
+  </channel>
+</rss>

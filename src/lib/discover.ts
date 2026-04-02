@@ -45,7 +45,7 @@ const CHANGELOG_PATTERNS = [
   /\/release-notes(\/|$)/i,
 ];
 
-function matchesChangelogPattern(url: string): boolean {
+export function matchesChangelogPattern(url: string): boolean {
   return CHANGELOG_PATTERNS.some((re) => re.test(url));
 }
 
@@ -69,7 +69,7 @@ async function fetchText(url: string, timeoutMs = 10_000): Promise<string | null
 }
 
 /** Extract sitemap URLs from robots.txt */
-function parseSitemapUrlsFromRobots(robotsTxt: string, origin: string): string[] {
+export function parseSitemapUrlsFromRobots(robotsTxt: string, origin: string): string[] {
   const urls: string[] = [];
   for (const line of robotsTxt.split("\n")) {
     const match = line.match(/^Sitemap:\s*(.+)/i);
@@ -84,7 +84,7 @@ function parseSitemapUrlsFromRobots(robotsTxt: string, origin: string): string[]
 }
 
 /** Extract <loc> URLs from a sitemap or sitemap index */
-function extractLocsFromSitemap(xml: string): string[] {
+export function extractLocsFromSitemap(xml: string): string[] {
   const locs: string[] = [];
   const re = /<loc>\s*(.*?)\s*<\/loc>/gi;
   let m;
@@ -94,7 +94,7 @@ function extractLocsFromSitemap(xml: string): string[] {
   return locs;
 }
 
-function isSitemapIndex(xml: string): boolean {
+export function isSitemapIndex(xml: string): boolean {
   return xml.includes("<sitemapindex");
 }
 
@@ -376,7 +376,7 @@ interface WellKnownManifest {
 }
 
 /** Text format keys (security.txt-style): "Changelog:", "Feed:" */
-function parseWellKnownText(text: string, origin: string): DiscoveredSource[] {
+export function parseWellKnownText(text: string, origin: string): DiscoveredSource[] {
   const results: DiscoveredSource[] = [];
   const lines = text.split("\n");
 
@@ -416,7 +416,7 @@ function parseWellKnownText(text: string, origin: string): DiscoveredSource[] {
   return results;
 }
 
-function parseWellKnownJson(raw: string, origin: string): DiscoveredSource[] {
+export function parseWellKnownJson(raw: string, origin: string): DiscoveredSource[] {
   let manifest: WellKnownManifest;
   try {
     manifest = JSON.parse(raw);
@@ -485,7 +485,7 @@ function parseWellKnownJson(raw: string, origin: string): DiscoveredSource[] {
  * These files describe how AI agents should interact with a site and may
  * include references to changelogs, release notes, or feeds.
  */
-function parseAgentsFile(text: string, origin: string): DiscoveredSource[] {
+export function parseAgentsFile(text: string, origin: string): DiscoveredSource[] {
   const results: DiscoveredSource[] = [];
   const lines = text.split("\n");
 
@@ -863,7 +863,7 @@ async function verifyWithAI(
 
 // ── Helpers ──────────────────────────────────────────────────────────
 
-function extractPathLabel(url: string): string {
+export function extractPathLabel(url: string): string {
   try {
     const pathname = new URL(url).pathname;
     return pathname === "/" ? "Home" : pathname;
@@ -872,7 +872,7 @@ function extractPathLabel(url: string): string {
   }
 }
 
-function dedup(sources: DiscoveredSource[]): DiscoveredSource[] {
+export function dedup(sources: DiscoveredSource[]): DiscoveredSource[] {
   const seen = new Map<string, DiscoveredSource>();
   for (const s of sources) {
     const existing = seen.get(s.url);
@@ -885,7 +885,7 @@ function dedup(sources: DiscoveredSource[]): DiscoveredSource[] {
 
 /** Remove URLs that are children of other discovered URLs.
  *  e.g., if /changelog is in the list, drop /changelog/2024-01-foo */
-function collapseChildren(sources: DiscoveredSource[]): DiscoveredSource[] {
+export function collapseChildren(sources: DiscoveredSource[]): DiscoveredSource[] {
   const urls = new Set(sources.map((s) => s.url));
   return sources.filter((s) => {
     try {
@@ -902,7 +902,7 @@ function collapseChildren(sources: DiscoveredSource[]): DiscoveredSource[] {
   });
 }
 
-function confidenceRank(c: Confidence): number {
+export function confidenceRank(c: Confidence): number {
   switch (c) {
     case "high": return 3;
     case "medium": return 2;
