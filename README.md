@@ -302,6 +302,8 @@ released discover --org vercel            # use org's domain and GitHub handle
 ```
 
 Discovery uses multiple evidence-based strategies in parallel:
+- **Well-known files** — checks `/.well-known/changelog.json`, `/.well-known/releases.json`, `/.well-known/changelog.txt`, `/AGENTS.md`, and root-level `/changelog.md` or `/releases.md` files. Cascading — stops at the first tier that produces results.
+- **Link relations** — detects `<link rel="changelog">`, `<link rel="releases">`, and `<link rel="release-notes">` tags in the page `<head>`
 - **Sitemap parsing** — robots.txt → sitemap(s) → filter changelog-like URLs
 - **Feed discovery** — RSS/Atom/JSON feed probing via HTML `<link>` tags and well-known feed paths
 - **HTML link analysis** — scans the homepage for changelog-related links
