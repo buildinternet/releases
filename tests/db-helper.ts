@@ -6,7 +6,6 @@ import { fileURLToPath } from "url";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
 import * as schema from "../src/db/schema.js";
-import { patchSchemaMetadataColumn } from "./db-patch.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = join(__dirname, "..", "src", "db", "migrations");
@@ -33,8 +32,6 @@ export function createTestDb(): TestDatabase {
   const db = drizzle(sqlite, { schema });
 
   migrate(db, { migrationsFolder });
-
-  patchSchemaMetadataColumn(sqlite);
 
   return {
     db,

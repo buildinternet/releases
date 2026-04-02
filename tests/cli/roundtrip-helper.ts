@@ -1,27 +1,16 @@
-import { Database } from "bun:sqlite";
 import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { runCli } from "../utils.js";
-import { patchSchemaMetadataColumn } from "../db-patch.js";
 
-const ENV_OVERRIDES = {
-  // Clear remote mode so the CLI uses local SQLite in the temp dir.
-  // Bun auto-loads .env which may set RELEASED_API_URL.
-  RELEASED_API_URL: "",
-  RELEASED_API_KEY: "",
-};
+// runCli() in tests/utils.ts already clears RELEASED_API_URL and
+// RELEASED_API_KEY, so we only need the data-dir override here.
 
 export function createTempDataDir(): { dataDir: string; cleanup: () => void } {
   const dataDir = mkdtempSync(join(tmpdir(), "released-roundtrip-"));
 
   // --help triggers auto-migration (runMigrations() runs before program.parse())
-  runCli(["--help"], { env: { ...ENV_OVERRIDES, RELEASED_DATA_DIR: dataDir } });
-
-  // Patch schema drift — remove once a proper migration is added
-  const sqlite = new Database(join(dataDir, "released.db"));
-  patchSchemaMetadataColumn(sqlite);
-  sqlite.close();
+  runCli(["--help"], { env: { RELEASED_DATA_DIR: dataDir } });
 
   return {
     dataDir,
@@ -35,7 +24,7 @@ export function cli(
   options?: { timeout?: number },
 ): ReturnType<typeof runCli> {
   return runCli(args, {
-    env: { ...ENV_OVERRIDES, RELEASED_DATA_DIR: dataDir },
+    env: { RELEASED_DATA_DIR: dataDir },
     timeout: options?.timeout,
   });
 }
