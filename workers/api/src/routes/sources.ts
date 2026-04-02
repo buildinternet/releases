@@ -151,8 +151,9 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
 
   let rows: (typeof sources.$inferSelect)[];
 
+  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
   if (mode === "unfetched") {
-    rows = await db.select().from(sources).where(sql`${sources.lastFetchedAt} IS NULL`);
+    rows = await db.select().from(sources).where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
   } else if (mode === "stale" && staleHours) {
     const hours = parseInt(staleHours, 10);
     const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
@@ -161,19 +162,23 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
       and(
         sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
         sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
-        sql`${sources.fetchPriority} != 'paused'`
+        sql`${sources.fetchPriority} != 'paused'`,
+        notDisabled
       )
     );
   } else if (mode === "retry_errors") {
     rows = await db.select().from(sources).where(
-      sql`${sources.id} IN (
-        SELECT f.source_id FROM fetch_log f
-        WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
-        AND f.status = 'error'
-      )`
+      and(
+        sql`${sources.id} IN (
+          SELECT f.source_id FROM fetch_log f
+          WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
+          AND f.status = 'error'
+        )`,
+        notDisabled
+      )
     );
   } else {
-    rows = await db.select().from(sources);
+    rows = await db.select().from(sources).where(notDisabled);
   }
 
   return c.json(rows);
@@ -577,7 +582,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     orgId: src.orgId,
     org,
     isPrimary: src.isPrimary ?? false,
-    metadata: parsedMeta,
+    metadata: src.metadata ?? "{}",
     releaseCount: relCount.n,
     releasesLast30Days,
     avgReleasesPerWeek,

@@ -575,7 +575,8 @@ export function decodeHtmlEntities(text: string): string {
 
 export function getSourceMeta(source: Source): SourceMetadata {
   try {
-    return JSON.parse(source.metadata ?? "{}");
+    const raw = source.metadata ?? "{}";
+    return typeof raw === "string" ? JSON.parse(raw) : raw;
   } catch {
     return {};
   }
