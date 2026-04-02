@@ -14,6 +14,78 @@ import { type WeeklyBucket, getProductColor, DAY_MS, WEEK_MS, fmtWeek } from "@/
 import { HoverCard } from "@/components/hover-card";
 
 /* ================================================================
+   AI Model launch milestones
+   ================================================================ */
+
+interface ModelMilestone {
+  name: string;
+  date: Date;
+  vendor: "claude" | "openai";
+}
+
+const MODEL_MILESTONES: ModelMilestone[] = [
+  // Claude
+  { name: "Claude 3 Opus", date: new Date("2024-03-04"), vendor: "claude" },
+  { name: "Claude 3.5 Sonnet", date: new Date("2024-06-20"), vendor: "claude" },
+  { name: "Claude 3.5 Sonnet v2", date: new Date("2024-10-22"), vendor: "claude" },
+  { name: "Claude 3.5 Haiku", date: new Date("2024-11-04"), vendor: "claude" },
+  { name: "Claude 3.7 Sonnet", date: new Date("2025-02-24"), vendor: "claude" },
+  { name: "Claude 4 Sonnet & Opus", date: new Date("2025-05-22"), vendor: "claude" },
+  { name: "Claude 4.5 Sonnet", date: new Date("2025-09-29"), vendor: "claude" },
+  { name: "Claude 4.5 Haiku", date: new Date("2025-10-01"), vendor: "claude" },
+  { name: "Claude 4.5 Opus", date: new Date("2025-11-24"), vendor: "claude" },
+  { name: "Claude 4.6 Opus", date: new Date("2026-02-05"), vendor: "claude" },
+  { name: "Claude 4.6 Sonnet", date: new Date("2026-02-17"), vendor: "claude" },
+  // OpenAI
+  { name: "GPT-4o", date: new Date("2024-05-13"), vendor: "openai" },
+  { name: "GPT-4o mini", date: new Date("2024-07-18"), vendor: "openai" },
+  { name: "o1-preview", date: new Date("2024-09-12"), vendor: "openai" },
+  { name: "o1", date: new Date("2024-12-05"), vendor: "openai" },
+  { name: "o3-mini", date: new Date("2025-01-31"), vendor: "openai" },
+  { name: "GPT-4.1", date: new Date("2025-04-14"), vendor: "openai" },
+  { name: "o3 & o4-mini", date: new Date("2025-04-16"), vendor: "openai" },
+  { name: "o3-pro", date: new Date("2025-06-10"), vendor: "openai" },
+  { name: "GPT-5", date: new Date("2025-08-07"), vendor: "openai" },
+  { name: "GPT-5-Codex", date: new Date("2025-09-23"), vendor: "openai" },
+  { name: "GPT-5.3-Codex", date: new Date("2026-02-01"), vendor: "openai" },
+  { name: "GPT-5.4", date: new Date("2026-03-05"), vendor: "openai" },
+];
+
+const VENDOR_COLORS = {
+  claude: { line: "rgba(217, 119, 56, 0.35)", text: "text-amber-600/60 dark:text-amber-500/50" },
+  openai: { line: "rgba(16, 163, 127, 0.35)", text: "text-emerald-600/60 dark:text-emerald-500/50" },
+} as const;
+
+type PositionedMilestone = ModelMilestone & { pct: number };
+
+function milestonesInRange(from: Date, to: Date): PositionedMilestone[] {
+  const span = to.getTime() - from.getTime();
+  if (span <= 0) return [];
+  return MODEL_MILESTONES
+    .filter((m) => m.date >= from && m.date <= to)
+    .map((m) => ({ ...m, pct: ((m.date.getTime() - from.getTime()) / span) * 100 }));
+}
+
+const ANNOTATIONS_STORAGE_KEY = "released:show-model-annotations";
+
+function useModelAnnotations() {
+  const [show, setShow] = useState(() => {
+    if (typeof window === "undefined") return false;
+    try { return localStorage.getItem(ANNOTATIONS_STORAGE_KEY) === "1"; } catch { return false; }
+  });
+
+  const toggle = useCallback(() => {
+    setShow((prev) => {
+      const next = !prev;
+      try { localStorage.setItem(ANNOTATIONS_STORAGE_KEY, next ? "1" : "0"); } catch {}
+      return next;
+    });
+  }, []);
+
+  return [show, toggle] as const;
+}
+
+/* ================================================================
    Shared context — holds the brush state for all subcomponents.
    ================================================================ */
 
@@ -37,6 +109,9 @@ interface RangeNavigatorCtx {
   sourceBuckets: SourceBucketEntry[] | null;
   /** Earliest bucket with data — derived from buckets */
   earliestRelease: Date | null;
+  /** Whether to show AI model launch annotations */
+  showAnnotations: boolean;
+  toggleAnnotations: () => void;
 }
 
 const Ctx = createContext<RangeNavigatorCtx | null>(null);
@@ -120,6 +195,8 @@ function Root({
     [min, totalMs],
   );
 
+  const [showAnnotations, toggleAnnotations] = useModelAnnotations();
+
   const controlled = value !== undefined;
   const [internal, setInternal] = useState<[number, number]>(() => {
     if (defaultValue) return [toNorm(defaultValue[0]), toNorm(defaultValue[1])];
@@ -140,7 +217,7 @@ function Root({
   );
 
   return (
-    <Ctx.Provider value={{ brushStart, brushEnd, setBrush, min, max, buckets, sourceBuckets: (sourceBuckets && sourceBuckets.length > 1) ? sourceBuckets : null, earliestRelease }}>
+    <Ctx.Provider value={{ brushStart, brushEnd, setBrush, min, max, buckets, sourceBuckets: (sourceBuckets && sourceBuckets.length > 1) ? sourceBuckets : null, earliestRelease, showAnnotations, toggleAnnotations }}>
       <div
         data-slot="range-navigator"
         className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5 ${className ?? ""}`}
@@ -158,14 +235,31 @@ function Root({
    ================================================================ */
 
 function Header({ title = "Releases over time" }: { title?: string }) {
-  const { brushStart, brushEnd, min, max } = useNav();
+  const { brushStart, brushEnd, min, max, showAnnotations, toggleAnnotations } = useNav();
   const startDate = toDate({ min, max }, brushStart);
   const endDate = toDate({ min, max }, brushEnd);
 
   return (
     <div data-slot="range-navigator-header" className="flex justify-between items-center mb-3">
-      <div data-slot="range-navigator-title" className="text-[13px] font-semibold text-stone-900 dark:text-stone-100">
-        {title}
+      <div className="flex items-center gap-2">
+        <div data-slot="range-navigator-title" className="text-[13px] font-semibold text-stone-900 dark:text-stone-100">
+          {title}
+        </div>
+        <button
+          type="button"
+          onClick={toggleAnnotations}
+          title={showAnnotations ? "Hide AI model launches" : "Show AI model launches"}
+          className={`cursor-pointer flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] transition-colors ${
+            showAnnotations
+              ? "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300 border border-stone-300 dark:border-stone-600"
+              : "text-stone-400 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
+          }`}
+        >
+          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+            <path d="M8 2v12M4 6v6M12 4v8" />
+          </svg>
+          <span>AI models</span>
+        </button>
       </div>
       <div
         data-slot="range-navigator-dates"
@@ -185,7 +279,7 @@ function Header({ title = "Releases over time" }: { title?: string }) {
 const DETAIL_HEIGHT = 120;
 
 function DetailChart() {
-  const { buckets, sourceBuckets, brushStart, brushEnd, min, max, earliestRelease } = useNav();
+  const { buckets, sourceBuckets, brushStart, brushEnd, min, max, earliestRelease, showAnnotations } = useNav();
   const [stacked, setStacked] = useState(false);
   const [hiddenSources, setHiddenSources] = useState<Set<string>>(new Set());
 
@@ -249,6 +343,13 @@ function DetailChart() {
 
   const maxCount = Math.max(...brushedBuckets.map((b) => b.count), 1);
 
+  const visibleMilestones = useMemo(() => {
+    if (!showAnnotations || brushedBuckets.length === 0) return [];
+    const first = brushedBuckets[0].weekStart;
+    const last = new Date(brushedBuckets[brushedBuckets.length - 1].weekStart.getTime() + WEEK_MS);
+    return milestonesInRange(first, last);
+  }, [showAnnotations, brushedBuckets]);
+
   // Y-axis ticks — up to 4 ticks spaced nicely
   const yTicks = useMemo(() => {
     if (maxCount <= 1) return [1];
@@ -308,7 +409,6 @@ function DetailChart() {
 
   return (
     <div data-slot="detail-chart" className="mb-3">
-      {/* Toggle button — only shown when multiple sources exist */}
       {showToggle && (
         <div className="flex justify-end mb-1.5">
           <div className="flex gap-0">
@@ -344,8 +444,37 @@ function DetailChart() {
           ))}
         </div>
 
-        {/* Bars */}
-        <div className="flex items-end gap-px flex-1 min-w-0">
+        {/* Bars + annotation overlay */}
+        <div className="relative flex-1 min-w-0">
+          {/* AI model milestone markers */}
+          {visibleMilestones.length > 0 && (
+            <div className="absolute inset-0 pointer-events-none z-10" aria-hidden="true">
+              {visibleMilestones.map((m) => (
+                <div
+                  key={`${m.vendor}-${m.name}`}
+                  className="absolute top-0 bottom-0"
+                  style={{ left: `${m.pct}%` }}
+                >
+                  <div
+                    className="absolute top-0 bottom-0 w-px"
+                    style={{ backgroundColor: VENDOR_COLORS[m.vendor].line }}
+                  />
+                  <span
+                    className={`absolute top-0 text-[8px] font-medium leading-none whitespace-nowrap ${VENDOR_COLORS[m.vendor].text}`}
+                    style={{
+                      transform: "rotate(-90deg) translateX(-100%)",
+                      transformOrigin: "top left",
+                      left: "3px",
+                      top: "2px",
+                    }}
+                  >
+                    {m.name}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex items-end gap-px h-full">
           {brushedBuckets.map((bucket, i) => {
             const visibleCount = isStacked ? stackedData[i].total : bucket.count;
             const h = visibleCount > 0 ? Math.max(2, (visibleCount / maxCount) * DETAIL_HEIGHT) : 0;
@@ -412,6 +541,7 @@ function DetailChart() {
               </HoverCard.Root>
             );
           })}
+          </div>
         </div>
       </div>
 
@@ -472,7 +602,7 @@ function DetailChart() {
 const OVERVIEW_HEIGHT = 32;
 
 function Overview() {
-  const { buckets, brushStart, brushEnd, setBrush, min, max, earliestRelease } = useNav();
+  const { buckets, brushStart, brushEnd, setBrush, min, max, earliestRelease, showAnnotations } = useNav();
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     mode: "left" | "right" | "move";
@@ -487,6 +617,11 @@ function Overview() {
 
   const maxCount = Math.max(...buckets.map((b) => b.count), 1);
   const totalMs = max.getTime() - min.getTime();
+
+  const overviewMilestones = useMemo(
+    () => (showAnnotations ? milestonesInRange(min, max) : []),
+    [showAnnotations, min, max],
+  );
 
   // Year boundary labels
   const yearLabels = useMemo(() => {
@@ -651,6 +786,15 @@ function Overview() {
               {yl.year}
             </span>
           </div>
+        ))}
+
+        {/* AI model milestone ticks in overview */}
+        {overviewMilestones.map((m) => (
+          <div
+            key={`${m.vendor}-${m.name}`}
+            className="absolute top-1 bottom-1 w-px pointer-events-none"
+            style={{ left: `${m.pct}%`, backgroundColor: VENDOR_COLORS[m.vendor].line }}
+          />
         ))}
 
         {/* Earliest release marker line */}
