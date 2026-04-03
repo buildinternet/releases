@@ -27,6 +27,8 @@ export type Env = {
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
     CACHE_DISABLED?: string;
+    GITHUB_TOKEN?: string;
+    CRON_ENABLED?: string;
   };
 };
 
@@ -88,4 +90,11 @@ app.route("/api", ignoreRoutes);
 app.route("/api", releaseRoutes);
 app.route("/api/summaries", summaries);
 
-export default app;
+import { pollAndFetch } from "./cron/poll-fetch.js";
+
+export default {
+  fetch: app.fetch,
+  async scheduled(_event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
+    ctx.waitUntil(pollAndFetch(env));
+  },
+};
