@@ -26,6 +26,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@shared/api/*": [
+        "../src/api/*"
+      ],
       "@shared/*": [
         "../src/lib/*"
       ]

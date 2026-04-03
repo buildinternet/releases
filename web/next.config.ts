@@ -20,12 +20,14 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, ".."),
     resolveAlias: {
-      "@shared/formatters": "../src/lib/formatters.ts",
+      "@shared/api/*": "../src/api/*",
+      "@shared/*": "../src/lib/*",
     },
   },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
+      "@shared/api": path.resolve(__dirname, "../src/api"),
       "@shared": path.resolve(__dirname, "../src/lib"),
     };
     return config;
