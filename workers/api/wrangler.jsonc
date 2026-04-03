@@ -4,14 +4,17 @@
   "account_id": "4beb6b6e1d55800c0c27b92fb79496ed",
   "main": "src/index.ts",
   "alias": {
-    "@released": "../../src"
+    "@released": "../../src",
+    "bun:sqlite": "./src/stubs/bun-sqlite.ts"
   },
   "compatibility_date": "2026-03-27",
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true
   },
-  "vars": {},
+  "vars": {
+    "CRON_ENABLED": "true"
+  },
   "d1_databases": [
     {
       "binding": "DB",
@@ -32,5 +35,8 @@
   },
   "migrations": [
     { "new_classes": ["StatusHub"], "tag": "v1" }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 * * * *"]
+  }
 }

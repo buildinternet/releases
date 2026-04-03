@@ -35,6 +35,7 @@ export function registerEditCommand(program: Command) {
     .option("--fetch-method <fetchMethod>", "Set the recommended fetch method (feed, markdown, scrape, crawl, github)")
     .option("--primary", "Mark as the org's primary changelog source")
     .option("--no-primary", "Unmark as primary")
+    .option("--priority <level>", "Set fetch priority (normal, low, paused)")
     .option("--disable", "Disable source (excluded from fetch, search, and stats)")
     .option("--enable", "Re-enable a disabled source")
     .option("--json", "Output as JSON")
@@ -47,6 +48,7 @@ Examples:
   released edit my-source --feed-url https://example.com/feed.xml
   released edit my-source --markdown-url https://example.com/changelog.md
   released edit my-source --fetch-method markdown
+  released edit my-source --priority low
   released edit my-source --disable
   released edit my-source --enable
   released edit my-source --no-org`)
@@ -55,6 +57,7 @@ Examples:
       org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
       primary?: boolean;
+      priority?: string;
       disable?: boolean;
       enable?: boolean;
     }) => {
@@ -129,6 +132,17 @@ Examples:
       if (opts.primary !== undefined) {
         updates.isPrimary = opts.primary;
         changes.push(opts.primary ? "marked as primary" : "unmarked as primary");
+      }
+
+      // Handle --priority
+      if (opts.priority) {
+        const validPriorities = ["normal", "low", "paused"];
+        if (!validPriorities.includes(opts.priority)) {
+          console.error(chalk.red(`Invalid priority "${opts.priority}". Must be one of: ${validPriorities.join(", ")}`));
+          process.exit(1);
+        }
+        updates.fetchPriority = opts.priority;
+        changes.push(`priority → ${opts.priority}`);
       }
 
       // Handle --disable / --enable

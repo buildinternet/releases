@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, fetchLog, releaseSummaries, products } from "@released/db/schema.js";
+import { sources, releases, organizations, releaseSummaries, products } from "@released/db/schema.js";
 import { daysAgoIso } from "@released/lib/dates.js";
 import { toSlug } from "@released/lib/slug.js";
 import { getStatusHub } from "../utils.js";
@@ -181,6 +181,33 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
     rows = await db.select().from(sources).where(notDisabled);
   }
 
+  return c.json(rows);
+});
+
+// ── Feed and change-detection sources (must be before :slug route) ──
+
+sourceRoutes.get("/sources/feeds", async (c) => {
+  const db = createDb(c.env.DB);
+  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
+  const rows = await db.select().from(sources).where(
+    and(
+      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
+      sql`${sources.fetchPriority} != 'paused'`,
+      notDisabled,
+    )
+  );
+  return c.json(rows);
+});
+
+sourceRoutes.get("/sources/changes", async (c) => {
+  const db = createDb(c.env.DB);
+  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
+  const rows = await db.select().from(sources).where(
+    and(
+      isNotNull(sources.changeDetectedAt),
+      notDisabled,
+    )
+  );
   return c.json(rows);
 });
 
@@ -658,6 +685,8 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
     consecutiveErrors?: number; nextFetchAfter?: string | null;
     isPrimary?: boolean;
     isHidden?: boolean;
+    changeDetectedAt?: string | null;
+    lastPolledAt?: string | null;
   }>();
 
   const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
@@ -678,6 +707,8 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.nextFetchAfter !== undefined) updates.nextFetchAfter = body.nextFetchAfter;
   if (body.isPrimary !== undefined) updates.isPrimary = body.isPrimary;
   if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
+  if (body.changeDetectedAt !== undefined) updates.changeDetectedAt = body.changeDetectedAt;
+  if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   return c.json(updated);
