@@ -1037,6 +1037,23 @@ export async function listFeedSources(): Promise<Source[]> {
   );
 }
 
+/** List scrape sources that don't have a feed URL (candidates for HEAD pre-check). */
+export async function listScrapeSources(): Promise<Source[]> {
+  if (isRemoteMode()) {
+    return []; // Not yet supported in remote mode
+  }
+  const db = getDb();
+  return db.select().from(sources).where(
+    and(
+      eq(sources.type, "scrape"),
+      sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR json_extract(${sources.metadata}, '$.feedUrl') = '')`,
+      sql`(json_extract(${sources.metadata}, '$.headCheckUseless') IS NULL OR json_extract(${sources.metadata}, '$.headCheckUseless') = false)`,
+      sql`${sources.fetchPriority} != 'paused'`,
+      notDisabled,
+    )
+  );
+}
+
 export async function setChangeDetected(source: Source): Promise<void> {
   const now = new Date().toISOString();
   if (isRemoteMode()) {

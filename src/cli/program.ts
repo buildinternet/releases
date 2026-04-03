@@ -1,4 +1,4 @@
-import { Command } from "commander";
+import { Command, Help } from "commander";
 import chalk from "chalk";
 import { registerAddCommand } from "./commands/add.js";
 import { registerEditCommand } from "./commands/edit.js";
@@ -107,8 +107,13 @@ export const program = new Command()
   .name("released")
   .description("Changelog indexer and registry for AI agents and developers")
   .version(VERSION, "-v, --version")
-  .helpOption(false)
-  .option("-h, --help", "Display help")
+  .configureHelp({
+    formatHelp: (cmd, helper) => {
+      // Root command gets styled help; subcommands get standard Commander help
+      if (cmd.name() === "released") return printStyledHelp() + "\n";
+      return new Help().formatHelp(cmd, helper);
+    },
+  })
   .action(() => {
     console.log(printStyledHelp());
     process.exit(0);
