@@ -1,5 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { getSandbox } from "@cloudflare/sandbox";
+import { getSandbox, parseSSEStream } from "@cloudflare/sandbox";
+import type { LogEvent } from "@cloudflare/sandbox";
 import type { Env, StatusResponse } from "./types.js";
 
 type SessionStatus = "idle" | "running" | "complete" | "error";
@@ -120,11 +121,15 @@ export class DiscoverySession extends DurableObject<Env> {
       const cmd = `bun /app/src/agent/run-discovery.ts ${args.join(" ")}`;
       console.log(`[discovery:${this.sessionId}] startProcess: ${cmd}`);
 
-      await sandbox.startProcess(cmd);
-      console.log(`[discovery:${this.sessionId}] process started`);
+      const proc = await sandbox.startProcess(cmd);
+      console.log(`[discovery:${this.sessionId}] process started (id=${proc.id})`);
+      await this.ctx.storage.put("agentProcessId", proc.id);
 
       // Connect to sandbox log stream (best-effort — falls back to polling)
       await this.connectToSandboxLogs();
+
+      // Stream raw stdout/stderr via Sandbox SDK (best-effort)
+      this.streamStdout(proc.id);
 
       await this.ctx.storage.delete("params");
       await this.ctx.storage.setAlarm(Date.now() + POLL_INTERVAL_MS);
@@ -206,6 +211,24 @@ export class DiscoverySession extends DurableObject<Env> {
     } catch {
       console.log(`[discovery:${this.sessionId}] sandbox WS unavailable — using poll fallback`);
     }
+  }
+
+  /** Stream raw stdout/stderr from the agent process via Sandbox SDK. Fire-and-forget. */
+  private streamStdout(processId: string): void {
+    const sandbox = this.getSandboxHandle();
+    sandbox.streamProcessLogs(processId).then(async (stream) => {
+      for await (const log of parseSSEStream<LogEvent>(stream)) {
+        await this.notifyStatusHub({
+          type: "session:stdout",
+          sessionId: this.sessionId,
+          line: log.data ?? "",
+          stream: log.type === "stderr" ? "stderr" : "stdout",
+          timestamp: Date.now(),
+        });
+      }
+    }).catch((err) => {
+      console.log(`[discovery:${this.sessionId}] stdout stream unavailable: ${err instanceof Error ? err.message : String(err)}`);
+    });
   }
 
   private async pollProgress(): Promise<void> {

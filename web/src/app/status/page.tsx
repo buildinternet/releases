@@ -11,6 +11,7 @@ export default async function StatusPage() {
   }
 
   const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+  const apiKey = process.env.RELEASED_API_KEY ?? "";
 
   return (
     <div className="min-h-screen">
@@ -19,7 +20,7 @@ export default async function StatusPage() {
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100">Status</h1>
         </div>
-        <StatusDashboard apiUrl={apiUrl} />
+        <StatusDashboard apiUrl={apiUrl} apiKey={apiKey} />
       </div>
     </div>
   );
