@@ -3,6 +3,8 @@ import { DurableObject } from "cloudflare:workers";
 const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark as error
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
 const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // run cleanup daily
+const STDOUT_FLUSH_INTERVAL_MS = 2_000; // batch stdout writes to storage
+const STDOUT_MAX_LINES = 1000;
 
 interface SessionState {
   sessionId: string;
@@ -33,12 +35,38 @@ interface StatusMessage {
     | "session:error"
     | "session:cancelled"
     | "session:dismissed"
+    | "session:stdout"
     | "fetch:complete"
+    | "fetch:triggered"
     | "init";
   [key: string]: unknown;
 }
 
 export class StatusHub extends DurableObject {
+  private stdoutBuffer: Map<string, string[]> = new Map();
+  private stdoutFlushTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private bufferStdoutLine(sessionId: string, line: string): void {
+    let lines = this.stdoutBuffer.get(sessionId);
+    if (!lines) { lines = []; this.stdoutBuffer.set(sessionId, lines); }
+    lines.push(line);
+    if (!this.stdoutFlushTimer) {
+      this.stdoutFlushTimer = setTimeout(() => this.flushStdout(), STDOUT_FLUSH_INTERVAL_MS);
+    }
+  }
+
+  private async flushStdout(): Promise<void> {
+    this.stdoutFlushTimer = null;
+    const entries = [...this.stdoutBuffer.entries()];
+    this.stdoutBuffer.clear();
+    for (const [sid, newLines] of entries) {
+      const existing = (await this.ctx.storage.get<string[]>(`stdout:${sid}`)) ?? [];
+      const merged = [...existing, ...newLines];
+      const trimmed = merged.length > STDOUT_MAX_LINES ? merged.slice(-STDOUT_MAX_LINES) : merged;
+      await this.ctx.storage.put(`stdout:${sid}`, trimmed);
+    }
+  }
+
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
 
@@ -90,6 +118,18 @@ export class StatusHub extends DurableObject {
       const sessionId = logsMatch[1];
       const logs = (await this.ctx.storage.get<string[]>(`logs:${sessionId}`)) ?? [];
       return new Response(JSON.stringify(logs), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
+    // HTTP endpoint: get stdout for a session
+    const stdoutMatch = url.pathname.match(/^\/sessions\/([^/]+)\/stdout$/);
+    if (request.method === "GET" && stdoutMatch) {
+      const sessionId = stdoutMatch[1];
+      // Flush any buffered lines before returning
+      if (this.stdoutBuffer.has(sessionId)) await this.flushStdout();
+      const lines = (await this.ctx.storage.get<string[]>(`stdout:${sessionId}`)) ?? [];
+      return new Response(JSON.stringify(lines), {
         headers: { "Content-Type": "application/json" },
       });
     }
@@ -181,7 +221,7 @@ export class StatusHub extends DurableObject {
     for (const [key, session] of entries) {
       const age = now - (session.lastUpdatedAt || session.startedAt);
       if (age > RETENTION_MS && session.status !== "running") {
-        keysToDelete.push(key, `logs:${session.sessionId}`);
+        keysToDelete.push(key, `logs:${session.sessionId}`, `stdout:${session.sessionId}`);
       }
     }
     if (keysToDelete.length > 0) {
@@ -250,6 +290,13 @@ export class StatusHub extends DurableObject {
         existing.activeSources = [];
         existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
+      }
+    } else if (event.type === "session:stdout") {
+      const sid = event.sessionId as string;
+      if (sid) {
+        const timestamp = new Date(now).toISOString().slice(11, 19);
+        const stream = event.stream === "stderr" ? "ERR" : "OUT";
+        this.bufferStdoutLine(sid, `${timestamp} [${stream}] ${event.line}`);
       }
     } else if (event.type === "session:error") {
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);

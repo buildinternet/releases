@@ -40,6 +40,15 @@ sessionRoutes.get("/sessions/:sessionId/logs", async (c) => {
   return c.json(logs);
 });
 
+// ── Session stdout ──
+
+sessionRoutes.get("/sessions/:sessionId/stdout", async (c) => {
+  const sessionId = c.req.param("sessionId");
+  const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}/stdout`));
+  const lines = await res.json();
+  return c.json(lines);
+});
+
 // ── Cancel a running session ──
 
 sessionRoutes.post("/sessions/:sessionId/cancel", async (c) => {

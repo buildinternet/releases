@@ -47,7 +47,36 @@ interface StatusMessage {
   [key: string]: unknown;
 }
 
-type Tab = "sessions" | "fetch-log";
+interface SourceEntry {
+  id: string;
+  slug: string;
+  name: string;
+  type: string;
+  url: string;
+  orgSlug?: string | null;
+  isPrimary?: boolean;
+  isHidden?: boolean;
+  metadata?: string | null;
+  releaseCount?: number;
+  latestVersion?: string | null;
+  latestDate?: string | null;
+  lastFetchedAt?: string | null;
+  fetchPriority?: string | null;
+  changeDetectedAt?: string | null;
+}
+
+interface FetchTriggerResult {
+  fetched?: boolean;
+  queued?: boolean;
+  releasesFound?: number;
+  releasesInserted?: number;
+  durationMs?: number;
+  status?: string;
+  error?: string;
+  type?: string;
+}
+
+type Tab = "sessions" | "fetch-log" | "sources";
 type DateRange = "today" | "week" | "month" | "all";
 
 function getDateRangeAfter(range: DateRange): string | null {
@@ -110,7 +139,7 @@ function formatDuration(ms?: number | null): string {
   return `${minutes}m ${secs}s`;
 }
 
-export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
+export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: string }) {
   const [tab, setTab] = useState<Tab>("sessions");
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
@@ -119,6 +148,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [connected, setConnected] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [sessionLogs, setSessionLogs] = useState<Record<string, string[]>>({});
+  const [sessionStdout, setSessionStdout] = useState<Record<string, string[]>>({});
+  const [allSources, setAllSources] = useState<SourceEntry[]>([]);
   const [sessionPage, setSessionPage] = useState(0);
   const [fetchLogPage, setFetchLogPage] = useState(0);
   const pageSize = 25;
@@ -156,6 +187,15 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   }, [apiUrl, after]);
 
   useEffect(() => { hydrate(); }, [hydrate]);
+
+  // Fetch sources once on mount (not tied to date range — requires auth)
+  useEffect(() => {
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    fetch(`${apiUrl}/api/sources`, { headers }).then((r) => r.ok ? r.json() : null)
+      .then((src) => { if (src) setAllSources(src as SourceEntry[]); })
+      .catch(() => {});
+  }, [apiUrl, apiKey]);
 
   // Handle incoming WebSocket messages
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -213,6 +253,16 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           s.sessionId === (msg.sessionId as string) ? { ...s, status: "error", error: msg.error as string } : s
         )
       );
+    } else if (msg.type === "session:stdout") {
+      const sid = msg.sessionId as string;
+      const stream = msg.stream === "stderr" ? "ERR" : "OUT";
+      const timestamp = new Date((msg.timestamp as number) || Date.now()).toISOString().slice(11, 19);
+      const line = `${timestamp} [${stream}] ${msg.line}`;
+      setSessionStdout((prev) => {
+        const existing = prev[sid] ?? [];
+        const updated = [...existing, line];
+        return { ...prev, [sid]: updated.length > 1000 ? updated.slice(-1000) : updated };
+      });
     } else if (msg.type === "session:dismissed") {
       setSessions((prev) => prev.filter((s) => s.sessionId !== (msg.sessionId as string)));
     } else if (msg.type === "fetch:complete") {
@@ -296,7 +346,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     return () => clearInterval(interval);
   }, [hasRunningSessions, visible]);
 
-  // Fetch persisted logs once when expanding a session
+  // Fetch persisted logs and stdout once when expanding a session
   const fetchedLogsRef = useRef<Set<string>>(new Set());
   const fetchLogsForSession = useCallback((sid: string) => {
     if (fetchedLogsRef.current.has(sid)) return;
@@ -306,6 +356,14 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       .then((logs: string[] | null) => {
         if (logs?.length) {
           setSessionLogs((prev) => ({ ...prev, [sid]: logs }));
+        }
+      })
+      .catch(() => {});
+    fetch(`${apiUrl}/api/sessions/${sid}/stdout`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((lines: string[] | null) => {
+        if (lines?.length) {
+          setSessionStdout((prev) => ({ ...prev, [sid]: lines }));
         }
       })
       .catch(() => {});
@@ -366,6 +424,16 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           >
             Fetch Log
           </button>
+          <button
+            onClick={() => setTab("sources")}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "sources"
+                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
+                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+            }`}
+          >
+            Sources
+          </button>
         </div>
         <div className="flex gap-1 mb-px">
           {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
@@ -390,6 +458,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           sessions={filteredSessions}
           expandedSessions={expandedSessions}
           sessionLogs={sessionLogs}
+          sessionStdout={sessionStdout}
           apiUrl={apiUrl}
           page={sessionPage}
           perPage={pageSize}
@@ -407,6 +476,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         />
       )}
       {tab === "fetch-log" && <FetchLogTable logs={fetchLogs} page={fetchLogPage} perPage={pageSize} onPageChange={setFetchLogPage} />}
+      {tab === "sources" && <SourcesTable sources={allSources} apiUrl={apiUrl} apiKey={apiKey} />}
     </div>
   );
 }
@@ -427,6 +497,7 @@ function SessionsTable({
   sessions,
   expandedSessions,
   sessionLogs,
+  sessionStdout,
   apiUrl,
   page,
   perPage,
@@ -437,6 +508,7 @@ function SessionsTable({
   sessions: SessionState[];
   expandedSessions: Set<string>;
   sessionLogs: Record<string, string[]>;
+  sessionStdout: Record<string, string[]>;
   apiUrl: string;
   page: number;
   perPage: number;
@@ -526,7 +598,7 @@ function SessionsTable({
               </div>
             </button>
             {isExpanded && (
-              <SessionLogPanel sessionId={session.sessionId} logs={sessionLogs[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
+              <SessionLogPanel sessionId={session.sessionId} logs={sessionLogs[session.sessionId] ?? []} stdout={sessionStdout[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
             )}
           </div>);
         })}
@@ -571,33 +643,64 @@ function StepBadge({ step, status, type }: { step?: string; status: string; type
   return <span className={`capitalize ${color}`}>{step}</span>;
 }
 
-function SessionLogPanel({ sessionId, logs, currentAction, status }: { sessionId: string; logs: string[]; currentAction?: string; status: string }) {
+type LogMode = "structured" | "raw";
+
+function SessionLogPanel({ sessionId, logs, stdout, currentAction, status }: { sessionId: string; logs: string[]; stdout: string[]; currentAction?: string; status: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const [mode, setMode] = useState<LogMode>("structured");
+
+  const lines = mode === "structured" ? logs : stdout;
 
   useEffect(() => {
-    // Scroll within the log container only, not the page
     const container = containerRef.current;
     if (container) {
       container.scrollTop = container.scrollHeight;
     }
-  }, [logs.length]);
+  }, [lines.length]);
 
   return (
-    <div ref={containerRef} className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200 dark:border-stone-800">
-      {logs.length === 0 && currentAction && (
-        <div className="text-stone-500">{currentAction}</div>
-      )}
-      {logs.length === 0 && !currentAction && (
-        <div className="text-stone-600">
-          {status === "running" ? "Waiting for log output..." : "No logs recorded for this session."}
-        </div>
-      )}
-      {logs.map((line, i) => (
-        <div key={`${sessionId}-${i}`}>{line}</div>
-      ))}
-      {status === "running" && <div className="text-green-400 mt-1">▊</div>}
-      <div ref={bottomRef} />
+    <div className="border-b border-stone-200 dark:border-stone-800">
+      {/* Mode toggle */}
+      <div className="bg-stone-800 px-4 py-1.5 flex items-center gap-2 border-b border-stone-700">
+        <button
+          onClick={() => setMode("structured")}
+          className={`px-2 py-0.5 text-xs rounded transition-colors ${
+            mode === "structured"
+              ? "bg-stone-600 text-stone-100"
+              : "text-stone-400 hover:text-stone-300"
+          }`}
+        >
+          Structured
+        </button>
+        <button
+          onClick={() => setMode("raw")}
+          className={`px-2 py-0.5 text-xs rounded transition-colors ${
+            mode === "raw"
+              ? "bg-stone-600 text-stone-100"
+              : "text-stone-400 hover:text-stone-300"
+          }`}
+        >
+          Raw
+        </button>
+      </div>
+      <div ref={containerRef} className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed">
+        {lines.length === 0 && mode === "structured" && currentAction && (
+          <div className="text-stone-500">{currentAction}</div>
+        )}
+        {lines.length === 0 && !(mode === "structured" && currentAction) && (
+          <div className="text-stone-600">
+            {status === "running"
+              ? mode === "raw" ? "Waiting for stdout..." : "Waiting for log output..."
+              : mode === "raw" ? "No stdout captured for this session." : "No logs recorded for this session."}
+          </div>
+        )}
+        {lines.map((line, i) => (
+          <div key={`${sessionId}-${mode}-${i}`} className={mode === "raw" && line.includes("[ERR]") ? "text-red-400" : undefined}>
+            {line}
+          </div>
+        ))}
+        {status === "running" && <div className="text-green-400 mt-1">▊</div>}
+      </div>
     </div>
   );
 }
@@ -781,4 +884,179 @@ function FetchStatusBadge({ status }: { status: FetchLogEntry["status"] }) {
     dry_run: "Dry run",
   };
   return <span className={`${styles[status] ?? "text-stone-400"}`}>{labels[status] ?? status}</span>;
+}
+
+type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
+
+function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; apiUrl: string; apiKey?: string }) {
+  const [filter, setFilter] = useState<SourceTypeFilter>("all");
+  const [query, setQuery] = useState("");
+  const [fetching, setFetching] = useState<Set<string>>(new Set());
+  const [results, setResults] = useState<Record<string, FetchTriggerResult>>({});
+  const [page, setPage] = useState(0);
+  const perPage = 25;
+
+  // Pre-compute counts by type (single pass) for filter badges
+  const countByType = sources.reduce<Record<string, number>>((acc, s) => {
+    acc[s.type] = (acc[s.type] ?? 0) + 1;
+    return acc;
+  }, {});
+
+  const filtered = sources.filter((s) => {
+    if (filter !== "all" && s.type !== filter) return false;
+    if (query) {
+      const q = query.toLowerCase();
+      return (s.name.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q) || (s.orgSlug ?? "").toLowerCase().includes(q));
+    }
+    return true;
+  });
+
+  const totalPages = Math.ceil(filtered.length / perPage);
+  const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
+
+  const triggerFetch = async (slug: string) => {
+    setFetching((prev) => new Set(prev).add(slug));
+    setResults((prev) => { const next = { ...prev }; delete next[slug]; return next; });
+    try {
+      const headers: Record<string, string> = {};
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      const res = await fetch(`${apiUrl}/api/sources/${slug}/fetch`, { method: "POST", headers });
+      const data: FetchTriggerResult = await res.json();
+      setResults((prev) => ({ ...prev, [slug]: data }));
+    } catch {
+      setResults((prev) => ({ ...prev, [slug]: { error: "Request failed" } }));
+    } finally {
+      setFetching((prev) => { const next = new Set(prev); next.delete(slug); return next; });
+    }
+  };
+
+  const filterButtons: { value: SourceTypeFilter; label: string }[] = [
+    { value: "all", label: "All" },
+    { value: "feed", label: "Feed" },
+    { value: "github", label: "GitHub" },
+    { value: "scrape", label: "Scrape" },
+    { value: "agent", label: "Agent" },
+  ];
+
+  if (sources.length === 0) {
+    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No sources loaded.</div>;
+  }
+
+  return (
+    <div>
+      {/* Filters */}
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex gap-1">
+          {filterButtons.map((f) => {
+            const count = f.value === "all" ? sources.length : (countByType[f.value] ?? 0);
+            if (count === 0 && f.value !== "all") return null;
+            return (
+              <button
+                key={f.value}
+                onClick={() => { setFilter(f.value); setPage(0); }}
+                className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                  filter === f.value
+                    ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+                    : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+                }`}
+              >
+                {f.label} <span className="ml-0.5 opacity-60">{count}</span>
+              </button>
+            );
+          })}
+        </div>
+        <input
+          type="text"
+          placeholder="Filter sources..."
+          value={query}
+          onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+          className="px-2.5 py-1 text-xs rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 w-48"
+        />
+      </div>
+
+      <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
+          <div>Name</div>
+          <div>Org</div>
+          <div>Type</div>
+          <div>Last Fetched</div>
+          <div>Priority</div>
+          <div></div>
+        </div>
+        {paginated.map((src) => {
+          const result = results[src.slug];
+          const isFetching = fetching.has(src.slug);
+          return (
+            <div key={src.id} className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center">
+              <div className="text-stone-900 dark:text-stone-100 truncate" title={src.slug}>
+                {src.name}
+              </div>
+              <div className="text-stone-500 truncate">{src.orgSlug ?? "—"}</div>
+              <div>
+                <SourceTypeBadge type={src.type} />
+              </div>
+              <div className="text-stone-500">
+                {src.lastFetchedAt ? formatTime(new Date(src.lastFetchedAt).getTime()) : <span className="text-stone-400">never</span>}
+              </div>
+              <div className="text-stone-500 capitalize">{src.fetchPriority ?? "normal"}</div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => triggerFetch(src.slug)}
+                  disabled={isFetching}
+                  className="px-2.5 py-1 text-xs rounded border border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-40 disabled:cursor-default transition-colors"
+                >
+                  {isFetching ? "Fetching..." : "Fetch"}
+                </button>
+                {result ? (
+                  <span className="text-xs">
+                    {result.error ? (
+                      <span className="text-red-500">{result.error.slice(0, 30)}</span>
+                    ) : result.fetched ? (
+                      <span className="text-green-600">+{result.releasesInserted ?? 0} ({formatDuration(result.durationMs)})</span>
+                    ) : result.queued ? (
+                      <span className="text-amber-500">Queued</span>
+                    ) : null}
+                  </span>
+                ) : src.changeDetectedAt && (src.type === "scrape" || src.type === "agent") ? (
+                  <span className="text-xs text-amber-500">Pending fetch</span>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {totalPages > 1 && (
+        <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
+          <span>{filtered.length} sources</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage(page - 1)}
+              disabled={page === 0}
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
+            >
+              Prev
+            </button>
+            <span>{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => setPage(page + 1)}
+              disabled={page >= totalPages - 1}
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
+            >
+              Next
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function SourceTypeBadge({ type }: { type: string }) {
+  const styles: Record<string, string> = {
+    feed: "text-blue-500",
+    github: "text-purple-500",
+    scrape: "text-amber-500",
+    agent: "text-green-500",
+  };
+  return <span className={`capitalize ${styles[type] ?? "text-stone-400"}`}>{type}</span>;
 }

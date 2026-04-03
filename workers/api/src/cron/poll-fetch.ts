@@ -154,11 +154,19 @@ async function pollOne(db: ReturnType<typeof drizzle>, source: Source, now: Date
 
 // ── Fetch one source ──
 
-async function fetchOne(
+export interface FetchOneResult {
+  releasesFound: number;
+  releasesInserted: number;
+  durationMs: number;
+  status: "success" | "no_change" | "error";
+  error?: string;
+}
+
+export async function fetchOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
   env: { GITHUB_TOKEN?: string },
-): Promise<void> {
+): Promise<FetchOneResult> {
   const start = Date.now();
   const meta = getSourceMeta(source);
 
@@ -170,15 +178,16 @@ async function fetchOne(
     } else {
       if (!meta.feedUrl || !meta.feedType) {
         console.warn(`[cron] Fetch ${source.slug}: missing feedUrl or feedType, skipping`);
+        const dur = Date.now() - start;
         await db.insert(fetchLog).values({
           sourceId: source.id,
           releasesFound: 0,
           releasesInserted: 0,
-          durationMs: Date.now() - start,
+          durationMs: dur,
           status: "error",
           error: "Missing feedUrl or feedType in source metadata",
         }).catch(() => {});
-        return;
+        return { releasesFound: 0, releasesInserted: 0, durationMs: dur, status: "error", error: "Missing feedUrl or feedType in source metadata" };
       }
       const conditionalHeaders: Record<string, string> = {};
       if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
@@ -222,8 +231,9 @@ async function fetchOne(
           changeDetectedAt: null,
         }).where(eq(sources.id, source.id)),
       ]);
-      console.log(`[cron] Fetch ${source.slug}: no changes (${Date.now() - start}ms)`);
-      return;
+      const dur = Date.now() - start;
+      console.log(`[cron] Fetch ${source.slug}: no changes (${dur}ms)`);
+      return { releasesFound: 0, releasesInserted: 0, durationMs: dur, status: "no_change" as const };
     }
 
     const rows = rawReleases.map((raw) => ({
@@ -238,17 +248,10 @@ async function fetchOne(
     }));
 
     let inserted = 0;
-    for (let i = 0; i < rows.length; i += 15) {
-      const chunk = rows.slice(i, i + 15);
+    for (let i = 0; i < rows.length; i += 5) {
+      const chunk = rows.slice(i, i + 5);
       const result = await db.insert(releases).values(chunk)
-        .onConflictDoUpdate({
-          target: [releases.sourceId, releases.url],
-          set: {
-            content: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content ELSE releases.content END`,
-            contentHash: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_hash ELSE releases.content_hash END`,
-          },
-          where: sql`excluded.content != '' AND releases.content = ''`,
-        })
+        .onConflictDoNothing()
         .returning({ id: releases.id });
       inserted += result.length;
     }
@@ -270,7 +273,9 @@ async function fetchOne(
       }).where(eq(sources.id, source.id)),
     ]);
 
-    console.log(`[cron] Fetch ${source.slug}: ${inserted} new (${Date.now() - start}ms)`);
+    const dur = Date.now() - start;
+    console.log(`[cron] Fetch ${source.slug}: ${inserted} new (${dur}ms)`);
+    return { releasesFound: rawReleases.length, releasesInserted: inserted, durationMs: dur, status: inserted > 0 ? "success" as const : "no_change" as const };
   } catch (err) {
     console.error(`[cron] Fetch error for ${source.slug}: ${err}`);
 
@@ -290,6 +295,8 @@ async function fetchOne(
       consecutiveErrors: newErrors,
       nextFetchAfter: nextFetch,
     }).where(eq(sources.id, source.id)).catch(() => {});
+
+    return { releasesFound: 0, releasesInserted: 0, durationMs: Date.now() - start, status: "error" as const, error: err instanceof Error ? err.message : String(err) };
   }
 }
 

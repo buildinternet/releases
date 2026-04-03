@@ -6,6 +6,7 @@ import { daysAgoIso } from "@released/lib/dates.js";
 import { toSlug } from "@released/lib/slug.js";
 import { getStatusHub } from "../utils.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
+import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
 
 export const sourceRoutes = new Hono<Env>();
@@ -136,6 +137,9 @@ sourceRoutes.get("/sources", async (c) => {
       releaseCount: stats?.release_count ?? 0,
       latestVersion: stats?.latest_version ?? null,
       latestDate: stats?.latest_date ?? null,
+      lastFetchedAt: src.lastFetchedAt ?? null,
+      fetchPriority: src.fetchPriority ?? null,
+      changeDetectedAt: src.changeDetectedAt ?? null,
     };
   });
 
@@ -209,6 +213,45 @@ sourceRoutes.get("/sources/changes", async (c) => {
     )
   );
   return c.json(rows);
+});
+
+// ── Trigger fetch for a single source ──
+
+sourceRoutes.post("/sources/:slug/fetch", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  if (!src) return c.json({ error: "not_found" }, 404);
+
+  let responsePayload: Record<string, unknown>;
+
+  if (src.type === "feed" || src.type === "github") {
+    // Feed and GitHub sources: fetch server-side
+    const result = await fetchOne(db, src, { GITHUB_TOKEN: c.env.GITHUB_TOKEN });
+    responsePayload = { fetched: true, ...result };
+  } else {
+    // Scrape and agent sources: flag for CLI pickup
+    await db.update(sources).set({
+      changeDetectedAt: new Date().toISOString(),
+    }).where(eq(sources.id, src.id));
+    responsePayload = { queued: true, type: "flagged" };
+  }
+
+  // Emit status event for dashboard feedback
+  const hub = getStatusHub(c.env);
+  await hub.fetch(new Request("https://do/event", {
+    method: "POST",
+    body: JSON.stringify({
+      type: "fetch:triggered",
+      sourceSlug: src.slug,
+      sourceName: src.name,
+      sourceType: src.type,
+      ...responsePayload,
+    }),
+    headers: { "Content-Type": "application/json" },
+  }));
+
+  return c.json(responsePayload);
 });
 
 // ── Batch release insert for fetch command ──
