@@ -7,7 +7,7 @@ import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
 import { detectChangelogUrl } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
-  findSourceBySlug, listAllSources, listFetchableSources,
+  findSourceBySlug, listAllSources, listFetchableSources, listSourcesWithChanges,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById,
   insertMediaAssets, clearChangeDetected,
@@ -44,6 +44,7 @@ export function registerFetchCommand(program: Command) {
     .option("--full", "Force full re-parse of all content (bypass incremental optimization)")
     .option("--unfetched", "Only fetch sources that have never been fetched")
     .option("--stale <hours>", "Only fetch sources older than N hours, respecting backoff")
+    .option("--changed", "Only fetch sources where poll detected upstream changes")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--no-summarize", "Skip summary generation after fetching")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
@@ -53,6 +54,7 @@ Examples:
   released fetch my-source                Fetch a single source
   released fetch --stale 6                Fetch sources not updated in 6+ hours
   released fetch --unfetched              Fetch sources never fetched before
+  released fetch --changed                Fetch sources where poll detected changes
   released fetch --retry-errors           Retry sources that errored last time
   released fetch my-source --dry-run      Preview without writing to DB
   released fetch my-source --force        Delete and re-fetch all releases
@@ -61,7 +63,7 @@ Examples:
     .action(async (slugArg: string | undefined, opts: {
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
-      unfetched?: boolean; stale?: string; retryErrors?: boolean; concurrency?: string;
+      unfetched?: boolean; stale?: string; changed?: boolean; retryErrors?: boolean; concurrency?: string;
       summarize?: boolean;
     }) => {
       // Positional arg takes precedence over --source option
@@ -125,6 +127,19 @@ Examples:
         if (!opts.json) {
           console.log(chalk.bold(`Fetching ${targetSources.length} stale source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
         }
+      } else if (opts.changed) {
+        targetSources = await listSourcesWithChanges();
+        if (targetSources.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.green("No sources with detected changes."));
+          }
+          return;
+        }
+        if (!opts.json) {
+          console.log(chalk.bold(`Fetching ${targetSources.length} changed source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
+        }
       } else if (opts.retryErrors) {
         targetSources = await listFetchableSources({ mode: "retry_errors" });
         if (targetSources.length === 0) {
@@ -141,7 +156,7 @@ Examples:
       } else {
         if (isRemoteMode()) {
           console.error(chalk.red("Remote fetch requires a filter to prevent expensive bulk operations."));
-          console.error(chalk.gray("Use one of: a source slug, --stale <hours>, --unfetched, or --retry-errors."));
+          console.error(chalk.gray("Use one of: a source slug, --stale <hours>, --unfetched, --changed, or --retry-errors."));
           process.exit(1);
         }
         targetSources = await listAllSources();
