@@ -8,6 +8,7 @@ export function Header() {
       <nav className="flex items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
         <Link href="/" className="hover:text-stone-700 dark:hover:text-stone-300">Browse</Link>
         <Link href="/search" className="hover:text-stone-700 dark:hover:text-stone-300">Search</Link>
+        <Link href="/docs" className="hover:text-stone-700 dark:hover:text-stone-300">Docs</Link>
         <ThemeToggle />
       </nav>
     </header>
