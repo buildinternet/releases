@@ -7,6 +7,7 @@
     "released": "./src/index.ts"
   },
   "scripts": {
+    "prebuild": "rm -f .*.bun-build",
     "build": "bun build --compile src/index.ts --outfile dist/released",
     "build:linux": "bun build --compile src/index.ts --outfile dist/released --target=bun-linux-x64",
     "build:mcp-browser": "bun build --compile src/agent/mcp-cloudflare-browser.ts --outfile dist/released-mcp-browser",
