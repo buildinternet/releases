@@ -69,7 +69,7 @@ export const scrape: Adapter = {
     }
 
     // ── Single-page Cloudflare + AI path ──────────────────────
-    return fetchViaSinglePage(source, options);
+    return fetchViaSinglePage(source, meta, options);
   },
 };
 
@@ -206,7 +206,7 @@ async function fetchViaMarkdown(
   };
 }
 
-async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promise<FetchResult> {
+async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSourceMeta>, options?: FetchOptions): Promise<FetchResult> {
   const accountId = config.cloudflareAccountId();
   const apiToken = config.cloudflareApiToken();
 
@@ -264,6 +264,12 @@ async function fetchViaSinglePage(source: Source, options?: FetchOptions): Promi
   const contentHash = sha256Hex(markdown);
   if (await checkContentHash(source, contentHash)) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
+    // Only meaningful when poll has stored HEAD headers — tracks how many renders could be avoided
+    if (meta.pageEtag || meta.pageLastModified) {
+      const skips = (meta.headCheckSkips ?? 0) + 1;
+      logger.info(`HEAD pre-check could have saved this render for ${source.slug} (${skips} skippable renders so far)`);
+      await updateSourceMeta(source, { headCheckSkips: skips });
+    }
     return { releases: [] };
   }
 

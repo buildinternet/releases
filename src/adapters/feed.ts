@@ -49,6 +49,14 @@ export interface SourceMetadata {
 
   // Summary generation
   summarize?: boolean; // false = opt-out of AI summaries
+
+  // Page HEAD check fields (scrape sources without feeds)
+  pageEtag?: string;
+  pageLastModified?: string;
+  pageContentLength?: string;
+  headCheckUseless?: boolean;      // server never returns useful headers
+  headCheckSkips?: number;         // times HEAD said unchanged and content hash agreed
+  headCheckFalseNegatives?: number; // times HEAD said unchanged but content hash differed
 }
 
 // ── Feed discovery ──────────────────────────────────────────────────

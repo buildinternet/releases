@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { findSourceBySlug, listFeedSources, updateSource } from "../../db/queries.js";
+import { findSourceBySlug, listFeedSources, listScrapeSources, updateSource } from "../../db/queries.js";
 import { getSourceMeta, updateSourceMeta, headCheckFeed } from "../../adapters/feed.js";
 import type { ChangeStatus, SourceMetadata } from "../../adapters/feed.js";
 import { timeAgo } from "../../lib/dates.js";
@@ -12,7 +12,8 @@ import type { Source } from "../../db/schema.js";
 interface PollResult {
   name: string;
   slug: string;
-  feedUrl: string;
+  url: string;
+  type: "feed" | "page";
   status: ChangeStatus;
   responseMs: number;
   lastFetchedAt: string | null;
@@ -20,36 +21,72 @@ interface PollResult {
 
 async function pollSource(source: Source): Promise<PollResult | null> {
   const meta = getSourceMeta(source);
-  if (!meta.feedUrl) return null;
 
-  const result = await headCheckFeed(meta.feedUrl, {
-    etag: meta.feedEtag,
-    lastModified: meta.feedLastModified,
-    contentLength: meta.feedContentLength,
-  });
+  // Feed sources: HEAD check on feed URL
+  if (meta.feedUrl) {
+    const result = await headCheckFeed(meta.feedUrl, {
+      etag: meta.feedEtag,
+      lastModified: meta.feedLastModified,
+      contentLength: meta.feedContentLength,
+    });
 
-  const metaUpdates: Partial<SourceMetadata> = {};
-  if (result.etag) metaUpdates.feedEtag = result.etag;
-  if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
-  if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
-  if (Object.keys(metaUpdates).length > 0) {
-    await updateSourceMeta(source, metaUpdates);
+    const metaUpdates: Partial<SourceMetadata> = {};
+    if (result.etag) metaUpdates.feedEtag = result.etag;
+    if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
+    if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
+    if (Object.keys(metaUpdates).length > 0) {
+      await updateSourceMeta(source, metaUpdates);
+    }
+
+    if (result.status === "changed" || result.status === "unknown") {
+      await updateSource(source, { changeDetectedAt: new Date().toISOString() });
+    }
+
+    logger.debug(`Poll ${source.slug}: ${result.status} (${result.responseMs}ms)`);
+
+    return {
+      name: source.name,
+      slug: source.slug,
+      url: meta.feedUrl,
+      type: "feed",
+      status: result.status,
+      responseMs: result.responseMs,
+      lastFetchedAt: source.lastFetchedAt,
+    };
   }
 
-  if (result.status === "changed" || result.status === "unknown") {
-    await updateSource(source, { changeDetectedAt: new Date().toISOString() });
+  // Scrape sources without feed: HEAD check on page URL
+  if (source.type === "scrape") {
+    // HEAD check on source page URL (same logic as feed, different stored keys)
+    const result = await headCheckFeed(source.url, {
+      etag: meta.pageEtag,
+      lastModified: meta.pageLastModified,
+      contentLength: meta.pageContentLength,
+    });
+
+    const metaUpdates: Partial<SourceMetadata> = {};
+    if (result.etag) metaUpdates.pageEtag = result.etag;
+    if (result.lastModified) metaUpdates.pageLastModified = result.lastModified;
+    if (result.contentLength) metaUpdates.pageContentLength = result.contentLength;
+    if (Object.keys(metaUpdates).length > 0) {
+      await updateSourceMeta(source, metaUpdates);
+    }
+
+    // HEAD alone is unreliable for scrape sources (JS-rendered pages, static shells) — collect signal only
+    logger.debug(`Poll ${source.slug} (page): ${result.status} (${result.responseMs}ms)`);
+
+    return {
+      name: source.name,
+      slug: source.slug,
+      url: source.url,
+      type: "page",
+      status: result.status,
+      responseMs: result.responseMs,
+      lastFetchedAt: source.lastFetchedAt,
+    };
   }
 
-  logger.debug(`Poll ${source.slug}: ${result.status} (${result.responseMs}ms)`);
-
-  return {
-    name: source.name,
-    slug: source.slug,
-    feedUrl: meta.feedUrl,
-    status: result.status,
-    responseMs: result.responseMs,
-    lastFetchedAt: source.lastFetchedAt,
-  };
+  return null;
 }
 
 function statusLabel(status: ChangeStatus): string {
@@ -60,19 +97,25 @@ function statusLabel(status: ChangeStatus): string {
   }
 }
 
+function typeLabel(type: "feed" | "page"): string {
+  return type === "feed" ? chalk.blue("feed") : chalk.magenta("page");
+}
+
 export function registerPollCommand(program: Command) {
   program
     .command("poll [slug]")
-    .description("Check feed sources for upstream changes via HEAD requests")
+    .description("Check feed and scrape sources for upstream changes via HEAD requests")
     .option("--json", "Output as JSON")
     .option("--changed", "Only show sources with detected changes")
+    .option("--scrape-only", "Only poll scrape sources (page HEAD check)")
     .addHelpText("after", `
 Examples:
-  released poll                      Poll all feed sources
+  released poll                      Poll all feed and scrape sources
   released poll my-source            Poll a specific source
   released poll --changed            Show only sources with changes
+  released poll --scrape-only        Poll only scrape sources
   released poll --json               Output as JSON`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; changed?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { json?: boolean; changed?: boolean; scrapeOnly?: boolean }) => {
       let sourcesToPoll: Source[];
 
       if (slug) {
@@ -83,12 +126,16 @@ Examples:
         }
         sourcesToPoll = [source];
       } else {
-        sourcesToPoll = (await listFeedSources()) ?? [];
+        const [feedSources, scrapeSources] = await Promise.all([
+          opts.scrapeOnly ? Promise.resolve([]) : listFeedSources().then(r => r ?? []),
+          listScrapeSources().then(r => r ?? []),
+        ]);
+        sourcesToPoll = [...feedSources, ...scrapeSources];
         if (sourcesToPoll.length === 0) {
           if (opts.json) {
             console.log(JSON.stringify([], null, 2));
           } else {
-            console.log("No feed sources found.");
+            console.log("No pollable sources found.");
           }
           return;
         }
@@ -123,6 +170,7 @@ Examples:
       const table = new Table({
         head: [
           chalk.cyan("Source"),
+          chalk.cyan("Type"),
           chalk.cyan("Status"),
           chalk.cyan("Response"),
           chalk.cyan("Last Fetch"),
@@ -132,6 +180,7 @@ Examples:
       for (const r of display) {
         table.push([
           stripAnsi(r.name),
+          typeLabel(r.type),
           statusLabel(r.status),
           chalk.dim(`${r.responseMs}ms`),
           r.lastFetchedAt ? timeAgo(r.lastFetchedAt) : chalk.dim("never"),
@@ -140,9 +189,14 @@ Examples:
 
       console.log(table.toString());
 
+      const feedResults = results.filter((r) => r.type === "feed");
+      const pageResults = results.filter((r) => r.type === "page");
       const changed = results.filter((r) => r.status === "changed").length;
       const unchanged = results.filter((r) => r.status === "unchanged").length;
       const unknown = results.filter((r) => r.status === "unknown").length;
-      console.log(`\n${results.length} polled: ${chalk.yellow(`${changed} changed`)}, ${chalk.green(`${unchanged} unchanged`)}, ${chalk.dim(`${unknown} unknown`)}`);
+      const parts = [`${results.length} polled`];
+      if (feedResults.length > 0) parts.push(`${feedResults.length} feed`);
+      if (pageResults.length > 0) parts.push(`${pageResults.length} page`);
+      console.log(`\n${parts.join(", ")}: ${chalk.yellow(`${changed} changed`)}, ${chalk.green(`${unchanged} unchanged`)}, ${chalk.dim(`${unknown} unknown`)}`);
     });
 }
