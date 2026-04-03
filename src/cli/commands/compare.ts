@@ -37,8 +37,8 @@ Examples:
       }
 
       const [releasesA, releasesB] = await Promise.all([
-        getRecentReleases(sourceA.id, cutoff),
-        getRecentReleases(sourceB.id, cutoff),
+        getRecentReleases(sourceA.id, cutoff, sourceA.slug),
+        getRecentReleases(sourceB.id, cutoff, sourceB.slug),
       ]);
 
       if (releasesA.length === 0 && releasesB.length === 0) {
