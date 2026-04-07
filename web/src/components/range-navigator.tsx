@@ -428,7 +428,7 @@ function DetailChart() {
             <button
               type="button"
               onClick={() => setStackMode("all")}
-              className={`cursor-pointer ${showProductToggle ? "rounded-r-none" : "rounded-r-none"} ${pillCls(stackMode === "all")}`}
+              className={`cursor-pointer rounded-r-none ${pillCls(stackMode === "all")}`}
             >
               All
             </button>
@@ -637,28 +637,52 @@ function Overview() {
   const brushRef = useRef({ brushStart, brushEnd });
   brushRef.current = { brushStart, brushEnd };
 
-  const maxCount = Math.max(...buckets.map((b) => b.count), 1);
-  const totalMs = max.getTime() - min.getTime();
+  // Fill the full min→max range with weekly buckets so bars align with date-based markers
+  const completeBuckets = useMemo(() => {
+    const bucketMap = new Map<number, number>();
+    for (const b of buckets) {
+      bucketMap.set(b.weekStart.getTime(), b.count);
+    }
+    const result: WeeklyBucket[] = [];
+    // Align to the same Monday-start grid the API uses
+    const firstWeek = buckets.length > 0 ? buckets[0].weekStart.getTime() : min.getTime();
+    const overshoot = firstWeek - min.getTime();
+    const gridStart = overshoot <= 0 ? firstWeek : firstWeek - Math.ceil(overshoot / WEEK_MS) * WEEK_MS;
+    for (let ts = gridStart; ts < max.getTime(); ts += WEEK_MS) {
+      result.push({ weekStart: new Date(ts), count: bucketMap.get(ts) ?? 0 });
+    }
+    return result;
+  }, [buckets, min, max]);
+
+  const maxCount = Math.max(...completeBuckets.map((b) => b.count), 1);
+  const bucketCount = completeBuckets.length;
+  const gridStartMs = bucketCount > 0 ? completeBuckets[0].weekStart.getTime() : 0;
+
+  const dateToBucketPct = useCallback((d: Date): number => {
+    if (bucketCount === 0) return 0;
+    const idx = (d.getTime() - gridStartMs) / WEEK_MS;
+    return (idx / bucketCount) * 100;
+  }, [gridStartMs, bucketCount]);
 
   const overviewMilestones = useMemo(
     () => (showAnnotations ? milestonesInRange(min, max) : []),
     [showAnnotations, min, max],
   );
 
-  // Year boundary labels
+  // Year boundary labels — aligned to the bucket grid
   const yearLabels = useMemo(() => {
-    if (totalMs <= 0) return [];
+    if (bucketCount === 0) return [];
     const labels: { year: number; pct: number }[] = [];
     const startYear = min.getFullYear();
     const endYear = max.getFullYear();
     for (let y = startYear + 1; y <= endYear; y++) {
       const jan1 = new Date(y, 0, 1);
       if (jan1 > min && jan1 < max) {
-        labels.push({ year: y, pct: ((jan1.getTime() - min.getTime()) / totalMs) * 100 });
+        labels.push({ year: y, pct: dateToBucketPct(jan1) });
       }
     }
     return labels;
-  }, [min, max, totalMs]);
+  }, [min, max, bucketCount, dateToBucketPct]);
 
   /* --- Pointer drag --- */
 
@@ -785,7 +809,7 @@ function Overview() {
       >
         {/* Mini bars */}
         <div className="absolute inset-x-0 bottom-2 top-2 flex items-end gap-px px-px" aria-hidden="true">
-          {buckets.map((bucket, i) => {
+          {completeBuckets.map((bucket, i) => {
             const h = bucket.count > 0 ? Math.max(1, (bucket.count / maxCount) * (OVERVIEW_HEIGHT - 4)) : 0;
             return (
               <div
@@ -820,10 +844,10 @@ function Overview() {
         ))}
 
         {/* Earliest release marker line */}
-        {earliestRelease && totalMs > 0 && earliestRelease > min && earliestRelease < max && (
+        {earliestRelease && bucketCount > 0 && earliestRelease > min && earliestRelease < max && (
           <div
             className="absolute top-0 bottom-0 border-l border-dashed border-stone-400 dark:border-stone-500 z-[1]"
-            style={{ left: `${((earliestRelease.getTime() - min.getTime()) / totalMs) * 100}%` }}
+            style={{ left: `${dateToBucketPct(earliestRelease)}%` }}
           />
         )}
 
@@ -892,8 +916,8 @@ function Overview() {
       </div>
 
       {/* Earliest release label positioned outside the clipping track */}
-      {earliestRelease && totalMs > 0 && earliestRelease > min && earliestRelease < max && (() => {
-        const pct = ((earliestRelease.getTime() - min.getTime()) / totalMs) * 100;
+      {earliestRelease && bucketCount > 0 && earliestRelease > min && earliestRelease < max && (() => {
+        const pct = dateToBucketPct(earliestRelease);
         return (
           <div className="relative h-3 mt-0.5" aria-hidden="true">
             <span

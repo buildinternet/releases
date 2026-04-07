@@ -84,6 +84,38 @@ export function ReleaseTimeline({ activity, orgSlug, sources, products, children
 
   const [brushRange, setBrushRange] = useState<[Date, Date]>([defaultBrushStart, rangeEnd]);
 
+  // Sources inherit their product's color so chart and card colors are consistent.
+  const productColorMap = useMemo(() => {
+    if (products.length === 0) return null;
+    const sourceToProduct = new Map<string, string>();
+    for (const s of sources) {
+      if (s.productSlug) sourceToProduct.set(s.slug, s.productSlug);
+    }
+    const activeSources = activity.sources.filter((s) => s.releaseCount > 0);
+    const activeProductSlugs = new Set<string>();
+    for (const src of activeSources) {
+      const ps = sourceToProduct.get(src.slug);
+      if (ps) activeProductSlugs.add(ps);
+    }
+    let colorIdx = 0;
+    const productToColor = new Map<string, number>();
+    for (const product of products) {
+      if (activeProductSlugs.has(product.slug)) {
+        productToColor.set(product.slug, colorIdx++);
+      }
+    }
+    const sourceColorMap = new Map<string, number>();
+    for (const src of activeSources) {
+      const ps = sourceToProduct.get(src.slug);
+      if (ps && productToColor.has(ps)) {
+        sourceColorMap.set(src.slug, productToColor.get(ps)!);
+      } else {
+        sourceColorMap.set(src.slug, colorIdx++);
+      }
+    }
+    return { sourceColorMap, productToColor, sourceToProduct };
+  }, [products, sources, activity.sources]);
+
   // Parse buckets once — stable across brush changes
   const parsedSources = useMemo(() => {
     return activity.sources
@@ -91,9 +123,9 @@ export function ReleaseTimeline({ activity, orgSlug, sources, products, children
       .map((source, i) => ({
         ...source,
         allBuckets: parseBuckets(source.weeklyBuckets),
-        colorIndex: i,
+        colorIndex: productColorMap?.sourceColorMap.get(source.slug) ?? i,
       }));
-  }, [activity.sources]);
+  }, [activity.sources, productColorMap]);
 
   // Per-source bucket data for stacked bar chart (only meaningful with multiple sources)
   const sourceBuckets = useMemo<SourceBucketEntry[] | null>(() => {
@@ -108,15 +140,9 @@ export function ReleaseTimeline({ activity, orgSlug, sources, products, children
 
   // Per-product bucket data for stacked bar chart (aggregate sources by product)
   const productBuckets = useMemo<SourceBucketEntry[] | null>(() => {
-    if (products.length === 0 || parsedSources.length <= 1) return null;
+    if (!productColorMap || parsedSources.length <= 1) return null;
 
-    // Build a slug→productSlug lookup from the sources prop
-    const sourceToProduct = new Map<string, string>();
-    for (const s of sources) {
-      if (s.productSlug) sourceToProduct.set(s.slug, s.productSlug);
-    }
-
-    // Group parsed sources by product (ungrouped → "other")
+    const { sourceToProduct } = productColorMap;
     const groups = new Map<string, typeof parsedSources>();
     for (const src of parsedSources) {
       const key = sourceToProduct.get(src.slug) ?? "other";
@@ -124,23 +150,22 @@ export function ReleaseTimeline({ activity, orgSlug, sources, products, children
       groups.get(key)!.push(src);
     }
 
-    // Merge buckets within each product group
-    let colorIdx = 0;
     const result: SourceBucketEntry[] = [];
     for (const product of products) {
       const srcs = groups.get(product.slug);
       if (!srcs || srcs.length === 0) continue;
       const merged = mergeBuckets(srcs.map((s) => s.allBuckets));
-      result.push({ name: product.name, slug: product.slug, colorIndex: colorIdx++, buckets: merged });
+      const colorIndex = productColorMap.productToColor.get(product.slug) ?? 0;
+      result.push({ name: product.name, slug: product.slug, colorIndex, buckets: merged });
     }
     const otherSrcs = groups.get("other");
     if (otherSrcs && otherSrcs.length > 0) {
       const merged = mergeBuckets(otherSrcs.map((s) => s.allBuckets));
-      result.push({ name: "Other", slug: "other", colorIndex: colorIdx++, buckets: merged });
+      result.push({ name: "Other", slug: "other", colorIndex: otherSrcs[0].colorIndex, buckets: merged });
     }
 
     return result.length > 1 ? result : null;
-  }, [parsedSources, products, sources]);
+  }, [parsedSources, productColorMap, products]);
 
   // Use aggregate buckets as the canonical week grid (properly aligned by the API)
   const brushedWeekGrid = useMemo(() => {
