@@ -52,7 +52,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   }
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const [accounts, tagRows, sourceRows, productRows, aliasRows] = await Promise.all([
+  const [accounts, tagRows, orgSources, productRows, aliasRows] = await Promise.all([
     db
       .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts)
@@ -87,9 +87,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .orderBy(domainAliases.domain),
   ]);
 
-  const orgSources = sourceRows;
-
-  const sourcesWithStats = sourceRows.map((row) => ({
+  const sourcesWithStats = orgSources.map((row) => ({
     id: row.id,
     slug: row.slug,
     name: row.name,

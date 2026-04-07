@@ -167,6 +167,7 @@ export type OrgReleaseRow = {
   source_type: string;
 };
 
+/** Uses raw D1 prepare/bind instead of Drizzle because cursor WHERE fragments are dynamic strings. */
 export async function getOrgReleasesFeed(
   d1: D1Database,
   orgId: string,
