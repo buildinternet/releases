@@ -104,23 +104,31 @@ sourceRoutes.get("/sources", async (c) => {
 
   if (rows.length === 0) return c.json([]);
 
-  const statsRows = await db.all<{
+  // D1 limits bound parameters to 100 per query — batch the IN clause
+  type StatsRow = {
     source_id: string;
     release_count: number;
     latest_version: string | null;
     latest_date: string | null;
     org_slug: string | null;
-  }>(sql`
-    SELECT
-      s.id AS source_id,
-      (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-      (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND (r2.suppressed IS NULL OR r2.suppressed = 0) AND r2.published_at IS NOT NULL ORDER BY r2.published_at DESC LIMIT 1) AS latest_version,
-      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND (r3.suppressed IS NULL OR r3.suppressed = 0) AND r3.published_at IS NOT NULL ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
-      o.slug AS org_slug
-    FROM sources s
-    LEFT JOIN organizations o ON o.id = s.org_id
-    WHERE s.id IN (${sql.join(rows.map(r => sql`${r.id}`), sql`,`)})
-  `);
+  };
+  const BATCH_SIZE = 50;
+  const statsRows: StatsRow[] = [];
+  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
+    const chunk = rows.slice(i, i + BATCH_SIZE);
+    const batch = await db.all<StatsRow>(sql`
+      SELECT
+        s.id AS source_id,
+        (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
+        (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND (r2.suppressed IS NULL OR r2.suppressed = 0) AND r2.published_at IS NOT NULL ORDER BY r2.published_at DESC LIMIT 1) AS latest_version,
+        (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND (r3.suppressed IS NULL OR r3.suppressed = 0) AND r3.published_at IS NOT NULL ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
+        o.slug AS org_slug
+      FROM sources s
+      LEFT JOIN organizations o ON o.id = s.org_id
+      WHERE s.id IN (${sql.join(chunk.map(r => sql`${r.id}`), sql`,`)})
+    `);
+    statsRows.push(...batch);
+  }
 
   const statsMap = new Map(statsRows.map(s => [s.source_id, s]));
 
