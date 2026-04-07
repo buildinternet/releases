@@ -1,6 +1,7 @@
 import { eq, and, or, sql, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sources, releases, fetchLog } from "@releases/db/schema.js";
+import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@releases/db/schema.js";
 import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapters/feed.js";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
@@ -63,7 +64,6 @@ export async function pollAndFetch(env: { DB: D1Database; GITHUB_TOKEN?: string;
 // ── Query due sources ──
 
 async function queryDueSources(db: ReturnType<typeof drizzle>, now: Date): Promise<Source[]> {
-  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
   const notPaused = sql`${sources.fetchPriority} != 'paused'`;
   // Include sources that have a feed URL OR are GitHub type (GitHub sources
   // don't store a feedUrl — they use the GitHub releases API directly)
