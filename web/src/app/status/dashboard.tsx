@@ -172,12 +172,12 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const hydrate = useCallback(() => {
     const safeFetch = (url: string) => fetch(url).then((r) => r.ok ? r.json() : null);
     const fetchLogUrl = after
-      ? `${apiUrl}/api/status/fetch-log?after=${encodeURIComponent(after)}`
-      : `${apiUrl}/api/status/fetch-log`;
+      ? `${apiUrl}/v1/status/fetch-log?after=${encodeURIComponent(after)}`
+      : `${apiUrl}/v1/status/fetch-log`;
     return Promise.all([
-      safeFetch(`${apiUrl}/api/sessions`),
+      safeFetch(`${apiUrl}/v1/sessions`),
       safeFetch(fetchLogUrl),
-      safeFetch(`${apiUrl}/api/status/usage`),
+      safeFetch(`${apiUrl}/v1/status/usage`),
     ]).then(([s, f, u]) => {
       if (s) setSessions(s as SessionState[]);
       if (f) setFetchLogs(f as FetchLogEntry[]);
@@ -192,7 +192,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   useEffect(() => {
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    fetch(`${apiUrl}/api/sources`, { headers }).then((r) => r.ok ? r.json() : null)
+    fetch(`${apiUrl}/v1/sources`, { headers }).then((r) => r.ok ? r.json() : null)
       .then((src) => { if (src) setAllSources(src as SourceEntry[]); })
       .catch(() => {});
   }, [apiUrl, apiKey]);
@@ -351,7 +351,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const fetchLogsForSession = useCallback((sid: string) => {
     if (fetchedLogsRef.current.has(sid)) return;
     fetchedLogsRef.current.add(sid);
-    fetch(`${apiUrl}/api/sessions/${sid}/logs`)
+    fetch(`${apiUrl}/v1/sessions/${sid}/logs`)
       .then((r) => r.ok ? r.json() : null)
       .then((logs: string[] | null) => {
         if (logs?.length) {
@@ -359,7 +359,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
         }
       })
       .catch(() => {});
-    fetch(`${apiUrl}/api/sessions/${sid}/stdout`)
+    fetch(`${apiUrl}/v1/sessions/${sid}/stdout`)
       .then((r) => r.ok ? r.json() : null)
       .then((lines: string[] | null) => {
         if (lines?.length) {
@@ -587,10 +587,10 @@ function SessionsTable({
                     title="Dismiss"
                     onClick={(e) => {
                       e.stopPropagation();
-                      fetch(`${apiUrl}/api/sessions/${session.sessionId}`, { method: "DELETE" });
+                      fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" });
                       onDismiss(session.sessionId);
                     }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/api/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
                   >
                     &times;
                   </span>
@@ -920,7 +920,7 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
     try {
       const headers: Record<string, string> = {};
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-      const res = await fetch(`${apiUrl}/api/sources/${slug}/fetch`, { method: "POST", headers });
+      const res = await fetch(`${apiUrl}/v1/sources/${slug}/fetch`, { method: "POST", headers });
       const data: FetchTriggerResult = await res.json();
       setResults((prev) => ({ ...prev, [slug]: data }));
     } catch {
