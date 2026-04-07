@@ -149,9 +149,18 @@ export class DiscoverySession extends DurableObject<Env> {
   private async connectToSandboxLogs(): Promise<void> {
     try {
       const sandbox = this.getSandboxHandle();
-      const ws = sandbox.wsConnect(8081);
+      const wsUpgradeRequest = new Request("http://localhost:8081", {
+        headers: { Upgrade: "websocket" },
+      });
+      const response = await sandbox.wsConnect(wsUpgradeRequest, 8081);
+      const ws = response.webSocket;
+      if (!ws) {
+        console.log(`[discovery:${this.sessionId}] sandbox WS upgrade failed — no webSocket on response`);
+        return;
+      }
+      ws.accept();
 
-      ws.addEventListener("message", async (event) => {
+      ws.addEventListener("message", async (event: MessageEvent) => {
         const data = typeof event.data === "string" ? event.data : "";
         try {
           const msg = JSON.parse(data);
