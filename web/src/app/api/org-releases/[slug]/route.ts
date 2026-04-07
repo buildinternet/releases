@@ -13,7 +13,7 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const headers: Record<string, string> = {};
   if (API_SECRET) headers["Authorization"] = `Bearer ${API_SECRET}`;
 
-  const res = await fetch(`${API_URL}/api/orgs/${slug}/releases?${qs}`, { headers });
+  const res = await fetch(`${API_URL}/v1/orgs/${slug}/releases?${qs}`, { headers });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }
