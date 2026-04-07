@@ -2,7 +2,7 @@ import { getApiUrl, getApiKey } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
-  ReleaseSummary, NewReleaseSummary, Product, Tag,
+  ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias,
 } from "../db/schema.js";
 import type { SourceListItem, Stats, UnifiedSearchResponse } from "./types.js";
 
@@ -844,3 +844,28 @@ export async function cancelSession(sessionId: string): Promise<{ ok: boolean; e
 }
 
 export type { SearchResult, Stats, SourceListItem } from "./types.js";
+
+// ── Domain Aliases ──
+
+export async function addDomainAlias(
+  domain: string,
+  target: { orgId?: string; productId?: string },
+): Promise<DomainAlias> {
+  return apiFetch<DomainAlias>("/v1/aliases", {
+    method: "POST",
+    body: JSON.stringify({ domain, orgId: target.orgId, productId: target.productId }),
+  });
+}
+
+export async function removeDomainAlias(domain: string): Promise<boolean> {
+  const result = await apiFetch<{ deleted: boolean } | null>(`/v1/aliases/${encodeURIComponent(domain)}`, { method: "DELETE" });
+  return result !== null;
+}
+
+export async function listDomainAliases(
+  target: { orgId?: string; productId?: string },
+): Promise<DomainAlias[]> {
+  if (!target.orgId && !target.productId) return [];
+  const params = target.orgId ? `orgId=${target.orgId}` : `productId=${target.productId}`;
+  return apiFetch<DomainAlias[]>(`/v1/aliases?${params}`);
+}

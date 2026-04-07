@@ -5,6 +5,7 @@ import {
   findOrg, getSourcesByOrg, listOrgs, createOrg, removeOrg,
   getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
   getProductsByOrg, addTagsToOrg, removeTagsFromOrg, getTagsForOrg, updateOrg,
+  listDomainAliases, addDomainAlias, removeDomainAlias,
 } from "../../db/queries.js";
 import { orgNotFound } from "../suggest.js";
 import { toSlug } from "../../lib/slug.js";
@@ -133,21 +134,23 @@ Examples:
         return orgNotFound(identifier);
       }
 
-      const [accounts, orgProducts, linkedSources, orgTags] = await Promise.all([
+      const [accounts, orgProducts, linkedSources, orgTags, aliases] = await Promise.all([
         getOrgAccountsBySlug(found.slug, found.id),
         getProductsByOrg(found.id),
         getSourcesByOrg(found.id),
         getTagsForOrg(found.id),
+        listDomainAliases({ orgId: found.id }),
       ]);
 
       if (opts.json) {
-        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources, tags: orgTags }, null, 2));
+        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources, tags: orgTags, aliases: aliases.map((a) => a.domain) }, null, 2));
         return;
       }
 
       console.log(chalk.bold(found.name));
       console.log(`  Slug:    ${found.slug}`);
       console.log(`  Domain:  ${found.domain ?? chalk.dim("—")}`);
+      if (aliases.length > 0) console.log(`  Aliases: ${aliases.map((a) => a.domain).join(", ")}`);
       if (found.description) console.log(`  About:   ${found.description}`);
       console.log(`  Created: ${found.createdAt}`);
       console.log(`  Updated: ${found.updatedAt}`);
@@ -394,6 +397,89 @@ Examples:
         console.log(chalk.yellow(`No tags for ${found.name}`));
       } else {
         console.log(allTags.join(", "));
+      }
+    });
+
+  // ── org alias ──
+  const alias = org.command("alias").description("Manage domain aliases for an organization");
+
+  alias
+    .command("add")
+    .description("Add domain aliases to an organization")
+    .argument("<identifier>", "Org slug")
+    .argument("<domains...>", "Domain names to add (e.g. claude.ai claude.com)")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, domains: string[], opts: { json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) return orgNotFound(identifier);
+
+      const results = [];
+      for (const domain of domains) {
+        try {
+          const created = await addDomainAlias(domain, { orgId: found.id });
+          results.push(created);
+        } catch (err) {
+          console.error(chalk.red(`Failed to add alias "${domain}": ${err instanceof Error ? err.message : err}`));
+        }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        for (const r of results) {
+          console.log(chalk.green(`Added alias: ${r.domain} → ${found.name}`));
+        }
+      }
+    });
+
+  alias
+    .command("remove")
+    .description("Remove domain aliases from an organization")
+    .argument("<identifier>", "Org slug")
+    .argument("<domains...>", "Domain names to remove")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, domains: string[], opts: { json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) return orgNotFound(identifier);
+
+      const removed = [];
+      for (const domain of domains) {
+        const ok = await removeDomainAlias(domain, { orgId: found.id });
+        if (ok) {
+          removed.push(domain);
+        } else {
+          console.error(chalk.yellow(`Alias "${domain}" not found.`));
+        }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify({ removed }, null, 2));
+      } else {
+        for (const d of removed) {
+          console.log(chalk.green(`Removed alias: ${d}`));
+        }
+      }
+    });
+
+  alias
+    .command("list")
+    .description("List domain aliases for an organization")
+    .argument("<identifier>", "Org slug")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, opts: { json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) return orgNotFound(identifier);
+
+      const aliases = await listDomainAliases({ orgId: found.id });
+
+      if (opts.json) {
+        console.log(JSON.stringify(aliases.map((a) => a.domain), null, 2));
+      } else if (aliases.length === 0) {
+        console.log(chalk.yellow(`No domain aliases for ${found.name}`));
+      } else {
+        for (const a of aliases) {
+          console.log(a.domain);
+        }
       }
     });
 }

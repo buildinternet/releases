@@ -11,3 +11,4 @@ export const newSummaryId = () => `sum_${nanoid()}`;
 export const newMediaAssetId = () => `ma_${nanoid()}`;
 export const newProductId = () => `prod_${nanoid()}`;
 export const newTagId = () => `tag_${nanoid()}`;
+export const newDomainAliasId = () => `da_${nanoid()}`;

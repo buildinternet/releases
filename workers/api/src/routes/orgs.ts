@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, count, max, min, gte, and, sql, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, orgAccounts, sources, releases, products, tags, orgTags } from "@released/db/schema.js";
+import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases } from "@released/db/schema.js";
 import { daysAgoIso } from "@released/lib/dates.js";
 import { isValidCategory } from "@released/lib/categories.js";
 import { toSlug } from "@released/lib/slug.js";
@@ -58,62 +58,78 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
 
-  const [org] = await db.select().from(organizations).where(
+  let [org] = await db.select().from(organizations).where(
     slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug)
   );
+  if (!org) {
+    const [alias] = await db
+      .select({ org: organizations })
+      .from(domainAliases)
+      .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
+      .where(eq(domainAliases.domain, slug));
+    if (alias) org = alias.org;
+  }
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const accounts = await db
-    .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
-    .from(orgAccounts)
-    .where(eq(orgAccounts.orgId, org.id));
+  const [accounts, tagRows, sourceRows, productRows, aliasRows] = await Promise.all([
+    db
+      .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
+      .from(orgAccounts)
+      .where(eq(orgAccounts.orgId, org.id)),
 
-  const tagRows = await db
-    .select({ name: tags.name })
-    .from(orgTags)
-    .innerJoin(tags, eq(orgTags.tagId, tags.id))
-    .where(eq(orgTags.orgId, org.id))
-    .orderBy(tags.name);
+    db
+      .select({ name: tags.name })
+      .from(orgTags)
+      .innerJoin(tags, eq(orgTags.tagId, tags.id))
+      .where(eq(orgTags.orgId, org.id))
+      .orderBy(tags.name),
 
-  const sourceRows = await db.all<{
-    id: string;
-    slug: string;
-    name: string;
-    type: string;
-    url: string;
-    is_primary: number | null;
-    release_count: number;
-    latest_version_by_date: string | null;
-    latest_date: string | null;
-    latest_version_by_fetch: string | null;
-    product_slug: string | null;
-    product_name: string | null;
-  }>(sql`
-    SELECT
-      s.id, s.slug, s.name, s.type, s.url, s.is_primary,
-      p.slug AS product_slug, p.name AS product_name,
-      (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-      (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND r2.published_at IS NOT NULL AND (r2.suppressed IS NULL OR r2.suppressed = 0) ORDER BY r2.published_at DESC LIMIT 1) AS latest_version_by_date,
-      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND r3.published_at IS NOT NULL AND (r3.suppressed IS NULL OR r3.suppressed = 0) ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
-      (SELECT r4.version FROM releases r4 WHERE r4.source_id = s.id AND (r4.suppressed IS NULL OR r4.suppressed = 0) ORDER BY r4.fetched_at DESC LIMIT 1) AS latest_version_by_fetch
-    FROM sources s
-    LEFT JOIN products p ON p.id = s.product_id
-    WHERE s.org_id = ${org.id}
-    ORDER BY s.name
-  `);
+    db.all<{
+      id: string;
+      slug: string;
+      name: string;
+      type: string;
+      url: string;
+      is_primary: number | null;
+      release_count: number;
+      latest_version_by_date: string | null;
+      latest_date: string | null;
+      latest_version_by_fetch: string | null;
+      product_slug: string | null;
+      product_name: string | null;
+    }>(sql`
+      SELECT
+        s.id, s.slug, s.name, s.type, s.url, s.is_primary,
+        p.slug AS product_slug, p.name AS product_name,
+        (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
+        (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND r2.published_at IS NOT NULL AND (r2.suppressed IS NULL OR r2.suppressed = 0) ORDER BY r2.published_at DESC LIMIT 1) AS latest_version_by_date,
+        (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND r3.published_at IS NOT NULL AND (r3.suppressed IS NULL OR r3.suppressed = 0) ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
+        (SELECT r4.version FROM releases r4 WHERE r4.source_id = s.id AND (r4.suppressed IS NULL OR r4.suppressed = 0) ORDER BY r4.fetched_at DESC LIMIT 1) AS latest_version_by_fetch
+      FROM sources s
+      LEFT JOIN products p ON p.id = s.product_id
+      WHERE s.org_id = ${org.id}
+      ORDER BY s.name
+    `),
 
-  const productRows = await db
-    .select({
-      id: products.id,
-      slug: products.slug,
-      name: products.name,
-      url: products.url,
-      description: products.description,
-      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
-    })
-    .from(products)
-    .where(eq(products.orgId, org.id))
-    .orderBy(products.name);
+    db
+      .select({
+        id: products.id,
+        slug: products.slug,
+        name: products.name,
+        url: products.url,
+        description: products.description,
+        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
+      })
+      .from(products)
+      .where(eq(products.orgId, org.id))
+      .orderBy(products.name),
+
+    db
+      .select({ domain: domainAliases.domain })
+      .from(domainAliases)
+      .where(eq(domainAliases.orgId, org.id))
+      .orderBy(domainAliases.domain),
+  ]);
 
   const orgSources = sourceRows;
 
@@ -180,6 +196,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     avgReleasesPerWeek,
     lastFetchedAt: latestFetch.maxFetch ?? null,
     trackingSince: oldestReleaseDate ?? org.createdAt,
+    aliases: aliasRows.map((a) => a.domain),
     accounts,
     products: productRows,
     sources: sourcesWithStats,

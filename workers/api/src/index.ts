@@ -18,6 +18,7 @@ import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
+import { aliasRoutes } from "./routes/aliases.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -97,6 +98,7 @@ v1.route("/", ignoreRoutes);
 v1.route("/", releaseRoutes);
 v1.route("/summaries", summaries);
 v1.route("/", discoverRoutes);
+v1.route("/", aliasRoutes);
 
 app.route("/v1", v1);
 

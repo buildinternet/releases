@@ -29,17 +29,20 @@ searchRoutes.get("/search", async (c) => {
 
   const [orgs, products, sources, ftsReleases] = await Promise.all([
     db.all<SearchOrgHit>(sql`
-      SELECT slug, name, domain, NULL as avatarUrl, category
-      FROM organizations
-      WHERE name LIKE ${pattern} OR slug LIKE ${pattern} OR domain LIKE ${pattern}
-      ORDER BY name LIMIT ${limit}
+      SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
+      FROM organizations o
+      LEFT JOIN domain_aliases da ON da.org_id = o.id
+      WHERE o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
+        OR da.domain LIKE ${pattern}
+      ORDER BY o.name LIMIT ${limit}
     `),
 
     db.all<SearchProductHit>(sql`
-      SELECT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category
+      SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category
       FROM products p
       LEFT JOIN organizations o ON o.id = p.org_id
-      WHERE p.name LIKE ${pattern} OR p.slug LIKE ${pattern}
+      LEFT JOIN domain_aliases da ON da.product_id = p.id
+      WHERE p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern}
       ORDER BY p.name LIMIT ${limit}
     `),
 

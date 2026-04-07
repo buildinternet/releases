@@ -6,6 +6,7 @@ import {
   deleteProduct, getSourcesByOrg, updateSource, removeOrg,
   getOrgAccountsBySlug, linkOrgAccount,
   addTagsToProduct, removeTagsFromProduct, getTagsForProduct,
+  listDomainAliases, addDomainAlias, removeDomainAlias,
 } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { isValidCategory, CATEGORIES } from "../../lib/categories.js";
@@ -387,6 +388,98 @@ Examples:
         console.log(chalk.yellow(`No tags for ${found.name}`));
       } else {
         console.log(allTags.join(", "));
+      }
+    });
+
+  // ── product alias ──
+  const alias = product.command("alias").description("Manage domain aliases for a product");
+
+  alias
+    .command("add")
+    .description("Add domain aliases to a product")
+    .argument("<identifier>", "Product slug")
+    .argument("<domains...>", "Domain names to add")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, domains: string[], opts: { json?: boolean }) => {
+      const found = await findProduct(identifier);
+      if (!found) {
+        console.error(chalk.red(`Product not found: ${identifier}`));
+        process.exit(1);
+      }
+
+      const results = [];
+      for (const domain of domains) {
+        try {
+          const created = await addDomainAlias(domain, { productId: found.id });
+          results.push(created);
+        } catch (err) {
+          console.error(chalk.red(`Failed to add alias "${domain}": ${err instanceof Error ? err.message : err}`));
+        }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify(results, null, 2));
+      } else {
+        for (const r of results) {
+          console.log(chalk.green(`Added alias: ${r.domain} → ${found.name}`));
+        }
+      }
+    });
+
+  alias
+    .command("remove")
+    .description("Remove domain aliases from a product")
+    .argument("<identifier>", "Product slug")
+    .argument("<domains...>", "Domain names to remove")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, domains: string[], opts: { json?: boolean }) => {
+      const found = await findProduct(identifier);
+      if (!found) {
+        console.error(chalk.red(`Product not found: ${identifier}`));
+        process.exit(1);
+      }
+
+      const removed = [];
+      for (const domain of domains) {
+        const ok = await removeDomainAlias(domain, { productId: found.id });
+        if (ok) {
+          removed.push(domain);
+        } else {
+          console.error(chalk.yellow(`Alias "${domain}" not found.`));
+        }
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify({ removed }, null, 2));
+      } else {
+        for (const d of removed) {
+          console.log(chalk.green(`Removed alias: ${d}`));
+        }
+      }
+    });
+
+  alias
+    .command("list")
+    .description("List domain aliases for a product")
+    .argument("<identifier>", "Product slug")
+    .option("--json", "Output as JSON")
+    .action(async (identifier: string, opts: { json?: boolean }) => {
+      const found = await findProduct(identifier);
+      if (!found) {
+        console.error(chalk.red(`Product not found: ${identifier}`));
+        process.exit(1);
+      }
+
+      const aliases = await listDomainAliases({ productId: found.id });
+
+      if (opts.json) {
+        console.log(JSON.stringify(aliases.map((a) => a.domain), null, 2));
+      } else if (aliases.length === 0) {
+        console.log(chalk.yellow(`No domain aliases for ${found.name}`));
+      } else {
+        for (const a of aliases) {
+          console.log(a.domain);
+        }
       }
     });
 }
