@@ -17,6 +17,7 @@ import { mediaRoutes } from "./routes/media.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import { productRoutes } from "./routes/products.js";
+import { discoverRoutes } from "./routes/discover.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -31,6 +32,7 @@ export type Env = {
     CACHE_DISABLED?: string;
     GITHUB_TOKEN?: string;
     CRON_ENABLED?: string;
+    DISCOVERY_WORKER?: Fetcher;
   };
 };
 
@@ -94,6 +96,7 @@ v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
 v1.route("/", releaseRoutes);
 v1.route("/summaries", summaries);
+v1.route("/", discoverRoutes);
 
 app.route("/v1", v1);
 

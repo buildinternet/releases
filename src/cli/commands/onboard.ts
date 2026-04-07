@@ -16,7 +16,7 @@ interface OnboardOpts {
 function shouldUseRemote(opts: OnboardOpts): boolean {
   if (opts.local) return false;
   if (opts.remote) return true;
-  return isRemoteMode() && !!process.env.RELEASED_DISCOVERY_URL;
+  return isRemoteMode();
 }
 
 export function registerOnboardCommand(program: Command) {
@@ -26,7 +26,7 @@ export function registerOnboardCommand(program: Command) {
     .argument("<company>", "Company or product name to discover sources for")
     .option("--domain <domain>", "Seed the agent with the company's domain")
     .option("--github-org <org>", "Seed the agent with the company's GitHub organization")
-    .option("--remote", "Run discovery on the remote worker (default when RELEASED_API_URL and RELEASED_DISCOVERY_URL are set)")
+    .option("--remote", "Run discovery on the remote worker (default when RELEASED_API_URL is set)")
     .option("--local", "Run discovery locally even when remote mode is configured")
     .option("--json", "Output results as JSON")
     .addHelpText("after", `
@@ -88,9 +88,9 @@ async function runLocalDiscovery(company: string, opts: OnboardOpts): Promise<vo
 }
 
 async function runRemoteDiscovery(company: string, opts: OnboardOpts): Promise<void> {
-  const discoveryUrl = process.env.RELEASED_DISCOVERY_URL;
-  if (!discoveryUrl) {
-    logger.error("RELEASED_DISCOVERY_URL is not set. Set it to the discovery worker URL or use --local.");
+  const apiUrl = process.env.RELEASED_API_URL;
+  if (!apiUrl) {
+    logger.error("RELEASED_API_URL is not set. Required for remote discovery.");
     process.exit(1);
   }
 
@@ -100,10 +100,10 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts): Promise<v
     process.exit(1);
   }
 
-  const baseUrl = discoveryUrl.replace(/\/$/, "");
+  const baseUrl = apiUrl.replace(/\/$/, "");
 
   async function discoveryFetch<T>(path: string, init?: RequestInit): Promise<T> {
-    const res = await fetch(`${baseUrl}${path}`, {
+    const res = await fetch(`${baseUrl}/v1${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",
@@ -130,7 +130,7 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts): Promise<v
 
   let sessionId: string;
   try {
-    const result = await discoveryFetch<{ sessionId: string }>("/onboard", {
+    const result = await discoveryFetch<{ sessionId: string }>("/discover", {
       method: "POST",
       body: JSON.stringify({ company, domain: opts.domain, githubOrg: opts.githubOrg }),
     });
@@ -159,7 +159,7 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts): Promise<v
       error?: string;
     };
     try {
-      status = await discoveryFetch(`/onboard/${sessionId}/status`);
+      status = await discoveryFetch(`/discover/${sessionId}`);
     } catch (err) {
       logger.error(`Failed to poll status: ${err instanceof Error ? err.message : String(err)}`);
       process.exit(1);

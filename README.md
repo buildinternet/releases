@@ -16,8 +16,7 @@ Copy `.env.example` to `.env` and fill in:
 - `ANTHROPIC_API_KEY` — Required for AI-powered parsing and summaries
 - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` — Required for scraping changelog pages (only used as a fallback when no feed is available)
 - `GITHUB_TOKEN` — Optional, increases GitHub API rate limits
-- `RELEASED_API_URL` / `RELEASED_API_KEY` — Remote mode: route CLI data operations through the API Worker
-- `RELEASED_DISCOVERY_URL` — Remote onboarding: route `onboard` through the discovery worker (e.g. `https://released-discovery.rally-workers-test.workers.dev`)
+- `RELEASED_API_URL` / `RELEASED_API_KEY` — Remote mode: route CLI data operations (including discovery) through the API Worker
 
 ## Usage
 
@@ -313,7 +312,7 @@ released onboard "Acme" --local                              # force local even 
 released onboard "Acme" --json                               # machine-readable output
 ```
 
-When `RELEASED_API_URL` and `RELEASED_DISCOVERY_URL` are set, `onboard` defaults to remote mode — the discovery runs on the Cloudflare discovery worker and progress appears on the `/status` dashboard. Use `--local` to override and run the agent in-process.
+When `RELEASED_API_URL` is set, `onboard` defaults to remote mode — the discovery runs on the Cloudflare discovery worker (proxied through the API) and progress appears on the `/status` dashboard. Use `--local` to override and run the agent in-process.
 
 **Discovery worker secrets** (required for remote onboarding):
 
