@@ -74,7 +74,10 @@ Examples:
 Examples:
   released org list
   released org list --query vercel
-  released org list --platform github --json`)
+  released org list --platform github --json
+
+Note: org list shows a summary view (counts, last activity). Use "org show <slug>" to see
+full details including linked accounts, tags, sources, and products.`)
     .action(async (opts: { query?: string; platform?: string; json?: boolean }) => {
       const allOrgs = await listOrgs({ query: opts.query, platform: opts.platform });
 

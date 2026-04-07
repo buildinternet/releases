@@ -72,6 +72,7 @@ bun src/index.ts product adopt nextjs --into vercel  # Convert org to product
 bun src/index.ts categories             # List valid categories
 bun src/index.ts org add "Acme" --category cloud --tags typescript,edge
 bun src/index.ts org edit acme --category developer-tools
+bun src/index.ts org show acme              # Full details: accounts, tags, sources, products
 bun src/index.ts org tag add acme react serverless
 bun src/index.ts org tag list acme
 bun src/index.ts product add "CLI" --org acme --category developer-tools --tags golang
@@ -83,6 +84,7 @@ bun src/index.ts poll --json            # Machine-readable output
 ```
 
 - Source slug is always a **positional argument** (e.g., `fetch claude-code`), not a flag. The `fetch` command also accepts `--source <slug>` as an alias for convenience.
+- `org list` returns a summary view (counts, last activity) without accounts or tags. Use `org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
 
 ## Remote Mode (D1)
 

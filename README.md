@@ -196,8 +196,8 @@ Group sources under organizations for aggregate queries:
 released org add "Vercel"
 released org link vercel --platform github --handle vercel
 released add "Next.js" --type github --url https://github.com/vercel/next.js --org vercel
-released org list
-released org show vercel
+released org list                                          # summary: name, domain, counts
+released org show vercel                                   # full details: accounts, tags, sources
 ```
 
 ### Products
