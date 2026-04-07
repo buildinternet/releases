@@ -45,7 +45,7 @@ export default {
 
       // ── Discovery guardrails: check for duplicates and count cap ──
       try {
-        const guardPath = "/api/sessions?status=running&type=onboard";
+        const guardPath = "/v1/sessions?status=running&type=onboard";
         const guardHeaders: Record<string, string> = env.RELEASED_API_KEY
           ? { Authorization: `Bearer ${env.RELEASED_API_KEY}` }
           : {};

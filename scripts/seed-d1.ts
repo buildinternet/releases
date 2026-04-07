@@ -36,7 +36,7 @@ const db = getDb();
 const orgs = await db.select().from(organizations);
 console.log(`Seeding ${orgs.length} organizations...`);
 for (const org of orgs) {
-  const res = await post("/api/orgs", { name: org.name, slug: org.slug, domain: org.domain });
+  const res = await post("/v1/orgs", { name: org.name, slug: org.slug, domain: org.domain });
   if (res.ok || res.status === 409) {
     console.log(`  ✓ ${org.slug}`);
   } else {
@@ -54,7 +54,7 @@ console.log(`\nSeeding ${accounts.length} org accounts...`);
 for (const acc of accounts) {
   const org = orgById.get(acc.orgId);
   if (!org) continue;
-  const res = await post(`/api/orgs/${org.slug}/accounts`, { platform: acc.platform, handle: acc.handle });
+  const res = await post(`/v1/orgs/${org.slug}/accounts`, { platform: acc.platform, handle: acc.handle });
   if (res.ok || res.status === 409) {
     console.log(`  ✓ ${acc.platform}/${acc.handle}`);
   } else {
@@ -67,7 +67,7 @@ const srcs = await db.select().from(sources);
 console.log(`\nSeeding ${srcs.length} sources...`);
 for (const src of srcs) {
   const org = src.orgId ? orgById.get(src.orgId) : null;
-  const res = await post("/api/sources", {
+  const res = await post("/v1/sources", {
     name: src.name, slug: src.slug, type: src.type, url: src.url,
     orgSlug: org?.slug ?? undefined, metadata: src.metadata,
   });
@@ -92,7 +92,7 @@ for (let i = 0; i < allReleases.length; i += CONCURRENCY) {
     batch.map(async (rel) => {
       const src = srcById.get(rel.sourceId);
       if (!src) return "skip";
-      const res = await post(`/api/sources/${src.slug}/releases`, {
+      const res = await post(`/v1/sources/${src.slug}/releases`, {
         id: rel.id, version: rel.version, title: rel.title, content: rel.content,
         contentSummary: rel.contentSummary, url: rel.url, contentHash: rel.contentHash,
         metadata: rel.metadata, publishedAt: rel.publishedAt, fetchedAt: rel.fetchedAt,
@@ -120,7 +120,7 @@ const ignored = await db.select().from(ignoredUrls);
 console.log(`\nSeeding ${ignored.length} ignored URLs...`);
 for (const ig of ignored) {
   const org = ig.orgId ? orgById.get(ig.orgId) : null;
-  await post("/api/ignore", { url: ig.url, orgId: org?.slug ?? undefined, reason: ig.reason });
+  await post("/v1/ignore", { url: ig.url, orgId: org?.slug ?? undefined, reason: ig.reason });
 }
 
 console.log("\nDone!");

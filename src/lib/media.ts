@@ -273,7 +273,7 @@ export async function uploadToR2(
 
   // PUT to API
   try {
-    const putRes = await fetch(`${apiUrl}/api/media/${key}`, {
+    const putRes = await fetch(`${apiUrl}/v1/media/${key}`, {
       method: "PUT",
       headers: {
         Authorization: `Bearer ${apiKey}`,

@@ -504,7 +504,7 @@ Examples:
                 if (media.length === 0) continue;
                 let content = rows[i].content;
                 for (const m of media) {
-                  if (m.r2Key) content = content.replaceAll(m.url, `${apiUrl}/api/media/${m.r2Key}`);
+                  if (m.r2Key) content = content.replaceAll(m.url, `${apiUrl}/v1/media/${m.r2Key}`);
                 }
                 rows[i].content = content;
                 rows[i].media = JSON.stringify(media);

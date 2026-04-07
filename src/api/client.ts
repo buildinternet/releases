@@ -32,19 +32,19 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export async function findSourceBySlug(slug: string): Promise<Source | null> {
   // API returns enriched data — extra fields are harmlessly ignored by callers expecting Source
-  return apiFetch<Source | null>(`/api/sources/${slug}`);
+  return apiFetch<Source | null>(`/v1/sources/${slug}`);
 }
 
 export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
   if (urls.length === 0) return [];
   const params = urls.map((u) => `url=${encodeURIComponent(u)}`).join("&");
-  return apiFetch<Source[]>(`/api/sources?filterByUrls=true&${params}`);
+  return apiFetch<Source[]>(`/v1/sources?filterByUrls=true&${params}`);
 }
 
 // ── Org queries ──
 
 export async function findOrg(identifier: string): Promise<Organization | null> {
-  return apiFetch<Organization | null>(`/api/orgs/${identifier}`);
+  return apiFetch<Organization | null>(`/v1/orgs/${identifier}`);
 }
 
 async function suggestEntities(
@@ -59,11 +59,11 @@ async function suggestEntities(
     .slice(0, limit);
 }
 
-export const suggestOrgs = (term: string, limit: number) => suggestEntities("/api/orgs", term, limit);
-export const suggestSources = (term: string, limit: number) => suggestEntities("/api/sources", term, limit);
+export const suggestOrgs = (term: string, limit: number) => suggestEntities("/v1/orgs", term, limit);
+export const suggestSources = (term: string, limit: number) => suggestEntities("/v1/sources", term, limit);
 
 export async function getSourcesByOrg(orgId: string): Promise<Source[]> {
-  return apiFetch<Source[]>(`/api/sources?orgId=${orgId}`);
+  return apiFetch<Source[]>(`/v1/sources?orgId=${orgId}`);
 }
 
 export async function listOrgs(opts?: { query?: string; platform?: string }): Promise<Organization[]> {
@@ -71,55 +71,55 @@ export async function listOrgs(opts?: { query?: string; platform?: string }): Pr
   if (opts?.query) params.set("q", opts.query);
   if (opts?.platform) params.set("platform", opts.platform);
   const qs = params.toString();
-  return apiFetch<Organization[]>(`/api/orgs${qs ? `?${qs}` : ""}`);
+  return apiFetch<Organization[]>(`/v1/orgs${qs ? `?${qs}` : ""}`);
 }
 
 export async function getOrgAccountByPlatform(orgId: string, platform: string): Promise<OrgAccount | null> {
-  return apiFetch<OrgAccount | null>(`/api/orgs/${orgId}/accounts?platform=${platform}`);
+  return apiFetch<OrgAccount | null>(`/v1/orgs/${orgId}/accounts?platform=${platform}`);
 }
 
 // ── Ignored URLs (org-scoped) ──
 
 export async function findIgnoredUrl(url: string, orgId: string): Promise<IgnoredUrl | null> {
   const encoded = encodeURIComponent(url);
-  return apiFetch<IgnoredUrl | null>(`/api/orgs/${orgId}/ignored-urls?url=${encoded}&single=true`);
+  return apiFetch<IgnoredUrl | null>(`/v1/orgs/${orgId}/ignored-urls?url=${encoded}&single=true`);
 }
 
 export async function addIgnoredUrl(url: string, orgId: string, reason?: string): Promise<void> {
-  await apiFetch(`/api/orgs/${orgId}/ignored-urls`, {
+  await apiFetch(`/v1/orgs/${orgId}/ignored-urls`, {
     method: "POST",
     body: JSON.stringify({ url, reason }),
   });
 }
 
 export async function listIgnoredUrls(orgId: string): Promise<IgnoredUrl[]> {
-  return apiFetch<IgnoredUrl[]>(`/api/orgs/${orgId}/ignored-urls`);
+  return apiFetch<IgnoredUrl[]>(`/v1/orgs/${orgId}/ignored-urls`);
 }
 
 export async function removeIgnoredUrl(url: string, orgId: string): Promise<void> {
-  await apiFetch(`/api/orgs/${orgId}/ignored-urls/${encodeURIComponent(url)}`, { method: "DELETE" });
+  await apiFetch(`/v1/orgs/${orgId}/ignored-urls/${encodeURIComponent(url)}`, { method: "DELETE" });
 }
 
 // ── Blocked URLs (global) ──
 
 export async function findBlockedUrl(url: string): Promise<BlockedUrl | null> {
   const encoded = encodeURIComponent(url);
-  return apiFetch<BlockedUrl | null>(`/api/blocked-urls?url=${encoded}&single=true`);
+  return apiFetch<BlockedUrl | null>(`/v1/blocked-urls?url=${encoded}&single=true`);
 }
 
 export async function addBlockedUrl(pattern: string, type: "exact" | "domain", reason?: string): Promise<void> {
-  await apiFetch("/api/blocked-urls", {
+  await apiFetch("/v1/blocked-urls", {
     method: "POST",
     body: JSON.stringify({ pattern, type, reason }),
   });
 }
 
 export async function listBlockedUrls(): Promise<BlockedUrl[]> {
-  return apiFetch<BlockedUrl[]>("/api/blocked-urls");
+  return apiFetch<BlockedUrl[]>("/v1/blocked-urls");
 }
 
 export async function removeBlockedUrl(pattern: string): Promise<void> {
-  await apiFetch(`/api/blocked-urls/${encodeURIComponent(pattern)}`, { method: "DELETE" });
+  await apiFetch(`/v1/blocked-urls/${encodeURIComponent(pattern)}`, { method: "DELETE" });
 }
 
 // ── Release CRUD ──
@@ -143,16 +143,16 @@ export interface ReleaseWithSource {
 }
 
 export async function getRelease(id: string): Promise<ReleaseWithSource | null> {
-  return apiFetch<ReleaseWithSource | null>(`/api/releases/${id}`);
+  return apiFetch<ReleaseWithSource | null>(`/v1/releases/${id}`);
 }
 
 export async function deleteRelease(id: string): Promise<boolean> {
-  const result = await apiFetch<{ deleted: boolean } | null>(`/api/releases/${id}`, { method: "DELETE" });
+  const result = await apiFetch<{ deleted: boolean } | null>(`/v1/releases/${id}`, { method: "DELETE" });
   return result?.deleted ?? false;
 }
 
 export async function updateRelease(id: string, data: Record<string, unknown>): Promise<ReleaseWithSource> {
-  return apiFetch<ReleaseWithSource>(`/api/releases/${id}`, {
+  return apiFetch<ReleaseWithSource>(`/v1/releases/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
@@ -161,7 +161,7 @@ export async function updateRelease(id: string, data: Record<string, unknown>): 
 // ── Release suppression ──
 
 export async function suppressRelease(releaseId: string, reason?: string): Promise<boolean> {
-  const result = await apiFetch<{ suppressed: boolean }>(`/api/releases/${releaseId}/suppress`, {
+  const result = await apiFetch<{ suppressed: boolean }>(`/v1/releases/${releaseId}/suppress`, {
     method: "POST",
     body: JSON.stringify({ reason }),
   });
@@ -169,7 +169,7 @@ export async function suppressRelease(releaseId: string, reason?: string): Promi
 }
 
 export async function unsuppressRelease(releaseId: string): Promise<boolean> {
-  const result = await apiFetch<{ unsuppressed: boolean }>(`/api/releases/${releaseId}/unsuppress`, {
+  const result = await apiFetch<{ unsuppressed: boolean }>(`/v1/releases/${releaseId}/unsuppress`, {
     method: "POST",
   });
   return result?.unsuppressed ?? false;
@@ -178,7 +178,7 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
 // ── Content hash ──
 
 export async function checkContentHash(source: Source, contentHash: string): Promise<boolean> {
-  const result = await apiFetch<{ unchanged: boolean } | null>(`/api/sources/${source.slug}/content-hash`, {
+  const result = await apiFetch<{ unchanged: boolean } | null>(`/v1/sources/${source.slug}/content-hash`, {
     method: "POST",
     body: JSON.stringify({ contentHash }),
   });
@@ -194,7 +194,7 @@ export async function unifiedSearch(
 ): Promise<UnifiedSearchResponse> {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (opts?.org) params.set("org", opts.org);
-  return apiFetch<UnifiedSearchResponse>(`/api/search?${params}`);
+  return apiFetch<UnifiedSearchResponse>(`/v1/search?${params}`);
 }
 
 // ── List sources with org ──
@@ -233,8 +233,8 @@ export async function listSourcesWithOrg(opts?: {
   if (opts?.category) params.set("category", opts.category);
   const qs = params.toString();
 
-  // The API GET /api/sources returns enriched source data — map to the shape the CLI needs
-  const rows = await apiFetch<Array<SourceListItem & { isHidden?: boolean }>>(`/api/sources${qs ? `?${qs}` : ""}`);
+  // The API GET /v1/sources returns enriched source data — map to the shape the CLI needs
+  const rows = await apiFetch<Array<SourceListItem & { isHidden?: boolean }>>(`/v1/sources${qs ? `?${qs}` : ""}`);
 
   return rows.map((r) => ({
     id: "",
@@ -295,15 +295,15 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
 
   // Compose from existing endpoints
   const [statsData, fetchLogData, sourcesData] = await Promise.all([
-    apiFetch<Stats>("/api/stats"),
+    apiFetch<Stats>("/v1/stats"),
     apiFetch<Array<{
       id: string; sourceId: string; releasesFound: number; releasesInserted: number;
       durationMs: number | null; status: string; error: string | null; createdAt: string;
-    }>>("/api/fetch-log?limit=20"),
+    }>>("/v1/fetch-log?limit=20"),
     apiFetch<Array<{
       slug: string; name: string; type: string; url: string;
       orgSlug: string | null; releaseCount: number;
-    }>>("/api/sources"),
+    }>>("/v1/sources"),
   ]);
 
   return {
@@ -360,7 +360,7 @@ export interface UsageStatsResponse {
 }
 
 export async function getUsageStats(days: number): Promise<UsageStatsResponse> {
-  return apiFetch<UsageStatsResponse>(`/api/usage-log/stats?days=${days}`);
+  return apiFetch<UsageStatsResponse>(`/v1/usage-log/stats?days=${days}`);
 }
 
 export async function postUsageLog(entry: {
@@ -371,7 +371,7 @@ export async function postUsageLog(entry: {
   sourceSlug?: string | null;
   releaseCount?: number | null;
 }): Promise<void> {
-  await apiFetch("/api/usage-log", {
+  await apiFetch("/v1/usage-log", {
     method: "POST",
     body: JSON.stringify(entry),
   });
@@ -388,7 +388,7 @@ export async function postFetchLog(entry: {
   error?: string | null;
   rawContent?: string | null;
 }): Promise<void> {
-  await apiFetch("/api/fetch-log", {
+  await apiFetch("/v1/fetch-log", {
     method: "POST",
     body: JSON.stringify(entry),
   });
@@ -418,7 +418,7 @@ export async function getFetchLogs(opts: {
     id: string; sourceId: string; releasesFound: number; releasesInserted: number;
     durationMs: number | null; status: string; error: string | null;
     rawContent: string | null; createdAt: string;
-  }>>(`/api/fetch-log?${params}`);
+  }>>(`/v1/fetch-log?${params}`);
 
   // The API fetch-log endpoint returns raw fetch_log rows without source name/slug.
   // In remote mode we don't have the join data, so we provide what we can.
@@ -461,7 +461,7 @@ async function collectReleasesFromSources(
   pageSize: number,
 ): Promise<LatestRelease[]> {
   const results = await Promise.all(
-    slugs.map((slug) => apiFetch<SourceReleaseResponse>(`/api/sources/${slug}?pageSize=${pageSize}`)),
+    slugs.map((slug) => apiFetch<SourceReleaseResponse>(`/v1/sources/${slug}?pageSize=${pageSize}`)),
   );
   const all: LatestRelease[] = [];
   for (const srcData of results) {
@@ -484,7 +484,7 @@ export async function getLatestReleases(opts: {
   count: number;
 }): Promise<LatestRelease[]> {
   if (opts.slug) {
-    const data = await apiFetch<SourceReleaseResponse>(`/api/sources/${opts.slug}?pageSize=${opts.count}`);
+    const data = await apiFetch<SourceReleaseResponse>(`/v1/sources/${opts.slug}?pageSize=${opts.count}`);
     if (!data) return [];
     return data.releases.map((r) => ({
       title: r.title,
@@ -497,13 +497,13 @@ export async function getLatestReleases(opts: {
   if (opts.orgSlug) {
     const data = await apiFetch<{
       sources: Array<{ slug: string; name: string }>;
-    }>(`/api/orgs/${opts.orgSlug}`);
+    }>(`/v1/orgs/${opts.orgSlug}`);
     if (!data) return [];
     const all = await collectReleasesFromSources(data.sources.map((s) => s.slug), opts.count);
     return all.sort(byPublishedAtDesc).slice(0, opts.count);
   }
 
-  const sourcesData = await apiFetch<Array<{ slug: string; name: string }>>("/api/sources");
+  const sourcesData = await apiFetch<Array<{ slug: string; name: string }>>("/v1/sources");
   const all = await collectReleasesFromSources(sourcesData.slice(0, 10).map((s) => s.slug), opts.count);
   return all.sort(byPublishedAtDesc).slice(0, opts.count);
 }
@@ -513,7 +513,7 @@ export async function getLatestReleases(opts: {
 export async function getEnrichableReleases(sourceSlug: string, limit?: number): Promise<Release[]> {
   const params = new URLSearchParams({ enrichable: "true" });
   if (limit) params.set("limit", String(limit));
-  const res = await apiFetch<{ releases: Release[] }>(`/api/sources/${sourceSlug}/releases?${params}`);
+  const res = await apiFetch<{ releases: Release[] }>(`/v1/sources/${sourceSlug}/releases?${params}`);
   return res?.releases ?? [];
 }
 
@@ -524,7 +524,7 @@ export async function getKnownReleasesForSource(
   limit: number,
 ): Promise<Array<{ version: string | null; title: string; publishedAt: string | null }>> {
   const data = await apiFetch<Array<{ version: string | null; title: string; publishedAt: string | null }>>(
-    `/api/sources/${sourceSlug}/known-releases?limit=${limit}`,
+    `/v1/sources/${sourceSlug}/known-releases?limit=${limit}`,
   );
   return data ?? [];
 }
@@ -537,28 +537,28 @@ export async function listFetchableSources(opts: {
 }): Promise<Source[]> {
   const params = new URLSearchParams({ mode: opts.mode });
   if (opts.staleHours) params.set("staleHours", String(opts.staleHours));
-  return apiFetch<Source[]>(`/api/sources/fetchable?${params}`);
+  return apiFetch<Source[]>(`/v1/sources/fetchable?${params}`);
 }
 
 export async function listFeedSources(): Promise<Source[]> {
-  return apiFetch<Source[]>("/api/sources/feeds");
+  return apiFetch<Source[]>("/v1/sources/feeds");
 }
 
 export async function listSourcesWithChanges(): Promise<Source[]> {
-  return apiFetch<Source[]>("/api/sources/changes");
+  return apiFetch<Source[]>("/v1/sources/changes");
 }
 
 // ── Source CRUD ──
 
 export async function updateSource(slug: string, data: Record<string, unknown>): Promise<Source> {
-  return apiFetch<Source>(`/api/sources/${slug}`, {
+  return apiFetch<Source>(`/v1/sources/${slug}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
 }
 
 export async function deleteSource(slug: string): Promise<void> {
-  await apiFetch(`/api/sources/${slug}`, { method: "DELETE" });
+  await apiFetch(`/v1/sources/${slug}`, { method: "DELETE" });
 }
 
 export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array<{
@@ -572,7 +572,7 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
   }
   const results = await Promise.all(
     chunks.map((chunk) =>
-      apiFetch<{ inserted: number; total: number }>(`/api/sources/${sourceSlug}/releases/batch`, {
+      apiFetch<{ inserted: number; total: number }>(`/v1/sources/${sourceSlug}/releases/batch`, {
         method: "POST",
         body: JSON.stringify({ releases: chunk }),
       })
@@ -584,7 +584,7 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
 }
 
 export async function deleteReleasesForSource(sourceSlug: string): Promise<{ deleted: number }> {
-  return apiFetch(`/api/sources/${sourceSlug}/releases`, { method: "DELETE" });
+  return apiFetch(`/v1/sources/${sourceSlug}/releases`, { method: "DELETE" });
 }
 
 export async function createSource(data: {
@@ -596,7 +596,7 @@ export async function createSource(data: {
   productId?: string | null;
   metadata?: string;
 }): Promise<Source> {
-  return apiFetch<Source>("/api/sources", {
+  return apiFetch<Source>("/v1/sources", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -608,18 +608,18 @@ export async function createOrg(
   name: string,
   opts?: { slug?: string; domain?: string; description?: string; category?: string },
 ): Promise<Organization> {
-  return apiFetch<Organization>("/api/orgs", {
+  return apiFetch<Organization>("/v1/orgs", {
     method: "POST",
     body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain, description: opts?.description, category: opts?.category }),
   });
 }
 
 export async function removeOrg(slug: string): Promise<void> {
-  await apiFetch(`/api/orgs/${slug}`, { method: "DELETE" });
+  await apiFetch(`/v1/orgs/${slug}`, { method: "DELETE" });
 }
 
 export async function updateOrg(slug: string, data: Record<string, unknown>): Promise<Organization> {
-  return apiFetch<Organization>(`/api/orgs/${slug}`, {
+  return apiFetch<Organization>(`/v1/orgs/${slug}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
@@ -630,7 +630,7 @@ export async function getOrgAccountsBySlug(
 ): Promise<Array<{ platform: string; handle: string }>> {
   const data = await apiFetch<{
     accounts: Array<{ platform: string; handle: string }>;
-  }>(`/api/orgs/${orgSlug}`);
+  }>(`/v1/orgs/${orgSlug}`);
   return data?.accounts ?? [];
 }
 
@@ -639,7 +639,7 @@ export async function linkOrgAccount(
   platform: string,
   handle: string,
 ): Promise<OrgAccount> {
-  return apiFetch<OrgAccount>(`/api/orgs/${orgSlug}/accounts`, {
+  return apiFetch<OrgAccount>(`/v1/orgs/${orgSlug}/accounts`, {
     method: "POST",
     body: JSON.stringify({ platform, handle }),
   });
@@ -652,8 +652,8 @@ export async function unlinkOrgAccount(
 ): Promise<void> {
   // The API doesn't have a dedicated unlink endpoint — use PATCH to update org or
   // we need to add one. For now, this is a placeholder that will need a matching API endpoint.
-  // The simplest approach: DELETE /api/orgs/:slug/accounts/:platform/:handle
-  await apiFetch(`/api/orgs/${orgSlug}/accounts/${platform}/${encodeURIComponent(handle)}`, {
+  // The simplest approach: DELETE /v1/orgs/:slug/accounts/:platform/:handle
+  await apiFetch(`/v1/orgs/${orgSlug}/accounts/${platform}/${encodeURIComponent(handle)}`, {
     method: "DELETE",
   });
 }
@@ -665,71 +665,71 @@ export async function createProduct(
   name: string,
   opts?: { slug?: string; url?: string; description?: string; category?: string },
 ): Promise<Product> {
-  return apiFetch<Product>(`/api/products`, {
+  return apiFetch<Product>(`/v1/products`, {
     method: "POST",
     body: JSON.stringify({ orgId, name, slug: opts?.slug, url: opts?.url, description: opts?.description, category: opts?.category }),
   });
 }
 
 export async function findProduct(identifier: string): Promise<Product | null> {
-  return apiFetch<Product | null>(`/api/products/${identifier}`);
+  return apiFetch<Product | null>(`/v1/products/${identifier}`);
 }
 
 export async function getProductsByOrg(orgId: string): Promise<Array<Product & { sourceCount: number }>> {
-  return apiFetch<Array<Product & { sourceCount: number }>>(`/api/products?orgId=${orgId}`);
+  return apiFetch<Array<Product & { sourceCount: number }>>(`/v1/products?orgId=${orgId}`);
 }
 
 export async function updateProduct(slug: string, data: Record<string, unknown>): Promise<Product> {
-  return apiFetch<Product>(`/api/products/${slug}`, {
+  return apiFetch<Product>(`/v1/products/${slug}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
 }
 
 export async function deleteProduct(productId: string): Promise<void> {
-  await apiFetch(`/api/products/${productId}`, { method: "DELETE" });
+  await apiFetch(`/v1/products/${productId}`, { method: "DELETE" });
 }
 
 // ── Tags ──
 
 export async function getOrCreateTag(name: string): Promise<Tag> {
-  return apiFetch<Tag>("/api/tags", {
+  return apiFetch<Tag>("/v1/tags", {
     method: "POST",
     body: JSON.stringify({ name }),
   });
 }
 
 export async function getTagsForOrg(orgId: string): Promise<string[]> {
-  return apiFetch<string[]>(`/api/orgs/${orgId}/tags`);
+  return apiFetch<string[]>(`/v1/orgs/${orgId}/tags`);
 }
 
 export async function addTagsToOrg(orgId: string, tagNames: string[]): Promise<void> {
-  await apiFetch(`/api/orgs/${orgId}/tags`, {
+  await apiFetch(`/v1/orgs/${orgId}/tags`, {
     method: "PUT",
     body: JSON.stringify({ tags: tagNames }),
   });
 }
 
 export async function removeTagsFromOrg(orgId: string, tagNames: string[]): Promise<void> {
-  await apiFetch(`/api/orgs/${orgId}/tags`, {
+  await apiFetch(`/v1/orgs/${orgId}/tags`, {
     method: "DELETE",
     body: JSON.stringify({ tags: tagNames }),
   });
 }
 
 export async function getTagsForProduct(productId: string): Promise<string[]> {
-  return apiFetch<string[]>(`/api/products/${productId}/tags`);
+  return apiFetch<string[]>(`/v1/products/${productId}/tags`);
 }
 
 export async function addTagsToProduct(productId: string, tagNames: string[]): Promise<void> {
-  await apiFetch(`/api/products/${productId}/tags`, {
+  await apiFetch(`/v1/products/${productId}/tags`, {
     method: "PUT",
     body: JSON.stringify({ tags: tagNames }),
   });
 }
 
 export async function removeTagsFromProduct(productId: string, tagNames: string[]): Promise<void> {
-  await apiFetch(`/api/products/${productId}/tags`, {
+  await apiFetch(`/v1/products/${productId}/tags`, {
     method: "DELETE",
     body: JSON.stringify({ tags: tagNames }),
   });
@@ -743,7 +743,7 @@ export async function postStatusEvent(event: {
   [key: string]: unknown;
 }): Promise<{ cancelRequested: boolean }> {
   try {
-    const result = await apiFetch<{ cancelRequested?: boolean }>("/api/status/event", {
+    const result = await apiFetch<{ cancelRequested?: boolean }>("/v1/status/event", {
       method: "POST",
       body: JSON.stringify(event),
     });
@@ -757,17 +757,17 @@ export async function postStatusEvent(event: {
 // ── Recent releases ──
 
 export async function getRecentReleases(sourceSlug: string, cutoffIso: string): Promise<Release[]> {
-  return apiFetch<Release[]>(`/api/sources/${sourceSlug}/recent-releases?cutoff=${cutoffIso}`);
+  return apiFetch<Release[]>(`/v1/sources/${sourceSlug}/recent-releases?cutoff=${cutoffIso}`);
 }
 
 // ── Release summaries ──
 
 export async function getSummariesForSource(sourceId: string): Promise<ReleaseSummary[]> {
-  return apiFetch<ReleaseSummary[]>(`/api/summaries?sourceId=${sourceId}`);
+  return apiFetch<ReleaseSummary[]>(`/v1/summaries?sourceId=${sourceId}`);
 }
 
 export async function upsertSummary(data: NewReleaseSummary): Promise<void> {
-  await apiFetch("/api/summaries", {
+  await apiFetch("/v1/summaries", {
     method: "POST",
     body: JSON.stringify(data),
   });
@@ -779,7 +779,7 @@ export async function getMonthlySummary(
   month: number,
 ): Promise<ReleaseSummary | undefined> {
   const rows = await apiFetch<ReleaseSummary[]>(
-    `/api/summaries?sourceId=${sourceId}&type=monthly&year=${year}&month=${month}`,
+    `/v1/summaries?sourceId=${sourceId}&type=monthly&year=${year}&month=${month}`,
   );
   return rows[0];
 }
@@ -791,18 +791,18 @@ import type { MediaAssetInput } from "../db/queries.js";
 export async function insertMediaAssets(
   assets: MediaAssetInput[],
 ): Promise<{ inserted: number }> {
-  return apiFetch("/api/media/assets", {
+  return apiFetch("/v1/media/assets", {
     method: "POST",
     body: JSON.stringify({ assets }),
   });
 }
 
 export async function getMediaAssetStats(): Promise<{ count: number; totalBytes: number }> {
-  return apiFetch("/api/media/assets/stats");
+  return apiFetch("/v1/media/assets/stats");
 }
 
 export async function queryReleasesWithMedia(): Promise<{ id: string; sourceId: string; media: string }[]> {
-  return apiFetch("/api/releases?hasMedia=true&fields=id,sourceId,media");
+  return apiFetch("/v1/releases?hasMedia=true&fields=id,sourceId,media");
 }
 
 // ── Sessions ──
@@ -826,19 +826,19 @@ export interface Session {
 }
 
 export async function listSessions(): Promise<Session[]> {
-  return apiFetch<Session[]>("/api/sessions");
+  return apiFetch<Session[]>("/v1/sessions");
 }
 
 export async function getSession(sessionId: string): Promise<Session | null> {
-  return apiFetch<Session | null>(`/api/sessions/${sessionId}`);
+  return apiFetch<Session | null>(`/v1/sessions/${sessionId}`);
 }
 
 export async function getActiveSources(): Promise<{ slugs: string[]; sessionMap: Record<string, string> }> {
-  return apiFetch<{ slugs: string[]; sessionMap: Record<string, string> }>("/api/sessions/active-sources");
+  return apiFetch<{ slugs: string[]; sessionMap: Record<string, string> }>("/v1/sessions/active-sources");
 }
 
 export async function cancelSession(sessionId: string): Promise<{ ok: boolean; error?: string }> {
-  return apiFetch<{ ok: boolean; error?: string }>(`/api/sessions/${sessionId}/cancel`, {
+  return apiFetch<{ ok: boolean; error?: string }>(`/v1/sessions/${sessionId}/cancel`, {
     method: "POST",
   });
 }

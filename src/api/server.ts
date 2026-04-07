@@ -38,39 +38,39 @@ export function startApiServer(port: number) {
       }
 
       try {
-        // GET /api/stats
-        if (pathname === "/api/stats") {
+        // GET /v1/stats
+        if (pathname === "/v1/stats") {
           return jsonResponse(handleStats());
         }
 
-        // GET /api/orgs
-        if (pathname === "/api/orgs") {
+        // GET /v1/orgs
+        if (pathname === "/v1/orgs") {
           return jsonResponse(handleOrgs());
         }
 
-        // GET /api/orgs/:slug
-        const orgMatch = pathname.match(/^\/api\/orgs\/([^/]+)$/);
+        // GET /v1/orgs/:slug
+        const orgMatch = pathname.match(/^\/v1\/orgs\/([^/]+)$/);
         if (orgMatch) {
           const result = handleOrgDetail(orgMatch[1]);
           if (!result) return errorResponse("not_found", "Organization not found", 404);
           return jsonResponse(result);
         }
 
-        // GET /api/sources
-        if (pathname === "/api/sources") {
+        // GET /v1/sources
+        if (pathname === "/v1/sources") {
           return jsonResponse(handleSources(url.searchParams));
         }
 
-        // GET /api/sources/:slug/activity
-        const sourceActivityMatch = pathname.match(/^\/api\/sources\/([^/]+)\/activity$/);
+        // GET /v1/sources/:slug/activity
+        const sourceActivityMatch = pathname.match(/^\/v1\/sources\/([^/]+)\/activity$/);
         if (sourceActivityMatch) {
           const result = handleSourceActivity(sourceActivityMatch[1], url.searchParams);
           if (!result) return errorResponse("not_found", "Source not found", 404);
           return jsonResponse(result);
         }
 
-        // GET /api/sources/:slug
-        const sourceMatch = pathname.match(/^\/api\/sources\/([^/]+)$/);
+        // GET /v1/sources/:slug
+        const sourceMatch = pathname.match(/^\/v1\/sources\/([^/]+)$/);
         if (sourceMatch) {
           const page = parseInt(url.searchParams.get("page") ?? "1", 10);
           const pageSize = parseInt(url.searchParams.get("pageSize") ?? "20", 10);
@@ -79,8 +79,8 @@ export function startApiServer(port: number) {
           return jsonResponse(result);
         }
 
-        // GET /api/search
-        if (pathname === "/api/search") {
+        // GET /v1/search
+        if (pathname === "/v1/search") {
           const q = url.searchParams.get("q") ?? "";
           if (!q) return errorResponse("bad_request", "Missing required query parameter: q", 400);
           const limit = parseInt(url.searchParams.get("limit") ?? "20", 10);

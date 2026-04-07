@@ -300,7 +300,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
 
     function connect() {
       intentionalClose.current = false;
-      const wsUrl = apiUrl.replace(/^http/, "ws") + "/api/status/ws";
+      const wsUrl = apiUrl.replace(/^http/, "ws") + "/v1/status/ws";
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 

@@ -75,35 +75,35 @@ async function fetchApi<T>(path: string): Promise<T> {
 }
 
 export const api = {
-  stats: () => fetchApi<Stats>("/api/stats"),
-  orgs: () => fetchApi<OrgListItem[]>("/api/orgs"),
-  orgDetail: (slug: string) => fetchApi<OrgDetail>(`/api/orgs/${slug}`),
-  sources: (independent?: boolean) => fetchApi<SourceListItem[]>(`/api/sources${independent ? "?independent=true" : ""}`),
+  stats: () => fetchApi<Stats>("/v1/stats"),
+  orgs: () => fetchApi<OrgListItem[]>("/v1/orgs"),
+  orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
+  sources: (independent?: boolean) => fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),
   sourceDetail: (slug: string, page = 1, pageSize = 20) =>
-    fetchApi<SourceDetail>(`/api/sources/${slug}?page=${page}&pageSize=${pageSize}`),
+    fetchApi<SourceDetail>(`/v1/sources/${slug}?page=${page}&pageSize=${pageSize}`),
   search: (q: string, limit = 20, offset = 0) =>
-    fetchApi<UnifiedSearchResponse>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+    fetchApi<UnifiedSearchResponse>(`/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
   sourceActivity: (slug: string, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     const qs = params.toString();
-    return fetchApi<SourceActivity>(`/api/sources/${slug}/activity${qs ? `?${qs}` : ""}`);
+    return fetchApi<SourceActivity>(`/v1/sources/${slug}/activity${qs ? `?${qs}` : ""}`);
   },
   orgActivity: (slug: string, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     const qs = params.toString();
-    return fetchApi<OrgActivity>(`/api/orgs/${slug}/activity${qs ? `?${qs}` : ""}`);
+    return fetchApi<OrgActivity>(`/v1/orgs/${slug}/activity${qs ? `?${qs}` : ""}`);
   },
   orgReleases: (slug: string, cursor?: string, limit = 20) => {
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit !== 20) params.set("limit", String(limit));
     const qs = params.toString();
-    return fetchApi<OrgReleasesResponse>(`/api/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
+    return fetchApi<OrgReleasesResponse>(`/v1/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },
-  release: (id: string) => fetchApi<ReleaseDetail>(`/api/releases/${id}`),
-  productDetail: (slug: string) => fetchApi<ProductDetail>(`/api/products/${slug}`),
+  release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`),
+  productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
 };

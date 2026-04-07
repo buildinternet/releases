@@ -42,7 +42,7 @@ export class DiscoverySession extends DurableObject<Env> {
 
   private async notifyStatusHub(event: Record<string, unknown>): Promise<void> {
     try {
-      const url = `${this.env.RELEASED_API_URL}/api/status/event`;
+      const url = `${this.env.RELEASED_API_URL}/v1/status/event`;
       console.log(`[status-hub] POST ${url}`, JSON.stringify(event).slice(0, 200));
       const res = await fetch(url, {
         method: "POST",

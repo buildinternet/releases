@@ -8,32 +8,32 @@ export default function RestApiPage() {
 
       <p>
         The API is a Cloudflare Worker backed by D1. All endpoints are prefixed
-        with <code>/api</code> and return JSON.
+        with <code>/v1</code> and return JSON.
       </p>
 
       <h2>Authentication</h2>
       <p>
         Read endpoints are public. Write endpoints require a Bearer token:
       </p>
-      <pre><code>{`curl -H "Authorization: Bearer YOUR_KEY" https://api.releases.sh/api/...`}</code></pre>
+      <pre><code>{`curl -H "Authorization: Bearer YOUR_KEY" https://api.releases.sh/v1/...`}</code></pre>
 
       <hr />
 
       <h2>Stats</h2>
-      <h3><code>GET /api/stats</code></h3>
+      <h3><code>GET /v1/stats</code></h3>
       <p>Returns counts of organizations, sources, releases, and products.</p>
 
       <hr />
 
       <h2>Organizations</h2>
 
-      <h3><code>GET /api/orgs</code></h3>
+      <h3><code>GET /v1/orgs</code></h3>
       <p>List all organizations with source counts and metadata.</p>
 
-      <h3><code>GET /api/orgs/:slug</code></h3>
+      <h3><code>GET /v1/orgs/:slug</code></h3>
       <p>Get organization details including sources, products, and release metrics.</p>
 
-      <h3><code>GET /api/orgs/:slug/releases</code></h3>
+      <h3><code>GET /v1/orgs/:slug/releases</code></h3>
       <p>Paginated release feed across all sources in the org.</p>
       <table>
         <thead>
@@ -45,7 +45,7 @@ export default function RestApiPage() {
         </tbody>
       </table>
 
-      <h3><code>GET /api/orgs/:slug/activity</code></h3>
+      <h3><code>GET /v1/orgs/:slug/activity</code></h3>
       <p>Weekly release activity for the organization.</p>
       <table>
         <thead>
@@ -61,17 +61,17 @@ export default function RestApiPage() {
 
       <h2>Products</h2>
 
-      <h3><code>GET /api/products</code></h3>
+      <h3><code>GET /v1/products</code></h3>
       <p>List products. Filter with <code>?orgId=...</code>.</p>
 
-      <h3><code>GET /api/products/:slug</code></h3>
+      <h3><code>GET /v1/products/:slug</code></h3>
       <p>Get product details by slug or ID.</p>
 
       <hr />
 
       <h2>Sources</h2>
 
-      <h3><code>GET /api/sources</code></h3>
+      <h3><code>GET /v1/sources</code></h3>
       <p>List sources with filters.</p>
       <table>
         <thead>
@@ -88,7 +88,7 @@ export default function RestApiPage() {
         </tbody>
       </table>
 
-      <h3><code>GET /api/sources/:slug</code></h3>
+      <h3><code>GET /v1/sources/:slug</code></h3>
       <p>Source details with paginated releases.</p>
       <table>
         <thead>
@@ -100,24 +100,24 @@ export default function RestApiPage() {
         </tbody>
       </table>
 
-      <h3><code>GET /api/sources/:slug/activity</code></h3>
+      <h3><code>GET /v1/sources/:slug/activity</code></h3>
       <p>Weekly release activity for a source. Accepts <code>from</code> and <code>to</code> date params.</p>
 
-      <h3><code>GET /api/sources/:slug/recent-releases</code></h3>
+      <h3><code>GET /v1/sources/:slug/recent-releases</code></h3>
       <p>Releases after a cutoff date. Requires <code>?cutoff=ISO-date</code>.</p>
 
       <hr />
 
       <h2>Releases</h2>
 
-      <h3><code>GET /api/releases/:id</code></h3>
+      <h3><code>GET /v1/releases/:id</code></h3>
       <p>Get full release details by ID, including content and media assets.</p>
 
       <hr />
 
       <h2>Search</h2>
 
-      <h3><code>GET /api/search</code></h3>
+      <h3><code>GET /v1/search</code></h3>
       <p>Full-text search across orgs, products, sources, and releases.</p>
       <table>
         <thead>
@@ -134,7 +134,7 @@ export default function RestApiPage() {
 
       <h2>Summaries</h2>
 
-      <h3><code>GET /api/summaries</code></h3>
+      <h3><code>GET /v1/summaries</code></h3>
       <p>Get cached AI summaries for a source.</p>
       <table>
         <thead>

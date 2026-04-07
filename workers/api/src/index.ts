@@ -3,6 +3,7 @@ import { cors } from "hono/cors";
 import { authMiddleware } from "./middleware/auth.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
+import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { statsRoutes } from "./routes/stats.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { sourceRoutes } from "./routes/sources.js";
@@ -16,6 +17,7 @@ import { mediaRoutes } from "./routes/media.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import { productRoutes } from "./routes/products.js";
+import { pollAndFetch } from "./cron/poll-fetch.js";
 
 export { StatusHub } from "./status-hub.js";
 
@@ -49,48 +51,51 @@ app.use("*", async (c, next) => {
   c.res.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
 });
 
-// Status routes mounted before auth — they accept unauthenticated browser WebSocket/fetch connections
-app.route("/api", statusRoutes);
+// ── v1 REST API ──
 
-// Media routes mounted before auth — GET is public, PUT has its own auth check
-app.route("/api", mediaRoutes);
+const v1 = new Hono<Env>();
 
-app.use("/api/*", authMiddleware);
-app.use("/api/*", dbHealthCheck);
+// Unauthenticated routes (status WebSocket/fetch, public media GET)
+v1.route("/", statusRoutes);
+v1.route("/", mediaRoutes);
 
-// Cache-Control for read-heavy GET endpoints (Cloudflare handles gzip/brotli automatically).
-// Set CACHE_DISABLED=1 in env to bypass (e.g. local dev).
-app.use("/api/stats", cacheControl(300, { staleWhileRevalidate: 60 }));
-app.use("/api/orgs", cacheControl(60, { staleWhileRevalidate: 30 }));
-app.use("/api/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
-app.use("/api/orgs/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
-app.use("/api/sources", cacheControl(60, { staleWhileRevalidate: 30 }));
-app.use("/api/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
-app.use("/api/search", cacheControl(30, { staleWhileRevalidate: 30 }));
-app.use("/api/releases/:id", cacheControl(120, { staleWhileRevalidate: 60 }));
-app.use("/api/summaries/*", cacheControl(300, { staleWhileRevalidate: 120 }));
-app.use("/api/status/fetch-log", cacheControl(15));
-app.use("/api/status/usage", cacheControl(30));
-app.use("/api/orgs/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30 }));
-app.use("/api/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60 }));
-app.use("/api/products", cacheControl(60, { staleWhileRevalidate: 30 }));
-app.use("/api/products/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
-app.use("/api/sources/fetchable", cacheControl(15));
-app.use("/api/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
+// Auth + DB health for everything else
+v1.use("/*", authMiddleware);
+v1.use("/*", dbHealthCheck);
 
-app.route("/api", sessionRoutes);
-app.route("/api", statsRoutes);
-app.route("/api", orgRoutes);
-app.route("/api", productRoutes);
-app.route("/api", sourceRoutes);
-app.route("/api", searchRoutes);
-app.route("/api", fetchLogRoutes);
-app.route("/api", usageLogRoutes);
-app.route("/api", ignoreRoutes);
-app.route("/api", releaseRoutes);
-app.route("/api/summaries", summaries);
+// Cache-Control for read-heavy GET endpoints
+v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60 }));
+v1.use("/orgs", cacheControl(60, { staleWhileRevalidate: 30 }));
+v1.use("/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30 }), varyOnAccept());
+v1.use("/orgs/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
+v1.use("/orgs/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30 }));
+v1.use("/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60 }));
+v1.use("/sources", cacheControl(60, { staleWhileRevalidate: 30 }));
+v1.use("/sources/fetchable", cacheControl(15));
+v1.use("/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30 }), varyOnAccept());
+v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
+v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30 }));
+v1.use("/releases/:id", cacheControl(120, { staleWhileRevalidate: 60 }));
+v1.use("/summaries/*", cacheControl(300, { staleWhileRevalidate: 120 }));
+v1.use("/status/fetch-log", cacheControl(15));
+v1.use("/status/usage", cacheControl(30));
+v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30 }));
+v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
 
-import { pollAndFetch } from "./cron/poll-fetch.js";
+// Route modules
+v1.route("/", sessionRoutes);
+v1.route("/", statsRoutes);
+v1.route("/", orgRoutes);
+v1.route("/", productRoutes);
+v1.route("/", sourceRoutes);
+v1.route("/", searchRoutes);
+v1.route("/", fetchLogRoutes);
+v1.route("/", usageLogRoutes);
+v1.route("/", ignoreRoutes);
+v1.route("/", releaseRoutes);
+v1.route("/summaries", summaries);
+
+app.route("/v1", v1);
 
 export default {
   fetch: app.fetch,
