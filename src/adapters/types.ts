@@ -19,6 +19,8 @@ export interface FetchOptions {
   crawl?: boolean;
   /** Force full re-parse, bypassing incremental optimization */
   full?: boolean;
+  /** Preview mode — avoid persisting side-effects like content hashes */
+  dryRun?: boolean;
   /** Called when a parsing chunk completes (for progress reporting) */
   onParseProgress?: (completed: number, total: number) => void;
 }
