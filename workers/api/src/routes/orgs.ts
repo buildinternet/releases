@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, desc, count, max, min, gte, and, sql, inArray } from "drizzle-orm";
+import { eq, count, max, min, gte, and, sql, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { organizations, orgAccounts, sources, releases, products, tags, orgTags } from "@released/db/schema.js";
 import { daysAgoIso } from "@released/lib/dates.js";

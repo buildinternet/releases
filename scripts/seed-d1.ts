@@ -1,3 +1,4 @@
+/// <reference types="node" />
 // scripts/seed-d1.ts
 //
 // One-time script to seed the remote D1 database from the local SQLite database.
