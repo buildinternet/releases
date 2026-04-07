@@ -65,24 +65,25 @@ v1.route("/", mediaRoutes);
 v1.use("/*", authMiddleware);
 v1.use("/*", dbHealthCheck);
 
-// Cache-Control for read-heavy GET endpoints
-v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60 }));
-v1.use("/orgs", cacheControl(60, { staleWhileRevalidate: 30 }));
-v1.use("/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30 }), varyOnAccept());
-v1.use("/orgs/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
-v1.use("/orgs/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30 }), varyOnAccept());
-v1.use("/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60 }));
-v1.use("/sources", cacheControl(60, { staleWhileRevalidate: 30 }));
+// Cache-Control for read-heavy GET endpoints.
+// Public endpoints use CDN edge caching; internal/admin endpoints stay private.
+v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/orgs", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use("/orgs/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/orgs/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use("/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/sources", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/sources/fetchable", cacheControl(15));
-v1.use("/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30 }), varyOnAccept());
-v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60 }));
-v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30 }), varyOnAccept());
-v1.use("/releases/:id", cacheControl(120, { staleWhileRevalidate: 60 }), varyOnAccept());
-v1.use("/summaries/*", cacheControl(300, { staleWhileRevalidate: 120 }));
+v1.use("/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use("/releases/:id", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }), varyOnAccept());
+v1.use("/summaries/*", cacheControl(300, { staleWhileRevalidate: 120, isPublic: true }));
 v1.use("/status/fetch-log", cacheControl(15));
 v1.use("/status/usage", cacheControl(30));
-v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30 }));
-v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30 }));
+v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 
 // Route modules
 v1.route("/", sessionRoutes);

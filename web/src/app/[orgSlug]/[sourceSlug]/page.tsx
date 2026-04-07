@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
@@ -12,10 +13,12 @@ import { HighlightsView } from "@/components/highlights-view";
 import { SourceTimeline } from "@/components/source-timeline";
 import Link from "next/link";
 
+const getSource = cache((slug: string, page = 1) => api.sourceDetail(slug, page));
+
 export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string; sourceSlug: string }> }): Promise<Metadata> {
   const { orgSlug, sourceSlug } = await params;
   try {
-    const source = await api.sourceDetail(sourceSlug);
+    const source = await getSource(sourceSlug);
     const orgName = source.org?.name ?? orgSlug;
     return {
       title: `${source.name} — ${orgName}`,
@@ -59,7 +62,7 @@ export default async function SourcePage({
   let activity;
   try {
     [source, activity] = await Promise.all([
-      api.sourceDetail(sourceSlug, page),
+      getSource(sourceSlug, page),
       api.sourceActivity(sourceSlug, activityFrom).catch(() => null),
     ]);
   } catch (err) {
