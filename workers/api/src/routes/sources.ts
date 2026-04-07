@@ -518,22 +518,44 @@ sourceRoutes.get("/sources/:slug", async (c) => {
 
   const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
 
-  const [latest] = await db
-    .select({ version: releases.version, publishedAt: releases.publishedAt })
-    .from(releases)
-    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`))
-    .orderBy(desc(releases.publishedAt))
-    .limit(1);
+  // Derive latestVersion from already-fetched releases when on first page
+  let latestVersion: string | null = null;
+  let latestDate: string | null = null;
 
-  let latestVersion = latest?.version ?? null;
-  if (!latestVersion) {
-    const [fallback] = await db
-      .select({ version: releases.version })
+  if (page === 1 && releaseRows.length > 0) {
+    // releaseRows are sorted: published_at DESC (nulls last), then fetched_at DESC
+    // First row with published_at is the latest by date
+    const latestByDate = releaseRows.find(r => r.published_at !== null);
+    if (latestByDate?.version) {
+      latestVersion = latestByDate.version;
+      latestDate = latestByDate.published_at;
+    }
+    // Fallback: first row's version (sorted by fetched_at for null published_at rows)
+    if (!latestVersion) {
+      latestVersion = releaseRows[0].version ?? null;
+    }
+    if (!latestDate && latestByDate) {
+      latestDate = latestByDate.published_at;
+    }
+  } else {
+    // For page > 1, we still need the separate queries
+    const [latest] = await db
+      .select({ version: releases.version, publishedAt: releases.publishedAt })
       .from(releases)
-      .where(and(eq(releases.sourceId, src.id), notSuppressed))
-      .orderBy(desc(releases.fetchedAt))
+      .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`))
+      .orderBy(desc(releases.publishedAt))
       .limit(1);
-    latestVersion = fallback?.version ?? null;
+    latestVersion = latest?.version ?? null;
+    latestDate = latest?.publishedAt ?? null;
+    if (!latestVersion) {
+      const [fallback] = await db
+        .select({ version: releases.version })
+        .from(releases)
+        .where(and(eq(releases.sourceId, src.id), notSuppressed))
+        .orderBy(desc(releases.fetchedAt))
+        .limit(1);
+      latestVersion = fallback?.version ?? null;
+    }
   }
 
   // Compute source metrics inline — use fetchedAt as fallback when publishedAt is NULL
@@ -586,7 +608,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     releasesLast30Days,
     avgReleasesPerWeek,
     latestVersion,
-    latestDate: latest?.publishedAt ?? null,
+    latestDate,
     changelogUrl: parsedMeta.changelogUrl ?? null,
     lastFetchedAt: src.lastFetchedAt,
     trackingSince: earliest?.date ?? totals.oldest ?? src.createdAt,
