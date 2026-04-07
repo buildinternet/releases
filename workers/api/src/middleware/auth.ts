@@ -1,9 +1,8 @@
 import type { MiddlewareHandler } from "hono";
-
-type Env = { Bindings: { RELEASED_API_KEY: string } };
+import type { Env } from "../index.js";
 
 export const authMiddleware: MiddlewareHandler<Env> = async (c, next) => {
-  const secret = c.env.RELEASED_API_KEY;
+  const secret = await c.env.RELEASED_API_KEY?.get();
 
   // No secret configured — skip auth (local dev)
   if (!secret) {

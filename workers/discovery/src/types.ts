@@ -23,15 +23,18 @@ export interface StatusResponse {
   error?: string;
 }
 
+/** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
+export type SecretBinding = { get(): Promise<string> };
+
 export interface Env {
   Sandbox: DurableObjectNamespace<Sandbox>;
   DISCOVERY_SESSION: DurableObjectNamespace;
   DB: D1Database;
-  ANTHROPIC_API_KEY: string;
-  CLOUDFLARE_ACCOUNT_ID: string;
-  CLOUDFLARE_API_TOKEN: string;
-  GITHUB_TOKEN?: string;
+  ANTHROPIC_API_KEY: SecretBinding;
+  CLOUDFLARE_ACCOUNT_ID: SecretBinding;
+  CLOUDFLARE_API_TOKEN: SecretBinding;
+  GITHUB_TOKEN?: SecretBinding;
   RELEASED_API_URL: string;
-  RELEASED_API_KEY: string;
+  RELEASED_API_KEY: SecretBinding;
   API_WORKER?: Fetcher;
 }

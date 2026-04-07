@@ -44,12 +44,13 @@ export class DiscoverySession extends DurableObject<Env> {
     try {
       const url = `${this.env.RELEASED_API_URL}/v1/status/event`;
       console.log(`[status-hub] POST ${url}`, JSON.stringify(event).slice(0, 200));
+      const apiKey = await this.env.RELEASED_API_KEY?.get();
       const res = await fetch(url, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(this.env.RELEASED_API_KEY
-            ? { Authorization: `Bearer ${this.env.RELEASED_API_KEY}` }
+          ...(apiKey
+            ? { Authorization: `Bearer ${apiKey}` }
             : {}),
         },
         body: JSON.stringify(event),
@@ -101,15 +102,22 @@ export class DiscoverySession extends DurableObject<Env> {
 
     try {
       console.log(`[discovery:${this.sessionId}] launchProcess: setting up sandbox`);
-      // Set env vars on the container so all processes inherit them
+      // Resolve secrets from Secrets Store and pass as plain env vars to the container
+      const [anthropicKey, cfAccountId, cfApiToken, apiKey, githubToken] = await Promise.all([
+        this.env.ANTHROPIC_API_KEY.get(),
+        this.env.CLOUDFLARE_ACCOUNT_ID.get(),
+        this.env.CLOUDFLARE_API_TOKEN.get(),
+        this.env.RELEASED_API_KEY.get(),
+        this.env.GITHUB_TOKEN?.get(),
+      ]);
       const envVars: Record<string, string> = {
-        ANTHROPIC_API_KEY: this.env.ANTHROPIC_API_KEY,
-        CLOUDFLARE_ACCOUNT_ID: this.env.CLOUDFLARE_ACCOUNT_ID,
-        CLOUDFLARE_API_TOKEN: this.env.CLOUDFLARE_API_TOKEN,
+        ANTHROPIC_API_KEY: anthropicKey,
+        CLOUDFLARE_ACCOUNT_ID: cfAccountId,
+        CLOUDFLARE_API_TOKEN: cfApiToken,
         RELEASED_API_URL: this.env.RELEASED_API_URL,
-        RELEASED_API_KEY: this.env.RELEASED_API_KEY,
+        RELEASED_API_KEY: apiKey,
       };
-      if (this.env.GITHUB_TOKEN) envVars.GITHUB_TOKEN = this.env.GITHUB_TOKEN;
+      if (githubToken) envVars.GITHUB_TOKEN = githubToken;
       await sandbox.setEnvVars(envVars);
 
       // Start WebSocket log server in the sandbox
