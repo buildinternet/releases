@@ -29,11 +29,27 @@ export async function getSourcesWithStats(
     SELECT
       sources.*,
       organizations.slug AS org_slug,
-      (SELECT COUNT(*) FROM releases r WHERE r.source_id = sources.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-      (SELECT r2.version FROM releases r2 WHERE r2.source_id = sources.id AND (r2.suppressed IS NULL OR r2.suppressed = 0) AND r2.published_at IS NOT NULL ORDER BY r2.published_at DESC LIMIT 1) AS latest_version,
-      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = sources.id AND (r3.suppressed IS NULL OR r3.suppressed = 0) AND r3.published_at IS NOT NULL ORDER BY r3.published_at DESC LIMIT 1) AS latest_date
+      COALESCE(rs.release_count, 0) AS release_count,
+      rs.latest_version AS latest_version,
+      rs.latest_date AS latest_date
     FROM sources
     LEFT JOIN organizations ON organizations.id = sources.org_id
+    LEFT JOIN (
+      SELECT
+        r.source_id,
+        COUNT(*) AS release_count,
+        MAX(r.published_at) AS latest_date,
+        NULLIF(
+          SUBSTR(
+            MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END),
+            INSTR(MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END), '|') + 1
+          ),
+          ''
+        ) AS latest_version
+      FROM releases r
+      WHERE (r.suppressed IS NULL OR r.suppressed = 0)
+      GROUP BY r.source_id
+    ) rs ON rs.source_id = sources.id
     ${whereClause ? sql`WHERE ${whereClause}` : sql``}
     ORDER BY sources.name
   `);

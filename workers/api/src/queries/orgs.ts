@@ -9,11 +9,14 @@ export async function getOrgsWithStats(
   return db.all<OrgListRow>(sql`
     SELECT
       o.id, o.slug, o.name, o.domain, o.description, o.category,
-      (SELECT COUNT(*) FROM sources s WHERE s.org_id = o.id) AS source_count,
-      (SELECT COUNT(*) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-      (SELECT MAX(r.published_at) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND r.published_at IS NOT NULL) AS last_activity,
-      (SELECT COUNT(*) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND r.published_at >= ${cutoff30d} AND (r.suppressed IS NULL OR r.suppressed = 0)) AS recent_release_count
+      COUNT(DISTINCT s.id) AS source_count,
+      COUNT(CASE WHEN r.id IS NOT NULL AND (r.suppressed IS NULL OR r.suppressed = 0) THEN 1 END) AS release_count,
+      MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
+      COUNT(CASE WHEN r.published_at >= ${cutoff30d} AND (r.suppressed IS NULL OR r.suppressed = 0) THEN 1 END) AS recent_release_count
     FROM organizations o
+    LEFT JOIN sources s ON s.org_id = o.id
+    LEFT JOIN releases r ON r.source_id = s.id
+    GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category
     ORDER BY o.name
   `);
 }
