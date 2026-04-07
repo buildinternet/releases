@@ -6,6 +6,8 @@ import { daysAgoIso } from "@released/lib/dates.js";
 import { isValidCategory } from "@released/lib/categories.js";
 import { toSlug } from "@released/lib/slug.js";
 import { isConflictError, computeAvgPerWeek, getOrCreateTagD1 } from "../utils.js";
+import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
+import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@released/lib/formatters.js";
 import type { Env } from "../index.js";
 
 export const orgRoutes = new Hono<Env>();
@@ -164,7 +166,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     .from(sources)
     .where(eq(sources.orgId, org.id));
 
-  return c.json({
+  const result = {
     id: org.id,
     slug: org.slug,
     name: org.name,
@@ -181,7 +183,13 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     accounts,
     products: productRows,
     sources: sourcesWithStats,
-  });
+  };
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(c, orgToMarkdown(result as any));
+  }
+
+  return c.json(result);
 });
 
 orgRoutes.post("/orgs", async (c) => {
@@ -714,7 +722,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
       try { return JSON.parse(r.media ?? "[]"); } catch { return []; }
     })().map((m: any) => ({
       ...m,
-      r2Url: m.r2Key ? `/api/media/${m.r2Key}` : undefined,
+      r2Url: m.r2Key ? `/v1/media/${m.r2Key}` : undefined,
     })),
     source: {
       slug: r.source_slug,
@@ -723,10 +731,13 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     },
   }));
 
-  return c.json({
-    releases: releasesFormatted,
-    pagination: { nextCursor, limit },
-  });
+  const pagination = { nextCursor, limit };
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(c, orgReleaseFeedToMarkdown(slug, releasesFormatted, pagination));
+  }
+
+  return c.json({ releases: releasesFormatted, pagination });
 });
 
 orgRoutes.post("/orgs/:slug/accounts", async (c) => {
