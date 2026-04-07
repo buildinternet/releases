@@ -28,7 +28,7 @@
   "r2_buckets": [
     {
       "binding": "MEDIA",
-      "bucket_name": "releases-media"
+      "bucket_name": "released-media"
     }
   ],
   "durable_objects": {
