@@ -6,6 +6,8 @@ import { daysAgoIso } from "@released/lib/dates.js";
 import { toSlug } from "@released/lib/slug.js";
 import { getStatusHub } from "../utils.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
+import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
+import { sourceToMarkdown, releaseToMarkdown } from "@released/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
 
@@ -583,7 +585,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     url: r.url,
     media: JSON.parse(r.media ?? "[]").map((m: any) => ({
       ...m,
-      r2Url: m.r2Key ? `/api/media/${m.r2Key}` : undefined,
+      r2Url: m.r2Key ? `/v1/media/${m.r2Key}` : undefined,
     })),
   }));
 
@@ -643,7 +645,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
 
   const parsedMeta = JSON.parse(src.metadata || "{}");
 
-  return c.json({
+  const result = {
     id: src.id,
     slug: src.slug,
     name: src.name,
@@ -671,7 +673,13 @@ sourceRoutes.get("/sources/:slug", async (c) => {
         year: s.year, month: s.month, summary: s.summary, releaseCount: s.releaseCount, generatedAt: s.generatedAt,
       })),
     },
-  });
+  };
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(c, sourceToMarkdown(result as any));
+  }
+
+  return c.json(result);
 });
 
 sourceRoutes.post("/sources", async (c) => {
@@ -833,10 +841,16 @@ sourceRoutes.get("/releases/:id", async (c) => {
 
   const media = JSON.parse((release.media as string) ?? "[]").map((m: any) => ({
     ...m,
-    r2Url: m.r2Key ? `/api/media/${m.r2Key}` : undefined,
+    r2Url: m.r2Key ? `/v1/media/${m.r2Key}` : undefined,
   }));
 
-  return c.json({ ...release, media, sourceName, sourceSlug, sourceType, org });
+  const result = { ...release, media, sourceName, sourceSlug, sourceType, org };
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(c, releaseToMarkdown(result as any));
+  }
+
+  return c.json(result);
 });
 
 sourceRoutes.delete("/releases/:id", async (c) => {

@@ -1,6 +1,8 @@
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { createDb } from "../db.js";
+import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
+import { searchToMarkdown } from "@released/lib/formatters.js";
 import type { Env } from "../index.js";
 import type {
   SearchOrgHit,
@@ -100,5 +102,11 @@ searchRoutes.get("/search", async (c) => {
     }
   }
 
-  return c.json({ query: q, orgs, products, sources, releases });
+  const result = { query: q, orgs, products, sources, releases };
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(c, searchToMarkdown(result));
+  }
+
+  return c.json(result);
 });

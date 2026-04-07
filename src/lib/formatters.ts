@@ -7,10 +7,13 @@
 
 import type {
   ReleaseItem,
+  ReleaseDetail,
   ReleaseSummaryItem,
   SourceDetail,
   SourceListItem,
   OrgDetail,
+  OrgReleaseItem,
+  UnifiedSearchResponse,
 } from "../api/types.js";
 
 // Re-export under the old names for any callers still using them
@@ -204,6 +207,175 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): s
   }
 
   lines.push("");
+
+  return lines.join("\n");
+}
+
+// ── Release Detail → Markdown ──────────────────────────────────────
+
+export function releaseToMarkdown(
+  release: ReleaseDetail,
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+
+  const orgPath = release.org ? `/${release.org.slug}` : "";
+  const sourcePath = orgPath
+    ? `${orgPath}/${release.sourceSlug}`
+    : `/source/${release.sourceSlug}`;
+
+  lines.push("---");
+  lines.push(yamlLine("title", release.title));
+  if (release.version) lines.push(yamlLine("version", release.version));
+  lines.push(yamlLine("source", release.sourceName));
+  lines.push(yamlLine("source_slug", release.sourceSlug));
+  lines.push(yamlLine("source_type", release.sourceType));
+  if (release.org) {
+    lines.push(yamlLine("organization", release.org.name));
+    lines.push(yamlLine("organization_slug", release.org.slug));
+  }
+  if (release.publishedAt) {
+    lines.push(yamlLine("published", isoDateOnly(release.publishedAt)));
+  }
+  if (release.url) lines.push(yamlLine("url", release.url));
+  if (opts.baseUrl) {
+    lines.push(yamlLine("canonical_source", `${opts.baseUrl}${sourcePath}`));
+  }
+  lines.push("---");
+  lines.push("");
+
+  if (release.title) {
+    lines.push(`# ${release.title}`);
+    lines.push("");
+  }
+
+  if (release.content) {
+    lines.push(release.content);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+// ── Org Release Feed → Markdown ────────────────────────────────────
+
+export function orgReleaseFeedToMarkdown(
+  orgSlug: string,
+  releases: OrgReleaseItem[],
+  pagination: { nextCursor: string | null; limit: number },
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+
+  lines.push("---");
+  lines.push(yamlLine("organization", orgSlug));
+  lines.push(yamlLine("release_count", releases.length));
+  if (pagination.nextCursor) {
+    lines.push(yamlLine("has_more", "true"));
+  }
+  if (opts.baseUrl) {
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/${orgSlug}`));
+  }
+  lines.push("---");
+  lines.push("");
+
+  for (const release of releases) {
+    const dateStr = formatIsoDate(release.publishedAt);
+    lines.push(
+      `<Release${attr("version", release.version)}${attr("date", dateStr)}${attr("published", release.publishedAt)}${attr("url", release.url)}${attr("source", release.source.slug)}>`
+    );
+
+    if (release.title && release.title !== release.version) {
+      lines.push(`## ${release.title}`);
+      lines.push("");
+    }
+
+    const body = release.content || release.summary;
+    if (body) {
+      lines.push(body);
+    }
+
+    lines.push("</Release>");
+    lines.push("");
+  }
+
+  if (pagination.nextCursor) {
+    const cursorAttrs = [`cursor="${pagination.nextCursor}"`];
+    if (opts.baseUrl) {
+      cursorAttrs.push(`next="${opts.baseUrl}/${orgSlug}/releases?cursor=${encodeURIComponent(pagination.nextCursor)}&limit=${pagination.limit}"`);
+    }
+    lines.push(`<Pagination ${cursorAttrs.join(" ")} />`);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+// ── Search Results → Markdown ──────────────────────────────────────
+
+export function searchToMarkdown(
+  results: UnifiedSearchResponse,
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+
+  lines.push("---");
+  lines.push(yamlLine("query", results.query));
+  lines.push("---");
+  lines.push("");
+
+  if (results.orgs.length > 0) {
+    lines.push("## Organizations");
+    lines.push("");
+    for (const org of results.orgs) {
+      const url = opts.baseUrl ? ` — [view](${opts.baseUrl}/${org.slug})` : "";
+      lines.push(`- **${org.name}** (\`${org.slug}\`)${org.category ? ` [${org.category}]` : ""}${url}`);
+    }
+    lines.push("");
+  }
+
+  if (results.products.length > 0) {
+    lines.push("## Products");
+    lines.push("");
+    for (const p of results.products) {
+      const orgInfo = p.orgSlug ? ` (${p.orgName})` : "";
+      lines.push(`- **${p.name}** (\`${p.slug}\`)${orgInfo}${p.category ? ` [${p.category}]` : ""}`);
+    }
+    lines.push("");
+  }
+
+  if (results.sources.length > 0) {
+    lines.push("## Sources");
+    lines.push("");
+    for (const s of results.sources) {
+      const orgInfo = s.orgSlug ? ` (${s.orgName})` : "";
+      const url = opts.baseUrl && s.orgSlug
+        ? ` — [view](${opts.baseUrl}/${s.orgSlug}/${s.slug})`
+        : "";
+      lines.push(`- **${s.name}** (\`${s.slug}\`, ${s.type})${orgInfo}${url}`);
+    }
+    lines.push("");
+  }
+
+  if (results.releases.length > 0) {
+    lines.push("## Releases");
+    lines.push("");
+    for (const r of results.releases) {
+      const date = r.publishedAt ? ` (${isoDateOnly(r.publishedAt)})` : "";
+      const version = r.version ? ` ${r.version}` : "";
+      lines.push(`- **${r.sourceName}${version}**${date}: ${r.title}`);
+      if (r.summary) {
+        lines.push(`  > ${r.summary}`);
+      }
+    }
+    lines.push("");
+  }
+
+  if (results.orgs.length === 0 && results.products.length === 0 &&
+      results.sources.length === 0 && results.releases.length === 0) {
+    lines.push("No results found.");
+    lines.push("");
+  }
 
   return lines.join("\n");
 }
