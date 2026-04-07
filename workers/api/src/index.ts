@@ -23,15 +23,18 @@ import { pollAndFetch } from "./cron/poll-fetch.js";
 
 export { StatusHub } from "./status-hub.js";
 
+/** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
+type SecretBinding = { get(): Promise<string> };
+
 export type Env = {
   Bindings: {
     DB: D1Database;
-    RELEASED_API_KEY: string;
+    RELEASED_API_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
     CACHE_DISABLED?: string;
-    GITHUB_TOKEN?: string;
+    GITHUB_TOKEN?: SecretBinding;
     CRON_ENABLED?: string;
     DISCOVERY_WORKER?: Fetcher;
   };
@@ -106,6 +109,7 @@ app.route("/v1", v1);
 export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
-    ctx.waitUntil(pollAndFetch(env));
+    const githubToken = await env.GITHUB_TOKEN?.get();
+    ctx.waitUntil(pollAndFetch({ DB: env.DB, GITHUB_TOKEN: githubToken, CRON_ENABLED: env.CRON_ENABLED }));
   },
 };

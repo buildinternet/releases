@@ -14,11 +14,12 @@ function errorResponse(message: string, status: number): Response {
   return jsonResponse({ error: message }, status);
 }
 
-function checkAuth(request: Request, env: Env): Response | null {
-  if (!env.RELEASED_API_KEY) return null;
+async function checkAuth(request: Request, env: Env): Promise<Response | null> {
+  const apiKey = await env.RELEASED_API_KEY?.get();
+  if (!apiKey) return null;
   const header = request.headers.get("Authorization") ?? "";
   const token = header.startsWith("Bearer ") ? header.slice(7) : "";
-  if (token !== env.RELEASED_API_KEY) {
+  if (token !== apiKey) {
     return errorResponse("Unauthorized", 401);
   }
   return null;
@@ -28,7 +29,7 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
-    const authError = checkAuth(request, env);
+    const authError = await checkAuth(request, env);
     if (authError) return authError;
 
     if (request.method === "POST" && url.pathname === "/onboard") {
@@ -46,8 +47,9 @@ export default {
       // ── Discovery guardrails: check for duplicates and count cap ──
       try {
         const guardPath = "/v1/sessions?status=running&type=onboard";
-        const guardHeaders: Record<string, string> = env.RELEASED_API_KEY
-          ? { Authorization: `Bearer ${env.RELEASED_API_KEY}` }
+        const apiKey = await env.RELEASED_API_KEY?.get();
+        const guardHeaders: Record<string, string> = apiKey
+          ? { Authorization: `Bearer ${apiKey}` }
           : {};
         // Use service binding (Worker-to-Worker) when available, public URL as fallback
         const guardRes = env.API_WORKER
