@@ -8,6 +8,9 @@
   "observability": {
     "enabled": true
   },
+  "vars": {
+    "RELEASED_API_URL": "https://api.releases.sh"
+  },
   "containers": [{
     "class_name": "Sandbox",
     "image": "./Dockerfile",
