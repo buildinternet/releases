@@ -357,15 +357,18 @@ export async function isUrlExcluded(url: string, orgId?: string): Promise<{ excl
   return { excluded: false };
 }
 
-/** Returns true if content is unchanged (hash matches). Persists the new hash on change. */
+/** Returns true if content is unchanged (hash matches). Persists the new hash on change unless dryRun is set. */
 export async function checkContentHash(
   source: Source,
   contentHash: string,
+  options?: { dryRun?: boolean },
 ): Promise<boolean> {
   if (isRemoteMode()) return apiClient.checkContentHash(source, contentHash);
   if (source.lastContentHash === contentHash) return true;
-  const db = getDb();
-  await db.update(sources).set({ lastContentHash: contentHash }).where(eq(sources.id, source.id));
+  if (!options?.dryRun) {
+    const db = getDb();
+    await db.update(sources).set({ lastContentHash: contentHash }).where(eq(sources.id, source.id));
+  }
   return false;
 }
 
