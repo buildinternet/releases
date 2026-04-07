@@ -39,6 +39,9 @@
   "migrations": [
     { "new_classes": ["StatusHub"], "tag": "v1" }
   ],
+  "routes": [
+    { "pattern": "api.releases.sh", "custom_domain": true }
+  ],
   "triggers": {
     "crons": ["0 * * * *"]
   },
