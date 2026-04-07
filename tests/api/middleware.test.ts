@@ -18,8 +18,13 @@ const { cacheControl } = (await import(
 // ---------------------------------------------------------------------------
 
 describe("authMiddleware", () => {
+  /** Create a mock SecretBinding that returns the given value from .get() */
+  function mockSecret(value: string) {
+    return { get: () => Promise.resolve(value) };
+  }
+
   function createApp() {
-    type Env = { Bindings: { RELEASED_API_KEY: string } };
+    type Env = { Bindings: { RELEASED_API_KEY?: { get(): Promise<string> } } };
     const app = new Hono<Env>();
     app.use("*", authMiddleware);
     app.get("/test", (c) => c.json({ ok: true }));
@@ -28,7 +33,7 @@ describe("authMiddleware", () => {
 
   it("returns 401 when no Authorization header is provided", async () => {
     const app = createApp();
-    const res = await app.request("/test", {}, { RELEASED_API_KEY: "secret" });
+    const res = await app.request("/test", {}, { RELEASED_API_KEY: mockSecret("secret") });
     expect(res.status).toBe(401);
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("unauthorized");
@@ -39,7 +44,7 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Bearer wrong-key" } },
-      { RELEASED_API_KEY: "secret" },
+      { RELEASED_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(401);
   });
@@ -49,17 +54,16 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Bearer secret" } },
-      { RELEASED_API_KEY: "secret" },
+      { RELEASED_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { ok: boolean };
     expect(body.ok).toBe(true);
   });
 
-  it("skips auth when no API key is configured (local dev)", async () => {
+  it("skips auth when no API key binding is present (local dev)", async () => {
     const app = createApp();
-    // Pass an empty string as the key — treated as falsy
-    const res = await app.request("/test", {}, { RELEASED_API_KEY: "" });
+    const res = await app.request("/test", {}, {});
     expect(res.status).toBe(200);
   });
 
@@ -68,7 +72,7 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Basic dXNlcjpwYXNz" } },
-      { RELEASED_API_KEY: "secret" },
+      { RELEASED_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(401);
   });
@@ -78,7 +82,7 @@ describe("authMiddleware", () => {
     const res = await app.request(
       "/test",
       { headers: { Authorization: "Bearer " } },
-      { RELEASED_API_KEY: "secret" },
+      { RELEASED_API_KEY: mockSecret("secret") },
     );
     expect(res.status).toBe(401);
   });
