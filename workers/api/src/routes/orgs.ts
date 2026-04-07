@@ -650,20 +650,6 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
 
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  // Get all source IDs for this org
-  const orgSources = await db
-    .select({ id: sources.id })
-    .from(sources)
-    .where(eq(sources.orgId, org.id))
-    .all();
-
-  if (orgSources.length === 0) {
-    return c.json({ releases: [], pagination: { nextCursor: null, limit } });
-  }
-
-  const sourceIds = orgSources.map((s) => s.id);
-  const placeholders = sourceIds.map(() => "?").join(", ");
-
   // Parse cursor — format is "publishedAt|id"
   let cursorWhere = "";
   const cursorBindings: string[] = [];
@@ -690,7 +676,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
     FROM releases r
     INNER JOIN sources s ON s.id = r.source_id
-    WHERE r.source_id IN (${placeholders})
+    WHERE s.org_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${cursorWhere}
     ORDER BY
@@ -699,7 +685,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
       r.fetched_at DESC,
       r.id DESC
     LIMIT ?
-  `).bind(...sourceIds, ...cursorBindings, limit + 1);
+  `).bind(org.id, ...cursorBindings, limit + 1);
 
   const { results } = await stmt.all<{
     id: string;
