@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { fetchLog, sources } from "@released/db/schema.js";
+import { fetchLog, sources } from "@releases/db/schema.js";
 import type { Env } from "../index.js";
 
 export const fetchLogRoutes = new Hono<Env>();

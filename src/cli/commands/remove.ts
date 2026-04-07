@@ -14,10 +14,10 @@ export function registerRemoveCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released remove my-source
-  released remove source-a source-b source-c
-  released remove my-source --ignore --reason "no longer maintained"
-  released remove my-source --dry-run`)
+  releases remove my-source
+  releases remove source-a source-b source-c
+  releases remove my-source --ignore --reason "no longer maintained"
+  releases remove my-source --dry-run`)
     .action(async (slugs: string[], opts: { ignore?: boolean; reason?: string; json?: boolean; dryRun?: boolean }) => {
       const existing = await findSourcesBySlugs(slugs);
 

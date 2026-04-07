@@ -20,8 +20,8 @@ export function registerReleaseCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released release show abc123
-  released release show abc123 --json`)
+  releases release show abc123
+  releases release show abc123 --json`)
     .action(async (id: string, opts: { json?: boolean }) => {
       const result = await getRelease(id);
 
@@ -73,16 +73,16 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released release delete abc123
-  released release delete --source my-source
-  released release delete --source my-source --before 2024-01-01
-  released release delete --source my-source --dry-run`)
+  releases release delete abc123
+  releases release delete --source my-source
+  releases release delete --source my-source --before 2024-01-01
+  releases release delete --source my-source --dry-run`)
     .action(async (id: string | undefined, opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean }) => {
       if (!id && !opts.source && !opts.before) {
         console.error("Error: provide a release ID, --source, or --before\n");
-        console.error("  released release delete abc123");
-        console.error("  released release delete --source my-source");
-        console.error("  released release delete --before 2024-01-01");
+        console.error("  releases release delete abc123");
+        console.error("  releases release delete --source my-source");
+        console.error("  releases release delete --before 2024-01-01");
         process.exit(1);
       }
 
@@ -201,9 +201,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released release edit abc123 --title "New Title"
-  released release edit abc123 --version "2.0.0"
-  released release edit abc123 --json`)
+  releases release edit abc123 --title "New Title"
+  releases release edit abc123 --version "2.0.0"
+  releases release edit abc123 --json`)
     .action(async (id: string, opts: { title?: string; version?: string; content?: string; json?: boolean }) => {
       const existing = await getRelease(id);
       if (!existing) {
@@ -259,8 +259,8 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released release suppress abc123 --reason "promotional content"
-  released release suppress abc123 --dry-run`)
+  releases release suppress abc123 --reason "promotional content"
+  releases release suppress abc123 --dry-run`)
     .action(async (id: string, opts: { reason?: string; dryRun?: boolean; json?: boolean }) => {
       if (opts.dryRun) {
         if (opts.json) {
@@ -292,7 +292,7 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released release unsuppress abc123`)
+  releases release unsuppress abc123`)
     .action(async (id: string, opts: { json?: boolean }) => {
       const found = await unsuppressRelease(id);
       if (!found) {

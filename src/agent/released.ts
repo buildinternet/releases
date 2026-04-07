@@ -48,7 +48,7 @@ export interface ReleasedAgentOptions {
 // ── Constants ──────────────────────────────────────────────────────
 
 export const DISCOVERY_STATE_FILE = "/tmp/discovery-state.json";
-const cliCmd = process.env.RELEASED_CLI_CMD ?? "released";
+const cliCmd = process.env.RELEASED_CLI_CMD ?? "releases";
 
 // ── System prompt ──────────────────────────────────────────────────
 
@@ -130,7 +130,7 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
     {
       "url": "<source url>",
       "type": "github|scrape|feed",
-      "slug": "<slug from released add>",
+      "slug": "<slug from releases add>",
       "label": "<human-readable label>",
       "confidence": "high|medium|low",
       "validated": true/false,
@@ -163,11 +163,11 @@ function resolveSkillsDir(): string | null {
   if (envDir && existsSync(envDir)) return envDir;
 
   // 2. Container convention
-  const containerDir = "/usr/share/released/skills";
+  const containerDir = "/usr/share/releases/skills";
   if (existsSync(containerDir)) return containerDir;
 
   // 3. Local user convention
-  const localDir = resolve(homedir(), ".released/skills");
+  const localDir = resolve(homedir(), ".releases/skills");
   if (existsSync(localDir)) return localDir;
 
   // 4. Dev fallback — source tree (for running via bun src/index.ts)
@@ -213,7 +213,7 @@ export async function runAgent(options: ReleasedAgentOptions): Promise<Discovery
   if (cfAccountId && cfApiToken) {
     mcpServers["cloudflare-browser"] = {
       type: "stdio",
-      command: process.env.RELEASED_MCP_BROWSER_CMD ?? "released-mcp-browser",
+      command: process.env.RELEASED_MCP_BROWSER_CMD ?? "releases-mcp-browser",
       args: [],
       env: {
         CLOUDFLARE_ACCOUNT_ID: cfAccountId,

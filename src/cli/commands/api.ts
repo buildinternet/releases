@@ -8,8 +8,8 @@ export function registerApiCommand(program: Command) {
     .option("--port <port>", "Port to listen on", "3456")
     .addHelpText("after", `
 Examples:
-  released api
-  released api --port 8080`)
+  releases api
+  releases api --port 8080`)
     .action((opts: { port: string }) => {
       const port = parseInt(opts.port, 10) || parseInt(process.env.RELEASED_API_PORT ?? "3456", 10);
       startApiServer(port);

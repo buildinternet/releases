@@ -106,7 +106,7 @@ Both carry `confidence: "high"` since they represent explicit publisher intent.
 
 ## Using the CLI
 
-### `released evaluate <url>`
+### `releases evaluate <url>`
 
 Runs automated pre-checks (provider detection, feed discovery) and returns a recommendation. Use `--json` for structured output.
 
@@ -119,7 +119,7 @@ Key fields in JSON output:
 - `confidence`: `high` (structured source found), `medium` (clear page structure), `low` (unclear)
 - `alternatives`: Other viable sources found
 
-### `released discover <domain>`
+### `releases discover <domain>`
 
 Probes a domain for changelog URLs, feeds, and GitHub repos. Returns candidate URLs to evaluate. Use this as a starting point when you don't know where a company's changelogs live.
 
@@ -133,7 +133,7 @@ The `evaluate` command runs these before returning:
 
 ## When to Evaluate Manually
 
-If `released evaluate` returns `confidence: low` or `recommendedMethod: scrape`, you may want to investigate the page yourself:
+If `releases evaluate` returns `confidence: low` or `recommendedMethod: scrape`, you may want to investigate the page yourself:
 
 1. **Fetch the page** with `WebFetch` and look at the HTML source.
 2. **Look for feeds** — feed URLs embedded in JavaScript, non-standard paths, or links to RSS/Atom.
@@ -145,7 +145,7 @@ If `released evaluate` returns `confidence: low` or `recommendedMethod: scrape`,
 
 When evaluating multiple changelog sources for an org, identify which one is the company's **primary changelog** — the top-level, platform-wide changelog that covers the product as a whole. This is typically a website changelog page (e.g., `example.com/changelog`) rather than individual GitHub repos or product-specific pages.
 
-After adding sources, mark the primary one with `released edit <slug> --primary`. Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
+After adding sources, mark the primary one with `releases edit <slug> --primary`. Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
 
 ## When to Use Crawl
 

@@ -317,7 +317,7 @@ function mapEntries(entries: ExtractedEntry[], sourceUrl: string): RawRelease[] 
 async function isJsRenderedPage(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "released/0.1 (+https://releases.sh)" },
+      headers: { "User-Agent": "releases/0.1 (+https://releases.sh)" },
       redirect: "follow",
       signal: AbortSignal.timeout(10_000),
     });
@@ -379,7 +379,7 @@ export const agent: Adapter = {
         logger.info(`Cloudflare returned ${markdown.length.toLocaleString()} chars of markdown`);
 
         const contentHash = sha256Hex(markdown);
-        if (await checkContentHash(source, contentHash)) {
+        if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
           logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
           return { releases: [] };
         }
@@ -412,7 +412,7 @@ export const agent: Adapter = {
           logger.info(`Cloudflare returned ${markdown.length.toLocaleString()} chars of markdown`);
 
           const contentHash = sha256Hex(markdown);
-          if (await checkContentHash(source, contentHash)) {
+          if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
             logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
             return { releases: [] };
           }

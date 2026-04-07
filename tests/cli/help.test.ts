@@ -5,14 +5,14 @@ describe("CLI help", () => {
   it("shows help with --help", () => {
     const { stdout, exitCode } = runCli(["--help"]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Usage:");
-    expect(stdout).toContain("released");
+    expect(stdout).toContain("Available Commands:");
+    expect(stdout).toContain("releases");
   });
 
   it("shows help with -h", () => {
     const { stdout, exitCode } = runCli(["-h"]);
     expect(exitCode).toBe(0);
-    expect(stdout).toContain("Usage:");
+    expect(stdout).toContain("Available Commands:");
   });
 
   it("lists available commands in help", () => {

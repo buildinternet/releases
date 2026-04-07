@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "released-discovery",
+  "name": "releases-discovery",
   "account_id": "b082600d280d44fd5da3501bc1bffe2f",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-27",
@@ -23,7 +23,7 @@
     }
   ],
   "services": [
-    { "binding": "API_WORKER", "service": "released-api" }
+    { "binding": "API_WORKER", "service": "releases-api" }
   ],
   "durable_objects": {
     "bindings": [

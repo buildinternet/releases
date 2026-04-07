@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { count } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, sources, releases, products } from "@released/db/schema.js";
+import { organizations, sources, releases, products } from "@releases/db/schema.js";
 import type { Env } from "../index.js";
 
 export const statsRoutes = new Hono<Env>();

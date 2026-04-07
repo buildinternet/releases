@@ -15,9 +15,9 @@ export function registerCompareCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released compare next-js remix
-  released compare next-js remix --days 7
-  released compare next-js remix --json`)
+  releases compare next-js remix
+  releases compare next-js remix --days 7
+  releases compare next-js remix --json`)
     .action(async (slugA: string, slugB: string, opts: { days: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
       const cutoff = daysAgoIso(days);

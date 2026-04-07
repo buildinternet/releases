@@ -56,7 +56,7 @@ async function fetchText(url: string, timeoutMs = 10_000): Promise<string | null
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     const res = await fetch(url, {
-      headers: { "User-Agent": "released/0.1" },
+      headers: { "User-Agent": "releases/0.1" },
       redirect: "follow",
       signal: controller.signal,
     });
@@ -192,7 +192,7 @@ async function probeUrl(url: string): Promise<boolean> {
     const timer = setTimeout(() => controller.abort(), 8_000);
     const res = await fetch(url, {
       method: "HEAD",
-      headers: { "User-Agent": "released/0.1" },
+      headers: { "User-Agent": "releases/0.1" },
       redirect: "follow",
       signal: controller.signal,
     });

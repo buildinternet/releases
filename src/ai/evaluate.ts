@@ -69,7 +69,7 @@ async function tryMarkdownSuffix(url: string): Promise<string | null> {
   try {
     const res = await fetch(mdUrl, {
       method: "HEAD",
-      headers: { "User-Agent": "released/0.1" },
+      headers: { "User-Agent": "releases/0.1" },
       redirect: "follow",
       signal: AbortSignal.timeout(8_000),
     });
@@ -102,7 +102,7 @@ async function tryProviderFeeds(
     candidates.map(async (feedUrl) => {
       const res = await fetch(feedUrl, {
         method: "HEAD",
-        headers: { "User-Agent": "released/0.1" },
+        headers: { "User-Agent": "releases/0.1" },
         redirect: "follow",
         signal: AbortSignal.timeout(8_000),
       });

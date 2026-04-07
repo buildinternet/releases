@@ -53,9 +53,9 @@ export function registerEvaluateCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released evaluate https://code.claude.com/docs/en/changelog
-  released evaluate https://code.claude.com/docs/en/changelog --source claude-code
-  released evaluate https://github.com/vercel/next.js --json`)
+  releases evaluate https://code.claude.com/docs/en/changelog
+  releases evaluate https://code.claude.com/docs/en/changelog --source claude-code
+  releases evaluate https://github.com/vercel/next.js --json`)
     .action(async (url: string, opts: { source?: string; json?: boolean }) => {
       try {
         new URL(url);

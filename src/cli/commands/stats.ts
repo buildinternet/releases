@@ -13,9 +13,9 @@ export function registerStatsCommand(program: Command) {
     .option("--days <n>", "Period for recent activity (default: 30)", "30")
     .addHelpText("after", `
 Examples:
-  released stats
-  released stats --days 7
-  released stats --json`)
+  releases stats
+  releases stats --days 7
+  releases stats --json`)
     .action(async (opts: { json?: boolean; days?: string }) => {
       const days = parseInt(opts.days ?? "30", 10);
       const data = await getStatsSummary(days);
@@ -119,7 +119,7 @@ Examples:
         }
         console.log(activityTable.toString());
       } else {
-        console.log(chalk.dim("\nNo fetch activity recorded yet. Run `released fetch` to start."));
+        console.log(chalk.dim("\nNo fetch activity recorded yet. Run `releases fetch` to start."));
       }
     });
 }

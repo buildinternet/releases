@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, and, or } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { ignoredUrls, blockedUrls, organizations } from "@released/db/schema.js";
+import { ignoredUrls, blockedUrls, organizations } from "@releases/db/schema.js";
 import type { Env } from "../index.js";
 
 export const ignoreRoutes = new Hono<Env>();

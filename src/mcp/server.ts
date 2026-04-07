@@ -24,7 +24,7 @@ function textResult(text: string) {
 }
 
 const server = new McpServer({
-  name: "released",
+  name: "releases",
   version: "0.9.0",
 });
 
@@ -270,7 +270,7 @@ server.registerTool("list_products", {
   }
 
   if (allSources.length === 0) {
-    return textResult("No products indexed yet. Use `released add` to add sources.");
+    return textResult("No products indexed yet. Use `releases add` to add sources.");
   }
 
   const text = allSources

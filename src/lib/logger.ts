@@ -1,5 +1,5 @@
 // All logging goes to stderr — stdout is reserved for MCP JSON-RPC in serve mode
-// Logs are also persisted to ~/.released/logs/ for debugging
+// Logs are also persisted to ~/.releases/logs/ for debugging
 
 import { appendFileSync } from "fs";
 import { join } from "path";
@@ -20,19 +20,19 @@ function writeToFile(level: string, args: unknown[]) {
 
 export const logger = {
   info: (...args: unknown[]) => {
-    console.error("[released]", ...args);
+    console.error("[releases]", ...args);
     writeToFile("INFO", args);
   },
   warn: (...args: unknown[]) => {
-    console.error("[released] WARN:", ...args);
+    console.error("[releases] WARN:", ...args);
     writeToFile("WARN", args);
   },
   error: (...args: unknown[]) => {
-    console.error("[released] ERROR:", ...args);
+    console.error("[releases] ERROR:", ...args);
     writeToFile("ERROR", args);
   },
   debug: (...args: unknown[]) => {
-    if (process.env.DEBUG) console.error("[released] DEBUG:", ...args);
+    if (process.env.DEBUG) console.error("[releases] DEBUG:", ...args);
     writeToFile("DEBUG", args);
   },
 };

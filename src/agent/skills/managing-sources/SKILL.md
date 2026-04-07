@@ -10,13 +10,13 @@ Operational guide for managing changelog sources via the Released CLI.
 ## Listing Sources
 
 ```bash
-released list --json                    # All sources with metadata
-released list <slug> --json             # Single source details
-released list --org <org> --json        # Sources for a specific org
-released list --query <text> --json     # Filter by name, slug, or URL
-released list --has-feed --json         # Sources with a discovered feed URL
-released list --enrichable --json       # Sources eligible for content enrichment
-released list --enrichable --org <org> --json  # Combine filters
+releases list --json                    # All sources with metadata
+releases list <slug> --json             # Single source details
+releases list --org <org> --json        # Sources for a specific org
+releases list --query <text> --json     # Filter by name, slug, or URL
+releases list --has-feed --json         # Sources with a discovered feed URL
+releases list --enrichable --json       # Sources eligible for content enrichment
+releases list --enrichable --org <org> --json  # Combine filters
 ```
 
 The `--json` output includes source metadata (feed URLs, provider, evaluation results, fetch history).
@@ -26,7 +26,7 @@ The `--json` output includes source metadata (feed URLs, provider, evaluation re
 Use `--enrichable` to find sources that have a feed URL but either haven't been assessed for content depth or are known to have sparse (summary-only) content. These are candidates for AI-based content enrichment:
 
 ```bash
-released list --enrichable --json | jq '.[].slug'
+releases list --enrichable --json | jq '.[].slug'
 ```
 
 Use `--has-feed` to find all sources with a discovered feed URL, regardless of content depth:
@@ -36,12 +36,12 @@ Use `--has-feed` to find all sources with a discovered feed URL, regardless of c
 ### Single source
 
 ```bash
-released add <name> --url <url>                    # Auto-detect type
-released add --name <name> --url <url>              # Name as flag (alternative)
-released add <name> --url <url> --type github       # Explicit type
-released add <name> --url <url> --org "Acme Corp"   # Associate with org
-released add <name> --url <url> --feed-url <feed>   # Explicit feed URL
-released add <name> --url <url> --skip-eval         # Skip evaluation
+releases add <name> --url <url>                    # Auto-detect type
+releases add --name <name> --url <url>              # Name as flag (alternative)
+releases add <name> --url <url> --type github       # Explicit type
+releases add <name> --url <url> --org "Acme Corp"   # Associate with org
+releases add <name> --url <url> --feed-url <feed>   # Explicit feed URL
+releases add <name> --url <url> --skip-eval         # Skip evaluation
 ```
 
 ### Organization descriptions
@@ -49,7 +49,7 @@ released add <name> --url <url> --skip-eval         # Skip evaluation
 When creating an org, include a brief one-sentence product description. This grounds AI summaries for lesser-known products:
 
 ```bash
-released org add "Trigger.dev" --domain trigger.dev --description "Open-source background job framework for TypeScript"
+releases org add "Trigger.dev" --domain trigger.dev --description "Open-source background job framework for TypeScript"
 ```
 
 The description is also supported in import manifests (`"description": "..."`) and the MCP `add_organization` tool.
@@ -69,7 +69,7 @@ cat > /tmp/sources.json << 'EOF'
   {"name": "Product B", "url": "https://github.com/org/repo", "type": "github"}
 ]
 EOF
-released add --batch /tmp/sources.json
+releases add --batch /tmp/sources.json
 ```
 
 Batch mode skips evaluation by default (uses basic heuristics).
@@ -77,8 +77,8 @@ Batch mode skips evaluation by default (uses basic heuristics).
 ## Removing Sources
 
 ```bash
-released remove <slug> --ignore --reason "duplicate of X"
-released remove <slug1> <slug2> --ignore --reason "no releases found"
+releases remove <slug> --ignore --reason "duplicate of X"
+releases remove <slug1> <slug2> --ignore --reason "no releases found"
 ```
 
 Always use `--ignore --reason` when removing discovery results. This adds the URL to the org's ignore list so it won't be re-discovered.
@@ -88,9 +88,9 @@ Always use `--ignore --reason` when removing discovery results. This adds the UR
 A URL ignored for one org can still be valid for another org.
 
 ```bash
-released ignore list --org <org> --json    # Show ignored URLs
-released ignore add --org <org> <url>      # Ignore a URL
-released ignore remove --org <org> <url>   # Un-ignore a URL
+releases ignore list --org <org> --json    # Show ignored URLs
+releases ignore add --org <org> <url>      # Ignore a URL
+releases ignore remove --org <org> <url>   # Un-ignore a URL
 ```
 
 ## Blocked URLs (global)
@@ -98,19 +98,19 @@ released ignore remove --org <org> <url>   # Un-ignore a URL
 For spam domains and known-bad URLs that should never be added for any org.
 
 ```bash
-released block list --json                 # Show blocked URLs
-released block add <url>                   # Block a URL globally
-released block remove <url>               # Unblock
+releases block list --json                 # Show blocked URLs
+releases block add <url>                   # Block a URL globally
+releases block remove <url>               # Unblock
 ```
 
 ## Validation Workflow
 
 After adding a source, validate it before considering it good:
 
-1. **Add the source:** `released add <name> --url <url>`
-2. **Dry-run fetch:** `released fetch <slug> --dry-run`
+1. **Add the source:** `releases add <name> --url <url>`
+2. **Dry-run fetch:** `releases fetch <slug> --dry-run`
 3. **Check results:** Does it find releases? Do they have titles, dates, content?
-4. **If bad:** `released remove <slug> --ignore --reason "no usable releases"`
+4. **If bad:** `releases remove <slug> --ignore --reason "no usable releases"`
 5. **If good:** The source is ready for production fetches
 
 ## Primary Sources
@@ -118,8 +118,8 @@ After adding a source, validate it before considering it good:
 An org can have one source marked as its **primary changelog** — the main, company-wide changelog that covers the entire platform. Other sources (GitHub repos, product-specific changelogs) are secondary. The primary source appears first in the web app and is badged as "Primary".
 
 ```bash
-released edit <slug> --primary          # mark as org's primary changelog
-released edit <slug> --no-primary       # unmark as primary
+releases edit <slug> --primary          # mark as org's primary changelog
+releases edit <slug> --no-primary       # unmark as primary
 ```
 
 When onboarding an org, if you find a single top-level changelog (e.g., `example.com/changelog`) alongside product-specific or GitHub sources, mark the top-level one as primary.
@@ -129,7 +129,7 @@ When onboarding an org, if you find a single top-level changelog (e.g., `example
 Before adding sources, check for overlapping URLs:
 
 ```bash
-released list --json | jq '.[].url'
+releases list --json | jq '.[].url'
 ```
 
 Common duplicates:
@@ -142,10 +142,10 @@ Common duplicates:
 All data commands support `--json`. Key patterns:
 
 ```bash
-released list --json                           # Array of source objects
-released fetch <slug> --dry-run --json         # Fetch result with releases
-released evaluate <url> --json                 # Evaluation recommendation
-released discover <domain> --json              # Discovery candidates
+releases list --json                           # Array of source objects
+releases fetch <slug> --dry-run --json         # Fetch result with releases
+releases evaluate <url> --json                 # Evaluation recommendation
+releases discover <domain> --json              # Discovery candidates
 ```
 
 Pipe through `jq` for filtering when working with large datasets.
@@ -155,6 +155,6 @@ Pipe through `jq` for filtering when working with large datasets.
 Monitor and control remote fetch sessions:
 
 ```bash
-released task list                             # Active remote sessions
-released task cancel <sessionId>               # Cancel a running session
+releases task list                             # Active remote sessions
+releases task cancel <sessionId>               # Cancel a running session
 ```

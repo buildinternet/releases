@@ -78,7 +78,7 @@ export function startSubprocessFixtureServer(
   options?: { routes?: Record<string, FixtureRoute> },
 ): SubprocessFixtureServer {
   const routes = options?.routes ?? {};
-  const tmpDir = mkdtempSync(join(tmpdir(), "released-fixture-server-"));
+  const tmpDir = mkdtempSync(join(tmpdir(), "releases-fixture-server-"));
   const configPath = join(tmpDir, "routes.json");
   const portFilePath = join(tmpDir, "port.txt");
   writeFileSync(configPath, JSON.stringify(routes));

@@ -50,16 +50,16 @@ export function registerFetchCommand(program: Command) {
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .addHelpText("after", `
 Examples:
-  released fetch                          Fetch all sources
-  released fetch my-source                Fetch a single source
-  released fetch --stale 6                Fetch sources not updated in 6+ hours
-  released fetch --unfetched              Fetch sources never fetched before
-  released fetch --changed                Fetch sources where poll detected changes
-  released fetch --retry-errors           Retry sources that errored last time
-  released fetch my-source --dry-run      Preview without writing to DB
-  released fetch my-source --force        Delete and re-fetch all releases
-  released fetch --concurrency 5          Fetch 5 sources in parallel
-  released fetch --json                   Output results as JSON`)
+  releases fetch                          Fetch all sources
+  releases fetch my-source                Fetch a single source
+  releases fetch --stale 6                Fetch sources not updated in 6+ hours
+  releases fetch --unfetched              Fetch sources never fetched before
+  releases fetch --changed                Fetch sources where poll detected changes
+  releases fetch --retry-errors           Retry sources that errored last time
+  releases fetch my-source --dry-run      Preview without writing to DB
+  releases fetch my-source --force        Delete and re-fetch all releases
+  releases fetch --concurrency 5          Fetch 5 sources in parallel
+  releases fetch --json                   Output results as JSON`)
     .action(async (slugArg: string | undefined, opts: {
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
@@ -164,7 +164,7 @@ Examples:
           if (opts.json) {
             console.log(JSON.stringify([], null, 2));
           } else {
-            console.log(chalk.yellow("No sources configured. Use `released add` to add one."));
+            console.log(chalk.yellow("No sources configured. Use `releases add` to add one."));
           }
           return;
         }
@@ -348,6 +348,7 @@ Examples:
           ...fetchOptions,
           crawl: opts.crawl,
           full: opts.full,
+          dryRun: opts.dryRun,
           onParseProgress: (completed, total) => {
             progressSession(`${source.name}: parsing chunk ${completed}/${total}`);
           },
@@ -693,7 +694,7 @@ Examples:
               ? overlapping.map((s) => `"${s}"`).join(", ")
               : `${overlapping.length} sources`;
             console.error(chalk.red(`Source ${sourceList} already being fetched in session ${overlapSessionId.slice(0, 8)}.`));
-            console.error(chalk.gray(`Use 'released task cancel ${overlapSessionId.slice(0, 8)}' to stop it first.`));
+            console.error(chalk.gray(`Use 'releases task cancel ${overlapSessionId.slice(0, 8)}' to stop it first.`));
             process.exit(1);
           }
         } catch {

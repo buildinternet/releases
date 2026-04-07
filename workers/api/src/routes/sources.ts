@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, releaseSummaries, products } from "@released/db/schema.js";
-import { daysAgoIso } from "@released/lib/dates.js";
-import { toSlug } from "@released/lib/slug.js";
+import { sources, releases, organizations, releaseSummaries, products } from "@releases/db/schema.js";
+import { daysAgoIso } from "@releases/lib/dates.js";
+import { toSlug } from "@releases/lib/slug.js";
 import { getStatusHub } from "../utils.js";
 import { isConflictError, computeAvgPerWeek } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
-import { sourceToMarkdown, releaseToMarkdown } from "@released/lib/formatters.js";
+import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
 

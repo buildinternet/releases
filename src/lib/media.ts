@@ -196,7 +196,7 @@ export async function uploadToR2(
     response = await fetch(mediaUrl, {
       signal: AbortSignal.timeout(DOWNLOAD_TIMEOUT_MS),
       headers: {
-        "User-Agent": "released-bot/1.0 (+https://releases.sh)",
+        "User-Agent": "releases-bot/1.0 (+https://releases.sh)",
       },
     });
   } catch (err) {

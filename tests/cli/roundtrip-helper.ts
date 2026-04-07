@@ -10,7 +10,7 @@ const CLI_PATH = join(import.meta.dirname, "..", "..", "src", "index.ts");
 // RELEASED_API_KEY, so we only need the data-dir override here.
 
 export function createTempDataDir(): { dataDir: string; cleanup: () => void } {
-  const dataDir = mkdtempSync(join(tmpdir(), "released-roundtrip-"));
+  const dataDir = mkdtempSync(join(tmpdir(), "releases-roundtrip-"));
 
   // --help triggers auto-migration (runMigrations() runs before program.parse())
   runCli(["--help"], { env: { RELEASED_DATA_DIR: dataDir } });

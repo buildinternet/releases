@@ -354,7 +354,7 @@ async function fetchHttpSignals(url: string): Promise<HttpSignals | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(url, {
-      headers: { "User-Agent": "released/0.1", Accept: "text/html" },
+      headers: { "User-Agent": "releases/0.1", Accept: "text/html" },
       redirect: "follow",
       signal: controller.signal,
     });

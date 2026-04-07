@@ -1,13 +1,13 @@
 import { Hono } from "hono";
 import { eq, count, max, min, gte, and, sql, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases } from "@released/db/schema.js";
-import { daysAgoIso } from "@released/lib/dates.js";
-import { isValidCategory } from "@released/lib/categories.js";
-import { toSlug } from "@released/lib/slug.js";
+import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases } from "@releases/db/schema.js";
+import { daysAgoIso } from "@releases/lib/dates.js";
+import { isValidCategory } from "@releases/lib/categories.js";
+import { toSlug } from "@releases/lib/slug.js";
 import { isConflictError, computeAvgPerWeek, getOrCreateTagD1 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
-import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@released/lib/formatters.js";
+import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import type { Env } from "../index.js";
 
 export const orgRoutes = new Hono<Env>();

@@ -14,10 +14,10 @@ export function registerEnrichCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released enrich sentry-changelog              Enrich sparse releases
-  released enrich sentry-changelog --dry-run    Preview without updating
-  released enrich sentry-changelog --limit 5    Process at most 5 releases
-  released enrich sentry-changelog --json       Machine-readable output`)
+  releases enrich sentry-changelog              Enrich sparse releases
+  releases enrich sentry-changelog --dry-run    Preview without updating
+  releases enrich sentry-changelog --limit 5    Process at most 5 releases
+  releases enrich sentry-changelog --json       Machine-readable output`)
     .action(async (slug: string, opts: { dryRun?: boolean; limit?: string; json?: boolean }) => {
       const start = performance.now();
 
