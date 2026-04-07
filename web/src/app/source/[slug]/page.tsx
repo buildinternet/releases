@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
@@ -12,10 +13,12 @@ import { HighlightsView } from "@/components/highlights-view";
 import { SourceTimeline } from "@/components/source-timeline";
 import Link from "next/link";
 
+const getSource = cache((slug: string, page = 1) => api.sourceDetail(slug, page));
+
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   try {
-    const source = await api.sourceDetail(slug);
+    const source = await getSource(slug);
     return {
       title: source.name,
       description: `Release notes and changelog for ${source.name}`,
@@ -58,7 +61,7 @@ export default async function IndependentSourcePage({
   let activity;
   try {
     [source, activity] = await Promise.all([
-      api.sourceDetail(slug, page),
+      getSource(slug, page),
       api.sourceActivity(slug, activityFrom).catch(() => null),
     ]);
   } catch (err) {

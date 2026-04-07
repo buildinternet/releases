@@ -1,3 +1,4 @@
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, ApiSetupError, type OrgDetail } from "@/lib/api";
@@ -12,10 +13,12 @@ import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
 import { groupSourcesByProduct } from "@/lib/sources";
 
+const getOrg = cache((slug: string) => api.orgDetail(slug));
+
 export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
   const { orgSlug } = await params;
   try {
-    const org = await api.orgDetail(orgSlug);
+    const org = await getOrg(orgSlug);
     return {
       title: org.name,
       description: `${org.name} changelog releases on Released`,
@@ -113,12 +116,12 @@ export default async function OrgPage({
   try {
     if (showReleases) {
       [org, initialReleases] = await Promise.all([
-        api.orgDetail(orgSlug),
+        getOrg(orgSlug),
         api.orgReleases(orgSlug).catch(() => null),
       ]);
     } else {
       [org, activity] = await Promise.all([
-        api.orgDetail(orgSlug),
+        getOrg(orgSlug),
         api.orgActivity(orgSlug, activityFrom).catch(() => null),
       ]);
     }
