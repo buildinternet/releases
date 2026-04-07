@@ -110,11 +110,11 @@ export function registerPollCommand(program: Command) {
     .option("--scrape-only", "Only poll scrape sources (page HEAD check)")
     .addHelpText("after", `
 Examples:
-  released poll                      Poll all feed and scrape sources
-  released poll my-source            Poll a specific source
-  released poll --changed            Show only sources with changes
-  released poll --scrape-only        Poll only scrape sources
-  released poll --json               Output as JSON`)
+  releases poll                      Poll all feed and scrape sources
+  releases poll my-source            Poll a specific source
+  releases poll --changed            Show only sources with changes
+  releases poll --scrape-only        Poll only scrape sources
+  releases poll --json               Output as JSON`)
     .action(async (slug: string | undefined, opts: { json?: boolean; changed?: boolean; scrapeOnly?: boolean }) => {
       let sourcesToPoll: Source[];
 

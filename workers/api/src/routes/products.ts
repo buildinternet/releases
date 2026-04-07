@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { products, sources, organizations, orgAccounts, tags, productTags } from "@released/db/schema.js";
-import { toSlug } from "@released/lib/slug.js";
-import { isValidCategory } from "@released/lib/categories.js";
+import { products, sources, organizations, orgAccounts, tags, productTags } from "@releases/db/schema.js";
+import { toSlug } from "@releases/lib/slug.js";
+import { isValidCategory } from "@releases/lib/categories.js";
 import { isConflictError, getOrCreateTagD1 } from "../utils.js";
 import type { Env } from "../index.js";
 

@@ -6,14 +6,14 @@ let _dataDir: string | null = null;
 
 export function getDataDir(): string {
   if (!_dataDir) {
-    _dataDir = process.env.RELEASED_DATA_DIR || join(homedir(), ".released");
+    _dataDir = process.env.RELEASED_DATA_DIR || join(homedir(), ".releases");
     mkdirSync(_dataDir, { recursive: true });
   }
   return _dataDir;
 }
 
 export function getDbPath(): string {
-  return join(getDataDir(), "released.db");
+  return join(getDataDir(), "releases.db");
 }
 
 export function getLogsDir(): string {

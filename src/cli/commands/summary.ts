@@ -17,17 +17,17 @@ export function registerSummaryCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released summary my-source
-  released summary --org acme --days 7
-  released summary my-source --instructions "focus on breaking changes"
-  released summary my-source --json`)
+  releases summary my-source
+  releases summary --org acme --days 7
+  releases summary my-source --instructions "focus on breaking changes"
+  releases summary my-source --json`)
     .action(async (slug: string | undefined, opts: { days: string; org?: string; instructions?: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
 
       if (!slug && !opts.org) {
         console.error("Error: provide a source slug or --org\n");
-        console.error("  released summary my-source");
-        console.error("  released summary --org acme");
+        console.error("  releases summary my-source");
+        console.error("  releases summary --org acme");
         process.exit(1);
       }
 

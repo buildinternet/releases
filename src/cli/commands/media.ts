@@ -80,9 +80,9 @@ export function registerMediaCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released media backfill
-  released media backfill --dry-run
-  released media backfill --json`)
+  releases media backfill
+  releases media backfill --dry-run
+  releases media backfill --json`)
     .action(async (opts: { dryRun?: boolean; json?: boolean }) => {
       logger.info("Scanning releases for media with R2 keys...");
 

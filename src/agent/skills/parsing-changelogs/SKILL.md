@@ -22,7 +22,7 @@ After fetching content, the pipeline parses it:
 
 ## CLI Commands
 
-### `released fetch <slug>`
+### `releases fetch <slug>`
 
 Fetch and parse releases for a source. Key flags:
 
@@ -34,7 +34,7 @@ Fetch and parse releases for a source. Key flags:
 - `--no-summarize` — skip AI summary generation.
 - `--all` — remove the max release cap.
 
-### `released fetch-log <slug>`
+### `releases fetch-log <slug>`
 
 Show recent fetch history for a source. Useful for debugging fetch issues — shows timestamps, release counts, errors, and content hashes.
 
@@ -59,9 +59,9 @@ Enable with `--crawl` flag or by setting `metadata.crawlEnabled: true` on the so
 
 ## Enrichment
 
-Use the `released enrich <slug>` command to hydrate releases that have sparse content. This uses Haiku to judge which releases need enrichment, then fetches and extracts full page content.
+Use the `releases enrich <slug>` command to hydrate releases that have sparse content. This uses Haiku to judge which releases need enrichment, then fetches and extracts full page content.
 
-`released enrich <slug> --dry-run` previews what would be enriched. `released enrich <slug> --limit 5` caps the batch size.
+`releases enrich <slug> --dry-run` previews what would be enriched. `releases enrich <slug> --limit 5` caps the batch size.
 
 ## Feed Content Depth Assessment
 
@@ -78,34 +78,34 @@ Do NOT fetch release URLs in the parent agent — always delegate to a subagent 
 **What to do based on the result:**
 
 If pages are richer than feed content:
-1. Record the finding: `released edit <slug> --metadata '{"feedContentDepth":"summary-only"}'`
-2. Dispatch a bulk-worker subagent to run: `released enrich <slug>`
-3. Verify a sample: `released list <slug> --json` — check content is now richer
+1. Record the finding: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only"}'`
+2. Dispatch a bulk-worker subagent to run: `releases enrich <slug>`
+3. Verify a sample: `releases list <slug> --json` — check content is now richer
 
 If feed already provides full content:
-1. Record: `released edit <slug> --metadata '{"feedContentDepth":"full"}'`
-2. No enrichment needed — skip `released enrich` for this source
+1. Record: `releases edit <slug> --metadata '{"feedContentDepth":"full"}'`
+2. No enrichment needed — skip `releases enrich` for this source
 
-Once `feedContentDepth` is set, skip the sampling step on future encounters. For automated pipelines, run `released enrich <slug>` after fetch for `summary-only` sources.
+Once `feedContentDepth` is set, skip the sampling step on future encounters. For automated pipelines, run `releases enrich <slug>` after fetch for `summary-only` sources.
 
 **During onboarding:** This assessment is part of the standard onboarding workflow. After fetching each feed/scrape source, immediately assess content depth and enrich if needed before moving to the next source. Do not skip this step — sparse feed content significantly reduces the value of indexed releases.
 
-**Cost visibility:** The `released enrich` command reports token usage. Check aggregate costs with `released usage` filtered to `enrich-judge` and `enrich-extract` operations.
+**Cost visibility:** The `releases enrich` command reports token usage. Check aggregate costs with `releases usage` filtered to `enrich-judge` and `enrich-extract` operations.
 
 ## Validation Workflow
 
 When adding a new source, always validate before committing:
 
-1. `released fetch <slug> --dry-run` — check if parsing works
+1. `releases fetch <slug> --dry-run` — check if parsing works
 2. Look at the output: How many releases? Do they have titles, dates, content?
 3. If results are poor, try a different URL, type, or crawl mode
-4. If results are good, run `released fetch <slug>` to persist
+4. If results are good, run `releases fetch <slug>` to persist
 
 ## Smart Fetch (`--stale`)
 
-`released fetch --stale <hours>` fetches sources that haven't been checked recently. It respects:
+`releases fetch --stale <hours>` fetches sources that haven't been checked recently. It respects:
 - **Backoff** — sources with consecutive unchanged fetches are checked less frequently (1h-48h)
 - **Error backoff** — sources with consecutive errors back off more aggressively (1h-72h)
 - **Priority** — `fetchPriority` field on sources controls ordering
 
-> **Remote mode guardrail:** Bare `released fetch` (no slug or filter) is blocked in remote mode. Always provide a slug or use `--stale`/`--unfetched`/`--retry-errors`. Use `released task list` to check for active sessions and `released task cancel <id>` to stop one.
+> **Remote mode guardrail:** Bare `releases fetch` (no slug or filter) is blocked in remote mode. Always provide a slug or use `--stale`/`--unfetched`/`--retry-errors`. Use `releases task list` to check for active sessions and `releases task cancel <id>` to stop one.

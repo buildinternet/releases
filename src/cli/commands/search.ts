@@ -14,9 +14,9 @@ export function registerSearchCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released search "vercel"
-  released search "breaking change" --type releases
-  released search "authentication" --limit 5 --json`)
+  releases search "vercel"
+  releases search "breaking change" --type releases
+  releases search "authentication" --limit 5 --json`)
     .action(async (query: string, opts: { limit: string; type?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
 

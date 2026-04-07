@@ -42,20 +42,20 @@ function printStyledHelp(): string {
   const lines: string[] = [];
 
   lines.push("");
-  lines.push(`${chalk.bold("released")} ${chalk.dim(`v${VERSION}`)}`);
+  lines.push(`${chalk.bold("releases")} ${chalk.dim(`v${VERSION}`)}`);
   lines.push(chalk.dim("Changelog indexer and registry for AI agents and developers"));
   lines.push("");
 
   lines.push("To get started, onboard a company's changelogs:");
   lines.push("");
-  lines.push(`  $ released onboard <company>`);
+  lines.push(`  $ releases onboard <company>`);
   lines.push("");
   lines.push("The most common commands from there are:");
   lines.push("");
-  lines.push(`  - released fetch      : ${chalk.dim("Fetch new releases from sources")}`);
-  lines.push(`  - released search     : ${chalk.dim("Full-text search across releases")}`);
-  lines.push(`  - released latest     : ${chalk.dim("Show the most recent releases")}`);
-  lines.push(`  - released list       : ${chalk.dim("List and inspect sources")}`);
+  lines.push(`  - releases fetch      : ${chalk.dim("Fetch new releases from sources")}`);
+  lines.push(`  - releases search     : ${chalk.dim("Full-text search across releases")}`);
+  lines.push(`  - releases latest     : ${chalk.dim("Show the most recent releases")}`);
+  lines.push(`  - releases list       : ${chalk.dim("List and inspect sources")}`);
   lines.push("");
 
   lines.push(chalk.cyan("Available Commands:"));
@@ -98,19 +98,19 @@ function printStyledHelp(): string {
   lines.push(row("-v, --version", "Print version number"));
   lines.push("");
 
-  lines.push(chalk.dim(`Use ${chalk.white('"released <command> --help"')} for more information about a command.`));
+  lines.push(chalk.dim(`Use ${chalk.white('"releases <command> --help"')} for more information about a command.`));
 
   return lines.join("\n");
 }
 
 export const program = new Command()
-  .name("released")
+  .name("releases")
   .description("Changelog indexer and registry for AI agents and developers")
   .version(VERSION, "-v, --version")
   .configureHelp({
     formatHelp: (cmd, helper) => {
       // Root command gets styled help; subcommands get standard Commander help
-      if (cmd.name() === "released") return printStyledHelp() + "\n";
+      if (cmd.name() === "releases") return printStyledHelp() + "\n";
       return new Help().formatHelp(cmd, helper);
     },
   })
@@ -161,7 +161,7 @@ program
         sub.help();
       } else {
         console.error(chalk.red(`Unknown command: ${command}`));
-        console.log(chalk.dim(`\nRun ${chalk.white('"released --help"')} to see all available commands.`));
+        console.log(chalk.dim(`\nRun ${chalk.white('"releases --help"')} to see all available commands.`));
         process.exit(1);
       }
     } else {

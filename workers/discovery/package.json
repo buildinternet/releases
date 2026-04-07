@@ -1,5 +1,5 @@
 {
-  "name": "released-discovery-worker",
+  "name": "releases-discovery-worker",
   "version": "0.9.0",
   "private": true,
   "type": "module",

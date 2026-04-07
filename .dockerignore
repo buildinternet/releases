@@ -2,8 +2,8 @@
 *
 
 # Compiled binaries
-!dist/released
-!dist/released-mcp-browser
+!dist/releases
+!dist/releases-mcp-browser
 
-# Agent skills (copied to /usr/share/released/skills/ and .claude/skills/ in Dockerfile)
+# Agent skills (copied to /usr/share/releases/skills/ and .claude/skills/ in Dockerfile)
 !src/agent/skills/

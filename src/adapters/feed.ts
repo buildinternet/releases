@@ -35,7 +35,7 @@ export interface SourceMetadata {
   provider?: string;
   providerDetectedAt?: string;
 
-  // Evaluation fields (from `released evaluate`)
+  // Evaluation fields (from `releases evaluate`)
   markdownUrl?: string;
   evaluatedMethod?: string;
   evaluatedAt?: string;
@@ -106,7 +106,7 @@ export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | nu
 async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null> {
   try {
     const res = await fetch(pageUrl, {
-      headers: { "Accept": "text/html", "User-Agent": "released/0.1" },
+      headers: { "Accept": "text/html", "User-Agent": "releases/0.1" },
       redirect: "follow",
     });
     if (!res.ok || !res.body) return null;
@@ -139,7 +139,7 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
   const res = await fetch(probeUrl, {
     method: "HEAD",
     redirect: "follow",
-    headers: { "User-Agent": "released/0.1" },
+    headers: { "User-Agent": "releases/0.1" },
   });
   if (!res.ok) return null;
 
@@ -151,7 +151,7 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
   if (path.endsWith(".xml") || path.endsWith(".json") || path === "/feed" || path === "/rss") {
     const getRes = await fetch(probeUrl, {
       redirect: "follow",
-      headers: { "User-Agent": "released/0.1", "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml" },
+      headers: { "User-Agent": "releases/0.1", "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml" },
     });
     if (!getRes.ok) return null;
     const getCt = getRes.headers.get("content-type") ?? "";
@@ -214,7 +214,7 @@ export async function fetchAndParseFeed(
   headers?: Record<string, string>,
 ): Promise<{ releases: RawRelease[]; etag?: string; lastModified?: string; contentLength?: string }> {
   const reqHeaders: Record<string, string> = {
-    "User-Agent": "released/0.1",
+    "User-Agent": "releases/0.1",
     "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
     ...headers,
   };
@@ -284,7 +284,7 @@ export async function headCheckFeed(
   try {
     const res = await fetch(feedUrl, {
       method: "HEAD",
-      headers: { "User-Agent": "released/0.1" },
+      headers: { "User-Agent": "releases/0.1" },
       signal: controller.signal,
       redirect: "follow",
     });
@@ -369,15 +369,18 @@ export async function fetchViaFeed(
     }
   }
 
-  // Conditional fetch headers
-  const isFirstFetch = !meta.feedEtag && !meta.feedLastModified;
+  // Conditional fetch headers — skip on first real fetch so we don't 304 on
+  // ETags that were stored by `poll` before any releases were ingested.
+  const isFirstFetch = !source.lastFetchedAt;
   const conditionalHeaders: Record<string, string> = {};
-  if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
-  if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;
+  if (!isFirstFetch) {
+    if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
+    if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;
+  }
 
-  // HEAD pre-check: skip full fetch if feed hasn't changed
+  // HEAD pre-check: skip full fetch if feed hasn't changed (only after first fetch)
   const hasStoredHeaders = meta.feedEtag || meta.feedLastModified || meta.feedContentLength;
-  if (hasStoredHeaders && !options?.full) {
+  if (hasStoredHeaders && !options?.full && !isFirstFetch) {
     const headResult = await headCheckFeed(feedUrl, {
       etag: meta.feedEtag,
       lastModified: meta.feedLastModified,

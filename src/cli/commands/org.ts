@@ -30,10 +30,10 @@ export function registerOrgCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released org add "Acme Corp"
-  released org add "Acme Corp" --domain acme.com
-  released org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
-  released org add "Acme Corp" --slug acme --json`)
+  releases org add "Acme Corp"
+  releases org add "Acme Corp" --domain acme.com
+  releases org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
+  releases org add "Acme Corp" --slug acme --json`)
     .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; category?: string; tags?: string; avatar?: string; json?: boolean }) => {
       const slug = opts.slug ?? toSlug(name);
 
@@ -73,9 +73,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released org list
-  released org list --query vercel
-  released org list --platform github --json
+  releases org list
+  releases org list --query vercel
+  releases org list --platform github --json
 
 Note: org list shows a summary view (counts, last activity). Use "org show <slug>" to see
 full details including linked accounts, tags, sources, and products.`)
@@ -125,9 +125,9 @@ full details including linked accounts, tags, sources, and products.`)
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released org show acme
-  released org show acme.com
-  released org show acme --json`)
+  releases org show acme
+  releases org show acme.com
+  releases org show acme --json`)
     .action(async (identifier: string, opts: { json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -257,9 +257,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released org remove acme
-  released org remove acme --dry-run
-  released org remove acme --json`)
+  releases org remove acme
+  releases org remove acme --dry-run
+  releases org remove acme --json`)
     .action(async (identifier: string, opts: { json?: boolean; dryRun?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -294,8 +294,8 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released org link acme --platform github --handle acme-corp
-  released org link acme --platform x --handle acmecorp --json`)
+  releases org link acme --platform github --handle acme-corp
+  releases org link acme --platform x --handle acmecorp --json`)
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -321,7 +321,7 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  released org unlink acme --platform github --handle acme-corp`)
+  releases org unlink acme --platform github --handle acme-corp`)
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {

@@ -31,10 +31,10 @@ export function registerOnboardCommand(program: Command) {
     .option("--json", "Output results as JSON")
     .addHelpText("after", `
 Examples:
-  released onboard "Vercel"
-  released onboard "Stripe" --domain stripe.com --github-org stripe
-  released onboard "Acme" --remote
-  released onboard "Acme" --local --json`)
+  releases onboard "Vercel"
+  releases onboard "Stripe" --domain stripe.com --github-org stripe
+  releases onboard "Acme" --remote
+  releases onboard "Acme" --local --json`)
     .action(async (company: string, opts: OnboardOpts) => {
       if (opts.remote && opts.local) {
         logger.error("Cannot specify both --remote and --local");

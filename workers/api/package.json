@@ -1,5 +1,5 @@
 {
-  "name": "released-api",
+  "name": "releases-api",
   "private": true,
   "scripts": {
     "dev": "wrangler dev",

@@ -1,17 +1,17 @@
 {
-  "name": "released",
+  "name": "releases",
   "version": "0.9.0",
   "description": "Changelog indexer and registry for AI agents and developers",
   "type": "module",
   "bin": {
-    "released": "./src/index.ts"
+    "releases": "./src/index.ts"
   },
   "scripts": {
     "prebuild": "rm -f .*.bun-build",
-    "build": "bun build --compile src/index.ts --outfile dist/released",
-    "build:linux": "bun build --compile src/index.ts --outfile dist/released --target=bun-linux-x64",
-    "build:mcp-browser": "bun build --compile src/agent/mcp-cloudflare-browser.ts --outfile dist/released-mcp-browser",
-    "build:mcp-browser:linux": "bun build --compile src/agent/mcp-cloudflare-browser.ts --outfile dist/released-mcp-browser --target=bun-linux-x64",
+    "build": "bun build --compile src/index.ts --outfile dist/releases",
+    "build:linux": "bun build --compile src/index.ts --outfile dist/releases --target=bun-linux-x64",
+    "build:mcp-browser": "bun build --compile src/agent/mcp-cloudflare-browser.ts --outfile dist/releases-mcp-browser",
+    "build:mcp-browser:linux": "bun build --compile src/agent/mcp-cloudflare-browser.ts --outfile dist/releases-mcp-browser --target=bun-linux-x64",
     "build:all": "bun run build && bun run build:mcp-browser",
     "build:all:linux": "bun run build:linux && bun run build:mcp-browser:linux",
     "dev": "bun --watch src/index.ts",
@@ -30,7 +30,7 @@
     "db:studio": "bun drizzle-kit studio",
     "db:studio:d1": "bun drizzle-kit studio --config drizzle-d1.config.ts",
     "db:query": "wrangler d1 execute released-db --local --config workers/api/wrangler.jsonc --command",
-    "db:pull": "rm -rf workers/api/.wrangler/state/v3/d1 && wrangler d1 export released-db --remote --no-schema --table organizations --table org_accounts --table sources --table releases --table usage_log --table fetch_log --table ignored_urls --output /tmp/released-d1-export.sql --config workers/api/wrangler.jsonc && bun run db:migrate:local && sqlite3 $(find workers/api/.wrangler -name '*.sqlite' | head -1) < /tmp/released-d1-export.sql && rm /tmp/released-d1-export.sql",
+    "db:pull": "rm -rf workers/api/.wrangler/state/v3/d1 && wrangler d1 export released-db --remote --no-schema --table organizations --table org_accounts --table sources --table releases --table usage_log --table fetch_log --table ignored_urls --output /tmp/releases-d1-export.sql --config workers/api/wrangler.jsonc && bun run db:migrate:local && sqlite3 $(find workers/api/.wrangler -name '*.sqlite' | head -1) < /tmp/releases-d1-export.sql && rm /tmp/releases-d1-export.sql",
     "test": "bun test"
   },
   "workspaces": ["workers/*"],

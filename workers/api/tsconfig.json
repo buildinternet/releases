@@ -8,7 +8,7 @@
     "lib": ["ESNext"],
     "types": ["@cloudflare/workers-types"],
     "paths": {
-      "@released/*": ["../../src/*"]
+      "@releases/*": ["../../src/*"]
     }
   },
   "include": ["src/**/*.ts"],

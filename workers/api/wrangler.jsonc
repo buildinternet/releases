@@ -1,10 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "released-api",
+  "name": "releases-api",
   "account_id": "b082600d280d44fd5da3501bc1bffe2f",
   "main": "src/index.ts",
   "alias": {
-    "@released": "../../src",
+    "@releases": "../../src",
     "bun:sqlite": "./src/stubs/bun-sqlite.ts"
   },
   "compatibility_date": "2026-03-27",
@@ -23,12 +23,12 @@
     }
   ],
   "services": [
-    { "binding": "DISCOVERY_WORKER", "service": "released-discovery" }
+    { "binding": "DISCOVERY_WORKER", "service": "releases-discovery" }
   ],
   "r2_buckets": [
     {
       "binding": "MEDIA",
-      "bucket_name": "released-media"
+      "bucket_name": "releases-media"
     }
   ],
   "durable_objects": {

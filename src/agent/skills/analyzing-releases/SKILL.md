@@ -17,11 +17,11 @@ Turn changelog data into competitive intelligence by analyzing release patterns 
 
 | Command | Purpose |
 |---------|---------|
-| `released list --query <company>` | Check what sources exist for a company |
-| `released fetch <slug> --max 50` | Pull recent releases from a source |
-| `released latest <slug> --json` | Structured release list with dates |
-| `released summarize <slug> --window 90` | AI-generated rolling summary |
-| `released compare <slugA> <slugB> --days 60` | Head-to-head comparison |
+| `releases list --query <company>` | Check what sources exist for a company |
+| `releases fetch <slug> --max 50` | Pull recent releases from a source |
+| `releases latest <slug> --json` | Structured release list with dates |
+| `releases summarize <slug> --window 90` | AI-generated rolling summary |
+| `releases compare <slugA> <slugB> --days 60` | Head-to-head comparison |
 
 ## Workflow
 
@@ -32,15 +32,15 @@ Pick 3-6 companies in the same competitive space. Good cohorts share a common bu
 ### 2. Check existing sources
 
 ```bash
-released list --query <company> --json
+releases list --query <company> --json
 ```
 
-If a company isn't in the system, onboard it with `released onboard <company>`.
+If a company isn't in the system, onboard it with `releases onboard <company>`.
 
 ### 3. Fetch recent releases
 
 ```bash
-released fetch <source-slug> --max 50
+releases fetch <source-slug> --max 50
 ```
 
 The CLI skips unchanged feeds automatically. Fetch multiple sources concurrently when possible.
@@ -48,7 +48,7 @@ The CLI skips unchanged feeds automatically. Fetch multiple sources concurrently
 ### 4. Summarize each company
 
 ```bash
-released summarize <source-slug> --window 90
+releases summarize <source-slug> --window 90
 ```
 
 Capture the narrative summary for each company. Note dominant themes, release cadence, and version strategy.
@@ -56,7 +56,7 @@ Capture the narrative summary for each company. Note dominant themes, release ca
 ### 5. Compare interesting pairs
 
 ```bash
-released compare <slugA> <slugB> --days 60
+releases compare <slugA> <slugB> --days 60
 ```
 
 Pick 2-3 matchups between direct competitors or companies making divergent bets. Look for convergent features, divergent investments, and breaking changes that signal strategic shifts.

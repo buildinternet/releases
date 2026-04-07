@@ -42,14 +42,14 @@ export function registerListCommand(program: Command) {
     .option("--include-disabled", "Include disabled sources in the list")
     .addHelpText("after", `
 Examples:
-  released list                       List all sources
-  released list claude-code           Show details for a single source
-  released list --json                List all sources as JSON
-  released list --has-feed            Sources with a discovered feed URL
-  released list --enrichable          Sources eligible for content enrichment
-  released list --query shadcn        Filter sources by name, slug, or URL
-  released list --include-disabled        Include disabled sources
-  released list --has-feed --org sentry   Combine filters`)
+  releases list                       List all sources
+  releases list claude-code           Show details for a single source
+  releases list --json                List all sources as JSON
+  releases list --has-feed            Sources with a discovered feed URL
+  releases list --enrichable          Sources eligible for content enrichment
+  releases list --query shadcn        Filter sources by name, slug, or URL
+  releases list --include-disabled        Include disabled sources
+  releases list --has-feed --org sentry   Combine filters`)
     .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeDisabled?: boolean }) => {
       // ── Single-source detail view ──
       if (slug) {

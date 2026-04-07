@@ -24,7 +24,7 @@ export interface TestDatabase {
  * Call cleanup() when done to remove the temp directory.
  */
 export function createTestDb(): TestDatabase {
-  const tmpDir = mkdtempSync(join(tmpdir(), "released-test-"));
+  const tmpDir = mkdtempSync(join(tmpdir(), "releases-test-"));
   const dbPath = join(tmpDir, "test.db");
   const sqlite = new Database(dbPath);
   sqlite.run("PRAGMA journal_mode=WAL");

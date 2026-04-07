@@ -147,7 +147,7 @@ async function fetchViaMarkdown(
 ): Promise<FetchResult | null> {
   logger.info(`Fetching markdown directly from ${markdownUrl}...`);
   const res = await fetch(markdownUrl, {
-    headers: { "User-Agent": "released/0.1 (+https://releases.sh)" },
+    headers: { "User-Agent": "releases/0.1 (+https://releases.sh)" },
     redirect: "follow",
     signal: AbortSignal.timeout(30_000),
   });
@@ -166,7 +166,7 @@ async function fetchViaMarkdown(
   logger.info(`Got ${markdown.length.toLocaleString()} chars of markdown (no Cloudflare needed)`);
 
   const contentHash = sha256Hex(markdown);
-  if (await checkContentHash(source, contentHash)) {
+  if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
     logger.info("No changes detected (content hash unchanged)");
     return { releases: [] };
   }
@@ -262,7 +262,7 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
   logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
 
   const contentHash = sha256Hex(markdown);
-  if (await checkContentHash(source, contentHash)) {
+  if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
     // Only meaningful when poll has stored HEAD headers — tracks how many renders could be avoided
     if (meta.pageEtag || meta.pageLastModified) {

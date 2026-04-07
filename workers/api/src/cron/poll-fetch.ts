@@ -1,11 +1,11 @@
 import { eq, and, or, sql, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { sources, releases, fetchLog } from "@released/db/schema.js";
-import type { Source } from "@released/db/schema.js";
-import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@released/adapters/feed.js";
-import type { SourceMetadata } from "@released/adapters/feed.js";
-import { contentHash } from "@released/adapters/resolve.js";
-import type { RawRelease } from "@released/adapters/types.js";
+import { sources, releases, fetchLog } from "@releases/db/schema.js";
+import type { Source } from "@releases/db/schema.js";
+import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapters/feed.js";
+import type { SourceMetadata } from "@releases/adapters/feed.js";
+import { contentHash } from "@releases/adapters/resolve.js";
+import type { RawRelease } from "@releases/adapters/types.js";
 
 // ── Tier intervals (hours) ──
 
@@ -310,7 +310,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
 
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "released/0.1",
+    "User-Agent": "releases/0.1",
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 

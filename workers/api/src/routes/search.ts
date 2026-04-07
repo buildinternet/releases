@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
-import { searchToMarkdown } from "@released/lib/formatters.js";
+import { searchToMarkdown } from "@releases/lib/formatters.js";
 import type { Env } from "../index.js";
 import type {
   SearchOrgHit,
