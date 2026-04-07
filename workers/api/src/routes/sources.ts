@@ -92,66 +92,62 @@ sourceRoutes.get("/sources", async (c) => {
   if (categoryFilter) {
     conditions.push(
       sql`(
-        EXISTS (SELECT 1 FROM organizations o WHERE o.id = sources.org_id AND o.category = ${categoryFilter})
-        OR EXISTS (SELECT 1 FROM products p WHERE p.id = sources.product_id AND p.category = ${categoryFilter})
+        EXISTS (SELECT 1 FROM organizations o2 WHERE o2.id = ${sources.orgId} AND o2.category = ${categoryFilter})
+        OR EXISTS (SELECT 1 FROM products p2 WHERE p2.id = ${sources.productId} AND p2.category = ${categoryFilter})
       )`,
     );
   }
 
-  const rows = conditions.length > 0
-    ? await db.select().from(sources).where(and(...conditions)).orderBy(sources.name)
-    : await db.select().from(sources).orderBy(sources.name);
+  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  if (rows.length === 0) return c.json([]);
-
-  // D1 limits bound parameters to 100 per query — batch the IN clause
-  type StatsRow = {
-    source_id: string;
+  const rows = await db.all<{
+    id: string;
+    slug: string;
+    name: string;
+    type: string;
+    url: string;
+    org_id: string | null;
+    product_id: string | null;
+    is_primary: number | null;
+    is_hidden: number | null;
+    metadata: string | null;
+    last_fetched_at: string | null;
+    fetch_priority: string | null;
+    change_detected_at: string | null;
+    org_slug: string | null;
     release_count: number;
     latest_version: string | null;
     latest_date: string | null;
-    org_slug: string | null;
-  };
-  const BATCH_SIZE = 50;
-  const statsRows: StatsRow[] = [];
-  for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const chunk = rows.slice(i, i + BATCH_SIZE);
-    const batch = await db.all<StatsRow>(sql`
-      SELECT
-        s.id AS source_id,
-        (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-        (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND (r2.suppressed IS NULL OR r2.suppressed = 0) AND r2.published_at IS NOT NULL ORDER BY r2.published_at DESC LIMIT 1) AS latest_version,
-        (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND (r3.suppressed IS NULL OR r3.suppressed = 0) AND r3.published_at IS NOT NULL ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
-        o.slug AS org_slug
-      FROM sources s
-      LEFT JOIN organizations o ON o.id = s.org_id
-      WHERE s.id IN (${sql.join(chunk.map(r => sql`${r.id}`), sql`,`)})
-    `);
-    statsRows.push(...batch);
-  }
+  }>(sql`
+    SELECT
+      sources.*,
+      organizations.slug AS org_slug,
+      (SELECT COUNT(*) FROM releases r WHERE r.source_id = sources.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
+      (SELECT r2.version FROM releases r2 WHERE r2.source_id = sources.id AND (r2.suppressed IS NULL OR r2.suppressed = 0) AND r2.published_at IS NOT NULL ORDER BY r2.published_at DESC LIMIT 1) AS latest_version,
+      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = sources.id AND (r3.suppressed IS NULL OR r3.suppressed = 0) AND r3.published_at IS NOT NULL ORDER BY r3.published_at DESC LIMIT 1) AS latest_date
+    FROM sources
+    LEFT JOIN organizations ON organizations.id = sources.org_id
+    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
+    ORDER BY sources.name
+  `);
 
-  const statsMap = new Map(statsRows.map(s => [s.source_id, s]));
-
-  const result = rows.map((src) => {
-    const stats = statsMap.get(src.id);
-    return {
-      id: src.id,
-      slug: src.slug,
-      name: src.name,
-      type: src.type,
-      url: src.url,
-      orgSlug: stats?.org_slug ?? null,
-      isPrimary: src.isPrimary ?? false,
-      isHidden: src.isHidden ?? false,
-      metadata: src.metadata ?? null,
-      releaseCount: stats?.release_count ?? 0,
-      latestVersion: stats?.latest_version ?? null,
-      latestDate: stats?.latest_date ?? null,
-      lastFetchedAt: src.lastFetchedAt ?? null,
-      fetchPriority: src.fetchPriority ?? null,
-      changeDetectedAt: src.changeDetectedAt ?? null,
-    };
-  });
+  const result = rows.map((src) => ({
+    id: src.id,
+    slug: src.slug,
+    name: src.name,
+    type: src.type,
+    url: src.url,
+    orgSlug: src.org_slug,
+    isPrimary: src.is_primary ? true : false,
+    isHidden: src.is_hidden ? true : false,
+    metadata: src.metadata ?? null,
+    releaseCount: src.release_count,
+    latestVersion: src.latest_version ?? null,
+    latestDate: src.latest_date ?? null,
+    lastFetchedAt: src.last_fetched_at ?? null,
+    fetchPriority: src.fetch_priority ?? null,
+    changeDetectedAt: src.change_detected_at ?? null,
+  }));
 
   return c.json(result);
 });
