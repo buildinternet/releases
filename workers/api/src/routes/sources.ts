@@ -10,6 +10,8 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
+import { getSourcesWithStats, getSourceReleasesPaginated, getSourceActivityBuckets } from "../queries/sources.js";
+import { notDisabled } from "../queries/shared.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -61,9 +63,7 @@ sourceRoutes.get("/sources", async (c) => {
   }
 
   if (!includeHidden) {
-    conditions.push(
-      sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
-    );
+    conditions.push(notDisabled);
   }
 
   if (hasFeed || enrichable) {
@@ -100,36 +100,7 @@ sourceRoutes.get("/sources", async (c) => {
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const rows = await db.all<{
-    id: string;
-    slug: string;
-    name: string;
-    type: string;
-    url: string;
-    org_id: string | null;
-    product_id: string | null;
-    is_primary: number | null;
-    is_hidden: number | null;
-    metadata: string | null;
-    last_fetched_at: string | null;
-    fetch_priority: string | null;
-    change_detected_at: string | null;
-    org_slug: string | null;
-    release_count: number;
-    latest_version: string | null;
-    latest_date: string | null;
-  }>(sql`
-    SELECT
-      sources.*,
-      organizations.slug AS org_slug,
-      (SELECT COUNT(*) FROM releases r WHERE r.source_id = sources.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-      (SELECT r2.version FROM releases r2 WHERE r2.source_id = sources.id AND (r2.suppressed IS NULL OR r2.suppressed = 0) AND r2.published_at IS NOT NULL ORDER BY r2.published_at DESC LIMIT 1) AS latest_version,
-      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = sources.id AND (r3.suppressed IS NULL OR r3.suppressed = 0) AND r3.published_at IS NOT NULL ORDER BY r3.published_at DESC LIMIT 1) AS latest_date
-    FROM sources
-    LEFT JOIN organizations ON organizations.id = sources.org_id
-    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
-    ORDER BY sources.name
-  `);
+  const rows = await getSourcesWithStats(db, whereClause);
 
   const result = rows.map((src) => ({
     id: src.id,
@@ -161,7 +132,6 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
 
   let rows: (typeof sources.$inferSelect)[];
 
-  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
   if (mode === "unfetched") {
     rows = await db.select().from(sources).where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
   } else if (mode === "stale" && staleHours) {
@@ -198,7 +168,6 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
 
 sourceRoutes.get("/sources/feeds", async (c) => {
   const db = createDb(c.env.DB);
-  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
   const rows = await db.select().from(sources).where(
     and(
       sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
@@ -211,7 +180,6 @@ sourceRoutes.get("/sources/feeds", async (c) => {
 
 sourceRoutes.get("/sources/changes", async (c) => {
   const db = createDb(c.env.DB);
-  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
   const rows = await db.select().from(sources).where(
     and(
       isNotNull(sources.changeDetectedAt),
@@ -480,37 +448,7 @@ sourceRoutes.get("/sources/:slug/activity", async (c) => {
   toDate.setUTCDate(toDate.getUTCDate() + 1);
   const toExclusive = toDate.toISOString().slice(0, 10);
 
-  const bucketRows = await db.all<{
-    week_start: string;
-    cnt: number;
-    earliest_version: string | null;
-    latest_version: string | null;
-  }>(sql`
-    WITH bucketed AS (
-      SELECT
-        strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
-        COUNT(*) AS cnt,
-        MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
-        MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
-      FROM releases r
-      WHERE
-        r.source_id = ${src.id}
-        AND r.published_at IS NOT NULL
-        AND ${notSuppressed}
-        AND r.published_at >= ${from}
-        AND r.published_at < ${toExclusive}
-      GROUP BY week_start
-    )
-    SELECT week_start, cnt,
-      CASE WHEN earliest_tagged IS NOT NULL
-        THEN SUBSTR(earliest_tagged, INSTR(earliest_tagged, '|') + 1)
-        ELSE NULL END AS earliest_version,
-      CASE WHEN latest_tagged IS NOT NULL
-        THEN SUBSTR(latest_tagged, INSTR(latest_tagged, '|') + 1)
-        ELSE NULL END AS latest_version
-    FROM bucketed
-    ORDER BY week_start
-  `);
+  const bucketRows = await getSourceActivityBuckets(db, src.id, from, toExclusive);
 
   let orgSlug: string | null = null;
   let orgName: string | null = null;
@@ -560,23 +498,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false)));
 
   const offset = (page - 1) * pageSize;
-  const releaseRows = await db.all<{
-    id: string;
-    version: string | null;
-    title: string;
-    content_summary: string | null;
-    content: string;
-    published_at: string | null;
-    url: string | null;
-    media: string | null;
-  }>(sql`
-    SELECT id, version, title, content_summary, content, published_at, url, media
-    FROM releases WHERE source_id = ${src.id} AND (suppressed IS NULL OR suppressed = 0)
-    ORDER BY
-      CASE WHEN published_at IS NOT NULL THEN 0 ELSE 1 END,
-      published_at DESC, fetched_at DESC
-    LIMIT ${pageSize} OFFSET ${offset}
-  `);
+  const releaseRows = await getSourceReleasesPaginated(db, src.id, pageSize, offset);
 
   const releasesFormatted = releaseRows.map((r) => ({
     id: r.id,

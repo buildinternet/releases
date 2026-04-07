@@ -1,15 +1,16 @@
 import { Hono } from "hono";
-import { sql } from "drizzle-orm";
-import { createDb } from "../db.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { searchToMarkdown } from "@releases/lib/formatters.js";
 import type { Env } from "../index.js";
-import type {
-  SearchOrgHit,
-  SearchProductHit,
-  SearchSourceHit,
-  SearchReleaseHit,
-} from "../../../../src/api/types.js";
+import type { SearchReleaseHit } from "../../../../src/api/types.js";
+import { createDb } from "../db.js";
+import {
+  searchOrgs,
+  searchProducts,
+  searchSources,
+  searchReleasesFts,
+  searchReleasesFromMatchedEntities,
+} from "../queries/search.js";
 
 export const searchRoutes = new Hono<Env>();
 
@@ -28,81 +29,20 @@ searchRoutes.get("/search", async (c) => {
   const pattern = `%${q}%`;
 
   const [orgs, products, sources, ftsReleases] = await Promise.all([
-    db.all<SearchOrgHit>(sql`
-      SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
-      FROM organizations o
-      LEFT JOIN domain_aliases da ON da.org_id = o.id
-      WHERE o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
-        OR da.domain LIKE ${pattern}
-      ORDER BY o.name LIMIT ${limit}
-    `),
-
-    db.all<SearchProductHit>(sql`
-      SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category
-      FROM products p
-      LEFT JOIN organizations o ON o.id = p.org_id
-      LEFT JOIN domain_aliases da ON da.product_id = p.id
-      WHERE p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern}
-      ORDER BY p.name LIMIT ${limit}
-    `),
-
-    db.all<SearchSourceHit>(sql`
-      SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
-             p.slug as productSlug
-      FROM sources s
-      LEFT JOIN organizations o ON o.id = s.org_id
-      LEFT JOIN products p ON p.id = s.product_id
-      WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
-        AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
-      ORDER BY s.name LIMIT ${limit}
-    `),
-
-    (async () => {
-      try {
-        return await db.all<SearchReleaseHit>(sql`
-          SELECT s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
-                 r.version, r.title,
-                 COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
-                 r.published_at as publishedAt
-          FROM releases_fts
-          JOIN releases r ON r.rowid = releases_fts.rowid
-          JOIN sources s ON s.id = r.source_id
-          LEFT JOIN organizations o ON o.id = s.org_id
-          WHERE releases_fts MATCH ${q}
-            AND (r.suppressed IS NULL OR r.suppressed = 0)
-            AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-          ORDER BY rank LIMIT ${limit} OFFSET ${offset}
-        `);
-      } catch {
-        return [];
-      }
-    })(),
+    searchOrgs(db, pattern, limit),
+    searchProducts(db, pattern, limit),
+    searchSources(db, pattern, limit),
+    searchReleasesFts(db, q, limit, offset).catch(() => [] as SearchReleaseHit[]),
   ]);
 
-  // Cascading enrichment: show recent releases from matched orgs/products
   let releases = ftsReleases;
   if (releases.length === 0 && (orgs.length > 0 || products.length > 0)) {
-    const orgSlugs = orgs.map((o) => o.slug);
-    const productSlugs = products.map((p) => p.slug);
-    const conditions = [];
-    if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
-    if (productSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(productSlugs.map((s) => sql`${s}`), sql`, `)})`);
-    if (conditions.length > 0) {
-      releases = await db.all<SearchReleaseHit>(sql`
-        SELECT s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
-               r.version, r.title,
-               COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
-               r.published_at as publishedAt
-        FROM releases r
-        JOIN sources s ON s.id = r.source_id
-        LEFT JOIN organizations o ON o.id = s.org_id
-        LEFT JOIN products p ON p.id = s.product_id
-        WHERE (r.suppressed IS NULL OR r.suppressed = 0)
-          AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-          AND (${sql.join(conditions, sql` OR `)})
-        ORDER BY r.published_at DESC LIMIT ${limit}
-      `);
-    }
+    releases = await searchReleasesFromMatchedEntities(
+      db,
+      orgs.map((o) => o.slug),
+      products.map((p) => p.slug),
+      limit,
+    );
   }
 
   const result = { query: q, orgs, products, sources, releases };

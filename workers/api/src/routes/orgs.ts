@@ -9,6 +9,7 @@ import { isConflictError, computeAvgPerWeek, getOrCreateTagD1 } from "../utils.j
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import type { Env } from "../index.js";
+import { getOrgsWithStats, getOrgSourcesWithStats, getOrgActivityData, getOrgReleasesFeed } from "../queries/orgs.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -16,27 +17,7 @@ orgRoutes.get("/orgs", async (c) => {
   const db = createDb(c.env.DB);
   const cutoff30d = daysAgoIso(30);
 
-  const rows = await db.all<{
-    id: string;
-    slug: string;
-    name: string;
-    domain: string | null;
-    description: string | null;
-    category: string | null;
-    source_count: number;
-    release_count: number;
-    last_activity: string | null;
-    recent_release_count: number;
-  }>(sql`
-    SELECT
-      o.id, o.slug, o.name, o.domain, o.description, o.category,
-      (SELECT COUNT(*) FROM sources s WHERE s.org_id = o.id) AS source_count,
-      (SELECT COUNT(*) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-      (SELECT MAX(r.published_at) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND r.published_at IS NOT NULL) AS last_activity,
-      (SELECT COUNT(*) FROM releases r INNER JOIN sources s ON r.source_id = s.id WHERE s.org_id = o.id AND r.published_at >= ${cutoff30d} AND (r.suppressed IS NULL OR r.suppressed = 0)) AS recent_release_count
-    FROM organizations o
-    ORDER BY o.name
-  `);
+  const rows = await getOrgsWithStats(db, cutoff30d);
 
   const result = rows.map((row) => ({
     id: row.id,
@@ -84,32 +65,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .where(eq(orgTags.orgId, org.id))
       .orderBy(tags.name),
 
-    db.all<{
-      id: string;
-      slug: string;
-      name: string;
-      type: string;
-      url: string;
-      is_primary: number | null;
-      release_count: number;
-      latest_version_by_date: string | null;
-      latest_date: string | null;
-      latest_version_by_fetch: string | null;
-      product_slug: string | null;
-      product_name: string | null;
-    }>(sql`
-      SELECT
-        s.id, s.slug, s.name, s.type, s.url, s.is_primary,
-        p.slug AS product_slug, p.name AS product_name,
-        (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-        (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND r2.published_at IS NOT NULL AND (r2.suppressed IS NULL OR r2.suppressed = 0) ORDER BY r2.published_at DESC LIMIT 1) AS latest_version_by_date,
-        (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND r3.published_at IS NOT NULL AND (r3.suppressed IS NULL OR r3.suppressed = 0) ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
-        (SELECT r4.version FROM releases r4 WHERE r4.source_id = s.id AND (r4.suppressed IS NULL OR r4.suppressed = 0) ORDER BY r4.fetched_at DESC LIMIT 1) AS latest_version_by_fetch
-      FROM sources s
-      LEFT JOIN products p ON p.id = s.product_id
-      WHERE s.org_id = ${org.id}
-      ORDER BY s.name
-    `),
+    getOrgSourcesWithStats(db, org.id),
 
     db
       .select({
@@ -470,103 +426,8 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   toDate.setUTCDate(toDate.getUTCDate() + 1);
   const toExclusive = toDate.toISOString().slice(0, 10);
 
-  const [bucketRows, statsRows, versionRows, earliestVersionRows] = await Promise.all([
-    db.all<{
-      source_id: string;
-      week_start: string;
-      cnt: number;
-      earliest_version: string | null;
-      latest_version: string | null;
-    }>(sql`
-      WITH bucketed AS (
-        SELECT
-          s.id AS source_id,
-          s.slug AS source_slug,
-          strftime('%Y-%m-%d', r.published_at, 'weekday 0', '-6 days') AS week_start,
-          COUNT(*) AS cnt,
-          MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
-          MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
-        FROM releases r
-        INNER JOIN sources s ON s.id = r.source_id
-        WHERE
-          s.org_id = ${org.id}
-          AND r.published_at IS NOT NULL
-          AND (r.suppressed IS NULL OR r.suppressed = 0)
-          AND r.published_at >= ${from}
-          AND r.published_at < ${toExclusive}
-        GROUP BY s.id, week_start
-      )
-      SELECT source_id, week_start, cnt,
-        CASE WHEN earliest_tagged IS NOT NULL
-          THEN SUBSTR(earliest_tagged, INSTR(earliest_tagged, '|') + 1)
-          ELSE NULL END AS earliest_version,
-        CASE WHEN latest_tagged IS NOT NULL
-          THEN SUBSTR(latest_tagged, INSTR(latest_tagged, '|') + 1)
-          ELSE NULL END AS latest_version
-      FROM bucketed
-      ORDER BY source_slug, week_start
-    `),
-
-    db.all<{
-      source_id: string;
-      total: number;
-      oldest: string | null;
-      latest_date: string | null;
-    }>(sql`
-      SELECT
-        s.id AS source_id,
-        COUNT(*) AS total,
-        MIN(r.published_at) AS oldest,
-        MAX(r.published_at) AS latest_date
-      FROM releases r
-      INNER JOIN sources s ON s.id = r.source_id
-      WHERE
-        s.org_id = ${org.id}
-        AND r.published_at IS NOT NULL
-        AND (r.suppressed IS NULL OR r.suppressed = 0)
-        AND r.published_at >= ${from}
-        AND r.published_at < ${toExclusive}
-      GROUP BY s.id
-    `),
-
-    db.all<{
-      source_id: string;
-      version: string | null;
-    }>(sql`
-      SELECT r.source_id, r.version
-      FROM releases r
-      INNER JOIN (
-        SELECT source_id, MAX(published_at) AS max_date
-        FROM releases
-        WHERE source_id IN ${sourceIds}
-          AND (suppressed IS NULL OR suppressed = 0)
-          AND published_at IS NOT NULL
-          AND published_at >= ${from}
-          AND published_at < ${toExclusive}
-        GROUP BY source_id
-      ) latest ON r.source_id = latest.source_id AND r.published_at = latest.max_date
-      WHERE (r.suppressed IS NULL OR r.suppressed = 0)
-    `),
-
-    db.all<{
-      source_id: string;
-      version: string | null;
-    }>(sql`
-      SELECT r.source_id, r.version
-      FROM releases r
-      INNER JOIN (
-        SELECT source_id, MIN(published_at) AS min_date
-        FROM releases
-        WHERE source_id IN ${sourceIds}
-          AND (suppressed IS NULL OR suppressed = 0)
-          AND published_at IS NOT NULL
-          AND published_at >= ${from}
-          AND published_at < ${toExclusive}
-        GROUP BY source_id
-      ) earliest ON r.source_id = earliest.source_id AND r.published_at = earliest.min_date
-      WHERE (r.suppressed IS NULL OR r.suppressed = 0)
-    `),
-  ]);
+  const { bucketRows, statsRows, latestVersionRows: versionRows, earliestVersionRows } =
+    await getOrgActivityData(db, org.id, sourceIds, from, toExclusive);
 
   const latestVersionBySource = new Map<string, string | null>();
   for (const row of versionRows) {
@@ -670,36 +531,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     }
   }
 
-  const stmt = c.env.DB.prepare(`
-    SELECT r.id, r.version, r.title, r.content, r.content_summary,
-           r.published_at, r.fetched_at, r.url, r.media,
-           s.slug AS source_slug, s.name AS source_name, s.type AS source_type
-    FROM releases r
-    INNER JOIN sources s ON s.id = r.source_id
-    WHERE s.org_id = ?
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
-      ${cursorWhere}
-    ORDER BY
-      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
-      r.published_at DESC,
-      r.fetched_at DESC,
-      r.id DESC
-    LIMIT ?
-  `).bind(org.id, ...cursorBindings, limit + 1);
-
-  const { results } = await stmt.all<{
-    id: string;
-    version: string | null;
-    title: string;
-    content: string;
-    content_summary: string | null;
-    published_at: string | null;
-    url: string | null;
-    media: string | null;
-    source_slug: string;
-    source_name: string;
-    source_type: string;
-  }>();
+  const results = await getOrgReleasesFeed(c.env.DB, org.id, { cursorWhere, cursorBindings }, limit + 1);
 
   const hasMore = results.length > limit;
   const pageRows = hasMore ? results.slice(0, limit) : results;
