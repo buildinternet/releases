@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, count, max, min, gte, and, sql, inArray } from "drizzle-orm";
+import { eq, count, max, min, and, sql, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
@@ -52,7 +52,9 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   }
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const [accounts, tagRows, orgSources, productRows, aliasRows] = await Promise.all([
+  const cutoff = daysAgoIso(30);
+
+  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow] = await Promise.all([
     db
       .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts)
@@ -85,6 +87,19 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .from(domainAliases)
       .where(eq(domainAliases.orgId, org.id))
       .orderBy(domainAliases.domain),
+
+    // Total release count (includes suppressed — intentional for overall count)
+    db
+      .select({ n: count() })
+      .from(releases)
+      .innerJoin(sources, eq(releases.sourceId, sources.id))
+      .where(eq(sources.orgId, org.id)),
+
+    // Latest fetch timestamp across all org sources
+    db
+      .select({ maxFetch: max(sources.lastFetchedAt) })
+      .from(sources)
+      .where(eq(sources.orgId, org.id)),
   ]);
 
   const sourcesWithStats = orgSources.map((row) => ({
@@ -101,8 +116,6 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     productName: row.product_name ?? null,
   }));
 
-  // Compute org metrics inline
-  const cutoff = daysAgoIso(30);
   const orgSourceIds = orgSources.map((s) => s.id);
 
   let releasesLast30Days = 0;
@@ -110,31 +123,22 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   let oldestReleaseDate: string | null = null;
 
   if (orgSourceIds.length > 0) {
-    const [recent] = await db
-      .select({ n: count() })
-      .from(releases)
-      .where(and(inArray(releases.sourceId, orgSourceIds), gte(releases.publishedAt, cutoff)));
-
-    const [totals] = await db
-      .select({ total: count(), oldest: min(releases.publishedAt) })
+    const [metrics] = await db
+      .select({
+        total: count(),
+        recent: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
+        oldest: min(releases.publishedAt),
+      })
       .from(releases)
       .where(and(inArray(releases.sourceId, orgSourceIds), sql`${releases.publishedAt} IS NOT NULL`));
 
-    releasesLast30Days = recent.n;
-    avgReleasesPerWeek = computeAvgPerWeek(totals.total, totals.oldest);
-    oldestReleaseDate = totals.oldest;
+    releasesLast30Days = metrics.recent;
+    avgReleasesPerWeek = computeAvgPerWeek(metrics.total, metrics.oldest);
+    oldestReleaseDate = metrics.oldest;
   }
 
-  const [totalReleases] = await db
-    .select({ n: count() })
-    .from(releases)
-    .innerJoin(sources, eq(releases.sourceId, sources.id))
-    .where(eq(sources.orgId, org.id));
-
-  const [latestFetch] = await db
-    .select({ maxFetch: max(sources.lastFetchedAt) })
-    .from(sources)
-    .where(eq(sources.orgId, org.id));
+  const totalReleases = totalReleaseRow[0];
+  const latestFetch = latestFetchRow[0];
 
   const result = {
     id: org.id,
