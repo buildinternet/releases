@@ -29,6 +29,13 @@
       "when": 1775224242293,
       "tag": "0003_add_last_polled_at",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1775579805347,
+      "tag": "0004_flimsy_sleeper",
+      "breakpoints": true
     }
   ]
 }

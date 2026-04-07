@@ -2,9 +2,9 @@ import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
-  type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag,
+  type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -98,6 +98,14 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
     .innerJoin(organizations, eq(orgAccounts.orgId, organizations.id))
     .where(eq(orgAccounts.handle, identifier));
   if (byHandle) return byHandle.org;
+
+  // 5. Domain alias
+  const [byAlias] = await db
+    .select({ org: organizations })
+    .from(domainAliases)
+    .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
+    .where(eq(domainAliases.domain, identifier));
+  if (byAlias) return byAlias.org;
 
   return null;
 }
@@ -759,6 +767,13 @@ export async function findProduct(identifier: string): Promise<Product | null> {
     const [byId] = await db.select().from(products).where(eq(products.id, identifier));
     if (byId) return byId;
   }
+  // Domain alias lookup
+  const [byAlias] = await db
+    .select({ product: products })
+    .from(domainAliases)
+    .innerJoin(products, eq(domainAliases.productId, products.id))
+    .where(eq(domainAliases.domain, identifier));
+  if (byAlias) return byAlias.product;
   return null;
 }
 
@@ -794,6 +809,53 @@ export async function deleteProduct(productId: string): Promise<void> {
   if (isRemoteMode()) return apiClient.deleteProduct(productId);
   const db = getDb();
   await db.delete(products).where(eq(products.id, productId));
+}
+
+// ── Domain alias queries ──
+
+export async function addDomainAlias(
+  domain: string,
+  target: { orgId?: string; productId?: string },
+): Promise<DomainAlias> {
+  if (isRemoteMode()) return apiClient.addDomainAlias(domain, target);
+  const db = getDb();
+  const [created] = await db
+    .insert(domainAliases)
+    .values({ domain, orgId: target.orgId ?? null, productId: target.productId ?? null })
+    .returning();
+  return created;
+}
+
+export async function removeDomainAlias(
+  domain: string,
+  scope?: { orgId?: string; productId?: string },
+): Promise<boolean> {
+  if (isRemoteMode()) return apiClient.removeDomainAlias(domain);
+  const db = getDb();
+  const conditions = [eq(domainAliases.domain, domain)];
+  if (scope?.orgId) conditions.push(eq(domainAliases.orgId, scope.orgId));
+  if (scope?.productId) conditions.push(eq(domainAliases.productId, scope.productId));
+  const deleted = await db
+    .delete(domainAliases)
+    .where(and(...conditions))
+    .returning();
+  return deleted.length > 0;
+}
+
+export async function listDomainAliases(
+  target: { orgId?: string; productId?: string },
+): Promise<DomainAlias[]> {
+  if (isRemoteMode()) {
+    return apiClient.listDomainAliases(target);
+  }
+  const db = getDb();
+  if (target.orgId) {
+    return db.select().from(domainAliases).where(eq(domainAliases.orgId, target.orgId));
+  }
+  if (target.productId) {
+    return db.select().from(domainAliases).where(eq(domainAliases.productId, target.productId));
+  }
+  return [];
 }
 
 // ── Tag queries ──

@@ -259,6 +259,22 @@ Products are also supported in import manifests:
 
 Org-level `sources` (no product) and product-level `sources` coexist in the same manifest.
 
+### Domain Aliases
+
+Map alternate domains to organizations or products for better searchability — e.g., `claude.ai` and `claude.com` both resolving to Anthropic:
+
+```bash
+released org alias add anthropic claude.ai claude.com
+released org alias list anthropic
+released org alias remove anthropic claude.com
+
+released product alias add nextjs nextjs.org
+released product alias list nextjs
+released product alias remove nextjs nextjs.org
+```
+
+Aliases are checked as a fallback in `org show`, `product show`, and search. A domain alias is globally unique — only one org or product can claim it.
+
 ### Categories & Tags
 
 Organize entities with a controlled category vocabulary and freeform tags:

@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -44,6 +44,24 @@ export const products = sqliteTable("products", {
 }, (table) => [
   index("idx_products_org").on(table.orgId),
 ]);
+
+export const domainAliases = sqliteTable(
+  "domain_aliases",
+  {
+    id: text("id").primaryKey().$defaultFn(newDomainAliasId),
+    domain: text("domain").notNull().unique(),
+    orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => products.id, { onDelete: "cascade" }),
+    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    index("idx_domain_aliases_org").on(table.orgId),
+    index("idx_domain_aliases_product").on(table.productId),
+  ],
+);
+
+export type DomainAlias = typeof domainAliases.$inferSelect;
+export type NewDomainAlias = typeof domainAliases.$inferInsert;
 
 export const tags = sqliteTable("tags", {
   id: text("id").primaryKey().$defaultFn(newTagId),
