@@ -173,6 +173,47 @@ Detected automatically in pre-checks. Listed for reference:
 | LaunchNotes | `/rss` | — | — |
 | GitBook, Notion, Intercom, Zendesk, etc. | — | — | No feeds; use crawl or scrape |
 
+## Source Selection and Scope
+
+Prefer **3–5 high-signal sources per org** over exhaustive coverage. More sources means more noise, more maintenance, and diminishing returns. Every source you add should justify itself — if you wouldn't want to read its releases, don't add it.
+
+### Core products vs ecosystem
+
+Only index an org's **own products**, not their ecosystem or community plugins. For example:
+
+- **Terraform** (core product) — yes
+- `terraform-provider-aws` (ecosystem plugin maintained by a different team) — no
+- **Next.js** (Vercel's own framework) — yes
+- `next-auth` (community library) — no
+
+Signs that a repo is ecosystem, not core:
+- Maintained by a different team or community contributors
+- One of hundreds of similar repos (providers, plugins, extensions, adapters)
+- Ships independently of the org's main release cycle
+- The org wouldn't mention it in their own changelog
+
+### Staleness signals — when to skip
+
+Skip sources that show signs of being inactive or low-value:
+- **Maintenance mode:** No meaningful releases in 6+ months, or only dependency bumps
+- **Pre-release only:** Recent "releases" are all dev/alpha/RC builds with no stable versions
+- **Superseded:** The product has been replaced by a successor (e.g., Vagrant → dev containers)
+- **Winding down:** The org has announced deprecation or deprioritization
+- **Low adoption:** The product exists but has minimal real-world usage
+
+When in doubt, add and pause rather than skip entirely. A focused index with 3 core sources is more useful than 11 sources where half are noise.
+
+### Add and pause, don't omit
+
+When you find a source that matches the staleness or ecosystem criteria above, **still add it to the database** but immediately set it to `--priority paused`. This prevents future onboard runs from rediscovering the same source and re-evaluating it. The source record serves as documentation that "we know about this, and we decided not to track it."
+
+```bash
+releases add "CDK for Terraform" --url https://github.com/hashicorp/terraform-cdk --org hashicorp --type github --skip-eval
+releases edit cdk-for-terraform --priority paused
+```
+
+Do the same for ecosystem plugins, deprecated products, and low-value repos. The goal is to capture the discovery decision, not to lose the knowledge.
+
 ## Products, Categories, and Tags
 
 Organizations can have multiple distinct products (e.g., Vercel → Next.js, Turborepo, v0). When discovering sources for an org, consider whether they belong to separate products.
