@@ -12,10 +12,17 @@ export function getBaseUrl(request: NextRequest): string {
   }
 
   const host = request.headers.get("host");
-  if (host && !host.includes("localhost") && !host.startsWith("127.")) {
+  const proto = request.headers.get("x-forwarded-proto") ?? "http";
+  const productionHost = new URL(PRODUCTION_BASE_URL).hostname;
+
+  if (host === productionHost) {
     return PRODUCTION_BASE_URL;
   }
 
-  const proto = request.headers.get("x-forwarded-proto") ?? "http";
+  if (host && !host.includes("localhost") && !host.startsWith("127.")) {
+    // Preview / staging deployment — use the actual host
+    return `${proto}://${host}`;
+  }
+
   return `${proto}://${host ?? "localhost:3000"}`;
 }
