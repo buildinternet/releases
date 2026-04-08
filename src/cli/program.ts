@@ -35,6 +35,42 @@ import { isAdminMode } from "../lib/mode.js";
 
 export const VERSION = "0.9.0";
 
+type AdminEntry = {
+  name: string;
+  helpLabel: string;
+  description: string;
+  register: (program: Command) => void;
+};
+
+const ADMIN_COMMANDS: AdminEntry[] = [
+  { name: "add", helpLabel: "add <url>", description: "Add a new changelog source", register: registerAddCommand },
+  { name: "edit", helpLabel: "edit <slug>", description: "Edit source settings", register: registerEditCommand },
+  { name: "remove", helpLabel: "remove <slug>", description: "Remove a source", register: registerRemoveCommand },
+  { name: "import", helpLabel: "import <file>", description: "Bulk-import orgs and sources", register: registerImportCommand },
+  { name: "discover", helpLabel: "discover <query>", description: "Discover changelogs for a company", register: registerDiscoverCommand },
+  { name: "evaluate", helpLabel: "evaluate <slug>", description: "Evaluate a source", register: registerEvaluateCommand },
+  { name: "fetch", helpLabel: "fetch [slug]", description: "Fetch releases from sources", register: registerFetchCommand },
+  { name: "fetch-log", helpLabel: "fetch-log [slug]", description: "View recent fetch history", register: registerFetchLogCommand },
+  { name: "check", helpLabel: "check <slug>", description: "Check a source URL for changes", register: registerCheckCommand },
+  { name: "poll", helpLabel: "poll [slug]", description: "Poll feed sources for upstream changes", register: registerPollCommand },
+  { name: "enrich", helpLabel: "enrich <slug>", description: "Enrich sparse releases with full content", register: registerEnrichCommand },
+  { name: "summarize", helpLabel: "summarize <slug>", description: "AI-powered release summary", register: registerSummarizeCommand },
+  { name: "org", helpLabel: "org <action>", description: "Manage organizations", register: registerOrgCommand },
+  { name: "product", helpLabel: "product <action>", description: "Manage products within orgs", register: registerProductCommand },
+  { name: "release", helpLabel: "release <action>", description: "Show, edit, delete, or suppress releases", register: registerReleaseCommand },
+  { name: "block", helpLabel: "block <action>", description: "Manage globally blocked URLs", register: registerBlockCommand },
+  { name: "ignore", helpLabel: "ignore <action>", description: "Manage org-scoped ignored URLs", register: registerIgnoreCommand },
+  { name: "onboard", helpLabel: "onboard <company>", description: "AI-powered company onboarding", register: registerOnboardCommand },
+  { name: "task", helpLabel: "task <action>", description: "Manage remote sessions", register: registerTaskCommand },
+  { name: "media", helpLabel: "media <action>", description: "Media management (backfill)", register: registerMediaCommand },
+  { name: "knowledge", helpLabel: "knowledge <action>", description: "Generate knowledge pages", register: registerKnowledgeCommand },
+];
+
+function adminKeyError(name: string): never {
+  console.error(chalk.red(`"${name}" requires an API key.`) + " " + chalk.dim("Set RELEASED_API_KEY to enable it."));
+  process.exit(1);
+}
+
 function row(name: string, desc: string, pad = 22): string {
   const gap = " ".repeat(Math.max(2, pad - name.length));
   return `  ${chalk.bold(name)}${gap}${chalk.dim(desc)}`;
@@ -83,27 +119,9 @@ function printStyledHelp(): string {
   if (isAdminMode()) {
     lines.push("");
     lines.push(chalk.cyan("Admin:"));
-    lines.push(row("add <url>", "Add a new changelog source"));
-    lines.push(row("edit <slug>", "Edit source settings"));
-    lines.push(row("remove <slug>", "Remove a source"));
-    lines.push(row("import <file>", "Bulk-import orgs and sources"));
-    lines.push(row("discover <query>", "Discover changelogs for a company"));
-    lines.push(row("evaluate <slug>", "Evaluate a source"));
-    lines.push(row("fetch [slug]", "Fetch releases from sources"));
-    lines.push(row("fetch-log [slug]", "View recent fetch history"));
-    lines.push(row("check <slug>", "Check a source URL for changes"));
-    lines.push(row("poll [slug]", "Poll feed sources for upstream changes"));
-    lines.push(row("enrich <slug>", "Enrich sparse releases with full content"));
-    lines.push(row("summarize <slug>", "AI-powered release summary"));
-    lines.push(row("org <action>", "Manage organizations"));
-    lines.push(row("product <action>", "Manage products within orgs"));
-    lines.push(row("release <action>", "Show, edit, delete, or suppress releases"));
-    lines.push(row("block <action>", "Manage globally blocked URLs"));
-    lines.push(row("ignore <action>", "Manage org-scoped ignored URLs"));
-    lines.push(row("onboard <company>", "AI-powered company onboarding"));
-    lines.push(row("task <action>", "Manage remote sessions"));
-    lines.push(row("media <action>", "Media management (backfill)"));
-    lines.push(row("knowledge <action>", "Generate knowledge pages"));
+    for (const cmd of ADMIN_COMMANDS) {
+      lines.push(row(cmd.helpLabel, cmd.description));
+    }
   }
   lines.push("");
 
@@ -146,51 +164,18 @@ registerListCommand(program);
 registerServeCommand(program);
 registerApiCommand(program);
 
-// Admin commands — require RELEASED_API_KEY or RELEASED_ADMIN=1
+// Admin commands — require RELEASED_API_KEY
 if (isAdminMode()) {
-  registerAddCommand(program);
-  registerEditCommand(program);
-  registerRemoveCommand(program);
-  registerFetchCommand(program);
-  registerOrgCommand(program);
-  registerProductCommand(program);
-  registerDiscoverCommand(program);
-  registerReleaseCommand(program);
-  registerCheckCommand(program);
-  registerFetchLogCommand(program);
-  registerOnboardCommand(program);
-  registerIgnoreCommand(program);
-  registerBlockCommand(program);
-  registerImportCommand(program);
-  registerEvaluateCommand(program);
-  registerSummarizeCommand(program);
-  registerKnowledgeCommand(program);
-  registerEnrichCommand(program);
-  registerMediaCommand(program);
-  registerTaskCommand(program);
-  registerPollCommand(program);
+  for (const cmd of ADMIN_COMMANDS) cmd.register(program);
 } else {
-  // In public mode, catch admin command names and give a clear error
-  const adminCommands = [
-    "add", "edit", "remove", "fetch", "org", "product", "discover",
-    "release", "check", "fetch-log", "onboard", "ignore", "block",
-    "import", "evaluate", "summarize", "enrich", "media", "task",
-    "poll", "knowledge",
-  ];
-  for (const name of adminCommands) {
+  for (const { name } of ADMIN_COMMANDS) {
     program
-      .command(name)
+      .command(name, { hidden: true })
       .allowUnknownOption()
       .helpOption(false)
       .argument("[args...]")
       .description("")
-      .action(() => {
-        console.error(chalk.red(`"${name}" requires an API key.`) + " " + chalk.dim("Set RELEASED_API_KEY to enable it."));
-        process.exit(1);
-      });
-    // Hide from help output
-    const cmd = program.commands.find((c) => c.name() === name);
-    if (cmd) (cmd as any).hidden = true;
+      .action(() => adminKeyError(name));
   }
 }
 
@@ -202,9 +187,9 @@ program
   .action((command?: string) => {
     if (command) {
       const sub = program.commands.find((c) => c.name() === command);
-      if (sub && (sub as any).hidden) {
-        console.error(chalk.red(`"${command}" requires an API key.`) + " " + chalk.dim("Set RELEASED_API_KEY to enable it."));
-        process.exit(1);
+      const isHidden = sub && ADMIN_COMMANDS.some((a) => a.name === command) && !isAdminMode();
+      if (isHidden) {
+        adminKeyError(command);
       } else if (sub) {
         sub.help();
       } else {
