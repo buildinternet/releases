@@ -30,12 +30,15 @@ export interface EnrichResult {
     title: string;
     status: "enriched" | "skipped" | "error";
     reason?: string;
+    mediaAdded?: number;
+    mediaTotal?: number;
   }>;
 }
 
 export interface EnrichOptions {
   dryRun?: boolean;
   limit?: number;
+  force?: boolean;
   sourceSlug: string;
 }
 
@@ -70,19 +73,29 @@ export async function enrichReleases(options: EnrichOptions): Promise<EnrichResu
     return { enriched: 0, skipped: 0, errors: 0, triageTokens: 0, extractTokens: 0, releases: [] };
   }
 
-  logger.info(`Triaging ${candidates.length} releases for enrichment...`);
+  let needsEnrichment: { release: Release }[];
+  let skippedTriage: TriageResult[] = [];
+  let triageTokens = 0;
 
-  // Phase 1: Haiku triage — which releases need enrichment?
-  const triageResults = await mapWithConcurrency(
-    candidates,
-    (r) => triageRelease(r, client, model, options.sourceSlug),
-    CONCURRENCY,
-  );
+  if (options.force) {
+    logger.info(`Force mode: skipping triage, enriching all ${candidates.length} release(s)...`);
+    needsEnrichment = candidates.map((r) => ({ release: r }));
+  } else {
+    logger.info(`Triaging ${candidates.length} releases for enrichment...`);
 
-  const needsEnrichment = triageResults.filter((t) => t.needsEnrichment);
-  const skippedTriage = triageResults.filter((t) => !t.needsEnrichment);
+    // Phase 1: Haiku triage — which releases need enrichment?
+    const triageResults = await mapWithConcurrency(
+      candidates,
+      (r) => triageRelease(r, client, model, options.sourceSlug),
+      CONCURRENCY,
+    );
 
-  logger.info(`Triage: ${needsEnrichment.length} need enrichment, ${skippedTriage.length} already rich`);
+    needsEnrichment = triageResults.filter((t) => t.needsEnrichment);
+    skippedTriage = triageResults.filter((t) => !t.needsEnrichment);
+    triageTokens = triageResults.reduce((sum, t) => sum + t.tokens, 0);
+
+    logger.info(`Triage: ${needsEnrichment.length} need enrichment, ${skippedTriage.length} already rich`);
+  }
 
   // Phase 2: Fetch and extract content for releases that need it
   const extractResults = await mapWithConcurrency(
@@ -95,7 +108,7 @@ export async function enrichReleases(options: EnrichOptions): Promise<EnrichResu
     enriched: extractResults.filter((r) => r.status === "enriched").length,
     skipped: skippedTriage.length + extractResults.filter((r) => r.status === "skipped").length,
     errors: extractResults.filter((r) => r.status === "error").length,
-    triageTokens: triageResults.reduce((sum, t) => sum + t.tokens, 0),
+    triageTokens,
     extractTokens: extractResults.reduce((sum, r) => sum + r.tokens, 0),
     releases: [
       ...skippedTriage.map((t) => ({
@@ -203,6 +216,8 @@ interface ExtractResult {
   status: "enriched" | "skipped" | "error";
   reason?: string;
   tokens: number;
+  mediaAdded?: number;
+  mediaTotal?: number;
 }
 
 async function extractAndUpdate(
@@ -259,31 +274,51 @@ async function extractAndUpdate(
       releaseCount: 1,
     });
 
+    const existingMedia: Array<{ type: string; url: string; alt?: string }> =
+      JSON.parse((release.media as string) || "[]");
+    const mergedMedia = mergeMedia(existingMedia, media);
+    const mediaChanged = mergedMedia.length !== existingMedia.length;
+
+    const mediaAdded = mergedMedia.length - existingMedia.length;
+
     if (text.length <= release.content.length) {
-      // Even if content isn't richer, persist media if we found some and release has none
-      if (media.length > 0 && !options.dryRun) {
-        const existingMedia = JSON.parse((release.media as string) || "[]");
-        if (existingMedia.length === 0) {
-          await updateRelease(release.id, { media: JSON.stringify(media) });
-          return { id: release.id, title: release.title, status: "enriched", reason: "media only", tokens };
-        }
+      // Content isn't richer — persist media only if we gained new entries
+      if (mediaChanged && !options.dryRun) {
+        await updateRelease(release.id, { media: JSON.stringify(mergedMedia) });
+        return { id: release.id, title: release.title, status: "enriched", reason: "media only", tokens, mediaAdded, mediaTotal: mergedMedia.length };
       }
       return { id: release.id, title: release.title, status: "skipped", reason: "extraction not richer", tokens };
     }
 
+    const contentChanged = text !== release.content;
+    if (!contentChanged && !mediaChanged) {
+      return { id: release.id, title: release.title, status: "skipped", reason: "content and media unchanged", tokens };
+    }
+
     if (!options.dryRun) {
-      const updates: Record<string, unknown> = { content: text };
-      if (media.length > 0) {
-        updates.media = JSON.stringify(media);
-      }
+      const updates: Record<string, unknown> = {};
+      if (contentChanged) updates.content = text;
+      if (mediaChanged) updates.media = JSON.stringify(mergedMedia);
       await updateRelease(release.id, updates);
     }
 
-    return { id: release.id, title: release.title, status: "enriched", tokens };
+    return { id: release.id, title: release.title, status: "enriched", tokens, mediaAdded: mediaAdded > 0 ? mediaAdded : undefined, mediaTotal: mergedMedia.length > 0 ? mergedMedia.length : undefined };
   } catch (err) {
     logger.debug(`Extract failed for ${url}: ${err instanceof Error ? err.message : String(err)}`);
     return { id: release.id, title: release.title, status: "error", reason: String(err), tokens: 0 };
   }
+}
+
+// ── Media merge ────────────────────────────────────────────────────
+
+/** Merge new media into existing, deduping by URL. Existing entries take precedence. */
+function mergeMedia(
+  existing: Array<{ type: string; url: string; alt?: string }>,
+  incoming: Array<{ type: string; url: string; alt?: string }>,
+): Array<{ type: string; url: string; alt?: string }> {
+  const seen = new Set(existing.map((m) => m.url));
+  const added = incoming.filter((m) => !seen.has(m.url));
+  return [...existing, ...added];
 }
 
 // ── Concurrency helper ──────────────────────────────────────────────
