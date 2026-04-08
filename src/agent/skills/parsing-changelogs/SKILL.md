@@ -65,30 +65,34 @@ Use the `releases enrich <slug>` command to hydrate releases that have sparse co
 
 ## Feed Content Depth Assessment
 
-After fetching a feed source, assess whether the releases have meaningful content or just summaries. Many feeds (RSS/Atom) provide only a title and one-line description while the actual release pages have full write-ups with images and detail.
+**This is a mandatory step during onboarding for every feed and scrape source.** Always spot-check individual release pages even if the feed content looks adequate. Many feeds provide decent text summaries but the actual pages have significantly richer content — product screenshots, video demos, detailed code examples, and inline media that the feed strips out.
 
-**When to check:** After a feed fetch produces releases where most entries have short content (1-2 sentences) and each has a URL to an individual page. This is a required step during onboarding for every feed and scrape source.
+**When to check:** After every feed fetch, regardless of content length. Do not skip this because feed entries have multiple sentences. The question is not "does the feed have some content?" but "does the actual page have substantially more?"
 
 **How to check:** Dispatch a bulk-worker subagent to sample 2-3 release URLs. Prompt the subagent:
 
-> "Fetch these URLs with WebFetch and compare the page content against these feed summaries. For each URL, report: (1) how much content is on the page vs the feed summary, (2) whether there are images or media, (3) your assessment of whether the page has substantially more content. Summarize your findings."
+> "Fetch these URLs with WebFetch and compare the page content against these feed summaries. For each URL, report: (1) how much content is on the page vs the feed summary, (2) whether there are images, screenshots, or embedded videos (YouTube, Vimeo, Loom), (3) whether there are code examples or detailed explanations not in the feed. Summarize your findings."
 
 Do NOT fetch release URLs in the parent agent — always delegate to a subagent to keep your context window clean.
 
 **What to do based on the result:**
 
-If pages are richer than feed content:
-1. Record the finding: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only"}'`
+If pages are richer than feed content (more text, images, videos, or code examples):
+1. Record and enable auto-enrichment: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only","autoEnrich":true}'`
 2. Dispatch a bulk-worker subagent to run: `releases enrich <slug>`
-3. Verify a sample: `releases list <slug> --json` — check content is now richer
+3. Verify a sample: `releases list <slug> --json` — check content is now richer and media array is populated
 
-If feed already provides full content:
+If feed already provides full content with no meaningful additions on the page:
 1. Record: `releases edit <slug> --metadata '{"feedContentDepth":"full"}'`
 2. No enrichment needed — skip `releases enrich` for this source
 
-Once `feedContentDepth` is set, skip the sampling step on future encounters. For automated pipelines, run `releases enrich <slug>` after fetch for `summary-only` sources.
+Once `feedContentDepth` is set, skip the sampling step on future encounters. Sources with `autoEnrich: true` will automatically enrich new releases after each feed fetch.
 
-**During onboarding:** This assessment is part of the standard onboarding workflow. After fetching each feed/scrape source, immediately assess content depth and enrich if needed before moving to the next source. Do not skip this step — sparse feed content significantly reduces the value of indexed releases.
+**Per-source AI instructions:** If a source has unique content patterns (e.g., videos always embedded, unusual changelog format), set `parseInstructions` on the source metadata to guide the AI parser:
+
+```bash
+releases edit <slug> --metadata '{"parseInstructions":"This source embeds YouTube demo videos in every release — always look for video links."}'
+```
 
 **Cost visibility:** The `releases enrich` command reports token usage. Check aggregate costs with `releases usage` filtered to `enrich-judge` and `enrich-extract` operations.
 

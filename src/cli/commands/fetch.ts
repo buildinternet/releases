@@ -19,6 +19,7 @@ import { generateKnowledgePage } from "../../ai/knowledge.js";
 import { logger } from "../../lib/logger.js";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { config } from "../../lib/config.js";
+import { enrichReleases } from "../../adapters/enrich.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import { stripAnsi } from "../../lib/sanitize.js";
@@ -637,6 +638,25 @@ Examples:
             } catch (err) {
               // Summary generation is non-critical — log and continue
               logger.warn(`Summary generation failed for ${source.name}: ${err}`);
+            }
+          }
+
+          // Auto-enrich if the source is flagged (e.g., summary-only feeds)
+          if (inserted > 0 && !opts.dryRun) {
+            const enrichMeta = getSourceMeta(source);
+            if (enrichMeta.autoEnrich) {
+              try {
+                logger.info(`Auto-enriching ${inserted} new release(s) for ${source.slug}...`);
+                const enrichResult = await enrichReleases({
+                  sourceSlug: source.slug,
+                  limit: inserted,
+                });
+                if (enrichResult.enriched > 0) {
+                  logger.info(`Auto-enriched ${enrichResult.enriched} release(s) for ${source.slug}`);
+                }
+              } catch (err) {
+                logger.warn(`Auto-enrich failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+              }
             }
           }
 

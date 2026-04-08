@@ -49,3 +49,10 @@ export const releaseItemProperties = {
 };
 
 export const releaseItemRequired = ["title", "content", "isBreaking"] as const;
+
+/** Append per-source AI instructions to a base system prompt. */
+export function withParseInstructions(basePrompt: string, parseInstructions?: string): string {
+  return parseInstructions
+    ? `${basePrompt}\n\nAdditional source-specific instructions:\n${parseInstructions}`
+    : basePrompt;
+}

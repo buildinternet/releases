@@ -5,7 +5,7 @@ import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { getKnownReleasesForSource, type KnownRelease } from "../db/queries.js";
 import type { ParsedRelease } from "./ingest.js";
-import { sanitizeVersion, releaseItemProperties, releaseItemRequired } from "./shared.js";
+import { sanitizeVersion, releaseItemProperties, releaseItemRequired, withParseInstructions } from "./shared.js";
 
 // ── Tool schemas ────────────────────────────────────────────────────
 
@@ -79,6 +79,7 @@ Rules:
 - Keep content concise: key changes, features, and fixes.
 - Dates should be ISO 8601. If no date is found, omit publishedAt.
 - Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
+- For each release, populate the media array with every product image and video URL found in the content. Images go as type "image", YouTube/Vimeo/Loom links go as type "video".
 - If the provided lines don't contain changelog content (e.g. all navigation or headers), set needsMoreContext to true.
 - If you can see the changelog and everything matches what we already have, return an empty releases array with needsMoreContext false.
 - When in doubt, return an empty array. The system will fall back to a full re-parse.`;
@@ -94,6 +95,7 @@ Rules:
 - Keep content concise: key changes, features, and fixes.
 - Dates should be ISO 8601. If no date is found, omit publishedAt.
 - Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
+- For each release, populate the media array with every product image and video URL found in the content. Images go as type "image", YouTube/Vimeo/Loom links go as type "video".
 - Always call extract_releases when done, even if the array is empty.`;
 
 // ── Tool handlers ───────────────────────────────────────────────────
@@ -225,6 +227,7 @@ async function singlePass(
   client: Anthropic,
   lines: string[],
   knownReleases: KnownRelease[],
+  parseInstructions?: string,
 ): Promise<IncrementalParseResult> {
   const contentStart = findContentStart(lines);
   const previewCount = Math.min(200, lines.length - contentStart);
@@ -241,7 +244,7 @@ async function singlePass(
     system: [
       {
         type: "text",
-        text: SINGLE_PASS_SYSTEM,
+        text: withParseInstructions(SINGLE_PASS_SYSTEM, parseInstructions),
         cache_control: { type: "ephemeral" },
       },
     ],
@@ -281,6 +284,7 @@ async function fallbackToolLoop(
   client: Anthropic,
   lines: string[],
   knownReleases: KnownRelease[],
+  parseInstructions?: string,
 ): Promise<IncrementalParseResult> {
   const ctx: ToolContext = { lines };
 
@@ -307,7 +311,7 @@ async function fallbackToolLoop(
       system: [
         {
           type: "text",
-          text: FALLBACK_SYSTEM,
+          text: withParseInstructions(FALLBACK_SYSTEM, parseInstructions),
           cache_control: { type: "ephemeral" },
         },
       ],
@@ -390,6 +394,7 @@ export async function parseIncremental(
   sourceId: string,
   sourceSlug?: string,
   prefetchedKnownReleases?: KnownRelease[],
+  parseInstructions?: string,
 ): Promise<IncrementalParseResult> {
   const client = getAnthropicClient();
   const lines = markdown.split("\n");
@@ -402,12 +407,12 @@ export async function parseIncremental(
 
   // Single-pass: send first 200 lines + known releases in one call
   logger.info("Trying single-pass incremental parse...");
-  let result = await singlePass(client, lines, knownReleases);
+  let result = await singlePass(client, lines, knownReleases, parseInstructions);
 
   // If the model says it needs more context (top of page was nav/header), use fallback loop
   if (!result.boundaryFound) {
     logger.info("Single-pass needs more context — trying fallback tool loop...");
-    const fallbackResult = await fallbackToolLoop(client, lines, knownReleases);
+    const fallbackResult = await fallbackToolLoop(client, lines, knownReleases, parseInstructions);
     result = {
       ...fallbackResult,
       inputTokens: result.inputTokens + fallbackResult.inputTokens,

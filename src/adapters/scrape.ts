@@ -10,7 +10,7 @@ import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed } from "./feed.js";
 import { getSourceMeta, updateSourceMeta } from "./feed.js";
-import { fetchCloudflareMarkdownWithMedia } from "./cloudflare.js";
+import { fetchCloudflareMarkdown } from "./cloudflare.js";
 import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
 
 function toFragmentUrl(baseUrl: string, version: string | undefined, title: string): string {
@@ -61,7 +61,7 @@ export const scrape: Adapter = {
     // ── Markdown path (direct fetch, no Cloudflare needed) ────
     if (meta.markdownUrl) {
       try {
-        const mdResult = await fetchViaMarkdown(source, meta.markdownUrl, options);
+        const mdResult = await fetchViaMarkdown(source, meta.markdownUrl, meta, options);
         if (mdResult !== null) return mdResult;
       } catch (err) {
         logger.warn(`Markdown fetch failed, falling back to Cloudflare: ${err}`);
@@ -120,7 +120,7 @@ async function fetchViaCrawl(
   if (pages.length === 0 && allPages.length > 0) {
     // Only got the index page — fall back to parsing it (better than nothing)
     logger.info(`Crawl only returned the index page, parsing it directly`);
-    const releases = await parseCrawlPages(allPages, source.slug, options);
+    const releases = await parseCrawlPages(allPages, source.slug, options, meta.parseInstructions);
     await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
     return { releases, rawContent: buildRawContent(allPages) };
   }
@@ -132,7 +132,7 @@ async function fetchViaCrawl(
   }
 
   logger.info(`Crawl returned ${pages.length} page(s), parsing...`);
-  const releases = await parseCrawlPages(pages, source.slug, options);
+  const releases = await parseCrawlPages(pages, source.slug, options, meta.parseInstructions);
 
   await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
 
@@ -143,6 +143,7 @@ async function fetchViaCrawl(
 async function fetchViaMarkdown(
   source: Source,
   markdownUrl: string,
+  meta: ReturnType<typeof getSourceMeta>,
   options?: FetchOptions,
 ): Promise<FetchResult | null> {
   logger.info(`Fetching markdown directly from ${markdownUrl}...`);
@@ -174,7 +175,7 @@ async function fetchViaMarkdown(
   // Use the same parsing pipeline as Cloudflare-rendered content
   const knownReleases = await getKnownReleasesForSource(source.id, source.slug);
   if (knownReleases.length > 0 && !options?.full) {
-    const incremental = await parseIncremental(markdown, source.id, source.slug, knownReleases);
+    const incremental = await parseIncremental(markdown, source.id, source.slug, knownReleases, meta.parseInstructions);
     if (incremental.boundaryFound) {
       return {
         releases: incremental.releases.map((r) => ({
@@ -192,6 +193,7 @@ async function fetchViaMarkdown(
 
   const parsed = await parseChangelog(markdown, source.slug, {
     onChunkComplete: options?.onParseProgress,
+    parseInstructions: meta.parseInstructions,
   });
   return {
     releases: parsed.map((r) => ({
@@ -218,21 +220,18 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
   }
 
   logger.info(`Fetching page via Cloudflare...`);
-  const result = await fetchCloudflareMarkdownWithMedia(source.url, accountId, apiToken);
+  const markdown = await fetchCloudflareMarkdown(source.url, accountId, apiToken);
 
-  if (!result) {
+  if (!markdown) {
     throw new AdapterError(
       "scrape",
       `Cloudflare Browser Rendering returned no content for ${source.url}`,
     );
   }
 
-  const markdown = result.markdown;
+  logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
 
-  logger.info(`Received ${result.rawMarkdown.length.toLocaleString()} chars of markdown`);
-
-  // Hash the raw markdown (before video URL enrichment) for stable change detection
-  const contentHash = sha256Hex(result.rawMarkdown);
+  const contentHash = sha256Hex(markdown);
   if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
     // Only meaningful when poll has stored HEAD headers — tracks how many renders could be avoided
@@ -254,7 +253,7 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
     if (knownReleases.length > 0) {
       logger.info("Source has existing releases — trying incremental parse...");
       try {
-        const result = await parseIncremental(markdown, source.id, source.slug, knownReleases);
+        const result = await parseIncremental(markdown, source.id, source.slug, knownReleases, meta.parseInstructions);
 
         if (result.boundaryFound) {
           if (result.releases.length > 0) {
@@ -280,6 +279,7 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
     try {
       parsed = await parseChangelog(markdown, source.slug, {
         onChunkComplete: options?.onParseProgress,
+        parseInstructions: meta.parseInstructions,
       });
     } catch (error) {
       logger.warn(

@@ -46,6 +46,10 @@ export interface SourceMetadata {
 
   // Content depth assessment
   feedContentDepth?: "full" | "summary-only";
+  autoEnrich?: boolean;  // true = auto-enrich new releases after feed fetch (for summary-only feeds)
+
+  // Per-source AI guidance
+  parseInstructions?: string;  // freeform text appended to AI parsing prompts
 
   // Summary generation
   summarize?: boolean; // false = opt-out of AI summaries
