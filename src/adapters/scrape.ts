@@ -10,7 +10,7 @@ import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed } from "./feed.js";
 import { getSourceMeta, updateSourceMeta } from "./feed.js";
-import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
+import { fetchCloudflareMarkdownWithMedia } from "./cloudflare.js";
 import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
 
 function toFragmentUrl(baseUrl: string, version: string | undefined, title: string): string {
@@ -217,51 +217,22 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
     );
   }
 
-  // Use /markdown endpoint — more reliable than /json for diverse changelog pages
-  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/markdown`;
-
   logger.info(`Fetching page via Cloudflare...`);
-  const res: Response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url: source.url,
-      rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
-      gotoOptions: { waitUntil: "networkidle2" },
-    }),
-  });
+  const result = await fetchCloudflareMarkdownWithMedia(source.url, accountId, apiToken);
 
-  if (!res.ok) {
-    const body = await res.text();
+  if (!result) {
     throw new AdapterError(
       "scrape",
-      `Cloudflare Browser Rendering API returned ${res.status} for ${source.url}: ${body}`,
+      `Cloudflare Browser Rendering returned no content for ${source.url}`,
     );
   }
 
-  const data = await res.json() as { success: boolean; result: string; errors?: Array<{ message: string }> };
+  const markdown = result.markdown;
 
-  if (!data.success) {
-    const messages = data.errors?.map((e) => e.message).join("; ") ?? "unknown error";
-    throw new AdapterError(
-      "scrape",
-      `Cloudflare Browser Rendering failed for ${source.url}: ${messages}`,
-    );
-  }
+  logger.info(`Received ${result.rawMarkdown.length.toLocaleString()} chars of markdown`);
 
-  const markdown = data.result;
-
-  if (!markdown || markdown.trim().length === 0) {
-    logger.warn(`Cloudflare returned empty markdown for ${source.url}`);
-    return { releases: [] };
-  }
-
-  logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
-
-  const contentHash = sha256Hex(markdown);
+  // Hash the raw markdown (before video URL enrichment) for stable change detection
+  const contentHash = sha256Hex(result.rawMarkdown);
   if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
     // Only meaningful when poll has stored HEAD headers — tracks how many renders could be avoided

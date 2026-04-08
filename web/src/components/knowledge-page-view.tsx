@@ -2,6 +2,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeHighlight from "rehype-highlight";
 import type { KnowledgePageItem } from "@/lib/api";
+import { markdownComponents } from "./markdown-components";
 
 interface KnowledgePageViewProps {
   page: KnowledgePageItem;
@@ -28,7 +29,7 @@ export function KnowledgePageView({ page }: KnowledgePageViewProps) {
           </span>
         </div>
         <div className={proseClasses}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>
             {page.content}
           </ReactMarkdown>
         </div>
