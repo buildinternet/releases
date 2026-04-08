@@ -8,7 +8,9 @@
     "start": "next start"
   },
   "dependencies": {
+    "@flags-sdk/vercel": "^1.2.1",
     "@tailwindcss/typography": "^0.5.19",
+    "flags": "^4.0.6",
     "next": "^16.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -22,6 +24,7 @@
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.0"
+    "typescript": "^6.0.0",
+    "vercel": "^50.41.0"
   }
 }
