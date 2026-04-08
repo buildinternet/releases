@@ -312,7 +312,7 @@ async function extractAndUpdate(
 // ── Media merge ────────────────────────────────────────────────────
 
 /** Merge new media into existing, deduping by URL. Existing entries take precedence. */
-function mergeMedia(
+export function mergeMedia(
   existing: Array<{ type: string; url: string; alt?: string }>,
   incoming: Array<{ type: string; url: string; alt?: string }>,
 ): Array<{ type: string; url: string; alt?: string }> {

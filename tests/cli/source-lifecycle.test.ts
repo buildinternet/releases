@@ -179,29 +179,29 @@ describe("CLI source lifecycle", () => {
     expect(updated.isPrimary).toBeTruthy();
   });
 
-  it("marks a source as hidden", () => {
-    const result = cli(dataDir, ["edit", "acme-changelog", "--hidden", "--json"]);
+  it("disables a source", () => {
+    const result = cli(dataDir, ["edit", "acme-changelog", "--disable", "--json"]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isHidden).toBeTruthy();
   });
 
-  it("hidden source excluded from default list", () => {
+  it("disabled source excluded from default list", () => {
     const sources = cliJson<{ slug: string }[]>(dataDir, ["list", "--json"]);
     const slugs = sources.map((s) => s.slug);
     expect(slugs).not.toContain("acme-changelog");
   });
 
-  it("hidden source included with --include-hidden", () => {
+  it("disabled source included with --include-disabled", () => {
     const sources = cliJson<{ slug: string }[]>(dataDir, [
-      "list", "--include-hidden", "--json",
+      "list", "--include-disabled", "--json",
     ]);
     const slugs = sources.map((s) => s.slug);
     expect(slugs).toContain("acme-changelog");
   });
 
-  it("unhides a source", () => {
-    const result = cli(dataDir, ["edit", "acme-changelog", "--no-hidden", "--json"]);
+  it("re-enables a source", () => {
+    const result = cli(dataDir, ["edit", "acme-changelog", "--enable", "--json"]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isHidden).toBeFalsy();
