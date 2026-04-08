@@ -238,6 +238,15 @@ export interface OrgActivity {
   aggregateWeekly: Array<{ weekStart: string; count: number }>;
 }
 
+// ── Org Heatmap ──
+
+export interface OrgHeatmap {
+  org: { slug: string; name: string };
+  range: { from: string; to: string };
+  dailyCounts: Array<{ date: string; count: number }>;
+  total: number;
+}
+
 // ── Org Releases ──
 
 export interface OrgReleaseItem extends ReleaseItem {

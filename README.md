@@ -98,7 +98,7 @@ releases api              # start the API server on :3456
 cd web && bun run dev     # start the Next.js frontend on :3000
 ```
 
-The API server exposes read-only JSON endpoints (`/api/stats`, `/api/orgs`, `/api/orgs/:slug/activity`, `/api/orgs/:slug/releases`, `/api/sources`, `/api/sources/:slug/activity`, `/api/search`). The frontend is a Next.js app in `web/` that fetches from the API. Configure the API URL for the frontend with `RELEASED_API_URL` (defaults to `http://localhost:3456`).
+The API server exposes read-only JSON endpoints (`/api/stats`, `/api/orgs`, `/api/orgs/:slug/activity`, `/api/orgs/:slug/heatmap`, `/api/orgs/:slug/releases`, `/api/sources`, `/api/sources/:slug/activity`, `/api/search`). The frontend is a Next.js app in `web/` that fetches from the API. Configure the API URL for the frontend with `RELEASED_API_URL` (defaults to `http://localhost:3456`).
 
 Production deployment: the API and frontend are deployed separately. The frontend will be hosted at [releases.sh](https://releases.sh).
 

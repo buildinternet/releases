@@ -1,7 +1,7 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiSetupError, type OrgDetail } from "@/lib/api";
+import { api, ApiSetupError, type OrgDetail, type OrgHeatmap, type OrgReleasesResponse } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
@@ -113,7 +113,8 @@ export default async function OrgPage({
 
   let org;
   let activity;
-  let initialReleases: import("@/lib/api").OrgReleasesResponse | null = null;
+  let heatmap: OrgHeatmap | null = null;
+  let initialReleases: OrgReleasesResponse | null = null;
   try {
     if (showReleases) {
       [org, initialReleases] = await Promise.all([
@@ -121,9 +122,10 @@ export default async function OrgPage({
         api.orgReleases(orgSlug).catch(() => null),
       ]);
     } else {
-      [org, activity] = await Promise.all([
+      [org, activity, heatmap] = await Promise.all([
         getOrg(orgSlug),
         api.orgActivity(orgSlug, activityFrom).catch(() => null),
+        api.orgHeatmap(orgSlug).catch(() => null),
       ]);
     }
   } catch (err) {
@@ -210,7 +212,7 @@ export default async function OrgPage({
               </>
             ) : activity ? (
               <>
-                <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} products={org.products}>
+                <ReleaseTimeline activity={activity} heatmap={heatmap} orgSlug={org.slug} sources={org.sources} products={org.products}>
                   <OrgTabs />
                 </ReleaseTimeline>
                 {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}

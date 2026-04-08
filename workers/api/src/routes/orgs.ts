@@ -9,7 +9,7 @@ import { isConflictError, computeAvgPerWeek, getOrCreateTagD1 } from "../utils.j
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import type { Env } from "../index.js";
-import { getOrgsWithStats, getOrgSourcesWithStats, getOrgActivityData, getOrgReleasesFeed } from "../queries/orgs.js";
+import { getOrgsWithStats, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgReleasesFeed } from "../queries/orgs.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -502,6 +502,35 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
     range: { from, to },
     sources: sourcesOut,
     aggregateWeekly,
+  });
+});
+
+// Daily release heatmap for contribution-graph visualization
+orgRoutes.get("/orgs/:slug/heatmap", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+
+  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  const today = new Date();
+  const to = today.toISOString().slice(0, 10);
+
+  const toExclusiveDate = new Date(today);
+  toExclusiveDate.setUTCDate(toExclusiveDate.getUTCDate() + 1);
+  const toExclusive = toExclusiveDate.toISOString().slice(0, 10);
+
+  const fromDate = new Date(today);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 52 * 7);
+  const from = fromDate.toISOString().slice(0, 10);
+
+  const { rows, total } = await getOrgHeatmapData(db, org.id, from, toExclusive);
+
+  return c.json({
+    org: { slug: org.slug, name: org.name },
+    range: { from, to },
+    dailyCounts: rows.map((r) => ({ date: r.date, count: r.cnt })),
+    total,
   });
 });
 

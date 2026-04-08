@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { type OrgActivity, type SourceListItem, type OrgDetail } from "@/lib/api";
+import { type OrgActivity, type OrgHeatmap, type SourceListItem, type OrgDetail } from "@/lib/api";
 import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
+import { ReleaseHeatmap } from "@/components/release-heatmap";
 import { groupSourcesByProduct } from "@/lib/sources";
 
 /** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
@@ -21,8 +22,11 @@ function mergeBuckets(bucketArrays: WeeklyBucket[][]): WeeklyBucket[] {
     .map(([ts, count]) => ({ weekStart: new Date(ts), count }));
 }
 
+type ViewMode = "heatmap" | "chart";
+
 interface ReleaseTimelineProps {
   activity: OrgActivity;
+  heatmap: OrgHeatmap | null;
   orgSlug: string;
   sources: SourceListItem[];
   products: OrgDetail["products"];
@@ -70,7 +74,9 @@ function ProductGroupedSources({
   );
 }
 
-export function ReleaseTimeline({ activity, orgSlug, sources, products, children }: ReleaseTimelineProps) {
+export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products, children }: ReleaseTimelineProps) {
+  const [viewMode, setViewMode] = useState<ViewMode>(heatmap ? "heatmap" : "chart");
+
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
   const rangeEnd = useMemo(() => new Date(activity.range.to), [activity.range.to]);
 
@@ -268,22 +274,53 @@ export function ReleaseTimeline({ activity, orgSlug, sources, products, children
 
   return (
     <div className="mt-8 mb-2">
-      <RangeNavigator.Root
-        min={rangeStart}
-        max={rangeEnd}
-        buckets={aggregateBuckets}
-        sourceBuckets={sourceBuckets}
-        productBuckets={productBuckets}
-        value={brushRange}
-        onValueChange={setBrushRange}
-      >
-        <RangeNavigator.Header />
-        <RangeNavigator.DetailChart />
-        <RangeNavigator.Overview />
-        <RangeNavigator.QuickRanges defaultPreset="3 months" />
-      </RangeNavigator.Root>
+      {/* View toggle */}
+      {heatmap && (
+        <div className="inline-flex bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-md p-0.5 mb-4">
+          <button
+            className={`px-3 py-1 text-xs font-medium rounded transition-all ${
+              viewMode === "heatmap"
+                ? "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm"
+                : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+            }`}
+            onClick={() => setViewMode("heatmap")}
+          >
+            Activity
+          </button>
+          <button
+            className={`px-3 py-1 text-xs font-medium rounded transition-all ${
+              viewMode === "chart"
+                ? "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm"
+                : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
+            }`}
+            onClick={() => setViewMode("chart")}
+          >
+            Chart
+          </button>
+        </div>
+      )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+      {/* Heatmap view */}
+      {viewMode === "heatmap" && heatmap ? (
+        <ReleaseHeatmap heatmap={heatmap} />
+      ) : (
+        <RangeNavigator.Root
+          min={rangeStart}
+          max={rangeEnd}
+          buckets={aggregateBuckets}
+          sourceBuckets={sourceBuckets}
+          productBuckets={productBuckets}
+          value={brushRange}
+          onValueChange={setBrushRange}
+        >
+          <RangeNavigator.Header />
+          <RangeNavigator.DetailChart />
+          <RangeNavigator.Overview />
+          <RangeNavigator.QuickRanges defaultPreset="3 months" />
+        </RangeNavigator.Root>
+      )}
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 mb-6">
         {([
           { label: "Releases", value: String(summaryStats.totalReleases) },
           { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014" },
