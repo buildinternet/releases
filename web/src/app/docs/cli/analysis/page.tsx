@@ -28,14 +28,6 @@ released summary --json`}</code></pre>
         </tbody>
       </table>
 
-      <h2>Summarize (rolling / monthly)</h2>
-      <p>
-        The <code>summarize</code> command generates cached AI summaries with configurable windows.
-        Unlike <code>summary</code>, these are persisted and can be retrieved later.
-      </p>
-      <pre><code>{`released summarize my-source --window 90     # Rolling 90-day summary
-released summarize my-source --monthly        # Summary for last month`}</code></pre>
-
       <h2>Compare</h2>
       <p>
         Generate a head-to-head comparison of recent releases between two sources.
@@ -52,21 +44,15 @@ released compare --json`}</code></pre>
         <li><strong>Breaking changes</strong> — deprecations or migrations that signal strategic shifts</li>
       </ul>
 
-      <h2>Example: competitive intelligence workflow</h2>
+      <h2>Example: competitive intelligence</h2>
       <p>
-        Chain these commands to produce a cross-company trend analysis:
+        Compare recent activity across competing products:
       </p>
-      <pre><code>{`# 1. Fetch recent releases for a cohort
-released fetch supabase --max 50
-released fetch neon-changelog --max 50
-released fetch planetscale-changelog --max 50
+      <pre><code>{`# Summarize each company's recent releases
+released summary --org neon --days 60
+released summary --org supabase --days 60
 
-# 2. Generate per-company summaries
-released summarize supabase --window 90
-released summarize neon-changelog --window 90
-released summarize planetscale-changelog --window 90
-
-# 3. Run head-to-head comparisons
+# Run head-to-head comparisons
 released compare neon-changelog planetscale-changelog --days 60
 released compare neon-changelog supabase --days 60`}</code></pre>
     </>

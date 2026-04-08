@@ -20,6 +20,131 @@ Copy `.env.example` to `.env` and fill in:
 
 ## Usage
 
+### Search
+
+```bash
+releases search "authentication"
+releases search "vercel" --type releases --limit 5
+releases search "breaking change" --json
+```
+
+### Latest releases
+
+```bash
+releases latest                          # across all sources
+releases latest next-js                  # from one source
+releases latest --org vercel --count 20  # latest 20 from an org
+```
+
+### Inspect sources
+
+```bash
+releases list                          # list all sources
+releases list next-js                  # show details for a single source
+releases list --org sentry             # filter by organization
+releases list --query shadcn           # filter by name, slug, or URL
+releases list --has-feed               # sources with a discovered feed URL
+releases list --category ai            # filter by category
+releases list --json                   # machine-readable output
+```
+
+### Summaries
+
+Generate a natural-language summary of recent releases for a source or organization:
+
+```bash
+releases summary next-js --days 30
+releases summary --org vercel --days 7
+releases summary next-js --instructions "focus on API breaking changes"
+```
+
+### Comparisons
+
+Generate a head-to-head comparison of recent releases between two sources:
+
+```bash
+releases compare next-js remix --days 30
+releases compare neon-changelog planetscale-changelog --days 60
+```
+
+### Categories
+
+```bash
+releases categories          # list valid category values
+releases categories --json
+```
+
+### Statistics
+
+```bash
+releases stats             # index overview, source health, recent fetch activity
+releases stats --days 7    # adjust period
+releases stats --json      # machine-readable output
+```
+
+### Usage tracking
+
+```bash
+releases usage             # show API token usage summary
+releases usage --days 7    # last 7 days
+```
+
+### Web Frontend
+
+Browse the catalog in your browser:
+
+```bash
+releases api              # start the API server on :3456
+cd web && bun run dev     # start the Next.js frontend on :3000
+```
+
+The API server exposes read-only JSON endpoints (`/api/stats`, `/api/orgs`, `/api/orgs/:slug/activity`, `/api/orgs/:slug/releases`, `/api/sources`, `/api/sources/:slug/activity`, `/api/search`). The frontend is a Next.js app in `web/` that fetches from the API. Configure the API URL for the frontend with `RELEASED_API_URL` (defaults to `http://localhost:3456`).
+
+Production deployment: the API and frontend are deployed separately. The frontend will be hosted at [releases.sh](https://releases.sh).
+
+### MCP Server
+
+Start the MCP server for AI agent integration:
+
+```bash
+releases serve
+```
+
+Claude Desktop config:
+
+```json
+{
+  "mcpServers": {
+    "releases": {
+      "command": "releases",
+      "args": ["serve"],
+      "env": {
+        "ANTHROPIC_API_KEY": "...",
+        "CLOUDFLARE_ACCOUNT_ID": "...",
+        "CLOUDFLARE_API_TOKEN": "..."
+      }
+    }
+  }
+}
+```
+
+**MCP Tools:**
+
+| Tool | Description |
+|------|-------------|
+| `search_releases` | Full-text search across all indexed releases |
+| `get_latest_releases` | Most recent releases, optionally filtered by product |
+| `summarize_changes` | AI summary of a product's recent changes |
+| `compare_products` | AI comparison between two products |
+| `list_products` | List all tracked sources |
+| `list_organizations` | List all organizations with their linked sources |
+
+---
+
+## Admin CLI
+
+The following commands require an API key (`RELEASED_API_KEY`). They are not available in the public CLI.
+
 ### Add sources
 
 ```bash
@@ -82,6 +207,15 @@ By default, fetch caps at 200 releases per source to avoid API pagination limits
 
 > **Remote mode:** bare `releases fetch` (no slug or filter) is blocked to prevent expensive bulk operations. Use `--stale`, `--unfetched`, `--retry-errors`, or a source slug. Remote concurrency defaults to 3 (max 5). Duplicate source fetches are detected and blocked.
 
+### Smart fetch
+
+```bash
+releases fetch --stale 24          # only fetch sources older than 24h, respecting backoff
+releases fetch --retry-errors      # only fetch sources whose last attempt failed
+```
+
+Sources that repeatedly return no changes back off automatically (1h → 2h → 4h → ... up to 48h). Error backoff caps at 72h. Successful fetches reset all counters. Paused sources (`fetchPriority = "paused"`) are always skipped by `--stale`. The default 200-release cap applies to smart fetch as well — use `--max` to adjust per-run.
+
 ### Crawl mode
 
 For changelogs spread across multiple pages, crawl mode follows links and parses each page individually:
@@ -108,85 +242,12 @@ releases enrich sentry-changelog --json       # machine-readable output
 
 Enrichment uses AI triage (Haiku) to judge which releases need enrichment, then fetches and extracts full page content. Token usage is reported per run. Use `--force` to bypass triage and re-process all releases — useful for backfilling media on previously-enriched releases or re-enriching after adding `parseInstructions`. Media from new extractions is merged with existing media (deduped by URL), so `--force` never drops previously-captured media.
 
-### Import sources from manifest
-
-Bulk-import organizations and sources from a JSON file — the discovery agent handoff point:
+### Feed change detection
 
 ```bash
-releases import manifest.json              # import orgs and sources
-releases import manifest.json --dry-run    # preview what would be created
-releases import manifest.json --skip-existing  # skip duplicate URLs silently
-releases import manifest.json --json       # machine-readable output
-```
-
-Manifest format:
-
-```json
-{
-  "organizations": [
-    {
-      "name": "Vercel",
-      "slug": "vercel",
-      "domain": "vercel.com",
-      "accounts": [
-        { "platform": "github", "handle": "vercel" }
-      ],
-      "sources": [
-        { "name": "Vercel Changelog", "type": "scrape", "url": "https://vercel.com/changelog" }
-      ]
-    }
-  ],
-  "sources": [
-    { "name": "Standalone Source", "url": "https://example.com/changelog" }
-  ]
-}
-```
-
-Slugs are auto-derived from names. Source types are auto-detected from URLs (GitHub URLs become `github`, others default to `scrape`). Existing orgs are found-or-created by slug. Source URLs are deduped against the database.
-
-### Smart fetch
-
-```bash
-releases fetch --stale 24          # only fetch sources older than 24h, respecting backoff
-releases fetch --retry-errors      # only fetch sources whose last attempt failed
-```
-
-Sources that repeatedly return no changes back off automatically (1h → 2h → 4h → ... up to 48h). Error backoff caps at 72h. Successful fetches reset all counters. Paused sources (`fetchPriority = "paused"`) are always skipped by `--stale`. The default 200-release cap applies to smart fetch as well — use `--max` to adjust per-run.
-
-### Task management
-
-Manage remote fetch and discovery sessions (requires remote mode):
-
-```bash
-releases task list                    # list active and recent sessions
-releases task list --json             # machine-readable output
-releases task cancel <sessionId>      # cancel a running session (prefix match supported)
-```
-
-Sessions track which sources are actively being fetched. The CLI blocks new fetches if overlapping sources are already in-flight — cancel the existing session first with `task cancel`.
-
-### Inspect sources
-
-```bash
-releases list                          # list all sources
-releases list next-js                  # show details for a single source
-releases list next-js --json           # machine-readable output
-releases list --org sentry             # filter by organization
-releases list --query shadcn           # filter by name, slug, or URL
-releases list --has-feed               # sources with a discovered feed URL
-releases list --enrichable             # sources eligible for content enrichment
-releases list --has-feed --org sentry  # combine filters
-```
-
-### Query
-
-```bash
-releases search "authentication"
-releases latest --count 5
-releases latest next-js
-releases summary next-js --days 30
-releases summary next-js --instructions "focus on API breaking changes"
-releases compare next-js linear --days 30
+releases poll                  # check all feed sources for changes
+releases poll next-js          # check a single source
+releases poll --changed        # only show sources with detected changes
 ```
 
 ### Organizations
@@ -213,108 +274,36 @@ releases product edit nextjs --description "React framework for production"
 releases product remove nextjs                    # sources become unlinked, not deleted
 ```
 
-Assign sources to products:
+Convert an org that should be a product:
 
 ```bash
-releases add "Next.js Releases" --url https://github.com/vercel/next.js/releases --org vercel --product nextjs
-releases edit next-js-releases --product nextjs   # assign existing source
-releases edit next-js-releases --no-product       # unlink from product
-releases list --product nextjs                    # filter by product
+releases product adopt nextjs --into vercel
 ```
 
-Convert an org that should be a product (e.g., "Next.js" was added as a standalone org but should be under Vercel):
-
-```bash
-releases product adopt nextjs --into vercel                    # convert org to product
-releases product adopt nextjs --into vercel --dry-run          # preview changes
-releases product adopt nextjs --into vercel --url https://nextjs.org  # override URL
-```
-
-Adopt creates the product, moves all sources and accounts to the target org, then deletes the source org.
-
-Products are also supported in import manifests:
-
-```json
-{
-  "organizations": [
-    {
-      "name": "Vercel",
-      "slug": "vercel",
-      "products": [
-        {
-          "name": "Next.js",
-          "slug": "nextjs",
-          "url": "https://nextjs.org",
-          "sources": [
-            { "name": "Next.js GitHub Releases", "url": "https://github.com/vercel/next.js/releases" }
-          ]
-        }
-      ],
-      "sources": [
-        { "name": "Vercel Changelog", "url": "https://vercel.com/changelog" }
-      ]
-    }
-  ]
-}
-```
-
-Org-level `sources` (no product) and product-level `sources` coexist in the same manifest.
-
-### Domain Aliases
-
-Map alternate domains to organizations or products for better searchability — e.g., `claude.ai` and `claude.com` both resolving to Anthropic:
+### Domain aliases
 
 ```bash
 releases org alias add anthropic claude.ai claude.com
-releases org alias list anthropic
-releases org alias remove anthropic claude.com
-
 releases product alias add nextjs nextjs.org
-releases product alias list nextjs
-releases product alias remove nextjs nextjs.org
 ```
 
-Aliases are checked as a fallback in `org show`, `product show`, and search. A domain alias is globally unique — only one org or product can claim it.
-
-### Categories & Tags
-
-Organize entities with a controlled category vocabulary and freeform tags:
+### Categories & tags
 
 ```bash
-releases categories                                  # list valid categories
-releases categories --json                           # as JSON
-
-# Categories on orgs and products
 releases org add "Acme" --category cloud --tags typescript,edge
-releases org edit acme --category developer-tools
-releases org edit acme --no-category                 # clear category
-releases product add "CLI" --org acme --category developer-tools --tags golang
-
-# Manage tags separately
-releases org tag add acme react serverless           # add tags
-releases org tag remove acme react                   # remove tags
-releases org tag list acme                           # list tags
-releases product tag add acme-cli testing            # same for products
-
-# Filter by category
-releases list --category ai                          # sources in AI orgs/products
+releases org tag add acme react serverless
+releases product tag add acme-cli testing
+releases list --category ai
 ```
 
-Categories and tags are also supported in import manifests:
+### Import sources from manifest
 
-```json
-{
-  "organizations": [{
-    "name": "Vercel",
-    "category": "cloud",
-    "tags": ["typescript", "edge-computing"],
-    "products": [{
-      "name": "Next.js",
-      "category": "framework",
-      "tags": ["react", "ssr"]
-    }]
-  }]
-}
+Bulk-import organizations and sources from a JSON file:
+
+```bash
+releases import manifest.json
+releases import manifest.json --dry-run
+releases import manifest.json --skip-existing
 ```
 
 ### AI-powered onboarding
@@ -322,230 +311,69 @@ Categories and tags are also supported in import manifests:
 Use the AI agent to discover, validate, and add changelog sources for a company:
 
 ```bash
-releases onboard "Vercel"                                    # local agent (default)
+releases onboard "Vercel"
 releases onboard "Stripe" --domain stripe.com --github-org stripe
-releases onboard "Acme" --remote                             # run on the discovery worker
-releases onboard "Acme" --local                              # force local even in remote mode
-releases onboard "Acme" --json                               # machine-readable output
 ```
-
-When `RELEASED_API_URL` is set, `onboard` defaults to remote mode — the discovery runs on the Cloudflare discovery worker (proxied through the API) and progress appears on the `/status` dashboard. Use `--local` to override and run the agent in-process.
-
-**Discovery worker secrets** (required for remote onboarding):
-
-| Secret | Purpose |
-|--------|---------|
-| `ANTHROPIC_API_KEY` | Powers the AI agent inside the sandbox |
-| `CLOUDFLARE_ACCOUNT_ID` | Browser rendering for scrape sources |
-| `CLOUDFLARE_API_TOKEN` | Browser rendering for scrape sources |
-| `GITHUB_TOKEN` | GitHub API access (optional, increases rate limits) |
-| `RELEASED_API_URL` | API worker URL for data operations inside the sandbox |
-| `RELEASED_API_KEY` | Authenticates requests to the API worker |
-
-Set secrets with `cd workers/discovery && wrangler secret put <NAME>`.
-
-**Discovery guardrails:** The discovery worker prevents duplicate sessions — starting onboard for a company that's already being discovered returns 409, and exceeding 5 concurrent discovery sessions returns 429.
 
 ### Discover sources
 
 Automatically find changelog and release-note pages for a domain:
 
 ```bash
-releases discover vercel.com              # scan domain, show results (dry-run)
-releases discover vercel.com --verify     # use AI to verify results and find more
+releases discover vercel.com
+releases discover vercel.com --verify     # AI verification pass
 releases discover vercel.com --add        # auto-add all discovered sources
-releases discover vercel.com --json       # machine-readable output
-releases discover --org vercel            # use org's domain and GitHub handle
 ```
 
-Discovery uses multiple evidence-based strategies in parallel:
-- **Well-known files** — checks `/.well-known/changelog.json`, `/.well-known/releases.json`, `/.well-known/changelog.txt`, `/AGENTS.md`, and root-level `/changelog.md` or `/releases.md` files. Cascading — stops at the first tier that produces results.
-- **Link relations** — detects `<link rel="changelog">`, `<link rel="releases">`, and `<link rel="release-notes">` tags in the page `<head>`
-- **Sitemap parsing** — robots.txt → sitemap(s) → filter changelog-like URLs
-- **Feed discovery** — RSS/Atom/JSON feed probing via HTML `<link>` tags and well-known feed paths
-- **HTML link analysis** — scans the homepage for changelog-related links
-- **GitHub repo enumeration** — lists repos with releases (when org has a linked GitHub handle)
-- **Provider detection** — identifies hosting platforms (Mintlify, ReadMe, Zendesk, Intercom, Docusaurus, WordPress, etc.) via DNS, HTTP headers, and HTML signatures, then uses provider-specific hints for feed paths and crawl patterns
-
-The `--verify` flag adds an AI verification pass (requires `ANTHROPIC_API_KEY`) that filters out false positives and suggests additional changelog URLs the automated methods may have missed — useful for sites where changelogs live on unexpected subdomains or paths.
-
-### Web Frontend
-
-Browse the catalog in your browser:
+### Ignored URLs & blocked URLs
 
 ```bash
-releases api              # start the API server on :3456
-cd web && bun run dev     # start the Next.js frontend on :3000
-```
-
-The API server exposes read-only JSON endpoints (`/api/stats`, `/api/orgs`, `/api/orgs/:slug/activity`, `/api/orgs/:slug/releases`, `/api/sources`, `/api/sources/:slug/activity`, `/api/search`). The frontend is a Next.js app in `web/` that fetches from the API. Configure the API URL for the frontend with `RELEASED_API_URL` (defaults to `http://localhost:3456`).
-
-Production deployment: the API and frontend are deployed separately. The frontend will be hosted at [releases.sh](https://releases.sh).
-
-### MCP Server
-
-Start the MCP server for AI agent integration:
-
-```bash
-releases serve
-```
-
-Claude Desktop config:
-
-```json
-{
-  "mcpServers": {
-    "releases": {
-      "command": "releases",
-      "args": ["serve"],
-      "env": {
-        "ANTHROPIC_API_KEY": "...",
-        "CLOUDFLARE_ACCOUNT_ID": "...",
-        "CLOUDFLARE_API_TOKEN": "..."
-      }
-    }
-  }
-}
-```
-
-**MCP Tools:**
-
-| Tool | Description |
-|------|-------------|
-| `search_releases` | Full-text search across all indexed releases |
-| `get_latest_releases` | Most recent releases, optionally filtered by product |
-| `summarize_changes` | AI summary of a product's recent changes |
-| `compare_products` | AI comparison between two products |
-| `list_products` | List all tracked sources |
-| `list_organizations` | List all organizations with their linked sources |
-| `add_source` | Add a new changelog source |
-| `remove_source` | Remove a source and its releases |
-| `fetch_source` | Trigger a fetch for a specific source by slug |
-| `add_organization` | Create a new organization |
-| `link_account` | Link a platform account to an organization |
-| `list_ignored_urls` | List ignored URLs for an organization |
-| `ignore_url` | Ignore a URL for an organization |
-| `unignore_url` | Remove a URL from an org's ignore list |
-| `list_blocked_urls` | List globally blocked URL patterns |
-| `block_url` | Block a URL or domain globally |
-| `unblock_url` | Remove a URL/domain from the global block list |
-| `suppress_release` | Suppress a release from queries and search |
-| `unsuppress_release` | Restore a suppressed release |
-
-### Ignored URLs & Blocked URLs
-
-Prevent unwanted sources from being re-discovered:
-
-```bash
-# Org-scoped: ignore a URL for a specific org (same URL can be valid for another org)
 releases ignore add https://example.com/blog --org vercel --reason "Not a changelog"
 releases ignore list --org vercel
-releases ignore remove https://example.com/blog --org vercel
-
-# Global: block a URL or domain everywhere (spam, aggregators)
-releases block add medium.com --domain --reason "Aggregator, not primary source"
-releases block add https://spam.example.com/changelog --reason "SEO spam"
+releases block add medium.com --domain --reason "Aggregator"
 releases block list
-releases block remove medium.com
 ```
 
-When adding sources, both lists are checked automatically. The `remove --ignore` flag on source removal adds the URL to the org's ignore list.
-
-### Release Suppression
-
-Hide individual releases from queries without deleting them — useful when a source contains non-changelog content like promotional posts:
+### Release management
 
 ```bash
-releases release suppress rel_abc123 --reason "promotional content"
-releases release unsuppress rel_abc123
-```
-
-Suppressed releases are filtered from all read paths (search, latest, stats, API) but remain in the database and can be restored at any time.
-
-### Release Management
-
-View, edit, and delete individual releases:
-
-```bash
-releases release show rel_abc123               # view full release details
-releases release show rel_abc123 --json        # machine-readable output
-
+releases release show rel_abc123
 releases release edit rel_abc123 --title "Fixed title" --version "v2.0.1"
-releases release edit rel_abc123 --content "Updated content"   # recomputes contentHash
-
-releases release delete rel_abc123             # delete by ID
-releases release delete --source next-js       # delete all releases for a source
-releases release delete --source next-js --before 2025-01-01
-releases release delete --before 2024-01-01    # prune old releases across all sources
+releases release delete rel_abc123
+releases release suppress rel_abc123 --reason "promotional content"
 ```
 
-### Release Summaries
+### Release summaries
 
-AI-generated thematic summaries of release activity, produced automatically at fetch time:
+AI-generated thematic summaries, produced automatically at fetch time:
 
 ```bash
 releases summarize next-js                # generate rolling summary (last 90 days)
 releases summarize next-js --window 30    # custom window
 releases summarize next-js --monthly      # generate last month's archive summary
-releases summarize next-js --json         # machine-readable output
-releases summarize next-js --force        # override opt-out
 ```
 
-Summaries identify themes and directional trends rather than listing features — e.g., "Significant investment in developer tooling" rather than "shipped X, Y, Z." Rolling summaries are regenerated each fetch; monthly summaries are write-once archives.
-
-**Opt-out:** Set `"summarize": false` in a source's metadata (`releases edit <slug> --metadata '{"summarize": false}'`) or in an org's metadata to disable summary generation.
-
-**Web app:** Source detail pages show a Highlights tab (default) with the rolling summary and monthly archives, alongside an All Releases tab with the full changelog.
-
-### Source Health Checks
-
-Probe source URLs to check availability and detect issues:
+### Source health checks
 
 ```bash
 releases check             # check all sources
 releases check next-js     # check one source
-releases check --json      # machine-readable output
 ```
 
-Reports HTTP status, response time, and health classification (`healthy`, `degraded`, `error`). For feed sources, also probes the feed URL.
-
-### Feed Change Detection
-
-Lightweight check for upstream feed changes using HTTP HEAD requests — no content download or AI involved:
-
-```bash
-releases poll                  # check all feed sources for changes
-releases poll next-js          # check a single source
-releases poll --changed        # only show sources with detected changes
-releases poll --json           # machine-readable output
-```
-
-Compares ETag, Last-Modified, and Content-Length headers against stored values to flag sources that have upstream changes available. The `fetch` command also uses HEAD as a pre-filter to skip unchanged feeds automatically.
-
-### Fetch History
-
-View recent fetch activity:
+### Fetch history
 
 ```bash
 releases fetch-log                   # recent fetch logs across all sources
 releases fetch-log next-js           # logs for one source
-releases fetch-log --limit 50        # more entries
-releases fetch-log --json            # machine-readable output
 ```
 
-### Statistics
+### Task management
+
+Manage remote fetch and discovery sessions (requires remote mode):
 
 ```bash
-releases stats             # index overview, source health, recent fetch activity
-releases stats --days 7    # adjust period
-releases stats --json      # machine-readable output
-```
-
-### Usage Tracking
-
-```bash
-releases usage             # show API token usage summary
-releases usage --days 7    # last 7 days
+releases task list
+releases task cancel <sessionId>
 ```
 
 ## Architecture

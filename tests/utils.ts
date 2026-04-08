@@ -8,13 +8,13 @@ export function runCli(
   args: string[],
   options?: { env?: Record<string, string>; timeout?: number },
 ): { stdout: string; stderr: string; exitCode: number } {
-  // Always clear remote-mode env vars so tests use local SQLite by default.
-  // Bun auto-loads .env which may set RELEASED_API_URL, causing tests to
-  // route through the remote API. Callers can still override explicitly.
+  // Clear remote-mode URL so tests use local SQLite by default.
+  // Set RELEASED_API_KEY to "test" so admin commands are available.
+  // Callers can still override explicitly.
   const safeEnv: Record<string, string> = {
     ...process.env as Record<string, string>,
     RELEASED_API_URL: "",
-    RELEASED_API_KEY: "",
+    RELEASED_API_KEY: "test",
     ...options?.env,
   };
   const result = spawnSync("bun", [CLI_PATH, ...args], {

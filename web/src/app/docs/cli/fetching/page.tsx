@@ -1,4 +1,9 @@
-export default function FetchingPage() {
+import { notFound } from "next/navigation";
+import { adminDocs } from "@/flags";
+
+export default async function FetchingPage() {
+  const showAdmin = await adminDocs();
+  if (!showAdmin) notFound();
   return (
     <>
       <h1>Fetching Releases</h1>

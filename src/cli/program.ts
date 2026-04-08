@@ -31,8 +31,45 @@ import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
 import { registerKnowledgeCommand } from "./commands/knowledge.js";
 import { CATEGORIES } from "../lib/categories.js";
+import { isAdminMode } from "../lib/mode.js";
 
 export const VERSION = "0.9.0";
+
+type AdminEntry = {
+  name: string;
+  helpLabel: string;
+  description: string;
+  register: (program: Command) => void;
+};
+
+const ADMIN_COMMANDS: AdminEntry[] = [
+  { name: "add", helpLabel: "add <url>", description: "Add a new changelog source", register: registerAddCommand },
+  { name: "edit", helpLabel: "edit <slug>", description: "Edit source settings", register: registerEditCommand },
+  { name: "remove", helpLabel: "remove <slug>", description: "Remove a source", register: registerRemoveCommand },
+  { name: "import", helpLabel: "import <file>", description: "Bulk-import orgs and sources", register: registerImportCommand },
+  { name: "discover", helpLabel: "discover <query>", description: "Discover changelogs for a company", register: registerDiscoverCommand },
+  { name: "evaluate", helpLabel: "evaluate <slug>", description: "Evaluate a source", register: registerEvaluateCommand },
+  { name: "fetch", helpLabel: "fetch [slug]", description: "Fetch releases from sources", register: registerFetchCommand },
+  { name: "fetch-log", helpLabel: "fetch-log [slug]", description: "View recent fetch history", register: registerFetchLogCommand },
+  { name: "check", helpLabel: "check <slug>", description: "Check a source URL for changes", register: registerCheckCommand },
+  { name: "poll", helpLabel: "poll [slug]", description: "Poll feed sources for upstream changes", register: registerPollCommand },
+  { name: "enrich", helpLabel: "enrich <slug>", description: "Enrich sparse releases with full content", register: registerEnrichCommand },
+  { name: "summarize", helpLabel: "summarize <slug>", description: "AI-powered release summary", register: registerSummarizeCommand },
+  { name: "org", helpLabel: "org <action>", description: "Manage organizations", register: registerOrgCommand },
+  { name: "product", helpLabel: "product <action>", description: "Manage products within orgs", register: registerProductCommand },
+  { name: "release", helpLabel: "release <action>", description: "Show, edit, delete, or suppress releases", register: registerReleaseCommand },
+  { name: "block", helpLabel: "block <action>", description: "Manage globally blocked URLs", register: registerBlockCommand },
+  { name: "ignore", helpLabel: "ignore <action>", description: "Manage org-scoped ignored URLs", register: registerIgnoreCommand },
+  { name: "onboard", helpLabel: "onboard <company>", description: "AI-powered company onboarding", register: registerOnboardCommand },
+  { name: "task", helpLabel: "task <action>", description: "Manage remote sessions", register: registerTaskCommand },
+  { name: "media", helpLabel: "media <action>", description: "Media management (backfill)", register: registerMediaCommand },
+  { name: "knowledge", helpLabel: "knowledge <action>", description: "Generate knowledge pages", register: registerKnowledgeCommand },
+];
+
+function adminKeyError(name: string): never {
+  console.error(chalk.red(`"${name}" requires an API key.`) + " " + chalk.dim("Set RELEASED_API_KEY to enable it."));
+  process.exit(1);
+}
 
 function row(name: string, desc: string, pad = 22): string {
   const gap = " ".repeat(Math.max(2, pad - name.length));
@@ -47,49 +84,45 @@ function printStyledHelp(): string {
   lines.push(chalk.dim("Changelog indexer and registry for AI agents and developers"));
   lines.push("");
 
-  lines.push("To get started, onboard a company's changelogs:");
+  if (isAdminMode()) {
+    lines.push("To get started, onboard a company's changelogs:");
+    lines.push("");
+    lines.push(`  $ releases onboard <company>`);
+  } else {
+    lines.push("Search and browse changelogs from the registry:");
+    lines.push("");
+    lines.push(`  $ releases search <query>`);
+  }
   lines.push("");
-  lines.push(`  $ releases onboard <company>`);
+  lines.push("The most common commands are:");
   lines.push("");
-  lines.push("The most common commands from there are:");
-  lines.push("");
-  lines.push(`  - releases fetch      : ${chalk.dim("Fetch new releases from sources")}`);
   lines.push(`  - releases search     : ${chalk.dim("Full-text search across releases")}`);
   lines.push(`  - releases latest     : ${chalk.dim("Show the most recent releases")}`);
   lines.push(`  - releases list       : ${chalk.dim("List and inspect sources")}`);
+  if (isAdminMode()) {
+    lines.push(`  - releases fetch      : ${chalk.dim("Fetch new releases from sources")}`);
+  }
   lines.push("");
 
-  lines.push(chalk.cyan("Available Commands:"));
-  lines.push(row("add <url>", "Add a new changelog source"));
-  lines.push(row("edit <slug>", "Edit source settings"));
-  lines.push(row("remove <slug>", "Remove a source"));
-  lines.push(row("list [slug]", "List sources or inspect one"));
-  lines.push(row("import <file>", "Bulk-import orgs and sources"));
-  lines.push(row("discover <query>", "Discover changelogs for a company"));
-  lines.push(row("evaluate <slug>", "Evaluate a source"));
-  lines.push(row("fetch [slug]", "Fetch releases from sources"));
-  lines.push(row("fetch-log [slug]", "View recent fetch history"));
-  lines.push(row("check <slug>", "Check a source URL for changes"));
-  lines.push(row("poll [slug]", "Poll feed sources for upstream changes"));
-  lines.push(row("enrich <slug>", "Enrich sparse releases with full content"));
+  lines.push(chalk.cyan("Commands:"));
   lines.push(row("search <query>", "Full-text search across releases"));
   lines.push(row("latest [slug]", "Show latest releases"));
   lines.push(row("summary <slug>", "Summarize recent changes"));
-  lines.push(row("summarize <slug>", "AI-powered release summary"));
   lines.push(row("compare <a> <b>", "Compare releases between sources"));
+  lines.push(row("list [slug]", "List sources or inspect one"));
   lines.push(row("stats", "Show database statistics"));
-  lines.push(row("org <action>", "Manage organizations"));
-  lines.push(row("product <action>", "Manage products within orgs"));
+  lines.push(row("usage", "Show API usage stats"));
   lines.push(row("categories", "List valid category values"));
-  lines.push(row("release <action>", "Show, edit, delete, or suppress releases"));
-  lines.push(row("block <action>", "Manage globally blocked URLs"));
-  lines.push(row("ignore <action>", "Manage org-scoped ignored URLs"));
-  lines.push(row("onboard <company>", "AI-powered company onboarding"));
   lines.push(row("serve", "Start MCP server on stdio"));
   lines.push(row("api", "Start local API server"));
-  lines.push(row("task <action>", "Manage remote sessions"));
-  lines.push(row("media <action>", "Media management (backfill)"));
-  lines.push(row("usage", "Show API usage stats"));
+
+  if (isAdminMode()) {
+    lines.push("");
+    lines.push(chalk.cyan("Admin:"));
+    for (const cmd of ADMIN_COMMANDS) {
+      lines.push(row(cmd.helpLabel, cmd.description));
+    }
+  }
   lines.push("");
 
   lines.push(chalk.cyan("Flags:"));
@@ -120,36 +153,31 @@ export const program = new Command()
     process.exit(0);
   });
 
-registerAddCommand(program);
-registerEditCommand(program);
-registerRemoveCommand(program);
-registerListCommand(program);
-registerFetchCommand(program);
+// Public commands — available to all users
 registerSearchCommand(program);
 registerLatestCommand(program);
 registerSummaryCommand(program);
 registerCompareCommand(program);
-registerServeCommand(program);
-registerUsageCommand(program);
-registerOrgCommand(program);
-registerProductCommand(program);
-registerDiscoverCommand(program);
 registerStatsCommand(program);
+registerUsageCommand(program);
+registerListCommand(program);
+registerServeCommand(program);
 registerApiCommand(program);
-registerReleaseCommand(program);
-registerCheckCommand(program);
-registerFetchLogCommand(program);
-registerOnboardCommand(program);
-registerIgnoreCommand(program);
-registerBlockCommand(program);
-registerImportCommand(program);
-registerEvaluateCommand(program);
-registerSummarizeCommand(program);
-registerKnowledgeCommand(program);
-registerEnrichCommand(program);
-registerMediaCommand(program);
-registerTaskCommand(program);
-registerPollCommand(program);
+
+// Admin commands — require RELEASED_API_KEY
+if (isAdminMode()) {
+  for (const cmd of ADMIN_COMMANDS) cmd.register(program);
+} else {
+  for (const { name } of ADMIN_COMMANDS) {
+    program
+      .command(name, { hidden: true })
+      .allowUnknownOption()
+      .helpOption(false)
+      .argument("[args...]")
+      .description("")
+      .action(() => adminKeyError(name));
+  }
+}
 
 program
   .command("help")
@@ -159,7 +187,10 @@ program
   .action((command?: string) => {
     if (command) {
       const sub = program.commands.find((c) => c.name() === command);
-      if (sub) {
+      const isHidden = sub && ADMIN_COMMANDS.some((a) => a.name === command) && !isAdminMode();
+      if (isHidden) {
+        adminKeyError(command);
+      } else if (sub) {
         sub.help();
       } else {
         console.error(chalk.red(`Unknown command: ${command}`));
