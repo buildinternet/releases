@@ -7,6 +7,7 @@ import type {
   UnifiedSearchResponse,
   SourceActivity,
   OrgActivity,
+  OrgHeatmap,
   OrgReleasesResponse,
   ReleaseDetail,
   ProductDetail,
@@ -32,6 +33,7 @@ export type {
   UnifiedSearchResponse,
   SourceActivity,
   OrgActivity,
+  OrgHeatmap,
   OrgReleasesResponse,
   ReleaseDetail,
   ProductDetail,
@@ -105,6 +107,7 @@ export const api = {
     const qs = params.toString();
     return fetchApi<OrgReleasesResponse>(`/v1/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },
+  orgHeatmap: (slug: string) => fetchApi<OrgHeatmap>(`/v1/orgs/${slug}/heatmap`),
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
 };

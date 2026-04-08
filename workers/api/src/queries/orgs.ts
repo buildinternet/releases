@@ -156,6 +156,37 @@ export async function getOrgActivityData(
   return { bucketRows, statsRows, latestVersionRows, earliestVersionRows };
 }
 
+export type OrgHeatmapRow = {
+  date: string;
+  cnt: number;
+};
+
+export async function getOrgHeatmapData(
+  db: D1Db,
+  orgId: string,
+  from: string,
+  toExclusive: string,
+): Promise<{ rows: OrgHeatmapRow[]; total: number }> {
+  const rows = await db.all<OrgHeatmapRow>(sql`
+    SELECT
+      DATE(r.published_at) AS date,
+      COUNT(*) AS cnt
+    FROM releases r
+    INNER JOIN sources s ON s.id = r.source_id
+    WHERE
+      s.org_id = ${orgId}
+      AND r.published_at IS NOT NULL
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      AND r.published_at >= ${from}
+      AND r.published_at < ${toExclusive}
+    GROUP BY DATE(r.published_at)
+    ORDER BY date
+  `);
+
+  const total = rows.reduce((sum, r) => sum + r.cnt, 0);
+  return { rows, total };
+}
+
 export type OrgReleaseRow = {
   id: string;
   version: string | null;
