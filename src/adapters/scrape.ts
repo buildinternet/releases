@@ -221,15 +221,18 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
   const result = await fetchCloudflareMarkdownWithMedia(source.url, accountId, apiToken);
 
   if (!result) {
-    logger.warn(`Cloudflare returned empty content for ${source.url}`);
-    return { releases: [] };
+    throw new AdapterError(
+      "scrape",
+      `Cloudflare Browser Rendering returned no content for ${source.url}`,
+    );
   }
 
   const markdown = result.markdown;
 
-  logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
+  logger.info(`Received ${result.rawMarkdown.length.toLocaleString()} chars of markdown`);
 
-  const contentHash = sha256Hex(markdown);
+  // Hash the raw markdown (before video URL enrichment) for stable change detection
+  const contentHash = sha256Hex(result.rawMarkdown);
   if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
     // Only meaningful when poll has stored HEAD headers — tracks how many renders could be avoided
