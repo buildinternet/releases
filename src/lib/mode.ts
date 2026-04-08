@@ -2,12 +2,24 @@ import { logger } from "./logger.js";
 
 // Cache env var reads — these don't change during process lifetime
 let _remote: boolean | null = null;
+let _admin: boolean | null = null;
 let _apiUrl: string | null = null;
 let _apiKey: string | null = null;
 
 export function isRemoteMode(): boolean {
   if (_remote === null) _remote = !!process.env.RELEASED_API_URL;
   return _remote;
+}
+
+/**
+ * Admin mode is enabled when an API key is configured.
+ * Public users see only consumer commands.
+ */
+export function isAdminMode(): boolean {
+  if (_admin === null) {
+    _admin = !!process.env.RELEASED_API_KEY;
+  }
+  return _admin;
 }
 
 export function getApiUrl(): string {

@@ -31,6 +31,7 @@ import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
 import { registerKnowledgeCommand } from "./commands/knowledge.js";
 import { CATEGORIES } from "../lib/categories.js";
+import { isAdminMode } from "../lib/mode.js";
 
 export const VERSION = "0.9.0";
 
@@ -47,49 +48,63 @@ function printStyledHelp(): string {
   lines.push(chalk.dim("Changelog indexer and registry for AI agents and developers"));
   lines.push("");
 
-  lines.push("To get started, onboard a company's changelogs:");
+  if (isAdminMode()) {
+    lines.push("To get started, onboard a company's changelogs:");
+    lines.push("");
+    lines.push(`  $ releases onboard <company>`);
+  } else {
+    lines.push("Search and browse changelogs from the registry:");
+    lines.push("");
+    lines.push(`  $ releases search <query>`);
+  }
   lines.push("");
-  lines.push(`  $ releases onboard <company>`);
+  lines.push("The most common commands are:");
   lines.push("");
-  lines.push("The most common commands from there are:");
-  lines.push("");
-  lines.push(`  - releases fetch      : ${chalk.dim("Fetch new releases from sources")}`);
   lines.push(`  - releases search     : ${chalk.dim("Full-text search across releases")}`);
   lines.push(`  - releases latest     : ${chalk.dim("Show the most recent releases")}`);
   lines.push(`  - releases list       : ${chalk.dim("List and inspect sources")}`);
+  if (isAdminMode()) {
+    lines.push(`  - releases fetch      : ${chalk.dim("Fetch new releases from sources")}`);
+  }
   lines.push("");
 
-  lines.push(chalk.cyan("Available Commands:"));
-  lines.push(row("add <url>", "Add a new changelog source"));
-  lines.push(row("edit <slug>", "Edit source settings"));
-  lines.push(row("remove <slug>", "Remove a source"));
-  lines.push(row("list [slug]", "List sources or inspect one"));
-  lines.push(row("import <file>", "Bulk-import orgs and sources"));
-  lines.push(row("discover <query>", "Discover changelogs for a company"));
-  lines.push(row("evaluate <slug>", "Evaluate a source"));
-  lines.push(row("fetch [slug]", "Fetch releases from sources"));
-  lines.push(row("fetch-log [slug]", "View recent fetch history"));
-  lines.push(row("check <slug>", "Check a source URL for changes"));
-  lines.push(row("poll [slug]", "Poll feed sources for upstream changes"));
-  lines.push(row("enrich <slug>", "Enrich sparse releases with full content"));
+  lines.push(chalk.cyan("Commands:"));
   lines.push(row("search <query>", "Full-text search across releases"));
   lines.push(row("latest [slug]", "Show latest releases"));
   lines.push(row("summary <slug>", "Summarize recent changes"));
-  lines.push(row("summarize <slug>", "AI-powered release summary"));
   lines.push(row("compare <a> <b>", "Compare releases between sources"));
+  lines.push(row("list [slug]", "List sources or inspect one"));
   lines.push(row("stats", "Show database statistics"));
-  lines.push(row("org <action>", "Manage organizations"));
-  lines.push(row("product <action>", "Manage products within orgs"));
+  lines.push(row("usage", "Show API usage stats"));
   lines.push(row("categories", "List valid category values"));
-  lines.push(row("release <action>", "Show, edit, delete, or suppress releases"));
-  lines.push(row("block <action>", "Manage globally blocked URLs"));
-  lines.push(row("ignore <action>", "Manage org-scoped ignored URLs"));
-  lines.push(row("onboard <company>", "AI-powered company onboarding"));
   lines.push(row("serve", "Start MCP server on stdio"));
   lines.push(row("api", "Start local API server"));
-  lines.push(row("task <action>", "Manage remote sessions"));
-  lines.push(row("media <action>", "Media management (backfill)"));
-  lines.push(row("usage", "Show API usage stats"));
+
+  if (isAdminMode()) {
+    lines.push("");
+    lines.push(chalk.cyan("Admin:"));
+    lines.push(row("add <url>", "Add a new changelog source"));
+    lines.push(row("edit <slug>", "Edit source settings"));
+    lines.push(row("remove <slug>", "Remove a source"));
+    lines.push(row("import <file>", "Bulk-import orgs and sources"));
+    lines.push(row("discover <query>", "Discover changelogs for a company"));
+    lines.push(row("evaluate <slug>", "Evaluate a source"));
+    lines.push(row("fetch [slug]", "Fetch releases from sources"));
+    lines.push(row("fetch-log [slug]", "View recent fetch history"));
+    lines.push(row("check <slug>", "Check a source URL for changes"));
+    lines.push(row("poll [slug]", "Poll feed sources for upstream changes"));
+    lines.push(row("enrich <slug>", "Enrich sparse releases with full content"));
+    lines.push(row("summarize <slug>", "AI-powered release summary"));
+    lines.push(row("org <action>", "Manage organizations"));
+    lines.push(row("product <action>", "Manage products within orgs"));
+    lines.push(row("release <action>", "Show, edit, delete, or suppress releases"));
+    lines.push(row("block <action>", "Manage globally blocked URLs"));
+    lines.push(row("ignore <action>", "Manage org-scoped ignored URLs"));
+    lines.push(row("onboard <company>", "AI-powered company onboarding"));
+    lines.push(row("task <action>", "Manage remote sessions"));
+    lines.push(row("media <action>", "Media management (backfill)"));
+    lines.push(row("knowledge <action>", "Generate knowledge pages"));
+  }
   lines.push("");
 
   lines.push(chalk.cyan("Flags:"));
@@ -120,36 +135,64 @@ export const program = new Command()
     process.exit(0);
   });
 
-registerAddCommand(program);
-registerEditCommand(program);
-registerRemoveCommand(program);
-registerListCommand(program);
-registerFetchCommand(program);
+// Public commands — available to all users
 registerSearchCommand(program);
 registerLatestCommand(program);
 registerSummaryCommand(program);
 registerCompareCommand(program);
-registerServeCommand(program);
-registerUsageCommand(program);
-registerOrgCommand(program);
-registerProductCommand(program);
-registerDiscoverCommand(program);
 registerStatsCommand(program);
+registerUsageCommand(program);
+registerListCommand(program);
+registerServeCommand(program);
 registerApiCommand(program);
-registerReleaseCommand(program);
-registerCheckCommand(program);
-registerFetchLogCommand(program);
-registerOnboardCommand(program);
-registerIgnoreCommand(program);
-registerBlockCommand(program);
-registerImportCommand(program);
-registerEvaluateCommand(program);
-registerSummarizeCommand(program);
-registerKnowledgeCommand(program);
-registerEnrichCommand(program);
-registerMediaCommand(program);
-registerTaskCommand(program);
-registerPollCommand(program);
+
+// Admin commands — require RELEASED_API_KEY or RELEASED_ADMIN=1
+if (isAdminMode()) {
+  registerAddCommand(program);
+  registerEditCommand(program);
+  registerRemoveCommand(program);
+  registerFetchCommand(program);
+  registerOrgCommand(program);
+  registerProductCommand(program);
+  registerDiscoverCommand(program);
+  registerReleaseCommand(program);
+  registerCheckCommand(program);
+  registerFetchLogCommand(program);
+  registerOnboardCommand(program);
+  registerIgnoreCommand(program);
+  registerBlockCommand(program);
+  registerImportCommand(program);
+  registerEvaluateCommand(program);
+  registerSummarizeCommand(program);
+  registerKnowledgeCommand(program);
+  registerEnrichCommand(program);
+  registerMediaCommand(program);
+  registerTaskCommand(program);
+  registerPollCommand(program);
+} else {
+  // In public mode, catch admin command names and give a clear error
+  const adminCommands = [
+    "add", "edit", "remove", "fetch", "org", "product", "discover",
+    "release", "check", "fetch-log", "onboard", "ignore", "block",
+    "import", "evaluate", "summarize", "enrich", "media", "task",
+    "poll", "knowledge",
+  ];
+  for (const name of adminCommands) {
+    program
+      .command(name)
+      .allowUnknownOption()
+      .helpOption(false)
+      .argument("[args...]")
+      .description("")
+      .action(() => {
+        console.error(chalk.red(`"${name}" requires an API key.`) + " " + chalk.dim("Set RELEASED_API_KEY to enable it."));
+        process.exit(1);
+      });
+    // Hide from help output
+    const cmd = program.commands.find((c) => c.name() === name);
+    if (cmd) (cmd as any).hidden = true;
+  }
+}
 
 program
   .command("help")
@@ -159,7 +202,10 @@ program
   .action((command?: string) => {
     if (command) {
       const sub = program.commands.find((c) => c.name() === command);
-      if (sub) {
+      if (sub && (sub as any).hidden) {
+        console.error(chalk.red(`"${command}" requires an API key.`) + " " + chalk.dim("Set RELEASED_API_KEY to enable it."));
+        process.exit(1);
+      } else if (sub) {
         sub.help();
       } else {
         console.error(chalk.red(`Unknown command: ${command}`));
