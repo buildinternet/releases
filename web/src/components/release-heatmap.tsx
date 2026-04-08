@@ -6,7 +6,7 @@ import type { OrgHeatmap } from "@/lib/api";
 const MIN_CELL_SIZE = 8;
 const MAX_CELL_SIZE = 13;
 const CELL_GAP = 3;
-const WEEKS = 52;
+const MAX_WEEKS = 52;
 const DAYS = 7;
 const DAY_LABEL_WIDTH = 32;
 
@@ -56,7 +56,7 @@ interface MonthLabel {
   col: number;
 }
 
-function buildGrid(heatmap: OrgHeatmap): { cells: CellData[]; monthLabels: MonthLabel[] } {
+function buildGrid(heatmap: OrgHeatmap, visibleWeeks: number): { cells: CellData[]; monthLabels: MonthLabel[] } {
   const countMap = new Map<string, number>();
   for (const entry of heatmap.dailyCounts) {
     countMap.set(entry.date, entry.count);
@@ -69,13 +69,13 @@ function buildGrid(heatmap: OrgHeatmap): { cells: CellData[]; monthLabels: Month
     parseInt(heatmap.range.to.slice(8, 10)),
   );
   const todayDay = new Date(todayMs).getUTCDay();
-  const startMs = todayMs - (WEEKS * 7 + todayDay) * 86400000;
+  const startMs = todayMs - (visibleWeeks * 7 + todayDay) * 86400000;
 
   const cells: CellData[] = [];
   const monthLabels: MonthLabel[] = [];
   let lastMonth = -1;
 
-  for (let week = 0; week < WEEKS; week++) {
+  for (let week = 0; week < visibleWeeks; week++) {
     for (let day = 0; day < DAYS; day++) {
       const ms = startMs + (week * 7 + day) * 86400000;
       const d = new Date(ms);
@@ -100,25 +100,42 @@ function buildGrid(heatmap: OrgHeatmap): { cells: CellData[]; monthLabels: Month
   return { cells, monthLabels };
 }
 
-interface ReleaseHeatmapProps {
-  heatmap: OrgHeatmap;
+/** Find the date of the earliest release with count > 0 from the heatmap data. */
+function findEarliestRelease(heatmap: OrgHeatmap): string | null {
+  const withCounts = heatmap.dailyCounts.filter((d) => d.count > 0);
+  if (withCounts.length === 0) return null;
+  withCounts.sort((a, b) => a.date.localeCompare(b.date));
+  return withCounts[0].date;
 }
 
-export function ReleaseHeatmap({ heatmap }: ReleaseHeatmapProps) {
-  const { cells, monthLabels } = useMemo(() => buildGrid(heatmap), [heatmap]);
+interface ReleaseHeatmapProps {
+  heatmap: OrgHeatmap;
+  trackingSince?: string | null;
+}
 
+export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const [cellSize, setCellSize] = useState(MAX_CELL_SIZE);
+  const [cellSize, setCellSize] = useState(MIN_CELL_SIZE);
+  const [visibleWeeks, setVisibleWeeks] = useState(MAX_WEEKS);
 
-  // Compute cell size to fit the container width
+  // Compute cell size and visible weeks to fit the container width
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
     function measure() {
       const available = el!.clientWidth - DAY_LABEL_WIDTH - 8; // 8px for flex gap
-      const size = Math.floor((available + CELL_GAP) / WEEKS - CELL_GAP);
-      setCellSize(Math.max(MIN_CELL_SIZE, Math.min(MAX_CELL_SIZE, size)));
+      const sizeAt52 = Math.floor((available + CELL_GAP) / MAX_WEEKS - CELL_GAP);
+      if (sizeAt52 >= MIN_CELL_SIZE) {
+        // All 52 weeks fit — use the largest cell size that works
+        setCellSize(Math.min(MAX_CELL_SIZE, sizeAt52));
+        setVisibleWeeks(MAX_WEEKS);
+      } else {
+        // Not enough room for 52 weeks at MIN_CELL_SIZE — reduce weeks to fit
+        const weeks = Math.max(12, Math.floor((available + CELL_GAP) / (MIN_CELL_SIZE + CELL_GAP)));
+        setCellSize(MIN_CELL_SIZE);
+        setVisibleWeeks(weeks);
+      }
     }
     measure();
     const observer = new ResizeObserver(measure);
@@ -126,10 +143,25 @@ export function ReleaseHeatmap({ heatmap }: ReleaseHeatmapProps) {
     return () => observer.disconnect();
   }, []);
 
-  const handleMouseEnter = useCallback((e: React.MouseEvent<HTMLDivElement>, cell: CellData) => {
+  const { cells, monthLabels } = useMemo(() => buildGrid(heatmap, visibleWeeks), [heatmap, visibleWeeks]);
+
+  // Use trackingSince if provided, otherwise fall back to earliest release in data.
+  // Normalize to YYYY-MM-DD to match cell date format.
+  const trackingStart = useMemo(() => {
+    const raw = trackingSince ?? findEarliestRelease(heatmap);
+    return raw ? raw.slice(0, 10) : null;
+  }, [trackingSince, heatmap]);
+
+  const handleMouseEnter = useCallback((e: React.MouseEvent<SVGSVGElement>, cell: CellData, isPreTracking: boolean, isEarliestTracked: boolean) => {
     const label = cell.count === 0 ? "No releases" : cell.count === 1 ? "1 release" : `${cell.count} releases`;
+    let text = `${label} on ${formatTooltipDate(cell.date)}`;
+    if (isEarliestTracked) {
+      text += " · Earliest tracked release";
+    } else if (isPreTracking) {
+      text += " · Before tracking";
+    }
     setTooltip({
-      text: `${label} on ${formatTooltipDate(cell.date)}`,
+      text,
       x: e.clientX,
       y: e.clientY,
     });
@@ -139,18 +171,29 @@ export function ReleaseHeatmap({ heatmap }: ReleaseHeatmapProps) {
     setTooltip(null);
   }, []);
 
-  const gridWidth = WEEKS * (cellSize + CELL_GAP) - CELL_GAP;
-
   const weeks = useMemo(() => {
-    const result: CellData[][] = Array.from({ length: WEEKS }, () => []);
+    const result: CellData[][] = Array.from({ length: visibleWeeks }, () => []);
     for (const cell of cells) {
       result[cell.col].push(cell);
     }
     return result;
-  }, [cells]);
+  }, [cells, visibleWeeks]);
+
+  // SVG pattern ID for pre-tracking stripe
+  const patternId = "heatmap-stripe";
 
   return (
     <div ref={containerRef} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4">
+      {/* SVG defs for stripe pattern */}
+      <svg width="0" height="0" className="absolute">
+        <defs>
+          <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+            <rect width="4" height="4" fill="var(--color-heat-0, #1c2129)" />
+            <line x1="0" y1="0" x2="0" y2="4" stroke="rgba(255,255,255,0.08)" strokeWidth="2" />
+          </pattern>
+        </defs>
+      </svg>
+
       {/* Header */}
       <div className="flex justify-between items-center mb-3">
         <span className="text-xs text-stone-500 dark:text-stone-400">
@@ -180,7 +223,7 @@ export function ReleaseHeatmap({ heatmap }: ReleaseHeatmapProps) {
         {/* Heatmap grid + month labels */}
         <div className="min-w-0 flex-1">
           {/* Month labels */}
-          <div className="relative" style={{ height: 14, width: gridWidth }}>
+          <div className="relative overflow-hidden" style={{ height: 14 }}>
             {monthLabels.map((ml, i) => (
               <span
                 key={i}
@@ -193,22 +236,31 @@ export function ReleaseHeatmap({ heatmap }: ReleaseHeatmapProps) {
           </div>
 
           {/* Cell grid */}
-          <div className="flex" style={{ gap: CELL_GAP }}>
+          <div className="flex overflow-hidden" style={{ gap: CELL_GAP }}>
             {weeks.map((weekCells, wi) => (
               <div key={wi} className="flex flex-col" style={{ gap: CELL_GAP }}>
-                {weekCells.map((cell) => (
-                  <div
-                    key={cell.date}
-                    className="rounded-[2px] hover:outline hover:outline-1 hover:outline-stone-400 dark:hover:outline-stone-500 hover:-outline-offset-1"
-                    style={{
-                      width: cellSize,
-                      height: cellSize,
-                      background: LEVEL_COLORS[cell.level],
-                    }}
-                    onMouseEnter={(e) => handleMouseEnter(e, cell)}
-                    onMouseLeave={handleMouseLeave}
-                  />
-                ))}
+                {weekCells.map((cell) => {
+                  const isPreTracking = trackingStart ? cell.date < trackingStart : false;
+                  const isEarliestTracked = trackingStart ? cell.date === trackingStart : false;
+
+                  return (
+                    <svg
+                      key={cell.date}
+                      width={cellSize}
+                      height={cellSize}
+                      className="rounded-[2px]"
+                      onMouseEnter={(e) => handleMouseEnter(e, cell, isPreTracking, isEarliestTracked)}
+                      onMouseLeave={handleMouseLeave}
+                    >
+                      <rect
+                        width={cellSize}
+                        height={cellSize}
+                        rx={2}
+                        fill={isPreTracking ? `url(#${patternId})` : LEVEL_COLORS[cell.level]}
+                      />
+                    </svg>
+                  );
+                })}
               </div>
             ))}
           </div>
