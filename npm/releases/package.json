@@ -1,0 +1,28 @@
+{
+  "name": "@buildinternet/releases",
+  "version": "0.9.0",
+  "description": "Changelog indexer and registry for AI agents and developers",
+  "bin": {
+    "releases": "bin/releases"
+  },
+  "files": [
+    "bin/releases"
+  ],
+  "optionalDependencies": {
+    "@buildinternet/releases-darwin-arm64": "0.9.0",
+    "@buildinternet/releases-darwin-x64": "0.9.0",
+    "@buildinternet/releases-linux-x64": "0.9.0",
+    "@buildinternet/releases-linux-arm64": "0.9.0"
+  },
+  "keywords": [
+    "changelog",
+    "releases",
+    "mcp",
+    "ai"
+  ],
+  "homepage": "https://releases.sh",
+  "license": "ISC",
+  "engines": {
+    "node": ">=18"
+  }
+}

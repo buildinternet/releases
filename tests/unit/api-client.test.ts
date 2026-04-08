@@ -5,6 +5,7 @@ mock.module("../../src/lib/mode.js", () => ({
   getApiUrl: () => "https://test.example.com",
   getApiKey: () => "test-key",
   isRemoteMode: () => true,
+  isAdminMode: () => true,
 }));
 
 const client = await import("../../src/api/client.js");

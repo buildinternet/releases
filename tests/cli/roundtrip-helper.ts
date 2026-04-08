@@ -61,7 +61,7 @@ export async function cliAsync(
       ...process.env,
       RELEASED_DATA_DIR: dataDir,
       RELEASED_API_URL: "",
-      RELEASED_API_KEY: "",
+      RELEASED_API_KEY: "test",
     },
     stdin: "ignore",
     stdout: "pipe",

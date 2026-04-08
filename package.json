@@ -23,6 +23,7 @@
     "predeploy:discovery": "bun run build:all:linux",
     "deploy:discovery": "wrangler deploy --config workers/discovery/wrangler.jsonc",
     "deploy": "bun run deploy:api && bun run deploy:discovery",
+    "publish:npm": "./scripts/publish-npm.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
     "db:migrate:local": "wrangler d1 migrations apply released-db --local --config workers/api/wrangler.jsonc",

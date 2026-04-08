@@ -1,0 +1,15 @@
+{
+  "name": "@buildinternet/releases-darwin-arm64",
+  "version": "0.9.0",
+  "description": "releases binary for macOS ARM64",
+  "os": [
+    "darwin"
+  ],
+  "cpu": [
+    "arm64"
+  ],
+  "files": [
+    "releases"
+  ],
+  "license": "ISC"
+}
