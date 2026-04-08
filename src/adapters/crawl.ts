@@ -177,6 +177,7 @@ export async function parseCrawlPages(
   pages: CrawlPage[],
   sourceSlug: string,
   options?: FetchOptions,
+  parseInstructions?: string,
 ): Promise<RawRelease[]> {
   if (pages.length === 0) return [];
 
@@ -191,7 +192,7 @@ export async function parseCrawlPages(
     const results = await Promise.allSettled(
       batch.map(async (page) => {
         logger.debug(`Parsing page: ${page.url} (${page.markdown.length} chars)`);
-        const parsed = await parseChangelog(page.markdown, sourceSlug);
+        const parsed = await parseChangelog(page.markdown, sourceSlug, { parseInstructions });
         return parsed.map((entry) => ({
           version: entry.version,
           title: entry.title,
