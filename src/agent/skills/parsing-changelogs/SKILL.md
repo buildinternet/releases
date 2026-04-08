@@ -61,7 +61,7 @@ Enable with `--crawl` flag or by setting `metadata.crawlEnabled: true` on the so
 
 Use the `releases enrich <slug>` command to hydrate releases that have sparse content. This uses Haiku to judge which releases need enrichment, then fetches and extracts full page content.
 
-`releases enrich <slug> --dry-run` previews what would be enriched. `releases enrich <slug> --limit 5` caps the batch size.
+`releases enrich <slug> --dry-run` previews what would be enriched. `releases enrich <slug> --limit 5` caps the batch size. `releases enrich <slug> --force` bypasses the Haiku triage entirely and re-enriches all candidates — useful for backfilling media on previously-enriched releases or re-processing after adding `parseInstructions`. Media from new extractions is merged with existing media (deduped by URL), so `--force` never drops previously-captured media.
 
 ## Feed Content Depth Assessment
 

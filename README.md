@@ -102,10 +102,11 @@ For feed sources with sparse content (short summaries), hydrate releases with fu
 releases enrich sentry-changelog              # enrich sparse releases
 releases enrich sentry-changelog --dry-run    # preview what would be enriched
 releases enrich sentry-changelog --limit 5    # process at most 5 releases
+releases enrich sentry-changelog --force      # bypass triage, re-enrich all candidates
 releases enrich sentry-changelog --json       # machine-readable output
 ```
 
-Enrichment uses AI triage (Haiku) to judge which releases need enrichment, then fetches and extracts full page content. Token usage is reported per run.
+Enrichment uses AI triage (Haiku) to judge which releases need enrichment, then fetches and extracts full page content. Token usage is reported per run. Use `--force` to bypass triage and re-process all releases — useful for backfilling media on previously-enriched releases or re-enriching after adding `parseInstructions`. Media from new extractions is merged with existing media (deduped by URL), so `--force` never drops previously-captured media.
 
 ### Import sources from manifest
 

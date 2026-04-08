@@ -66,6 +66,7 @@ bun src/index.ts fetch <slug> --max 5   # Fetch limited releases for one source
 bun src/index.ts fetch --changed        # Fetch only sources where poll detected changes
 bun src/index.ts fetch-log <slug>       # Check recent fetch history for a source
 bun src/index.ts enrich <slug>          # Enrich sparse feed releases with full page content
+bun src/index.ts enrich <slug> --force  # Bypass triage, re-enrich all (backfill media, re-apply parseInstructions)
 bun src/index.ts task list              # List active/recent remote sessions
 bun src/index.ts task cancel <id>       # Cancel a running remote session
 bun src/index.ts product list vercel    # List products for an org
