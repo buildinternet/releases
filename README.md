@@ -2,7 +2,27 @@
 
 Changelog indexer and registry for AI agents and developers. Fetches, normalizes, and indexes release notes from GitHub releases, RSS/Atom/JSON feeds, and product changelog pages, then exposes them via an MCP server or CLI.
 
-## Setup
+Website: [releases.sh](https://releases.sh)
+
+## Install
+
+The CLI is available as a prebuilt binary via npm — no source code or runtime dependencies required:
+
+```bash
+npm install -g @buildinternet/releases
+releases search "react"
+```
+
+Or run without installing:
+
+```bash
+npx @buildinternet/releases search "react"
+npx @buildinternet/releases latest --org vercel
+```
+
+The public CLI connects to the hosted API at `api.releases.sh` automatically. Read-only commands (search, latest, stats, list, categories) work without any configuration. Admin commands (fetch, onboard, enrich) require an API key.
+
+## Development Setup
 
 ```bash
 bun install
@@ -16,7 +36,7 @@ Copy `.env.example` to `.env` and fill in:
 - `ANTHROPIC_API_KEY` — Required for AI-powered parsing and summaries
 - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` — Required for scraping changelog pages (only used as a fallback when no feed is available)
 - `GITHUB_TOKEN` — Optional, increases GitHub API rate limits
-- `RELEASED_API_URL` / `RELEASED_API_KEY` — Remote mode: route CLI data operations (including discovery) through the API Worker
+- `RELEASED_API_URL` / `RELEASED_API_KEY` — Remote mode: route CLI data operations through the API Worker. Compiled binaries default to `https://api.releases.sh` when unset
 
 ## Usage
 
@@ -378,13 +398,13 @@ releases task cancel <sessionId>
 
 ## Architecture
 
-- **TypeScript + Bun** — single package, compiles to a self-contained binary via `bun build --compile`
+- **TypeScript + Bun** — single package, compiles to a self-contained binary via `bun build --compile`. Distributed as `@buildinternet/releases` on npm with platform-specific packages (macOS arm64/x64, Linux x64/arm64)
 - **SQLite** (Bun built-in + Drizzle ORM) with WAL mode and FTS5 for search
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, Cloudflare Browser Rendering for scraping
 - **AI Layer** — Anthropic SDK for changelog parsing (ingestion) and summarization (query)
 - **Agent** — Unified Agent SDK agent (`src/agent/released.ts`) handles discovery, evaluation, and onboarding. Domain knowledge lives in skill files at `src/agent/skills/`. The deterministic fetch pipeline (ingest, incremental, enrich, summarize) stays as direct Messages API calls.
 - **MCP Server** — `@modelcontextprotocol/sdk` on stdio
-- **API Server** — Bun HTTP server with read-only JSON endpoints, CORS enabled
+- **API Server** — Bun HTTP server with JSON endpoints, CORS enabled. GET endpoints are public (no auth); write operations require a Bearer token
 - **Web Frontend** — Next.js 15 (App Router) + Tailwind CSS in `web/`
 - **Migrations** — Drizzle Kit (`bun run db:generate` to create, applied automatically at startup)
 
@@ -402,6 +422,17 @@ bun run deploy:api           # deploy API worker only
 bun run deploy:discovery     # deploy Discovery worker only
 bun run db:migrate:remote    # apply D1 migrations to production
 ```
+
+### Publishing the CLI to npm
+
+The CLI is distributed as `@buildinternet/releases` with platform-specific binary packages:
+
+```bash
+bun run publish:npm            # dry run — builds all platforms, shows what would publish
+bun run publish:npm --publish  # build and publish to npm
+```
+
+Requires `NPM_PUBLISHING_TOKEN` in `.env` (a granular access token with "Bypass 2FA" enabled). Version is read from the root `package.json` and synced to all npm packages automatically.
 
 Local development:
 

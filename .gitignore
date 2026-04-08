@@ -61,3 +61,7 @@ data/preferences.json
 
 # Agent skills symlink (generated at runtime by released agent)
 .claude/skills
+
+# npm publish artifacts (compiled binaries + temp auth)
+npm/*/releases
+npm/.npmrc

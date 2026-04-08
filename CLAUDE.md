@@ -88,13 +88,19 @@ bun src/index.ts poll --json            # Machine-readable output
 - Source slug is always a **positional argument** (e.g., `fetch claude-code`), not a flag. The `fetch` command also accepts `--source <slug>` as an alias for convenience.
 - `org list` returns a summary view (counts, last activity) without accounts or tags. Use `org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
 
+## npm Distribution
+
+The CLI is published as `@buildinternet/releases` on npm with platform-specific binary packages (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`). Package scaffolding is in `npm/`, publish script at `scripts/publish-npm.sh`. Run `bun run publish:npm` for dry run, `bun run publish:npm --publish` to publish. Requires `NPM_PUBLISHING_TOKEN` in `.env`.
+
 ## Remote Mode (D1)
 
-When `RELEASED_API_URL` is set, the CLI routes data operations through the API Worker instead of local SQLite. `RELEASED_API_KEY` is required alongside it. The switch point is `src/lib/mode.ts` — `isRemoteMode()` checks the env var once and caches the result. Query functions in `src/db/queries.ts` delegate to `src/api/client.ts` in remote mode. All CLI commands support both modes — no command calls `getDb()` directly (except `search` for local FTS).
+When `RELEASED_API_URL` is set, the CLI routes data operations through the API Worker instead of local SQLite. The switch point is `src/lib/mode.ts` — `isRemoteMode()` checks the env var once and caches the result. Compiled binaries auto-detect remote mode and default to `https://api.releases.sh` when `RELEASED_API_URL` is unset. Query functions in `src/db/queries.ts` delegate to `src/api/client.ts` in remote mode. All CLI commands support both modes — no command calls `getDb()` directly (except `search` for local FTS).
 
-**Local mode** (default): No config needed. Uses `bun:sqlite` at `~/.releases/releases.db`.
+**Local mode** (default for `bun src/index.ts`): No config needed. Uses `bun:sqlite` at `~/.releases/releases.db`.
 
-**Remote mode**: Set `RELEASED_API_URL` and `RELEASED_API_KEY`. All data operations go through the Cloudflare Worker API backed by D1.
+**Remote mode** (default for compiled binary): Set `RELEASED_API_URL` and `RELEASED_API_KEY` for admin access. Public read-only access works without any env vars — the compiled binary defaults to `https://api.releases.sh`.
+
+**API auth model**: GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE) require a Bearer token. The `publicReadAuthMiddleware` in `workers/api/src/middleware/auth.ts` handles this split. Admin-only routes (sessions, fetch-log, usage-log, discover, blocked-urls, aliases) require auth for all methods.
 
 The API Worker lives at `workers/api/` and shares the Drizzle schema from `src/db/schema.ts`. D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
 

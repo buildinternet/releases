@@ -1,0 +1,37 @@
+#!/usr/bin/env node
+
+const { execFileSync } = require("child_process");
+const path = require("path");
+const os = require("os");
+
+const PLATFORMS = {
+  "darwin-arm64": "@buildinternet/releases-darwin-arm64",
+  "darwin-x64": "@buildinternet/releases-darwin-x64",
+  "linux-x64": "@buildinternet/releases-linux-x64",
+  "linux-arm64": "@buildinternet/releases-linux-arm64",
+};
+
+const key = `${os.platform()}-${os.arch()}`;
+const pkg = PLATFORMS[key];
+
+if (!pkg) {
+  console.error(`Unsupported platform: ${key}`);
+  console.error(`Supported: ${Object.keys(PLATFORMS).join(", ")}`);
+  process.exit(1);
+}
+
+let binPath;
+try {
+  binPath = path.join(require.resolve(`${pkg}/package.json`), "..", "releases");
+} catch {
+  console.error(`Missing platform package: ${pkg}`);
+  console.error(`Try reinstalling: npm install @buildinternet/releases`);
+  process.exit(1);
+}
+
+try {
+  execFileSync(binPath, process.argv.slice(2), { stdio: "inherit" });
+} catch (err) {
+  if (err.status !== undefined) process.exit(err.status);
+  throw err;
+}

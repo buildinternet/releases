@@ -1,4 +1,4 @@
-import { getApiUrl, getApiKey } from "../lib/mode.js";
+import { getApiUrl, getApiKey, isAdminMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
@@ -8,13 +8,17 @@ import type { SourceListItem, Stats, UnifiedSearchResponse } from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${getApiUrl()}${path}`;
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...opts?.headers as Record<string, string>,
+  };
+  // Only send auth header when an API key is configured (admin mode)
+  if (isAdminMode()) {
+    headers["Authorization"] = `Bearer ${getApiKey()}`;
+  }
   const res = await fetch(url, {
     ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${getApiKey()}`,
-      ...opts?.headers,
-    },
+    headers,
   });
 
   if (res.status === 404 && (!opts?.method || opts.method === "GET")) return null as T;

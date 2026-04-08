@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { authMiddleware } from "./middleware/auth.js";
+import { authMiddleware, publicReadAuthMiddleware } from "./middleware/auth.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
@@ -62,16 +62,31 @@ app.use("*", async (c, next) => {
 
 const v1 = new Hono<Env>();
 
-// Unauthenticated routes (status WebSocket/fetch, public media GET)
+// No-auth routes (status WebSocket, public media GET)
 v1.route("/", statusRoutes);
 v1.route("/", mediaRoutes);
 
-// Auth + DB health for everything else
-v1.use("/*", authMiddleware);
-v1.use("/*", dbHealthCheck);
+// Public-read routes: GET is open, writes require auth
+const publicReadRoutes = [
+  "stats", "orgs", "sources", "search", "releases",
+  "products", "summaries", "knowledge", "tags",
+];
+for (const r of publicReadRoutes) {
+  v1.use(`/${r}`, publicReadAuthMiddleware, dbHealthCheck);
+  v1.use(`/${r}/*`, publicReadAuthMiddleware, dbHealthCheck);
+}
 
-// Cache-Control for read-heavy GET endpoints.
-// Public endpoints use CDN edge caching; internal/admin endpoints stay private.
+// Admin-only routes: all methods require auth
+const adminRoutes = [
+  "sessions", "fetch-log", "usage-log", "blocked-urls",
+  "discover", "aliases", "status/fetch-log", "status/usage", "status/event",
+];
+for (const r of adminRoutes) {
+  v1.use(`/${r}`, authMiddleware, dbHealthCheck);
+  v1.use(`/${r}/*`, authMiddleware, dbHealthCheck);
+}
+
+// Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/orgs", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
@@ -84,7 +99,6 @@ v1.use("/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: 
 v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/releases/:id", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }), varyOnAccept());
-// summaries and knowledge accept POST upserts — no edge caching
 v1.use("/status/fetch-log", cacheControl(15));
 v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
