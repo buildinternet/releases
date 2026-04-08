@@ -2,9 +2,10 @@ import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
+  type KnowledgePage, type NewKnowledgePage,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -1414,6 +1415,63 @@ export async function getMonthlySummary(
       ),
     );
   return row;
+}
+
+// ── Knowledge Pages ──
+
+export async function getKnowledgePageForOrg(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
+  if (isRemoteMode() && orgSlug) {
+    return apiClient.getKnowledgePage("org", orgSlug);
+  }
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(knowledgePages)
+    .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, orgId)));
+  return row ?? null;
+}
+
+export async function getKnowledgePageForProduct(productId: string, productSlug?: string): Promise<KnowledgePage | null> {
+  if (isRemoteMode() && productSlug) {
+    return apiClient.getKnowledgePage("product", productSlug);
+  }
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(knowledgePages)
+    .where(and(eq(knowledgePages.scope, "product"), eq(knowledgePages.productId, productId)));
+  return row ?? null;
+}
+
+export async function upsertKnowledgePage(
+  data: { scope: "org" | "product"; orgId?: string | null; productId?: string | null; content: string; releaseCount: number; lastContributingReleaseAt?: string | null },
+): Promise<void> {
+  if (isRemoteMode()) {
+    return apiClient.upsertKnowledgePage(data);
+  }
+  const db = getDb();
+  const now = new Date().toISOString();
+  await db
+    .insert(knowledgePages)
+    .values({
+      scope: data.scope,
+      orgId: data.orgId ?? null,
+      productId: data.productId ?? null,
+      content: data.content,
+      releaseCount: data.releaseCount,
+      lastContributingReleaseAt: data.lastContributingReleaseAt ?? null,
+      generatedAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: data.scope === "org" ? [knowledgePages.orgId] : [knowledgePages.productId],
+      set: {
+        content: data.content,
+        releaseCount: data.releaseCount,
+        lastContributingReleaseAt: data.lastContributingReleaseAt ?? null,
+        updatedAt: now,
+      },
+    });
 }
 
 // ── Media Assets ──

@@ -29,6 +29,7 @@ import { registerEnrichCommand } from "./commands/enrich.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
+import { registerKnowledgeCommand } from "./commands/knowledge.js";
 import { CATEGORIES } from "../lib/categories.js";
 
 export const VERSION = "0.9.0";
@@ -144,6 +145,7 @@ registerBlockCommand(program);
 registerImportCommand(program);
 registerEvaluateCommand(program);
 registerSummarizeCommand(program);
+registerKnowledgeCommand(program);
 registerEnrichCommand(program);
 registerMediaCommand(program);
 registerTaskCommand(program);

@@ -16,6 +16,7 @@ import { sessionRoutes } from "./routes/sessions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
+import knowledge from "./routes/knowledge.js";
 import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
@@ -84,6 +85,7 @@ v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, 
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/releases/:id", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }), varyOnAccept());
 v1.use("/summaries/*", cacheControl(300, { staleWhileRevalidate: 120, isPublic: true }));
+v1.use("/knowledge", cacheControl(300, { staleWhileRevalidate: 120, isPublic: true }));
 v1.use("/status/fetch-log", cacheControl(15));
 v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
@@ -101,6 +103,7 @@ v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
 v1.route("/", releaseRoutes);
 v1.route("/summaries", summaries);
+v1.route("/knowledge", knowledge);
 v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 

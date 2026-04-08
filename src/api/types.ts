@@ -58,6 +58,7 @@ export interface OrgDetail {
     sourceCount: number;
   }>;
   sources: SourceListItem[];
+  knowledgePage?: KnowledgePageItem | null;
 }
 
 // ── Sources ──
@@ -181,6 +182,19 @@ export interface UnifiedSearchResponse {
   products: SearchProductHit[];
   sources: SearchSourceHit[];
   releases: SearchReleaseHit[];
+}
+
+// ── Knowledge Pages ──
+
+export interface KnowledgePageItem {
+  scope: "org" | "product";
+  orgSlug?: string | null;
+  productSlug?: string | null;
+  content: string;
+  releaseCount: number;
+  lastContributingReleaseAt: string | null;
+  generatedAt: string;
+  updatedAt: string;
 }
 
 /** @deprecated Use UnifiedSearchResponse */

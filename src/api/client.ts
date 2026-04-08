@@ -2,7 +2,7 @@ import { getApiUrl, getApiKey } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
-  ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias,
+  ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
 } from "../db/schema.js";
 import type { SourceListItem, Stats, UnifiedSearchResponse } from "./types.js";
 
@@ -782,6 +782,29 @@ export async function getMonthlySummary(
     `/v1/summaries?sourceId=${sourceId}&type=monthly&year=${year}&month=${month}`,
   );
   return rows[0];
+}
+
+// ── Knowledge Pages ──
+
+export async function getKnowledgePage(
+  scope: "org" | "product",
+  slug: string,
+): Promise<KnowledgePage | null> {
+  return apiFetch<KnowledgePage | null>(`/v1/knowledge?scope=${scope}&slug=${slug}`);
+}
+
+export async function upsertKnowledgePage(data: {
+  scope: "org" | "product";
+  orgId?: string | null;
+  productId?: string | null;
+  content: string;
+  releaseCount: number;
+  lastContributingReleaseAt?: string | null;
+}): Promise<void> {
+  await apiFetch("/v1/knowledge", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
 }
 
 // ── Media Assets ──

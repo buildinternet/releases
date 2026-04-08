@@ -9,11 +9,13 @@ import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
   findSourceBySlug, listAllSources, listFetchableSources, listSourcesWithChanges,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
-  upsertSummary, getMonthlySummary, getRecentReleases, getOrgById,
+  upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
   insertMediaAssets, clearChangeDetected,
+  getKnowledgePageForOrg, upsertKnowledgePage,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
+import { generateKnowledgePage } from "../../ai/knowledge.js";
 import { logger } from "../../lib/logger.js";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { config } from "../../lib/config.js";
@@ -634,6 +636,44 @@ Examples:
             } catch (err) {
               // Summary generation is non-critical — log and continue
               logger.warn(`Summary generation failed for ${source.name}: ${err}`);
+            }
+          }
+
+          // Update org knowledge page if source belongs to an org
+          if (inserted > 0 && source.orgId && opts.summarize !== false) {
+            try {
+              const org = source.orgId ? await getOrgById(source.orgId) : null;
+              if (org) {
+                const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
+                const orgReleases = await getRecentReleases(source.id, cutoff, source.slug);
+                const existingPage = await getKnowledgePageForOrg(org.id, org.slug);
+                const orgSources = await getSourcesByOrg(org.id);
+                const totalReleaseCount = orgReleases.length;
+
+                const result = await generateKnowledgePage({
+                  name: org.name,
+                  slug: org.slug,
+                  description: org.description || undefined,
+                  existingContent: existingPage?.content,
+                  newReleases: orgReleases.slice(0, 30),
+                  totalReleaseCount,
+                  sourceNames: orgSources.map((s) => s.name),
+                });
+
+                if (result) {
+                  const latestDate = orgReleases[0]?.publishedAt ?? null;
+                  await upsertKnowledgePage({
+                    scope: "org",
+                    orgId: org.id,
+                    content: result.content,
+                    releaseCount: result.releaseCount,
+                    lastContributingReleaseAt: latestDate,
+                  });
+                }
+              }
+            } catch (err) {
+              // Knowledge page generation is non-critical — log and continue
+              logger.warn(`Knowledge page update failed for org: ${err}`);
             }
           }
 

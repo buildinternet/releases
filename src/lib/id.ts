@@ -12,3 +12,4 @@ export const newMediaAssetId = () => `ma_${nanoid()}`;
 export const newProductId = () => `prod_${nanoid()}`;
 export const newTagId = () => `tag_${nanoid()}`;
 export const newDomainAliasId = () => `da_${nanoid()}`;
+export const newKnowledgePageId = () => `kp_${nanoid()}`;
