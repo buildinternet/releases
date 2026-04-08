@@ -1,11 +1,15 @@
+import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { DocsNav } from "@/components/docs-nav";
+import { publicDocs } from "@/flags";
 
 export const metadata = {
   title: "Docs",
 };
 
-export default function DocsLayout({ children }: { children: React.ReactNode }) {
+export default async function DocsLayout({ children }: { children: React.ReactNode }) {
+  const docsEnabled = await publicDocs();
+  if (!docsEnabled) notFound();
   return (
     <div className="min-h-screen">
       <Header />

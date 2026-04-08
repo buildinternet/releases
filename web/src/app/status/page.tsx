@@ -1,14 +1,14 @@
 import type { Metadata } from "next";
-import { redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { Header } from "@/components/header";
 import { StatusDashboard } from "./dashboard";
+import { statusDashboard } from "@/flags";
 
 export const metadata: Metadata = { title: "Status" };
 
 export default async function StatusPage() {
-  if (process.env.RELEASED_DEV_MODE !== "true") {
-    redirect("/");
-  }
+  const enabled = await statusDashboard();
+  if (!enabled) notFound();
 
   const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
   const apiKey = process.env.RELEASED_API_KEY ?? "";
