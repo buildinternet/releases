@@ -27,7 +27,6 @@ released list --json                 # Machine-readable output`}</code></pre>
           <tr><td><code>--org &lt;slug&gt;</code></td><td>Filter by organization</td></tr>
           <tr><td><code>--product &lt;slug&gt;</code></td><td>Filter by product</td></tr>
           <tr><td><code>--has-feed</code></td><td>Only sources with a discovered feed URL</td></tr>
-          <tr><td><code>--enrichable</code></td><td>Sources eligible for content enrichment</td></tr>
           <tr><td><code>--query &lt;text&gt;</code></td><td>Substring match on name, slug, or URL</td></tr>
           <tr><td><code>--category &lt;cat&gt;</code></td><td>Filter by org or product category</td></tr>
           <tr><td><code>--include-disabled</code></td><td>Include disabled sources</td></tr>
@@ -75,9 +74,6 @@ released search "vercel" --json`}</code></pre>
       </p>
       <pre><code>{`released stats`}</code></pre>
 
-      <h2>Fetch log</h2>
-      <p>Check the recent fetch history for a source to see when it was last updated and whether any errors occurred:</p>
-      <pre><code>{`released fetch-log claude-code`}</code></pre>
     </>
   );
 }

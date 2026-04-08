@@ -8,6 +8,13 @@ export const publicDocs = flag<boolean>({
   defaultValue: process.env.NODE_ENV === "development",
 });
 
+export const adminDocs = flag<boolean>({
+  key: "admin-docs",
+  description: "Controls whether admin CLI documentation (fetching, enrichment, source management) is visible",
+  adapter: vercelAdapter(),
+  defaultValue: process.env.NODE_ENV === "development",
+});
+
 export const statusDashboard = flag<boolean>({
   key: "status-dashboard",
   description: "Controls access to the internal status dashboard",

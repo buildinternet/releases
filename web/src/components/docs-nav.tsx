@@ -3,7 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-const sections = [
+type Section = {
+  title: string;
+  items: { label: string; href: string }[];
+};
+
+const publicSections: Section[] = [
   {
     title: "Getting Started",
     items: [
@@ -15,7 +20,6 @@ const sections = [
     title: "CLI",
     items: [
       { label: "Browsing & Search", href: "/docs/cli/browsing" },
-      { label: "Fetching Releases", href: "/docs/cli/fetching" },
       { label: "Summaries & Comparisons", href: "/docs/cli/analysis" },
     ],
   },
@@ -28,8 +32,19 @@ const sections = [
   },
 ];
 
-export function DocsNav() {
+const adminSections: Section[] = [
+  {
+    title: "Admin CLI",
+    items: [
+      { label: "Fetching Releases", href: "/docs/cli/fetching" },
+      { label: "Source Management", href: "/docs/cli/admin" },
+    ],
+  },
+];
+
+export function DocsNav({ showAdmin = false }: { showAdmin?: boolean }) {
   const pathname = usePathname();
+  const sections = showAdmin ? [...publicSections, ...adminSections] : publicSections;
 
   return (
     <nav className="hidden md:block w-[180px] shrink-0 sticky top-6 self-start">
