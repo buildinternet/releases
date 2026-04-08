@@ -324,7 +324,7 @@ npx tsc --noEmit
 
 Then test:
 ```bash
-source .env && RELEASED_API_URL=https://released-api.rally-workers-test.workers.dev bun src/index.ts fetch claude-code --dry-run
+source .env && RELEASED_API_URL=https://api.releases.sh bun src/index.ts fetch claude-code --dry-run
 ```
 
 ```bash
@@ -535,7 +535,7 @@ cd workers/api && wrangler deploy
 - [ ] **Step 2: Test each command in remote mode**
 
 ```bash
-source .env && export RELEASED_API_URL=https://released-api.rally-workers-test.workers.dev
+source .env && export RELEASED_API_URL=https://api.releases.sh
 
 # Test each command
 bun src/index.ts list
