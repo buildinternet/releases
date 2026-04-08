@@ -10,7 +10,7 @@ import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed } from "./feed.js";
 import { getSourceMeta, updateSourceMeta } from "./feed.js";
-import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
+import { fetchCloudflareMarkdownWithMedia } from "./cloudflare.js";
 import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
 
 function toFragmentUrl(baseUrl: string, version: string | undefined, title: string): string {
@@ -217,47 +217,15 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
     );
   }
 
-  // Use /markdown endpoint — more reliable than /json for diverse changelog pages
-  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/markdown`;
-
   logger.info(`Fetching page via Cloudflare...`);
-  const res: Response = await fetch(endpoint, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${apiToken}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      url: source.url,
-      rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
-      gotoOptions: { waitUntil: "networkidle2" },
-    }),
-  });
+  const result = await fetchCloudflareMarkdownWithMedia(source.url, accountId, apiToken);
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new AdapterError(
-      "scrape",
-      `Cloudflare Browser Rendering API returned ${res.status} for ${source.url}: ${body}`,
-    );
-  }
-
-  const data = await res.json() as { success: boolean; result: string; errors?: Array<{ message: string }> };
-
-  if (!data.success) {
-    const messages = data.errors?.map((e) => e.message).join("; ") ?? "unknown error";
-    throw new AdapterError(
-      "scrape",
-      `Cloudflare Browser Rendering failed for ${source.url}: ${messages}`,
-    );
-  }
-
-  const markdown = data.result;
-
-  if (!markdown || markdown.trim().length === 0) {
-    logger.warn(`Cloudflare returned empty markdown for ${source.url}`);
+  if (!result) {
+    logger.warn(`Cloudflare returned empty content for ${source.url}`);
     return { releases: [] };
   }
+
+  const markdown = result.markdown;
 
   logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
 

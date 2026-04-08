@@ -42,6 +42,7 @@ Rules:
 - For each release, extract the version, title, content, publication date, and whether it contains breaking changes.
 - For the content field, keep it concise: include the key changes, features, and fixes but summarize verbose entries. Do not reproduce the entire raw text.
 - Include only content images (screenshots, product images, diagrams) as markdown image links. Remove images that are site chrome: author avatars, navigation logos, footer icons, social badges, decorative separators, and tracking/spacer pixels.
+- For each release, populate the media array with every product image and video URL found in the content. Do not leave media empty if the content contains image references or video links. Images go as type "image", YouTube/Vimeo/Loom links go as type "video".
 - If a date is present, convert it to ISO 8601 format (YYYY-MM-DD or full datetime).
 - Mark isBreaking as true if the release mentions breaking changes, deprecations that remove functionality, or backwards-incompatible changes.
 - If no version is explicitly stated, omit the version field.

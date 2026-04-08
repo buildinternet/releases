@@ -7,8 +7,9 @@ import rehypeHighlight from "rehype-highlight";
 import Image from "next/image";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
-import { isSafeHref, isSafeImgSrc, isOptimizableImage } from "@/lib/sanitize";
+import { isOptimizableImage } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
+import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
@@ -26,93 +27,6 @@ function stripLeadingTitle(content: string, title: string | null): string {
   }
   return content;
 }
-
-/* eslint-disable @typescript-eslint/no-explicit-any */
-const markdownComponents: Record<string, any> = {
-  img: (props: any) => {
-    const src = props.src as string | undefined;
-    if (!isSafeImgSrc(src)) return null;
-    return (
-      <img
-        src={src}
-        alt={props.alt || ""}
-        loading="lazy"
-        className="rounded-md max-w-full h-auto my-2 max-h-80 object-contain"
-      />
-    );
-  },
-  a: (props: any) => {
-    const href = props.href as string | undefined;
-    const children = props.children;
-    if (!isSafeHref(href)) return <>{children}</>;
-
-    // YouTube embed
-    const ytMatch = href.match(/(?:youtube\.com\/watch\?v=|youtu\.be\/)([^&?]+)/);
-    if (ytMatch) {
-      return (
-        <div className="my-3 aspect-video max-w-lg">
-          <iframe
-            src={`https://www.youtube.com/embed/${ytMatch[1]}`}
-            className="w-full h-full rounded-md"
-            allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-            loading="lazy"
-          />
-        </div>
-      );
-    }
-
-    // Vimeo embed
-    const vimeoMatch = href.match(/vimeo\.com\/(\d+)/);
-    if (vimeoMatch) {
-      return (
-        <div className="my-3 aspect-video max-w-lg">
-          <iframe
-            src={`https://player.vimeo.com/video/${vimeoMatch[1]}`}
-            className="w-full h-full rounded-md"
-            allow="autoplay; fullscreen; picture-in-picture"
-            allowFullScreen
-            loading="lazy"
-          />
-        </div>
-      );
-    }
-
-    // Loom embed
-    const loomMatch = href.match(/loom\.com\/share\/([^?&]+)/);
-    if (loomMatch) {
-      return (
-        <div className="my-3 aspect-video max-w-lg">
-          <iframe
-            src={`https://www.loom.com/embed/${loomMatch[1]}`}
-            className="w-full h-full rounded-md"
-            allowFullScreen
-            loading="lazy"
-          />
-        </div>
-      );
-    }
-
-    // Regular link
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer">
-        {children}
-      </a>
-    );
-  },
-};
-
-const collapsedMarkdownComponents: Record<string, any> = {
-  ...markdownComponents,
-  img: () => null,
-  a: (props: any) => {
-    const href = props.href as string | undefined;
-    const children = props.children;
-    if (!isSafeHref(href)) return <>{children}</>;
-    if (/youtube|vimeo|loom/i.test(href)) return <>{children}</>;
-    return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
-  },
-};
 
 function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content: string }) {
   if (!media || media.length === 0) return null;
