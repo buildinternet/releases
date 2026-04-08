@@ -20,6 +20,7 @@ export type {
   SearchProductHit,
   SearchSourceHit,
   OrgReleaseItem,
+  KnowledgePageItem,
 } from "@shared/api/types";
 
 export type {

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, count, max, min, and, sql, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases } from "@releases/db/schema.js";
+import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases, knowledgePages } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { isValidCategory } from "@releases/lib/categories.js";
 import { toSlug } from "@releases/lib/slug.js";
@@ -54,7 +54,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
   const cutoff = daysAgoIso(30);
 
-  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow] = await Promise.all([
+  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgeRow] = await Promise.all([
     db
       .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts)
@@ -100,6 +100,12 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .select({ maxFetch: max(sources.lastFetchedAt) })
       .from(sources)
       .where(eq(sources.orgId, org.id)),
+
+    // Knowledge page for this org
+    db
+      .select()
+      .from(knowledgePages)
+      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id))),
   ]);
 
   const sourcesWithStats = orgSources.map((row) => ({
@@ -158,6 +164,14 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     accounts,
     products: productRows,
     sources: sourcesWithStats,
+    knowledgePage: knowledgeRow[0] ? {
+      scope: knowledgeRow[0].scope as "org",
+      content: knowledgeRow[0].content,
+      releaseCount: knowledgeRow[0].releaseCount,
+      lastContributingReleaseAt: knowledgeRow[0].lastContributingReleaseAt,
+      generatedAt: knowledgeRow[0].generatedAt,
+      updatedAt: knowledgeRow[0].updatedAt,
+    } : null,
   };
 
   if (wantsMarkdown(c)) {
