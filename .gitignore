@@ -56,5 +56,8 @@ data/preferences.json
 .wrangler
 .dev.vars
 
+# Vercel
+.vercel
+
 # Agent skills symlink (generated at runtime by released agent)
 .claude/skills
