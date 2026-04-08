@@ -212,7 +212,7 @@ export default async function OrgPage({
               </>
             ) : activity ? (
               <>
-                <ReleaseTimeline activity={activity} heatmap={heatmap} orgSlug={org.slug} sources={org.sources} products={org.products}>
+                <ReleaseTimeline activity={activity} heatmap={heatmap} orgSlug={org.slug} sources={org.sources} products={org.products} trackingSince={org.trackingSince}>
                   <OrgTabs />
                 </ReleaseTimeline>
                 {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}

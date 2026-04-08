@@ -30,6 +30,7 @@ interface ReleaseTimelineProps {
   orgSlug: string;
   sources: SourceListItem[];
   products: OrgDetail["products"];
+  trackingSince?: string | null;
   children?: React.ReactNode;
 }
 
@@ -74,7 +75,7 @@ function ProductGroupedSources({
   );
 }
 
-export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products, children }: ReleaseTimelineProps) {
+export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products, trackingSince, children }: ReleaseTimelineProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(heatmap ? "heatmap" : "chart");
 
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
@@ -302,7 +303,7 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
 
       {/* Heatmap view */}
       {viewMode === "heatmap" && heatmap ? (
-        <ReleaseHeatmap heatmap={heatmap} />
+        <ReleaseHeatmap heatmap={heatmap} trackingSince={trackingSince} />
       ) : (
         <RangeNavigator.Root
           min={rangeStart}
