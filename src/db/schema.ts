@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId } from "../lib/id.js";
 
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
@@ -283,3 +283,26 @@ export const mediaAssets = sqliteTable(
 
 export type MediaAsset = typeof mediaAssets.$inferSelect;
 export type NewMediaAsset = typeof mediaAssets.$inferInsert;
+
+export const knowledgePages = sqliteTable(
+  "knowledge_pages",
+  {
+    id: text("id").primaryKey().$defaultFn(newKnowledgePageId),
+    scope: text("scope", { enum: ["org", "product"] }).notNull(),
+    orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
+    productId: text("product_id").references(() => products.id, { onDelete: "cascade" }),
+    content: text("content").notNull(),
+    releaseCount: integer("release_count").notNull().default(0),
+    lastContributingReleaseAt: text("last_contributing_release_at"),
+    generatedAt: text("generated_at").notNull().$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_knowledge_pages_org").on(table.orgId),
+    uniqueIndex("idx_knowledge_pages_product").on(table.productId),
+    index("idx_knowledge_pages_scope").on(table.scope),
+  ],
+);
+
+export type KnowledgePage = typeof knowledgePages.$inferSelect;
+export type NewKnowledgePage = typeof knowledgePages.$inferInsert;

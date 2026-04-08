@@ -12,6 +12,7 @@ import { OrgReleaseList } from "@/components/org-release-list";
 import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
 import { groupSourcesByProduct } from "@/lib/sources";
+import { KnowledgePageView } from "@/components/knowledge-page-view";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
 
@@ -208,12 +209,19 @@ export default async function OrgPage({
                 )}
               </>
             ) : activity ? (
-              <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} products={org.products}>
-                <OrgTabs />
-              </ReleaseTimeline>
+              <>
+                <ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} products={org.products}>
+                  <OrgTabs />
+                </ReleaseTimeline>
+                {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}
+                <div className="mt-6">
+                  <SourceList org={org} orgSlug={orgSlug} />
+                </div>
+              </>
             ) : (
               <>
                 <OrgTabs />
+                {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}
                 <div className="mt-6">
                   <SourceList org={org} orgSlug={orgSlug} />
                 </div>

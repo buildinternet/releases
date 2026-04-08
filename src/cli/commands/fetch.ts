@@ -9,11 +9,13 @@ import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
   findSourceBySlug, listAllSources, listFetchableSources, listSourcesWithChanges,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
-  upsertSummary, getMonthlySummary, getRecentReleases, getOrgById,
+  upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
   insertMediaAssets, clearChangeDetected,
+  getKnowledgePageForOrg, upsertKnowledgePage,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
+import { generateKnowledgePage } from "../../ai/knowledge.js";
 import { logger } from "../../lib/logger.js";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { config } from "../../lib/config.js";
@@ -268,6 +270,7 @@ Examples:
       let stopping = false;
       const total = targetSources.length;
       const fetchStartTime = performance.now();
+      const orgsNeedingKnowledgeUpdate = new Set<string>();
       const showProgress = !opts.json && total > 1 && effectiveConcurrency > 1;
       const showSummary = !opts.json && total > 1;
 
@@ -637,6 +640,11 @@ Examples:
             }
           }
 
+          // Defer knowledge page regeneration until after all sources are processed
+          if (inserted > 0 && source.orgId && opts.summarize !== false) {
+            orgsNeedingKnowledgeUpdate.add(source.orgId);
+          }
+
           if (!opts.json && !showProgress) {
             console.log(
               chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedFormatted(startTime)})`)}`),
@@ -738,6 +746,47 @@ Examples:
       }
 
       process.removeListener("SIGINT", onSigint);
+
+      // Regenerate knowledge pages for orgs that had new releases
+      for (const orgId of orgsNeedingKnowledgeUpdate) {
+        try {
+          const org = await getOrgById(orgId);
+          if (!org) continue;
+          const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
+          const orgSources = await getSourcesByOrg(org.id);
+          const [releaseArrays, existingPage] = await Promise.all([
+            Promise.all(orgSources.map((s) => getRecentReleases(s.id, cutoff, s.slug))),
+            getKnowledgePageForOrg(org.id, org.slug),
+          ]);
+          const allOrgReleases = releaseArrays.flat()
+            .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+
+          if (allOrgReleases.length === 0) continue;
+
+          const result = await generateKnowledgePage({
+            name: org.name,
+            slug: org.slug,
+            description: org.description || undefined,
+            existingContent: existingPage?.content,
+            newReleases: allOrgReleases.slice(0, 30),
+            totalReleaseCount: allOrgReleases.length,
+            sourceNames: orgSources.map((s) => s.name),
+          });
+
+          if (result) {
+            const latestDate = allOrgReleases[0]?.publishedAt ?? null;
+            await upsertKnowledgePage({
+              scope: "org",
+              orgId: org.id,
+              content: result.content,
+              releaseCount: result.releaseCount,
+              lastContributingReleaseAt: latestDate,
+            });
+          }
+        } catch (err) {
+          logger.warn(`Knowledge page update failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
 
       const fetchErrors = fetchResults.filter((r) => r.error);
       if (stopping && await checkCancelled().catch(() => false)) {

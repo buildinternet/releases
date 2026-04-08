@@ -26,7 +26,7 @@
       },
     },
     "workers/api": {
-      "name": "released-api",
+      "name": "releases-api",
       "dependencies": {
         "hono": "^4.12.9",
       },
@@ -36,8 +36,8 @@
       },
     },
     "workers/discovery": {
-      "name": "released-discovery-worker",
-      "version": "0.1.0",
+      "name": "releases-discovery-worker",
+      "version": "0.9.0",
       "dependencies": {
         "@cloudflare/sandbox": "latest",
       },
@@ -59,7 +59,7 @@
 
     "@cloudflare/kv-asset-handler": ["@cloudflare/kv-asset-handler@0.4.2", "", {}, "sha512-SIOD2DxrRRwQ+jgzlXCqoEFiKOFqaPjhnNTGKXSRLvp1HiOvapLaFG2kEr9dYQTYe8rKrd9uvDUzmAITeNyaHQ=="],
 
-    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.8.1", "", { "dependencies": { "@cloudflare/containers": "^0.2.0", "aws4fetch": "^1.0.20" }, "peerDependencies": { "@openai/agents": "^0.3.3", "@opencode-ai/sdk": "^1.1.40", "@xterm/xterm": ">=5.0.0" }, "optionalPeers": ["@openai/agents", "@opencode-ai/sdk", "@xterm/xterm"] }, "sha512-qEp6WVFlhJV2c54RIdyZ1GwFS7g3rgsv8+qt9wrSbrVxyKc1oUZ5afXeshaWgZVXSaOLhbIx2x1/kMDNeTMVmA=="],
+    "@cloudflare/sandbox": ["@cloudflare/sandbox@0.8.6", "", { "dependencies": { "@cloudflare/containers": "^0.2.2", "aws4fetch": "^1.0.20" }, "peerDependencies": { "@openai/agents": "^0.3.3", "@opencode-ai/sdk": "^1.1.40", "@xterm/xterm": ">=5.0.0" }, "optionalPeers": ["@openai/agents", "@opencode-ai/sdk", "@xterm/xterm"] }, "sha512-gqipp028g5jYwuzlVD0RaYExWAnc4lDFo6Dt/qAKFmU3AFZc53WWkyVCWFNRYKWXv3ZFe1u0SQMNjWe9OiDajQ=="],
 
     "@cloudflare/unenv-preset": ["@cloudflare/unenv-preset@2.16.0", "", { "peerDependencies": { "unenv": "2.0.0-rc.24", "workerd": "1.20260301.1 || ~1.20260302.1 || ~1.20260303.1 || ~1.20260304.1 || >1.20260305.0 <2.0.0-0" }, "optionalPeers": ["workerd"] }, "sha512-8ovsRpwzPoEqPUzoErAYVv8l3FMZNeBVQfJTvtzP4AgLSRGZISRfuChFxHWUQd3n6cnrwkuTGxT+2cGo8EsyYg=="],
 
@@ -445,9 +445,9 @@
 
     "readable-stream": ["readable-stream@3.6.2", "", { "dependencies": { "inherits": "^2.0.3", "string_decoder": "^1.1.1", "util-deprecate": "^1.0.1" } }, "sha512-9u/sniCrY3D5WdsERHzHE4G2YCXqoG5FTHUiCC4SIbr6XcLZBY05ya9EKjYek9O5xOAwjGq+1JdGBAS7Q9ScoA=="],
 
-    "released-api": ["released-api@workspace:workers/api"],
+    "releases-api": ["releases-api@workspace:workers/api"],
 
-    "released-discovery-worker": ["released-discovery-worker@workspace:workers/discovery"],
+    "releases-discovery-worker": ["releases-discovery-worker@workspace:workers/discovery"],
 
     "require-from-string": ["require-from-string@2.0.2", "", {}, "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw=="],
 
