@@ -50,6 +50,7 @@ export function registerFetchCommand(program: Command) {
     .option("--changed", "Only fetch sources where poll detected upstream changes")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--no-summarize", "Skip summary generation after fetching")
+    .option("--managed-agents", "Delegate fetching to a remote managed agent session")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .addHelpText("after", `
 Examples:
@@ -62,15 +63,96 @@ Examples:
   releases fetch my-source --dry-run      Preview without writing to DB
   releases fetch my-source --force        Delete and re-fetch all releases
   releases fetch --concurrency 5          Fetch 5 sources in parallel
-  releases fetch --json                   Output results as JSON`)
+  releases fetch --json                   Output results as JSON
+  releases fetch linear --managed-agents   Delegate fetch to a managed agent`)
     .action(async (slugArg: string | undefined, opts: {
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
       unfetched?: boolean; stale?: string; changed?: boolean; retryErrors?: boolean; concurrency?: string;
-      summarize?: boolean;
+      summarize?: boolean; managedAgents?: boolean;
     }) => {
       // Positional arg takes precedence over --source option
       const slug = slugArg ?? opts.source;
+
+      // ── Managed agents delegation ──
+      if (opts.managedAgents) {
+        const apiUrl = process.env.RELEASED_API_URL;
+        const apiKey = process.env.RELEASED_API_KEY;
+        if (!apiUrl || !apiKey) {
+          logger.error("RELEASED_API_URL and RELEASED_API_KEY are required for --managed-agents");
+          process.exit(1);
+        }
+
+        // Resolve source slugs from filters
+        let sourceSlugs: string[] = [];
+        let label = "manual fetch";
+
+        if (slug) {
+          sourceSlugs = [slug];
+          label = slug;
+        } else if (opts.unfetched) {
+          const sources = await listFetchableSources({ mode: "unfetched" });
+          sourceSlugs = sources.map(s => s.slug);
+          label = `${sourceSlugs.length} unfetched sources`;
+        } else if (opts.stale) {
+          const hours = parseInt(opts.stale, 10);
+          const sources = await listFetchableSources({ mode: "stale", staleHours: hours });
+          sourceSlugs = sources.map(s => s.slug);
+          label = `${sourceSlugs.length} stale sources (>${hours}h)`;
+        } else if (opts.changed) {
+          const sources = await listSourcesWithChanges();
+          sourceSlugs = sources.map(s => s.slug);
+          label = `${sourceSlugs.length} changed sources`;
+        } else if (opts.retryErrors) {
+          const sources = await listFetchableSources({ mode: "retry_errors" });
+          sourceSlugs = sources.map(s => s.slug);
+          label = `${sourceSlugs.length} errored sources`;
+        } else {
+          logger.error("--managed-agents requires a source slug or filter (--stale, --unfetched, --changed, --retry-errors)");
+          process.exit(1);
+        }
+
+        if (sourceSlugs.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify({ sessionId: null, message: "No matching sources" }));
+          } else {
+            logger.info("No matching sources to fetch.");
+          }
+          return;
+        }
+
+        if (sourceSlugs.length > 20) {
+          logger.warn(`Capping at 20 sources (${sourceSlugs.length} matched). Use multiple sessions for larger batches.`);
+          sourceSlugs = sourceSlugs.slice(0, 20);
+        }
+
+        const baseUrl = apiUrl.replace(/\/$/, "");
+        const res = await fetch(`${baseUrl}/v1/update`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`,
+          },
+          body: JSON.stringify({ company: label, sourceSlugs }),
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({ error: res.statusText }));
+          logger.error(`Failed to start update session: ${(body as { error?: string }).error ?? res.statusText}`);
+          process.exit(1);
+        }
+
+        const result = await res.json() as { sessionId: string };
+        if (opts.json) {
+          console.log(JSON.stringify(result, null, 2));
+        } else {
+          logger.info(`Update session started: ${result.sessionId}`);
+          logger.info(`Fetching ${sourceSlugs.length} source(s): ${sourceSlugs.join(", ")}`);
+          logger.info(`Track progress: releases task list`);
+        }
+        return;
+      }
+
       const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
 
       let effectiveConcurrency = concurrency;
