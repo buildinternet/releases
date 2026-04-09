@@ -82,8 +82,7 @@ export function createHTTPExecutor(opts: APIClientOptions): CLIExecutor {
 
     // ── evaluate ──
     if (cmd === "evaluate" && args[1]) {
-      // No dedicated endpoint — return the URL for the agent to assess
-      return `Evaluate is not available in remote mode. URL: ${args[1]}`;
+      return api("GET", `/evaluate?url=${encodeURIComponent(args[1])}`);
     }
 
     // ── add ──
