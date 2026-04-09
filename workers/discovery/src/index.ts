@@ -97,14 +97,18 @@ export default {
       const sessionId = `${engine === "managed-agents" ? "ma" : "sb"}-${crypto.randomUUID()}`;
 
       if (engine === "managed-agents") {
-        // Preflight: validate Anthropic API key before starting
         const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
         if (!anthropicKey) {
           return errorResponse("ANTHROPIC_API_KEY not configured — cannot use managed-agents engine", 500);
         }
 
-        // Use Durable Object for long-running managed agents session
-        // (Workers have CPU time limits; DOs reset their timer on I/O)
+        const agentId = env.ANTHROPIC_AGENT_ID;
+        const agentVersion = env.ANTHROPIC_AGENT_VERSION ? parseInt(env.ANTHROPIC_AGENT_VERSION, 10) : undefined;
+        const environmentId = env.ANTHROPIC_ENVIRONMENT_ID;
+        if (!agentId || !environmentId) {
+          return errorResponse("ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured", 500);
+        }
+
         const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
         const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
 
@@ -114,6 +118,9 @@ export default {
             domain: body.domain,
             githubOrg: body.githubOrg,
             sessionId,
+            agentId,
+            agentVersion,
+            environmentId,
           });
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);

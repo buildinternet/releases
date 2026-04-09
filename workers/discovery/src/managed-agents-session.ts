@@ -5,30 +5,30 @@
  * exceeds (~60-120s of streaming). Durable Objects reset their 30s
  * wall-clock timer on each I/O operation (API calls, fetches), making
  * them suitable for long-running I/O-bound workloads.
+ *
+ * Agent and environment are created once via the Anthropic console/API
+ * and referenced by ID (env vars). Sessions are the only per-request resource.
  */
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
 import { createHTTPExecutor } from "./http-executor.js";
 
-interface SessionParams {
+export interface SessionParams {
   company: string;
   domain?: string;
   githubOrg?: string;
   sessionId: string;
+  agentId: string;
+  agentVersion?: number;
+  environmentId: string;
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 
-const CATEGORIES = [
-  "ai", "cloud", "database", "design", "developer-tools",
-  "devops", "framework", "infrastructure", "observability", "security",
-];
-
 export class ManagedAgentsSession extends DurableObject<Env> {
 
   async startDiscovery(params: SessionParams): Promise<void> {
-    // Store params and schedule via alarm for immediate execution
     await this.ctx.storage.put("params", params);
     await this.ctx.storage.put("status", "running");
     await this.ctx.storage.setAlarm(Date.now());
@@ -60,7 +60,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   }
 
   private async runDiscovery(params: SessionParams): Promise<void> {
-    const { sessionId } = params;
+    const { sessionId, agentId, agentVersion, environmentId } = params;
 
     try {
       const anthropicApiKey = await this.env.ANTHROPIC_API_KEY.get();
@@ -92,47 +92,9 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
       const client = new Anthropic({ apiKey: anthropicApiKey });
 
-      const agent = await (client.beta.agents as any).create({
-        name: "Released Discovery Agent",
-        model: "claude-sonnet-4-6",
-        system: buildSystemPrompt(),
-        tools: [
-          { type: "agent_toolset_20260401", default_config: { enabled: true } },
-          {
-            type: "custom",
-            name: "releases_cli",
-            description: "Execute a Released CLI command. Use --json for structured output. Do NOT fetch without --dry-run unless told to persist.",
-            input_schema: {
-              type: "object",
-              properties: {
-                command: { type: "string", description: 'CLI command without the "releases" prefix.' },
-              },
-              required: ["command"],
-            },
-          },
-          {
-            type: "custom",
-            name: "releases_report_state",
-            description: "Report the final discovery state as JSON.",
-            input_schema: {
-              type: "object",
-              properties: {
-                state: { type: "object", description: "The complete discovery state JSON." },
-              },
-              required: ["state"],
-            },
-          },
-        ],
-      });
-
-      const environment = await (client.beta.environments as any).create({
-        name: `released-discovery-${Date.now()}`,
-        config: { type: "cloud", networking: { type: "unrestricted" } },
-      });
-
       const session = await (client.beta.sessions as any).create({
-        agent: { type: "agent", id: agent.id, version: agent.version },
-        environment_id: environment.id,
+        agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
+        environment_id: environmentId,
         title: `Discovery: ${params.company}`,
       });
 
@@ -184,7 +146,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                 const command = toolEvent.input?.command ?? "";
                 toolCallCount++;
 
-                // Store progress in DO — pollers read it directly (no per-tool StatusHub call)
                 await this.ctx.storage.put("progress", {
                   step: "discovery",
                   sourcesFound: 0,
@@ -242,9 +203,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         try { stream.controller.abort(); } catch { /* closed */ }
       }
 
-      // Archive
+      // Archive session (agent + environment are long-lived, not archived)
       try { await (client.beta.sessions as any).archive(session.id); } catch { /* non-critical */ }
-      try { await (client.beta.agents as any).archive(agent.id); } catch { /* non-critical */ }
 
       if (capturedState) {
         capturedState["agentSessionId"] = session.id;
@@ -301,87 +261,4 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       console.error(`[managed-agents] StatusHub notify failed: ${err}`);
     }
   }
-}
-
-function buildSystemPrompt(): string {
-  return `You manage changelog sources for Released. You find, evaluate, add, fetch, and validate changelog sources using the releases_cli tool.
-
-## CLI Commands Reference
-
-Call the releases_cli tool with the command string (without the "releases" prefix):
-
-- list [slug] [--json] [--org <org>] [--has-feed] [--enrichable] [--product <p>] [--category <c>] [--query <text>]
-- discover <domain> [--json]: Probe a domain for changelog URLs, feeds, and GitHub repos
-- add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>] [--skip-eval]
-- fetch <slug> [--dry-run] [--max <n>] [--full] [--crawl] [--no-crawl]: Fetch releases
-- fetch-log <slug>: Show recent fetch history
-- remove <slug> [--ignore --reason <reason>]: Remove a source
-- enrich <slug> [--dry-run] [--limit <n>] [--force]: Enrich sparse releases
-- org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]
-- org edit <slug> [--category <c>]
-- org show <slug>: Full org details with accounts, tags, sources, products
-- org tag add <slug> <tag1> [tag2...]
-- product add <name> --org <org> [--category <c>] [--tags <t1,t2>] [--url <u>] [--description <t>]
-- product edit <slug> [--category <c>]
-- product tag add <slug> <tag1> [tag2...]
-- ignore list --org <org> --json / ignore add --org <org> <url>
-- block list --json / block add <url>
-- categories [--json]: List valid categories
-- edit <slug> [--primary] [--no-primary] [--priority <p>] [--metadata <json>]
-
-NOTE: The "evaluate" command is not available in this mode. Use "discover" to find sources and "fetch --dry-run" to validate them.
-
-## Available Categories
-
-Valid categories: ${CATEGORIES.join(", ")}
-
-When creating an organization, always include a --description with a brief one-sentence product description.
-
-## Multi-Product Organizations
-
-Some organizations ship multiple distinct products. When you discover sources that clearly belong to different products:
-- High confidence (separate repos, separate domains): Create products using product add
-- Medium confidence: Note suggested groupings but don't auto-create
-- Low confidence: Leave sources at the org level
-
-## Onboarding Workflow
-
-1. **Discover** — use the discover command and web search to find changelog URLs, feeds, and GitHub repos
-2. **Add** — add sources with appropriate types
-3. **Validate** — dry-run fetch each source to check quality
-4. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-5. **Report** — summarize what was found
-
-Do NOT actually fetch (without --dry-run) unless explicitly told to.
-
-## Source Selection
-
-Prefer 3-5 high-signal sources per org over exhaustive coverage. Only index the org's own products, not ecosystem plugins. Add and pause low-value sources rather than omitting them entirely.
-
-## Output
-
-Keep output concise — focus on actions and results.
-
-IMPORTANT: At the end of discovery, call the releases_report_state tool with the complete discovery state JSON object (do NOT write to a file). The state object must include: product, domain, githubOrg, startedAt, updatedAt, status, and sources array. Use this schema:
-{
-  "product": "<company name>",
-  "domain": "<discovered domain or null>",
-  "githubOrg": "<discovered GitHub org or null>",
-  "startedAt": "<ISO timestamp>",
-  "updatedAt": "<ISO timestamp>",
-  "status": "awaiting_review",
-  "sources": [
-    {
-      "url": "<source url>",
-      "type": "github|scrape|feed",
-      "slug": "<slug from releases add>",
-      "label": "<human-readable label>",
-      "confidence": "high|medium|low",
-      "validated": true/false,
-      "validationError": "<error message if validation failed>",
-      "releaseCount": <number>,
-      "contentDepth": "full|summary-only"
-    }
-  ]
-}`;
 }

@@ -40,4 +40,10 @@ export interface Env {
   API_WORKER?: Fetcher;
   /** Discovery engine toggle: "managed-agents" (default) or "sandbox". */
   RELEASED_DISCOVERY_ENGINE?: string;
+  /** Pre-created Anthropic Managed Agent ID. */
+  ANTHROPIC_AGENT_ID?: string;
+  /** Pre-created Anthropic Managed Agent version. */
+  ANTHROPIC_AGENT_VERSION?: string;
+  /** Pre-created Anthropic Environment ID. */
+  ANTHROPIC_ENVIRONMENT_ID?: string;
 }
