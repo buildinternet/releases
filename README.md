@@ -425,6 +425,8 @@ bun run deploy               # deploy all workers (API + Discovery)
 bun run deploy:api           # deploy API worker only
 bun run deploy:discovery     # deploy Discovery worker only
 bun run db:migrate:remote    # apply D1 migrations to production
+bun scripts/sync-agent-skills.ts          # sync skills to Anthropic Skills API
+bun scripts/sync-agent-skills.ts --dry-run  # preview without changes
 ```
 
 ### Publishing the CLI to npm
