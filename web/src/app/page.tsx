@@ -4,6 +4,7 @@ import { SearchBar } from "@/components/search-bar";
 import { SourceCard } from "@/components/source-card";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
+import { InstallTabs } from "@/components/install-tabs";
 
 export default async function HomePage() {
   let stats, orgs, independentSources;
@@ -48,6 +49,10 @@ export default async function HomePage() {
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs</span>
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.sources}</strong> sources</span>
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.releases.toLocaleString()}</strong> releases</span>
+        </div>
+        <div className="mt-8">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">Install the CLI</div>
+          <InstallTabs />
         </div>
       </div>
       <div className="max-w-4xl mx-auto px-6 pb-12">

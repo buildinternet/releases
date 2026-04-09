@@ -6,18 +6,22 @@ Website: [releases.sh](https://releases.sh)
 
 ## Install
 
-The CLI is available as a prebuilt binary via npm — no source code or runtime dependencies required:
+### npm
 
 ```bash
 npm install -g @buildinternet/releases
-releases search "react"
 ```
 
 Or run without installing:
 
 ```bash
 npx @buildinternet/releases search "react"
-npx @buildinternet/releases latest --org vercel
+```
+
+### Shell
+
+```bash
+curl -fsSL https://releases.sh/install | bash
 ```
 
 The public CLI connects to the hosted API at `api.releases.sh` automatically. Read-only commands (search, latest, stats, list, categories) work without any configuration. Admin commands (fetch, onboard, enrich) require an API key.
