@@ -219,7 +219,7 @@ orgRoutes.post("/orgs", async (c) => {
 orgRoutes.patch("/orgs/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; domain?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
+  const body = await c.req.json<{ name?: string; slug?: string; domain?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
 
   if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
     return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
@@ -230,6 +230,7 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
 
   const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
   if (body.name) updates.name = body.name;
+  if (body.slug) updates.slug = body.slug;
   if (body.domain !== undefined) updates.domain = body.domain;
   if (body.description !== undefined) updates.description = body.description;
   if (body.category !== undefined) updates.category = body.category;
