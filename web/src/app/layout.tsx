@@ -11,14 +11,14 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "Released — Changelog Index",
-    template: "%s — Released",
+    default: "releases.sh — Product Changelog Catalog",
+    template: "%s — releases.sh",
   },
-  description: "Changelog index for developers. Track release notes across tools, frameworks, and services.",
+  description: "Product changelogs for LLMs and agents. Search across product release notes via CLI, API, or MCP.",
   metadataBase: new URL("https://releases.sh"),
   openGraph: {
     type: "website",
-    siteName: "Released",
+    siteName: "releases.sh",
     locale: "en_US",
   },
   twitter: {
