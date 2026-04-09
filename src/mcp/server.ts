@@ -187,67 +187,68 @@ server.registerTool("get_latest_releases", {
   return textResult(text);
 });
 
-// ── summarize_changes ────────────────────────────────────────────────
-server.registerTool("summarize_changes", {
-  description: "Get an AI-generated summary of recent changes for a product",
-  inputSchema: {
-    product: z.string().describe("Product slug"),
-    days: z.number().optional().describe("Look back this many days (default 30)"),
-    instructions: z.string().optional().describe("Additional guidance for the summary (e.g. what to focus on, audience, format)"),
-  },
-}, async ({ product, days, instructions }) => {
-  const lookback = days ?? 30;
-  const source = await findSourceBySlug(product);
-  if (!source) {
-    return textResult(`No product found with slug "${product}"`);
-  }
+// ── AI tools (gated by ENABLE_AI_TOOLS env var) ─────────────────────
+if (process.env.ENABLE_AI_TOOLS === "true") {
+  server.registerTool("summarize_changes", {
+    description: "Get an AI-generated summary of recent changes for a product",
+    inputSchema: {
+      product: z.string().describe("Product slug"),
+      days: z.number().optional().describe("Look back this many days (default 30)"),
+      instructions: z.string().optional().describe("Additional guidance for the summary (e.g. what to focus on, audience, format)"),
+    },
+  }, async ({ product, days, instructions }) => {
+    const lookback = days ?? 30;
+    const source = await findSourceBySlug(product);
+    if (!source) {
+      return textResult(`No product found with slug "${product}"`);
+    }
 
-  const recentReleases = await getRecentReleases(source.id, daysAgoIso(lookback));
+    const recentReleases = await getRecentReleases(source.id, daysAgoIso(lookback));
 
-  if (recentReleases.length === 0) {
-    return textResult(`No releases found for "${product}" in the last ${lookback} days.`);
-  }
+    if (recentReleases.length === 0) {
+      return textResult(`No releases found for "${product}" in the last ${lookback} days.`);
+    }
 
-  const summary = await summarizeReleases(recentReleases.map(toReleaseInput), { instructions });
-  return textResult(summary);
-});
+    const summary = await summarizeReleases(recentReleases.map(toReleaseInput), { instructions });
+    return textResult(summary);
+  });
 
-// ── compare_products ─────────────────────────────────────────────────
-server.registerTool("compare_products", {
-  description: "Compare recent changes between two products",
-  inputSchema: {
-    products: z.array(z.string()).describe("Array of two product slugs to compare"),
-    days: z.number().optional().describe("Look back this many days (default 30)"),
-  },
-}, async ({ products, days }) => {
-  const lookback = days ?? 30;
+  server.registerTool("compare_products", {
+    description: "Compare recent changes between two products",
+    inputSchema: {
+      products: z.array(z.string()).describe("Array of two product slugs to compare"),
+      days: z.number().optional().describe("Look back this many days (default 30)"),
+    },
+  }, async ({ products, days }) => {
+    const lookback = days ?? 30;
 
-  if (products.length < 2) {
-    return textResult("Please provide at least two product slugs.");
-  }
+    if (products.length < 2) {
+      return textResult("Please provide at least two product slugs.");
+    }
 
-  const cutoff = daysAgoIso(lookback);
+    const cutoff = daysAgoIso(lookback);
 
-  const [sourceA, sourceB] = await Promise.all([
-    findSourceBySlug(products[0]),
-    findSourceBySlug(products[1]),
-  ]);
+    const [sourceA, sourceB] = await Promise.all([
+      findSourceBySlug(products[0]),
+      findSourceBySlug(products[1]),
+    ]);
 
-  if (!sourceA) return textResult(`No product found with slug "${products[0]}"`);
-  if (!sourceB) return textResult(`No product found with slug "${products[1]}"`);
+    if (!sourceA) return textResult(`No product found with slug "${products[0]}"`);
+    if (!sourceB) return textResult(`No product found with slug "${products[1]}"`);
 
-  const [releasesA, releasesB] = await Promise.all([
-    getRecentReleases(sourceA.id, cutoff),
-    getRecentReleases(sourceB.id, cutoff),
-  ]);
+    const [releasesA, releasesB] = await Promise.all([
+      getRecentReleases(sourceA.id, cutoff),
+      getRecentReleases(sourceB.id, cutoff),
+    ]);
 
-  const comparison = await compareProducts(
-    { name: sourceA.name, releases: releasesA.map(toReleaseInput) },
-    { name: sourceB.name, releases: releasesB.map(toReleaseInput) },
-  );
+    const comparison = await compareProducts(
+      { name: sourceA.name, releases: releasesA.map(toReleaseInput) },
+      { name: sourceB.name, releases: releasesB.map(toReleaseInput) },
+    );
 
-  return textResult(comparison);
-});
+    return textResult(comparison);
+  });
+}
 
 // ── list_products ────────────────────────────────────────────────────
 server.registerTool("list_products", {
