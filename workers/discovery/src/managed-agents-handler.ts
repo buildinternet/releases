@@ -53,6 +53,7 @@ export async function runManagedAgentsDiscovery(
     type: "session:start",
     sessionId,
     company: params.company,
+    sessionType: "onboard",
   });
 
   try {
@@ -253,17 +254,28 @@ export async function runManagedAgentsDiscovery(
 async function notifyStatusHub(env: Env, event: Record<string, unknown>): Promise<void> {
   try {
     const apiKey = await env.RELEASED_API_KEY.get();
-    const url = `${env.RELEASED_API_URL}/v1/status/event`;
-    await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
-      },
-      body: JSON.stringify(event),
-    });
-  } catch {
-    // Non-critical
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+    };
+    const body = JSON.stringify(event);
+
+    // Prefer service binding (Worker-to-Worker, no external DNS)
+    if (env.API_WORKER) {
+      await env.API_WORKER.fetch(new Request("https://api/v1/status/event", {
+        method: "POST",
+        headers,
+        body,
+      }));
+    } else {
+      await fetch(`${env.RELEASED_API_URL}/v1/status/event`, {
+        method: "POST",
+        headers,
+        body,
+      });
+    }
+  } catch (err) {
+    console.error(`[managed-agents] StatusHub notify failed: ${err}`);
   }
 }
 
