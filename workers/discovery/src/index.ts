@@ -14,6 +14,24 @@ function resolveEngine(env: Env, body?: { engine?: string }): DiscoveryEngine {
   return "managed-agents";
 }
 
+const MAX_UPDATE_SOURCES = 20;
+
+interface AnthropicConfig {
+  agentId: string;
+  agentVersion?: number;
+  environmentId: string;
+}
+
+function getAnthropicConfig(env: Env): AnthropicConfig | Response {
+  const agentId = env.ANTHROPIC_AGENT_ID;
+  const environmentId = env.ANTHROPIC_ENVIRONMENT_ID;
+  if (!agentId || !environmentId) {
+    return jsonResponse({ error: "ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured" }, 500);
+  }
+  const agentVersion = env.ANTHROPIC_AGENT_VERSION ? parseInt(env.ANTHROPIC_AGENT_VERSION, 10) : undefined;
+  return { agentId, agentVersion, environmentId };
+}
+
 function jsonResponse(data: object, status = 200): Response {
   return new Response(JSON.stringify(data), {
     status,
@@ -102,12 +120,9 @@ export default {
           return errorResponse("ANTHROPIC_API_KEY not configured — cannot use managed-agents engine", 500);
         }
 
-        const agentId = env.ANTHROPIC_AGENT_ID;
-        const agentVersion = env.ANTHROPIC_AGENT_VERSION ? parseInt(env.ANTHROPIC_AGENT_VERSION, 10) : undefined;
-        const environmentId = env.ANTHROPIC_ENVIRONMENT_ID;
-        if (!agentId || !environmentId) {
-          return errorResponse("ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured", 500);
-        }
+        const config = getAnthropicConfig(env);
+        if (config instanceof Response) return config;
+        const { agentId, agentVersion, environmentId } = config;
 
         const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
         const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
@@ -165,21 +180,18 @@ export default {
       if (!Array.isArray(body.sourceSlugs) || body.sourceSlugs.length === 0) {
         return errorResponse("sourceSlugs must be a non-empty array", 400);
       }
-      if (body.sourceSlugs.length > 20) {
-        return errorResponse(`Too many sources (${body.sourceSlugs.length}/20 max). Split into multiple requests.`, 400);
+      if (body.sourceSlugs.length > MAX_UPDATE_SOURCES) {
+        return errorResponse(`Too many sources (${body.sourceSlugs.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`, 400);
       }
 
       const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
       if (!anthropicKey) {
-        return errorResponse("ANTHROPIC_API_KEY not configured — cannot use managed-agents engine", 500);
+        return errorResponse("ANTHROPIC_API_KEY not configured", 500);
       }
 
-      const agentId = env.ANTHROPIC_AGENT_ID;
-      const agentVersion = env.ANTHROPIC_AGENT_VERSION ? parseInt(env.ANTHROPIC_AGENT_VERSION, 10) : undefined;
-      const environmentId = env.ANTHROPIC_ENVIRONMENT_ID;
-      if (!agentId || !environmentId) {
-        return errorResponse("ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured", 500);
-      }
+      const config = getAnthropicConfig(env);
+      if (config instanceof Response) return config;
+      const { agentId, agentVersion, environmentId } = config;
 
       const sessionId = `ma-${crypto.randomUUID()}`;
       const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
