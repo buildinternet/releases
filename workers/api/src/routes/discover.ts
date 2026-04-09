@@ -49,3 +49,21 @@ discoverRoutes.get("/discover/:sessionId", async (c) => {
     headers: res.headers,
   });
 });
+
+// ── Start update session ──
+
+discoverRoutes.post("/update", async (c) => {
+  const body = await c.req.text();
+  const res = await proxyToDiscovery(c.env, "/update", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: c.req.header("Authorization") ?? "",
+    },
+    body,
+  });
+  return new Response(res.body, {
+    status: res.status,
+    headers: res.headers,
+  });
+});
