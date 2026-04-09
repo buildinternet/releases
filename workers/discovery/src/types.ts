@@ -37,4 +37,6 @@ export interface Env {
   RELEASED_API_URL: string;
   RELEASED_API_KEY: SecretBinding;
   API_WORKER?: Fetcher;
+  /** Discovery engine toggle: "managed-agents" (default) or "sandbox". */
+  RELEASED_DISCOVERY_ENGINE?: string;
 }

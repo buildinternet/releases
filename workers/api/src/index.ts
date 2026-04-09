@@ -120,6 +120,16 @@ v1.route("/knowledge", knowledge);
 v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 
+// Static endpoint — categories are defined in code, not DB
+v1.get("/categories", (c) => {
+  // Import would create a circular dep, so we inline the list here.
+  // Must stay in sync with src/lib/categories.ts.
+  return c.json([
+    "ai", "cloud", "database", "design", "developer-tools",
+    "devops", "framework", "infrastructure", "observability", "security",
+  ]);
+});
+
 app.route("/v1", v1);
 
 export default {

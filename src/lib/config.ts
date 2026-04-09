@@ -1,5 +1,5 @@
 import { mkdirSync } from "fs";
-import { join } from "path";
+import { join, resolve } from "path";
 import { homedir } from "os";
 
 let _dataDir: string | null = null;
@@ -20,6 +20,16 @@ export function getLogsDir(): string {
   const dir = join(getDataDir(), "logs");
   mkdirSync(dir, { recursive: true });
   return dir;
+}
+
+/** Resolve the CLI command — env override, source-mode detection, or default binary name. */
+export function resolveCLICmd(): string {
+  if (process.env.RELEASED_CLI_CMD) return process.env.RELEASED_CLI_CMD;
+  if (process.argv[1]?.endsWith(".ts")) {
+    const projectRoot = resolve(import.meta.dir, "../..");
+    return `bun ${projectRoot}/src/index.ts`;
+  }
+  return "releases";
 }
 
 export const config = {

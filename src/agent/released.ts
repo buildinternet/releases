@@ -2,7 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "path";
 import { homedir } from "os";
 import { existsSync, mkdirSync, symlinkSync } from "fs";
-import { config } from "../lib/config.js";
+import { config, resolveCLICmd } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import type { Confidence } from "../lib/discover.js";
 import { CATEGORIES } from "../lib/categories.js";
@@ -48,7 +48,7 @@ export interface ReleasedAgentOptions {
 // ── Constants ──────────────────────────────────────────────────────
 
 export const DISCOVERY_STATE_FILE = "/tmp/discovery-state.json";
-const cliCmd = process.env.RELEASED_CLI_CMD ?? "releases";
+const cliCmd = resolveCLICmd();
 
 // ── System prompt ──────────────────────────────────────────────────
 
@@ -294,21 +294,35 @@ export async function runAgent(options: ReleasedAgentOptions): Promise<Discovery
 
 // ── Backward-compatible discovery wrapper ──────────────────────────
 
+/** Status event emitted during discovery for StatusHub integration. */
+export interface DiscoveryStatusEvent {
+  type: "session:start" | "session:progress" | "session:complete" | "session:error";
+  sessionId: string;
+  company: string;
+  [key: string]: unknown;
+}
+
 export interface DiscoveryOptions {
   company: string;
   domain?: string;
   githubOrg?: string;
   onProgress?: (text: string) => void;
   onToolUse?: (toolName: string, command?: string) => void;
+  /** Emitted for StatusHub integration — maps agent events to session lifecycle. */
+  onStatusEvent?: (event: DiscoveryStatusEvent) => void;
 }
 
-export async function runDiscovery(options: DiscoveryOptions): Promise<DiscoveryState> {
+/** Build the user-facing discovery prompt with optional domain/org hints. */
+export function buildDiscoveryPrompt(options: Pick<DiscoveryOptions, "company" | "domain" | "githubOrg">): string {
   const hints: string[] = [];
   if (options.domain) hints.push(`Their website is ${options.domain}.`);
   if (options.githubOrg) hints.push(`Their GitHub organization is ${options.githubOrg}.`);
   const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
+  return `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+}
 
-  const prompt = `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+export async function runDiscovery(options: DiscoveryOptions): Promise<DiscoveryState> {
+  const prompt = buildDiscoveryPrompt(options);
 
   return runAgent({
     prompt,
