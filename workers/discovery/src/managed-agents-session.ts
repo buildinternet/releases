@@ -103,7 +103,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       if (params.domain) hints.push(`Their website is ${params.domain}.`);
       if (params.githubOrg) hints.push(`Their GitHub organization is ${params.githubOrg}.`);
       const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-      const prompt = `Find and evaluate changelog sources for "${params.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+      const prompt = `Find and evaluate changelog sources for "${params.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
 
       const stream = await (client.beta.sessions.events as any).stream(session.id);
       await (client.beta.sessions.events as any).send(session.id, {
