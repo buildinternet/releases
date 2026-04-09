@@ -22,16 +22,24 @@ export interface SessionParams {
   agentId: string;
   agentVersion?: number;
   environmentId: string;
+  mode: "onboard" | "update";
+  /** For update mode: source slugs to fetch. */
+  sourceSlugs?: string[];
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 
 export class ManagedAgentsSession extends DurableObject<Env> {
 
-  async startDiscovery(params: SessionParams): Promise<void> {
+  async startSession(params: SessionParams): Promise<void> {
     await this.ctx.storage.put("params", params);
     await this.ctx.storage.put("status", "running");
     await this.ctx.storage.setAlarm(Date.now());
+  }
+
+  /** @deprecated Use startSession instead. Kept for backward compat with existing DO instances. */
+  async startDiscovery(params: Omit<SessionParams, "mode">): Promise<void> {
+    return this.startSession({ ...params, mode: "onboard" });
   }
 
   async alarm(): Promise<void> {
@@ -41,7 +49,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     const params = await this.ctx.storage.get<SessionParams>("params");
     if (!params) return;
 
-    await this.runDiscovery(params);
+    await this.runSession(params);
   }
 
   async getStatus(): Promise<Record<string, unknown>> {
@@ -59,8 +67,9 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     };
   }
 
-  private async runDiscovery(params: SessionParams): Promise<void> {
-    const { sessionId, agentId, agentVersion, environmentId } = params;
+  private async runSession(params: SessionParams): Promise<void> {
+    const { sessionId, agentId, agentVersion, environmentId, mode } = params;
+    const sessionType = mode === "update" ? "update" : "onboard";
 
     try {
       const anthropicApiKey = await this.env.ANTHROPIC_API_KEY.get();
@@ -86,24 +95,34 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         type: "session:start",
         sessionId,
         company: params.company,
-        sessionType: "onboard",
+        sessionType,
       }, releasedApiKey);
 
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
       const client = new Anthropic({ apiKey: anthropicApiKey });
 
+      const sessionTitle = mode === "update"
+        ? `Update: ${params.company}`
+        : `Discovery: ${params.company}`;
+
       const session = await (client.beta.sessions as any).create({
         agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
         environment_id: environmentId,
-        title: `Discovery: ${params.company}`,
+        title: sessionTitle,
       });
 
-      // Build prompt
-      const hints: string[] = [];
-      if (params.domain) hints.push(`Their website is ${params.domain}.`);
-      if (params.githubOrg) hints.push(`Their GitHub organization is ${params.githubOrg}.`);
-      const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-      const prompt = `Find and evaluate changelog sources for "${params.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+      // Build prompt based on mode
+      let prompt: string;
+      if (mode === "update") {
+        const slugList = (params.sourceSlugs ?? []).map(s => `- ${s}`).join("\n");
+        prompt = `Fetch release updates for the following sources:\n${slugList}\n\nFor each source, run: fetch <slug> --max 100\nReport the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
+      } else {
+        const hints: string[] = [];
+        if (params.domain) hints.push(`Their website is ${params.domain}.`);
+        if (params.githubOrg) hints.push(`Their GitHub organization is ${params.githubOrg}.`);
+        const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
+        prompt = `Find and evaluate changelog sources for "${params.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+      }
 
       const stream = await (client.beta.sessions.events as any).stream(session.id);
       await (client.beta.sessions.events as any).send(session.id, {
@@ -217,6 +236,17 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           company: params.company,
           sourcesFound: Array.isArray(capturedState["sources"]) ? (capturedState["sources"] as unknown[]).length : 0,
           result: capturedState,
+        }, releasedApiKey);
+        return;
+      }
+
+      // Update sessions don't require a state report — completing without one is fine
+      if (mode === "update") {
+        await this.ctx.storage.put("status", "complete");
+        await this.notifyStatusHub({
+          type: "session:complete",
+          sessionId,
+          company: params.company,
         }, releasedApiKey);
         return;
       }

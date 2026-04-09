@@ -21,6 +21,7 @@ export interface AgentDiscoveredSource {
   duplicateOf?: string;
   approved?: boolean;
   fetched?: boolean;
+  releasesFetched?: number;
   contentDepth?: "full" | "summary-only";
 }
 
@@ -108,13 +109,12 @@ When onboarding a new company, follow this sequence:
 1. **Discover** — find changelog URLs, feeds, and GitHub repos
 2. **Add** — add sources with appropriate types
 3. **Validate** — dry-run fetch each source to check quality
-4. **Fetch** — persist releases for approved sources (only when explicitly told to fetch)
+4. **Fetch** — for validated sources, run a real fetch (without --dry-run) with --max 50 to seed initial releases
 5. **Enrich feed sources** — after fetching, assess feed content depth and enrich sparse sources. See the "Feed Content Depth Assessment" section in the parsing-changelogs skill. Delegate enrichment to the bulk-worker subagent.
 
 ## Output
 
 Keep your output concise — focus on actions and results.
-Do NOT actually fetch (without --dry-run) unless explicitly told to.
 
 IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY_STATE_FILE} with this schema:
 {
@@ -136,6 +136,7 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
       "validated": true/false,
       "validationError": "<error message if validation failed>",
       "releaseCount": <number of releases found in dry-run>,
+      "releasesFetched": <number of releases actually persisted via real fetch>,
       "duplicateOf": "<slug if this overlaps another source>",
       "contentDepth": "full|summary-only (for feed/scrape sources, based on dry-run content length)",
       "productSlug": "<product slug if assigned to auto-created product>"
@@ -318,7 +319,7 @@ export function buildDiscoveryPrompt(options: Pick<DiscoveryOptions, "company" |
   if (options.domain) hints.push(`Their website is ${options.domain}.`);
   if (options.githubOrg) hints.push(`Their GitHub organization is ${options.githubOrg}.`);
   const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-  return `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, and write the discovery state file. Do not persist any fetches — dry-run only. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+  return `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
 }
 
 export async function runDiscovery(options: DiscoveryOptions): Promise<DiscoveryState> {

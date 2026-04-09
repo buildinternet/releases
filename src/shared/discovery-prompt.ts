@@ -68,10 +68,11 @@ Some organizations ship multiple distinct products. When you discover sources th
 ${discoverStep}
 2. **Add** — add sources with appropriate types
 3. **Validate** — dry-run fetch each source to check quality
-4. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-5. **Report** — summarize what was found
+4. **Fetch** — for validated sources, run a real fetch (without --dry-run) with --max 50 to seed initial releases
+5. **Assess content depth** — for feed sources, check if pages have richer content than feeds
+6. **Report** — summarize what was found, including how many releases were persisted
 
-Do NOT actually fetch (without --dry-run) unless explicitly told to.
+After dry-run validation succeeds, proceed directly to a real fetch. Do not wait for external approval.
 
 ## Source Selection
 
@@ -99,8 +100,14 @@ IMPORTANT: At the end of discovery, call the releases_report_state tool with the
       "validated": true/false,
       "validationError": "<error message if validation failed>",
       "releaseCount": <number>,
+      "releasesFetched": <number of releases persisted via real fetch>,
+      "fetched": true/false,
       "contentDepth": "full|summary-only"
     }
   ]
-}`;
+}
+
+After fetching, update each source in the state with:
+- "fetched": true (if the real fetch succeeded)
+- "releasesFetched": <number of releases persisted>`;
 }

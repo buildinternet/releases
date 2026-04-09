@@ -94,7 +94,7 @@ const DISCOVERY_TOOLS = [
     type: "custom",
     name: "releases_cli",
     description:
-      "Execute a Released CLI command. Manages changelog sources, orgs, products. Use --json for structured output. Do NOT fetch without --dry-run unless told to persist.",
+      "Execute a Released CLI command. Manages changelog sources, orgs, products. Use --json for structured output. Use --dry-run for validation, then real fetch (--max 50) to persist validated sources.",
     input_schema: {
       type: "object" as const,
       properties: {

@@ -11,6 +11,13 @@ export interface OnboardResponse {
   status: "running";
 }
 
+export interface UpdateRequest {
+  /** Label for StatusHub — can be an org name or description like "stale sources". */
+  company: string;
+  /** Source slugs to fetch. */
+  sourceSlugs: string[];
+}
+
 export interface StatusResponse {
   status: "running" | "complete" | "error" | "idle";
   progress?: {
