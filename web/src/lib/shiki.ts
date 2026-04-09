@@ -14,11 +14,23 @@ import css from "@shikijs/langs/css";
 import html from "@shikijs/langs/html";
 import md from "@shikijs/langs/markdown";
 
-const highlighter = createHighlighterCoreSync({
-  themes: [githubLight, githubDarkDimmed],
-  langs: [js, ts, bash, json, yaml, jsx, tsx, css, html, md],
-  engine: createJavaScriptRegexEngine(),
-});
+const globalKey = "__shiki_highlighter" as const;
+
+function getHighlighter() {
+  const cached = (globalThis as Record<string, unknown>)[globalKey];
+  if (cached) return cached as ReturnType<typeof createHighlighterCoreSync>;
+
+  const instance = createHighlighterCoreSync({
+    themes: [githubLight, githubDarkDimmed],
+    langs: [js, ts, bash, json, yaml, jsx, tsx, css, html, md],
+    engine: createJavaScriptRegexEngine(),
+  });
+
+  (globalThis as Record<string, unknown>)[globalKey] = instance;
+  return instance;
+}
+
+const highlighter = getHighlighter();
 
 const themeOptions = {
   themes: {
