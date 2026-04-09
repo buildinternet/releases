@@ -1,5 +1,3 @@
-"use client";
-
 import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
