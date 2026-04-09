@@ -70,16 +70,37 @@ jobs:
           rm ~/.npmrc
 
       - name: Prepare release assets
-        env:
-          TAG_NAME: ${{ github.ref_name }}
         run: |
-          VERSION="${TAG_NAME#v}"
           mkdir -p dist/release
           for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
             cp "npm/releases-${target}/releases" "dist/release/releases-${target}"
             gzip -k "dist/release/releases-${target}"
+            sha256sum "dist/release/releases-${target}.gz" | awk '{print $1}' > "dist/release/releases-${target}.gz.sha256"
           done
-          cd dist/release && sha256sum *.gz > checksums.txt
+          sha256sum dist/release/*.gz > dist/release/checksums.txt
+
+      - name: Update Homebrew formula
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          DARWIN_ARM64=$(cat dist/release/releases-darwin-arm64.gz.sha256)
+          DARWIN_X64=$(cat dist/release/releases-darwin-x64.gz.sha256)
+          LINUX_ARM64=$(cat dist/release/releases-linux-arm64.gz.sha256)
+          LINUX_X64=$(cat dist/release/releases-linux-x64.gz.sha256)
+          # Update version
+          sed -i "s/version \".*\"/version \"${VERSION}\"/" homebrew/releases.rb
+          # Update SHA256 hashes — uses line-context matching so each sha256
+          # line is replaced based on the url line above it
+          sed -i "/releases-darwin-arm64\.gz/{n;s/sha256 \"[^\"]*\"/sha256 \"${DARWIN_ARM64}\"/;}" homebrew/releases.rb
+          sed -i "/releases-darwin-x64\.gz/{n;s/sha256 \"[^\"]*\"/sha256 \"${DARWIN_X64}\"/;}" homebrew/releases.rb
+          sed -i "/releases-linux-arm64\.gz/{n;s/sha256 \"[^\"]*\"/sha256 \"${LINUX_ARM64}\"/;}" homebrew/releases.rb
+          sed -i "/releases-linux-x64\.gz/{n;s/sha256 \"[^\"]*\"/sha256 \"${LINUX_X64}\"/;}" homebrew/releases.rb
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add homebrew/releases.rb
+          git commit -m "chore: update Homebrew formula for v${VERSION}"
+          git push origin HEAD:main
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -87,7 +108,11 @@ jobs:
           generate_release_notes: true
           files: |
             dist/release/releases-darwin-arm64.gz
+            dist/release/releases-darwin-arm64.gz.sha256
             dist/release/releases-darwin-x64.gz
+            dist/release/releases-darwin-x64.gz.sha256
             dist/release/releases-linux-x64.gz
+            dist/release/releases-linux-x64.gz.sha256
             dist/release/releases-linux-arm64.gz
+            dist/release/releases-linux-arm64.gz.sha256
             dist/release/checksums.txt
