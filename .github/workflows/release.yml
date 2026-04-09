@@ -1,0 +1,88 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Build binaries
+        run: |
+          bun build --compile src/index.ts --outfile npm/releases-darwin-arm64/releases --target=bun-darwin-arm64
+          bun build --compile src/index.ts --outfile npm/releases-darwin-x64/releases --target=bun-darwin-x64
+          bun build --compile src/index.ts --outfile npm/releases-linux-x64/releases --target=bun-linux-x64
+          bun build --compile src/index.ts --outfile npm/releases-linux-arm64/releases --target=bun-linux-arm64
+
+      - name: Sync npm package versions
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          for pkg in releases releases-darwin-arm64 releases-darwin-x64 releases-linux-x64 releases-linux-arm64; do
+            node -e "
+              const fs = require('fs');
+              const p = JSON.parse(fs.readFileSync('npm/$pkg/package.json', 'utf8'));
+              p.version = '$VERSION';
+              if (p.optionalDependencies) {
+                for (const k of Object.keys(p.optionalDependencies)) {
+                  p.optionalDependencies[k] = '$VERSION';
+                }
+              }
+              fs.writeFileSync('npm/$pkg/package.json', JSON.stringify(p, null, 2) + '\n');
+            "
+          done
+
+      - name: Publish to npm
+        env:
+          NPM_PUBLISHING_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISHING_TOKEN}" > npm/.npmrc
+          for pkg in releases-darwin-arm64 releases-darwin-x64 releases-linux-x64 releases-linux-arm64 releases; do
+            npm publish npm/$pkg --access public --userconfig npm/.npmrc
+          done
+          rm npm/.npmrc
+
+      - name: Prepare release assets
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          mkdir -p dist/release
+          for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
+            cp "npm/releases-${target}/releases" "dist/release/releases-${target}"
+            gzip -k "dist/release/releases-${target}"
+          done
+          cd dist/release && sha256sum *.gz > checksums.txt
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: |
+            dist/release/releases-darwin-arm64.gz
+            dist/release/releases-darwin-x64.gz
+            dist/release/releases-linux-x64.gz
+            dist/release/releases-linux-arm64.gz
+            dist/release/checksums.txt
