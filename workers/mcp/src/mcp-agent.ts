@@ -16,6 +16,7 @@ type SecretBinding = { get(): Promise<string> };
 export interface Env {
   DB: D1Database;
   ANTHROPIC_API_KEY: SecretBinding;
+  ENABLE_AI_TOOLS?: string;
 }
 
 export function createServer(env: Env) {
@@ -70,28 +71,30 @@ export function createServer(env: Env) {
     },
   }, async (params) => listOrganizations(db, params));
 
-  server.registerTool("summarize_changes", {
-    description: "Get an AI-generated summary of recent changes for a product",
-    inputSchema: {
-      product: z.string().describe("Product slug"),
-      days: z.number().optional().describe("Look back this many days (default 30)"),
-      instructions: z.string().optional().describe("Additional guidance for the summary (e.g. what to focus on, audience, format)"),
-    },
-  }, async (params) => {
-    const anthropic = await getAnthropic();
-    return summarizeChanges(db, params, anthropic);
-  });
+  if (env.ENABLE_AI_TOOLS === "true") {
+    server.registerTool("summarize_changes", {
+      description: "Get an AI-generated summary of recent changes for a product",
+      inputSchema: {
+        product: z.string().describe("Product slug"),
+        days: z.number().optional().describe("Look back this many days (default 30)"),
+        instructions: z.string().optional().describe("Additional guidance for the summary (e.g. what to focus on, audience, format)"),
+      },
+    }, async (params) => {
+      const anthropic = await getAnthropic();
+      return summarizeChanges(db, params, anthropic);
+    });
 
-  server.registerTool("compare_products", {
-    description: "Compare recent changes between two products",
-    inputSchema: {
-      products: z.array(z.string()).describe("Array of two product slugs to compare"),
-      days: z.number().optional().describe("Look back this many days (default 30)"),
-    },
-  }, async (params) => {
-    const anthropic = await getAnthropic();
-    return compareProducts(db, params, anthropic);
-  });
+    server.registerTool("compare_products", {
+      description: "Compare recent changes between two products",
+      inputSchema: {
+        products: z.array(z.string()).describe("Array of two product slugs to compare"),
+        days: z.number().optional().describe("Look back this many days (default 30)"),
+      },
+    }, async (params) => {
+      const anthropic = await getAnthropic();
+      return compareProducts(db, params, anthropic);
+    });
+  }
 
   return server;
 }
