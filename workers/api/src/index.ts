@@ -20,6 +20,7 @@ import knowledge from "./routes/knowledge.js";
 import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
+import { evaluateRoutes } from "./routes/evaluate.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -79,7 +80,7 @@ for (const r of publicReadRoutes) {
 // Admin-only routes: all methods require auth
 const adminRoutes = [
   "sessions", "fetch-log", "usage-log", "blocked-urls",
-  "discover", "aliases", "status/fetch-log", "status/usage", "status/event",
+  "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -119,6 +120,7 @@ v1.route("/summaries", summaries);
 v1.route("/knowledge", knowledge);
 v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
+v1.route("/", evaluateRoutes);
 
 // Static endpoint — categories are defined in code, not DB
 v1.get("/categories", (c) => {

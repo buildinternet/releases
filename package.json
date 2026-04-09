@@ -38,7 +38,7 @@
     "eval:evaluation": "bun test ./tests/evals/evaluation.eval.ts --timeout 30000",
     "eval:discovery": "bun test ./tests/evals/discovery.eval.ts --timeout 300000"
   },
-  "workspaces": ["workers/*"],
+  "workspaces": ["workers/api"],
   "keywords": [
     "changelog",
     "releases",

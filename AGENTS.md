@@ -37,6 +37,8 @@ bun run build:all:linux       # cross-compile both for Linux
 
 Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_URL`) — local SQLite mode is only supported via `bun src/index.ts`.
 
+**Workspaces:** Only `workers/api` is declared as a workspace in root `package.json`. The discovery worker (`workers/discovery/`) is intentionally excluded because Bun eagerly resolves imports across all workspace members at startup — the `cloudflare:workers` imports in the discovery worker's Durable Object files cause `bun src/index.ts` to fail even though the CLI never imports from that workspace. Wrangler manages the discovery worker's dependencies independently.
+
 ## Conventions
 
 - All logging goes to **stderr** (`src/lib/logger.ts`). stdout is reserved for MCP JSON-RPC in serve mode.
