@@ -23,13 +23,20 @@ function getSystemTheme(): "light" | "dark" {
   return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
 }
 
+function getInitialResolvedTheme(): "light" | "dark" {
+  if (typeof document === "undefined") return "light";
+  return document.documentElement.classList.contains("dark") ? "dark" : "light";
+}
+
 function applyTheme(resolved: "light" | "dark") {
-  document.documentElement.classList.toggle("dark", resolved === "dark");
+  document.documentElement.classList.remove("light", "dark");
+  document.documentElement.classList.add(resolved);
+  document.documentElement.style.colorScheme = resolved;
 }
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>("system");
-  const [systemPreference, setSystemPreference] = useState<"light" | "dark">("light");
+  const [systemPreference, setSystemPreference] = useState<"light" | "dark">(getInitialResolvedTheme);
   const themeRef = useRef(theme);
 
   const resolved = theme === "system" ? systemPreference : theme;
@@ -48,7 +55,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     applyTheme(resolved);
   }, [resolved]);
 
-  // Stable matchMedia listener — never torn down/recreated
+  // Stable matchMedia listener
   useEffect(() => {
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = (e: MediaQueryListEvent) => {
