@@ -200,6 +200,7 @@ Examples:
     .description("Edit an organization")
     .argument("<identifier>", "Org slug, domain, or name")
     .option("--name <name>", "Update display name")
+    .option("--slug <slug>", "Update slug")
     .option("--domain <domain>", "Update domain")
     .option("--description <text>", "Update description")
     .option("--category <category>", "Set category")
@@ -207,7 +208,7 @@ Examples:
     .option("--avatar <url>", "Set avatar image URL")
     .option("--no-avatar", "Clear avatar URL")
     .option("--json", "Output as JSON")
-    .action(async (identifier: string, opts: { name?: string; domain?: string; description?: string; category?: string | boolean; avatar?: string | boolean; json?: boolean }) => {
+    .action(async (identifier: string, opts: { name?: string; slug?: string; domain?: string; description?: string; category?: string | boolean; avatar?: string | boolean; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
         return orgNotFound(identifier);
@@ -215,6 +216,7 @@ Examples:
 
       const updates: Record<string, unknown> = {};
       if (opts.name !== undefined) updates.name = opts.name;
+      if (opts.slug !== undefined) updates.slug = opts.slug;
       if (opts.domain !== undefined) updates.domain = opts.domain;
       if (opts.description !== undefined) updates.description = opts.description;
 
@@ -235,7 +237,7 @@ Examples:
       }
 
       if (Object.keys(updates).length === 0) {
-        console.error(chalk.yellow("No fields to update. Use --name, --domain, --description, --category, or --avatar."));
+        console.error(chalk.yellow("No fields to update. Use --name, --slug, --domain, --description, --category, or --avatar."));
         process.exit(1);
       }
 
