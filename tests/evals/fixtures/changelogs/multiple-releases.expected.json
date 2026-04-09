@@ -1,0 +1,30 @@
+[
+  {
+    "version": "2.3.0",
+    "publishedAt": "2024-02-28",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["webhook", "CSV"]
+  },
+  {
+    "version": "2.2.1",
+    "publishedAt": "2024-02-10",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["authentication", "timezone"]
+  },
+  {
+    "version": "2.2.0",
+    "publishedAt": "2024-01-25",
+    "isBreaking": true,
+    "hasContent": true,
+    "contentContains": ["collaboration", "custom domains"]
+  },
+  {
+    "version": "2.1.0",
+    "publishedAt": "2024-01-05",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["analytics dashboard"]
+  }
+]

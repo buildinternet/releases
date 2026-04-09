@@ -479,7 +479,7 @@ bun run build:all:linux      # compile CLI + MCP server for sandbox container
 Tests use Bun's built-in test runner — no extra dependencies required.
 
 ```bash
-bun test                     # run all tests
+bun test                     # run all tests (evals are excluded by design)
 bun test tests/unit/         # run unit tests only
 bun test tests/cli/          # run CLI integration tests only
 bun test --watch             # re-run on file changes
@@ -495,7 +495,10 @@ tests/
     feeds/              # RSS, Atom, JSON Feed samples
     html/               # HTML pages for parser testing
   unit/                 # pure function tests (dates, slug, hash, feed parsers, etc.)
-  cli/                  # integration tests that shell out to the real CLI
+  integration/          # adapter tests with fixture HTTP servers
+  cli/                  # end-to-end tests that shell out to the real CLI
+  api/                  # API middleware and content negotiation tests
+  evals/                # AI eval suites (see below)
 ```
 
 Type-check tests separately (they have their own tsconfig):
@@ -503,3 +506,27 @@ Type-check tests separately (they have their own tsconfig):
 ```bash
 npx tsc --noEmit --project tests/tsconfig.json
 ```
+
+### Evals
+
+Eval suites measure the quality of AI-powered features — changelog parsing, source evaluation, and agent discovery. They call real AI models and are not part of the normal test run.
+
+```bash
+bun run eval                 # run all evals
+bun run eval:parsing         # parsing pipeline evals (~2 min, needs ANTHROPIC_API_KEY)
+bun run eval:evaluation      # URL evaluation evals (~30 sec, no API key needed)
+bun run eval:discovery       # agent discovery evals (~3 min/company, ~$2/company)
+```
+
+Evals use the same models as production (`config.ingestModel()` for parsing, `config.agentModel()` for discovery). Override with env vars to compare models:
+
+```bash
+RELEASED_INGEST_MODEL=claude-sonnet-4-6 bun run eval:parsing
+```
+
+**Fixtures** live in `tests/evals/fixtures/`:
+
+- `changelogs/` — markdown + expected JSON pairs for parsing evals. Each `.expected.json` is a grading spec with fields like `contentContains`, `mediaCountMin`, and `isBreaking` that enable code-based grading of structured AI output.
+- `discovery/` — company JSON files with expected sources and products for discovery evals.
+
+**Results** are saved to `tests/evals/results/` (gitignored) as timestamped JSON for tracking scores over time.

@@ -1,0 +1,12 @@
+[
+  {
+    "version": "3.2.0",
+    "title": "Dark Mode Support",
+    "publishedAt": "2024-01-15",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["dark mode", "bug fixes"],
+    "mediaCount": 1,
+    "mediaTypes": ["image"]
+  }
+]

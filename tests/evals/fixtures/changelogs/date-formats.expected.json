@@ -1,0 +1,28 @@
+[
+  {
+    "version": "3.1.0",
+    "publishedAt": "2023-12-05",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["batch processing"]
+  },
+  {
+    "version": "3.0.0",
+    "publishedAt": "2023-11-15",
+    "isBreaking": true,
+    "hasContent": true,
+    "contentContains": ["Python 3.7", "GraphQL"]
+  },
+  {
+    "version": "2.9.0",
+    "publishedAt": "2023-11-01",
+    "isBreaking": false,
+    "hasContent": true
+  },
+  {
+    "version": "2.8.0",
+    "publishedAt": "2023-10",
+    "isBreaking": false,
+    "hasContent": true
+  }
+]

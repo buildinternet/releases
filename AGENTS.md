@@ -20,6 +20,10 @@ bun src/index.ts <command>    # run directly during development
 
 Type-check: `npx tsc --noEmit`
 
+Tests: `bun test`
+
+**Evals (`tests/evals/`) are manual and on-demand only.** Do not run evals as part of normal development, CI, or test verification. They call AI APIs, cost money, and take minutes to complete. Only run evals when explicitly asked by the user via `bun run eval:parsing`, `bun run eval:evaluation`, or `bun run eval:discovery`.
+
 ## Building
 
 The CLI compiles to a self-contained binary via `bun build --compile`:

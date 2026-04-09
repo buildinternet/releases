@@ -1,0 +1,16 @@
+[
+  {
+    "version": "5.0.0",
+    "publishedAt": "2024-04-01",
+    "isBreaking": true,
+    "hasContent": true,
+    "contentContains": ["Node.js 16", "initialize", "setup"]
+  },
+  {
+    "version": "4.9.2",
+    "publishedAt": "2024-03-15",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["memory leak", "WebSocket"]
+  }
+]

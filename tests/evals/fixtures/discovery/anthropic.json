@@ -1,0 +1,11 @@
+{
+  "company": "Anthropic",
+  "domain": "anthropic.com",
+  "githubOrg": "anthropics",
+  "expectedSources": [
+    { "urlPattern": "github.com/anthropics/anthropic-sdk-python", "type": "github" },
+    { "urlPattern": "github.com/anthropics/anthropic-sdk-typescript", "type": "github" }
+  ],
+  "expectedProducts": [],
+  "notes": "SDK-focused company — agent should find SDK release pages on GitHub"
+}

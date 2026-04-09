@@ -1,0 +1,11 @@
+{
+  "company": "Vercel",
+  "domain": "vercel.com",
+  "githubOrg": "vercel",
+  "expectedSources": [
+    { "urlPattern": "github.com/vercel/next.js", "type": "github" },
+    { "urlPattern": "github.com/vercel/turbo", "type": "github" }
+  ],
+  "expectedProducts": ["Next.js", "Turborepo"],
+  "notes": "Multi-product org — agent should detect separate products"
+}

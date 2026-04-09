@@ -1,0 +1,23 @@
+[
+  {
+    "version": "4.2.0",
+    "publishedAt": "2024-03-01",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["AI-powered search", "bulk delete"]
+  },
+  {
+    "version": "4.1.0",
+    "publishedAt": "2024-02-01",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["dark mode", "load time"]
+  },
+  {
+    "version": "4.0.0",
+    "publishedAt": "2024-01-15",
+    "isBreaking": true,
+    "hasContent": true,
+    "contentContains": ["API", "v2 endpoints", "IE11"]
+  }
+]

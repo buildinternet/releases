@@ -1,0 +1,12 @@
+[
+  {
+    "version": "1.5.0",
+    "title": "New Visual Editor",
+    "publishedAt": "2024-03-20",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["drag-and-drop", "visual editor", "dashboard"],
+    "mediaCountMin": 3,
+    "mediaTypes": ["image", "video"]
+  }
+]
