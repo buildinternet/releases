@@ -3,8 +3,9 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeHighlight from "rehype-highlight";
+import rehypeShiki from "@shikijs/rehype";
 import Image from "next/image";
+import { shikiOptions } from "@/lib/shiki";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
 import { isOptimizableImage } from "@/lib/sanitize";
@@ -143,14 +144,14 @@ export function ReleaseListItem({ release, hideDate, sourceByline }: { release: 
         >
           {expanded ? (
             <div className={markdownClasses}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={markdownComponents}>{markdownContent}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeShiki, shikiOptions]]} components={markdownComponents}>{markdownContent}</ReactMarkdown>
               <MediaGallery media={release.media} content={markdownContent} />
             </div>
           ) : (
             <>
               <div ref={contentRef} className="max-h-[4.5em] overflow-hidden">
                 <div className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeHighlight]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeShiki, shikiOptions]]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
                 </div>
               </div>
               {isOverflowing && (
