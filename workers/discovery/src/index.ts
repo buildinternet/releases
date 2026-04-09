@@ -1,7 +1,18 @@
 import type { Env, OnboardRequest, OnboardResponse, StatusResponse } from "./types.js";
+import { runManagedAgentsDiscovery } from "./managed-agents-handler.js";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { DiscoverySession } from "./discovery-session.js";
+
+type DiscoveryEngine = "managed-agents" | "sandbox";
+
+function resolveEngine(env: Env, body?: { engine?: string }): DiscoveryEngine {
+  // Request-level override > env var > default
+  if (body?.engine === "sandbox") return "sandbox";
+  if (body?.engine === "managed-agents") return "managed-agents";
+  if (env.RELEASED_DISCOVERY_ENGINE?.toLowerCase() === "sandbox") return "sandbox";
+  return "managed-agents";
+}
 
 function jsonResponse(data: object, status = 200): Response {
   return new Response(JSON.stringify(data), {
@@ -83,6 +94,23 @@ export default {
       }
 
       const sessionId = crypto.randomUUID();
+      const engine = resolveEngine(env, body as OnboardRequest & { engine?: string });
+
+      if (engine === "managed-agents") {
+        try {
+          const result = await runManagedAgentsDiscovery(body, env, sessionId);
+
+          if (result.error) {
+            return jsonResponse({ sessionId, status: "error", error: result.error }, 200);
+          }
+          return jsonResponse({ sessionId, status: "complete", result: result.state }, 200);
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return errorResponse(`Managed agents discovery failed: ${message}`, 500);
+        }
+      }
+
+      // ── Sandbox path (legacy) ──
       const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
       const stub = env.DISCOVERY_SESSION.get(doId);
 

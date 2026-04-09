@@ -1,9 +1,10 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { runDiscovery, type DiscoveryState } from "../../agent/released.js";
+import { runDiscovery, type DiscoveryState, type DiscoveryOptions } from "../../agent/released.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import { logger } from "../../lib/logger.js";
 import { registerOnboardApplyCommand } from "./onboard-apply.js";
+import { runManagedDiscovery } from "../../agent/managed-discovery.js";
 
 interface OnboardOpts {
   domain?: string;
@@ -11,6 +12,19 @@ interface OnboardOpts {
   json?: boolean;
   remote?: boolean;
   local?: boolean;
+  managedAgents?: boolean;
+  sandbox?: boolean;
+}
+
+type DiscoveryEngine = "managed-agents" | "sandbox";
+
+/** Resolve which discovery engine to use. Explicit flags > env var > default. */
+function resolveDiscoveryEngine(opts: OnboardOpts): DiscoveryEngine {
+  if (opts.managedAgents) return "managed-agents";
+  if (opts.sandbox) return "sandbox";
+  const env = process.env.RELEASED_DISCOVERY_ENGINE?.toLowerCase();
+  if (env === "sandbox") return "sandbox";
+  return "managed-agents"; // default
 }
 
 function shouldUseRemote(opts: OnboardOpts): boolean {
@@ -28,8 +42,15 @@ export function registerOnboardCommand(program: Command) {
     .option("--github-org <org>", "Seed the agent with the company's GitHub organization")
     .option("--remote", "Run discovery on the remote worker (default when RELEASED_API_URL is set)")
     .option("--local", "Run discovery locally even when remote mode is configured")
+    .option("--managed-agents", "Use Anthropic Managed Agents (default)")
+    .option("--sandbox", "Use legacy Cloudflare Sandbox engine")
     .option("--json", "Output results as JSON")
     .addHelpText("after", `
+Engine selection (RELEASED_DISCOVERY_ENGINE env var, default: managed-agents):
+  releases onboard "Acme"                   # uses managed agents (default)
+  releases onboard "Acme" --sandbox         # uses Cloudflare Sandbox
+  RELEASED_DISCOVERY_ENGINE=sandbox releases onboard "Acme"
+
 Examples:
   releases onboard "Vercel"
   releases onboard "Stripe" --domain stripe.com --github-org stripe
@@ -41,8 +62,17 @@ Examples:
         process.exit(1);
       }
 
-      if (shouldUseRemote(opts)) {
-        await runRemoteDiscovery(company, opts);
+      if (opts.managedAgents && opts.sandbox) {
+        logger.error("Cannot specify both --managed-agents and --sandbox");
+        process.exit(1);
+      }
+
+      const engine = resolveDiscoveryEngine(opts);
+
+      if (engine === "managed-agents" && !shouldUseRemote(opts)) {
+        await runManagedAgentsDiscovery(company, opts);
+      } else if (shouldUseRemote(opts)) {
+        await runRemoteDiscovery(company, opts, engine);
       } else {
         await runLocalDiscovery(company, opts);
       }
@@ -51,17 +81,23 @@ Examples:
   registerOnboardApplyCommand(onboard);
 }
 
-async function runLocalDiscovery(company: string, opts: OnboardOpts): Promise<void> {
+async function runDiscoveryWithUI(
+  company: string,
+  opts: OnboardOpts,
+  label: string,
+  discoveryFn: (o: DiscoveryOptions) => Promise<DiscoveryState>,
+  toolDisplayName: string,
+  toolPrefix: string,
+): Promise<void> {
   if (!opts.json) {
     process.stderr.write(
-      chalk.bold(`Onboarding "${company}"`) +
-        chalk.gray(" — discovery agent is running locally...\n\n"),
+      chalk.bold(`Onboarding "${company}"`) + chalk.gray(` — ${label}...\n\n`),
     );
   }
 
   let lastToolName = "";
 
-  const state = await runDiscovery({
+  const state = await discoveryFn({
     company,
     domain: opts.domain,
     githubOrg: opts.githubOrg,
@@ -69,9 +105,9 @@ async function runLocalDiscovery(company: string, opts: OnboardOpts): Promise<vo
       process.stderr.write(chalk.dim(text));
     },
     onToolUse: opts.json ? undefined : (toolName, command) => {
-      if (toolName === "Bash" && command) {
+      if (toolName === toolDisplayName && command) {
         const display = command.length > 120 ? command.slice(0, 117) + "..." : command;
-        process.stderr.write(chalk.gray(`  $ ${display}\n`));
+        process.stderr.write(chalk.gray(`  $ ${toolPrefix}${display}\n`));
       } else if (toolName !== lastToolName) {
         process.stderr.write(chalk.gray(`  [${toolName}]\n`));
       }
@@ -87,7 +123,15 @@ async function runLocalDiscovery(company: string, opts: OnboardOpts): Promise<vo
   printSummary(state);
 }
 
-async function runRemoteDiscovery(company: string, opts: OnboardOpts): Promise<void> {
+async function runLocalDiscovery(company: string, opts: OnboardOpts): Promise<void> {
+  return runDiscoveryWithUI(company, opts, "discovery agent is running locally", runDiscovery, "Bash", "");
+}
+
+async function runManagedAgentsDiscovery(company: string, opts: OnboardOpts): Promise<void> {
+  return runDiscoveryWithUI(company, opts, "using Anthropic Managed Agents", runManagedDiscovery, "releases_cli", "releases ");
+}
+
+async function runRemoteDiscovery(company: string, opts: OnboardOpts, engine: DiscoveryEngine = "managed-agents"): Promise<void> {
   const apiUrl = process.env.RELEASED_API_URL;
   if (!apiUrl) {
     logger.error("RELEASED_API_URL is not set. Required for remote discovery.");
@@ -132,7 +176,7 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts): Promise<v
   try {
     const result = await discoveryFetch<{ sessionId: string }>("/discover", {
       method: "POST",
-      body: JSON.stringify({ company, domain: opts.domain, githubOrg: opts.githubOrg }),
+      body: JSON.stringify({ company, domain: opts.domain, githubOrg: opts.githubOrg, engine }),
     });
     sessionId = result.sessionId;
   } catch (err) {
