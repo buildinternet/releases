@@ -240,6 +240,17 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         return;
       }
 
+      // Update sessions don't require a state report — completing without one is fine
+      if (mode === "update") {
+        await this.ctx.storage.put("status", "complete");
+        await this.notifyStatusHub({
+          type: "session:complete",
+          sessionId,
+          company: params.company,
+        }, releasedApiKey);
+        return;
+      }
+
       await this.fail(sessionId, params.company, "Agent did not report discovery state", releasedApiKey);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
