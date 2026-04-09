@@ -70,16 +70,14 @@ jobs:
           rm ~/.npmrc
 
       - name: Prepare release assets
-        env:
-          TAG_NAME: ${{ github.ref_name }}
         run: |
-          VERSION="${TAG_NAME#v}"
           mkdir -p dist/release
           for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
             cp "npm/releases-${target}/releases" "dist/release/releases-${target}"
             gzip -k "dist/release/releases-${target}"
+            sha256sum "dist/release/releases-${target}.gz" | awk '{print $1}' > "dist/release/releases-${target}.gz.sha256"
           done
-          cd dist/release && sha256sum *.gz > checksums.txt
+          sha256sum dist/release/*.gz > dist/release/checksums.txt
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -87,7 +85,11 @@ jobs:
           generate_release_notes: true
           files: |
             dist/release/releases-darwin-arm64.gz
+            dist/release/releases-darwin-arm64.gz.sha256
             dist/release/releases-darwin-x64.gz
+            dist/release/releases-darwin-x64.gz.sha256
             dist/release/releases-linux-x64.gz
+            dist/release/releases-linux-x64.gz.sha256
             dist/release/releases-linux-arm64.gz
+            dist/release/releases-linux-arm64.gz.sha256
             dist/release/checksums.txt

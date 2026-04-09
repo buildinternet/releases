@@ -16,26 +16,26 @@ class Releases < Formula
 
   on_macos do
     if Hardware::CPU.arm?
-      url "https://registry.npmjs.org/@buildinternet/releases-darwin-arm64/-/releases-darwin-arm64-#{version}.tgz"
+      url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-darwin-arm64.gz"
       sha256 "PLACEHOLDER_DARWIN_ARM64_SHA256"
     else
-      url "https://registry.npmjs.org/@buildinternet/releases-darwin-x64/-/releases-darwin-x64-#{version}.tgz"
+      url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-darwin-x64.gz"
       sha256 "PLACEHOLDER_DARWIN_X64_SHA256"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
-      url "https://registry.npmjs.org/@buildinternet/releases-linux-arm64/-/releases-linux-arm64-#{version}.tgz"
+      url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-linux-arm64.gz"
       sha256 "PLACEHOLDER_LINUX_ARM64_SHA256"
     else
-      url "https://registry.npmjs.org/@buildinternet/releases-linux-x64/-/releases-linux-x64-#{version}.tgz"
+      url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-linux-x64.gz"
       sha256 "PLACEHOLDER_LINUX_X64_SHA256"
     end
   end
 
   def install
-    bin.install "package/releases"
+    bin.install "releases"
   end
 
   test do
