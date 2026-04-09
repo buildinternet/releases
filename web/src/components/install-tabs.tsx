@@ -15,6 +15,11 @@ const tabs = [
     label: "Shell",
     command: "curl -fsSL https://releases.sh/install | bash",
   },
+  {
+    id: "mcp",
+    label: "MCP",
+    command: "https://mcp.releases.sh/mcp",
+  },
 ] as const;
 
 export function InstallTabs() {

@@ -29,9 +29,9 @@ export default async function HomePage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    "name": "Released",
+    "name": "releases.sh",
     "url": "https://releases.sh",
-    "description": "Changelog index for developers.",
+    "description": "Product changelogs for LLMs and agents. Search across product release notes via CLI, API, or MCP.",
   };
 
   return (
@@ -42,8 +42,8 @@ export default async function HomePage() {
       />
       <Header />
       <div className="pt-12 pb-8 text-center px-6">
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">Release notes, indexed</h1>
-        <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">Track changelogs across the tools and libraries you depend on.</p>
+        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">Product changelogs for LLMs and agents</h1>
+        <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">Search across product release notes via CLI, API, or MCP.</p>
         <SearchBar className="max-w-[480px] mx-auto" />
         <div className="flex justify-center gap-8 mt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs</span>
@@ -51,7 +51,7 @@ export default async function HomePage() {
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.releases.toLocaleString()}</strong> releases</span>
         </div>
         <div className="mt-8">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">Install the CLI</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">Get Started</div>
           <InstallTabs />
         </div>
       </div>
