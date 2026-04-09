@@ -175,8 +175,8 @@ releases serve
 |------|-------------|:------:|:-----:|
 | `search_releases` | Full-text search across all indexed releases | Yes | Yes |
 | `get_latest_releases` | Most recent releases, optionally filtered by product or org | Yes | Yes |
-| `summarize_changes` | AI summary of a product's recent changes | Yes | Yes |
-| `compare_products` | AI comparison between two products | Yes | Yes |
+| `summarize_changes` | AI summary of a product's recent changes | Gated | Gated |
+| `compare_products` | AI comparison between two products | Gated | Gated |
 | `list_products` | List all tracked sources | Yes | Yes |
 | `list_organizations` | List all organizations with their linked sources | Yes | Yes |
 | `add_source` | Add a new changelog source from a URL | -- | Yes |
@@ -188,6 +188,8 @@ releases serve
 | `ignore_url` / `unignore_url` | Manage org-scoped URL ignore list | -- | Yes |
 | `block_url` / `unblock_url` / `list_blocked_urls` | Manage global URL block list | -- | Yes |
 | `list_ignored_urls` | List ignored URLs for an organization | -- | Yes |
+
+**Gated** = requires `ENABLE_AI_TOOLS=true`. These tools make Anthropic API calls and are disabled by default. Set the env var in the worker config or local environment to enable them.
 
 ---
 
