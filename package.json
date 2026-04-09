@@ -1,6 +1,6 @@
 {
   "name": "releases",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Changelog indexer and registry for AI agents and developers",
   "type": "module",
   "bin": {
@@ -23,6 +23,7 @@
     "predeploy:discovery": "bun run build:all:linux",
     "deploy:discovery": "wrangler deploy --config workers/discovery/wrangler.jsonc",
     "deploy": "bun run deploy:api && bun run deploy:discovery",
+    "version:bump": "./scripts/bump-version.sh",
     "publish:npm": "./scripts/publish-npm.sh",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",

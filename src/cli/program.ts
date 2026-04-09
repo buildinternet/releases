@@ -33,7 +33,7 @@ import { registerKnowledgeCommand } from "./commands/knowledge.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
 
-export const VERSION = "0.9.0";
+export const VERSION = "0.9.1";
 
 type AdminEntry = {
   name: string;

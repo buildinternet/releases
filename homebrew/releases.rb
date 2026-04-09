@@ -11,7 +11,7 @@
 class Releases < Formula
   desc "Changelog indexer and registry for AI agents and developers"
   homepage "https://releases.sh"
-  version "0.9.0"
+  version "0.9.1"
   license "MIT"
 
   on_macos do

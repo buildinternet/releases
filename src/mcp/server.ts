@@ -25,7 +25,7 @@ function textResult(text: string) {
 
 const server = new McpServer({
   name: "releases",
-  version: "0.9.0",
+  version: "0.9.1",
 });
 
 // ── search_releases ──────────────────────────────────────────────────
