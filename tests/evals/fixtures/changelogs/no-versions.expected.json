@@ -1,0 +1,18 @@
+[
+  {
+    "title": "March 2024 Update",
+    "publishedAt": "2024-03",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["onboarding", "SSO"],
+    "versionShouldBeAbsent": true
+  },
+  {
+    "title": "February 2024 Update",
+    "publishedAt": "2024-02",
+    "isBreaking": false,
+    "hasContent": true,
+    "contentContains": ["rate limiting"],
+    "versionShouldBeAbsent": true
+  }
+]

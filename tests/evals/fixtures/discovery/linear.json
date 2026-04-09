@@ -1,0 +1,9 @@
+{
+  "company": "Linear",
+  "domain": "linear.app",
+  "expectedSources": [
+    { "urlPattern": "linear.app/changelog", "type": "feed" }
+  ],
+  "expectedProducts": [],
+  "notes": "Closed-source with a dedicated changelog page — agent should find feed or scrape"
+}

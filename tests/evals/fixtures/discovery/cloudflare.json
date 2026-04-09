@@ -1,0 +1,11 @@
+{
+  "company": "Cloudflare",
+  "domain": "cloudflare.com",
+  "githubOrg": "cloudflare",
+  "expectedSources": [
+    { "urlPattern": "blog.cloudflare.com", "type": "feed" },
+    { "urlPattern": "github.com/cloudflare/workers-sdk", "type": "github" }
+  ],
+  "expectedProducts": ["Workers"],
+  "notes": "Blog-based changelogs plus GitHub releases for open-source projects"
+}
