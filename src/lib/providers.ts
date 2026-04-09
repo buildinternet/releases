@@ -57,6 +57,17 @@ const PROVIDERS: ProviderDef[] = [
     },
   },
   {
+    id: "fern",
+    name: "Fern",
+    cnames: ["buildwithfern.com"],
+    htmlPatterns: ["fve-data-id", "fve-mdx-b64", "buildwithfern"],
+    hints: {
+      feedPaths: ["/changelog.rss", "/docs/changelog.rss"],
+      changelogPaths: ["/docs/changelog", "/changelog"],
+      preferredType: "feed",
+    },
+  },
+  {
     id: "readme",
     name: "ReadMe",
     cnames: ["readme.io", "readmessl.com"],

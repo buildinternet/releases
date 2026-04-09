@@ -282,9 +282,47 @@ describe("htmlToMarkdown", () => {
     expect(htmlToMarkdown(html)).toBe("XSS");
   });
 
-  it("strips remaining HTML tags", () => {
+  it("converts bold and paragraph formatting", () => {
     const html = "<p>Hello <strong>world</strong></p>";
-    expect(htmlToMarkdown(html)).toBe("Hello world");
+    expect(htmlToMarkdown(html)).toBe("Hello **world**");
+  });
+
+  it("converts headings", () => {
+    expect(htmlToMarkdown("<h2>Section</h2>")).toBe("## Section");
+    expect(htmlToMarkdown("<h3>Subsection</h3>")).toBe("### Subsection");
+  });
+
+  it("converts inline code", () => {
+    expect(htmlToMarkdown("Use <code>npm install</code> to install")).toBe("Use `npm install` to install");
+  });
+
+  it("converts italic", () => {
+    expect(htmlToMarkdown("This is <em>important</em>")).toBe("This is *important*");
+  });
+
+  it("converts list items", () => {
+    const html = "<ul><li>First</li><li>Second</li></ul>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("- First");
+    expect(result).toContain("- Second");
+  });
+
+  it("converts fenced code blocks", () => {
+    const html = "<pre><code>const x = 1;</code></pre>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("```");
+    expect(result).toContain("const x = 1;");
+  });
+
+  it("decodes HTML entities inside code blocks", () => {
+    const html = "<pre><code>a &amp; b &gt; c</code></pre>";
+    const result = htmlToMarkdown(html);
+    expect(result).toContain("a & b > c");
+  });
+
+  it("strips Fern visual editor attributes", () => {
+    const html = '<h3 fve-data-id="abc123" fve-mdx-b64="IyMjIEhlbGxv">Hello</h3>';
+    expect(htmlToMarkdown(html)).toBe("### Hello");
   });
 
   it("handles iframe embeds (YouTube)", () => {

@@ -163,6 +163,7 @@ Detected automatically in pre-checks. Listed for reference:
 | Provider | Feed Paths | Markdown Suffix | Notes |
 |----------|-----------|-----------------|-------|
 | Mintlify | `/rss.xml` | Yes (`.md`) | — |
+| Fern | `/changelog.rss`, `/docs/changelog.rss` | — | RSS contains `fve-mdx-b64` attributes (noise, stripped automatically). `<generator>` tag = `buildwithfern.com`. |
 | ReadMe | `/changelog.rss` | — | — |
 | Docusaurus | `/blog/rss.xml`, `/blog/atom.xml`, `/blog/feed.json` | — | — |
 | Ghost | `/rss/` | — | — |
