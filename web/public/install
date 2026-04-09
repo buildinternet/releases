@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# AUTO-GENERATED — do not edit. Source: scripts/install.sh
 # Install script for the Released CLI
 # Usage: curl -fsSL https://releases.sh/install | bash
 

@@ -1,6 +1,7 @@
 "use client";
 
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { tabButtonClass } from "@/lib/styles";
 
 interface SourceTabsProps {
   hasHighlights: boolean;
@@ -31,22 +32,14 @@ export function SourceTabs({ hasHighlights }: SourceTabsProps) {
       {hasHighlights && (
         <button
           onClick={() => setTab("highlights")}
-          className={`pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${
-            activeTab === "highlights"
-              ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
-              : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
-          }`}
+          className={tabButtonClass(activeTab === "highlights")}
         >
           Highlights
         </button>
       )}
       <button
         onClick={() => setTab("releases")}
-        className={`pb-2.5 text-[13px] font-medium border-b-2 transition-colors ${
-          activeTab === "releases"
-            ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
-            : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
-        }`}
+        className={tabButtonClass(activeTab === "releases")}
       >
         All Releases
       </button>
