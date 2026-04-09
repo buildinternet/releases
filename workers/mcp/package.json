@@ -1,0 +1,21 @@
+{
+  "name": "releases-mcp-worker",
+  "version": "0.9.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.86.1",
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "agents": "^0.10.0",
+    "zod": "^4.1.8"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20260331.1",
+    "wrangler": "^4.79.0",
+    "typescript": "^6.0.2"
+  }
+}

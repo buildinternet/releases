@@ -1,0 +1,29 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "releases-mcp",
+  "account_id": "b082600d280d44fd5da3501bc1bffe2f",
+  "main": "src/index.ts",
+  "alias": {
+    "@releases": "../../src",
+    "bun:sqlite": "./src/stubs/bun-sqlite.ts",
+    "drizzle-orm": "../../node_modules/drizzle-orm"
+  },
+  "compatibility_date": "2026-03-27",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": {
+    "enabled": true
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "released-db",
+      "database_id": "73be1562-d900-4e25-a62b-650ab74488b7"
+    }
+  ],
+  "routes": [
+    { "pattern": "mcp.releases.sh", "custom_domain": true }
+  ],
+  "secrets_store_secrets": [
+    { "binding": "ANTHROPIC_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "ANTHROPIC_API_KEY" }
+  ]
+}
