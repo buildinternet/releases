@@ -93,8 +93,8 @@ export default {
         console.warn("[discovery] Could not check active onboards — proceeding anyway");
       }
 
-      const sessionId = crypto.randomUUID();
       const engine = resolveEngine(env, body as OnboardRequest & { engine?: string });
+      const sessionId = `${engine === "managed-agents" ? "ma" : "sb"}-${crypto.randomUUID()}`;
 
       if (engine === "managed-agents") {
         // Preflight: validate Anthropic API key before starting
@@ -147,28 +147,25 @@ export default {
     if (request.method === "GET" && statusMatch) {
       const sessionId = statusMatch[1];
 
-      // Try ManagedAgentsSession DO first (managed agents path)
-      try {
-        const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
-        const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
-        const maStatus = await (maStub as any).getStatus() as Record<string, unknown>;
-        if (maStatus.status && maStatus.status !== "idle") {
-          return jsonResponse(maStatus as unknown as StatusResponse);
-        }
-      } catch {
-        // Not a managed agents session — fall through
-      }
-
-      // Try DiscoverySession DO (sandbox path)
-      try {
-        const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
-        const stub = env.DISCOVERY_SESSION.get(doId);
-        const status: StatusResponse = await (stub as any).getStatus();
-        if (status.status !== "idle") {
-          return jsonResponse(status);
-        }
-      } catch {
-        // Unknown session
+      // Route to the correct DO based on session ID prefix
+      if (sessionId.startsWith("ma-")) {
+        try {
+          const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
+          const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
+          const maStatus = await (maStub as any).getStatus() as Record<string, unknown>;
+          if (maStatus.status && maStatus.status !== "idle") {
+            return jsonResponse(maStatus as unknown as StatusResponse);
+          }
+        } catch { /* fall through */ }
+      } else {
+        try {
+          const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
+          const stub = env.DISCOVERY_SESSION.get(doId);
+          const status: StatusResponse = await (stub as any).getStatus();
+          if (status.status !== "idle") {
+            return jsonResponse(status);
+          }
+        } catch { /* fall through */ }
       }
 
       return jsonResponse({ status: "running" } as StatusResponse);

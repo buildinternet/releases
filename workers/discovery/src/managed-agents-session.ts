@@ -45,10 +45,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   }
 
   async getStatus(): Promise<Record<string, unknown>> {
-    const status = await this.ctx.storage.get<string>("status") ?? "idle";
-    const result = await this.ctx.storage.get<Record<string, unknown>>("result");
-    const error = await this.ctx.storage.get<string>("error");
-    const progress = await this.ctx.storage.get<Record<string, unknown>>("progress");
+    const map = await this.ctx.storage.get(["status", "result", "error", "progress"]);
+    const status = (map.get("status") as string) ?? "idle";
+    const result = map.get("result") as Record<string, unknown> | undefined;
+    const error = map.get("error") as string | undefined;
+    const progress = map.get("progress") as Record<string, unknown> | undefined;
 
     return {
       status,
@@ -86,7 +87,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         sessionId,
         company: params.company,
         sessionType: "onboard",
-      });
+      }, releasedApiKey);
 
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
       const client = new Anthropic({ apiKey: anthropicApiKey });
@@ -183,20 +184,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                 const command = toolEvent.input?.command ?? "";
                 toolCallCount++;
 
+                // Store progress in DO — pollers read it directly (no per-tool StatusHub call)
                 await this.ctx.storage.put("progress", {
                   step: "discovery",
                   sourcesFound: 0,
                   sourcesValidated: 0,
                   currentAction: `releases ${command}`,
-                });
-
-                await this.notifyStatusHub({
-                  type: "session:progress",
-                  sessionId,
-                  company: params.company,
-                  step: "discovery",
-                  currentAction: `releases ${command}`,
-                  toolCalls: toolCallCount,
                 });
 
                 const result = await executor(command);
@@ -233,9 +226,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               done = true;
               break;
 
-            case "session.error":
-              console.error(`[managed-agents] Session error: ${JSON.stringify(event)}`);
+            case "session.error": {
+              const errDetail = (event as any).error ?? JSON.stringify(event);
+              console.error(`[managed-agents] Session error: ${errDetail}`);
+              await this.fail(sessionId, params.company, `Session error: ${errDetail}`, releasedApiKey);
+              done = true;
               break;
+            }
           }
 
           if (done) break;
@@ -260,18 +257,18 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           company: params.company,
           sourcesFound: Array.isArray(capturedState["sources"]) ? (capturedState["sources"] as unknown[]).length : 0,
           result: capturedState,
-        });
+        }, releasedApiKey);
         return;
       }
 
-      await this.fail(sessionId, params.company, "Agent did not report discovery state");
+      await this.fail(sessionId, params.company, "Agent did not report discovery state", releasedApiKey);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this.fail(sessionId, params.company, message);
     }
   }
 
-  private async fail(sessionId: string, company: string, error: string): Promise<void> {
+  private async fail(sessionId: string, company: string, error: string, cachedApiKey?: string): Promise<void> {
     await this.ctx.storage.put("status", "error");
     await this.ctx.storage.put("error", error);
     await this.notifyStatusHub({
@@ -279,12 +276,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       sessionId,
       company,
       error,
-    });
+    }, cachedApiKey);
   }
 
-  private async notifyStatusHub(event: Record<string, unknown>): Promise<void> {
+  private async notifyStatusHub(event: Record<string, unknown>, cachedApiKey?: string): Promise<void> {
     try {
-      const apiKey = await this.env.RELEASED_API_KEY.get();
+      const apiKey = cachedApiKey ?? await this.env.RELEASED_API_KEY.get();
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
