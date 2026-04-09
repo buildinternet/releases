@@ -37,7 +37,7 @@ async function checkAuth(request: Request, env: Env): Promise<Response | null> {
 }
 
 export default {
-  async fetch(request: Request, env: Env): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
 
     const authError = await checkAuth(request, env);
@@ -97,17 +97,22 @@ export default {
       const engine = resolveEngine(env, body as OnboardRequest & { engine?: string });
 
       if (engine === "managed-agents") {
-        try {
-          const result = await runManagedAgentsDiscovery(body, env, sessionId);
-
-          if (result.error) {
-            return jsonResponse({ sessionId, status: "error", error: result.error }, 200);
-          }
-          return jsonResponse({ sessionId, status: "complete", result: result.state }, 200);
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          return errorResponse(`Managed agents discovery failed: ${message}`, 500);
+        // Preflight: validate Anthropic API key before committing to async work
+        const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
+        if (!anthropicKey) {
+          return errorResponse("ANTHROPIC_API_KEY not configured — cannot use managed-agents engine", 500);
         }
+
+        // Run discovery in the background — return 202 immediately
+        // StatusHub receives events as discovery progresses; CLI polls for status
+        ctx.waitUntil(
+          runManagedAgentsDiscovery(body, env, sessionId).catch((err) => {
+            console.error(`[managed-agents] Background discovery failed: ${err}`);
+          }),
+        );
+
+        const response: OnboardResponse = { sessionId, status: "running" };
+        return jsonResponse(response, 202);
       }
 
       // ── Sandbox path (legacy) ──
@@ -132,16 +137,54 @@ export default {
     const statusMatch = url.pathname.match(/^\/onboard\/([\w-]+)\/status$/);
     if (request.method === "GET" && statusMatch) {
       const sessionId = statusMatch[1];
-      const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
-      const stub = env.DISCOVERY_SESSION.get(doId);
 
+      // Try DiscoverySession DO first (sandbox path)
       try {
+        const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
+        const stub = env.DISCOVERY_SESSION.get(doId);
         const status: StatusResponse = await (stub as any).getStatus();
-        return jsonResponse(status);
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return errorResponse(`Failed to get status: ${message}`, 500);
+        // If the DO has real data (not idle/empty), return it
+        if (status.status !== "idle") {
+          return jsonResponse(status);
+        }
+      } catch {
+        // DO may not exist for managed agents sessions — fall through
       }
+
+      // Fall back to StatusHub (managed agents path posts events there)
+      try {
+        const apiKey = await env.RELEASED_API_KEY?.get();
+        const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
+        const hubFetcher = env.API_WORKER ?? globalThis;
+        const hubRes = await hubFetcher.fetch(
+          new Request(`https://api/v1/sessions/${sessionId}`, { headers }),
+        );
+        if (hubRes.ok) {
+          const session = await hubRes.json() as Record<string, unknown>;
+          const status = session.status as string;
+          const result: StatusResponse = {
+            status: status === "complete" ? "complete" : status === "error" ? "error" : "running",
+            progress: {
+              step: (session.step as string) ?? "discovery",
+              sourcesFound: (session.sourcesFound as number) ?? 0,
+              sourcesValidated: (session.sourcesValidated as number) ?? 0,
+              currentAction: (session.currentAction as string) ?? "",
+            },
+          };
+          // If complete, include the result from the last event
+          if (status === "complete" && session.result) {
+            result.result = session.result as object;
+          }
+          if (status === "error") {
+            result.error = (session.error as string) ?? "Unknown error";
+          }
+          return jsonResponse(result);
+        }
+      } catch {
+        // StatusHub also unavailable
+      }
+
+      return jsonResponse({ status: "running" } as StatusResponse);
     }
 
     return errorResponse("Not found", 404);

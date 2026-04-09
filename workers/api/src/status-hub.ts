@@ -25,6 +25,7 @@ interface SessionState {
   dismissed?: boolean;
   activeSources?: string[];
   cancelRequested?: boolean;
+  result?: Record<string, unknown>;
 }
 
 interface StatusMessage {
@@ -281,6 +282,9 @@ export class StatusHub extends DurableObject {
         existing.status = "complete";
         existing.activeSources = [];
         existing.lastUpdatedAt = now;
+        if (event.result && typeof event.result === "object") {
+          existing.result = event.result as Record<string, unknown>;
+        }
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
     } else if (event.type === "session:cancelled") {

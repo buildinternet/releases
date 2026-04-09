@@ -218,12 +218,13 @@ export async function runManagedAgentsDiscovery(
     try { await (client.beta.agents as any).archive(agent.id); } catch { /* non-critical */ }
 
     if (capturedState) {
-      capturedState.agentSessionId = session.id;
+      capturedState["agentSessionId"] = session.id;
       await notifyStatusHub(env, {
         type: "session:complete",
         sessionId,
         company: params.company,
-        sourcesFound: Array.isArray(capturedState.sources) ? capturedState.sources.length : 0,
+        sourcesFound: Array.isArray(capturedState["sources"]) ? (capturedState["sources"] as unknown[]).length : 0,
+        result: capturedState,
       });
       return { sessionId, state: capturedState };
     }
