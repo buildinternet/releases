@@ -6,21 +6,33 @@ export default function McpPage() {
         Use Released as an AI agent tool server via the Model Context Protocol.
       </p>
 
-      <h2>Starting the server</h2>
-      <pre><code>{`released serve`}</code></pre>
+      <h2>Remote server (recommended)</h2>
       <p>
-        This starts an MCP server on stdio, compatible with Claude Code, Cursor, Windsurf,
-        and other MCP-compatible clients.
-      </p>
-
-      <h2>Configuration</h2>
-      <p>
-        Add Released to your MCP client config. For Claude Code, add
-        to <code>.mcp.json</code>:
+        Connect to the hosted MCP server at <code>mcp.releases.sh</code>.
+        No installation or API keys required &mdash; all tools are read-only and public.
       </p>
       <pre><code>{`{
   "mcpServers": {
-    "released": {
+    "releases": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.releases.sh/mcp"]
+    }
+  }
+}`}</code></pre>
+      <p>
+        This works with Claude Code, Claude Desktop, Cursor, Windsurf, and any
+        MCP-compatible client that supports remote servers.
+      </p>
+
+      <h2>Local server</h2>
+      <p>
+        Run a local MCP server over stdio with the full tool set, including admin tools
+        for adding sources, fetching releases, and managing organizations:
+      </p>
+      <pre><code>{`released serve`}</code></pre>
+      <pre><code>{`{
+  "mcpServers": {
+    "releases": {
       "command": "released",
       "args": ["serve"]
     }
@@ -28,35 +40,35 @@ export default function McpPage() {
 }`}</code></pre>
 
       <h2>Available tools</h2>
-      <p>
-        The MCP server exposes 19 tools organized into read, analysis, and management categories.
-      </p>
 
       <h3>Read tools</h3>
+      <p>Available on both the remote and local servers.</p>
       <table>
         <thead>
           <tr><th>Tool</th><th>Description</th></tr>
         </thead>
         <tbody>
           <tr><td><code>search_releases</code></td><td>Full-text search across all indexed release notes. Supports filtering by product slug or organization.</td></tr>
-          <tr><td><code>get_latest_releases</code></td><td>Get the most recent releases, optionally filtered by source or org.</td></tr>
+          <tr><td><code>get_latest_releases</code></td><td>Get the most recent releases, optionally filtered by product or organization.</td></tr>
           <tr><td><code>list_products</code></td><td>List all changelog sources (products) in the index.</td></tr>
-          <tr><td><code>list_organizations</code></td><td>List all organizations with their source counts.</td></tr>
+          <tr><td><code>list_organizations</code></td><td>List all organizations, searchable by name, slug, domain, or account handle.</td></tr>
         </tbody>
       </table>
 
       <h3>Analysis tools</h3>
+      <p>Available on both the remote and local servers. Powered by Anthropic Claude.</p>
       <table>
         <thead>
           <tr><th>Tool</th><th>Description</th></tr>
         </thead>
         <tbody>
-          <tr><td><code>summarize_changes</code></td><td>AI-generated summary of recent releases for a source.</td></tr>
-          <tr><td><code>compare_products</code></td><td>Head-to-head comparison of releases between two sources.</td></tr>
+          <tr><td><code>summarize_changes</code></td><td>AI-generated summary of recent releases for a product. Supports custom lookback window and additional instructions.</td></tr>
+          <tr><td><code>compare_products</code></td><td>Head-to-head AI comparison of releases between two products.</td></tr>
         </tbody>
       </table>
 
       <h3>Source management tools</h3>
+      <p>Only available on the local server.</p>
       <table>
         <thead>
           <tr><th>Tool</th><th>Description</th></tr>
@@ -66,11 +78,12 @@ export default function McpPage() {
           <tr><td><code>remove_source</code></td><td>Remove a source from the index.</td></tr>
           <tr><td><code>fetch_source</code></td><td>Fetch new releases from a source.</td></tr>
           <tr><td><code>add_organization</code></td><td>Create a new organization.</td></tr>
-          <tr><td><code>link_account</code></td><td>Link a social media account to an organization.</td></tr>
+          <tr><td><code>link_account</code></td><td>Link a platform account to an organization.</td></tr>
         </tbody>
       </table>
 
       <h3>Curation tools</h3>
+      <p>Only available on the local server.</p>
       <table>
         <thead>
           <tr><th>Tool</th><th>Description</th></tr>
@@ -96,7 +109,6 @@ export default function McpPage() {
         <li>&ldquo;Search for breaking changes in the Prisma changelog&rdquo;</li>
         <li>&ldquo;Compare Next.js and Remix releases from the last 30 days&rdquo;</li>
         <li>&ldquo;Summarize Cloudflare&apos;s recent releases, focusing on Workers&rdquo;</li>
-        <li>&ldquo;Add the Astro changelog as a new source&rdquo;</li>
       </ul>
     </>
   );

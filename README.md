@@ -128,13 +128,30 @@ Production deployment: the API and frontend are deployed separately. The fronten
 
 ### MCP Server
 
-Start the MCP server for AI agent integration:
+Released is available as an MCP server for AI agent integration. There are two ways to connect:
+
+#### Remote server (recommended)
+
+Connect to the hosted MCP server at `mcp.releases.sh` — no installation or API keys required for read-only tools:
+
+```json
+{
+  "mcpServers": {
+    "releases": {
+      "command": "npx",
+      "args": ["mcp-remote", "https://mcp.releases.sh/mcp"]
+    }
+  }
+}
+```
+
+#### Local server
+
+Run a local MCP server over stdio with the full tool set (including admin tools):
 
 ```bash
 releases serve
 ```
-
-Claude Desktop config:
 
 ```json
 {
@@ -154,14 +171,23 @@ Claude Desktop config:
 
 **MCP Tools:**
 
-| Tool | Description |
-|------|-------------|
-| `search_releases` | Full-text search across all indexed releases |
-| `get_latest_releases` | Most recent releases, optionally filtered by product |
-| `summarize_changes` | AI summary of a product's recent changes |
-| `compare_products` | AI comparison between two products |
-| `list_products` | List all tracked sources |
-| `list_organizations` | List all organizations with their linked sources |
+| Tool | Description | Remote | Local |
+|------|-------------|:------:|:-----:|
+| `search_releases` | Full-text search across all indexed releases | Yes | Yes |
+| `get_latest_releases` | Most recent releases, optionally filtered by product or org | Yes | Yes |
+| `summarize_changes` | AI summary of a product's recent changes | Yes | Yes |
+| `compare_products` | AI comparison between two products | Yes | Yes |
+| `list_products` | List all tracked sources | Yes | Yes |
+| `list_organizations` | List all organizations with their linked sources | Yes | Yes |
+| `add_source` | Add a new changelog source from a URL | -- | Yes |
+| `remove_source` | Remove a source from the index | -- | Yes |
+| `fetch_source` | Fetch new releases from a source | -- | Yes |
+| `add_organization` | Create a new organization | -- | Yes |
+| `link_account` | Link a platform account to an organization | -- | Yes |
+| `suppress_release` / `unsuppress_release` | Hide or restore a release | -- | Yes |
+| `ignore_url` / `unignore_url` | Manage org-scoped URL ignore list | -- | Yes |
+| `block_url` / `unblock_url` / `list_blocked_urls` | Manage global URL block list | -- | Yes |
+| `list_ignored_urls` | List ignored URLs for an organization | -- | Yes |
 
 ---
 
@@ -407,7 +433,7 @@ releases task cancel <sessionId>
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, Cloudflare Browser Rendering for scraping
 - **AI Layer** — Anthropic SDK for changelog parsing (ingestion) and summarization (query)
 - **Agent** — Unified Agent SDK agent (`src/agent/released.ts`) handles discovery, evaluation, and onboarding. Domain knowledge lives in skill files at `src/agent/skills/`. The deterministic fetch pipeline (ingest, incremental, enrich, summarize) stays as direct Messages API calls.
-- **MCP Server** — `@modelcontextprotocol/sdk` on stdio
+- **MCP Server** — Local: `@modelcontextprotocol/sdk` on stdio. Remote: Cloudflare Worker at `mcp.releases.sh` using `createMcpHandler` with Streamable HTTP transport (read-only tools, no auth)
 - **API Server** — Bun HTTP server with JSON endpoints, CORS enabled. GET endpoints are public (no auth); write operations require a Bearer token
 - **Web Frontend** — Next.js 15 (App Router) + Tailwind CSS in `web/`
 - **Migrations** — Drizzle Kit (`bun run db:generate` to create, applied automatically at startup)
@@ -421,9 +447,10 @@ Data is stored in `~/.releases/releases.db` (configurable via `RELEASED_DATA_DIR
 All workers can be deployed from the project root:
 
 ```bash
-bun run deploy               # deploy all workers (API + Discovery)
+bun run deploy               # deploy all workers (API + Discovery + MCP)
 bun run deploy:api           # deploy API worker only
 bun run deploy:discovery     # deploy Discovery worker only
+bun run deploy:mcp           # deploy MCP worker only
 bun run db:migrate:remote    # apply D1 migrations to production
 bun scripts/sync-agent-skills.ts          # sync skills to Anthropic Skills API
 bun scripts/sync-agent-skills.ts --dry-run  # preview without changes
@@ -448,11 +475,12 @@ bun run api                  # start local API server on :3456 (uses local SQLit
 bun run dev:web              # start Next.js frontend on :3000
 bun run dev:api              # start API worker locally on :8787 (uses local D1)
 bun run dev:discovery        # start Discovery worker locally (Cloudflare)
+bun run dev:mcp              # start MCP worker locally (Cloudflare)
 ```
 
 To use the Cloudflare worker API locally with the web frontend, set `RELEASED_API_URL=http://localhost:8787` in `web/.env.local`. The default (`localhost:3456`) uses the Bun-based local API server backed by SQLite.
 
-Workers live in `workers/api/` (Hono API backed by D1) and `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery). Both share the same D1 database.
+Workers live in `workers/api/` (Hono API backed by D1), `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery), and `workers/mcp/` (remote MCP server). All three share the same D1 database.
 
 The discovery worker's sandbox container runs compiled binaries — no Bun runtime, source tree, or node_modules. Build with `bun run build:all:linux` before deploying. The root `.dockerignore` uses an **allowlist pattern** — only `dist/releases`, `dist/releases-mcp-browser`, and `src/agent/skills/` are included. Old container images are not auto-pruned — use `wrangler containers images list` and `wrangler containers images delete` periodically to clean up.
 
