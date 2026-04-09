@@ -9,14 +9,15 @@
   },
   "dependencies": {
     "@flags-sdk/vercel": "^1.2.1",
+    "@shikijs/rehype": "^4.0.2",
     "@tailwindcss/typography": "^0.5.19",
     "flags": "^4.0.6",
     "next": "^16.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-markdown": "^10.1.0",
-    "rehype-highlight": "^7.0.2",
-    "remark-gfm": "^4.0.1"
+    "remark-gfm": "^4.0.1",
+    "shiki": "^4.0.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
