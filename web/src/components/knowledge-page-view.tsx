@@ -1,8 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeShiki from "@shikijs/rehype";
 import type { KnowledgePageItem } from "@/lib/api";
-import { shikiOptions } from "@/lib/shiki";
+import { rehypeShikiPlugin } from "@/lib/shiki";
 import { markdownComponents } from "./markdown-components";
 
 interface KnowledgePageViewProps {
@@ -30,7 +29,7 @@ export function KnowledgePageView({ page }: KnowledgePageViewProps) {
           </span>
         </div>
         <div className={proseClasses}>
-          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeShiki, shikiOptions]]} components={markdownComponents}>
+          <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]} components={markdownComponents}>
             {page.content}
           </ReactMarkdown>
         </div>

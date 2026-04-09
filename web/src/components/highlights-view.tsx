@@ -1,8 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import rehypeShiki from "@shikijs/rehype";
 import type { ReleaseSummaryItem } from "@/lib/api";
-import { shikiOptions } from "@/lib/shiki";
+import { rehypeShikiPlugin } from "@/lib/shiki";
 
 interface HighlightsViewProps {
   rolling: ReleaseSummaryItem | null;
@@ -46,7 +45,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
             </span>
           </div>
           <div className={summaryClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeShiki, shikiOptions]]}>{rolling.summary}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]}>{rolling.summary}</ReactMarkdown>
           </div>
           {rolling.generatedAt && (
             <div className="text-[10px] text-stone-400 dark:text-stone-600 mt-3 tabular-nums">
@@ -76,7 +75,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
               </span>
             </div>
             <div className={summaryClasses}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[[rehypeShiki, shikiOptions]]}>{m.summary}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]}>{m.summary}</ReactMarkdown>
             </div>
           </div>
         </div>
