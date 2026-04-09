@@ -60,9 +60,12 @@ jobs:
         run: |
           echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
           echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
-          npm whoami || { echo "ERROR: npm auth failed — check NPM_PUBLISHING_TOKEN secret"; exit 1; }
+          npm whoami
           for pkg in releases-darwin-arm64 releases-darwin-x64 releases-linux-x64 releases-linux-arm64 releases; do
-            npm publish npm/$pkg --access public
+            cd npm/$pkg
+            npm pack --dry-run
+            npm publish --access public --registry https://registry.npmjs.org/
+            cd ../..
           done
           rm ~/.npmrc
 
