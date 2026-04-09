@@ -5,8 +5,8 @@
 #   brew tap buildinternet/tap
 #   brew install releases
 #
-# This formula downloads prebuilt binaries from the npm registry.
-# Update the version and sha256 hashes when publishing a new release.
+# This formula downloads prebuilt binaries from GitHub Releases.
+# Version and SHA256 hashes are updated automatically by CI.
 
 class Releases < Formula
   desc "Changelog indexer and registry for AI agents and developers"
