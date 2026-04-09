@@ -58,11 +58,11 @@ jobs:
         env:
           NPM_PUBLISHING_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISHING_TOKEN}" > npm/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_PUBLISHING_TOKEN}" > ~/.npmrc
           for pkg in releases-darwin-arm64 releases-darwin-x64 releases-linux-x64 releases-linux-arm64 releases; do
-            npm publish npm/$pkg --access public --userconfig npm/.npmrc
+            npm publish npm/$pkg --access public
           done
-          rm npm/.npmrc
+          rm ~/.npmrc
 
       - name: Prepare release assets
         env:
