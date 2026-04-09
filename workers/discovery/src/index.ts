@@ -1,8 +1,8 @@
 import type { Env, OnboardRequest, OnboardResponse, StatusResponse } from "./types.js";
-import { runManagedAgentsDiscovery } from "./managed-agents-handler.js";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { DiscoverySession } from "./discovery-session.js";
+export { ManagedAgentsSession } from "./managed-agents-session.js";
 
 type DiscoveryEngine = "managed-agents" | "sandbox";
 
@@ -37,7 +37,7 @@ async function checkAuth(request: Request, env: Env): Promise<Response | null> {
 }
 
 export default {
-  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     const authError = await checkAuth(request, env);
@@ -97,19 +97,28 @@ export default {
       const engine = resolveEngine(env, body as OnboardRequest & { engine?: string });
 
       if (engine === "managed-agents") {
-        // Preflight: validate Anthropic API key before committing to async work
+        // Preflight: validate Anthropic API key before starting
         const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
         if (!anthropicKey) {
           return errorResponse("ANTHROPIC_API_KEY not configured — cannot use managed-agents engine", 500);
         }
 
-        // Run discovery in the background — return 202 immediately
-        // StatusHub receives events as discovery progresses; CLI polls for status
-        ctx.waitUntil(
-          runManagedAgentsDiscovery(body, env, sessionId).catch((err) => {
-            console.error(`[managed-agents] Background discovery failed: ${err}`);
-          }),
-        );
+        // Use Durable Object for long-running managed agents session
+        // (Workers have CPU time limits; DOs reset their timer on I/O)
+        const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
+        const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
+
+        try {
+          await (maStub as any).startDiscovery({
+            company: body.company,
+            domain: body.domain,
+            githubOrg: body.githubOrg,
+            sessionId,
+          });
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          return errorResponse(`Failed to start managed agents discovery: ${message}`, 500);
+        }
 
         const response: OnboardResponse = { sessionId, status: "running" };
         return jsonResponse(response, 202);
@@ -138,50 +147,28 @@ export default {
     if (request.method === "GET" && statusMatch) {
       const sessionId = statusMatch[1];
 
-      // Try DiscoverySession DO first (sandbox path)
+      // Try ManagedAgentsSession DO first (managed agents path)
+      try {
+        const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
+        const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
+        const maStatus = await (maStub as any).getStatus() as Record<string, unknown>;
+        if (maStatus.status && maStatus.status !== "idle") {
+          return jsonResponse(maStatus as unknown as StatusResponse);
+        }
+      } catch {
+        // Not a managed agents session — fall through
+      }
+
+      // Try DiscoverySession DO (sandbox path)
       try {
         const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
         const stub = env.DISCOVERY_SESSION.get(doId);
         const status: StatusResponse = await (stub as any).getStatus();
-        // If the DO has real data (not idle/empty), return it
         if (status.status !== "idle") {
           return jsonResponse(status);
         }
       } catch {
-        // DO may not exist for managed agents sessions — fall through
-      }
-
-      // Fall back to StatusHub (managed agents path posts events there)
-      try {
-        const apiKey = await env.RELEASED_API_KEY?.get();
-        const headers: Record<string, string> = apiKey ? { Authorization: `Bearer ${apiKey}` } : {};
-        const hubFetcher = env.API_WORKER ?? globalThis;
-        const hubRes = await hubFetcher.fetch(
-          new Request(`https://api/v1/sessions/${sessionId}`, { headers }),
-        );
-        if (hubRes.ok) {
-          const session = await hubRes.json() as Record<string, unknown>;
-          const status = session.status as string;
-          const result: StatusResponse = {
-            status: status === "complete" ? "complete" : status === "error" ? "error" : "running",
-            progress: {
-              step: (session.step as string) ?? "discovery",
-              sourcesFound: (session.sourcesFound as number) ?? 0,
-              sourcesValidated: (session.sourcesValidated as number) ?? 0,
-              currentAction: (session.currentAction as string) ?? "",
-            },
-          };
-          // If complete, include the result from the last event
-          if (status === "complete" && session.result) {
-            result.result = session.result as object;
-          }
-          if (status === "error") {
-            result.error = (session.error as string) ?? "Unknown error";
-          }
-          return jsonResponse(result);
-        }
-      } catch {
-        // StatusHub also unavailable
+        // Unknown session
       }
 
       return jsonResponse({ status: "running" } as StatusResponse);

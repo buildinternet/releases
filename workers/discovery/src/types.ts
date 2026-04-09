@@ -29,6 +29,7 @@ export type SecretBinding = { get(): Promise<string> };
 export interface Env {
   Sandbox: DurableObjectNamespace<Sandbox>;
   DISCOVERY_SESSION: DurableObjectNamespace;
+  MANAGED_AGENTS_SESSION: DurableObjectNamespace;
   DB: D1Database;
   ANTHROPIC_API_KEY: SecretBinding;
   CLOUDFLARE_ACCOUNT_ID: SecretBinding;
