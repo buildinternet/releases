@@ -6,6 +6,8 @@
  * instead of the subprocess executor used in CLI context.
  */
 
+import { parseArgs } from "../../../src/shared/parse-args.js";
+
 /** Executes a CLI command string and returns the output. Matches CLIExecutor from managed-discovery.ts. */
 type CLIExecutor = (command: string) => Promise<string>;
 
@@ -52,7 +54,7 @@ export function createHTTPExecutor(opts: APIClientOptions): CLIExecutor {
   }
 
   return async (command: string): Promise<string> => {
-    const args = command.trim().split(/\s+/);
+    const args = parseArgs(command);
     const cmd = args[0];
 
     // ── list ──

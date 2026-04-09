@@ -4,6 +4,8 @@ import { join } from "path";
 import { tmpdir } from "os";
 import { sha256Hex } from "../../src/lib/hash.js";
 import { CATEGORIES } from "../../src/lib/categories.js";
+import { parseArgs } from "../../src/shared/parse-args.js";
+import { buildDiscoverySystemPrompt } from "../../src/shared/discovery-prompt.js";
 
 /**
  * Unit tests for managed-discovery module internals.
@@ -157,52 +159,109 @@ describe("system prompt content", () => {
   });
 });
 
-// ── CLI argument splitting (mirrors executeCLI argv construction) ──
+// ── parseArgs (shell-style tokenizer) ──
 
-describe("CLI argument splitting", () => {
-  function buildArgs(cliCmd: string, command: string): string[] {
-    const argv = command.trim().split(/\s+/);
-    const cliParts = cliCmd.trim().split(/\s+/);
-    return [...cliParts, ...argv];
-  }
-
+describe("parseArgs", () => {
   it("splits simple command correctly", () => {
-    const args = buildArgs("releases", "list --json");
-    expect(args).toEqual(["releases", "list", "--json"]);
-  });
-
-  it("splits multi-word CLI command", () => {
-    const args = buildArgs("bun src/index.ts", "fetch resend --dry-run");
-    expect(args).toEqual(["bun", "src/index.ts", "fetch", "resend", "--dry-run"]);
+    expect(parseArgs("list --json")).toEqual(["list", "--json"]);
   });
 
   it("handles extra whitespace", () => {
-    const args = buildArgs("releases", "  list   --json  ");
-    expect(args).toEqual(["releases", "list", "--json"]);
+    expect(parseArgs("  list   --json  ")).toEqual(["list", "--json"]);
+  });
+
+  it("preserves double-quoted strings", () => {
+    expect(parseArgs('org add "Val Town" --category ai')).toEqual([
+      "org", "add", "Val Town", "--category", "ai",
+    ]);
+  });
+
+  it("preserves single-quoted strings", () => {
+    expect(parseArgs("org add 'Val Town' --category ai")).toEqual([
+      "org", "add", "Val Town", "--category", "ai",
+    ]);
+  });
+
+  it("handles --description with quoted multi-word value", () => {
+    expect(parseArgs('org add "Val Town" --description "A platform for writing and deploying code"')).toEqual([
+      "org", "add", "Val Town", "--description", "A platform for writing and deploying code",
+    ]);
+  });
+
+  it("handles backslash escapes", () => {
+    expect(parseArgs('org add Val\\ Town')).toEqual(["org", "add", "Val Town"]);
+  });
+
+  it("handles empty quoted string", () => {
+    expect(parseArgs('add "" --url http://example.com')).toEqual(["add", "", "--url", "http://example.com"]);
+  });
+
+  it("handles mixed quotes", () => {
+    expect(parseArgs(`org add "Val Town" --tags 'a,b,c'`)).toEqual([
+      "org", "add", "Val Town", "--tags", "a,b,c",
+    ]);
   });
 
   it("prevents command injection via semicolons", () => {
-    // The split approach treats "list; rm -rf /" as separate args, not shell commands
-    const args = buildArgs("releases", "list; rm -rf /");
-    expect(args).toEqual(["releases", "list;", "rm", "-rf", "/"]);
-    // "list;" becomes a literal argument, not a shell separator
-    expect(args[1]).toBe("list;");
+    const args = parseArgs("list; rm -rf /");
+    expect(args).toEqual(["list;", "rm", "-rf", "/"]);
   });
 
   it("prevents injection via && operator", () => {
-    const args = buildArgs("releases", "list && echo pwned");
-    expect(args).toEqual(["releases", "list", "&&", "echo", "pwned"]);
-    // "&&" is a literal arg, not a shell operator
+    expect(parseArgs("list && echo pwned")).toEqual(["list", "&&", "echo", "pwned"]);
   });
 
   it("prevents injection via backticks", () => {
-    const args = buildArgs("releases", "list `whoami`");
-    expect(args).toEqual(["releases", "list", "`whoami`"]);
+    expect(parseArgs("list `whoami`")).toEqual(["list", "`whoami`"]);
   });
 
   it("prevents injection via $() substitution", () => {
-    const args = buildArgs("releases", "list $(whoami)");
-    expect(args).toEqual(["releases", "list", "$(whoami)"]);
+    expect(parseArgs("list $(whoami)")).toEqual(["list", "$(whoami)"]);
+  });
+
+  it("returns empty array for empty input", () => {
+    expect(parseArgs("")).toEqual([]);
+    expect(parseArgs("   ")).toEqual([]);
+  });
+});
+
+// ── Shared discovery prompt ──
+
+describe("buildDiscoverySystemPrompt", () => {
+  it("includes evaluate command when evaluateAvailable is true", () => {
+    const prompt = buildDiscoverySystemPrompt({
+      evaluateAvailable: true,
+      categories: [...CATEGORIES],
+    });
+    expect(prompt).toContain("evaluate <url>");
+  });
+
+  it("excludes evaluate command when evaluateAvailable is false", () => {
+    const prompt = buildDiscoverySystemPrompt({
+      evaluateAvailable: false,
+      categories: [...CATEGORIES],
+    });
+    expect(prompt).not.toContain("evaluate <url>");
+    expect(prompt).toContain("not available in this mode");
+  });
+
+  it("includes all categories", () => {
+    const prompt = buildDiscoverySystemPrompt({
+      evaluateAvailable: true,
+      categories: [...CATEGORIES],
+    });
+    for (const cat of CATEGORIES) {
+      expect(prompt).toContain(cat);
+    }
+  });
+
+  it("accepts readonly categories array", () => {
+    // Verifies the parameter type accepts CATEGORIES (readonly) without spreading
+    const prompt = buildDiscoverySystemPrompt({
+      evaluateAvailable: true,
+      categories: CATEGORIES,
+    });
+    expect(prompt).toContain(CATEGORIES[0]);
   });
 });
 

@@ -16,6 +16,8 @@ import { logger } from "../lib/logger.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { buildDiscoveryPrompt } from "./released.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./released.js";
+import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";
+import { parseArgs } from "../shared/parse-args.js";
 
 // ── Cached IDs ────────────────────────────────────────────────────
 
@@ -45,85 +47,10 @@ function saveCachedConfig(cfg: ManagedAgentConfig): void {
 // ── System prompt ─────────────────────────────────────────────────
 
 function buildSystemPrompt(): string {
-  return `You manage changelog sources for Released. You find, evaluate, add, fetch, and validate changelog sources using the releases_cli tool.
-
-## CLI Commands Reference
-
-Call the releases_cli tool with the command string (without the "releases" prefix):
-
-- list [slug] [--json] [--org <org>] [--has-feed] [--enrichable] [--product <p>] [--category <c>] [--query <text>]
-- evaluate <url> [--json]: Evaluate a URL for the best ingestion method
-- discover <domain> [--json]: Probe a domain for changelog URLs, feeds, and GitHub repos
-- add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>] [--skip-eval]
-- fetch <slug> [--dry-run] [--max <n>] [--full] [--crawl] [--no-crawl]: Fetch releases
-- fetch-log <slug>: Show recent fetch history
-- remove <slug> [--ignore --reason <reason>]: Remove a source
-- enrich <slug> [--dry-run] [--limit <n>] [--force]: Enrich sparse releases
-- org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]
-- org edit <slug> [--category <c>]
-- org show <slug>: Full org details with accounts, tags, sources, products
-- org tag add <slug> <tag1> [tag2...]
-- product add <name> --org <org> [--category <c>] [--tags <t1,t2>] [--url <u>] [--description <t>]
-- product edit <slug> [--category <c>]
-- product tag add <slug> <tag1> [tag2...]
-- ignore list --org <org> --json / ignore add --org <org> <url>
-- block list --json / block add <url>
-- categories [--json]: List valid categories
-- edit <slug> [--primary] [--no-primary] [--priority <p>] [--metadata <json>]
-
-## Available Categories
-
-Valid categories: ${CATEGORIES.join(", ")}
-
-When creating an organization, always include a --description with a brief one-sentence product description.
-
-## Multi-Product Organizations
-
-Some organizations ship multiple distinct products. When you discover sources that clearly belong to different products:
-- High confidence (separate repos, separate domains): Create products using product add
-- Medium confidence: Note suggested groupings but don't auto-create
-- Low confidence: Leave sources at the org level
-
-## Onboarding Workflow
-
-1. **Discover** — find changelog URLs, feeds, and GitHub repos
-2. **Add** — add sources with appropriate types
-3. **Validate** — dry-run fetch each source to check quality
-4. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-5. **Report** — summarize what was found
-
-Do NOT actually fetch (without --dry-run) unless explicitly told to.
-
-## Source Selection
-
-Prefer 3-5 high-signal sources per org over exhaustive coverage. Only index the org's own products, not ecosystem plugins. Add and pause low-value sources rather than omitting them entirely.
-
-## Output
-
-Keep output concise — focus on actions and results.
-
-IMPORTANT: At the end of discovery, call the releases_report_state tool with the complete discovery state JSON object (do NOT write to a file). The state object must include: product, domain, githubOrg, startedAt, updatedAt, status, and sources array. Use this schema:
-{
-  "product": "<company name>",
-  "domain": "<discovered domain or null>",
-  "githubOrg": "<discovered GitHub org or null>",
-  "startedAt": "<ISO timestamp>",
-  "updatedAt": "<ISO timestamp>",
-  "status": "awaiting_review",
-  "sources": [
-    {
-      "url": "<source url>",
-      "type": "github|scrape|feed",
-      "slug": "<slug from releases add>",
-      "label": "<human-readable label>",
-      "confidence": "high|medium|low",
-      "validated": true/false,
-      "validationError": "<error message if validation failed>",
-      "releaseCount": <number>,
-      "contentDepth": "full|summary-only"
-    }
-  ]
-}`;
+  return buildDiscoverySystemPrompt({
+    evaluateAvailable: true,
+    categories: CATEGORIES,
+  });
 }
 
 function hashPrompt(prompt: string): string {
@@ -139,8 +66,8 @@ export type CLIExecutor = (command: string) => Promise<string>;
 export function createSubprocessExecutor(): CLIExecutor {
   const cliCmd = resolveCLICmd();
   return async (command: string): Promise<string> => {
-    const argv = command.trim().split(/\s+/);
-    const cliParts = cliCmd.trim().split(/\s+/);
+    const argv = parseArgs(command);
+    const cliParts = parseArgs(cliCmd);
     const fullArgs = [...cliParts, ...argv];
     logger.debug(`[managed-agents] $ ${fullArgs.join(" ")}`);
 
@@ -159,11 +86,60 @@ export function createSubprocessExecutor(): CLIExecutor {
   };
 }
 
+// ── Agent tools (shared between create and DO) ──────────────────
+
+const DISCOVERY_TOOLS = [
+  { type: "agent_toolset_20260401", default_config: { enabled: true } },
+  {
+    type: "custom",
+    name: "releases_cli",
+    description:
+      "Execute a Released CLI command. Manages changelog sources, orgs, products. Use --json for structured output. Do NOT fetch without --dry-run unless told to persist.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        command: {
+          type: "string",
+          description:
+            'CLI command and arguments without the "releases" prefix. Example: "list --json" or "fetch my-source --dry-run"',
+        },
+      },
+      required: ["command"],
+    },
+  },
+  {
+    type: "custom",
+    name: "releases_report_state",
+    description:
+      "Report the final discovery state as JSON. Call this at the end of discovery instead of writing to a file.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        state: {
+          type: "object",
+          description: "The complete discovery state JSON object with product, domain, sources, etc.",
+        },
+      },
+      required: ["state"],
+    },
+  },
+];
+
 // ── Agent/Environment setup ───────────────────────────────────────
 
 async function ensureAgentAndEnv(
   client: Anthropic,
-): Promise<{ agentId: string; agentVersion: number; environmentId: string }> {
+): Promise<{ agentId: string; agentVersion?: number; environmentId: string }> {
+  // Prefer explicit env var IDs (agent + environment created once via console/API)
+  const envAgentId = process.env.ANTHROPIC_AGENT_ID;
+  const envEnvId = process.env.ANTHROPIC_ENVIRONMENT_ID;
+  if (envAgentId && envEnvId) {
+    const agentVersion = process.env.ANTHROPIC_AGENT_VERSION ? parseInt(process.env.ANTHROPIC_AGENT_VERSION, 10) : undefined;
+    logger.debug(`[managed-agents] Using env var agent=${envAgentId} env=${envEnvId}`);
+    return { agentId: envAgentId, agentVersion, environmentId: envEnvId };
+  }
+
+  // Fallback: auto-create for local development
   const currentPrompt = buildSystemPrompt();
   const currentHash = hashPrompt(currentPrompt);
   const cached = loadCachedConfig();
@@ -173,66 +149,45 @@ async function ensureAgentAndEnv(
     return cached;
   }
 
-  // Reuse existing environment if available (config is invariant)
   let environmentId: string;
 
   if (cached) {
-    logger.info("[managed-agents] System prompt changed — recreating agent...");
+    logger.info("[managed-agents] System prompt changed — updating agent...");
     environmentId = cached.environmentId;
-    // Archive old agent (non-critical)
-    try { await client.beta.agents.archive(cached.agentId); } catch { /* non-critical */ }
-  } else {
-    logger.info("[managed-agents] Creating agent and environment (first run)...");
-    const environment = await (client.beta.environments as any).create({
-      name: `released-discovery-${Date.now()}`,
-      config: {
-        type: "cloud",
-        networking: { type: "unrestricted" },
-      },
+
+    const updated = await (client.beta.agents as any).update(cached.agentId, {
+      version: cached.agentVersion,
+      system: currentPrompt,
+      model: config.agentModel(),
     });
-    environmentId = environment.id;
+
+    const cfg: ManagedAgentConfig = {
+      agentId: updated.id,
+      agentVersion: updated.version as number,
+      environmentId,
+      updatedAt: new Date().toISOString(),
+      promptHash: currentHash,
+    };
+    saveCachedConfig(cfg);
+    logger.info(`[managed-agents] Agent ${updated.id} updated to v${updated.version}`);
+    return cfg;
   }
+
+  logger.info("[managed-agents] Creating agent and environment (first run)...");
+  const environment = await (client.beta.environments as any).create({
+    name: "released-discovery",
+    config: {
+      type: "cloud",
+      networking: { type: "unrestricted" },
+    },
+  });
+  environmentId = environment.id;
 
   const agent = await (client.beta.agents as any).create({
     name: "Released Discovery Agent",
     model: config.agentModel(),
     system: currentPrompt,
-    tools: [
-      { type: "agent_toolset_20260401", default_config: { enabled: true } },
-      {
-        type: "custom",
-        name: "releases_cli",
-        description:
-          "Execute a Released CLI command. Manages changelog sources, orgs, products. Use --json for structured output. Do NOT fetch without --dry-run unless told to persist.",
-        input_schema: {
-          type: "object" as const,
-          properties: {
-            command: {
-              type: "string",
-              description:
-                'CLI command and arguments without the "releases" prefix. Example: "list --json" or "fetch my-source --dry-run"',
-            },
-          },
-          required: ["command"],
-        },
-      },
-      {
-        type: "custom",
-        name: "releases_report_state",
-        description:
-          "Report the final discovery state as JSON. Call this at the end of discovery instead of writing to a file.",
-        input_schema: {
-          type: "object" as const,
-          properties: {
-            state: {
-              type: "object",
-              description: "The complete discovery state JSON object with product, domain, sources, etc.",
-            },
-          },
-          required: ["state"],
-        },
-      },
-    ],
+    tools: DISCOVERY_TOOLS,
   });
 
   const cfg: ManagedAgentConfig = {
@@ -284,7 +239,7 @@ export async function runManagedDiscovery(
 
   // Create session
   const session = await client.beta.sessions.create({
-    agent: { type: "agent", id: agentId, version: agentVersion },
+    agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
     environment_id: environmentId,
     title: `Discovery: ${options.company}`,
   });
