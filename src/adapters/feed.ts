@@ -642,6 +642,9 @@ export function iframeSrcToWatchUrl(src: string): string {
 export function htmlToMarkdown(html: string): string {
   let md = html;
 
+  // Strip Fern docs visual editor attributes (base64-encoded MDX source noise)
+  md = md.replace(/ fve-[a-z0-9-]+="[^"]*"/g, "");
+
   // Convert images before stripping other tags
   md = md.replace(/<img[^>]*src=["']([^"']+)["'][^>]*alt=["']([^"']*)["'][^>]*\/?>/gi, "![$2]($1)");
   md = md.replace(/<img[^>]*alt=["']([^"']*)["'][^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "![$1]($2)");
@@ -662,9 +665,35 @@ export function htmlToMarkdown(html: string): string {
   md = md.replace(/<video[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/video>/gi, "\n[Video]($1)\n");
   md = md.replace(/<video[^>]*>[\s\S]*?<source[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "\n[Video]($1)\n");
 
+  // Convert fenced code blocks (<pre><code>) before inline code
+  md = md.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi,
+    (_, code) => `\n\`\`\`\n${decodeHtmlEntities(code)}\n\`\`\`\n`);
+
+  // Inline formatting
+  md = md.replace(/<(?:strong|b)(?:\s[^>]*)?>|<\/(?:strong|b)>/gi, "**");
+  md = md.replace(/<(?:em|i)(?:\s[^>]*)?>|<\/(?:em|i)>/gi, "*");
+  md = md.replace(/<code(?:\s[^>]*)?>|<\/code>/gi, "`");
+
+  // Headings (single pass with backreference for matched open/close tags)
+  md = md.replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, level, text) => {
+    return `\n\n${"#".repeat(Number(level))} ${text}\n\n`;
+  });
+
+  // List items (before stripping list wrappers)
+  md = md.replace(/<li[^>]*>([\s\S]*?)<\/li>/gi, "\n- $1");
+
+  // Block elements → spacing
+  md = md.replace(/<\/(?:p|div|blockquote|ul|ol)>/gi, "\n\n");
+  md = md.replace(/<(?:p|div|blockquote|ul|ol)(?:\s[^>]*)?>/gi, "\n");
+  md = md.replace(/<br\s*\/?>/gi, "\n");
+  md = md.replace(/<hr\s*\/?>/gi, "\n---\n");
+
   // Strip remaining HTML tags
   md = md.replace(/<[^>]+>/g, "");
   md = md.replace(/&nbsp;/g, " ");
+
+  // Clean up excessive whitespace while preserving structure
+  md = md.replace(/\n{3,}/g, "\n\n");
 
   return md.trim();
 }
