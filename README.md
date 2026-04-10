@@ -435,7 +435,7 @@ releases task cancel <sessionId>
 - **SQLite** (Bun built-in + Drizzle ORM) with WAL mode and FTS5 for search
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, Cloudflare Browser Rendering for scraping
 - **AI Layer** — Anthropic SDK for changelog parsing (ingestion) and summarization (query)
-- **Agent** — Unified Agent SDK agent (`src/agent/released.ts`) handles discovery, evaluation, and onboarding. Domain knowledge lives in skill files at `src/agent/skills/`. The deterministic fetch pipeline (ingest, incremental, enrich, summarize) stays as direct Messages API calls.
+- **Agent** — Discovery uses Anthropic Managed Agents by default (`RELEASED_DISCOVERY_ENGINE=managed-agents`). The agent definition (system prompt, tools, skills, model) is synced via `bun run deploy:agent`. Domain knowledge lives in skill files at `src/agent/skills/`, synced to the Anthropic Skills API. The deterministic fetch pipeline (ingest, incremental, enrich, summarize) stays as direct Messages API calls.
 - **MCP Server** — Local: `@modelcontextprotocol/sdk` on stdio. Remote: Cloudflare Worker at `mcp.releases.sh` using `createMcpHandler` with Streamable HTTP transport (read-only tools, no auth)
 - **API Server** — Bun HTTP server with JSON endpoints, CORS enabled. GET endpoints are public (no auth); write operations require a Bearer token
 - **Web Frontend** — Next.js 15 (App Router) + Tailwind CSS in `web/`
@@ -454,9 +454,10 @@ bun run deploy               # deploy all workers (API + Discovery + MCP)
 bun run deploy:api           # deploy API worker only
 bun run deploy:discovery     # deploy Discovery worker only
 bun run deploy:mcp           # deploy MCP worker only
+bun run deploy:agent         # sync managed agent (skills + prompt + tools + model)
+bun run deploy:skills        # sync skills only (SKILL.md files)
+bun run deploy:agent --dry-run  # preview agent changes without pushing
 bun run db:migrate:remote    # apply D1 migrations to production
-bun scripts/sync-agent-skills.ts          # sync skills to Anthropic Skills API
-bun scripts/sync-agent-skills.ts --dry-run  # preview without changes
 ```
 
 ### Publishing the CLI to npm
@@ -485,7 +486,9 @@ To use the Cloudflare worker API locally with the web frontend, set `RELEASED_AP
 
 Workers live in `workers/api/` (Hono API backed by D1), `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery), and `workers/mcp/` (remote MCP server). All three share the same D1 database.
 
-The discovery worker's sandbox container runs compiled binaries — no Bun runtime, source tree, or node_modules. Build with `bun run build:all:linux` before deploying. The root `.dockerignore` uses an **allowlist pattern** — only `dist/releases`, `dist/releases-mcp-browser`, and `src/agent/skills/` are included. Old container images are not auto-pruned — use `wrangler containers images list` and `wrangler containers images delete` periodically to clean up.
+The discovery worker supports two engines: **managed agents** (default, Anthropic-hosted) and **sandbox** (Cloudflare container). Managed agents sessions run as Durable Objects that stream events from the Anthropic API. The sandbox path runs compiled binaries in a container — build with `bun run build:all:linux` before deploying.
+
+After changing agent tools, system prompt, or skills, run `bun run deploy:agent` to sync the Anthropic-hosted agent definition. The script tracks content hashes for prompt and tools to avoid unnecessary updates. State is stored in `scripts/agent-skills.json`.
 
 Database tools:
 

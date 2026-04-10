@@ -1,17 +1,23 @@
 #!/usr/bin/env bun
 /**
- * Sync local skills to Anthropic Skills API and attach them to the managed agent.
+ * Deploy the managed agent: sync skills, system prompt, tools, and model.
  *
  * Usage:
- *   bun scripts/sync-agent-skills.ts              # sync all skills
+ *   bun scripts/sync-agent-skills.ts              # deploy everything
  *   bun scripts/sync-agent-skills.ts --dry-run    # preview without changes
+ *   bun scripts/sync-agent-skills.ts --skills     # skills only
+ *   bun scripts/sync-agent-skills.ts --agent      # prompt/tools/model only
  *
  * Requires ANTHROPIC_API_KEY in .env or environment.
  * Reads ANTHROPIC_AGENT_ID from env or workers/discovery/wrangler.jsonc.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
-import { resolve, basename } from "path";
+import { resolve } from "path";
+import { createHash } from "crypto";
+import { buildDiscoverySystemPrompt } from "../src/shared/discovery-prompt.js";
+import { AGENT_TOOLS } from "../src/shared/agent-tools.js";
+import { CATEGORIES } from "../src/lib/categories.js";
 
 // ── Config ───────────────────────────────────────────────────────
 
@@ -55,6 +61,8 @@ interface SkillConfig {
   skills: SkillMapping;
   agentId: string;
   agentVersion?: number;
+  promptHash?: string;
+  toolsHash?: string;
   lastSyncedAt: string;
 }
 
@@ -197,7 +205,7 @@ async function createSkillVersion(
 async function getAgent(
   apiKey: string,
   agentId: string,
-): Promise<{ version: number; skills: unknown[] }> {
+): Promise<{ version: number; skills: unknown[]; system: string; tools: unknown[]; model: { id: string; speed?: string } }> {
   const res = await fetch(`${ANTHROPIC_API}/v1/agents/${agentId}`, {
     headers: { ...AGENT_HEADERS, "x-api-key": apiKey },
   });
@@ -206,123 +214,105 @@ async function getAgent(
       `Failed to get agent ${agentId}: ${res.status} ${await res.text()}`,
     );
   }
-  return (await res.json()) as { version: number; skills: unknown[] };
+  return (await res.json()) as { version: number; skills: unknown[]; system: string; tools: unknown[]; model: { id: string; speed?: string } };
 }
 
-async function updateAgentSkills(
+async function updateAgent(
   apiKey: string,
   agentId: string,
   agentVersion: number,
-  skills: { type: string; skill_id: string; version: string }[],
+  payload: {
+    skills?: { type: string; skill_id: string; version: string }[];
+    system?: string;
+    tools?: unknown[];
+    model?: string;
+  },
 ): Promise<{ version: number }> {
   const res = await fetch(`${ANTHROPIC_API}/v1/agents/${agentId}`, {
     method: "POST",
     headers: { ...AGENT_HEADERS, "x-api-key": apiKey },
     body: JSON.stringify({
       version: agentVersion,
-      skills,
+      ...payload,
     }),
   });
   if (!res.ok) {
     throw new Error(
-      `Failed to update agent skills: ${res.status} ${await res.text()}`,
+      `Failed to update agent: ${res.status} ${await res.text()}`,
     );
   }
   return (await res.json()) as { version: number };
+}
+
+// ── Hashing ─────────────────────────────────────────────────────
+
+function hash(input: string): string {
+  return createHash("sha256").update(input).digest("hex").slice(0, 16);
 }
 
 // ── Main ─────────────────────────────────────────────────────────
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
+  const skillsOnly = process.argv.includes("--skills");
+  const agentOnly = process.argv.includes("--agent");
+  const syncSkills = !agentOnly;
+  const syncAgent = !skillsOnly;
+
   const apiKey = getApiKey();
   const agentId = getAgentId();
 
   console.log(`Agent: ${agentId}`);
-  console.log(`Skills dir: ${SKILLS_DIR}`);
-  if (dryRun) console.log("DRY RUN — no changes will be made\n");
+  if (dryRun) console.log("DRY RUN — no changes will be made");
+  console.log();
 
-  // 1. List existing custom skills to find matches by display_title
-  const existing = await listCustomSkills(apiKey);
-  const existingByTitle = new Map(existing.map((s) => [s.display_title, s]));
-
-  console.log(`Found ${existing.length} existing custom skill(s)\n`);
-
-  // 2. Sync each local skill
   const config = loadConfig() || {
     skills: {},
     agentId,
     lastSyncedAt: "",
   };
-  const skillIds: { type: string; skill_id: string; version: string }[] = [];
 
-  for (const dirName of SKILL_DIRS) {
-    const displayTitle = displayTitleFromDir(dirName);
-    const { content } = readSkillFile(dirName);
-    const remote = existingByTitle.get(displayTitle);
+  const agent = await getAgent(apiKey, agentId);
+  let agentVersion = agent.version;
+  const changes: string[] = [];
 
-    if (remote) {
-      // Skill exists — create a new version
-      console.log(`↻ ${displayTitle} (${remote.id}) — creating new version`);
-      if (!dryRun) {
-        const newVersion = await createSkillVersion(
-          apiKey,
-          remote.id,
-          content,
-          dirName,
-        );
-        config.skills[displayTitle] = {
-          skillId: remote.id,
-          latestVersion: newVersion.version,
-          localDir: dirName,
-          updatedAt: new Date().toISOString(),
-        };
-        skillIds.push({
-          type: "custom",
-          skill_id: remote.id,
-          version: "latest",
-        });
-        console.log(`  ✓ Version ${newVersion.version}\n`);
-      } else {
-        skillIds.push({
-          type: "custom",
-          skill_id: remote.id,
-          version: "latest",
-        });
-        console.log(`  (would create new version)\n`);
-      }
-    } else {
-      // Check local config for a previously-created skill ID
+  // ── 1. Sync skills ────────────────────────────────────────────
+  let skillIds: { type: string; skill_id: string; version: string }[] = [];
+  let skillsChanged = 0;
+
+  if (syncSkills) {
+    console.log(`Skills dir: ${SKILLS_DIR}`);
+
+    const existing = await listCustomSkills(apiKey);
+    const existingByTitle = new Map(existing.map((s) => [s.display_title, s]));
+    console.log(`Found ${existing.length} existing custom skill(s)\n`);
+
+    for (const dirName of SKILL_DIRS) {
+      const displayTitle = displayTitleFromDir(dirName);
+      const { content } = readSkillFile(dirName);
+      const remote = existingByTitle.get(displayTitle);
       const cached = config.skills[displayTitle];
-      if (cached?.skillId) {
-        // We have a cached ID — create a new version
-        console.log(`↻ ${displayTitle} (${cached.skillId}) — creating new version (from cache)`);
+      const existingId = remote?.id ?? cached?.skillId;
+
+      if (existingId) {
+        console.log(`↻ ${displayTitle} (${existingId}) — pushing new version`);
+        skillsChanged++;
         if (!dryRun) {
-          const newVersion = await createSkillVersion(
-            apiKey,
-            cached.skillId,
-            content,
-            dirName,
-          );
-          cached.latestVersion = newVersion.version;
-          cached.updatedAt = new Date().toISOString();
-          skillIds.push({
-            type: "custom",
-            skill_id: cached.skillId,
-            version: "latest",
-          });
+          const newVersion = await createSkillVersion(apiKey, existingId, content, dirName);
+          config.skills[displayTitle] = {
+            skillId: existingId,
+            latestVersion: newVersion.version,
+            localDir: dirName,
+            updatedAt: new Date().toISOString(),
+          };
           console.log(`  ✓ Version ${newVersion.version}\n`);
         } else {
-          skillIds.push({
-            type: "custom",
-            skill_id: cached.skillId,
-            version: "latest",
-          });
           console.log(`  (would create new version)\n`);
         }
+        skillIds.push({ type: "custom", skill_id: existingId, version: "latest" });
       } else {
-        // Skill doesn't exist anywhere — create it
         console.log(`+ ${displayTitle} — creating new skill`);
+        skillsChanged++;
         if (!dryRun) {
           const created = await createSkill(apiKey, displayTitle, content, dirName);
           config.skills[displayTitle] = {
@@ -331,29 +321,85 @@ async function main() {
             localDir: dirName,
             updatedAt: new Date().toISOString(),
           };
-          skillIds.push({
-            type: "custom",
-            skill_id: created.id,
-            version: "latest",
-          });
+          skillIds.push({ type: "custom", skill_id: created.id, version: "latest" });
           console.log(`  ✓ Created ${created.id}\n`);
         } else {
           console.log(`  (would create new skill — no cached ID)\n`);
         }
       }
     }
+    if (skillsChanged > 0) changes.push(`${skillsChanged} skill(s)`);
   }
 
-  // 3. Attach skills to the agent
-  console.log(`Attaching ${skillIds.length} skill(s) to agent...`);
+  // ── 2. Sync system prompt, tools, model ───────────────────────
+
+  const updatePayload: {
+    skills?: typeof skillIds;
+    system?: string;
+    tools?: unknown[];
+    model?: string;
+  } = {};
+
+  if (skillsChanged > 0) {
+    updatePayload.skills = skillIds;
+  }
+
+  if (syncAgent) {
+    const currentPrompt = buildDiscoverySystemPrompt({
+      evaluateAvailable: true,
+      categories: CATEGORIES,
+    });
+    const currentPromptHash = hash(currentPrompt);
+    const currentToolsHash = hash(JSON.stringify(AGENT_TOOLS));
+    const currentModel = process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6";
+
+    console.log("Agent config:");
+
+    // System prompt
+    if (config.promptHash !== currentPromptHash) {
+      console.log(`  System prompt: changed (${config.promptHash ?? "none"} → ${currentPromptHash})`);
+      updatePayload.system = currentPrompt;
+      changes.push("system prompt");
+    } else {
+      console.log(`  System prompt: up to date (${currentPromptHash})`);
+    }
+
+    // Tools
+    if (config.toolsHash !== currentToolsHash) {
+      console.log(`  Tools: changed (${config.toolsHash ?? "none"} → ${currentToolsHash})`);
+      updatePayload.tools = [...AGENT_TOOLS];
+      changes.push(`${AGENT_TOOLS.length} tools`);
+    } else {
+      console.log(`  Tools: up to date (${currentToolsHash})`);
+    }
+
+    // Model
+    const remoteModel = agent.model.id;
+    if (remoteModel !== currentModel) {
+      console.log(`  Model: changed (${remoteModel} → ${currentModel})`);
+      updatePayload.model = currentModel;
+      changes.push("model");
+    } else {
+      console.log(`  Model: up to date (${currentModel})`);
+    }
+
+    config.promptHash = currentPromptHash;
+    config.toolsHash = currentToolsHash;
+    console.log();
+  }
+
+  // ── 3. Push update ────────────────────────────────────────────
+
+  const hasChanges = Object.keys(updatePayload).length > 0;
+
+  if (!hasChanges) {
+    console.log("Everything up to date — no changes needed.");
+    return;
+  }
+
+  console.log(`Updating agent: ${changes.join(", ")}...`);
   if (!dryRun) {
-    const agent = await getAgent(apiKey, agentId);
-    const updated = await updateAgentSkills(
-      apiKey,
-      agentId,
-      agent.version,
-      skillIds,
-    );
+    const updated = await updateAgent(apiKey, agentId, agentVersion, updatePayload);
     config.agentId = agentId;
     config.agentVersion = updated.version;
     config.lastSyncedAt = new Date().toISOString();
@@ -361,10 +407,7 @@ async function main() {
     console.log(`✓ Agent updated to v${updated.version}`);
     console.log(`Config saved to ${CONFIG_PATH}`);
   } else {
-    console.log("Skills that would be attached:");
-    for (const s of skillIds) {
-      console.log(`  - ${s.skill_id}`);
-    }
+    console.log("(would update agent)");
   }
 }
 
