@@ -6,6 +6,7 @@ import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
+import { InactiveSourcesToggle } from "@/components/inactive-sources-toggle";
 import { groupSourcesByProduct } from "@/lib/sources";
 
 /** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
@@ -271,6 +272,21 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
     });
   }, [sources, cadenceMap]);
 
+  // Split sources into active (have releases in brush window) and inactive
+  const { activeSources, inactiveSources } = useMemo(() => {
+    const active: SourceListItem[] = [];
+    const inactive: SourceListItem[] = [];
+    for (const source of sortedSources) {
+      const cd = cadenceMap.get(source.slug);
+      if (cd && cd.releaseCount > 0) {
+        active.push(source);
+      } else {
+        inactive.push(source);
+      }
+    }
+    return { activeSources: active, inactiveSources: inactive };
+  }, [sortedSources, cadenceMap]);
+
   if (cardData.length === 0) return null;
 
   return (
@@ -339,18 +355,25 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
       <div className="mt-5">
         {products.length > 0 ? (
           <ProductGroupedSources
-            sources={sortedSources}
+            sources={activeSources}
             products={products}
             orgSlug={orgSlug}
             cadenceMap={cadenceMap}
           />
         ) : (
           <div className="space-y-2">
-            {sortedSources.map((source) => (
+            {activeSources.map((source) => (
               <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
             ))}
           </div>
         )}
+        <InactiveSourcesToggle count={inactiveSources.length}>
+          <div className="space-y-2">
+            {inactiveSources.map((source) => (
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
+            ))}
+          </div>
+        </InactiveSourcesToggle>
       </div>
 
     </div>
