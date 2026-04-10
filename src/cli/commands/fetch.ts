@@ -88,6 +88,8 @@ Examples:
         let sourceIdentifiers: string[] = [];
         let label = "manual fetch";
 
+        let orgId: string | undefined;
+
         if (slug) {
           // Resolve slug to ID for consistency — IDs are unambiguous
           if (slug.startsWith("src_")) {
@@ -95,6 +97,7 @@ Examples:
           } else {
             const src = await apiClient.findSource(slug);
             sourceIdentifiers = src ? [src.id] : [slug]; // fall back to slug if not found (let agent report the error)
+            if (src?.orgId) orgId = src.orgId;
           }
           label = slug;
         } else if (opts.unfetched) {
@@ -140,7 +143,7 @@ Examples:
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
           },
-          body: JSON.stringify({ company: label, sourceIdentifiers }),
+          body: JSON.stringify({ company: label, sourceIdentifiers, orgId }),
         });
 
         if (!res.ok) {

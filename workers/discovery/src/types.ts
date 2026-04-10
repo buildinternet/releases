@@ -16,6 +16,8 @@ export interface UpdateRequest {
   company: string;
   /** Source IDs (src_...) or slugs to fetch. IDs preferred. */
   sourceIdentifiers: string[];
+  /** Organization ID (org_...) for source guide lookup. */
+  orgId?: string;
   /** @deprecated Use sourceIdentifiers instead. */
   sourceSlugs?: string[];
 }
