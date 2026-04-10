@@ -3,7 +3,7 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import type { OrgHeatmap } from "@/lib/api";
 
-const MIN_CELL_SIZE = 8;
+const MIN_CELL_SIZE = 7;
 const MAX_CELL_SIZE = 13;
 const CELL_GAP = 3;
 const MAX_WEEKS = 52;
@@ -229,7 +229,7 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
         {/* Heatmap grid + month labels */}
         <div className="min-w-0 flex-1">
           {/* Month labels */}
-          <div className="relative overflow-hidden" style={{ height: 14 }}>
+          <div className="relative" style={{ height: 14 }}>
             {monthLabels.map((ml, i) => (
               <span
                 key={i}
