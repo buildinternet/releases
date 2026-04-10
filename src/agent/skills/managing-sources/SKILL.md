@@ -78,6 +78,18 @@ An org can have one source marked as its **primary changelog** — the main, com
 
 When onboarding an org, if you find a single top-level changelog alongside product-specific or GitHub sources, mark the top-level one as primary.
 
+## Source Guides
+
+Each org can have a **source guide** — a markdown document describing how to navigate its sources, what quirks to watch for, and agent-discovered notes. Think of it as the ops playbook for an org's changelog sources.
+
+**Before fetching:** Read the source guide for the org (`releases knowledge guide <org>`) to understand source types, priorities, parseInstructions, and any agent notes about known issues.
+
+**After discovering something:** Append a note to the guide (`releases knowledge guide <org> --note "description"`). Good candidates for notes: feed quirks, content depth observations, blog filtering results, crawl mode recommendations.
+
+**Regenerating:** When sources change (added/removed/reconfigured), regenerate the guide with `releases knowledge guide <org> --regenerate`. This preserves existing agent notes while rebuilding the source inventory from current metadata.
+
+**Product context:** Source guides group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the guide calls these out as "Organization-Level Sources" with a note about which products they may cover.
+
 ## Duplicate Detection
 
 Before adding sources, search for overlapping URLs.

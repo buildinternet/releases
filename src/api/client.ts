@@ -442,6 +442,7 @@ export async function getFetchLogs(opts: {
 // ── Latest releases ──
 
 export interface LatestRelease {
+  id: string;
   title: string;
   version: string | null;
   publishedAt: string | null;
@@ -450,7 +451,7 @@ export interface LatestRelease {
 
 type SourceReleaseResponse = {
   name: string;
-  releases: Array<{ version: string | null; title: string; publishedAt: string | null }>;
+  releases: Array<{ id: string; version: string | null; title: string; publishedAt: string | null }>;
 };
 
 function byPublishedAtDesc(a: LatestRelease, b: LatestRelease): number {
@@ -472,6 +473,7 @@ async function collectReleasesFromSources(
     if (!srcData) continue;
     for (const r of srcData.releases) {
       all.push({
+        id: r.id,
         title: r.title,
         version: r.version,
         publishedAt: r.publishedAt,
@@ -491,6 +493,7 @@ export async function getLatestReleases(opts: {
     const data = await apiFetch<SourceReleaseResponse>(`/v1/sources/${opts.slug}?pageSize=${opts.count}`);
     if (!data) return [];
     return data.releases.map((r) => ({
+      id: r.id,
       title: r.title,
       version: r.version,
       publishedAt: r.publishedAt,
@@ -791,14 +794,14 @@ export async function getMonthlySummary(
 // ── Knowledge Pages ──
 
 export async function getKnowledgePage(
-  scope: "org" | "product",
+  scope: "org" | "product" | "source-guide",
   slug: string,
 ): Promise<KnowledgePage | null> {
   return apiFetch<KnowledgePage | null>(`/v1/knowledge?scope=${scope}&slug=${slug}`);
 }
 
 export async function upsertKnowledgePage(data: {
-  scope: "org" | "product";
+  scope: "org" | "product" | "source-guide";
   orgId?: string | null;
   productId?: string | null;
   content: string;

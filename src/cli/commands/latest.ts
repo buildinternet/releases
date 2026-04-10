@@ -56,6 +56,7 @@ Examples:
 
       const table = new Table({
         head: [
+          chalk.cyan("ID"),
           chalk.cyan("Source"),
           chalk.cyan("Title"),
           chalk.cyan("Version"),
@@ -65,6 +66,7 @@ Examples:
 
       for (const row of rows) {
         table.push([
+          chalk.dim(row.id.slice(0, 12)),
           stripAnsi(row.sourceName),
           stripAnsi(row.title),
           row.version ? stripAnsi(row.version) : "-",
