@@ -202,7 +202,8 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
   if (src.type === "feed" || src.type === "github") {
     // Feed and GitHub sources: fetch server-side
     const githubToken = await c.env.GITHUB_TOKEN?.get();
-    const result = await fetchOne(db, src, { GITHUB_TOKEN: githubToken });
+    const sessionId = c.req.query("sessionId") ?? undefined;
+    const result = await fetchOne(db, src, { GITHUB_TOKEN: githubToken }, { sessionId });
     responsePayload = { fetched: true, ...result };
   } else {
     // Scrape and agent sources: flag for CLI pickup

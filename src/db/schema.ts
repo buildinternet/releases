@@ -180,6 +180,7 @@ export const fetchLog = sqliteTable("fetch_log", {
   sourceId: text("source_id")
     .notNull()
     .references(() => sources.id, { onDelete: "cascade" }),
+  sessionId: text("session_id"),
   releasesFound: integer("releases_found").notNull(),
   releasesInserted: integer("releases_inserted").notNull(),
   durationMs: integer("duration_ms"),
@@ -190,6 +191,7 @@ export const fetchLog = sqliteTable("fetch_log", {
 }, (table) => [
   index("idx_fetch_log_source").on(table.sourceId),
   index("idx_fetch_log_created").on(table.createdAt),
+  index("idx_fetch_log_session").on(table.sessionId),
 ]);
 
 export type Source = typeof sources.$inferSelect;

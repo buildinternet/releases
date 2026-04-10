@@ -166,9 +166,11 @@ export async function fetchOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
   env: { GITHUB_TOKEN?: string },
+  opts?: { sessionId?: string },
 ): Promise<FetchOneResult> {
   const start = Date.now();
   const meta = getSourceMeta(source);
+  const sessionId = opts?.sessionId ?? null;
 
   try {
     let rawReleases: RawRelease[];
@@ -181,6 +183,7 @@ export async function fetchOne(
         const dur = Date.now() - start;
         await db.insert(fetchLog).values({
           sourceId: source.id,
+          sessionId,
           releasesFound: 0,
           releasesInserted: 0,
           durationMs: dur,
@@ -219,6 +222,7 @@ export async function fetchOne(
       await Promise.all([
         db.insert(fetchLog).values({
           sourceId: source.id,
+          sessionId,
           releasesFound: 0,
           releasesInserted: 0,
           durationMs: Date.now() - start,
@@ -259,6 +263,7 @@ export async function fetchOne(
     await Promise.all([
       db.insert(fetchLog).values({
         sourceId: source.id,
+        sessionId,
         releasesFound: rawReleases.length,
         releasesInserted: inserted,
         durationMs: Date.now() - start,
@@ -281,6 +286,7 @@ export async function fetchOne(
 
     await db.insert(fetchLog).values({
       sourceId: source.id,
+      sessionId,
       releasesFound: 0,
       releasesInserted: 0,
       durationMs: Date.now() - start,

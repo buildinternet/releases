@@ -1356,6 +1356,7 @@ export async function insertFetchLog(entry: {
   status: "success" | "error" | "no_change" | "dry_run";
   error?: string | null;
   rawContent?: string | null;
+  sessionId?: string | null;
 }): Promise<void> {
   if (isRemoteMode()) {
     await apiClient.postFetchLog(entry);
@@ -1364,6 +1365,7 @@ export async function insertFetchLog(entry: {
   const db = getDb();
   await db.insert(fetchLog).values({
     sourceId: entry.sourceId,
+    sessionId: entry.sessionId ?? null,
     releasesFound: entry.releasesFound,
     releasesInserted: entry.releasesInserted,
     durationMs: entry.durationMs ?? null,

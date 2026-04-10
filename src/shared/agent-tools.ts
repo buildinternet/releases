@@ -341,6 +341,8 @@ export interface APIClientOptions {
   apiKey: string;
   /** Base URL prefix (default: "https://api" for service bindings). */
   baseUrl?: string;
+  /** Session ID to attach to fetch log entries for agent session correlation. */
+  sessionId?: string;
 }
 
 /**
@@ -459,7 +461,10 @@ export function createTypedExecutor(opts: APIClientOptions) {
       case "fetch_source": {
         const identifier = String(input.identifier ?? "");
         if (!identifier) return "Error: identifier is required";
-        return api("POST", `/sources/${encodeURIComponent(identifier)}/fetch`);
+        const fetchPath = opts.sessionId
+          ? `/sources/${encodeURIComponent(identifier)}/fetch?sessionId=${encodeURIComponent(opts.sessionId)}`
+          : `/sources/${encodeURIComponent(identifier)}/fetch`;
+        return api("POST", fetchPath);
       }
 
       case "manage_org": {

@@ -65,6 +65,7 @@ fetchLogRoutes.post("/fetch-log", async (c) => {
           type: "fetch:complete",
           id: inserted.id,
           sourceId: body.sourceId,
+          sessionId: body.sessionId ?? null,
           sourceName,
           sourceSlug,
           releasesFound: body.releasesFound,

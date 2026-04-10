@@ -28,6 +28,7 @@ statusRoutes.get("/status/fetch-log", async (c) => {
     .select({
       id: fetchLog.id,
       sourceId: fetchLog.sourceId,
+      sessionId: fetchLog.sessionId,
       sourceName: sources.name,
       sourceSlug: sources.slug,
       orgName: organizations.name,

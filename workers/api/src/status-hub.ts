@@ -10,6 +10,7 @@ interface SessionState {
   sessionId: string;
   company: string;
   type: "onboard" | "update";
+  agent?: "sonnet" | "haiku";
   status: "running" | "complete" | "error" | "cancelled";
   step?: string;
   sourcesFound?: number;
@@ -22,6 +23,7 @@ interface SessionState {
   startedAt: number;
   lastUpdatedAt: number;
   error?: string;
+  usage?: { inputTokens?: number; outputTokens?: number };
   dismissed?: boolean;
   activeSources?: string[];
   cancelRequested?: boolean;
@@ -239,6 +241,7 @@ export class StatusHub extends DurableObject {
         sessionId: event.sessionId as string,
         company: event.company as string,
         type: (event.sessionType as SessionState["type"]) ?? "onboard",
+        agent: event.agent as SessionState["agent"],
         status: "running",
         startedAt: now,
         lastUpdatedAt: now,
@@ -284,6 +287,9 @@ export class StatusHub extends DurableObject {
         existing.lastUpdatedAt = now;
         if (event.result && typeof event.result === "object") {
           existing.result = event.result as Record<string, unknown>;
+        }
+        if (event.usage && typeof event.usage === "object") {
+          existing.usage = event.usage as SessionState["usage"];
         }
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
