@@ -2,35 +2,35 @@
   "skills": {
     "Finding Changelogs": {
       "skillId": "skill_01NxvZfnCY4J3REEQY4HqtaV",
-      "latestVersion": "1775848861944565",
+      "latestVersion": "1775854354788465",
       "localDir": "finding-changelogs",
-      "updatedAt": "2026-04-10T19:21:03.627Z"
+      "updatedAt": "2026-04-10T20:52:36.219Z"
     },
     "Managing Sources": {
       "skillId": "skill_019Hwp3waa38APFdJQdhyC7X",
-      "latestVersion": "1775848863791885",
+      "latestVersion": "1775854356475799",
       "localDir": "managing-sources",
-      "updatedAt": "2026-04-10T19:21:05.485Z"
+      "updatedAt": "2026-04-10T20:52:38.019Z"
     },
     "Parsing Changelogs": {
       "skillId": "skill_014ABz5JwznotCKHwRWPV8HT",
-      "latestVersion": "1775848865659469",
+      "latestVersion": "1775854358242792",
       "localDir": "parsing-changelogs",
-      "updatedAt": "2026-04-10T19:21:06.936Z"
+      "updatedAt": "2026-04-10T20:52:39.508Z"
     },
     "Analyzing Releases": {
       "skillId": "skill_019FiqtkAUTte7yfNTDAjRLp",
-      "latestVersion": "1775848867103472",
+      "latestVersion": "1775854359753762",
       "localDir": "analyzing-releases",
-      "updatedAt": "2026-04-10T19:21:08.519Z"
+      "updatedAt": "2026-04-10T20:52:40.952Z"
     }
   },
   "agentId": "agent_011CZtWpasPtsYjF3aysf2ZH",
   "lastSyncedAt": "2026-04-10T16:29:34.588Z",
   "agentVersion": 3,
   "promptHash": "a6a51843545dc620",
-  "toolsHash": "28aaa1ebbab087a0",
+  "toolsHash": "ff7168e0bdc0ca01",
   "workerAgentId": "agent_011CZvdgPKDQ2eRs8gTrLnNA",
-  "workerAgentVersion": 1,
-  "workerPromptHash": "8ce93e778d9fd9d6"
+  "workerAgentVersion": 2,
+  "workerPromptHash": "2a69a0f6625417fb"
 }

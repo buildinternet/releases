@@ -314,6 +314,9 @@ export class StatusHub extends DurableObject {
         existing.status = "error";
         existing.error = event.error as string;
         existing.lastUpdatedAt = now;
+        if (event.usage && typeof event.usage === "object") {
+          existing.usage = event.usage as SessionState["usage"];
+        }
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
     }

@@ -30,8 +30,8 @@ export interface SessionParams {
   agentVersion?: number;
   environmentId: string;
   mode: "onboard" | "update";
-  /** For update mode: source slugs to fetch. */
-  sourceSlugs?: string[];
+  /** For update mode: source IDs (src_...) or slugs. IDs preferred. */
+  sourceIdentifiers?: string[];
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
@@ -128,8 +128,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
       let prompt: string;
       if (mode === "update") {
-        const slugList = (params.sourceSlugs ?? []).map(s => `- ${s}`).join("\n");
-        prompt = `Fetch release updates for the following sources:\n${slugList}\n\nFor each source, use the fetch_source tool with the source slug. Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
+        const idList = (params.sourceIdentifiers ?? []).map(s => `- ${s}`).join("\n");
+        prompt = `Fetch release updates for the following sources:\n${idList}\n\nFor each source, call fetch_source with the source ID as the \`identifier\` parameter (e.g. \`{"identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
       } else {
         const systemContext = buildDiscoverySystemPrompt({
           evaluateAvailable: false,
@@ -150,6 +150,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       let capturedState: Record<string, unknown> | null = null;
       let done = false;
       let toolCallCount = 0;
+      let toolErrors = 0;
+      let lastAgentMessage = "";
       const deadline = Date.now() + SESSION_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         try { stream.controller.abort(); } catch { /* closed */ }
@@ -163,6 +165,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             case "agent.custom_tool_use": {
               const toolEvent = event as any;
               const sendResult = async (toolUseId: string, text: string) => {
+                if (text.startsWith("Error")) toolErrors++;
                 await (client.beta.sessions.events as any).send(session.id, {
                   events: [{
                     type: "user.custom_tool_result",
@@ -194,6 +197,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               for (const block of (event as any).content ?? []) {
                 if (block.type === "text" && block.text) {
                   const text = truncate(block.text, 500);
+                  lastAgentMessage = block.text;
                   await this.notifyStatusHub({
                     type: "session:progress",
                     sessionId,
@@ -296,8 +300,16 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         return;
       }
 
-      // Update sessions don't require a state report — completing without one is fine
+      // Update sessions don't require a state report — but must have done useful work
       if (mode === "update") {
+        if (toolCallCount === 0 || (toolErrors > 0 && toolErrors >= toolCallCount)) {
+          const reason = toolCallCount === 0
+            ? "Agent completed without calling any tools"
+            : `All ${toolErrors} tool call(s) failed`;
+          const detail = lastAgentMessage ? `${reason}: ${truncate(lastAgentMessage, 120)}` : reason;
+          await this.fail(sessionId, params.company, detail, releasedApiKey, sessionUsage);
+          return;
+        }
         await this.ctx.storage.put("status", "complete");
         await this.notifyStatusHub({
           type: "session:complete",
@@ -315,7 +327,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     }
   }
 
-  private async fail(sessionId: string, company: string, error: string, cachedApiKey?: string): Promise<void> {
+  private async fail(
+    sessionId: string,
+    company: string,
+    error: string,
+    cachedApiKey?: string,
+    usage?: { inputTokens?: number; outputTokens?: number },
+  ): Promise<void> {
     await this.ctx.storage.put("status", "error");
     await this.ctx.storage.put("error", error);
     await this.notifyStatusHub({
@@ -323,6 +341,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       sessionId,
       company,
       error,
+      ...(usage ? { usage } : {}),
     }, cachedApiKey);
   }
 

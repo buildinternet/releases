@@ -33,8 +33,8 @@ export function registerFetchCommand(program: Command) {
   program
     .command("fetch")
     .description("Fetch releases from configured sources")
-    .argument("[slug]", "Fetch a specific source by slug, or all sources if omitted")
-    .option("--source <slug>", "Source slug (alternative to positional argument)")
+    .argument("[identifier]", "Source ID (src_...) or slug to fetch")
+    .option("--source <identifier>", "Source ID or slug (alternative to positional argument)")
     .option("--json", "Output as JSON")
     .option("--since <date>", "Only fetch releases after this date (ISO 8601 or YYYY-MM-DD)")
     .option("--max <n>", "Maximum number of releases to fetch per source (default: 200)")
@@ -54,17 +54,18 @@ export function registerFetchCommand(program: Command) {
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .addHelpText("after", `
 Examples:
+  releases fetch src_abc123               Fetch a single source by ID (preferred)
+  releases fetch my-source                Fetch a single source by slug
   releases fetch                          Fetch all sources
-  releases fetch my-source                Fetch a single source
   releases fetch --stale 6                Fetch sources not updated in 6+ hours
   releases fetch --unfetched              Fetch sources never fetched before
   releases fetch --changed                Fetch sources where poll detected changes
   releases fetch --retry-errors           Retry sources that errored last time
-  releases fetch my-source --dry-run      Preview without writing to DB
-  releases fetch my-source --force        Delete and re-fetch all releases
+  releases fetch src_abc123 --dry-run     Preview without writing to DB
+  releases fetch src_abc123 --force       Delete and re-fetch all releases
   releases fetch --concurrency 5          Fetch 5 sources in parallel
   releases fetch --json                   Output results as JSON
-  releases fetch linear --managed-agents   Delegate fetch to a managed agent`)
+  releases fetch src_abc123 --managed-agents  Delegate fetch to a managed agent`)
     .action(async (slugArg: string | undefined, opts: {
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
@@ -83,36 +84,42 @@ Examples:
           process.exit(1);
         }
 
-        // Resolve source slugs from filters
-        let sourceSlugs: string[] = [];
+        // Resolve source identifiers from filters (prefer IDs over slugs)
+        let sourceIdentifiers: string[] = [];
         let label = "manual fetch";
 
         if (slug) {
-          sourceSlugs = [slug];
+          // Resolve slug to ID for consistency — IDs are unambiguous
+          if (slug.startsWith("src_")) {
+            sourceIdentifiers = [slug];
+          } else {
+            const src = await apiClient.findSource(slug);
+            sourceIdentifiers = src ? [src.id] : [slug]; // fall back to slug if not found (let agent report the error)
+          }
           label = slug;
         } else if (opts.unfetched) {
           const sources = await listFetchableSources({ mode: "unfetched" });
-          sourceSlugs = sources.map(s => s.slug);
-          label = `${sourceSlugs.length} unfetched sources`;
+          sourceIdentifiers = sources.map(s => s.id);
+          label = `${sourceIdentifiers.length} unfetched sources`;
         } else if (opts.stale) {
           const hours = parseInt(opts.stale, 10);
           const sources = await listFetchableSources({ mode: "stale", staleHours: hours });
-          sourceSlugs = sources.map(s => s.slug);
-          label = `${sourceSlugs.length} stale sources (>${hours}h)`;
+          sourceIdentifiers = sources.map(s => s.id);
+          label = `${sourceIdentifiers.length} stale sources (>${hours}h)`;
         } else if (opts.changed) {
           const sources = await listSourcesWithChanges();
-          sourceSlugs = sources.map(s => s.slug);
-          label = `${sourceSlugs.length} changed sources`;
+          sourceIdentifiers = sources.map(s => s.id);
+          label = `${sourceIdentifiers.length} changed sources`;
         } else if (opts.retryErrors) {
           const sources = await listFetchableSources({ mode: "retry_errors" });
-          sourceSlugs = sources.map(s => s.slug);
-          label = `${sourceSlugs.length} errored sources`;
+          sourceIdentifiers = sources.map(s => s.id);
+          label = `${sourceIdentifiers.length} errored sources`;
         } else {
           logger.error("--managed-agents requires a source slug or filter (--stale, --unfetched, --changed, --retry-errors)");
           process.exit(1);
         }
 
-        if (sourceSlugs.length === 0) {
+        if (sourceIdentifiers.length === 0) {
           if (opts.json) {
             console.log(JSON.stringify({ sessionId: null, message: "No matching sources" }));
           } else {
@@ -121,9 +128,9 @@ Examples:
           return;
         }
 
-        if (sourceSlugs.length > 20) {
-          logger.warn(`Capping at 20 sources (${sourceSlugs.length} matched). Use multiple sessions for larger batches.`);
-          sourceSlugs = sourceSlugs.slice(0, 20);
+        if (sourceIdentifiers.length > 20) {
+          logger.warn(`Capping at 20 sources (${sourceIdentifiers.length} matched). Use multiple sessions for larger batches.`);
+          sourceIdentifiers = sourceIdentifiers.slice(0, 20);
         }
 
         const baseUrl = apiUrl.replace(/\/$/, "");
@@ -133,7 +140,7 @@ Examples:
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
           },
-          body: JSON.stringify({ company: label, sourceSlugs }),
+          body: JSON.stringify({ company: label, sourceIdentifiers }),
         });
 
         if (!res.ok) {
@@ -147,7 +154,7 @@ Examples:
           console.log(JSON.stringify(result, null, 2));
         } else {
           logger.info(`Update session started: ${result.sessionId}`);
-          logger.info(`Fetching ${sourceSlugs.length} source(s): ${sourceSlugs.join(", ")}`);
+          logger.info(`Fetching ${sourceIdentifiers.length} source(s): ${sourceIdentifiers.join(", ")}`);
           logger.info(`Track progress: releases task list`);
         }
         return;

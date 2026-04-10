@@ -177,11 +177,13 @@ export default {
       if (!body.company || typeof body.company !== "string") {
         return errorResponse("Missing required field: company", 400);
       }
-      if (!Array.isArray(body.sourceSlugs) || body.sourceSlugs.length === 0) {
-        return errorResponse("sourceSlugs must be a non-empty array", 400);
+      // Accept sourceIdentifiers (preferred) or legacy sourceSlugs
+      const identifiers = body.sourceIdentifiers ?? body.sourceSlugs;
+      if (!Array.isArray(identifiers) || identifiers.length === 0) {
+        return errorResponse("sourceIdentifiers must be a non-empty array", 400);
       }
-      if (body.sourceSlugs.length > MAX_UPDATE_SOURCES) {
-        return errorResponse(`Too many sources (${body.sourceSlugs.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`, 400);
+      if (identifiers.length > MAX_UPDATE_SOURCES) {
+        return errorResponse(`Too many sources (${identifiers.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`, 400);
       }
 
       const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
@@ -205,14 +207,14 @@ export default {
           agentVersion,
           environmentId,
           mode: "update",
-          sourceSlugs: body.sourceSlugs,
+          sourceIdentifiers: identifiers,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         return errorResponse(`Failed to start update session: ${message}`, 500);
       }
 
-      return jsonResponse({ sessionId, status: "running", sourceSlugs: body.sourceSlugs }, 202);
+      return jsonResponse({ sessionId, status: "running", sourceIdentifiers: identifiers }, 202);
     }
 
     const statusMatch = url.pathname.match(/^\/onboard\/([\w-]+)\/status$/);
