@@ -9,6 +9,8 @@
  * - Worker path (workers/discovery/src/managed-agents-session.ts)
  */
 
+import { CATEGORIES } from "../lib/categories.js";
+
 // ── Tool input types ─────────────────────────────────────────────────
 
 export interface ListSourcesInput {
@@ -363,13 +365,6 @@ export const API_TOOL_NAMES: string[] = AGENT_TOOLS
   .map((t) => t.name)
   .filter((n) => n !== "releases_report_state");
 
-// ── Valid categories (duplicated from src/lib/categories.ts to avoid cross-boundary import) ──
-
-const CATEGORIES = [
-  "ai", "cloud", "database", "design", "developer-tools",
-  "devops", "framework", "infrastructure", "observability", "security",
-];
-
 // ── Typed executor ───────────────────────────────────────────────────
 
 export interface APIClientOptions {
@@ -553,18 +548,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
 
         if (action === "add") {
           if (!input.name || !input.organization) return "Error: name and organization are required for add";
-          // Resolve org slug to ID — the API expects orgId, but we need to look up the org first
-          // For simplicity, we pass orgId as the slug and let the API resolve it
-          // Actually the API POST /products expects orgId, but we'll get it from org show
-          const orgRes = await api("GET", `/orgs/${encodeURIComponent(String(input.organization))}`);
-          let orgId: string | undefined;
-          try {
-            const org = JSON.parse(orgRes);
-            orgId = org.id;
-          } catch {
-            return `Error: could not resolve organization "${input.organization}": ${orgRes}`;
-          }
-          const body: Record<string, unknown> = { orgId, name: input.name };
+          const body: Record<string, unknown> = { orgSlug: input.organization, name: input.name };
           if (input.slug) body.slug = input.slug;
           if (input.url) body.url = input.url;
           if (input.description) body.description = input.description;
@@ -634,4 +618,57 @@ export function createTypedExecutor(opts: APIClientOptions) {
         return `Error: unknown tool "${toolName}"`;
     }
   };
+}
+
+// ── Shared tool dispatch helper ──────────────────────────────────────
+
+const MAX_TOOL_OUTPUT = 50_000;
+
+export interface ToolDispatchContext {
+  /** Send a tool result back to the Anthropic session. */
+  sendResult: (toolUseId: string, text: string) => Promise<void>;
+  /** Typed executor for API-proxied tools. */
+  executor: ReturnType<typeof createTypedExecutor>;
+  /** Called on state capture (onboard mode). */
+  onStateCapture?: (state: Record<string, unknown>) => void;
+  /** Called when an API tool is dispatched. */
+  onToolCall?: (toolName: string, input: Record<string, unknown>) => void;
+}
+
+/**
+ * Handle an `agent.custom_tool_use` event from a managed agent session.
+ *
+ * Returns true if the event was a `releases_report_state` call (caller may
+ * want to `continue` instead of `break`), false otherwise.
+ */
+export async function handleCustomToolUse(
+  event: { id: string; name: string; input?: Record<string, unknown> },
+  ctx: ToolDispatchContext,
+): Promise<boolean> {
+  const { name: toolName, input: toolInput = {}, id: toolUseId } = event;
+
+  if (toolName === "releases_report_state") {
+    const reported = toolInput.state;
+    if (reported && typeof reported === "object") {
+      const state = reported as Record<string, unknown>;
+      state["updatedAt"] = new Date().toISOString();
+      ctx.onStateCapture?.(state);
+    }
+    await ctx.sendResult(toolUseId, "State captured successfully.");
+    return true;
+  }
+
+  if (API_TOOL_NAMES.includes(toolName)) {
+    ctx.onToolCall?.(toolName, toolInput);
+    const result = await ctx.executor(toolName, toolInput);
+    const output = result ?? "(no output)";
+    const truncated = output.length > MAX_TOOL_OUTPUT
+      ? output.slice(0, MAX_TOOL_OUTPUT) + `\n\n[output truncated — ${output.length} total chars]`
+      : output;
+    await ctx.sendResult(toolUseId, truncated);
+    return false;
+  }
+
+  await ctx.sendResult(toolUseId, `Unknown tool: ${toolName}`);
+  return false;
 }

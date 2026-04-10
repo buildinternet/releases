@@ -12,7 +12,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
-import { createTypedExecutor, API_TOOL_NAMES } from "../../../src/shared/agent-tools.js";
+import { createTypedExecutor, handleCustomToolUse } from "../../../src/shared/agent-tools.js";
 
 export interface SessionParams {
   company: string;
@@ -111,7 +111,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         title: sessionTitle,
       });
 
-      // Build prompt based on mode
       let prompt: string;
       if (mode === "update") {
         const slugList = (params.sourceSlugs ?? []).map(s => `- ${s}`).join("\n");
@@ -144,60 +143,31 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           switch (event.type) {
             case "agent.custom_tool_use": {
               const toolEvent = event as any;
-              const toolName: string = toolEvent.name;
-              const toolInput: Record<string, unknown> = toolEvent.input ?? {};
-
-              // Handle report_state locally (not proxied to API)
-              if (toolName === "releases_report_state") {
-                const reported = toolInput.state;
-                if (reported && typeof reported === "object") {
-                  capturedState = reported as Record<string, unknown>;
-                  capturedState["updatedAt"] = new Date().toISOString();
-                }
+              const sendResult = async (toolUseId: string, text: string) => {
                 await (client.beta.sessions.events as any).send(session.id, {
                   events: [{
                     type: "user.custom_tool_result",
-                    custom_tool_use_id: toolEvent.id,
-                    content: [{ type: "text", text: "State captured successfully." }],
+                    custom_tool_use_id: toolUseId,
+                    content: [{ type: "text", text }],
                   }],
                 });
-                continue;
-              }
-
-              // Dispatch known tools through the typed executor
-              if (API_TOOL_NAMES.includes(toolName)) {
-                toolCallCount++;
-
-                await this.ctx.storage.put("progress", {
-                  step: "discovery",
-                  sourcesFound: 0,
-                  sourcesValidated: 0,
-                  currentAction: toolName,
-                });
-
-                const result = await executor(toolName, toolInput);
-                const output = result ?? "(no output)";
-                const maxLen = 50_000;
-                const truncated = output.length > maxLen
-                  ? output.slice(0, maxLen) + `\n\n[output truncated — ${output.length} total chars]`
-                  : output;
-
-                await (client.beta.sessions.events as any).send(session.id, {
-                  events: [{
-                    type: "user.custom_tool_result",
-                    custom_tool_use_id: toolEvent.id,
-                    content: [{ type: "text", text: truncated }],
-                  }],
-                });
-              } else {
-                await (client.beta.sessions.events as any).send(session.id, {
-                  events: [{
-                    type: "user.custom_tool_result",
-                    custom_tool_use_id: toolEvent.id,
-                    content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-                  }],
-                });
-              }
+              };
+              const wasStateReport = await handleCustomToolUse(
+                { id: toolEvent.id, name: toolEvent.name, input: toolEvent.input },
+                {
+                  sendResult,
+                  executor,
+                  onStateCapture: (state) => { capturedState = state; },
+                  onToolCall: (toolName) => {
+                    toolCallCount++;
+                    this.ctx.storage.put("progress", {
+                      step: "discovery",
+                      currentAction: toolName,
+                    });
+                  },
+                },
+              );
+              if (wasStateReport) continue;
               break;
             }
 

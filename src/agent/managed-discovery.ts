@@ -16,7 +16,7 @@ import { CATEGORIES } from "../lib/categories.js";
 import { buildDiscoveryPrompt } from "./released.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./released.js";
 import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";
-import { AGENT_TOOLS, API_TOOL_NAMES, createTypedExecutor } from "../shared/agent-tools.js";
+import { AGENT_TOOLS, createTypedExecutor, handleCustomToolUse } from "../shared/agent-tools.js";
 
 // ── Cached IDs ────────────────────────────────────────────────────
 
@@ -210,7 +210,8 @@ export async function runManagedDiscovery(
   });
 
   // Process events with wall-clock timeout
-  let capturedState: DiscoveryState | null = null;
+  // Using a mutable container so TS tracks closure mutations correctly
+  const captured: { state: DiscoveryState | null } = { state: null };
   let toolCallCount = 0;
   let done = false;
   const deadline = Date.now() + SESSION_TIMEOUT_MS;
@@ -240,66 +241,34 @@ export async function runManagedDiscovery(
 
         case "agent.custom_tool_use": {
           const toolEvent = event as any;
-          const toolName: string = toolEvent.name;
-          const toolInput: Record<string, unknown> = toolEvent.input ?? {};
-
-          // Handle report_state locally (not proxied to API)
-          if (toolName === "releases_report_state") {
-            const reported = toolInput.state;
-            if (reported && typeof reported === "object") {
-              capturedState = reported as DiscoveryState;
-              capturedState.updatedAt = new Date().toISOString();
-            } else {
-              logger.warn("[managed-agents] releases_report_state called with missing/invalid state");
-            }
+          const sendResult = async (toolUseId: string, text: string) => {
             await client.beta.sessions.events.send(session.id, {
               events: [{
                 type: "user.custom_tool_result",
-                custom_tool_use_id: toolEvent.id,
-                content: [{ type: "text", text: "State captured successfully." }],
+                custom_tool_use_id: toolUseId,
+                content: [{ type: "text", text }],
               }],
             });
-            continue;
-          }
-
-          // Dispatch known tools through the typed executor
-          if (API_TOOL_NAMES.includes(toolName)) {
-            options.onToolUse?.(toolName, JSON.stringify(toolInput));
-            toolCallCount++;
-
-            emitStatus(options, session.id, {
-              type: "session:progress",
-              step: "discovery",
-              currentAction: toolName,
-              toolCalls: toolCallCount,
-            });
-
-            const result = await executeToolCall(toolName, toolInput);
-            const output = result ?? "(no output)";
-
-            // Truncate very large outputs
-            const maxLen = 50_000;
-            const truncated =
-              output.length > maxLen
-                ? output.slice(0, maxLen) + `\n\n[output truncated — ${output.length} total chars]`
-                : output;
-
-            await client.beta.sessions.events.send(session.id, {
-              events: [{
-                type: "user.custom_tool_result",
-                custom_tool_use_id: toolEvent.id,
-                content: [{ type: "text", text: truncated }],
-              }],
-            });
-          } else {
-            await client.beta.sessions.events.send(session.id, {
-              events: [{
-                type: "user.custom_tool_result",
-                custom_tool_use_id: toolEvent.id,
-                content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
-              }],
-            });
-          }
+          };
+          const wasStateReport = await handleCustomToolUse(
+            { id: toolEvent.id, name: toolEvent.name, input: toolEvent.input },
+            {
+              sendResult,
+              executor: executeToolCall,
+              onStateCapture: (state) => { captured.state = state as unknown as DiscoveryState; },
+              onToolCall: (toolName, toolInput) => {
+                options.onToolUse?.(toolName, JSON.stringify(toolInput));
+                toolCallCount++;
+                emitStatus(options, session.id, {
+                  type: "session:progress",
+                  step: "discovery",
+                  currentAction: toolName,
+                  toolCalls: toolCallCount,
+                });
+              },
+            },
+          );
+          if (wasStateReport) continue;
           break;
         }
 
@@ -348,14 +317,14 @@ export async function runManagedDiscovery(
     // Non-critical
   }
 
-  if (capturedState) {
-    capturedState.agentSessionId = session.id;
+  if (captured.state) {
+    captured.state.agentSessionId = session.id;
     emitStatus(options, session.id, {
       type: "session:complete",
-      sourcesFound: capturedState.sources?.length ?? 0,
-      sourcesValidated: capturedState.sources?.filter((s) => s.validated).length ?? 0,
+      sourcesFound: captured.state.sources?.length ?? 0,
+      sourcesValidated: captured.state.sources?.filter((s) => s.validated).length ?? 0,
     });
-    return capturedState;
+    return captured.state;
   }
 
   // Fallback minimal state — no captured state means something went wrong
