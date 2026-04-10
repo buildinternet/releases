@@ -57,7 +57,7 @@ export async function pollAndFetch(env: { DB: D1Database; GITHUB_TOKEN?: string;
 
   const changedScrape = pollResults.filter((r) => r.changed).map((r) => r.source).filter((s) => s.type === "scrape" || s.type === "agent");
   if (changedScrape.length > 0) {
-    console.log(`[cron] ${changedScrape.length} scrape/agent source(s) flagged for CLI pickup`);
+    console.log(`[cron] ${changedScrape.length} scrape/agent source(s) flagged for pickup`);
   }
 }
 

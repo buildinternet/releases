@@ -672,11 +672,9 @@ export async function getLatestReleases(opts: {
 
 // ── Known releases for incremental parsing ──
 
-export interface KnownRelease {
-  version: string | null;
-  title: string;
-  publishedAt: string | null;
-}
+// Canonical type lives in src/ai/shared.ts; re-export for backward compat
+import type { KnownRelease } from "../ai/shared.js";
+export type { KnownRelease };
 
 export async function getKnownReleasesForSource(
   sourceId: string,
