@@ -3,7 +3,7 @@
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import type { OrgHeatmap } from "@/lib/api";
 
-const MIN_CELL_SIZE = 8;
+const MIN_CELL_SIZE = 7;
 const MAX_CELL_SIZE = 13;
 const CELL_GAP = 3;
 const MAX_WEEKS = 52;
@@ -69,15 +69,18 @@ function buildGrid(heatmap: OrgHeatmap, visibleWeeks: number): { cells: CellData
     parseInt(heatmap.range.to.slice(8, 10)),
   );
   const todayDay = new Date(todayMs).getUTCDay();
-  const startMs = todayMs - (visibleWeeks * 7 + todayDay) * 86400000;
+  // Shift start forward by one week so the last column lands on the current week.
+  // The last column is a partial week ending on today — future dates are skipped.
+  const startMs = todayMs - ((visibleWeeks - 1) * 7 + todayDay) * 86400000;
 
   const cells: CellData[] = [];
   const monthLabels: MonthLabel[] = [];
   let lastMonth = -1;
 
-  for (let week = 0; week < visibleWeeks; week++) {
+  outer: for (let week = 0; week < visibleWeeks; week++) {
     for (let day = 0; day < DAYS; day++) {
       const ms = startMs + (week * 7 + day) * 86400000;
+      if (ms > todayMs) break outer;
       const d = new Date(ms);
       const key = d.toISOString().slice(0, 10);
       const count = countMap.get(key) ?? 0;
@@ -124,7 +127,10 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
     const el = containerRef.current;
     if (!el) return;
     function measure() {
-      const available = el!.clientWidth - DAY_LABEL_WIDTH - 8; // 8px for flex gap
+      // clientWidth includes padding — subtract it to get the actual content box width
+      const cs = getComputedStyle(el!);
+      const contentWidth = el!.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const available = contentWidth - DAY_LABEL_WIDTH - 8; // 8px for flex gap
       const sizeAt52 = Math.floor((available + CELL_GAP) / MAX_WEEKS - CELL_GAP);
       if (sizeAt52 >= MIN_CELL_SIZE) {
         // All 52 weeks fit — use the largest cell size that works
@@ -223,7 +229,7 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
         {/* Heatmap grid + month labels */}
         <div className="min-w-0 flex-1">
           {/* Month labels */}
-          <div className="relative overflow-hidden" style={{ height: 14 }}>
+          <div className="relative" style={{ height: 14 }}>
             {monthLabels.map((ml, i) => (
               <span
                 key={i}
