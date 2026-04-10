@@ -22,7 +22,7 @@ After fetching content, the pipeline parses it:
 
 ## Fetching
 
-Trigger a fetch for a source by slug. CLI: `releases fetch <slug> [--dry-run] [--max <n>]`. Typed tool: `fetch_source` with slug param.
+Trigger a fetch for a source by ID or slug. CLI: `releases fetch <slug> [--dry-run] [--max <n>]`. Typed tool: `fetch_source` with identifier (ID or slug) param.
 
 Key CLI flags (not available via typed tool — the typed tool always does a full server-side fetch):
 - `--dry-run` — parse but don't persist. Essential for validation.
@@ -131,7 +131,7 @@ office openings, funding, acquisitions, research publications, safety reports, a
 
 When adding a new source, always validate before committing:
 
-1. **Fetch** — CLI: `releases fetch <slug> --dry-run` then `releases fetch <slug>`. Typed tool: `fetch_source` with slug.
-2. **Verify** — CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source slug.
-3. **If poor results** — try a different URL or type. CLI: `releases edit <slug> --type feed`. Typed tool: `edit_source`.
-4. **If no usable releases** — remove the source. CLI: `releases remove <slug> --ignore --reason "..."`. Typed tool: `remove_source` then `exclude_url`.
+1. **Fetch** — CLI: `releases fetch <slug> --dry-run` then `releases fetch <slug>`. Typed tool: `fetch_source` with identifier (ID or slug).
+2. **Verify** — CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source identifier.
+3. **If poor results** — try a different URL or type. CLI: `releases edit <slug> --type feed`. Typed tool: `edit_source` with identifier.
+4. **If no usable releases** — remove the source. CLI: `releases remove <slug> --ignore --reason "..."`. Typed tool: `remove_source` with identifier, then `exclude_url`.

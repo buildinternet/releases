@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { findSourceBySlug, listFeedSources, listScrapeSources, updateSource } from "../../db/queries.js";
+import { findSource, listFeedSources, listScrapeSources, updateSource } from "../../db/queries.js";
 import { getSourceMeta, updateSourceMeta, headCheckFeed } from "../../adapters/feed.js";
 import type { ChangeStatus, SourceMetadata } from "../../adapters/feed.js";
 import { timeAgo } from "../../lib/dates.js";
@@ -119,7 +119,7 @@ Examples:
       let sourcesToPoll: Source[];
 
       if (slug) {
-        const source = await findSourceBySlug(slug);
+        const source = await findSource(slug);
         if (!source) {
           console.error(`Source not found: ${slug}`);
           process.exit(1);

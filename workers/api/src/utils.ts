@@ -1,6 +1,27 @@
 import { eq } from "drizzle-orm";
-import { tags } from "@releases/db/schema.js";
+import { tags, sources, organizations, products } from "@releases/db/schema.js";
 import { toSlug } from "@releases/lib/slug.js";
+
+/** Resolve a source by ID (src_ prefix) or slug */
+export function sourceWhere(identifier: string) {
+  return identifier.startsWith("src_")
+    ? eq(sources.id, identifier)
+    : eq(sources.slug, identifier);
+}
+
+/** Resolve an org by ID (org_ prefix) or slug */
+export function orgWhere(identifier: string) {
+  return identifier.startsWith("org_")
+    ? eq(organizations.id, identifier)
+    : eq(organizations.slug, identifier);
+}
+
+/** Resolve a product by ID (prod_ prefix) or slug */
+export function productWhere(identifier: string) {
+  return identifier.startsWith("prod_")
+    ? eq(products.id, identifier)
+    : eq(products.slug, identifier);
+}
 
 /**
  * D1 wraps SQLite errors as "Failed query: ..." without preserving the

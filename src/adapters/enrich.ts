@@ -1,5 +1,5 @@
 import type { Release } from "../db/schema.js";
-import { updateRelease, getEnrichableReleases, findSourceBySlug } from "../db/queries.js";
+import { updateRelease, getEnrichableReleases, findSource } from "../db/queries.js";
 import type { default as Anthropic } from "@anthropic-ai/sdk";
 import { fetchCloudflareMarkdown } from "./cloudflare.js";
 import { getSourceMeta } from "./feed.js";
@@ -50,7 +50,7 @@ export interface EnrichOptions {
  * and extracts content for those that do.
  */
 export async function enrichReleases(options: EnrichOptions): Promise<EnrichResult> {
-  const source = await findSourceBySlug(options.sourceSlug);
+  const source = await findSource(options.sourceSlug);
   if (!source) throw new Error(`Source not found: ${options.sourceSlug}`);
   const meta = getSourceMeta(source);
 

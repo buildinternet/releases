@@ -2,7 +2,7 @@ import { Command } from "commander";
 import { createHash } from "crypto";
 import chalk from "chalk";
 import {
-  findSourceBySlug, suppressRelease, unsuppressRelease,
+  findSource, suppressRelease, unsuppressRelease,
   getRelease, deleteRelease, updateRelease, deleteReleasesByFilter, deleteReleasesForSource,
 } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
@@ -87,10 +87,10 @@ Examples:
       }
 
       // Resolve source if needed
-      let resolvedSource: Awaited<ReturnType<typeof findSourceBySlug>> | undefined;
+      let resolvedSource: Awaited<ReturnType<typeof findSource>> | undefined;
       let sourceId: string | undefined;
       if (opts.source) {
-        resolvedSource = await findSourceBySlug(opts.source);
+        resolvedSource = await findSource(opts.source);
         if (!resolvedSource) {
           console.error(chalk.red(`Source not found: ${opts.source}`));
           process.exit(1);

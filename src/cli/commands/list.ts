@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { listSourcesWithOrg, findSourceBySlug } from "../../db/queries.js";
+import { listSourcesWithOrg, findSource } from "../../db/queries.js";
 import { sourceNotFound } from "../suggest.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 
@@ -53,7 +53,7 @@ Examples:
     .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeDisabled?: boolean }) => {
       // ── Single-source detail view ──
       if (slug) {
-        const source = await findSourceBySlug(slug);
+        const source = await findSource(slug);
         if (!source) {
           return sourceNotFound(slug);
         }

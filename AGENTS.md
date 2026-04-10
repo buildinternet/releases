@@ -58,6 +58,7 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 - Ignored URLs are **org-scoped** — a URL ignored for one org can still be valid for another. The `ignored_urls` table requires `orgId`. CLI: `ignore list/add/remove --org <org>`. Blocked URLs (`blocked_urls` table) are **global** — for spam domains and known-bad URLs. CLI: `block list/add/remove`. Both lists are checked by `isUrlExcluded()` before adding sources.
 - Release suppression: individual releases can be suppressed (`release suppress <id> --reason "..."`) to hide them from queries and search without deleting. Suppressed releases are filtered out of all read paths (search, latest, stats, API). Use `release unsuppress <id>` to restore.
 - Feed change detection: `releases poll` uses HTTP HEAD requests to flag sources with upstream changes (`changeDetectedAt` column). The `fetch` command uses HEAD as a pre-filter to skip unchanged feeds. Both are purely mechanical — no AI or content parsing involved. The API Worker runs an hourly cron that polls feed sources on tier-based intervals (`fetchPriority`: normal=4h, low=24h, paused=never) and fetches changed feed/GitHub sources directly via D1. Scrape/agent sources are flagged for CLI pickup. The `lastPolledAt` column tracks when each source was last polled by the cron.
+- Entity resolution prefers IDs over slugs. All lookups (CLI args, API paths, agent tools) accept either an ID (`org_...`, `src_...`, `prod_...`) or a slug. IDs are immutable and globally unique; prefer them when available.
 - Remote mode fetch requires a filter (`--stale`, `--unfetched`, `--changed`, `--retry-errors`, or a source slug). Bare `fetch` is blocked in remote mode to prevent expensive bulk operations. Remote concurrency defaults to 3, capped at 5.
 
 ## Common CLI Patterns
@@ -91,6 +92,7 @@ bun src/index.ts poll --changed         # Show only sources with detected change
 bun src/index.ts poll --json            # Machine-readable output
 ```
 
+- Commands accept entity IDs (`org_...`, `src_...`, `prod_...`) or slugs. IDs are preferred for durability — slugs can change, IDs cannot.
 - Source slug is always a **positional argument** (e.g., `fetch claude-code`), not a flag. The `fetch` command also accepts `--source <slug>` as an alias for convenience.
 - `org list` returns a summary view (counts, last activity) without accounts or tags. Use `org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
 

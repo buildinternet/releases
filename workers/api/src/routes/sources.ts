@@ -4,8 +4,7 @@ import { createDb } from "../db.js";
 import { sources, releases, organizations, releaseSummaries, products } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { getStatusHub } from "../utils.js";
-import { isConflictError, computeAvgPerWeek } from "../utils.js";
+import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
@@ -51,14 +50,14 @@ sourceRoutes.get("/sources", async (c) => {
 
   // Resolve org by slug
   if (orgSlug) {
-    const [org] = await db.select().from(organizations).where(eq(organizations.slug, orgSlug));
+    const [org] = await db.select().from(organizations).where(orgWhere(orgSlug));
     if (!org) return c.json([]);
     conditions.push(eq(sources.orgId, org.id));
   }
 
   const productSlug = c.req.query("productSlug");
   if (productSlug) {
-    const [product] = await db.select().from(products).where(eq(products.slug, productSlug));
+    const [product] = await db.select().from(products).where(productWhere(productSlug));
     if (!product) return c.json([]);
     conditions.push(eq(sources.productId, product.id));
   }
@@ -195,7 +194,7 @@ sourceRoutes.get("/sources/changes", async (c) => {
 sourceRoutes.post("/sources/:slug/fetch", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
   let responsePayload: Record<string, unknown>;
@@ -235,7 +234,7 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
 sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const body = await c.req.json<{ releases: Array<{
@@ -283,7 +282,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
 sourceRoutes.delete("/sources/:slug/releases", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const deleted = await db.delete(releases).where(eq(releases.sourceId, src.id)).returning();
@@ -295,7 +294,7 @@ sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ contentHash: string }>();
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   if (src.lastContentHash === body.contentHash) {
@@ -315,7 +314,7 @@ sourceRoutes.get("/sources/:slug/recent-releases", async (c) => {
 
   if (!cutoff) return c.json({ error: "cutoff query param required" }, 400);
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const rows = await db
@@ -341,7 +340,7 @@ sourceRoutes.get("/sources/:slug/releases", async (c) => {
   const enrichable = c.req.query("enrichable") === "true";
   const limit = c.req.query("limit") ? parseInt(c.req.query("limit")!, 10) : undefined;
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const conditions = [
@@ -368,7 +367,7 @@ sourceRoutes.get("/sources/:slug/known-releases", async (c) => {
   const slug = c.req.param("slug");
   const limit = parseInt(c.req.query("limit") ?? "10", 10);
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const rows = await db
@@ -406,7 +405,7 @@ sourceRoutes.get("/sources/:slug/activity", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   // Validate date params
@@ -477,9 +476,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
   const db = createDb(c.env.DB);
 
-  const [src] = await db.select().from(sources).where(
-    slug.startsWith("src_") ? eq(sources.id, slug) : eq(sources.slug, slug)
-  );
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   let org: { slug: string; name: string } | null = null;
@@ -647,7 +644,7 @@ sourceRoutes.post("/sources", async (c) => {
   // Resolve org by slug if orgSlug provided (preferred over raw orgId)
   let orgId = body.orgId ?? null;
   if (!orgId && body.orgSlug) {
-    const [org] = await db.select().from(organizations).where(eq(organizations.slug, body.orgSlug));
+    const [org] = await db.select().from(organizations).where(orgWhere(body.orgSlug));
     orgId = org?.id ?? null;
   }
 
@@ -689,7 +686,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
     lastPolledAt?: string | null;
   }>();
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const updates: Record<string, unknown> = {};
@@ -719,7 +716,7 @@ sourceRoutes.delete("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const orgId = src.orgId;
@@ -733,7 +730,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const body = await c.req.json<{

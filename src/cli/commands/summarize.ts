@@ -1,6 +1,6 @@
 import type { Command } from "commander";
 import chalk from "chalk";
-import { findSourceBySlug, getRecentReleases, upsertSummary, getOrgById } from "../../db/queries.js";
+import { findSource, getRecentReleases, upsertSummary, getOrgById } from "../../db/queries.js";
 import { sourceNotFound } from "../suggest.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -18,7 +18,7 @@ export function registerSummarizeCommand(program: Command) {
     .option("--force", "Generate even if summarization is disabled")
     .description("Generate AI summary for a source")
     .action(async (slug: string, opts: { monthly?: boolean; window?: string; json?: boolean; force?: boolean }) => {
-      const source = await findSourceBySlug(slug);
+      const source = await findSource(slug);
       if (!source) {
         return sourceNotFound(slug);
       }

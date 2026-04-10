@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findSourceBySlug, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
+import { findSource, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
 import { sourceNotFound } from "../suggest.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
@@ -61,7 +61,7 @@ Examples:
       disable?: boolean;
       enable?: boolean;
     }) => {
-      const source = await findSourceBySlug(slug);
+      const source = await findSource(slug);
       if (!source) {
         return sourceNotFound(slug);
       }
@@ -203,7 +203,7 @@ Examples:
       const displaySlug = opts.slug ?? slug;
 
       if (opts.json) {
-        const updated = await findSourceBySlug(displaySlug);
+        const updated = await findSource(displaySlug);
         console.log(JSON.stringify(updated, null, 2));
       } else {
         console.log(chalk.green(`Updated ${source.name} (${displaySlug}):`));
