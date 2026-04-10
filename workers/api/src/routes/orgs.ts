@@ -8,6 +8,7 @@ import { toSlug } from "@releases/lib/slug.js";
 import { isConflictError, computeAvgPerWeek, getOrCreateTagD1 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
+import { assembleSourceGuide } from "@releases/ai/source-guide.js";
 import type { Env } from "../index.js";
 import { getOrgsWithStats, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgReleasesFeed } from "../queries/orgs.js";
 
@@ -180,7 +181,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     } : null,
     sourceGuide: sourceGuideRow[0] ? {
       scope: sourceGuideRow[0].scope as "source-guide",
-      content: sourceGuideRow[0].content,
+      content: assembleSourceGuide(sourceGuideRow[0].content, sourceGuideRow[0].notes),
       updatedAt: sourceGuideRow[0].updatedAt,
     } : null,
   };

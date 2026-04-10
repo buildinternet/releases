@@ -30,6 +30,8 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Ignore URL | `releases ignore add --org <org> <url>` | `exclude_url` action "ignore" with url, organization |
 | Block URL | `releases block add <url>` | `exclude_url` action "block" with url |
 | List categories | `releases categories --json` | `list_categories` |
+| Get source guide | `releases knowledge guide <org>` | `get_source_guide` with organization param |
+| Update guide notes | `releases knowledge guide <org> --notes "..."` | `update_source_guide_notes` with organization, notes params |
 
 ## Listing Sources
 
@@ -80,13 +82,15 @@ When onboarding an org, if you find a single top-level changelog alongside produ
 
 ## Source Guides
 
-Each org can have a **source guide** — a markdown document describing how to navigate its sources, what quirks to watch for, and agent-discovered notes. Think of it as the ops playbook for an org's changelog sources.
+Each org can have a **source guide** with two layers:
+- **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
+- **Agent notes** — free-form markdown that you fully control. Use `update_source_guide_notes` to replace the notes section entirely. You can rewrite, reorganize, or clear notes at any time.
 
-**Before fetching:** Read the source guide for the org (`releases knowledge guide <org>`) to understand source types, priorities, parseInstructions, and any agent notes about known issues.
+**Before fetching or working with an org's sources:** Read the source guide. Typed tool: `get_source_guide` with organization param. CLI: `releases knowledge guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
-**After discovering something:** Append a note to the guide (`releases knowledge guide <org> --note "description"`). Good candidates for notes: feed quirks, content depth observations, blog filtering results, crawl mode recommendations.
+**Updating notes:** Use `update_source_guide_notes` with the complete notes content — it replaces the entire notes section. Good things to record: feed quirks, content depth observations, blog filtering results, crawl mode recommendations, product coverage notes.
 
-**Regenerating:** When sources change (added/removed/reconfigured), regenerate the guide with `releases knowledge guide <org> --regenerate`. This preserves existing agent notes while rebuilding the source inventory from current metadata.
+**Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `autoEnrich`, use `edit_source` with metadata — the header updates automatically.
 
 **Product context:** Source guides group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the guide calls these out as "Organization-Level Sources" with a note about which products they may cover.
 

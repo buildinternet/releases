@@ -814,6 +814,13 @@ export async function upsertKnowledgePage(data: {
   });
 }
 
+export async function updateSourceGuideNotes(orgSlug: string, notes: string): Promise<void> {
+  await apiFetch(`/v1/knowledge/notes?slug=${encodeURIComponent(orgSlug)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ notes }),
+  });
+}
+
 // ── Media Assets ──
 
 import type { MediaAssetInput } from "../db/queries.js";

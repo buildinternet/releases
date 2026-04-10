@@ -2,8 +2,14 @@
  * Source guide generator — produces a structured markdown document describing
  * how to navigate an org's changelog sources. Deterministic (no AI needed).
  *
- * Agents read this before fetch operations. Agents can append notes as they
- * discover things about sources.
+ * Two-layer architecture:
+ * - **Header** — auto-generated from source metadata. Regenerated on every
+ *   source mutation. Agents never edit this directly.
+ * - **Notes** — free-form markdown that agents read and write as a whole
+ *   document. Stored separately in the DB. Agents can rewrite, reorganize,
+ *   or clear notes at any time.
+ *
+ * The full guide is assembled at read time by combining header + notes.
  */
 
 import type { Source } from "../db/schema.js";
@@ -22,13 +28,14 @@ export interface SourceGuideInput {
   domain?: string | null;
   sources: Source[];
   products?: ProductInfo[];
-  /** Existing notes section to preserve across regenerations */
-  existingNotes?: string;
 }
 
-/** Generate a source guide markdown document for an org. */
-export function generateSourceGuide(input: SourceGuideInput): string {
-  const { orgName, orgSlug, sources, products, existingNotes } = input;
+/**
+ * Generate the programmatic header for a source guide.
+ * This is the auto-generated portion that reflects current source metadata.
+ */
+export function generateSourceGuideHeader(input: SourceGuideInput): string {
+  const { orgName, orgSlug, sources, products } = input;
 
   const active = sources.filter((s) => !s.isHidden);
   const disabled = sources.filter((s) => s.isHidden);
@@ -56,7 +63,6 @@ export function generateSourceGuide(input: SourceGuideInput): string {
   // Active sources — grouped by product when products exist
   if (active.length > 0) {
     if (hasProducts) {
-      // Group sources by product
       const byProduct = new Map<string, Source[]>();
       const unassigned: Source[] = [];
 
@@ -114,17 +120,27 @@ export function generateSourceGuide(input: SourceGuideInput): string {
     }
   }
 
-  // Agent notes section
-  lines.push(`## Notes`);
-  lines.push("");
-  if (existingNotes) {
-    lines.push(existingNotes);
-  } else {
-    lines.push("_No agent notes yet. Agents can append observations here as they work with these sources._");
+  // Inline reminder about editing source metadata
+  const sourcesWithInstructions = [...active, ...disabled].filter((s) => getSourceMeta(s).parseInstructions);
+  if (sourcesWithInstructions.length > 0) {
+    lines.push(`> **Note:** ${sourcesWithInstructions.length} source${sourcesWithInstructions.length === 1 ? " has" : "s have"} \`parseInstructions\` configured. To update these, use \`edit_source\` with metadata — do not edit the guide header directly.`);
+    lines.push("");
   }
-  lines.push("");
 
   return lines.join("\n");
+}
+
+/**
+ * Assemble the full source guide from the auto-generated header and agent notes.
+ * Called at read time — the header reflects current metadata, notes are from storage.
+ */
+export function assembleSourceGuide(header: string, notes: string | null): string {
+  const trimmedNotes = notes?.trim();
+  const notesBody = trimmedNotes
+    ? trimmedNotes
+    : "_No agent notes yet. Use `update_source_guide_notes` to add observations about these sources._";
+
+  return `${header}\n## Agent Notes\n\n${notesBody}\n`;
 }
 
 function formatSource(source: Source, headingLevel = 3): string {
@@ -132,13 +148,13 @@ function formatSource(source: Source, headingLevel = 3): string {
   const lines: string[] = [];
 
   const priority = source.fetchPriority ?? "normal";
-  const badges = [source.type, priority !== "normal" ? `priority: ${priority}` : null].filter(Boolean);
+  const badges = priority !== "normal" ? `${source.type}, priority: ${priority}` : source.type;
   const heading = "#".repeat(headingLevel);
 
   lines.push(`${heading} ${source.name} (\`${source.slug}\`)`);
   lines.push("");
   lines.push(`- **URL:** ${source.url}`);
-  lines.push(`- **Type:** ${badges.join(", ")}`);
+  lines.push(`- **Type:** ${badges}`);
 
   if (meta.feedUrl) {
     lines.push(`- **Feed:** ${meta.feedUrl}`);
@@ -167,27 +183,13 @@ function formatSource(source: Source, headingLevel = 3): string {
   return lines.join("\n");
 }
 
-/** Extract just the Notes section from existing guide content. */
-export function extractNotes(content: string): string | undefined {
-  const notesMatch = content.match(/^## Notes\n\n([\s\S]*?)(?=\n## |\n$)/m);
-  if (!notesMatch) return undefined;
+// ── Legacy helpers (kept for migration from old format) ──
+
+/** Extract just the Notes section from an old-format guide that stored everything together. */
+export function extractNotesFromLegacyGuide(content: string): string | null {
+  const notesMatch = content.match(/^## (?:Notes|Agent Notes)\n\n([\s\S]*?)(?=\n## |\s*$)/m);
+  if (!notesMatch) return null;
   const notes = notesMatch[1].trim();
-  if (notes.startsWith("_No agent notes yet")) return undefined;
+  if (notes.startsWith("_No agent notes yet")) return null;
   return notes;
-}
-
-/** Append a note to the Notes section of a guide. Returns the updated guide content. */
-export function appendNote(content: string, note: string, author?: string): string {
-  const timestamp = new Date().toISOString().split("T")[0];
-  const prefix = author ? `[${author}, ${timestamp}]` : `[${timestamp}]`;
-  const formatted = `- ${prefix} ${note}`;
-
-  const existingNotes = extractNotes(content);
-  const notesSection = existingNotes ? `${existingNotes}\n${formatted}` : formatted;
-
-  // Replace the notes section in the content
-  return content.replace(
-    /^## Notes\n\n[\s\S]*?(?=\n## |\s*$)/m,
-    `## Notes\n\n${notesSection}\n`,
-  );
 }

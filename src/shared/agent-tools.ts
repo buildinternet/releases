@@ -10,6 +10,7 @@
  */
 
 import { CATEGORIES } from "../lib/categories.js";
+import { assembleSourceGuide } from "../ai/source-guide.js";
 
 // ── Tool input types ─────────────────────────────────────────────────
 // Read tools (list_sources, list_organizations, get_latest_releases,
@@ -85,6 +86,15 @@ export interface ExcludeUrlInput {
   block_type?: "exact" | "domain";
 }
 
+export interface GetSourceGuideInput {
+  organization: string;
+}
+
+export interface UpdateSourceGuideNotesInput {
+  organization: string;
+  notes: string;
+}
+
 export interface ReportStateInput {
   state: Record<string, unknown>;
 }
@@ -99,6 +109,8 @@ export type AgentToolCall =
   | { tool: "manage_product"; input: ManageProductInput }
   | { tool: "evaluate_url"; input: EvaluateUrlInput }
   | { tool: "exclude_url"; input: ExcludeUrlInput }
+  | { tool: "get_source_guide"; input: GetSourceGuideInput }
+  | { tool: "update_source_guide_notes"; input: UpdateSourceGuideNotesInput }
   | { tool: "list_categories"; input: Record<string, never> }
   | { tool: "releases_report_state"; input: ReportStateInput };
 
@@ -122,6 +134,34 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {},
+    },
+  },
+
+  {
+    type: "custom",
+    name: "get_source_guide",
+    description:
+      "Get the source guide for an organization. The guide has two parts: an auto-generated header (source metadata, types, priorities, parseInstructions) and agent notes (free-form markdown you can edit). Read this before fetching or working with an org's sources. Returns null if no guide exists yet (one will be auto-generated after the first source mutation). To change source configuration like parseInstructions, use edit_source — the header updates automatically.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        organization: { type: "string", description: "Org slug" },
+      },
+      required: ["organization"],
+    },
+  },
+  {
+    type: "custom",
+    name: "update_source_guide_notes",
+    description:
+      "Replace the agent notes section of an org's source guide. The notes section is free-form markdown that you fully control — you can rewrite, reorganize, or clear it. Use this to record observations about sources, content depth findings, feed quirks, filtering recommendations, or anything that helps future agents work with this org's sources. Pass the complete notes content (not a diff).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        organization: { type: "string", description: "Org slug" },
+        notes: { type: "string", description: "Complete markdown content for the agent notes section. Replaces existing notes entirely." },
+      },
+      required: ["organization", "notes"],
     },
   },
 
@@ -346,6 +386,28 @@ export function createTypedExecutor(opts: APIClientOptions) {
         return JSON.stringify({ categories: CATEGORIES });
       }
 
+      case "get_source_guide": {
+        const org = String(input.organization ?? "");
+        if (!org) return "Error: organization is required";
+        const result = await api("GET", `/knowledge?scope=source-guide&slug=${encodeURIComponent(org)}`);
+        if (result === "null" || result.trim() === "null") {
+          return `No source guide exists yet for "${org}". A guide will be auto-generated when you add, edit, or remove a source for this org.`;
+        }
+        try {
+          const data = JSON.parse(result);
+          return assembleSourceGuide(data.content ?? "", data.notes ?? null);
+        } catch {
+          return result;
+        }
+      }
+
+      case "update_source_guide_notes": {
+        const org = String(input.organization ?? "");
+        if (!org) return "Error: organization is required";
+        if (input.notes === undefined) return "Error: notes is required";
+        return api("PATCH", `/knowledge/notes?slug=${encodeURIComponent(org)}`, { notes: String(input.notes) });
+      }
+
       // ── Write tools ──
 
       case "add_source": {
@@ -358,7 +420,11 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (input.feed_url) {
           body.metadata = JSON.stringify({ feedUrl: input.feed_url });
         }
-        return api("POST", "/sources", body);
+        const result = await api("POST", "/sources", body);
+        if (input.organization && !result.startsWith("Error")) {
+          return result + `\n\n[Source guide for "${input.organization}" has been auto-regenerated. Use get_source_guide to review.]`;
+        }
+        return result;
       }
 
       case "edit_source": {
@@ -370,13 +436,21 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (input.name) body.name = input.name;
         if (input.url) body.url = input.url;
         if (input.type) body.type = input.type;
-        return api("PATCH", `/sources/${encodeURIComponent(slug)}`, body);
+        const result = await api("PATCH", `/sources/${encodeURIComponent(slug)}`, body);
+        if (!result.startsWith("Error")) {
+          return result + `\n\n[Source guide has been auto-regenerated to reflect this change.]`;
+        }
+        return result;
       }
 
       case "remove_source": {
         const slug = String(input.slug ?? "");
         if (!slug) return "Error: slug is required";
-        return api("DELETE", `/sources/${encodeURIComponent(slug)}`);
+        const result = await api("DELETE", `/sources/${encodeURIComponent(slug)}`);
+        if (!result.startsWith("Error")) {
+          return result + `\n\n[Source guide has been auto-regenerated to reflect this removal.]`;
+        }
+        return result;
       }
 
       case "fetch_source": {

@@ -37,3 +37,10 @@ export function computeAvgPerWeek(totalReleases: number, oldestPublishedAt: stri
   if (weeks < 1) return totalReleases;
   return Math.round((totalReleases / weeks) * 10) / 10;
 }
+
+/** Generate a knowledge page ID. Shared by route handlers and source-guide-regen. */
+export function newKnowledgePageId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  const base64 = btoa(String.fromCharCode(...bytes));
+  return "kp_" + base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
