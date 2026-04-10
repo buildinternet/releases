@@ -4,6 +4,11 @@ import {
   releases,
   organizations,
   usageLog,
+  orgAccounts,
+  tags,
+  orgTags,
+  products,
+  domainAliases,
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import type { D1Db } from "./db.js";
@@ -24,17 +29,19 @@ async function findOrg(db: D1Db, identifier: string) {
     name: string;
     slug: string;
     domain: string | null;
+    description: string | null;
+    category: string | null;
   }>(sql`
-    SELECT o.id, o.name, o.slug, o.domain
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
     FROM organizations o
     WHERE o.slug = ${identifier} OR o.domain = ${identifier} OR LOWER(o.name) = LOWER(${identifier})
     UNION
-    SELECT o.id, o.name, o.slug, o.domain
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
     FROM organizations o
     JOIN domain_aliases da ON da.org_id = o.id
     WHERE da.domain = ${identifier}
     UNION
-    SELECT o.id, o.name, o.slug, o.domain
+    SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
     FROM organizations o
     JOIN org_accounts oa ON oa.org_id = o.id
     WHERE oa.handle = ${identifier}
@@ -315,6 +322,82 @@ export async function listOrganizations(
     .join("\n\n");
 
   return text(result);
+}
+
+// ── get_organization ─────────────────────────────────────────────────
+
+export async function getOrganization(
+  db: D1Db,
+  params: { identifier: string },
+): Promise<ToolResult> {
+  const org = await findOrg(db, params.identifier);
+  if (!org) return text(`No organization found matching "${params.identifier}"`);
+
+  const [accounts, tagRows, orgSources, orgProducts, aliases] = await Promise.all([
+    db.select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
+      .from(orgAccounts).where(eq(orgAccounts.orgId, org.id)),
+    db.select({ name: tags.name }).from(orgTags)
+      .innerJoin(tags, eq(orgTags.tagId, tags.id)).where(eq(orgTags.orgId, org.id)),
+    db.select({ slug: sources.slug, name: sources.name, type: sources.type, url: sources.url, lastFetchedAt: sources.lastFetchedAt })
+      .from(sources).where(eq(sources.orgId, org.id)),
+    db.select({ slug: products.slug, name: products.name, url: products.url, description: products.description })
+      .from(products).where(eq(products.orgId, org.id)),
+    db.select({ domain: domainAliases.domain })
+      .from(domainAliases).where(eq(domainAliases.orgId, org.id)),
+  ]);
+
+  const lines: string[] = [];
+
+  lines.push(`**Organization: ${org.name}**`);
+  lines.push(
+    `Slug: ${org.slug} | Domain: ${org.domain ?? "N/A"} | Category: ${org.category ?? "N/A"}`,
+  );
+  if (org.description) lines.push(`Description: ${org.description}`);
+
+  lines.push("");
+
+  if (accounts.length > 0) {
+    lines.push(`Accounts: ${accounts.map((a) => `${a.platform}/${a.handle}`).join(", ")}`);
+  } else {
+    lines.push("Accounts: none");
+  }
+
+  if (tagRows.length > 0) {
+    lines.push(`Tags: ${tagRows.map((t) => t.name).join(", ")}`);
+  } else {
+    lines.push("Tags: none");
+  }
+
+  if (aliases.length > 0) {
+    lines.push(`Aliases: ${aliases.map((a) => a.domain).join(", ")}`);
+  } else {
+    lines.push("Aliases: none");
+  }
+
+  if (orgProducts.length > 0) {
+    lines.push("");
+    lines.push("Products:");
+    for (const p of orgProducts) {
+      const urlPart = p.url ? ` — ${p.url}` : "";
+      const descPart = p.description ? ` — ${p.description}` : "";
+      lines.push(`- ${p.name} (${p.slug})${urlPart}${descPart}`);
+    }
+  }
+
+  if (orgSources.length > 0) {
+    lines.push("");
+    lines.push("Sources:");
+    for (const s of orgSources) {
+      lines.push(`- **${s.name}** (${s.slug})`);
+      lines.push(`  Type: ${s.type} | URL: ${s.url}`);
+      lines.push(`  Last fetched: ${s.lastFetchedAt ?? "Never"}`);
+    }
+  } else {
+    lines.push("");
+    lines.push("Sources: none");
+  }
+
+  return text(lines.join("\n"));
 }
 
 // ── summarize_changes ────────────────────────────────────────────────

@@ -29,6 +29,7 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 - **get_latest_releases** — Recent releases for a product or organization
 - **list_sources** — List indexed changelog sources
 - **list_organizations** — Search/list organizations
+- **get_organization** — Detailed view of a single org (accounts, tags, sources, products, aliases)
 - **summarize_changes** — AI-generated summary of recent changes for a product
 - **compare_products** — AI comparison between two products
 

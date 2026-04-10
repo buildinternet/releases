@@ -13,6 +13,8 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
 import { createTypedExecutor, handleCustomToolUse } from "../../../src/shared/agent-tools.js";
+import { buildDiscoverySystemPrompt } from "../../../src/shared/discovery-prompt.js";
+import { CATEGORIES } from "../../../src/lib/categories.js";
 
 export interface SessionParams {
   company: string;
@@ -118,11 +120,15 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         const slugList = (params.sourceSlugs ?? []).map(s => `- ${s}`).join("\n");
         prompt = `Fetch release updates for the following sources:\n${slugList}\n\nFor each source, use the fetch_source tool with the source slug. Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
       } else {
+        const systemContext = buildDiscoverySystemPrompt({
+          evaluateAvailable: false,
+          categories: CATEGORIES,
+        });
         const hints: string[] = [];
         if (params.domain) hints.push(`Their website is ${params.domain}.`);
         if (params.githubOrg) hints.push(`Their GitHub organization is ${params.githubOrg}.`);
         const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-        prompt = `Find and evaluate changelog sources for "${params.company}".${hintStr} Check what we already have with list_sources, discover new sources, evaluate URLs, add and fetch validated sources. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+        prompt = `${systemContext}\n\n---\n\nFind and evaluate changelog sources for "${params.company}".${hintStr}`;
       }
 
       const stream = await (client.beta.sessions.events as any).stream(session.id);
