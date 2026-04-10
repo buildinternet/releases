@@ -208,6 +208,7 @@ export default {
           environmentId,
           mode: "update",
           sourceIdentifiers: identifiers,
+          orgId: body.orgId,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

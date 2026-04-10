@@ -82,13 +82,39 @@ When onboarding an org, if you find a single top-level changelog alongside produ
 
 ## Source Guides
 
-Each org can have a **source guide** with two layers:
+Each org has a **source guide** — a README that tells any agent how to efficiently work with that org's changelog sources. The guide has two layers:
+
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
-- **Agent notes** — free-form markdown that you fully control. Use `update_source_guide_notes` to replace the notes section entirely. You can rewrite, reorganize, or clear notes at any time.
+- **Agent notes** — free-form markdown that you fully control. This is the most important part of the guide. Write it like a README for a teammate who needs to fetch releases from this org without asking questions.
 
-**Before fetching or working with an org's sources:** Read the source guide. Typed tool: `get_source_guide` with organization param. CLI: `releases knowledge guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
+**Always read the source guide before fetching or working with an org's sources.** Typed tool: `get_source_guide` with organization param. CLI: `releases knowledge guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
-**Updating notes:** Use `update_source_guide_notes` with the complete notes content — it replaces the entire notes section. Good things to record: feed quirks, content depth observations, blog filtering results, crawl mode recommendations, product coverage notes.
+### Writing good agent notes
+
+The notes should answer: "If I need to fetch the latest releases from this org, what do I need to know?" Organize notes under these headings:
+
+**`### Extraction patterns`** — One paragraph per source describing:
+- How the page is structured (single long page with sections? paginated? date-grouped entries?)
+- What individual releases look like (headings, bullet lists, cards?)
+- Version format (semver, dates, codenames, or none — set version to null)
+- Publish cadence (daily, weekly, sporadic?)
+- Whether the page needs JS rendering or is static HTML
+- Whether filtering is needed or all content is relevant
+
+**`### Known quirks`** — Anything that has caused issues or requires special handling:
+- Non-obvious parseInstructions and why they exist
+- URL path oddities (doubled paths, relative links, redirects)
+- Content that looks like releases but isn't
+- Sources where crawl mode helps or hurts
+
+**`### Source coverage`** — The big picture:
+- Which sources are canonical vs supplementary
+- Whether the active sources cover the org's full release surface or if there are gaps
+- Why disabled sources were disabled (so they don't get re-evaluated)
+
+Write notes during onboarding after you've fetched and validated sources. Update them when you discover new quirks or when source behavior changes. If notes are empty or stale, write them before doing fetch work — future agents (including yourself in later sessions) will benefit.
+
+**Updating notes:** Use `update_source_guide_notes` with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
 
 **Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `autoEnrich`, use `edit_source` with metadata — the header updates automatically.
 

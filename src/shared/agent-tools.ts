@@ -600,6 +600,13 @@ export interface ToolDispatchContext {
   onStateCapture?: (state: Record<string, unknown>) => void;
   /** Called when an API tool is dispatched. */
   onToolCall?: (toolName: string, input: Record<string, unknown>) => void;
+  /**
+   * Optional handler for scrape source fetches. When provided and fetch_source
+   * returns a "flagged" response, this handler is called to do the actual
+   * scrape (Cloudflare render → AI parse → insert). Returns the result string
+   * to send back to the agent.
+   */
+  onScrapeFetch?: (sourceIdentifier: string) => Promise<string>;
 }
 
 /**
@@ -627,7 +634,23 @@ export async function handleCustomToolUse(
 
   if (API_TOOL_NAMES.includes(toolName)) {
     ctx.onToolCall?.(toolName, toolInput);
-    const result = await ctx.executor(toolName, toolInput);
+    let result = await ctx.executor(toolName, toolInput);
+
+    // When fetch_source returns "flagged" and a scrape handler is available,
+    // run the actual scrape pipeline instead of just reporting the flag.
+    if (toolName === "fetch_source" && ctx.onScrapeFetch) {
+      const isFlagged = (() => { try { return JSON.parse(result ?? "{}").type === "flagged"; } catch { return false; } })();
+      if (isFlagged) {
+        const identifier = String(toolInput.identifier ?? "");
+        try {
+          result = await ctx.onScrapeFetch(identifier);
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          result = `Scrape fetch failed: ${msg}`;
+        }
+      }
+    }
+
     const output = result ?? "(no output)";
     const truncated = output.length > MAX_TOOL_OUTPUT
       ? output.slice(0, MAX_TOOL_OUTPUT) + `\n\n[output truncated — ${output.length} total chars]`
