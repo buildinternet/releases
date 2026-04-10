@@ -13,7 +13,7 @@
  */
 
 import type { Source } from "../db/schema.js";
-import { getSourceMeta } from "../adapters/feed.js";
+import { getSourceMeta } from "../adapters/source-meta.js";
 
 export interface ProductInfo {
   id: string;

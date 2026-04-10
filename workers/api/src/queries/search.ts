@@ -5,7 +5,7 @@ import type {
   SearchProductHit,
   SearchReleaseHit,
   RawSourceHit,
-} from "../../../../src/api/types.js";
+} from "@releases/api/types.js";
 
 export async function searchOrgs(db: D1Db, pattern: string, limit: number): Promise<SearchOrgHit[]> {
   return db.all<SearchOrgHit>(sql`
