@@ -292,6 +292,8 @@ export const knowledgePages = sqliteTable(
     orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
     productId: text("product_id").references(() => products.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
+    /** Free-form agent notes — stored separately from auto-generated content. */
+    notes: text("notes"),
     releaseCount: integer("release_count").notNull().default(0),
     lastContributingReleaseAt: text("last_contributing_release_at"),
     generatedAt: text("generated_at").notNull().$defaultFn(() => new Date().toISOString()),

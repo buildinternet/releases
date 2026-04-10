@@ -3,9 +3,10 @@ import chalk from "chalk";
 import {
   findOrg, getSourcesByOrg, getProductsByOrg, getRecentReleases,
   getKnowledgePageForOrg, getSourceGuideForOrg, upsertKnowledgePage,
+  updateSourceGuideNotes,
 } from "../../db/queries.js";
 import { generateKnowledgePage } from "../../ai/knowledge.js";
-import { generateSourceGuide, extractNotes, appendNote } from "../../ai/source-guide.js";
+import { generateSourceGuideHeader, assembleSourceGuide, extractNotesFromLegacyGuide } from "../../ai/source-guide.js";
 import { DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { daysAgoIso } from "../../lib/dates.js";
 import { stripAnsi } from "../../lib/sanitize.js";
@@ -141,10 +142,10 @@ export function registerKnowledgeCommand(program: Command) {
     .command("guide")
     .argument("<org>", "Organization slug")
     .option("--json", "Output as JSON")
-    .option("--regenerate", "Regenerate the guide from current source metadata")
-    .option("--note <text>", "Append an agent note to the guide")
-    .description("Show or generate the source guide for an organization")
-    .action(async (orgSlug: string, opts: { json?: boolean; regenerate?: boolean; note?: string }) => {
+    .option("--regenerate", "Regenerate the header from current source metadata")
+    .option("--notes <text>", "Replace the agent notes section (pass full content)")
+    .description("Show or manage the source guide for an organization")
+    .action(async (orgSlug: string, opts: { json?: boolean; regenerate?: boolean; notes?: string }) => {
       const org = await findOrg(orgSlug);
       if (!org) {
         console.error(chalk.red(`Organization not found: ${orgSlug}`));
@@ -153,42 +154,32 @@ export function registerKnowledgeCommand(program: Command) {
 
       const orgSources = await getSourcesByOrg(org.id);
 
-      // Append a note to the existing guide
-      if (opts.note) {
-        const existing = await getSourceGuideForOrg(org.id, org.slug);
-        if (!existing) {
-          console.error(chalk.yellow(`No source guide exists for ${org.name}. Generate one first: releases knowledge guide ${orgSlug} --regenerate`));
-          process.exit(1);
-        }
-        const updated = appendNote(existing.content, opts.note);
-        await upsertKnowledgePage({
-          scope: "source-guide",
-          orgId: org.id,
-          content: updated,
-          releaseCount: existing.releaseCount,
-          lastContributingReleaseAt: existing.lastContributingReleaseAt,
-        });
+      // Update notes
+      if (opts.notes !== undefined) {
+        await updateSourceGuideNotes(org.id, org.slug, opts.notes);
         if (opts.json) {
-          console.log(JSON.stringify({ org: org.slug, note: opts.note, added: true }));
+          console.log(JSON.stringify({ org: org.slug, notes: opts.notes, updated: true }));
         } else {
-          console.log(chalk.green(`Note added to ${org.name} source guide.`));
+          console.log(chalk.green(`Notes updated for ${org.name} source guide.`));
         }
         return;
       }
 
-      // Fetch existing guide once — used for display, note preservation, and status messaging
+      // Fetch existing guide
       const existingPage = await getSourceGuideForOrg(org.id, org.slug);
 
       // Show existing guide unless --regenerate
       if (!opts.regenerate && existingPage) {
+        const assembled = assembleSourceGuide(existingPage.content, existingPage.notes);
         if (opts.json) {
           console.log(JSON.stringify({
             org: org.slug,
-            content: existingPage.content,
+            content: assembled,
+            notes: existingPage.notes,
             updatedAt: existingPage.updatedAt,
           }));
         } else {
-          console.log(existingPage.content);
+          console.log(assembled);
         }
         return;
       }
@@ -198,31 +189,36 @@ export function registerKnowledgeCommand(program: Command) {
         process.exit(0);
       }
 
-      // Preserve existing notes across regeneration
-      const existingNotes = existingPage ? extractNotes(existingPage.content) : undefined;
-
       const orgProducts = await getProductsByOrg(org.id);
-      const content = generateSourceGuide({
+      const header = generateSourceGuideHeader({
         orgName: org.name,
         orgSlug: org.slug,
         domain: org.domain,
         sources: orgSources,
         products: orgProducts.map((p) => ({ id: p.id, name: p.name, slug: p.slug, description: p.description })),
-        existingNotes,
       });
+
+      // Preserve notes: from existing notes column, or migrate from old-format content
+      let notes: string | null = existingPage?.notes ?? null;
+      if (!notes && existingPage) {
+        notes = extractNotesFromLegacyGuide(existingPage.content);
+      }
 
       await upsertKnowledgePage({
         scope: "source-guide",
         orgId: org.id,
-        content,
+        content: header,
+        notes,
         releaseCount: orgSources.length,
       });
 
+      const assembled = assembleSourceGuide(header, notes);
+
       if (opts.json) {
-        console.log(JSON.stringify({ org: org.slug, content, sources: orgSources.length }));
+        console.log(JSON.stringify({ org: org.slug, content: assembled, notes, sources: orgSources.length }));
       } else {
         console.log(chalk.green(`${existingPage ? "Regenerated" : "Generated"} source guide for ${org.name}\n`));
-        console.log(content);
+        console.log(assembled);
       }
     });
 }

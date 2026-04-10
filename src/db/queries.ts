@@ -1457,7 +1457,7 @@ export async function getSourceGuideForOrg(orgId: string, orgSlug?: string): Pro
 }
 
 export async function upsertKnowledgePage(
-  data: { scope: "org" | "product" | "source-guide"; orgId?: string | null; productId?: string | null; content: string; releaseCount: number; lastContributingReleaseAt?: string | null },
+  data: { scope: "org" | "product" | "source-guide"; orgId?: string | null; productId?: string | null; content: string; notes?: string | null; releaseCount: number; lastContributingReleaseAt?: string | null },
 ): Promise<void> {
   if (isRemoteMode()) {
     return apiClient.upsertKnowledgePage(data);
@@ -1474,6 +1474,7 @@ export async function upsertKnowledgePage(
       orgId: data.orgId ?? null,
       productId: data.productId ?? null,
       content: data.content,
+      notes: data.notes ?? null,
       releaseCount: data.releaseCount,
       lastContributingReleaseAt: data.lastContributingReleaseAt ?? null,
       generatedAt: now,
@@ -1488,6 +1489,18 @@ export async function upsertKnowledgePage(
         updatedAt: now,
       },
     });
+}
+
+export async function updateSourceGuideNotes(orgId: string, orgSlug: string, notes: string): Promise<void> {
+  if (isRemoteMode()) {
+    return apiClient.updateSourceGuideNotes(orgSlug, notes);
+  }
+  const db = getDb();
+  const now = new Date().toISOString();
+  await db
+    .update(knowledgePages)
+    .set({ notes: notes.trim() || null, updatedAt: now })
+    .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, orgId)));
 }
 
 // ── Media Assets ──
