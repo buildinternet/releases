@@ -24,6 +24,7 @@ interface ManagedAgentConfig {
   agentId: string;
   agentVersion: number;
   environmentId: string;
+  vaultId?: string;
   updatedAt: string;
   promptHash?: string;
 }
@@ -101,6 +102,7 @@ async function ensureAgentAndEnv(
       agentId: updated.id,
       agentVersion: updated.version as number,
       environmentId,
+      vaultId: cached.vaultId,
       updatedAt: new Date().toISOString(),
       promptHash: currentHash,
     };
@@ -138,6 +140,53 @@ async function ensureAgentAndEnv(
   logger.info(`[managed-agents] Agent ${agent.id} env=${environmentId} created and cached`);
 
   return cfg;
+}
+
+// ── Vault setup ──────────────────────────────────────────────────
+
+const MCP_SERVER_URL = "https://mcp.releases.sh/mcp";
+
+async function ensureVault(client: Anthropic): Promise<string> {
+  // Prefer explicit env var
+  const envVaultId = process.env.ANTHROPIC_VAULT_ID;
+  if (envVaultId) {
+    logger.debug(`[managed-agents] Using env var vault=${envVaultId}`);
+    return envVaultId;
+  }
+
+  // Check cached config
+  const cached = loadCachedConfig();
+  if (cached?.vaultId) {
+    logger.debug(`[managed-agents] Using cached vault=${cached.vaultId}`);
+    return cached.vaultId;
+  }
+
+  // Auto-create vault + credential for local development
+  logger.info("[managed-agents] Creating vault and MCP credential (first run)...");
+
+  const vault = await (client.beta.vaults as any).create({
+    display_name: "released-system",
+    metadata: { purpose: "released-discovery-agent" },
+  });
+
+  await (client.beta.vaults.credentials as any).create(vault.id, {
+    display_name: "Released MCP Server",
+    auth: {
+      type: "static_bearer",
+      mcp_server_url: MCP_SERVER_URL,
+      token: "public-access",
+    },
+  });
+
+  // Persist vault ID — re-read config in case ensureAgentAndEnv wrote it
+  const current = loadCachedConfig();
+  if (current) {
+    current.vaultId = vault.id;
+    saveCachedConfig(current);
+  }
+
+  logger.info(`[managed-agents] Vault ${vault.id} created with MCP credential`);
+  return vault.id;
 }
 
 // ── Constants ────────────────────────────────────────────────────
@@ -182,16 +231,19 @@ export async function runManagedDiscovery(
   })();
 
   const client = new Anthropic({ apiKey });
+  // Sequential: ensureAgentAndEnv writes the config file that ensureVault reads
   const { agentId, agentVersion, environmentId } = await ensureAgentAndEnv(client);
+  const vaultId = await ensureVault(client);
 
   const prompt = buildDiscoveryPrompt(options);
 
-  // Create session
+  // Create session with vault for MCP server access
   const session = await client.beta.sessions.create({
     agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
     environment_id: environmentId,
+    vault_ids: [vaultId],
     title: `Discovery: ${options.company}`,
-  });
+  } as any);
 
   logger.info(`[managed-agents] Session ${session.id} created`);
 

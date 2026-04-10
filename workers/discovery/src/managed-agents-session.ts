@@ -105,9 +105,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         ? `Update: ${params.company}`
         : `Discovery: ${params.company}`;
 
+      const vaultId = this.env.ANTHROPIC_VAULT_ID;
       const session = await (client.beta.sessions as any).create({
         agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
         environment_id: environmentId,
+        ...(vaultId ? { vault_ids: [vaultId] } : {}),
         title: sessionTitle,
       });
 
