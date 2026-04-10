@@ -2,9 +2,11 @@ import { describe, it, expect } from "bun:test";
 import {
   sourceToMarkdown,
   orgToMarkdown,
+  knowledgeToMarkdown,
   type FormatSourceDetail,
   type FormatOrgDetail,
 } from "../../src/lib/formatters.js";
+import type { KnowledgePageItem } from "../../src/api/types.js";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 
@@ -61,6 +63,10 @@ const fullOrg: FormatOrgDetail = {
   slug: "vercel",
   name: "Vercel",
   domain: "vercel.com",
+  description: "Frontend cloud platform",
+  category: "cloud",
+  tags: ["typescript", "edge"],
+  aliases: ["vercel.app", "nextjs.org"],
   sourceCount: 5,
   releaseCount: 300,
   releasesLast30Days: 12,
@@ -70,6 +76,16 @@ const fullOrg: FormatOrgDetail = {
   accounts: [
     { platform: "github", handle: "vercel" },
     { platform: "twitter", handle: "vercel" },
+  ],
+  products: [
+    {
+      id: "prod_1",
+      slug: "nextjs",
+      name: "Next.js",
+      url: "https://nextjs.org",
+      description: "React framework",
+      sourceCount: 2,
+    },
   ],
   sources: [
     {
@@ -287,6 +303,68 @@ describe("orgToMarkdown", () => {
     expect(md).toContain("  - platform: twitter");
   });
 
+  it("contains description when set", () => {
+    const md = orgToMarkdown(fullOrg);
+    expect(md).toContain("description: Frontend cloud platform");
+  });
+
+  it("omits description when null", () => {
+    const org: FormatOrgDetail = { ...fullOrg, description: null };
+    const md = orgToMarkdown(org);
+    expect(md).not.toContain("description:");
+  });
+
+  it("contains category when set", () => {
+    const md = orgToMarkdown(fullOrg);
+    expect(md).toContain("category: cloud");
+  });
+
+  it("omits category when null", () => {
+    const org: FormatOrgDetail = { ...fullOrg, category: null };
+    const md = orgToMarkdown(org);
+    expect(md).not.toContain("category:");
+  });
+
+  it("contains tags list when present", () => {
+    const md = orgToMarkdown(fullOrg);
+    expect(md).toContain("tags:");
+    expect(md).toContain("  - typescript");
+    expect(md).toContain("  - edge");
+  });
+
+  it("omits tags block when empty", () => {
+    const org: FormatOrgDetail = { ...fullOrg, tags: [] };
+    const md = orgToMarkdown(org);
+    expect(md).not.toContain("tags:");
+  });
+
+  it("contains aliases list when present", () => {
+    const md = orgToMarkdown(fullOrg);
+    expect(md).toContain("aliases:");
+    expect(md).toContain("  - vercel.app");
+    expect(md).toContain("  - nextjs.org");
+  });
+
+  it("omits aliases block when empty", () => {
+    const org: FormatOrgDetail = { ...fullOrg, aliases: [] };
+    const md = orgToMarkdown(org);
+    expect(md).not.toContain("aliases:");
+  });
+
+  it("contains Product tags when products are present", () => {
+    const md = orgToMarkdown(fullOrg);
+    expect(md).toContain('<Product name="Next.js"');
+    expect(md).toContain('slug="nextjs"');
+    expect(md).toContain('sources="2"');
+    expect(md).toContain('url="https://nextjs.org"');
+  });
+
+  it("omits Product section when products are empty", () => {
+    const org: FormatOrgDetail = { ...fullOrg, products: [] };
+    const md = orgToMarkdown(org);
+    expect(md).not.toContain("<Product");
+  });
+
   it("omits accounts block when accounts array is empty", () => {
     const org: FormatOrgDetail = { ...fullOrg, accounts: [] };
     const md = orgToMarkdown(org);
@@ -344,5 +422,75 @@ describe("orgToMarkdown", () => {
     const md = orgToMarkdown(org);
     expect(md).not.toContain("<Source");
     expect(md).toContain("name: Vercel");
+  });
+
+  it("includes knowledge_url when knowledgePage exists and baseUrl is provided", () => {
+    const org: FormatOrgDetail = {
+      ...fullOrg,
+      knowledgePage: {
+        scope: "org",
+        content: "test",
+        releaseCount: 10,
+        lastContributingReleaseAt: "2024-06-15T00:00:00Z",
+        generatedAt: "2024-06-16T00:00:00Z",
+        updatedAt: "2024-06-16T00:00:00Z",
+      },
+    };
+    const md = orgToMarkdown(org, { baseUrl: "https://releases.sh" });
+    expect(md).toContain("knowledge_url: https://releases.sh/vercel/knowledge.md");
+  });
+
+  it("omits knowledge_url when knowledgePage is absent", () => {
+    const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
+    expect(md).not.toContain("knowledge_url:");
+  });
+});
+
+// ── knowledgeToMarkdown ───────────────────────────────────────────
+
+describe("knowledgeToMarkdown", () => {
+  const fullKnowledge: KnowledgePageItem = {
+    scope: "org",
+    content: "# Overview\n\nThis org ships fast.",
+    releaseCount: 42,
+    lastContributingReleaseAt: "2024-06-15T00:00:00Z",
+    generatedAt: "2024-06-16T00:00:00Z",
+    updatedAt: "2024-06-16T00:00:00Z",
+  };
+
+  it("contains frontmatter with scope and stats", () => {
+    const md = knowledgeToMarkdown(fullKnowledge, { orgSlug: "vercel" });
+    expect(md).toContain("scope: org");
+    expect(md).toContain("organization: vercel");
+    expect(md).toContain("release_count: 42");
+    expect(md).toContain("last_release: 2024-06-15");
+    expect(md).toContain("generated: 2024-06-16");
+  });
+
+  it("includes the content body after frontmatter", () => {
+    const md = knowledgeToMarkdown(fullKnowledge);
+    expect(md).toContain("# Overview");
+    expect(md).toContain("This org ships fast.");
+  });
+
+  it("includes canonical URL when baseUrl and orgSlug are provided", () => {
+    const md = knowledgeToMarkdown(fullKnowledge, {
+      baseUrl: "https://releases.sh",
+      orgSlug: "vercel",
+    });
+    expect(md).toContain("canonical: https://releases.sh/vercel");
+  });
+
+  it("includes product slug for product-scoped pages", () => {
+    const knowledge: KnowledgePageItem = { ...fullKnowledge, scope: "product" };
+    const md = knowledgeToMarkdown(knowledge, { productSlug: "nextjs" });
+    expect(md).toContain("scope: product");
+    expect(md).toContain("product: nextjs");
+  });
+
+  it("handles null lastContributingReleaseAt", () => {
+    const knowledge: KnowledgePageItem = { ...fullKnowledge, lastContributingReleaseAt: null };
+    const md = knowledgeToMarkdown(knowledge);
+    expect(md).not.toContain("last_release:");
   });
 });
