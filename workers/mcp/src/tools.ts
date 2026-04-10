@@ -82,11 +82,14 @@ async function callAnthropic(
   return text(textBlock.text);
 }
 
-async function resolveSourceBySlug(db: D1Db, slug: string) {
+async function resolveSource(db: D1Db, identifier: string) {
+  const condition = identifier.startsWith("src_")
+    ? eq(sources.id, identifier)
+    : eq(sources.slug, identifier);
   const rows = await db
     .select({ id: sources.id, name: sources.name })
     .from(sources)
-    .where(eq(sources.slug, slug))
+    .where(condition)
     .limit(1);
   return rows.length > 0 ? rows[0] : null;
 }
@@ -113,7 +116,7 @@ export async function searchReleases(
 
   let sourceId: string | undefined;
   if (params.product) {
-    const source = await resolveSourceBySlug(db, params.product);
+    const source = await resolveSource(db, params.product);
     if (!source) return text(`No product found with slug "${params.product}"`);
     sourceId = source.id;
   }
@@ -160,7 +163,7 @@ export async function getLatestReleases(
 
   let sourceFilter: string | undefined;
   if (params.product) {
-    const source = await resolveSourceBySlug(db, params.product);
+    const source = await resolveSource(db, params.product);
     if (!source) return text(`No product found with slug "${params.product}"`);
     sourceFilter = source.id;
   }
@@ -409,7 +412,7 @@ export async function summarizeChanges(
 ): Promise<ToolResult> {
   const lookback = params.days ?? 30;
 
-  const source = await resolveSourceBySlug(db, params.product);
+  const source = await resolveSource(db, params.product);
   if (!source) return text(`No product found with slug "${params.product}"`);
 
   const cutoff = daysAgoIso(lookback);
@@ -470,8 +473,8 @@ export async function compareProducts(
   const cutoff = daysAgoIso(lookback);
 
   const [sourceA, sourceB] = await Promise.all([
-    resolveSourceBySlug(db, params.products[0]),
-    resolveSourceBySlug(db, params.products[1]),
+    resolveSource(db, params.products[0]),
+    resolveSource(db, params.products[1]),
   ]);
 
   if (!sourceA) return text(`No product found with slug "${params.products[0]}"`);

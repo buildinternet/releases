@@ -15,9 +15,15 @@ import * as apiClient from "../api/client.js";
 /** Reusable SQL condition: exclude disabled (hidden) sources. */
 const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
 
-export async function findSourceBySlug(slug: string): Promise<Source | null> {
-  const normalized = slug.toLowerCase();
-  if (isRemoteMode()) return apiClient.findSourceBySlug(normalized);
+export async function findSource(identifier: string): Promise<Source | null> {
+  if (identifier.startsWith("src_")) {
+    if (isRemoteMode()) return apiClient.findSource(identifier);
+    const db = getDb();
+    const [source] = await db.select().from(sources).where(eq(sources.id, identifier));
+    return source ?? null;
+  }
+  const normalized = identifier.toLowerCase();
+  if (isRemoteMode()) return apiClient.findSource(normalized);
   const db = getDb();
   const [source] = await db.select().from(sources).where(eq(sources.slug, normalized));
   return source ?? null;
@@ -72,6 +78,14 @@ export async function getEnrichableReleases(
 }
 
 export async function findOrg(identifier: string): Promise<Organization | null> {
+  // 0. ID (exact — IDs are case-sensitive)
+  if (identifier.startsWith("org_")) {
+    if (isRemoteMode()) return apiClient.findOrg(identifier);
+    const db = getDb();
+    const [byId] = await db.select().from(organizations).where(eq(organizations.id, identifier));
+    return byId ?? null;
+  }
+
   if (isRemoteMode()) return apiClient.findOrg(identifier.toLowerCase());
   const db = getDb();
 
@@ -766,12 +780,13 @@ export async function createProduct(
 export async function findProduct(identifier: string): Promise<Product | null> {
   if (isRemoteMode()) return apiClient.findProduct(identifier);
   const db = getDb();
-  const [bySlug] = await db.select().from(products).where(eq(products.slug, identifier));
-  if (bySlug) return bySlug;
+  // ID-first (consistent with findSource/findOrg)
   if (identifier.startsWith("prod_")) {
     const [byId] = await db.select().from(products).where(eq(products.id, identifier));
     if (byId) return byId;
   }
+  const [bySlug] = await db.select().from(products).where(eq(products.slug, identifier));
+  if (bySlug) return bySlug;
   // Domain alias lookup
   const [byAlias] = await db
     .select({ product: products })
@@ -1024,7 +1039,7 @@ export async function unifiedSearch(
 
 export async function findSourcesBySlugs(slugs: string[]): Promise<Source[]> {
   if (isRemoteMode()) {
-    const results = await Promise.all(slugs.map((s) => apiClient.findSourceBySlug(s)));
+    const results = await Promise.all(slugs.map((s) => apiClient.findSource(s)));
     return results.filter((s): s is Source => s !== null);
   }
   const db = getDb();

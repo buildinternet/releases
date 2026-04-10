@@ -34,9 +34,9 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
 
 // ── Source queries ──
 
-export async function findSourceBySlug(slug: string): Promise<Source | null> {
+export async function findSource(identifier: string): Promise<Source | null> {
   // API returns enriched data — extra fields are harmlessly ignored by callers expecting Source
-  return apiFetch<Source | null>(`/v1/sources/${slug}`);
+  return apiFetch<Source | null>(`/v1/sources/${identifier}`);
 }
 
 export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {

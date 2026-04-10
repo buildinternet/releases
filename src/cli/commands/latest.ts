@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { findOrg, findSourceBySlug, getLatestReleases } from "../../db/queries.js";
+import { findOrg, findSource, getLatestReleases } from "../../db/queries.js";
 import { orgNotFound, sourceNotFound } from "../suggest.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 
@@ -23,7 +23,7 @@ Examples:
       const count = parseInt(opts.count, 10);
 
       if (slug) {
-        const source = await findSourceBySlug(slug);
+        const source = await findSource(slug);
         if (!source) {
           return sourceNotFound(slug);
         }

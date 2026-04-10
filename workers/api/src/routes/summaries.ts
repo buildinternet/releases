@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { releaseSummaries, sources } from "@releases/db/schema.js";
+import { sourceWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
@@ -21,7 +22,7 @@ app.get("/", async (c) => {
     const [source] = await db
       .select({ id: sources.id })
       .from(sources)
-      .where(eq(sources.slug, sourceSlug));
+      .where(sourceWhere(sourceSlug));
     if (!source) return c.json({ error: "Source not found" }, 404);
     resolvedSourceId = source.id;
   }

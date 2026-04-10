@@ -3,7 +3,7 @@ import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { knowledgePages, organizations, products, sources } from "@releases/db/schema.js";
 import { generateSourceGuideHeader } from "@releases/ai/source-guide.js";
-import { newKnowledgePageId } from "../utils.js";
+import { newKnowledgePageId, orgWhere, productWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
@@ -25,7 +25,7 @@ app.get("/", async (c) => {
     const [org] = await db
       .select({ id: organizations.id })
       .from(organizations)
-      .where(eq(organizations.slug, slug));
+      .where(orgWhere(slug));
     if (!org) return c.json(null);
 
     const [row] = await db
@@ -43,7 +43,7 @@ app.get("/", async (c) => {
     const [product] = await db
       .select({ id: products.id })
       .from(products)
-      .where(eq(products.slug, slug));
+      .where(productWhere(slug));
     if (!product) return c.json(null);
 
     const [row] = await db
@@ -99,7 +99,7 @@ app.patch("/notes", async (c) => {
   const [org] = await db
     .select({ id: organizations.id, name: organizations.name, slug: organizations.slug, domain: organizations.domain })
     .from(organizations)
-    .where(eq(organizations.slug, slug));
+    .where(orgWhere(slug));
   if (!org) return c.json({ error: "Organization not found" }, 404);
 
   // If no guide exists yet, create one with auto-generated header + the provided notes

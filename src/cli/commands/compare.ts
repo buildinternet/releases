@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findSourceBySlug, getRecentReleases } from "../../db/queries.js";
+import { findSource, getRecentReleases } from "../../db/queries.js";
 import { compareProducts, toReleaseInput } from "../../ai/query.js";
 import { daysAgoIso } from "../../lib/dates.js";
 import { stripAnsi } from "../../lib/sanitize.js";
@@ -23,8 +23,8 @@ Examples:
       const cutoff = daysAgoIso(days);
 
       const [sourceA, sourceB] = await Promise.all([
-        findSourceBySlug(slugA),
-        findSourceBySlug(slugB),
+        findSource(slugA),
+        findSource(slugB),
       ]);
 
       if (!sourceA) {

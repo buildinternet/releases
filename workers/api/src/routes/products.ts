@@ -4,7 +4,7 @@ import { createDb } from "../db.js";
 import { products, sources, organizations, orgAccounts, tags, productTags } from "@releases/db/schema.js";
 import { toSlug } from "@releases/lib/slug.js";
 import { isValidCategory } from "@releases/lib/categories.js";
-import { isConflictError, getOrCreateTagD1 } from "../utils.js";
+import { isConflictError, getOrCreateTagD1, productWhere, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
 export const productRoutes = new Hono<Env>();
@@ -48,10 +48,10 @@ productRoutes.post("/products/adopt", async (c) => {
     return c.json({ error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" }, 400);
   }
 
-  const [sourceOrg] = await db.select().from(organizations).where(eq(organizations.slug, body.sourceOrgSlug));
+  const [sourceOrg] = await db.select().from(organizations).where(orgWhere(body.sourceOrgSlug));
   if (!sourceOrg) return c.json({ error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` }, 404);
 
-  const [targetOrg] = await db.select().from(organizations).where(eq(organizations.slug, body.targetOrgSlug));
+  const [targetOrg] = await db.select().from(organizations).where(orgWhere(body.targetOrgSlug));
   if (!targetOrg) return c.json({ error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` }, 404);
 
   const sourcesToMove = await db.select().from(sources).where(eq(sources.orgId, sourceOrg.id));
@@ -115,9 +115,7 @@ productRoutes.get("/products/:identifier", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
 
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db.select().from(products).where(productWhere(identifier));
 
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
@@ -146,8 +144,8 @@ productRoutes.post("/products", async (c) => {
     return c.json({ error: "bad_request", message: "Missing required fields: orgId or orgSlug, name" }, 400);
   }
 
-  const orgWhere = body.orgId ? eq(organizations.id, body.orgId) : eq(organizations.slug, body.orgSlug!);
-  const [org] = await db.select().from(organizations).where(orgWhere);
+  const orgCond = body.orgId ? eq(organizations.id, body.orgId) : orgWhere(body.orgSlug!);
+  const [org] = await db.select().from(organizations).where(orgCond);
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   if (body.category && !isValidCategory(body.category)) {
@@ -192,7 +190,7 @@ productRoutes.patch("/products/:slug", async (c) => {
   const slug = c.req.param("slug");
   const body = await c.req.json<{ name?: string; url?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
 
-  const [product] = await db.select().from(products).where(eq(products.slug, slug));
+  const [product] = await db.select().from(products).where(productWhere(slug));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const updates: Record<string, string | null> = {};
@@ -228,9 +226,7 @@ productRoutes.patch("/products/:slug", async (c) => {
 productRoutes.get("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db.select().from(products).where(productWhere(identifier));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const rows = await db
@@ -246,9 +242,7 @@ productRoutes.put("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
   const body = await c.req.json<{ tags: string[] }>();
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db.select().from(products).where(productWhere(identifier));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -262,9 +256,7 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
   const body = await c.req.json<{ tags: string[] }>();
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db.select().from(products).where(productWhere(identifier));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -282,9 +274,7 @@ productRoutes.delete("/products/:identifier", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
 
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db.select().from(products).where(productWhere(identifier));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   await db.delete(products).where(eq(products.id, product.id));

@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { findSourceBySlug, listAllSources } from "../../db/queries.js";
+import { findSource, listAllSources } from "../../db/queries.js";
 import { timeAgo } from "../../lib/dates.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import type { Source } from "../../db/schema.js";
@@ -103,7 +103,7 @@ Examples:
       let sourcesToCheck: Source[];
 
       if (slug) {
-        const source = await findSourceBySlug(slug);
+        const source = await findSource(slug);
         if (!source) {
           console.error(`Source not found: ${slug}`);
           process.exit(1);

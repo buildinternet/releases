@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, and, or } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { ignoredUrls, blockedUrls, organizations } from "@releases/db/schema.js";
+import { orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
 export const ignoreRoutes = new Hono<Env>();
@@ -12,7 +13,7 @@ ignoreRoutes.get("/orgs/:slug/ignored-urls", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const singleUrl = c.req.query("url");
@@ -31,7 +32,7 @@ ignoreRoutes.post("/orgs/:slug/ignored-urls", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const body = await c.req.json<{ url: string; reason?: string }>();
@@ -52,7 +53,7 @@ ignoreRoutes.delete("/orgs/:slug/ignored-urls/:url", async (c) => {
   const slug = c.req.param("slug");
   const url = decodeURIComponent(c.req.param("url"));
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   await db.delete(ignoredUrls)

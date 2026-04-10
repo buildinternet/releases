@@ -15,9 +15,9 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 |-----------|-----|------------|
 | List sources | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>]` | `list_sources` with query, organization, category, has_feed params |
 | Add source | `releases add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]` | `add_source` with name, url, type, organization, feed_url params |
-| Edit source | `releases edit <slug> [--primary] [--priority <p>]` | `edit_source` with slug, is_primary, fetch_priority params |
-| Remove source | `releases remove <slug> [--ignore --reason <reason>]` | `remove_source` with slug param |
-| Fetch releases | `releases fetch <slug> [--dry-run] [--max <n>]` | `fetch_source` with slug param |
+| Edit source | `releases edit <slug> [--primary] [--priority <p>]` | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
+| Remove source | `releases remove <slug> [--ignore --reason <reason>]` | `remove_source` with identifier (ID or slug) param |
+| Fetch releases | `releases fetch <slug> [--dry-run] [--max <n>]` | `fetch_source` with identifier (ID or slug) param |
 | Get latest releases | `releases latest [slug] --json [--org <org>]` | `get_latest_releases` with source, organization, limit params |
 | Search releases | `releases search <query> --json` | `search_releases` with query, limit params |
 | Evaluate URL | `releases evaluate <url> --json` | `evaluate_url` with url param |
@@ -37,8 +37,8 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 
 Search for existing sources with optional filters:
 - **query** — filter by name, slug, or URL
-- **organization** — filter by org slug
-- **product** — filter by product slug
+- **organization** — filter by org ID or slug
+- **product** — filter by product ID or slug
 - **category** — filter by category
 - **has_feed** — only sources with a discovered feed URL
 
@@ -46,7 +46,7 @@ Use `--json` (CLI) for structured output. Typed tools always return JSON.
 
 ## Adding Sources
 
-Required: **name** and **url**. Optional: **type** (github, scrape, feed, agent — auto-detected from URL if omitted), **organization** (org slug to associate with), **feed_url** (direct feed URL if known).
+Required: **name** and **url**. Optional: **type** (github, scrape, feed, agent — auto-detected from URL if omitted), **organization** (org ID or slug to associate with), **feed_url** (direct feed URL if known).
 
 ### Organization descriptions
 

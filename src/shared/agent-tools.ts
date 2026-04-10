@@ -27,7 +27,8 @@ export interface AddSourceInput {
 }
 
 export interface EditSourceInput {
-  slug: string;
+  /** Source ID (src_...) or slug */
+  identifier: string;
   is_primary?: boolean;
   fetch_priority?: "normal" | "low" | "paused";
   name?: string;
@@ -36,11 +37,13 @@ export interface EditSourceInput {
 }
 
 export interface RemoveSourceInput {
-  slug: string;
+  /** Source ID (src_...) or slug */
+  identifier: string;
 }
 
 export interface FetchSourceInput {
-  slug: string;
+  /** Source ID (src_...) or slug */
+  identifier: string;
 }
 
 export interface ManageOrgInput {
@@ -62,10 +65,10 @@ export interface ManageProductInput {
   action: "add" | "edit" | "tag_add";
   /** Required for add */
   name?: string;
-  /** Org slug — required for add */
+  /** Organization ID (org_...) or slug — required for add */
   organization?: string;
-  /** Product slug — required for edit/tag_add */
-  slug?: string;
+  /** Product ID (prod_...) or slug — required for edit/tag_add */
+  identifier?: string;
   url?: string;
   description?: string;
   category?: string;
@@ -145,7 +148,7 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        organization: { type: "string", description: "Org slug" },
+        organization: { type: "string", description: "Organization ID (org_...) or slug" },
       },
       required: ["organization"],
     },
@@ -158,7 +161,7 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        organization: { type: "string", description: "Org slug" },
+        organization: { type: "string", description: "Organization ID (org_...) or slug" },
         notes: { type: "string", description: "Complete markdown content for the agent notes section. Replaces existing notes entirely." },
       },
       required: ["organization", "notes"],
@@ -178,7 +181,7 @@ export const AGENT_TOOLS = [
         name: { type: "string", description: "Display name for the source" },
         url: { type: "string", description: "URL of the changelog source" },
         type: { type: "string", enum: ["github", "scrape", "feed", "agent"], description: "Source type (auto-detected if omitted)" },
-        organization: { type: "string", description: "Org slug to associate with" },
+        organization: { type: "string", description: "Organization ID (org_...) or slug" },
         feed_url: { type: "string", description: "Direct feed URL if known" },
       },
       required: ["name", "url"],
@@ -192,14 +195,14 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        slug: { type: "string", description: "Source slug to edit" },
+        identifier: { type: "string", description: "Source ID (src_...) or slug" },
         is_primary: { type: "boolean", description: "Mark as primary source for its org" },
         fetch_priority: { type: "string", enum: ["normal", "low", "paused"], description: "Fetch priority tier" },
         name: { type: "string", description: "New display name" },
         url: { type: "string", description: "New URL" },
         type: { type: "string", enum: ["github", "scrape", "feed", "agent"], description: "New source type" },
       },
-      required: ["slug"],
+      required: ["identifier"],
     },
   },
   {
@@ -210,9 +213,9 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        slug: { type: "string", description: "Source slug to remove" },
+        identifier: { type: "string", description: "Source ID (src_...) or slug" },
       },
-      required: ["slug"],
+      required: ["identifier"],
     },
   },
   {
@@ -223,9 +226,9 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        slug: { type: "string", description: "Source slug to fetch" },
+        identifier: { type: "string", description: "Source ID (src_...) or slug" },
       },
-      required: ["slug"],
+      required: ["identifier"],
     },
   },
   {
@@ -238,7 +241,7 @@ export const AGENT_TOOLS = [
       properties: {
         action: { type: "string", enum: ["add", "edit", "tag_add", "link_account"], description: "Operation to perform" },
         name: { type: "string", description: "Org name (required for add)" },
-        identifier: { type: "string", description: "Org slug/domain/name (required for edit, tag_add, link_account)" },
+        identifier: { type: "string", description: "Organization ID (org_...), slug, domain, or name" },
         domain: { type: "string", description: "Primary domain (e.g. vercel.com)" },
         description: { type: "string", description: "Brief one-sentence product description" },
         category: { type: "string", description: "Category slug" },
@@ -259,8 +262,8 @@ export const AGENT_TOOLS = [
       properties: {
         action: { type: "string", enum: ["add", "edit", "tag_add"], description: "Operation to perform" },
         name: { type: "string", description: "Product name (required for add)" },
-        organization: { type: "string", description: "Org slug (required for add)" },
-        slug: { type: "string", description: "Product slug (required for edit, tag_add)" },
+        organization: { type: "string", description: "Organization ID (org_...) or slug (required for add)" },
+        identifier: { type: "string", description: "Product ID (prod_...) or slug (required for edit, tag_add)" },
         url: { type: "string", description: "Canonical product URL" },
         description: { type: "string", description: "Brief product description" },
         category: { type: "string", description: "Category slug" },
@@ -428,15 +431,15 @@ export function createTypedExecutor(opts: APIClientOptions) {
       }
 
       case "edit_source": {
-        const slug = String(input.slug ?? "");
-        if (!slug) return "Error: slug is required";
+        const identifier = String(input.identifier ?? "");
+        if (!identifier) return "Error: identifier is required";
         const body: Record<string, unknown> = {};
         if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
         if (input.fetch_priority) body.fetchPriority = input.fetch_priority;
         if (input.name) body.name = input.name;
         if (input.url) body.url = input.url;
         if (input.type) body.type = input.type;
-        const result = await api("PATCH", `/sources/${encodeURIComponent(slug)}`, body);
+        const result = await api("PATCH", `/sources/${encodeURIComponent(identifier)}`, body);
         if (!result.startsWith("Error")) {
           return result + `\n\n[Source guide has been auto-regenerated to reflect this change.]`;
         }
@@ -444,9 +447,9 @@ export function createTypedExecutor(opts: APIClientOptions) {
       }
 
       case "remove_source": {
-        const slug = String(input.slug ?? "");
-        if (!slug) return "Error: slug is required";
-        const result = await api("DELETE", `/sources/${encodeURIComponent(slug)}`);
+        const identifier = String(input.identifier ?? "");
+        if (!identifier) return "Error: identifier is required";
+        const result = await api("DELETE", `/sources/${encodeURIComponent(identifier)}`);
         if (!result.startsWith("Error")) {
           return result + `\n\n[Source guide has been auto-regenerated to reflect this removal.]`;
         }
@@ -454,9 +457,9 @@ export function createTypedExecutor(opts: APIClientOptions) {
       }
 
       case "fetch_source": {
-        const slug = String(input.slug ?? "");
-        if (!slug) return "Error: slug is required";
-        return api("POST", `/sources/${encodeURIComponent(slug)}/fetch`);
+        const identifier = String(input.identifier ?? "");
+        if (!identifier) return "Error: identifier is required";
+        return api("POST", `/sources/${encodeURIComponent(identifier)}/fetch`);
       }
 
       case "manage_org": {
@@ -508,7 +511,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (action === "add") {
           if (!input.name || !input.organization) return "Error: name and organization are required for add";
           const body: Record<string, unknown> = { orgSlug: input.organization, name: input.name };
-          if (input.slug) body.slug = input.slug;
+          if (input.identifier) body.slug = input.identifier;
           if (input.url) body.url = input.url;
           if (input.description) body.description = input.description;
           if (input.category) body.category = input.category;
@@ -517,21 +520,21 @@ export function createTypedExecutor(opts: APIClientOptions) {
         }
 
         if (action === "edit") {
-          const slug = String(input.slug ?? "");
-          if (!slug) return "Error: slug is required for edit";
+          const identifier = String(input.identifier ?? "");
+          if (!identifier) return "Error: identifier is required for edit";
           const body: Record<string, unknown> = {};
           if (input.name) body.name = input.name;
           if (input.url) body.url = input.url;
           if (input.description) body.description = input.description;
           if (input.category) body.category = input.category;
-          return api("PATCH", `/products/${encodeURIComponent(slug)}`, body);
+          return api("PATCH", `/products/${encodeURIComponent(identifier)}`, body);
         }
 
         if (action === "tag_add") {
-          const slug = String(input.slug ?? "");
-          if (!slug) return "Error: slug is required for tag_add";
+          const identifier = String(input.identifier ?? "");
+          if (!identifier) return "Error: identifier is required for tag_add";
           if (!input.tags || !Array.isArray(input.tags)) return "Error: tags array is required";
-          return api("PUT", `/products/${encodeURIComponent(slug)}/tags`, { tags: input.tags });
+          return api("PUT", `/products/${encodeURIComponent(identifier)}/tags`, { tags: input.tags });
         }
 
         return `Error: unknown action "${action}"`;

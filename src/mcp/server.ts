@@ -7,7 +7,7 @@ import { runMigrations } from "../db/migrate.js";
 import { sources, releases, organizations, orgAccounts, fetchLog, type Source } from "../db/schema.js";
 import { searchReleases } from "../db/fts.js";
 import {
-  findSourceBySlug, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
+  findSource, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
   isUrlExcluded, listIgnoredUrls, addIgnoredUrl, removeIgnoredUrl,
   listBlockedUrls, addBlockedUrl, removeBlockedUrl,
   suppressRelease, unsuppressRelease, createOrg,
@@ -57,7 +57,7 @@ server.registerTool("search_releases", {
   let results = searchReleases(query, needsPostFilter ? maxResults * 5 : maxResults);
 
   if (product) {
-    const source = await findSourceBySlug(product);
+    const source = await findSource(product);
     if (!source) {
       return textResult(`No product found with slug "${product}"`);
     }
@@ -112,7 +112,7 @@ server.registerTool("get_latest_releases", {
 
   let sourceFilter: string | undefined;
   if (product) {
-    const source = await findSourceBySlug(product);
+    const source = await findSource(product);
     if (!source) {
       return textResult(`No product found with slug "${product}"`);
     }
@@ -198,7 +198,7 @@ if (process.env.ENABLE_AI_TOOLS === "true") {
     },
   }, async ({ product, days, instructions }) => {
     const lookback = days ?? 30;
-    const source = await findSourceBySlug(product);
+    const source = await findSource(product);
     if (!source) {
       return textResult(`No product found with slug "${product}"`);
     }
@@ -229,8 +229,8 @@ if (process.env.ENABLE_AI_TOOLS === "true") {
     const cutoff = daysAgoIso(lookback);
 
     const [sourceA, sourceB] = await Promise.all([
-      findSourceBySlug(products[0]),
-      findSourceBySlug(products[1]),
+      findSource(products[0]),
+      findSource(products[1]),
     ]);
 
     if (!sourceA) return textResult(`No product found with slug "${products[0]}"`);
@@ -335,7 +335,7 @@ server.registerTool("add_source", {
   let sourceType = type ?? (isGitHubUrl(url) ? "github" : "scrape");
   const sourceSlug = slug ?? toSlug(name);
 
-  const existing = await findSourceBySlug(sourceSlug);
+  const existing = await findSource(sourceSlug);
   if (existing) {
     return textResult(`Source with slug "${sourceSlug}" already exists.`);
   }
@@ -375,7 +375,7 @@ server.registerTool("remove_source", {
   },
 }, async ({ slug }) => {
   const db = getDb();
-  const source = await findSourceBySlug(slug);
+  const source = await findSource(slug);
   if (!source) {
     return textResult(`Source not found: "${slug}"`);
   }
@@ -394,7 +394,7 @@ server.registerTool("fetch_source", {
 }, async ({ slug, force }) => {
   const db = getDb();
 
-  const foundSource = await findSourceBySlug(slug);
+  const foundSource = await findSource(slug);
   if (!foundSource) {
     return textResult(`Source not found: "${slug}"`);
   }

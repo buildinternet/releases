@@ -1,6 +1,6 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findSourceBySlug, getRecentReleases, findOrg, getRecentReleasesByOrg } from "../../db/queries.js";
+import { findSource, getRecentReleases, findOrg, getRecentReleasesByOrg } from "../../db/queries.js";
 import { orgNotFound, sourceNotFound } from "../suggest.js";
 import { summarizeReleases, toReleaseInput } from "../../ai/query.js";
 import { daysAgoIso, elapsedFormatted } from "../../lib/dates.js";
@@ -51,7 +51,7 @@ Examples:
           toReleaseInput({ ...r, title: `[${r.sourceName}] ${r.title}` }),
         );
       } else {
-        const source = await findSourceBySlug(slug!);
+        const source = await findSource(slug!);
         if (!source) {
           return sourceNotFound(slug!);
         }

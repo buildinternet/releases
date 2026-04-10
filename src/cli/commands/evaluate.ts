@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { evaluateChangelog, applyEvaluation, type EvaluationResult } from "../../ai/evaluate.js";
-import { findSourceBySlug } from "../../db/queries.js";
+import { findSource } from "../../db/queries.js";
 import { logger } from "../../lib/logger.js";
 
 function formatResult(result: EvaluationResult, url: string): string {
@@ -71,7 +71,7 @@ Examples:
 
         // Persist to source if --source is given
         if (opts.source) {
-          const source = await findSourceBySlug(opts.source);
+          const source = await findSource(opts.source);
           if (!source) {
             logger.error(`Source not found: ${opts.source}`);
             process.exit(1);

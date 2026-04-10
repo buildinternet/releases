@@ -7,7 +7,7 @@ import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
 import { detectChangelogUrl } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
-  findSourceBySlug, listAllSources, listFetchableSources, listSourcesWithChanges,
+  findSource, listAllSources, listFetchableSources, listSourcesWithChanges,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
   insertMediaAssets, clearChangeDetected,
@@ -171,7 +171,7 @@ Examples:
       let targetSources: Source[];
 
       if (slug) {
-        const found = await findSourceBySlug(slug);
+        const found = await findSource(slug);
         if (!found) {
           return sourceNotFound(slug);
         }
@@ -425,7 +425,7 @@ Examples:
 
         // Reload source from DB if we modified metadata/columns so the adapter sees fresh data
         if (sourceModified) {
-          const reloaded = await findSourceBySlug(source.slug);
+          const reloaded = await findSource(source.slug);
           if (reloaded) source = reloaded;
         }
 

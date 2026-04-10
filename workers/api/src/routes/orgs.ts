@@ -5,7 +5,7 @@ import { organizations, orgAccounts, sources, releases, products, tags, orgTags,
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { isValidCategory } from "@releases/lib/categories.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { isConflictError, computeAvgPerWeek, getOrCreateTagD1 } from "../utils.js";
+import { isConflictError, computeAvgPerWeek, getOrCreateTagD1, orgWhere } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import { assembleSourceGuide } from "@releases/ai/source-guide.js";
@@ -40,9 +40,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
 
-  let [org] = await db.select().from(organizations).where(
-    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug)
-  );
+  let [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) {
     const [alias] = await db
       .select({ org: organizations })
@@ -237,7 +235,7 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
     return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
   }
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
@@ -264,7 +262,7 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   await db.delete(organizations).where(eq(organizations.id, org.id));
@@ -276,7 +274,7 @@ orgRoutes.get("/orgs/:slug/accounts", async (c) => {
   const slug = c.req.param("slug");
   const platform = c.req.query("platform");
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   if (platform) {
@@ -300,7 +298,7 @@ orgRoutes.delete("/orgs/:slug/accounts/:platform/:handle", async (c) => {
   const platform = c.req.param("platform");
   const handle = decodeURIComponent(c.req.param("handle"));
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const deleted = await db
@@ -329,9 +327,7 @@ orgRoutes.delete("/orgs/:slug/accounts/:platform/:handle", async (c) => {
 orgRoutes.get("/orgs/:slug/tags", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const [org] = await db.select().from(organizations).where(
-    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
-  );
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const rows = await db
@@ -347,9 +343,7 @@ orgRoutes.put("/orgs/:slug/tags", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
   const body = await c.req.json<{ tags: string[] }>();
-  const [org] = await db.select().from(organizations).where(
-    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
-  );
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -363,9 +357,7 @@ orgRoutes.delete("/orgs/:slug/tags", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
   const body = await c.req.json<{ tags: string[] }>();
-  const [org] = await db.select().from(organizations).where(
-    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
-  );
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -396,7 +388,7 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   // Validate date params
@@ -523,7 +515,7 @@ orgRoutes.get("/orgs/:slug/heatmap", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const today = new Date();
@@ -560,11 +552,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
   const org = await db
     .select({ id: organizations.id })
     .from(organizations)
-    .where(
-      slug.startsWith("org_")
-        ? eq(organizations.id, slug)
-        : eq(organizations.slug, slug)
-    )
+    .where(orgWhere(slug))
     .get();
 
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
@@ -642,7 +630,7 @@ orgRoutes.post("/orgs/:slug/accounts", async (c) => {
     return c.json({ error: "bad_request", message: "Missing required fields: platform, handle" }, 400);
   }
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.slug, slug));
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   try {
