@@ -13,6 +13,7 @@ import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
 import { groupSourcesByProduct } from "@/lib/sources";
 import { KnowledgePageView } from "@/components/knowledge-page-view";
+import { SourceGuideView } from "@/components/source-guide-view";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
 
@@ -106,6 +107,7 @@ export default async function OrgPage({
   const { orgSlug } = await params;
   const { tab } = await searchParams;
   const showReleases = tab === "releases";
+  const isDev = process.env.NODE_ENV === "development";
 
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -216,6 +218,7 @@ export default async function OrgPage({
                   <OrgTabs />
                 </ReleaseTimeline>
                 {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}
+                {isDev && org.sourceGuide && <SourceGuideView guide={org.sourceGuide} />}
                 <div className="mt-6">
                   <SourceList org={org} orgSlug={orgSlug} />
                 </div>
@@ -224,6 +227,7 @@ export default async function OrgPage({
               <>
                 <OrgTabs />
                 {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}
+                {isDev && org.sourceGuide && <SourceGuideView guide={org.sourceGuide} />}
                 <div className="mt-6">
                   <SourceList org={org} orgSlug={orgSlug} />
                 </div>

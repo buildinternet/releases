@@ -634,6 +634,7 @@ export async function getLatestReleases(opts: {
 
   let query = db
     .select({
+      id: releases.id,
       title: releases.title,
       version: releases.version,
       publishedAt: releases.publishedAt,
@@ -1443,14 +1444,29 @@ export async function getKnowledgePageForProduct(productId: string, productSlug?
   return row ?? null;
 }
 
+export async function getSourceGuideForOrg(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
+  if (isRemoteMode() && orgSlug) {
+    return apiClient.getKnowledgePage("source-guide", orgSlug);
+  }
+  const db = getDb();
+  const [row] = await db
+    .select()
+    .from(knowledgePages)
+    .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, orgId)));
+  return row ?? null;
+}
+
 export async function upsertKnowledgePage(
-  data: { scope: "org" | "product"; orgId?: string | null; productId?: string | null; content: string; releaseCount: number; lastContributingReleaseAt?: string | null },
+  data: { scope: "org" | "product" | "source-guide"; orgId?: string | null; productId?: string | null; content: string; releaseCount: number; lastContributingReleaseAt?: string | null },
 ): Promise<void> {
   if (isRemoteMode()) {
     return apiClient.upsertKnowledgePage(data);
   }
   const db = getDb();
   const now = new Date().toISOString();
+  const conflictTarget = data.scope === "product"
+    ? [knowledgePages.scope, knowledgePages.productId]
+    : [knowledgePages.scope, knowledgePages.orgId];
   await db
     .insert(knowledgePages)
     .values({
@@ -1464,7 +1480,7 @@ export async function upsertKnowledgePage(
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: data.scope === "org" ? [knowledgePages.orgId] : [knowledgePages.productId],
+      target: conflictTarget,
       set: {
         content: data.content,
         releaseCount: data.releaseCount,

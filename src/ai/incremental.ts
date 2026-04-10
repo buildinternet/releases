@@ -262,9 +262,10 @@ async function singlePass(
     (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "extract_releases",
   );
 
-  const input = toolBlock?.input as { releases?: ParsedRelease[]; needsMoreContext?: boolean } | undefined;
+  const input = toolBlock?.input as { releases?: ParsedRelease[] | Record<string, unknown>; needsMoreContext?: boolean } | undefined;
 
-  const releases = (input?.releases ?? []).map((r) => ({
+  const rawReleases = Array.isArray(input?.releases) ? input.releases : [];
+  const releases = rawReleases.map((r) => ({
     ...r,
     version: sanitizeVersion(r.version),
   }));

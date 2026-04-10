@@ -288,7 +288,7 @@ export const knowledgePages = sqliteTable(
   "knowledge_pages",
   {
     id: text("id").primaryKey().$defaultFn(newKnowledgePageId),
-    scope: text("scope", { enum: ["org", "product"] }).notNull(),
+    scope: text("scope", { enum: ["org", "product", "source-guide"] }).notNull(),
     orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
     productId: text("product_id").references(() => products.id, { onDelete: "cascade" }),
     content: text("content").notNull(),
@@ -298,8 +298,8 @@ export const knowledgePages = sqliteTable(
     updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
   },
   (table) => [
-    uniqueIndex("idx_knowledge_pages_org").on(table.orgId),
-    uniqueIndex("idx_knowledge_pages_product").on(table.productId),
+    uniqueIndex("idx_knowledge_pages_scope_org").on(table.scope, table.orgId),
+    uniqueIndex("idx_knowledge_pages_scope_product").on(table.scope, table.productId),
     index("idx_knowledge_pages_scope").on(table.scope),
   ],
 );

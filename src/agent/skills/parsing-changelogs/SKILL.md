@@ -83,6 +83,50 @@ Once `feedContentDepth` is set, skip the sampling step on future encounters. Sou
 
 **Per-source AI instructions:** If a source has unique content patterns (e.g., videos always embedded, unusual changelog format), note this in the discovery state so parseInstructions can be set later via the CLI.
 
+## Blog-Style Sources
+
+Engineering blogs and news pages mix product announcements with educational content, opinion pieces, and corporate news. They can be useful supplementary sources but require aggressive filtering via `parseInstructions` to avoid noise.
+
+**Before working with blog sources:** Check the org's source guide (`releases knowledge guide <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
+
+**When to add a blog source:**
+- The org's primary changelogs don't cover major product announcements (new models, new services)
+- The blog has engineering/product content not found elsewhere
+- The blog is a secondary signal source — primary coverage should come from dedicated changelogs
+
+**How to configure:**
+1. Add as `--type scrape` with `--priority low` (blog pages change infrequently)
+2. Set `parseInstructions` that tell the AI what to include and — more importantly — what to skip
+3. Always dry-run first: `releases fetch <slug> --dry-run` to check signal-to-noise ratio
+4. Iterate on instructions: tighten if too many irrelevant posts, loosen if genuine announcements are being filtered
+
+**Writing effective parseInstructions for blogs:**
+
+- Be explicit about what to SKIP — blogs have more noise categories than changelogs
+- Use concrete signals: "titles containing 'Introducing'" is better than "posts about new features"
+- Add a default-skip rule: "When in doubt, skip the post"
+- Name the noise categories: "best practices guides, benchmark analyses, eval methodology, postmortems, partnership announcements, policy statements"
+- For corporate news pages: skip partnerships, MOUs, office openings, funding, acquisitions, research papers, safety reports
+
+**Example parseInstructions for an engineering blog:**
+```
+ONLY extract posts that announce a NEW product, feature, tool, service, or capability.
+Signals: titles containing "Introducing", "launching", or describing something new.
+SKIP: best practices guides, benchmark analyses, eval methodology, postmortems,
+technical deep-dives, and educational content. When in doubt, skip.
+```
+
+**Example parseInstructions for a corporate news page:**
+```
+ONLY extract posts about: (1) new model launches, (2) major new product features or services,
+(3) significant platform capability announcements. Skip all: partnerships, MOUs, policy statements,
+office openings, funding, acquisitions, research publications, safety reports, and opinion pieces.
+```
+
+**Versioning:** Blog posts don't have traditional version strings. Set `parseInstructions` to tell the AI that dates are not versions (same as for date-headed changelogs like Claude's consumer release notes).
+
+**Content depth:** Blog index pages typically show card summaries, not full post content. The extracted releases will have thin content. Enable crawl mode (`--crawl`) to follow links to full posts if richer content is needed, but this is expensive — only enable for high-value sources.
+
 ## Validation Workflow
 
 When adding a new source, always validate before committing:

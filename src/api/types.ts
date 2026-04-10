@@ -64,6 +64,7 @@ export interface OrgDetail {
   }>;
   sources: SourceListItem[];
   knowledgePage?: KnowledgePageItem | null;
+  sourceGuide?: { scope: "source-guide"; content: string; updatedAt: string } | null;
 }
 
 // ── Sources ──

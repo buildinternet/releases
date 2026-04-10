@@ -54,7 +54,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
   const cutoff = daysAgoIso(30);
 
-  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgeRow] = await Promise.all([
+  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgeRow, sourceGuideRow] = await Promise.all([
     db
       .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts)
@@ -106,6 +106,12 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .select()
       .from(knowledgePages)
       .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id))),
+
+    // Source guide for this org
+    db
+      .select()
+      .from(knowledgePages)
+      .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, org.id))),
   ]);
 
   const sourcesWithStats = orgSources.map((row) => ({
@@ -171,6 +177,11 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       lastContributingReleaseAt: knowledgeRow[0].lastContributingReleaseAt,
       generatedAt: knowledgeRow[0].generatedAt,
       updatedAt: knowledgeRow[0].updatedAt,
+    } : null,
+    sourceGuide: sourceGuideRow[0] ? {
+      scope: sourceGuideRow[0].scope as "source-guide",
+      content: sourceGuideRow[0].content,
+      updatedAt: sourceGuideRow[0].updatedAt,
     } : null,
   };
 
