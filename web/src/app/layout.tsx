@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { JetBrains_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
@@ -37,7 +38,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={jetbrainsMono.variable} suppressHydrationWarning>
       <head>
         <style dangerouslySetInnerHTML={{ __html: THEME_STYLE }} />
-        <script dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
+        <Script strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: THEME_INIT }} />
       </head>
       <body className="font-sans bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 antialiased">
         <ThemeProvider>

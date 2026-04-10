@@ -69,17 +69,15 @@ function buildGrid(heatmap: OrgHeatmap, visibleWeeks: number): { cells: CellData
     parseInt(heatmap.range.to.slice(8, 10)),
   );
   const todayDay = new Date(todayMs).getUTCDay();
-  const startMs = todayMs - (visibleWeeks * 7 + todayDay) * 86400000;
+  // Shift start forward by one week so the last column lands on the current week.
+  // The last column is a partial week ending on today — future dates are skipped.
+  const startMs = todayMs - ((visibleWeeks - 1) * 7 + todayDay) * 86400000;
 
   const cells: CellData[] = [];
   const monthLabels: MonthLabel[] = [];
   let lastMonth = -1;
 
-  // Render visibleWeeks + 1 columns so the current (partial) week is included.
-  // The last column ends on today — future dates are skipped.
-  const totalCols = visibleWeeks + 1;
-
-  outer: for (let week = 0; week < totalCols; week++) {
+  outer: for (let week = 0; week < visibleWeeks; week++) {
     for (let day = 0; day < DAYS; day++) {
       const ms = startMs + (week * 7 + day) * 86400000;
       if (ms > todayMs) break outer;
@@ -130,18 +128,16 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
     if (!el) return;
     function measure() {
       const available = el!.clientWidth - DAY_LABEL_WIDTH - 8; // 8px for flex gap
-      // buildGrid renders visibleWeeks + 1 columns (extra partial column for the current week)
-      const totalCols = MAX_WEEKS + 1;
-      const sizeAtFull = Math.floor((available + CELL_GAP) / totalCols - CELL_GAP);
-      if (sizeAtFull >= MIN_CELL_SIZE) {
-        // All columns fit — use the largest cell size that works
-        setCellSize(Math.min(MAX_CELL_SIZE, sizeAtFull));
+      const sizeAt52 = Math.floor((available + CELL_GAP) / MAX_WEEKS - CELL_GAP);
+      if (sizeAt52 >= MIN_CELL_SIZE) {
+        // All 52 weeks fit — use the largest cell size that works
+        setCellSize(Math.min(MAX_CELL_SIZE, sizeAt52));
         setVisibleWeeks(MAX_WEEKS);
       } else {
-        // Not enough room at MIN_CELL_SIZE — reduce weeks to fit (accounting for +1 column)
-        const cols = Math.max(13, Math.floor((available + CELL_GAP) / (MIN_CELL_SIZE + CELL_GAP)));
+        // Not enough room for 52 weeks at MIN_CELL_SIZE — reduce weeks to fit
+        const weeks = Math.max(12, Math.floor((available + CELL_GAP) / (MIN_CELL_SIZE + CELL_GAP)));
         setCellSize(MIN_CELL_SIZE);
-        setVisibleWeeks(cols - 1);
+        setVisibleWeeks(weeks);
       }
     }
     measure();
@@ -179,7 +175,7 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
   }, []);
 
   const weeks = useMemo(() => {
-    const result: CellData[][] = Array.from({ length: visibleWeeks + 1 }, () => []);
+    const result: CellData[][] = Array.from({ length: visibleWeeks }, () => []);
     for (const cell of cells) {
       result[cell.col].push(cell);
     }
