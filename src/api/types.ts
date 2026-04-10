@@ -155,6 +155,10 @@ export interface SearchProductHit {
   orgSlug: string | null;
   orgName: string | null;
   category: string | null;
+  /** Distinguishes standalone sources folded into the products list */
+  kind?: "product" | "source";
+  /** For source-kind entries: the source slug (used for URL routing) */
+  sourceSlug?: string;
 }
 
 export interface SearchSourceHit {
@@ -164,6 +168,45 @@ export interface SearchSourceHit {
   orgSlug: string | null;
   orgName: string | null;
   productSlug: string | null;
+}
+
+/** Extended source hit with product metadata for folding into products list */
+export interface RawSourceHit extends SearchSourceHit {
+  productName?: string;
+  productCategory?: string;
+}
+
+/** Fold raw source hits into the products list, deduplicating against existing products */
+export function foldSourcesIntoProducts(
+  existingProducts: SearchProductHit[],
+  rawSources: RawSourceHit[],
+): SearchProductHit[] {
+  const products = [...existingProducts];
+  const seen = new Set(products.map((p) => p.slug));
+  for (const s of rawSources) {
+    if (s.productSlug) {
+      if (seen.has(s.productSlug)) continue;
+      products.push({
+        slug: s.productSlug,
+        name: s.productName ?? s.name,
+        orgSlug: s.orgSlug,
+        orgName: s.orgName,
+        category: s.productCategory ?? null,
+      });
+      seen.add(s.productSlug);
+    } else {
+      products.push({
+        slug: s.slug,
+        name: s.name,
+        orgSlug: s.orgSlug,
+        orgName: s.orgName,
+        category: null,
+        kind: "source",
+        sourceSlug: s.slug,
+      });
+    }
+  }
+  return products;
 }
 
 export interface SearchReleaseHit {

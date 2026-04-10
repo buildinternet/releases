@@ -2,7 +2,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { logger } from "../lib/logger.js";
-import type { SearchOrgHit, SearchProductHit, SearchSourceHit, SearchReleaseHit } from "../api/types.js";
+import type { SearchOrgHit, SearchProductHit, SearchSourceHit, SearchReleaseHit, RawSourceHit } from "../api/types.js";
+import { foldSourcesIntoProducts } from "../api/types.js";
 
 export interface FtsResult {
   id: string;
@@ -71,15 +72,18 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
     ORDER BY p.name LIMIT ${limit}
   `) as SearchProductHit[];
 
-  const sources = db.all(sql`
-    SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName, p.slug as productSlug
+  const rawSources = db.all(sql`
+    SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
+           p.slug as productSlug, p.name as productName, p.category as productCategory
     FROM sources s
     LEFT JOIN organizations o ON o.id = s.org_id
     LEFT JOIN products p ON p.id = s.product_id
     WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
     ORDER BY s.name LIMIT ${limit}
-  `) as SearchSourceHit[];
+  `) as RawSourceHit[];
+
+  const mergedProducts = foldSourcesIntoProducts(products, rawSources);
 
   let releases: SearchReleaseHit[] = [];
   try {
@@ -102,12 +106,12 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
   }
 
   // Cascading enrichment: show recent releases from matched orgs/products
-  if (releases.length === 0 && (orgs.length > 0 || products.length > 0)) {
+  if (releases.length === 0 && (orgs.length > 0 || mergedProducts.length > 0)) {
     const orgSlugs = orgs.map((o) => o.slug);
-    const productSlugs = products.map((p) => p.slug);
+    const matchedProductSlugs = mergedProducts.filter((p) => p.kind !== "source").map((p) => p.slug);
     const conditions = [];
     if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
-    if (productSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(productSlugs.map((s) => sql`${s}`), sql`, `)})`);
+    if (matchedProductSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(matchedProductSlugs.map((s) => sql`${s}`), sql`, `)})`);
     if (conditions.length > 0) {
       releases = db.all(sql`
         SELECT s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
@@ -126,5 +130,5 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
     }
   }
 
-  return { orgs, products, sources, releases };
+  return { orgs, products: mergedProducts, sources: [], releases };
 }

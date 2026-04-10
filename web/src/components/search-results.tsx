@@ -4,13 +4,12 @@ import { useState } from "react";
 import Link from "next/link";
 import type { UnifiedSearchResponse } from "@/lib/api";
 
-type SearchFilter = "all" | "orgs" | "products" | "sources" | "releases";
+type SearchFilter = "all" | "orgs" | "products" | "releases";
 
 const FILTERS: { value: SearchFilter; label: string }[] = [
   { value: "all", label: "All" },
   { value: "orgs", label: "Organizations" },
   { value: "products", label: "Products" },
-  { value: "sources", label: "Sources" },
   { value: "releases", label: "Releases" },
 ];
 
@@ -27,19 +26,16 @@ export function SearchResults({
     results &&
     (results.orgs.length > 0 ||
       results.products.length > 0 ||
-      results.sources.length > 0 ||
       results.releases.length > 0);
 
   const showOrgs = filter === "all" || filter === "orgs";
   const showProducts = filter === "all" || filter === "products";
-  const showSources = filter === "all" || filter === "sources";
   const showReleases = filter === "all" || filter === "releases";
 
   const filteredHasResults =
     results &&
     ((showOrgs && results.orgs.length > 0) ||
       (showProducts && results.products.length > 0) ||
-      (showSources && results.sources.length > 0) ||
       (showReleases && results.releases.length > 0));
 
   return (
@@ -107,42 +103,20 @@ export function SearchResults({
                 Products
               </h2>
               <div className="space-y-2">
-                {results.products.map((p: any) => (
-                  <Link
-                    key={p.slug}
-                    href={p.orgSlug ? `/${p.orgSlug}/product/${p.slug}` : `/product/${p.slug}`}
-                    className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
-                  >
-                    <span className="font-medium">{p.name}</span>
-                    {p.orgName && (
-                      <span className="ml-2 text-xs text-stone-400">by {p.orgName}</span>
-                    )}
-                  </Link>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Sources */}
-          {showSources && results.sources.length > 0 && (
-            <section>
-              <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
-                Sources
-              </h2>
-              <div className="space-y-2">
-                {results.sources.map((s: any) => {
-                  const href = s.orgSlug ? `/${s.orgSlug}/${s.slug}` : `/source/${s.slug}`;
+                {results.products.map((p: any) => {
+                  const href = p.kind === "source" && p.sourceSlug
+                    ? (p.orgSlug ? `/${p.orgSlug}/${p.sourceSlug}` : `/source/${p.sourceSlug}`)
+                    : (p.orgSlug ? `/${p.orgSlug}/product/${p.slug}` : `/product/${p.slug}`);
                   return (
                     <Link
-                      key={s.slug}
+                      key={p.slug}
                       href={href}
                       className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
                     >
-                      <span className="font-medium">{s.name}</span>
-                      {s.orgName && (
-                        <span className="ml-2 text-xs text-stone-400">{s.orgName}</span>
+                      <span className="font-medium">{p.name}</span>
+                      {p.orgName && (
+                        <span className="ml-2 text-xs text-stone-400">by {p.orgName}</span>
                       )}
-                      <span className="ml-2 text-xs text-stone-400">{s.type}</span>
                     </Link>
                   );
                 })}

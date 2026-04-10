@@ -12,12 +12,11 @@ describe("CLI search with empty database", () => {
   afterAll(() => cleanup());
 
   it("search returns empty results gracefully (JSON)", () => {
-    const results = cliJson<{ orgs: unknown[]; products: unknown[]; sources: unknown[]; releases: unknown[] }>(dataDir, [
+    const results = cliJson<{ orgs: unknown[]; products: unknown[]; releases: unknown[] }>(dataDir, [
       "search", "anything", "--json",
     ]);
     expect(results.orgs).toEqual([]);
     expect(results.products).toEqual([]);
-    expect(results.sources).toEqual([]);
     expect(results.releases).toEqual([]);
   });
 
