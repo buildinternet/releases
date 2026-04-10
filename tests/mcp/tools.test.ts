@@ -14,7 +14,7 @@ import {
 import {
   searchReleases,
   getLatestReleases,
-  listProducts,
+  listSources,
   listOrganizations,
 } from "../../workers/mcp/src/tools.js";
 
@@ -146,12 +146,12 @@ describe("listOrganizations", () => {
 });
 
 // ---------------------------------------------------------------------------
-// listProducts
+// listSources
 // ---------------------------------------------------------------------------
-describe("listProducts", () => {
+describe("listSources", () => {
   it("lists all sources when no org filter", async () => {
     seedData();
-    const result = await listProducts(getDb() as any, {});
+    const result = await listSources(getDb() as any, {});
     const txt = resultText(result);
     expect(txt).toContain("Acme CLI");
     expect(txt).toContain("Acme Web");
@@ -160,7 +160,7 @@ describe("listProducts", () => {
 
   it("filters by organization slug", async () => {
     seedData();
-    const result = await listProducts(getDb() as any, { organization: "acme" });
+    const result = await listSources(getDb() as any, { organization: "acme" });
     const txt = resultText(result);
     expect(txt).toContain("Acme CLI");
     expect(txt).toContain("Acme Web");
@@ -169,28 +169,28 @@ describe("listProducts", () => {
 
   it("resolves org by domain", async () => {
     seedData();
-    const result = await listProducts(getDb() as any, { organization: "acme.com" });
+    const result = await listSources(getDb() as any, { organization: "acme.com" });
     const txt = resultText(result);
     expect(txt).toContain("Acme CLI");
   });
 
   it("resolves org by domain alias", async () => {
     seedData();
-    const result = await listProducts(getDb() as any, { organization: "acme-alias.com" });
+    const result = await listSources(getDb() as any, { organization: "acme-alias.com" });
     const txt = resultText(result);
     expect(txt).toContain("Acme CLI");
   });
 
   it("resolves org by account handle", async () => {
     seedData();
-    const result = await listProducts(getDb() as any, { organization: "acme-gh" });
+    const result = await listSources(getDb() as any, { organization: "acme-gh" });
     const txt = resultText(result);
     expect(txt).toContain("Acme CLI");
   });
 
   it("returns error for unknown org", async () => {
     seedData();
-    const result = await listProducts(getDb() as any, { organization: "nope" });
+    const result = await listSources(getDb() as any, { organization: "nope" });
     expect(resultText(result)).toContain("No organization found");
   });
 });

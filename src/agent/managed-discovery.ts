@@ -9,15 +9,14 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import { $ } from "bun";
-import { config, getDataDir, resolveCLICmd } from "../lib/config.js";
+import { config, getDataDir } from "../lib/config.js";
 import { sha256Hex } from "../lib/hash.js";
 import { logger } from "../lib/logger.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { buildDiscoveryPrompt } from "./released.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./released.js";
 import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";
-import { parseArgs } from "../shared/parse-args.js";
+import { AGENT_TOOLS, createTypedExecutor, handleCustomToolUse } from "../shared/agent-tools.js";
 
 // ── Cached IDs ────────────────────────────────────────────────────
 
@@ -57,73 +56,10 @@ function hashPrompt(prompt: string): string {
   return sha256Hex(prompt).slice(0, 16);
 }
 
-// ── CLI execution ─────────────────────────────────────────────────
+// ── Tool executor type ───────────────────────────────────────────
 
-/** Executes a CLI command string and returns the output. Injectable for worker context. */
-export type CLIExecutor = (command: string) => Promise<string>;
-
-/** Default executor — spawns the CLI as a subprocess (Bun shell). */
-export function createSubprocessExecutor(): CLIExecutor {
-  const cliCmd = resolveCLICmd();
-  return async (command: string): Promise<string> => {
-    const argv = parseArgs(command);
-    const cliParts = parseArgs(cliCmd);
-    const fullArgs = [...cliParts, ...argv];
-    logger.debug(`[managed-agents] $ ${fullArgs.join(" ")}`);
-
-    try {
-      const result = await $`${fullArgs}`.quiet().nothrow();
-      const stdout = result.stdout.toString().trim();
-      const stderr = result.stderr.toString().trim();
-
-      if (result.exitCode !== 0) {
-        return `Command failed (exit ${result.exitCode}):\n${stderr || stdout}`;
-      }
-      return stdout || "(no output)";
-    } catch (err) {
-      return `Command error: ${err instanceof Error ? err.message : String(err)}`;
-    }
-  };
-}
-
-// ── Agent tools (shared between create and DO) ──────────────────
-
-const DISCOVERY_TOOLS = [
-  { type: "agent_toolset_20260401", default_config: { enabled: true } },
-  {
-    type: "custom",
-    name: "releases_cli",
-    description:
-      "Execute a Released CLI command. Manages changelog sources, orgs, products. Use --json for structured output. Use --dry-run for validation, then real fetch (--max 50) to persist validated sources.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        command: {
-          type: "string",
-          description:
-            'CLI command and arguments without the "releases" prefix. Example: "list --json" or "fetch my-source --dry-run"',
-        },
-      },
-      required: ["command"],
-    },
-  },
-  {
-    type: "custom",
-    name: "releases_report_state",
-    description:
-      "Report the final discovery state as JSON. Call this at the end of discovery instead of writing to a file.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        state: {
-          type: "object",
-          description: "The complete discovery state JSON object with product, domain, sources, etc.",
-        },
-      },
-      required: ["state"],
-    },
-  },
-];
+/** Executes a typed tool call and returns the output. */
+export type ToolExecutor = (toolName: string, input: Record<string, unknown>) => Promise<string | null>;
 
 // ── Agent/Environment setup ───────────────────────────────────────
 
@@ -187,7 +123,7 @@ async function ensureAgentAndEnv(
     name: "Released Discovery Agent",
     model: config.agentModel(),
     system: currentPrompt,
-    tools: DISCOVERY_TOOLS,
+    tools: AGENT_TOOLS,
   });
 
   const cfg: ManagedAgentConfig = {
@@ -224,13 +160,26 @@ function emitStatus(
 
 export async function runManagedDiscovery(
   options: DiscoveryOptions,
-  executor?: CLIExecutor,
+  executor?: ToolExecutor,
 ): Promise<DiscoveryState> {
-  const executeCLI = executor ?? createSubprocessExecutor();
   const apiKey = config.anthropicApiKey();
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY is required for managed agents discovery");
   }
+
+  // Build typed executor if not provided — requires remote API
+  const executeToolCall = executor ?? (() => {
+    const apiUrl = process.env.RELEASED_API_URL;
+    const releasedApiKey = process.env.RELEASED_API_KEY;
+    if (!apiUrl || !releasedApiKey) {
+      throw new Error("RELEASED_API_URL and RELEASED_API_KEY are required for managed agents discovery");
+    }
+    return createTypedExecutor({
+      fetcher: { fetch: globalThis.fetch.bind(globalThis) },
+      apiKey: releasedApiKey,
+      baseUrl: apiUrl.replace(/\/+$/, ""),
+    });
+  })();
 
   const client = new Anthropic({ apiKey });
   const { agentId, agentVersion, environmentId } = await ensureAgentAndEnv(client);
@@ -261,7 +210,8 @@ export async function runManagedDiscovery(
   });
 
   // Process events with wall-clock timeout
-  let capturedState: DiscoveryState | null = null;
+  // Using a mutable container so TS tracks closure mutations correctly
+  const captured: { state: DiscoveryState | null } = { state: null };
   let toolCallCount = 0;
   let done = false;
   const deadline = Date.now() + SESSION_TIMEOUT_MS;
@@ -291,68 +241,34 @@ export async function runManagedDiscovery(
 
         case "agent.custom_tool_use": {
           const toolEvent = event as any;
-
-          if (toolEvent.name === "releases_report_state") {
-            const reported = toolEvent.input?.state;
-            if (reported && typeof reported === "object") {
-              capturedState = reported as DiscoveryState;
-              capturedState.updatedAt = new Date().toISOString();
-            } else {
-              logger.warn("[managed-agents] releases_report_state called with missing/invalid state");
-            }
+          const sendResult = async (toolUseId: string, text: string) => {
             await client.beta.sessions.events.send(session.id, {
               events: [{
                 type: "user.custom_tool_result",
-                custom_tool_use_id: toolEvent.id,
-                content: [{ type: "text", text: "State captured successfully." }],
+                custom_tool_use_id: toolUseId,
+                content: [{ type: "text", text }],
               }],
             });
-            continue; // Don't break — let the agent finish naturally
-          }
-
-          if (toolEvent.name !== "releases_cli") {
-            // Unknown custom tool — no-op, send empty result
-            await client.beta.sessions.events.send(session.id, {
-              events: [{
-                type: "user.custom_tool_result",
-                custom_tool_use_id: toolEvent.id,
-                content: [{ type: "text", text: "Unknown tool" }],
-              }],
-            });
-            break;
-          }
-
-          const input = toolEvent.input as { command?: string };
-          const command = input?.command ?? "";
-
-          options.onToolUse?.("releases_cli", command);
-          toolCallCount++;
-
-          emitStatus(options, session.id, {
-            type: "session:progress",
-            step: "discovery",
-            currentAction: `releases ${command}`,
-            toolCalls: toolCallCount,
-          });
-
-          const result = await executeCLI(command);
-
-          // Truncate very large outputs
-          const maxLen = 50_000;
-          const truncated =
-            result.length > maxLen
-              ? result.slice(0, maxLen) + `\n\n[output truncated — ${result.length} total chars]`
-              : result;
-
-          await client.beta.sessions.events.send(session.id, {
-            events: [
-              {
-                type: "user.custom_tool_result",
-                custom_tool_use_id: toolEvent.id,
-                content: [{ type: "text", text: truncated }],
+          };
+          const wasStateReport = await handleCustomToolUse(
+            { id: toolEvent.id, name: toolEvent.name, input: toolEvent.input },
+            {
+              sendResult,
+              executor: executeToolCall,
+              onStateCapture: (state) => { captured.state = state as unknown as DiscoveryState; },
+              onToolCall: (toolName, toolInput) => {
+                options.onToolUse?.(toolName, JSON.stringify(toolInput));
+                toolCallCount++;
+                emitStatus(options, session.id, {
+                  type: "session:progress",
+                  step: "discovery",
+                  currentAction: toolName,
+                  toolCalls: toolCallCount,
+                });
               },
-            ],
-          });
+            },
+          );
+          if (wasStateReport) continue;
           break;
         }
 
@@ -401,14 +317,14 @@ export async function runManagedDiscovery(
     // Non-critical
   }
 
-  if (capturedState) {
-    capturedState.agentSessionId = session.id;
+  if (captured.state) {
+    captured.state.agentSessionId = session.id;
     emitStatus(options, session.id, {
       type: "session:complete",
-      sourcesFound: capturedState.sources?.length ?? 0,
-      sourcesValidated: capturedState.sources?.filter((s) => s.validated).length ?? 0,
+      sourcesFound: captured.state.sources?.length ?? 0,
+      sourcesValidated: captured.state.sources?.filter((s) => s.validated).length ?? 0,
     });
-    return capturedState;
+    return captured.state;
   }
 
   // Fallback minimal state — no captured state means something went wrong

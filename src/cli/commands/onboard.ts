@@ -128,7 +128,7 @@ async function runLocalDiscovery(company: string, opts: OnboardOpts): Promise<vo
 }
 
 async function runManagedAgentsDiscovery(company: string, opts: OnboardOpts): Promise<void> {
-  return runDiscoveryWithUI(company, opts, "using Anthropic Managed Agents", runManagedDiscovery, "releases_cli", "releases ");
+  return runDiscoveryWithUI(company, opts, "using Anthropic Managed Agents", runManagedDiscovery, "", "");
 }
 
 async function runRemoteDiscovery(company: string, opts: OnboardOpts, engine: DiscoveryEngine = "managed-agents"): Promise<void> {

@@ -140,13 +140,14 @@ productRoutes.get("/products/:identifier", async (c) => {
 // Create product
 productRoutes.post("/products", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ orgId: string; name: string; slug?: string; url?: string; description?: string; category?: string; tags?: string[] }>();
+  const body = await c.req.json<{ orgId?: string; orgSlug?: string; name: string; slug?: string; url?: string; description?: string; category?: string; tags?: string[] }>();
 
-  if (!body.orgId || !body.name) {
-    return c.json({ error: "bad_request", message: "Missing required fields: orgId, name" }, 400);
+  if ((!body.orgId && !body.orgSlug) || !body.name) {
+    return c.json({ error: "bad_request", message: "Missing required fields: orgId or orgSlug, name" }, 400);
   }
 
-  const [org] = await db.select().from(organizations).where(eq(organizations.id, body.orgId));
+  const orgWhere = body.orgId ? eq(organizations.id, body.orgId) : eq(organizations.slug, body.orgSlug!);
+  const [org] = await db.select().from(organizations).where(orgWhere);
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   if (body.category && !isValidCategory(body.category)) {
@@ -161,7 +162,7 @@ productRoutes.post("/products", async (c) => {
       .values({
         name: body.name,
         slug,
-        orgId: body.orgId,
+        orgId: org.id,
         url: body.url ?? null,
         description: body.description ?? null,
         category: body.category ?? null,

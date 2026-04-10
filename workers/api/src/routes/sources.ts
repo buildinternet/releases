@@ -335,27 +335,25 @@ sourceRoutes.get("/sources/:slug/recent-releases", async (c) => {
 // ── Enrichable releases (have URLs, not suppressed) ──
 
 sourceRoutes.get("/sources/:slug/releases", async (c) => {
-  const enrichable = c.req.query("enrichable");
-  if (enrichable !== "true") return c.json({ error: "enrichable=true query param required" }, 400);
-
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-
+  const enrichable = c.req.query("enrichable") === "true";
   const limit = c.req.query("limit") ? parseInt(c.req.query("limit")!, 10) : undefined;
 
   const [src] = await db.select().from(sources).where(eq(sources.slug, slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
+  const conditions = [
+    eq(releases.sourceId, src.id),
+    eq(releases.suppressed, false),
+  ];
+  // When enrichable=true, filter to releases with a URL (existing behavior for enrich command)
+  if (enrichable) conditions.push(isNotNull(releases.url));
+
   const query = db
     .select()
     .from(releases)
-    .where(
-      and(
-        eq(releases.sourceId, src.id),
-        isNotNull(releases.url),
-        eq(releases.suppressed, false),
-      ),
-    )
+    .where(and(...conditions))
     .orderBy(desc(releases.publishedAt));
 
   const rows = limit ? await query.limit(limit) : await query;

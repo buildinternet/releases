@@ -228,20 +228,20 @@ describe("parseArgs", () => {
 // ── Shared discovery prompt ──
 
 describe("buildDiscoverySystemPrompt", () => {
-  it("includes evaluate command when evaluateAvailable is true", () => {
+  it("includes evaluate_url tool when evaluateAvailable is true", () => {
     const prompt = buildDiscoverySystemPrompt({
       evaluateAvailable: true,
       categories: [...CATEGORIES],
     });
-    expect(prompt).toContain("evaluate <url>");
+    expect(prompt).toContain("evaluate_url");
   });
 
-  it("excludes evaluate command when evaluateAvailable is false", () => {
+  it("excludes evaluate_url tool when evaluateAvailable is false", () => {
     const prompt = buildDiscoverySystemPrompt({
       evaluateAvailable: false,
       categories: [...CATEGORIES],
     });
-    expect(prompt).not.toContain("evaluate <url>");
+    expect(prompt).not.toContain("**evaluate_url**");
     expect(prompt).toContain("not available in this mode");
   });
 

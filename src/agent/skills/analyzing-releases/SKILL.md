@@ -13,15 +13,16 @@ description: >
 
 Turn changelog data into competitive intelligence by analyzing release patterns across a cohort of related companies.
 
-## Commands
+## Key Operations
 
-| Command | Purpose |
-|---------|---------|
-| `releases list --query <company>` | Check what sources exist for a company |
-| `releases fetch <slug> --max 50` | Pull recent releases from a source |
-| `releases latest <slug> --json` | Structured release list with dates |
-| `releases summarize <slug> --window 90` | AI-generated rolling summary |
-| `releases compare <slugA> <slugB> --days 60` | Head-to-head comparison |
+| Operation | CLI | Typed tool |
+|-----------|-----|------------|
+| Check existing sources | `releases list --query <company> --json` | `list_sources` with query param |
+| Fetch releases | `releases fetch <slug> --max 50` | `fetch_source` with slug |
+| Get latest releases | `releases latest <slug> --json` | `get_latest_releases` with source/org and limit |
+| Search releases | `releases search <query> --json` | `search_releases` with query |
+| Summarize | `releases summary <slug> --json` | (not available as typed tool) |
+| Compare | `releases compare <slugA> <slugB> --json` | (not available as typed tool) |
 
 ## Workflow
 
@@ -31,35 +32,19 @@ Pick 3-6 companies in the same competitive space. Good cohorts share a common bu
 
 ### 2. Check existing sources
 
-```bash
-releases list --query <company> --json
-```
-
-If a company isn't in the system, onboard it with `releases onboard <company>`.
+Search for each company to see what sources are indexed. If a company isn't in the system, it needs to be onboarded first.
 
 ### 3. Fetch recent releases
 
-```bash
-releases fetch <source-slug> --max 50
-```
+Fetch each source. The system skips unchanged feeds automatically.
 
-The CLI skips unchanged feeds automatically. Fetch multiple sources concurrently when possible.
+### 4. Get latest releases
 
-### 4. Summarize each company
+Get structured release data with dates for each source. Use a limit (e.g., 50) to cap results. For org-wide views, filter by organization instead of individual source.
 
-```bash
-releases summarize <source-slug> --window 90
-```
+### 5. Search and cross-reference
 
-Capture the narrative summary for each company. Note dominant themes, release cadence, and version strategy.
-
-### 5. Compare interesting pairs
-
-```bash
-releases compare <slugA> <slugB> --days 60
-```
-
-Pick 2-3 matchups between direct competitors or companies making divergent bets. Look for convergent features, divergent investments, and breaking changes that signal strategic shifts.
+Search across all indexed releases to find specific features, breaking changes, or patterns.
 
 ### 6. Synthesize
 
@@ -78,6 +63,6 @@ Ask the user where to save the analysis, or use your best judgment based on the 
 ## Important
 
 - Focus on what companies shipped. If a source has noisy data (blog posts mixed in, missing dates), work around it silently. Don't include source quality commentary in the report unless a company had to be substantially excluded.
-- Fill data gaps with web fetches. Use `list <slug> --json` to get release URLs, then WebFetch to spot-check pages for missing dates, versions, or feature details.
-- Use `latest <slug> --json` for velocity counting — it returns structured data with dates.
-- The `--json` flag on `summarize` and `compare` returns structured output for programmatic use.
+- Fill data gaps with web fetches. List sources to get release URLs, then WebFetch to spot-check pages for missing dates, versions, or feature details.
+- For velocity counting, get the latest releases with dates — CLI: `releases latest <slug> --json`, typed tool: `get_latest_releases`.
+- AI-powered summarize and compare are only available via CLI (`releases summary`, `releases compare`). When using typed tools, synthesize manually from raw release data.

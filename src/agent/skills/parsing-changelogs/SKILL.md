@@ -20,23 +20,19 @@ After fetching content, the pipeline parses it:
 - **Incremental parsing** — if the source already has releases in the database, extract only new ones by comparing against known releases. This is the default for subsequent fetches.
 - **Bulk parsing** — parse the entire page into releases. Used on first fetch or when `--full` is specified.
 
-## CLI Commands
+## Fetching
 
-### `releases fetch <slug>`
+Trigger a fetch for a source by slug. CLI: `releases fetch <slug> [--dry-run] [--max <n>]`. Typed tool: `fetch_source` with slug param.
 
-Fetch and parse releases for a source. Key flags:
+Key CLI flags (not available via typed tool — the typed tool always does a full server-side fetch):
+- `--dry-run` — parse but don't persist. Essential for validation.
+- `--max <n>` — limit releases to extract (default: 200).
+- `--full` — bypass incremental parsing, force full re-parse.
+- `--crawl` / `--no-crawl` — enable/disable crawl mode.
 
-- `--dry-run` — parse but don't persist to the database. Essential for validation.
-- `--max <n>` — limit the number of releases to extract (default: 200).
-- `--full` — bypass incremental parsing, force a full re-parse of the page.
-- `--crawl` — enable crawl mode (follow links to individual release pages).
-- `--no-crawl` — disable crawl mode even if `crawlEnabled` is set in metadata.
-- `--no-summarize` — skip AI summary generation.
-- `--all` — remove the max release cap.
+### Checking results
 
-### `releases fetch-log <slug>`
-
-Show recent fetch history for a source. Useful for debugging fetch issues — shows timestamps, release counts, errors, and content hashes.
+After fetching, verify releases were persisted. CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source param. Use `get_organization` (or `releases org show <slug> --json`) to see the full picture of an org's sources.
 
 ## Incremental vs Bulk Parsing
 
@@ -59,9 +55,7 @@ Enable with `--crawl` flag or by setting `metadata.crawlEnabled: true` on the so
 
 ## Enrichment
 
-Use the `releases enrich <slug>` command to hydrate releases that have sparse content. This uses Haiku to judge which releases need enrichment, then fetches and extracts full page content.
-
-`releases enrich <slug> --dry-run` previews what would be enriched. `releases enrich <slug> --limit 5` caps the batch size. `releases enrich <slug> --force` bypasses the Haiku triage entirely and re-enriches all candidates — useful for backfilling media on previously-enriched releases or re-processing after adding `parseInstructions`. Media from new extractions is merged with existing media (deduped by URL), so `--force` never drops previously-captured media.
+Enrichment hydrates releases that have sparse content by fetching full page content and extracting richer data. CLI: `releases enrich <slug> [--dry-run] [--force]`. Enrichment is not available as a typed agent tool — it is triggered automatically for sources with `autoEnrich: true` in their metadata, or run directly via CLI.
 
 ## Feed Content Depth Assessment
 
@@ -78,38 +72,22 @@ Do NOT fetch release URLs in the parent agent — always delegate to a subagent 
 **What to do based on the result:**
 
 If pages are richer than feed content (more text, images, videos, or code examples):
-1. Record and enable auto-enrichment: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only","autoEnrich":true}'`
-2. Dispatch a bulk-worker subagent to run: `releases enrich <slug>`
-3. Verify a sample: `releases list <slug> --json` — check content is now richer and media array is populated
+1. Record and enable auto-enrichment. CLI: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only","autoEnrich":true}'`. Typed tool: `edit_source` with appropriate metadata.
+2. Run enrichment if using CLI: `releases enrich <slug>`. Via typed tools, enrichment will run automatically on future fetches.
+3. Verify results. CLI: `releases list <slug> --json`. Typed tool: `get_latest_releases` — check content is richer after enrichment.
 
 If feed already provides full content with no meaningful additions on the page:
-1. Record: `releases edit <slug> --metadata '{"feedContentDepth":"full"}'`
-2. No enrichment needed — skip `releases enrich` for this source
+1. No enrichment needed for this source
 
 Once `feedContentDepth` is set, skip the sampling step on future encounters. Sources with `autoEnrich: true` will automatically enrich new releases after each feed fetch.
 
-**Per-source AI instructions:** If a source has unique content patterns (e.g., videos always embedded, unusual changelog format), set `parseInstructions` on the source metadata to guide the AI parser:
-
-```bash
-releases edit <slug> --metadata '{"parseInstructions":"This source embeds YouTube demo videos in every release — always look for video links."}'
-```
-
-**Cost visibility:** The `releases enrich` command reports token usage. Check aggregate costs with `releases usage` filtered to `enrich-judge` and `enrich-extract` operations.
+**Per-source AI instructions:** If a source has unique content patterns (e.g., videos always embedded, unusual changelog format), note this in the discovery state so parseInstructions can be set later via the CLI.
 
 ## Validation Workflow
 
 When adding a new source, always validate before committing:
 
-1. `releases fetch <slug> --dry-run` — check if parsing works
-2. Look at the output: How many releases? Do they have titles, dates, content?
-3. If results are poor, try a different URL, type, or crawl mode
-4. If results are good, run `releases fetch <slug>` to persist
-
-## Smart Fetch (`--stale`)
-
-`releases fetch --stale <hours>` fetches sources that haven't been checked recently. It respects:
-- **Backoff** — sources with consecutive unchanged fetches are checked less frequently (1h-48h)
-- **Error backoff** — sources with consecutive errors back off more aggressively (1h-72h)
-- **Priority** — `fetchPriority` field on sources controls ordering
-
-> **Remote mode guardrail:** Bare `releases fetch` (no slug or filter) is blocked in remote mode. Always provide a slug or use `--stale`/`--unfetched`/`--retry-errors`. Use `releases task list` to check for active sessions and `releases task cancel <id>` to stop one.
+1. **Fetch** — CLI: `releases fetch <slug> --dry-run` then `releases fetch <slug>`. Typed tool: `fetch_source` with slug.
+2. **Verify** — CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source slug.
+3. **If poor results** — try a different URL or type. CLI: `releases edit <slug> --type feed`. Typed tool: `edit_source`.
+4. **If no usable releases** — remove the source. CLI: `releases remove <slug> --ignore --reason "..."`. Typed tool: `remove_source` then `exclude_url`.
