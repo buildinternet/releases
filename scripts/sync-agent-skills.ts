@@ -1,12 +1,18 @@
 #!/usr/bin/env bun
 /**
- * Deploy the managed agent: sync skills, system prompt, tools, and model.
+ * Deploy managed agents: sync skills, system prompt, tools, and model.
+ *
+ * Manages two agents:
+ *   - Discovery agent (Sonnet) — onboarding, evaluation, judgment tasks
+ *   - Worker agent (Haiku) — fetches, updates, mechanical operations
  *
  * Usage:
- *   bun scripts/sync-agent-skills.ts              # deploy everything
- *   bun scripts/sync-agent-skills.ts --dry-run    # preview without changes
- *   bun scripts/sync-agent-skills.ts --skills     # skills only
- *   bun scripts/sync-agent-skills.ts --agent      # prompt/tools/model only
+ *   bun scripts/sync-agent-skills.ts                  # deploy both agents
+ *   bun scripts/sync-agent-skills.ts --dry-run        # preview without changes
+ *   bun scripts/sync-agent-skills.ts --skills         # skills only
+ *   bun scripts/sync-agent-skills.ts --agent          # prompt/tools/model only
+ *   bun scripts/sync-agent-skills.ts --discovery      # discovery agent only
+ *   bun scripts/sync-agent-skills.ts --worker         # worker agent only
  *
  * Requires ANTHROPIC_API_KEY in .env or environment.
  * Reads ANTHROPIC_AGENT_ID from env or workers/discovery/wrangler.jsonc.
@@ -16,6 +22,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { createHash } from "crypto";
 import { buildDiscoverySystemPrompt } from "../src/shared/discovery-prompt.js";
+import { buildWorkerSystemPrompt } from "../src/shared/worker-prompt.js";
 import { AGENT_TOOLS } from "../src/shared/agent-tools.js";
 import { CATEGORIES } from "../src/lib/categories.js";
 
@@ -63,6 +70,9 @@ interface SkillConfig {
   agentVersion?: number;
   promptHash?: string;
   toolsHash?: string;
+  workerAgentId?: string;
+  workerAgentVersion?: number;
+  workerPromptHash?: string;
   lastSyncedAt: string;
 }
 
@@ -101,21 +111,34 @@ function getApiKey(): string {
   return key;
 }
 
-function getAgentId(): string {
-  if (process.env.ANTHROPIC_AGENT_ID) return process.env.ANTHROPIC_AGENT_ID;
-
-  // Read from wrangler.jsonc
+function readWranglerVar(varName: string): string | null {
   try {
     const wrangler = readFileSync(
       resolve(PROJECT_ROOT, "workers/discovery/wrangler.jsonc"),
       "utf8",
     );
-    const match = wrangler.match(/"ANTHROPIC_AGENT_ID":\s*"([^"]+)"/);
+    const match = wrangler.match(new RegExp(`"${varName}":\\s*"([^"]+)"`));
     if (match) return match[1];
   } catch { /* ignore */ }
+  return null;
+}
 
-  throw new Error(
-    "ANTHROPIC_AGENT_ID not found. Set it in env or workers/discovery/wrangler.jsonc",
+function getAgentId(): string {
+  const id = process.env.ANTHROPIC_AGENT_ID ?? readWranglerVar("ANTHROPIC_AGENT_ID");
+  if (!id) {
+    throw new Error(
+      "ANTHROPIC_AGENT_ID not found. Set it in env or workers/discovery/wrangler.jsonc",
+    );
+  }
+  return id;
+}
+
+function getWorkerAgentId(): string | null {
+  return (
+    process.env.ANTHROPIC_WORKER_AGENT_ID ??
+    readWranglerVar("ANTHROPIC_WORKER_AGENT_ID") ??
+    loadConfig()?.workerAgentId ??
+    null
   );
 }
 
@@ -217,6 +240,29 @@ async function getAgent(
   return (await res.json()) as { version: number; skills: unknown[]; system: string; tools: unknown[]; model: { id: string; speed?: string } };
 }
 
+async function createAgent(
+  apiKey: string,
+  payload: {
+    name: string;
+    model: string;
+    system: string;
+    tools: unknown[];
+    skills?: { type: string; skill_id: string; version: string }[];
+  },
+): Promise<{ id: string; version: number }> {
+  const res = await fetch(`${ANTHROPIC_API}/v1/agents`, {
+    method: "POST",
+    headers: { ...AGENT_HEADERS, "x-api-key": apiKey },
+    body: JSON.stringify(payload),
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Failed to create agent: ${res.status} ${await res.text()}`,
+    );
+  }
+  return (await res.json()) as { id: string; version: number };
+}
+
 async function updateAgent(
   apiKey: string,
   agentId: string,
@@ -256,13 +302,17 @@ async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const skillsOnly = process.argv.includes("--skills");
   const agentOnly = process.argv.includes("--agent");
+  const discoveryOnly = process.argv.includes("--discovery");
+  const workerOnly = process.argv.includes("--worker");
   const syncSkills = !agentOnly;
   const syncAgent = !skillsOnly;
+  const syncDiscovery = !workerOnly;
+  const syncWorker = !discoveryOnly;
 
   const apiKey = getApiKey();
   const agentId = getAgentId();
 
-  console.log(`Agent: ${agentId}`);
+  if (syncDiscovery) console.log(`Discovery agent: ${agentId}`);
   if (dryRun) console.log("DRY RUN — no changes will be made");
   console.log();
 
@@ -272,9 +322,13 @@ async function main() {
     lastSyncedAt: "",
   };
 
-  const agent = await getAgent(apiKey, agentId);
-  let agentVersion = agent.version;
-  const changes: string[] = [];
+  // Only fetch discovery agent state when we need it
+  let agent: { version: number; model: { id: string } } | null = null;
+  let agentVersion = 0;
+  if (syncDiscovery && syncAgent) {
+    agent = await getAgent(apiKey, agentId);
+    agentVersion = agent.version;
+  }
 
   // ── 1. Sync skills ────────────────────────────────────────────
   let skillIds: { type: string; skill_id: string; version: string }[] = [];
@@ -328,86 +382,149 @@ async function main() {
         }
       }
     }
-    if (skillsChanged > 0) changes.push(`${skillsChanged} skill(s)`);
   }
 
-  // ── 2. Sync system prompt, tools, model ───────────────────────
+  // ── 2. Sync agents ─────────────────────────────────────────────
 
-  const updatePayload: {
-    skills?: typeof skillIds;
-    system?: string;
-    tools?: unknown[];
-    model?: string;
-  } = {};
+  const currentToolsHash = hash(JSON.stringify(AGENT_TOOLS));
 
-  if (skillsChanged > 0) {
-    updatePayload.skills = skillIds;
+  interface AgentSyncParams {
+    label: string;
+    agentId: string;
+    prompt: string;
+    promptHash: string;
+    cachedPromptHash: string | undefined;
+    model: string;
+    remoteAgent: { version: number; model: { id: string } };
+    onSuccess: (version: number) => void;
   }
 
-  if (syncAgent) {
-    const currentPrompt = buildDiscoverySystemPrompt({
-      evaluateAvailable: true,
-      categories: CATEGORIES,
-    });
-    const currentPromptHash = hash(currentPrompt);
-    const currentToolsHash = hash(JSON.stringify(AGENT_TOOLS));
-    const currentModel = process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6";
+  /** Diff an agent's prompt/tools/model/skills against remote and apply updates. */
+  async function syncAgentConfig(params: AgentSyncParams): Promise<void> {
+    const { label, agentId: id, prompt, promptHash, cachedPromptHash, model, remoteAgent, onSuccess } = params;
+    const payload: { skills?: typeof skillIds; system?: string; tools?: unknown[]; model?: string } = {};
+    const changes: string[] = [];
 
-    console.log("Agent config:");
-
-    // System prompt
-    if (config.promptHash !== currentPromptHash) {
-      console.log(`  System prompt: changed (${config.promptHash ?? "none"} → ${currentPromptHash})`);
-      updatePayload.system = currentPrompt;
-      changes.push("system prompt");
-    } else {
-      console.log(`  System prompt: up to date (${currentPromptHash})`);
+    if (skillsChanged > 0) {
+      payload.skills = skillIds;
+      changes.push(`${skillsChanged} skill(s)`);
     }
 
-    // Tools
+    if (cachedPromptHash !== promptHash) {
+      console.log(`  System prompt: changed (${cachedPromptHash ?? "none"} → ${promptHash})`);
+      payload.system = prompt;
+      changes.push("system prompt");
+    } else {
+      console.log(`  System prompt: up to date (${promptHash})`);
+    }
+
     if (config.toolsHash !== currentToolsHash) {
       console.log(`  Tools: changed (${config.toolsHash ?? "none"} → ${currentToolsHash})`);
-      updatePayload.tools = [...AGENT_TOOLS];
+      payload.tools = [...AGENT_TOOLS];
       changes.push(`${AGENT_TOOLS.length} tools`);
     } else {
       console.log(`  Tools: up to date (${currentToolsHash})`);
     }
 
-    // Model
-    const remoteModel = agent.model.id;
-    if (remoteModel !== currentModel) {
-      console.log(`  Model: changed (${remoteModel} → ${currentModel})`);
-      updatePayload.model = currentModel;
+    if (remoteAgent.model.id !== model) {
+      console.log(`  Model: changed (${remoteAgent.model.id} → ${model})`);
+      payload.model = model;
       changes.push("model");
     } else {
-      console.log(`  Model: up to date (${currentModel})`);
+      console.log(`  Model: up to date (${model})`);
     }
 
-    config.promptHash = currentPromptHash;
-    config.toolsHash = currentToolsHash;
+    if (Object.keys(payload).length === 0) {
+      console.log(`${label} up to date — no changes needed.`);
+      return;
+    }
+
+    console.log(`Updating ${label.toLowerCase()}: ${changes.join(", ")}...`);
+    if (!dryRun) {
+      const updated = await updateAgent(apiKey, id, remoteAgent.version, payload);
+      onSuccess(updated.version);
+      saveConfig(config);
+      console.log(`✓ ${label} updated to v${updated.version}`);
+    } else {
+      console.log(`(would update ${label.toLowerCase()})`);
+    }
+  }
+
+  if (syncDiscovery && syncAgent) {
+    console.log("── Discovery Agent ──────────────────────────────");
+
+    const discoveryPrompt = buildDiscoverySystemPrompt({
+      evaluateAvailable: true,
+      categories: CATEGORIES,
+    });
+    const discoveryPromptHash = hash(discoveryPrompt);
+
+    await syncAgentConfig({
+      label: "Discovery agent",
+      agentId,
+      prompt: discoveryPrompt,
+      promptHash: discoveryPromptHash,
+      cachedPromptHash: config.promptHash,
+      model: process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6",
+      remoteAgent: agent!,
+      onSuccess: (version) => {
+        config.agentId = agentId;
+        config.agentVersion = version;
+        config.promptHash = discoveryPromptHash;
+        config.toolsHash = currentToolsHash;
+        config.lastSyncedAt = new Date().toISOString();
+      },
+    });
     console.log();
   }
 
-  // ── 3. Push update ────────────────────────────────────────────
+  // ── 3. Sync worker agent ─────────────────────────────────────
 
-  const hasChanges = Object.keys(updatePayload).length > 0;
+  if (syncWorker && syncAgent) {
+    console.log("── Worker Agent ─────────────────────────────────");
+    const workerModel = process.env.RELEASED_WORKER_AGENT_MODEL || "claude-haiku-4-5";
+    const workerPrompt = buildWorkerSystemPrompt({ categories: CATEGORIES });
+    const workerPromptHash = hash(workerPrompt);
+    const workerAgentId = getWorkerAgentId();
 
-  if (!hasChanges) {
-    console.log("Everything up to date — no changes needed.");
-    return;
-  }
-
-  console.log(`Updating agent: ${changes.join(", ")}...`);
-  if (!dryRun) {
-    const updated = await updateAgent(apiKey, agentId, agentVersion, updatePayload);
-    config.agentId = agentId;
-    config.agentVersion = updated.version;
-    config.lastSyncedAt = new Date().toISOString();
-    saveConfig(config);
-    console.log(`✓ Agent updated to v${updated.version}`);
-    console.log(`Config saved to ${CONFIG_PATH}`);
-  } else {
-    console.log("(would update agent)");
+    if (workerAgentId) {
+      const workerAgent = await getAgent(apiKey, workerAgentId);
+      await syncAgentConfig({
+        label: "Worker agent",
+        agentId: workerAgentId,
+        prompt: workerPrompt,
+        promptHash: workerPromptHash,
+        cachedPromptHash: config.workerPromptHash,
+        model: workerModel,
+        remoteAgent: workerAgent,
+        onSuccess: (version) => {
+          config.workerAgentId = workerAgentId;
+          config.workerAgentVersion = version;
+          config.workerPromptHash = workerPromptHash;
+          config.toolsHash = currentToolsHash;
+        },
+      });
+    } else {
+      console.log("Creating worker agent...");
+      if (!dryRun) {
+        const created = await createAgent(apiKey, {
+          name: "Released Worker Agent",
+          model: workerModel,
+          system: workerPrompt,
+          tools: [...AGENT_TOOLS],
+          ...(skillIds.length > 0 ? { skills: skillIds } : {}),
+        });
+        config.workerAgentId = created.id;
+        config.workerAgentVersion = created.version;
+        config.workerPromptHash = workerPromptHash;
+        saveConfig(config);
+        console.log(`✓ Worker agent created: ${created.id} (v${created.version})`);
+        console.log(`  Add to wrangler.jsonc: "ANTHROPIC_WORKER_AGENT_ID": "${created.id}"`);
+      } else {
+        console.log("(would create worker agent)");
+      }
+    }
+    console.log();
   }
 }
 
