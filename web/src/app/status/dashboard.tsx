@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 
 interface SessionState {
   sessionId: string;
   company: string;
   type?: "onboard" | "update";
+  agent?: "sonnet" | "haiku";
   status: "running" | "complete" | "error";
   step?: string;
   sourcesFound?: number;
@@ -18,11 +19,13 @@ interface SessionState {
   startedAt: number;
   lastUpdatedAt?: number;
   error?: string;
+  usage?: { inputTokens?: number; outputTokens?: number };
 }
 
 interface FetchLogEntry {
   id: string;
   sourceId: string;
+  sessionId?: string | null;
   sourceName?: string;
   sourceSlug?: string;
   orgName?: string;
@@ -170,7 +173,9 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const after = getDateRangeAfter(dateRange);
 
   const hydrate = useCallback(() => {
-    const safeFetch = (url: string) => fetch(url).then((r) => r.ok ? r.json() : null);
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    const safeFetch = (url: string) => fetch(url, { headers }).then((r) => r.ok ? r.json() : null);
     const fetchLogUrl = after
       ? `${apiUrl}/v1/status/fetch-log?after=${encodeURIComponent(after)}`
       : `${apiUrl}/v1/status/fetch-log`;
@@ -184,7 +189,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
       if (u) setUsage(u as UsageEntry[]);
       return s as SessionState[] | null;
     }).catch(() => null);
-  }, [apiUrl, after]);
+  }, [apiUrl, after, apiKey]);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -210,6 +215,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
       setSessions((prev) => [{
         sessionId: msg.sessionId as string,
         company: msg.company as string,
+        agent: msg.agent as SessionState["agent"],
         status: "running",
         startedAt: Date.now(),
       }, ...prev]);
@@ -269,6 +275,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
       setFetchLogs((prev) => [{
         id: msg.id as string,
         sourceId: msg.sourceId as string,
+        sessionId: msg.sessionId as string | undefined,
         sourceName: msg.sourceName as string | undefined,
         sourceSlug: msg.sourceSlug as string | undefined,
         releasesFound: msg.releasesFound as number,
@@ -351,7 +358,9 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const fetchLogsForSession = useCallback((sid: string) => {
     if (fetchedLogsRef.current.has(sid)) return;
     fetchedLogsRef.current.add(sid);
-    fetch(`${apiUrl}/v1/sessions/${sid}/logs`)
+    const headers: Record<string, string> = {};
+    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+    fetch(`${apiUrl}/v1/sessions/${sid}/logs`, { headers })
       .then((r) => r.ok ? r.json() : null)
       .then((logs: string[] | null) => {
         if (logs?.length) {
@@ -359,7 +368,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
         }
       })
       .catch(() => {});
-    fetch(`${apiUrl}/v1/sessions/${sid}/stdout`)
+    fetch(`${apiUrl}/v1/sessions/${sid}/stdout`, { headers })
       .then((r) => r.ok ? r.json() : null)
       .then((lines: string[] | null) => {
         if (lines?.length) {
@@ -367,7 +376,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
         }
       })
       .catch(() => {});
-  }, [apiUrl]);
+  }, [apiUrl, apiKey]);
 
   // Filter sessions client-side by date range (sessions come from DO, not SQL)
   const afterMs = after ? new Date(after).getTime() : 0;
@@ -544,6 +553,7 @@ function SessionsTable({
               <div className="text-stone-900 dark:text-stone-100">
                 <span className="mr-1.5 text-stone-300 dark:text-stone-600">{isExpanded ? "▾" : "▸"}</span>
                 {session.company}
+                {session.agent && <AgentBadge agent={session.agent} />}
               </div>
               <div className="text-stone-500 dark:text-stone-400">
                 {formatTime(session.startedAt)}
@@ -578,7 +588,10 @@ function SessionsTable({
                 )}
               </div>
               <div className="text-stone-400 dark:text-stone-500 text-right flex items-center justify-end gap-2">
-                {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
+                <span>
+                  {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
+                  <SessionTokens usage={session.usage} />
+                </span>
                 {session.status !== "running" && (
                   <span
                     role="button"
@@ -639,8 +652,39 @@ function StepBadge({ step, status, type }: { step?: string; status: string; type
     return <span className={`capitalize ${color}`}>{step}</span>;
   }
 
-  const color = step === "discovering" ? "text-amber-500" : step === "adding" ? "text-blue-500" : step === "validating" ? "text-green-500" : "text-stone-500";
+  const stepColors: Record<string, string> = {
+    discovering: "text-amber-500",
+    adding: "text-blue-500",
+    validating: "text-green-500",
+  };
+  const color = stepColors[step] ?? "text-stone-500";
   return <span className={`capitalize ${color}`}>{step}</span>;
+}
+
+const agentStyles: Record<string, { bg: string; label: string }> = {
+  haiku: { bg: "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400", label: "Haiku" },
+  sonnet: { bg: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400", label: "Sonnet" },
+};
+
+function AgentBadge({ agent }: { agent: string }): ReactNode {
+  const style = agentStyles[agent];
+  if (!style) return null;
+  return (
+    <span className={`ml-2 text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-full ${style.bg}`}>
+      {style.label}
+    </span>
+  );
+}
+
+function SessionTokens({ usage }: { usage?: SessionState["usage"] }): ReactNode {
+  if (!usage) return null;
+  const total = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+  if (total === 0) return null;
+  return (
+    <span className="block text-[10px] text-stone-300 dark:text-stone-600">
+      {formatTokens(total)} tok
+    </span>
+  );
 }
 
 type LogMode = "structured" | "raw";
@@ -786,6 +830,9 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
                     </div>
                     {log.orgName && (
                       <div className="text-stone-400">{log.orgName}</div>
+                    )}
+                    {log.sessionId && (
+                      <span className="text-[10px] font-sans text-indigo-400 dark:text-indigo-500">agent</span>
                     )}
                   </div>
                 </div>

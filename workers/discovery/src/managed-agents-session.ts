@@ -16,6 +16,11 @@ import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
 import { CATEGORIES } from "@releases/lib/categories.js";
 
+function truncate(text: string, maxLength: number): string {
+  if (text.length <= maxLength) return text;
+  return text.slice(0, maxLength) + "…";
+}
+
 export interface SessionParams {
   company: string;
   domain?: string;
@@ -96,13 +101,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           ),
       };
 
-      const executor = createTypedExecutor({ fetcher, apiKey: releasedApiKey });
+      const executor = createTypedExecutor({ fetcher, apiKey: releasedApiKey, sessionId });
 
       await this.notifyStatusHub({
         type: "session:start",
         sessionId,
         company: params.company,
         sessionType: mode,
+        agent: useWorker ? "haiku" : "sonnet",
       }, releasedApiKey);
 
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
@@ -184,6 +190,49 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               break;
             }
 
+            case "agent.message": {
+              for (const block of (event as any).content ?? []) {
+                if (block.type === "text" && block.text) {
+                  const text = truncate(block.text, 500);
+                  await this.notifyStatusHub({
+                    type: "session:progress",
+                    sessionId,
+                    logLine: text,
+                  }, releasedApiKey);
+                }
+              }
+              break;
+            }
+
+            case "agent.tool_use":
+            case "agent.mcp_tool_use": {
+              const toolName = (event as any).name;
+              if (toolName) {
+                await this.notifyStatusHub({
+                  type: "session:progress",
+                  sessionId,
+                  currentAction: toolName,
+                }, releasedApiKey);
+              }
+              break;
+            }
+
+            case "agent.tool_result":
+            case "agent.mcp_tool_result": {
+              for (const block of (event as any).content ?? []) {
+                if (block.type === "text" && block.text) {
+                  const text = truncate(block.text, 200);
+                  await this.notifyStatusHub({
+                    type: "session:progress",
+                    sessionId,
+                    logLine: text,
+                  }, releasedApiKey);
+                  break; // only forward first text block
+                }
+              }
+              break;
+            }
+
             case "session.status_idle":
               if ((event as any).stop_reason?.type === "requires_action") continue;
               done = true;
@@ -209,6 +258,22 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         try { stream.controller.abort(); } catch { /* closed */ }
       }
 
+      // Retrieve final session for usage tracking (also logged in CLI's managed-discovery.ts)
+      let sessionUsage: { inputTokens?: number; outputTokens?: number } | undefined;
+      try {
+        const finalSession = await (client.beta.sessions as any).retrieve(session.id);
+        const usage = finalSession.usage as Record<string, unknown> | undefined;
+        if (usage) {
+          sessionUsage = {
+            inputTokens: usage.input_tokens as number | undefined,
+            outputTokens: usage.output_tokens as number | undefined,
+          };
+          console.log(`[managed-agents] Session usage: ${JSON.stringify(usage)}`);
+        }
+      } catch {
+        // Non-critical
+      }
+
       // Archive session (agent + environment are long-lived, not archived).
       // NOTE: Worker agent (Haiku) sessions show as "terminated" in the Anthropic
       // console while discovery agent sessions do not — possibly a timing/state
@@ -226,6 +291,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           company: params.company,
           sourcesFound: Array.isArray(capturedState["sources"]) ? (capturedState["sources"] as unknown[]).length : 0,
           result: capturedState,
+          ...(sessionUsage ? { usage: sessionUsage } : {}),
         }, releasedApiKey);
         return;
       }
@@ -237,6 +303,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           type: "session:complete",
           sessionId,
           company: params.company,
+          ...(sessionUsage ? { usage: sessionUsage } : {}),
         }, releasedApiKey);
         return;
       }

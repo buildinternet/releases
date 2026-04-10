@@ -391,6 +391,7 @@ export async function postFetchLog(entry: {
   status: "success" | "error" | "no_change" | "dry_run";
   error?: string | null;
   rawContent?: string | null;
+  sessionId?: string | null;
 }): Promise<void> {
   await apiFetch("/v1/fetch-log", {
     method: "POST",

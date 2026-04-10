@@ -36,6 +36,13 @@
       "when": 1775579805347,
       "tag": "0004_flimsy_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1775750400000,
+      "tag": "0005_fetch_log_session_id",
+      "breakpoints": true
     }
   ]
 }
