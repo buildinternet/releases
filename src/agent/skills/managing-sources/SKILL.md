@@ -96,21 +96,38 @@ The notes should answer: "If I need to fetch the latest releases from this org, 
 **`### Extraction patterns`** — One paragraph per source describing:
 - How the page is structured (single long page with sections? paginated? date-grouped entries?)
 - What individual releases look like (headings, bullet lists, cards?)
-- Version format (semver, dates, codenames, or none — set version to null)
-- Publish cadence (daily, weekly, sporadic?)
+- Version format (semver, dates, codenames, or none — set version to null). Cite actual versions observed.
+- Publish cadence with evidence (e.g., "~1.4 releases/week — March 2026: 4 releases, Feb 2026: 5 releases")
 - Whether the page needs JS rendering or is static HTML
 - Whether filtering is needed or all content is relevant
+- Content quality: are releases complete or do some have empty content fields?
 
 **`### Known quirks`** — Anything that has caused issues or requires special handling:
 - Non-obvious parseInstructions and why they exist
 - URL path oddities (doubled paths, relative links, redirects)
 - Content that looks like releases but isn't
 - Sources where crawl mode helps or hurts
+- Data quality issues: null dates, empty content, broken feeds, date drift between title and publishedAt
+- Fetch failures or stale data (changeDetectedAt set but no recent successful fetch)
 
 **`### Source coverage`** — The big picture:
 - Which sources are canonical vs supplementary
 - Whether the active sources cover the org's full release surface or if there are gaps
 - Why disabled sources were disabled (so they don't get re-evaluated)
+- Missing sources: repos or changelogs that exist but aren't tracked
+
+### Levels of guide quality
+
+**Compilation** (fast, from metadata only): Write notes based on source metadata — URL, type, priority, parseInstructions. Good for bulk coverage but claims about page structure, cadence, and version format are inferred, not verified. Suitable for initial scaffolding or low-priority orgs.
+
+**Verified** (thorough, from actual data): Before writing, query release data and fetch logs to ground every claim in observation:
+
+1. `releases list <slug> --json` — Check actual version formats, titles, content length, publishedAt patterns
+2. `releases fetch-log <slug> --json` — Check for errors, success rates, stale data
+3. Analyze: calculate real cadence from dates, identify empty content or null fields, spot date drift
+4. Write notes citing specific data points, not general assumptions
+
+Use the verified approach for high-value orgs, when onboarding new orgs with scrape sources, or when enriching stale compilation-only guides. The difference: "this source likely needs JS rendering" (compilation) vs "all 50 releases have empty content — the RSS feed delivers summaries only, needs enrichment" (verified).
 
 Write notes during onboarding after you've fetched and validated sources. Update them when you discover new quirks or when source behavior changes. If notes are empty or stale, write them before doing fetch work — future agents (including yourself in later sessions) will benefit.
 
