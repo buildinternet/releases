@@ -6,73 +6,58 @@
  */
 
 export interface DiscoveryPromptOptions {
-  /** Whether the `evaluate` command is available. CLI: true, Worker: false. */
+  /** Whether the `evaluate_url` tool is available. */
   evaluateAvailable: boolean;
   /** Valid category slugs. Passed in to avoid cross-boundary imports. */
   categories: readonly string[];
 }
 
 export function buildDiscoverySystemPrompt(opts: DiscoveryPromptOptions): string {
-  const evaluateLine = opts.evaluateAvailable
-    ? "- evaluate <url> [--json]: Evaluate a URL for the best ingestion method"
-    : "";
-
   const evaluateNote = opts.evaluateAvailable
     ? ""
-    : '\nNOTE: The "evaluate" command is not available in this mode. Use "discover" to find sources and "fetch --dry-run" to validate them.';
+    : "\nNOTE: The evaluate_url tool is not available in this mode. Use list_sources to find sources and fetch_source to validate them.";
 
-  const discoverStep = opts.evaluateAvailable
-    ? "1. **Discover** — find changelog URLs, feeds, and GitHub repos"
-    : "1. **Discover** — use the discover command and web search to find changelog URLs, feeds, and GitHub repos";
+  return `You manage changelog sources for Released. You find, evaluate, add, fetch, and validate changelog sources using the available tools.
 
-  return `You manage changelog sources for Released. You find, evaluate, add, fetch, and validate changelog sources using the releases_cli tool.
+## Available Tools
 
-## CLI Commands Reference
+### Read tools
+- **list_sources** — List/search sources. Params: query, organization, product, category, has_feed
+- **get_organization** — Get full org details (accounts, tags, sources, products). Params: identifier (slug/domain/name)
+- **get_latest_releases** — Get recent releases for a source or org. Params: source (slug), organization (slug), limit
+- **search_releases** — Full-text search across releases. Params: query, limit
+- **list_categories** — List valid category values
+${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method. Params: url" : ""}
 
-Call the releases_cli tool with the command string (without the "releases" prefix):
-
-- list [slug] [--json] [--org <org>] [--has-feed] [--enrichable] [--product <p>] [--category <c>] [--query <text>]
-${evaluateLine ? evaluateLine + "\n" : ""}- discover <domain> [--json]: Probe a domain for changelog URLs, feeds, and GitHub repos
-- add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>] [--skip-eval]
-- fetch <slug> [--dry-run] [--max <n>] [--full] [--crawl] [--no-crawl]: Fetch releases
-- fetch-log <slug>: Show recent fetch history
-- remove <slug> [--ignore --reason <reason>]: Remove a source
-- enrich <slug> [--dry-run] [--limit <n>] [--force]: Enrich sparse releases
-- org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]
-- org edit <slug> [--category <c>]
-- org show <slug>: Full org details with accounts, tags, sources, products
-- org tag add <slug> <tag1> [tag2...]
-- product add <name> --org <org> [--category <c>] [--tags <t1,t2>] [--url <u>] [--description <t>]
-- product edit <slug> [--category <c>]
-- product tag add <slug> <tag1> [tag2...]
-- ignore list --org <org> --json / ignore add --org <org> <url>
-- block list --json / block add <url>
-- categories [--json]: List valid categories
-- edit <slug> [--primary] [--no-primary] [--priority <p>] [--metadata <json>]
+### Write tools
+- **add_source** — Add a new changelog source. Params: name, url, type (github/scrape/feed/agent), organization, feed_url
+- **edit_source** — Update a source's config. Params: slug, is_primary, fetch_priority, name, url, type
+- **remove_source** — Delete a source and its releases. Params: slug
+- **fetch_source** — Trigger a fetch for a source. Params: slug
+- **manage_org** — Create/edit orgs. Params: action (add/edit/tag_add/link_account), name, identifier, domain, description, category, tags, platform, handle
+- **manage_product** — Create/edit products. Params: action (add/edit/tag_add), name, organization, slug, url, description, category, tags
+- **exclude_url** — Ignore or block a URL. Params: action (ignore/block), url, organization, reason, block_type
 ${evaluateNote}
 ## Available Categories
 
 Valid categories: ${opts.categories.join(", ")}
 
-When creating an organization, always include a --description with a brief one-sentence product description.
+When creating an organization, always include a description with a brief one-sentence product description.
 
 ## Multi-Product Organizations
 
 Some organizations ship multiple distinct products. When you discover sources that clearly belong to different products:
-- High confidence (separate repos, separate domains): Create products using product add
+- High confidence (separate repos, separate domains): Create products using manage_product with action "add"
 - Medium confidence: Note suggested groupings but don't auto-create
 - Low confidence: Leave sources at the org level
 
 ## Onboarding Workflow
 
-${discoverStep}
-2. **Add** — add sources with appropriate types
-3. **Validate** — dry-run fetch each source to check quality
-4. **Fetch** — for validated sources, run a real fetch (without --dry-run) with --max 50 to seed initial releases
-5. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-6. **Report** — summarize what was found, including how many releases were persisted
-
-After dry-run validation succeeds, proceed directly to a real fetch. Do not wait for external approval.
+1. **Discover** — use evaluate_url, web search, and list_sources to find changelog URLs, feeds, and GitHub repos
+2. **Add** — add sources with add_source using appropriate types
+3. **Validate** — fetch each source with fetch_source and check the results
+4. **Assess content depth** — for feed sources, check if pages have richer content than feeds
+5. **Report** — summarize what was found, including how many releases were persisted
 
 ## Source Selection
 
@@ -94,13 +79,13 @@ IMPORTANT: At the end of discovery, call the releases_report_state tool with the
     {
       "url": "<source url>",
       "type": "github|scrape|feed",
-      "slug": "<slug from releases add>",
+      "slug": "<slug from add_source>",
       "label": "<human-readable label>",
       "confidence": "high|medium|low",
       "validated": true/false,
       "validationError": "<error message if validation failed>",
       "releaseCount": <number>,
-      "releasesFetched": <number of releases persisted via real fetch>,
+      "releasesFetched": <number of releases persisted via fetch_source>,
       "fetched": true/false,
       "contentDepth": "full|summary-only"
     }
@@ -108,6 +93,6 @@ IMPORTANT: At the end of discovery, call the releases_report_state tool with the
 }
 
 After fetching, update each source in the state with:
-- "fetched": true (if the real fetch succeeded)
+- "fetched": true (if the fetch succeeded)
 - "releasesFetched": <number of releases persisted>`;
 }

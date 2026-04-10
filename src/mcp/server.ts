@@ -250,9 +250,9 @@ if (process.env.ENABLE_AI_TOOLS === "true") {
   });
 }
 
-// ── list_products ────────────────────────────────────────────────────
-server.registerTool("list_products", {
-  description: "List all indexed products/sources",
+// ── list_sources ─────────────────────────────────────────────────────
+server.registerTool("list_sources", {
+  description: "List all indexed changelog sources",
   inputSchema: {
     organization: z.string().optional().describe("Filter to sources belonging to this organization"),
   },

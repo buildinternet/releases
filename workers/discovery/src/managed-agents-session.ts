@@ -12,7 +12,7 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
-import { createHTTPExecutor } from "./http-executor.js";
+import { createTypedExecutor, API_TOOL_NAMES } from "../../../src/shared/agent-tools.js";
 
 export interface SessionParams {
   company: string;
@@ -89,7 +89,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           ),
       };
 
-      const executor = createHTTPExecutor({ fetcher, apiKey: releasedApiKey });
+      const executor = createTypedExecutor({ fetcher, apiKey: releasedApiKey });
 
       await this.notifyStatusHub({
         type: "session:start",
@@ -115,13 +115,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       let prompt: string;
       if (mode === "update") {
         const slugList = (params.sourceSlugs ?? []).map(s => `- ${s}`).join("\n");
-        prompt = `Fetch release updates for the following sources:\n${slugList}\n\nFor each source, run: fetch <slug> --max 100\nReport the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
+        prompt = `Fetch release updates for the following sources:\n${slugList}\n\nFor each source, use the fetch_source tool with the source slug. Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
       } else {
         const hints: string[] = [];
         if (params.domain) hints.push(`Their website is ${params.domain}.`);
         if (params.githubOrg) hints.push(`Their GitHub organization is ${params.githubOrg}.`);
         const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-        prompt = `Find and evaluate changelog sources for "${params.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+        prompt = `Find and evaluate changelog sources for "${params.company}".${hintStr} Check what we already have with list_sources, discover new sources, evaluate URLs, add and fetch validated sources. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
       }
 
       const stream = await (client.beta.sessions.events as any).stream(session.id);
@@ -144,9 +144,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           switch (event.type) {
             case "agent.custom_tool_use": {
               const toolEvent = event as any;
+              const toolName: string = toolEvent.name;
+              const toolInput: Record<string, unknown> = toolEvent.input ?? {};
 
-              if (toolEvent.name === "releases_report_state") {
-                const reported = toolEvent.input?.state;
+              // Handle report_state locally (not proxied to API)
+              if (toolName === "releases_report_state") {
+                const reported = toolInput.state;
                 if (reported && typeof reported === "object") {
                   capturedState = reported as Record<string, unknown>;
                   capturedState["updatedAt"] = new Date().toISOString();
@@ -161,22 +164,23 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                 continue;
               }
 
-              if (toolEvent.name === "releases_cli") {
-                const command = toolEvent.input?.command ?? "";
+              // Dispatch known tools through the typed executor
+              if (API_TOOL_NAMES.includes(toolName)) {
                 toolCallCount++;
 
                 await this.ctx.storage.put("progress", {
                   step: "discovery",
                   sourcesFound: 0,
                   sourcesValidated: 0,
-                  currentAction: `releases ${command}`,
+                  currentAction: toolName,
                 });
 
-                const result = await executor(command);
+                const result = await executor(toolName, toolInput);
+                const output = result ?? "(no output)";
                 const maxLen = 50_000;
-                const truncated = result.length > maxLen
-                  ? result.slice(0, maxLen) + `\n\n[output truncated — ${result.length} total chars]`
-                  : result;
+                const truncated = output.length > maxLen
+                  ? output.slice(0, maxLen) + `\n\n[output truncated — ${output.length} total chars]`
+                  : output;
 
                 await (client.beta.sessions.events as any).send(session.id, {
                   events: [{
@@ -190,7 +194,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   events: [{
                     type: "user.custom_tool_result",
                     custom_tool_use_id: toolEvent.id,
-                    content: [{ type: "text", text: "Unknown tool" }],
+                    content: [{ type: "text", text: `Unknown tool: ${toolName}` }],
                   }],
                 });
               }

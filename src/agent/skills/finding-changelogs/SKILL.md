@@ -104,13 +104,13 @@ Sources found via these mechanisms are tagged:
 
 Both carry `confidence: "high"` since they represent explicit publisher intent.
 
-## Using the CLI
+## Using the Tools
 
-### `releases evaluate <url>`
+### `evaluate_url`
 
-Runs automated pre-checks (provider detection, feed discovery) and returns a recommendation. Use `--json` for structured output.
+Runs automated pre-checks (provider detection, feed discovery) and returns a recommendation.
 
-Key fields in JSON output:
+Key fields in output:
 - `recommendedMethod`: `feed`, `github`, `markdown`, `scrape`, or `crawl`
 - `recommendedUrl`: The URL to use (may differ from the input URL)
 - `feedUrl` / `feedType`: If a feed was found
@@ -119,9 +119,9 @@ Key fields in JSON output:
 - `confidence`: `high` (structured source found), `medium` (clear page structure), `low` (unclear)
 - `alternatives`: Other viable sources found
 
-### `releases discover <domain>`
+### `list_sources` with query
 
-Probes a domain for changelog URLs, feeds, and GitHub repos. Returns candidate URLs to evaluate. Use this as a starting point when you don't know where a company's changelogs live.
+Use with a domain or company name query to check what sources already exist. Use as a starting point when you don't know where a company's changelogs live.
 
 ## Pre-checks (automated)
 
@@ -133,7 +133,7 @@ The `evaluate` command runs these before returning:
 
 ## When to Evaluate Manually
 
-If `releases evaluate` returns `confidence: low` or `recommendedMethod: scrape`, you may want to investigate the page yourself:
+If `evaluate_url` returns `confidence: low` or `recommendedMethod: scrape`, you may want to investigate the page yourself:
 
 1. **Fetch the page** with `WebFetch` and look at the HTML source.
 2. **Look for feeds** — feed URLs embedded in JavaScript, non-standard paths, or links to RSS/Atom.
@@ -145,7 +145,7 @@ If `releases evaluate` returns `confidence: low` or `recommendedMethod: scrape`,
 
 When evaluating multiple changelog sources for an org, identify which one is the company's **primary changelog** — the top-level, platform-wide changelog that covers the product as a whole. This is typically a website changelog page (e.g., `example.com/changelog`) rather than individual GitHub repos or product-specific pages.
 
-After adding sources, mark the primary one with `releases edit <slug> --primary`. Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
+After adding sources, mark the primary one with `edit_source` (slug, is_primary: true). Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
 
 ## When to Use Crawl
 
@@ -208,10 +208,7 @@ When in doubt, add and pause rather than skip entirely. A focused index with 3 c
 
 When you find a source that matches the staleness or ecosystem criteria above, **still add it to the database** but immediately set it to `--priority paused`. This prevents future onboard runs from rediscovering the same source and re-evaluating it. The source record serves as documentation that "we know about this, and we decided not to track it."
 
-```bash
-releases add "CDK for Terraform" --url https://github.com/hashicorp/terraform-cdk --org hashicorp --type github --skip-eval
-releases edit cdk-for-terraform --priority paused
-```
+Use `add_source` with name, url, organization, and type params, then `edit_source` with fetch_priority: "paused".
 
 Do the same for ecosystem plugins, deprecated products, and low-value repos. The goal is to capture the discovery decision, not to lose the knowledge.
 
@@ -219,6 +216,6 @@ Do the same for ecosystem plugins, deprecated products, and low-value repos. The
 
 Organizations can have multiple distinct products (e.g., Vercel → Next.js, Turborepo, v0). When discovering sources for an org, consider whether they belong to separate products.
 
-Use the `product add`, `product tag add`, `org tag add`, and `categories` CLI commands to organize what you find. The full list of valid categories is provided in your system prompt.
+Use the `manage_product`, `manage_org`, and `list_categories` tools to organize what you find. The full list of valid categories is provided in your system prompt.
 
 Don't force product groupings when sources are ambiguous — leave them at the org level and note suggestions in the state file.

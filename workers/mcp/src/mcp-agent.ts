@@ -5,7 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import {
   searchReleases,
   getLatestReleases,
-  listProducts,
+  listSources,
   listOrganizations,
   summarizeChanges,
   compareProducts,
@@ -56,12 +56,12 @@ export function createServer(env: Env) {
     },
   }, async (params) => getLatestReleases(db, params));
 
-  server.registerTool("list_products", {
-    description: "List all indexed products/sources",
+  server.registerTool("list_sources", {
+    description: "List all indexed changelog sources",
     inputSchema: {
       organization: z.string().optional().describe("Filter to sources belonging to this organization"),
     },
-  }, async (params) => listProducts(db, params));
+  }, async (params) => listSources(db, params));
 
   server.registerTool("list_organizations", {
     description: "List all indexed organizations, optionally filtered",

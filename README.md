@@ -177,7 +177,7 @@ releases serve
 | `get_latest_releases` | Most recent releases, optionally filtered by product or org | Yes | Yes |
 | `summarize_changes` | AI summary of a product's recent changes | Gated | Gated |
 | `compare_products` | AI comparison between two products | Gated | Gated |
-| `list_products` | List all tracked sources | Yes | Yes |
+| `list_sources` | List all tracked sources | Yes | Yes |
 | `list_organizations` | List all organizations with their linked sources | Yes | Yes |
 | `add_source` | Add a new changelog source from a URL | -- | Yes |
 | `remove_source` | Remove a source from the index | -- | Yes |

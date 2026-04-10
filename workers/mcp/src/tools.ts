@@ -213,9 +213,9 @@ export async function getLatestReleases(
   return text(result);
 }
 
-// ── list_products ────────────────────────────────────────────────────
+// ── list_sources ─────────────────────────────────────────────────────
 
-export async function listProducts(
+export async function listSources(
   db: D1Db,
   params: { organization?: string },
 ): Promise<ToolResult> {

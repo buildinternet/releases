@@ -118,7 +118,7 @@ Discovery guardrails: The discovery worker checks `GET /api/sessions?status=runn
 
 ## Remote MCP Server
 
-The MCP Worker (`workers/mcp/`) exposes a remote MCP server at `mcp.releases.sh` using Cloudflare's `createMcpHandler` with Streamable HTTP transport. It provides 6 read-only tools: `search_releases`, `get_latest_releases`, `list_products`, `list_organizations`, `summarize_changes`, and `compare_products`. No authentication required — all tools are public.
+The MCP Worker (`workers/mcp/`) exposes a remote MCP server at `mcp.releases.sh` using Cloudflare's `createMcpHandler` with Streamable HTTP transport. It provides 6 read-only tools: `search_releases`, `get_latest_releases`, `list_sources`, `list_organizations`, `summarize_changes`, and `compare_products`. No authentication required — all tools are public.
 
 The worker binds to the same D1 database as the API and discovery workers. AI tools (`summarize_changes`, `compare_products`) use an `ANTHROPIC_API_KEY` from the secrets store. Like the discovery worker, `workers/mcp/` is excluded from root `workspaces` to avoid import conflicts.
 

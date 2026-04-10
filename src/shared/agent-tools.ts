@@ -1,0 +1,637 @@
+/**
+ * Typed tool definitions and executor for managed agents.
+ *
+ * Replaces the string-parsing http-executor with structured tool schemas
+ * and a typed dispatcher that maps tool calls directly to REST API endpoints.
+ *
+ * Shared between:
+ * - CLI path (src/agent/managed-discovery.ts)
+ * - Worker path (workers/discovery/src/managed-agents-session.ts)
+ */
+
+// ── Tool input types ─────────────────────────────────────────────────
+
+export interface ListSourcesInput {
+  query?: string;
+  organization?: string;
+  product?: string;
+  category?: string;
+  has_feed?: boolean;
+}
+
+export interface AddSourceInput {
+  name: string;
+  url: string;
+  type?: "github" | "scrape" | "feed" | "agent";
+  organization?: string;
+  feed_url?: string;
+}
+
+export interface EditSourceInput {
+  slug: string;
+  is_primary?: boolean;
+  fetch_priority?: "normal" | "low" | "paused";
+  name?: string;
+  url?: string;
+  type?: "github" | "scrape" | "feed" | "agent";
+}
+
+export interface RemoveSourceInput {
+  slug: string;
+}
+
+export interface FetchSourceInput {
+  slug: string;
+}
+
+export interface GetOrganizationInput {
+  identifier: string;
+}
+
+export interface ManageOrgInput {
+  action: "add" | "edit" | "tag_add" | "link_account";
+  /** Required for add */
+  name?: string;
+  /** Identifier for edit/tag_add/link_account — slug, domain, or name */
+  identifier?: string;
+  domain?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+  /** For link_account */
+  platform?: string;
+  handle?: string;
+}
+
+export interface ManageProductInput {
+  action: "add" | "edit" | "tag_add";
+  /** Required for add */
+  name?: string;
+  /** Org slug — required for add */
+  organization?: string;
+  /** Product slug — required for edit/tag_add */
+  slug?: string;
+  url?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+}
+
+export interface EvaluateUrlInput {
+  url: string;
+}
+
+export interface ExcludeUrlInput {
+  action: "ignore" | "block";
+  url: string;
+  /** Required for ignore */
+  organization?: string;
+  reason?: string;
+  /** For block: "exact" or "domain" */
+  block_type?: "exact" | "domain";
+}
+
+export interface GetLatestReleasesInput {
+  source?: string;
+  organization?: string;
+  limit?: number;
+}
+
+export interface SearchReleasesInput {
+  query: string;
+  limit?: number;
+}
+
+export interface ReportStateInput {
+  state: Record<string, unknown>;
+}
+
+// Discriminated union for executor dispatch
+export type AgentToolCall =
+  | { tool: "list_sources"; input: ListSourcesInput }
+  | { tool: "add_source"; input: AddSourceInput }
+  | { tool: "edit_source"; input: EditSourceInput }
+  | { tool: "remove_source"; input: RemoveSourceInput }
+  | { tool: "fetch_source"; input: FetchSourceInput }
+  | { tool: "get_organization"; input: GetOrganizationInput }
+  | { tool: "manage_org"; input: ManageOrgInput }
+  | { tool: "manage_product"; input: ManageProductInput }
+  | { tool: "evaluate_url"; input: EvaluateUrlInput }
+  | { tool: "exclude_url"; input: ExcludeUrlInput }
+  | { tool: "get_latest_releases"; input: GetLatestReleasesInput }
+  | { tool: "search_releases"; input: SearchReleasesInput }
+  | { tool: "list_categories"; input: Record<string, never> }
+  | { tool: "releases_report_state"; input: ReportStateInput };
+
+// ── Anthropic tool schemas ───────────────────────────────────────────
+
+/** Tool definitions in Anthropic custom tool format, for agent/environment registration. */
+export const AGENT_TOOLS = [
+  { type: "agent_toolset_20260401", default_config: { enabled: true } },
+
+  // ── Read tools ──
+
+  {
+    type: "custom",
+    name: "list_sources",
+    description:
+      "List changelog sources, optionally filtered. Returns source name, slug, type, URL, and last fetch date.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search by source name, slug, or URL" },
+        organization: { type: "string", description: "Filter to sources belonging to this org (slug or domain)" },
+        product: { type: "string", description: "Filter to sources under this product (slug)" },
+        category: { type: "string", description: "Filter by category" },
+        has_feed: { type: "boolean", description: "Only sources with a discovered feed URL" },
+      },
+    },
+  },
+  {
+    type: "custom",
+    name: "get_organization",
+    description:
+      "Get full details for an organization — accounts, tags, sources, products, and domain aliases.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        identifier: { type: "string", description: "Org slug, domain, or name" },
+      },
+      required: ["identifier"],
+    },
+  },
+  {
+    type: "custom",
+    name: "get_latest_releases",
+    description:
+      "Get the most recent releases for a source or organization. Returns title, version, date, and content preview.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        source: { type: "string", description: "Source slug to get releases for" },
+        organization: { type: "string", description: "Org slug to get releases across all its sources" },
+        limit: { type: "number", description: "Max releases to return (default 10)" },
+      },
+    },
+  },
+  {
+    type: "custom",
+    name: "search_releases",
+    description:
+      "Full-text search across all indexed release notes. Returns matching releases with source info and content preview.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        query: { type: "string", description: "Search query" },
+        limit: { type: "number", description: "Max results (default 20)" },
+      },
+      required: ["query"],
+    },
+  },
+  {
+    type: "custom",
+    name: "list_categories",
+    description:
+      "List valid category values for organizations and products.",
+    input_schema: {
+      type: "object" as const,
+      properties: {},
+    },
+  },
+
+  // ── Write tools ──
+
+  {
+    type: "custom",
+    name: "add_source",
+    description:
+      "Add a new changelog source. Type is auto-detected from URL if omitted (GitHub URLs → github, others → scrape).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        name: { type: "string", description: "Display name for the source" },
+        url: { type: "string", description: "URL of the changelog source" },
+        type: { type: "string", enum: ["github", "scrape", "feed", "agent"], description: "Source type (auto-detected if omitted)" },
+        organization: { type: "string", description: "Org slug to associate with" },
+        feed_url: { type: "string", description: "Direct feed URL if known" },
+      },
+      required: ["name", "url"],
+    },
+  },
+  {
+    type: "custom",
+    name: "edit_source",
+    description:
+      "Edit an existing changelog source's configuration.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        slug: { type: "string", description: "Source slug to edit" },
+        is_primary: { type: "boolean", description: "Mark as primary source for its org" },
+        fetch_priority: { type: "string", enum: ["normal", "low", "paused"], description: "Fetch priority tier" },
+        name: { type: "string", description: "New display name" },
+        url: { type: "string", description: "New URL" },
+        type: { type: "string", enum: ["github", "scrape", "feed", "agent"], description: "New source type" },
+      },
+      required: ["slug"],
+    },
+  },
+  {
+    type: "custom",
+    name: "remove_source",
+    description:
+      "Remove a changelog source and all its releases.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        slug: { type: "string", description: "Source slug to remove" },
+      },
+      required: ["slug"],
+    },
+  },
+  {
+    type: "custom",
+    name: "fetch_source",
+    description:
+      "Trigger a fetch for a source to pull its latest releases. For feed/GitHub sources, fetches server-side. For scrape/agent sources, flags for CLI pickup.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        slug: { type: "string", description: "Source slug to fetch" },
+      },
+      required: ["slug"],
+    },
+  },
+  {
+    type: "custom",
+    name: "manage_org",
+    description:
+      "Create or modify an organization. Actions: add (create new), edit (update fields), tag_add (add tags), link_account (link a platform account like GitHub or Twitter).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["add", "edit", "tag_add", "link_account"], description: "Operation to perform" },
+        name: { type: "string", description: "Org name (required for add)" },
+        identifier: { type: "string", description: "Org slug/domain/name (required for edit, tag_add, link_account)" },
+        domain: { type: "string", description: "Primary domain (e.g. vercel.com)" },
+        description: { type: "string", description: "Brief one-sentence product description" },
+        category: { type: "string", description: "Category slug" },
+        tags: { type: "array", items: { type: "string" }, description: "Tags to add" },
+        platform: { type: "string", description: "Platform name for link_account (github, x, linkedin, etc.)" },
+        handle: { type: "string", description: "Account handle for link_account" },
+      },
+      required: ["action"],
+    },
+  },
+  {
+    type: "custom",
+    name: "manage_product",
+    description:
+      "Create or modify a product (grouping layer under an organization). Actions: add (create new), edit (update fields), tag_add (add tags).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["add", "edit", "tag_add"], description: "Operation to perform" },
+        name: { type: "string", description: "Product name (required for add)" },
+        organization: { type: "string", description: "Org slug (required for add)" },
+        slug: { type: "string", description: "Product slug (required for edit, tag_add)" },
+        url: { type: "string", description: "Canonical product URL" },
+        description: { type: "string", description: "Brief product description" },
+        category: { type: "string", description: "Category slug" },
+        tags: { type: "array", items: { type: "string" }, description: "Tags to add" },
+      },
+      required: ["action"],
+    },
+  },
+
+  // ── Utility tools ──
+
+  {
+    type: "custom",
+    name: "evaluate_url",
+    description:
+      "Evaluate a changelog URL to determine the best ingestion method. Returns provider detection, feed discovery, and recommended source type.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        url: { type: "string", description: "URL to evaluate" },
+      },
+      required: ["url"],
+    },
+  },
+  {
+    type: "custom",
+    name: "exclude_url",
+    description:
+      "Ignore a URL for a specific org (prevents re-discovery) or globally block a URL/domain (spam, aggregators).",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: { type: "string", enum: ["ignore", "block"], description: "ignore = org-scoped, block = global" },
+        url: { type: "string", description: "URL or domain to exclude" },
+        organization: { type: "string", description: "Org slug (required for ignore)" },
+        reason: { type: "string", description: "Why this URL is being excluded" },
+        block_type: { type: "string", enum: ["exact", "domain"], description: "For block: exact URL or entire domain (default: exact)" },
+      },
+      required: ["action", "url"],
+    },
+  },
+
+  // ── Session tool ──
+
+  {
+    type: "custom",
+    name: "releases_report_state",
+    description:
+      "Report the final discovery state as JSON. Call this at the end of discovery instead of writing to a file.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        state: {
+          type: "object",
+          description: "The complete discovery state JSON object with product, domain, sources, etc.",
+        },
+      },
+      required: ["state"],
+    },
+  },
+] as const;
+
+/** Names of tools that are dispatched via the API (everything except report_state). */
+export const API_TOOL_NAMES: string[] = AGENT_TOOLS
+  .filter((t): t is Extract<typeof t, { type: "custom" }> => t.type === "custom")
+  .map((t) => t.name)
+  .filter((n) => n !== "releases_report_state");
+
+// ── Valid categories (duplicated from src/lib/categories.ts to avoid cross-boundary import) ──
+
+const CATEGORIES = [
+  "ai", "cloud", "database", "design", "developer-tools",
+  "devops", "framework", "infrastructure", "observability", "security",
+];
+
+// ── Typed executor ───────────────────────────────────────────────────
+
+export interface APIClientOptions {
+  /** Fetcher — either a Cloudflare service binding or a plain fetch wrapper. */
+  fetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
+  /** Bearer token for authenticated requests. */
+  apiKey: string;
+  /** Base URL prefix (default: "https://api" for service bindings). */
+  baseUrl?: string;
+}
+
+/**
+ * Create a typed executor that maps structured tool calls to REST API calls.
+ *
+ * Returns a function that takes a tool name and input object, routes to the
+ * correct API endpoint, and returns the response text. Returns null for
+ * `releases_report_state` (handled by the session runner, not the executor).
+ */
+export function createTypedExecutor(opts: APIClientOptions) {
+  const baseUrl = opts.baseUrl ?? "https://api";
+
+  async function api(method: string, path: string, body?: object): Promise<string> {
+    const url = `${baseUrl}/v1${path}`;
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${opts.apiKey}`,
+    };
+
+    try {
+      const res = await opts.fetcher.fetch(url, {
+        method,
+        headers,
+        body: body ? JSON.stringify(body) : undefined,
+      });
+
+      const text = await res.text();
+      if (!res.ok) {
+        return `Error (HTTP ${res.status}): ${text}`;
+      }
+      return text || "(no output)";
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : String(err)}`;
+    }
+  }
+
+  /**
+   * Execute a typed tool call. Returns the result text, or null if the tool
+   * is `releases_report_state` (which is handled by the session runner).
+   */
+  return async (toolName: string, input: Record<string, unknown>): Promise<string | null> => {
+    switch (toolName) {
+      // ── Read tools ──
+
+      case "list_sources": {
+        const params = new URLSearchParams();
+        params.set("format", "json");
+        if (input.query) params.set("query", String(input.query));
+        if (input.organization) params.set("orgSlug", String(input.organization));
+        if (input.product) params.set("productSlug", String(input.product));
+        if (input.category) params.set("category", String(input.category));
+        if (input.has_feed) params.set("has_feed", "true");
+        return api("GET", `/sources?${params}`);
+      }
+
+      case "get_organization": {
+        const identifier = String(input.identifier ?? "");
+        if (!identifier) return "Error: identifier is required";
+        return api("GET", `/orgs/${encodeURIComponent(identifier)}`);
+      }
+
+      case "get_latest_releases": {
+        if (input.source) {
+          const slug = String(input.source);
+          const limit = input.limit ? `&limit=${input.limit}` : "";
+          return api("GET", `/sources/${encodeURIComponent(slug)}/releases?${limit}`);
+        }
+        if (input.organization) {
+          const slug = String(input.organization);
+          const limit = input.limit ? `&limit=${input.limit}` : "&limit=10";
+          return api("GET", `/orgs/${encodeURIComponent(slug)}/releases?${limit}`);
+        }
+        return "Error: provide either source or organization";
+      }
+
+      case "search_releases": {
+        const q = String(input.query ?? "");
+        if (!q) return "Error: query is required";
+        const params = new URLSearchParams({ q });
+        if (input.limit) params.set("limit", String(input.limit));
+        return api("GET", `/search?${params}`);
+      }
+
+      case "list_categories": {
+        return JSON.stringify({ categories: CATEGORIES });
+      }
+
+      // ── Write tools ──
+
+      case "add_source": {
+        const body: Record<string, unknown> = {
+          name: input.name,
+          url: input.url,
+        };
+        if (input.type) body.type = input.type;
+        if (input.organization) body.orgSlug = input.organization;
+        if (input.feed_url) {
+          body.metadata = JSON.stringify({ feedUrl: input.feed_url });
+        }
+        return api("POST", "/sources", body);
+      }
+
+      case "edit_source": {
+        const slug = String(input.slug ?? "");
+        if (!slug) return "Error: slug is required";
+        const body: Record<string, unknown> = {};
+        if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
+        if (input.fetch_priority) body.fetchPriority = input.fetch_priority;
+        if (input.name) body.name = input.name;
+        if (input.url) body.url = input.url;
+        if (input.type) body.type = input.type;
+        return api("PATCH", `/sources/${encodeURIComponent(slug)}`, body);
+      }
+
+      case "remove_source": {
+        const slug = String(input.slug ?? "");
+        if (!slug) return "Error: slug is required";
+        return api("DELETE", `/sources/${encodeURIComponent(slug)}`);
+      }
+
+      case "fetch_source": {
+        const slug = String(input.slug ?? "");
+        if (!slug) return "Error: slug is required";
+        return api("POST", `/sources/${encodeURIComponent(slug)}/fetch`);
+      }
+
+      case "manage_org": {
+        const action = String(input.action ?? "");
+
+        if (action === "add") {
+          const body: Record<string, unknown> = { name: input.name };
+          if (input.domain) body.domain = input.domain;
+          if (input.description) body.description = input.description;
+          if (input.category) body.category = input.category;
+          if (input.tags) body.tags = input.tags;
+          return api("POST", "/orgs", body);
+        }
+
+        if (action === "edit") {
+          const slug = String(input.identifier ?? "");
+          if (!slug) return "Error: identifier is required for edit";
+          const body: Record<string, unknown> = {};
+          if (input.name) body.name = input.name;
+          if (input.domain) body.domain = input.domain;
+          if (input.description) body.description = input.description;
+          if (input.category) body.category = input.category;
+          return api("PATCH", `/orgs/${encodeURIComponent(slug)}`, body);
+        }
+
+        if (action === "tag_add") {
+          const slug = String(input.identifier ?? "");
+          if (!slug) return "Error: identifier is required for tag_add";
+          if (!input.tags || !Array.isArray(input.tags)) return "Error: tags array is required";
+          return api("PUT", `/orgs/${encodeURIComponent(slug)}/tags`, { tags: input.tags });
+        }
+
+        if (action === "link_account") {
+          const slug = String(input.identifier ?? "");
+          if (!slug) return "Error: identifier is required for link_account";
+          if (!input.platform || !input.handle) return "Error: platform and handle are required";
+          return api("POST", `/orgs/${encodeURIComponent(slug)}/accounts`, {
+            platform: input.platform,
+            handle: input.handle,
+          });
+        }
+
+        return `Error: unknown action "${action}"`;
+      }
+
+      case "manage_product": {
+        const action = String(input.action ?? "");
+
+        if (action === "add") {
+          if (!input.name || !input.organization) return "Error: name and organization are required for add";
+          // Resolve org slug to ID — the API expects orgId, but we need to look up the org first
+          // For simplicity, we pass orgId as the slug and let the API resolve it
+          // Actually the API POST /products expects orgId, but we'll get it from org show
+          const orgRes = await api("GET", `/orgs/${encodeURIComponent(String(input.organization))}`);
+          let orgId: string | undefined;
+          try {
+            const org = JSON.parse(orgRes);
+            orgId = org.id;
+          } catch {
+            return `Error: could not resolve organization "${input.organization}": ${orgRes}`;
+          }
+          const body: Record<string, unknown> = { orgId, name: input.name };
+          if (input.slug) body.slug = input.slug;
+          if (input.url) body.url = input.url;
+          if (input.description) body.description = input.description;
+          if (input.category) body.category = input.category;
+          if (input.tags) body.tags = input.tags;
+          return api("POST", "/products", body);
+        }
+
+        if (action === "edit") {
+          const slug = String(input.slug ?? "");
+          if (!slug) return "Error: slug is required for edit";
+          const body: Record<string, unknown> = {};
+          if (input.name) body.name = input.name;
+          if (input.url) body.url = input.url;
+          if (input.description) body.description = input.description;
+          if (input.category) body.category = input.category;
+          return api("PATCH", `/products/${encodeURIComponent(slug)}`, body);
+        }
+
+        if (action === "tag_add") {
+          const slug = String(input.slug ?? "");
+          if (!slug) return "Error: slug is required for tag_add";
+          if (!input.tags || !Array.isArray(input.tags)) return "Error: tags array is required";
+          return api("PUT", `/products/${encodeURIComponent(slug)}/tags`, { tags: input.tags });
+        }
+
+        return `Error: unknown action "${action}"`;
+      }
+
+      // ── Utility tools ──
+
+      case "evaluate_url": {
+        const url = String(input.url ?? "");
+        if (!url) return "Error: url is required";
+        return api("GET", `/evaluate?url=${encodeURIComponent(url)}`);
+      }
+
+      case "exclude_url": {
+        const action = String(input.action ?? "");
+        const url = String(input.url ?? "");
+        if (!url) return "Error: url is required";
+
+        if (action === "ignore") {
+          const org = String(input.organization ?? "");
+          if (!org) return "Error: organization is required for ignore";
+          const body: Record<string, unknown> = { url };
+          if (input.reason) body.reason = input.reason;
+          return api("POST", `/orgs/${encodeURIComponent(org)}/ignored-urls`, body);
+        }
+
+        if (action === "block") {
+          const body: Record<string, unknown> = { pattern: url };
+          if (input.block_type) body.type = input.block_type;
+          if (input.reason) body.reason = input.reason;
+          return api("POST", "/blocked-urls", body);
+        }
+
+        return `Error: unknown action "${action}"`;
+      }
+
+      // ── Session tool (handled by caller) ──
+
+      case "releases_report_state":
+        return null;
+
+      default:
+        return `Error: unknown tool "${toolName}"`;
+    }
+  };
+}
