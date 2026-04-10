@@ -44,7 +44,7 @@ export interface OrgDetail {
   domain: string | null;
   description?: string | null;
   category?: string | null;
-  avatarUrl?: string | null;
+  avatarUrl: string | null;
   tags?: string[];
   sourceCount: number;
   releaseCount: number;

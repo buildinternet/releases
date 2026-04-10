@@ -63,6 +63,7 @@ const fullOrg: FormatOrgDetail = {
   slug: "vercel",
   name: "Vercel",
   domain: "vercel.com",
+  avatarUrl: null,
   description: "Frontend cloud platform",
   category: "cloud",
   tags: ["typescript", "edge"],
