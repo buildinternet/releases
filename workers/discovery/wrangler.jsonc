@@ -12,7 +12,8 @@
     "RELEASED_API_URL": "https://api.releases.sh",
     "RELEASED_DISCOVERY_ENGINE": "managed-agents",
     "ANTHROPIC_AGENT_ID": "agent_011CZtWpasPtsYjF3aysf2ZH",
-    "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU"
+    "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU",
+    "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB"
   },
   "containers": [{
     "class_name": "Sandbox",

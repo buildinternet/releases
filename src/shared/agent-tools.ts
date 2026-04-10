@@ -12,14 +12,10 @@
 import { CATEGORIES } from "../lib/categories.js";
 
 // ── Tool input types ─────────────────────────────────────────────────
-
-export interface ListSourcesInput {
-  query?: string;
-  organization?: string;
-  product?: string;
-  category?: string;
-  has_feed?: boolean;
-}
+// Read tools (list_sources, list_organizations, get_latest_releases,
+// search_releases, summarize_changes, compare_products) are provided by the
+// MCP server at mcp.releases.sh via vault credentials. Only write, utility,
+// and session tools remain as custom tools here.
 
 export interface AddSourceInput {
   name: string;
@@ -44,10 +40,6 @@ export interface RemoveSourceInput {
 
 export interface FetchSourceInput {
   slug: string;
-}
-
-export interface GetOrganizationInput {
-  identifier: string;
 }
 
 export interface ManageOrgInput {
@@ -93,35 +85,20 @@ export interface ExcludeUrlInput {
   block_type?: "exact" | "domain";
 }
 
-export interface GetLatestReleasesInput {
-  source?: string;
-  organization?: string;
-  limit?: number;
-}
-
-export interface SearchReleasesInput {
-  query: string;
-  limit?: number;
-}
-
 export interface ReportStateInput {
   state: Record<string, unknown>;
 }
 
-// Discriminated union for executor dispatch
+// Discriminated union for executor dispatch (custom tools only — reads via MCP)
 export type AgentToolCall =
-  | { tool: "list_sources"; input: ListSourcesInput }
   | { tool: "add_source"; input: AddSourceInput }
   | { tool: "edit_source"; input: EditSourceInput }
   | { tool: "remove_source"; input: RemoveSourceInput }
   | { tool: "fetch_source"; input: FetchSourceInput }
-  | { tool: "get_organization"; input: GetOrganizationInput }
   | { tool: "manage_org"; input: ManageOrgInput }
   | { tool: "manage_product"; input: ManageProductInput }
   | { tool: "evaluate_url"; input: EvaluateUrlInput }
   | { tool: "exclude_url"; input: ExcludeUrlInput }
-  | { tool: "get_latest_releases"; input: GetLatestReleasesInput }
-  | { tool: "search_releases"; input: SearchReleasesInput }
   | { tool: "list_categories"; input: Record<string, never> }
   | { tool: "releases_report_state"; input: ReportStateInput };
 
@@ -132,64 +109,11 @@ export const AGENT_TOOLS = [
   { type: "agent_toolset_20260401", default_config: { enabled: true } },
 
   // ── Read tools ──
+  // Most read tools (list_sources, list_organizations, get_latest_releases,
+  // search_releases, summarize_changes, compare_products) are provided by
+  // the MCP server via vault credentials. Only list_categories remains here
+  // because it's hardcoded and not backed by the MCP server.
 
-  {
-    type: "custom",
-    name: "list_sources",
-    description:
-      "List changelog sources, optionally filtered. Returns source name, slug, type, URL, and last fetch date.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        query: { type: "string", description: "Search by source name, slug, or URL" },
-        organization: { type: "string", description: "Filter to sources belonging to this org (slug or domain)" },
-        product: { type: "string", description: "Filter to sources under this product (slug)" },
-        category: { type: "string", description: "Filter by category" },
-        has_feed: { type: "boolean", description: "Only sources with a discovered feed URL" },
-      },
-    },
-  },
-  {
-    type: "custom",
-    name: "get_organization",
-    description:
-      "Get full details for an organization — accounts, tags, sources, products, and domain aliases.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        identifier: { type: "string", description: "Org slug, domain, or name" },
-      },
-      required: ["identifier"],
-    },
-  },
-  {
-    type: "custom",
-    name: "get_latest_releases",
-    description:
-      "Get the most recent releases for a source or organization. Returns title, version, date, and content preview.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        source: { type: "string", description: "Source slug to get releases for" },
-        organization: { type: "string", description: "Org slug to get releases across all its sources" },
-        limit: { type: "number", description: "Max releases to return (default 10)" },
-      },
-    },
-  },
-  {
-    type: "custom",
-    name: "search_releases",
-    description:
-      "Full-text search across all indexed release notes. Returns matching releases with source info and content preview.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        query: { type: "string", description: "Search query" },
-        limit: { type: "number", description: "Max results (default 20)" },
-      },
-      required: ["query"],
-    },
-  },
   {
     type: "custom",
     name: "list_categories",
@@ -416,46 +340,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
    */
   return async (toolName: string, input: Record<string, unknown>): Promise<string | null> => {
     switch (toolName) {
-      // ── Read tools ──
-
-      case "list_sources": {
-        const params = new URLSearchParams();
-        params.set("format", "json");
-        if (input.query) params.set("query", String(input.query));
-        if (input.organization) params.set("orgSlug", String(input.organization));
-        if (input.product) params.set("productSlug", String(input.product));
-        if (input.category) params.set("category", String(input.category));
-        if (input.has_feed) params.set("has_feed", "true");
-        return api("GET", `/sources?${params}`);
-      }
-
-      case "get_organization": {
-        const identifier = String(input.identifier ?? "");
-        if (!identifier) return "Error: identifier is required";
-        return api("GET", `/orgs/${encodeURIComponent(identifier)}`);
-      }
-
-      case "get_latest_releases": {
-        if (input.source) {
-          const slug = String(input.source);
-          const limit = input.limit ? `&limit=${input.limit}` : "";
-          return api("GET", `/sources/${encodeURIComponent(slug)}/releases?${limit}`);
-        }
-        if (input.organization) {
-          const slug = String(input.organization);
-          const limit = input.limit ? `&limit=${input.limit}` : "&limit=10";
-          return api("GET", `/orgs/${encodeURIComponent(slug)}/releases?${limit}`);
-        }
-        return "Error: provide either source or organization";
-      }
-
-      case "search_releases": {
-        const q = String(input.query ?? "");
-        if (!q) return "Error: query is required";
-        const params = new URLSearchParams({ q });
-        if (input.limit) params.set("limit", String(input.limit));
-        return api("GET", `/search?${params}`);
-      }
+      // ── Read tool (remaining — most reads served by MCP) ──
 
       case "list_categories": {
         return JSON.stringify({ categories: CATEGORIES });

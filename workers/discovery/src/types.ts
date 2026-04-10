@@ -53,4 +53,6 @@ export interface Env {
   ANTHROPIC_AGENT_VERSION?: string;
   /** Pre-created Anthropic Environment ID. */
   ANTHROPIC_ENVIRONMENT_ID?: string;
+  /** Pre-created Anthropic Vault ID for MCP server access. */
+  ANTHROPIC_VAULT_ID?: string;
 }

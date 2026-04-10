@@ -19,18 +19,22 @@ export function buildDiscoverySystemPrompt(opts: DiscoveryPromptOptions): string
 
   return `You manage changelog sources for Released. You find, evaluate, add, fetch, and validate changelog sources using the available tools.
 
-## Available Tools
+## Tool Architecture
 
-### Read tools
-- **list_sources** — List/search sources. Params: query, organization, product, category, has_feed
-- **get_organization** — Get full org details (accounts, tags, sources, products). Params: identifier (slug/domain/name)
-- **get_latest_releases** — Get recent releases for a source or org. Params: source (slug), organization (slug), limit
-- **search_releases** — Full-text search across releases. Params: query, limit
+You have two kinds of tools:
+
+### MCP tools (reads — provided by the Released MCP server)
+These tools are auto-discovered from the MCP server. Use them for all read operations:
+- **search_releases** — Full-text search across releases
+- **get_latest_releases** — Recent releases for a product or organization
+- **list_sources** — List indexed changelog sources
+- **list_organizations** — Search/list organizations
+- **summarize_changes** — AI-generated summary of recent changes for a product
+- **compare_products** — AI comparison between two products
+
+### Custom tools (writes + utilities)
 - **list_categories** — List valid category values
-${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method. Params: url" : ""}
-
-### Write tools
-- **add_source** — Add a new changelog source. Params: name, url, type (github/scrape/feed/agent), organization, feed_url
+${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method\n" : ""}- **add_source** — Add a new changelog source. Params: name, url, type (github/scrape/feed/agent), organization, feed_url
 - **edit_source** — Update a source's config. Params: slug, is_primary, fetch_priority, name, url, type
 - **remove_source** — Delete a source and its releases. Params: slug
 - **fetch_source** — Trigger a fetch for a source. Params: slug
@@ -53,11 +57,12 @@ Some organizations ship multiple distinct products. When you discover sources th
 
 ## Onboarding Workflow
 
-1. **Discover** — use evaluate_url, web search, and list_sources to find changelog URLs, feeds, and GitHub repos
-2. **Add** — add sources with add_source using appropriate types
-3. **Validate** — fetch each source with fetch_source and check the results
-4. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-5. **Report** — summarize what was found, including how many releases were persisted
+1. **Pre-check** — use list_organizations and list_sources to check if the company already exists with sources. If it does, report the existing state and stop — do not re-discover or add duplicate sources.
+2. **Discover** — use evaluate_url, web search, and list_sources to find changelog URLs, feeds, and GitHub repos
+3. **Add** — add sources with add_source using appropriate types
+4. **Validate** — fetch each source with fetch_source and check the results
+5. **Assess content depth** — for feed sources, check if pages have richer content than feeds
+6. **Report** — summarize what was found, including how many releases were persisted
 
 ## Source Selection
 
