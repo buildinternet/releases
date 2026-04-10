@@ -14,6 +14,7 @@ import type {
   OrgDetail,
   OrgReleaseItem,
   UnifiedSearchResponse,
+  KnowledgePageItem,
 } from "../api/types.js";
 
 // Re-export under the old names for any callers still using them
@@ -174,6 +175,12 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): s
   if (org.domain) {
     lines.push(yamlLine("domain", org.domain));
   }
+  if (org.description) {
+    lines.push(yamlLine("description", org.description));
+  }
+  if (org.category) {
+    lines.push(yamlLine("category", org.category));
+  }
   lines.push(yamlLine("sources", org.sourceCount));
   lines.push(yamlLine("total_releases", org.releaseCount));
   lines.push(yamlLine("releases_last_30d", org.releasesLast30Days));
@@ -185,6 +192,23 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): s
 
   if (opts.baseUrl) {
     lines.push(yamlLine("canonical", `${opts.baseUrl}/${org.slug}`));
+    if (org.knowledgePage) {
+      lines.push(yamlLine("knowledge_url", `${opts.baseUrl}/${org.slug}/knowledge.md`));
+    }
+  }
+
+  if (org.tags && org.tags.length > 0) {
+    lines.push("tags:");
+    for (const tag of org.tags) {
+      lines.push(`  - ${tag}`);
+    }
+  }
+
+  if (org.aliases && org.aliases.length > 0) {
+    lines.push("aliases:");
+    for (const alias of org.aliases) {
+      lines.push(`  - ${alias}`);
+    }
   }
 
   if (org.accounts.length > 0) {
@@ -197,6 +221,16 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): s
 
   lines.push("---");
   lines.push("");
+
+  // ── Products ──
+  if (org.products.length > 0) {
+    for (const product of org.products) {
+      lines.push(
+        `<Product${attr("name", product.name)}${attr("slug", product.slug)}${attr("sources", product.sourceCount)}${product.url ? attr("url", product.url) : ""} />`
+      );
+    }
+    lines.push("");
+  }
 
   // ── Sources ──
   for (const source of org.sources) {
@@ -367,6 +401,38 @@ export function searchToMarkdown(
     lines.push("No results found.");
     lines.push("");
   }
+
+  return lines.join("\n");
+}
+
+// ── Knowledge Page → Markdown ─────────────────────────────────────
+
+export function knowledgeToMarkdown(
+  knowledge: KnowledgePageItem,
+  opts: FormatOptions & { orgSlug?: string; productSlug?: string } = {},
+): string {
+  const lines: string[] = [];
+
+  lines.push("---");
+  lines.push(yamlLine("scope", knowledge.scope));
+  if (opts.orgSlug) {
+    lines.push(yamlLine("organization", opts.orgSlug));
+  }
+  if (opts.productSlug) {
+    lines.push(yamlLine("product", opts.productSlug));
+  }
+  lines.push(yamlLine("release_count", knowledge.releaseCount));
+  if (knowledge.lastContributingReleaseAt) {
+    lines.push(yamlLine("last_release", isoDateOnly(knowledge.lastContributingReleaseAt)));
+  }
+  lines.push(yamlLine("generated", isoDateOnly(knowledge.generatedAt)));
+  if (opts.baseUrl && opts.orgSlug) {
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/${opts.orgSlug}/knowledge.md`));
+  }
+  lines.push("---");
+  lines.push("");
+  lines.push(knowledge.content);
+  lines.push("");
 
   return lines.join("\n");
 }

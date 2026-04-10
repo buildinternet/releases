@@ -38,16 +38,21 @@ export interface OrgListItem {
 }
 
 export interface OrgDetail {
+  id?: string;
   slug: string;
   name: string;
   domain: string | null;
+  description?: string | null;
+  category?: string | null;
   avatarUrl: string | null;
+  tags?: string[];
   sourceCount: number;
   releaseCount: number;
   releasesLast30Days: number;
   avgReleasesPerWeek: number;
   lastFetchedAt: string | null;
   trackingSince: string;
+  aliases?: string[];
   accounts: { platform: string; handle: string }[];
   products: Array<{
     id: string;

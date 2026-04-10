@@ -7,6 +7,7 @@
 export {
   sourceToMarkdown,
   orgToMarkdown,
+  knowledgeToMarkdown,
 } from "@shared/formatters";
 
 export type {
