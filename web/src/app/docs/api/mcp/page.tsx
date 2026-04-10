@@ -52,6 +52,7 @@ export default function McpPage() {
           <tr><td><code>get_latest_releases</code></td><td>Get the most recent releases, optionally filtered by product or organization.</td></tr>
           <tr><td><code>list_products</code></td><td>List all changelog sources (products) in the index.</td></tr>
           <tr><td><code>list_organizations</code></td><td>List all organizations, searchable by name, slug, domain, or account handle.</td></tr>
+          <tr><td><code>get_organization</code></td><td>Detailed view of a single organization including accounts, tags, sources, products, and domain aliases.</td></tr>
         </tbody>
       </table>
 

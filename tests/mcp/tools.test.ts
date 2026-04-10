@@ -6,6 +6,9 @@ import {
   releases,
   orgAccounts,
   domainAliases,
+  tags,
+  orgTags,
+  products,
 } from "../../src/db/schema.js";
 
 // The MCP tools accept a drizzle DB instance. The bun-sqlite drizzle
@@ -16,6 +19,7 @@ import {
   getLatestReleases,
   listSources,
   listOrganizations,
+  getOrganization,
 } from "../../workers/mcp/src/tools.js";
 
 let testDatabase: TestDatabase;
@@ -109,6 +113,9 @@ beforeEach(() => {
   const db = getDb();
   db.delete(releases).run();
   db.delete(sources).run();
+  db.delete(orgTags).run();
+  db.delete(tags).run();
+  db.delete(products).run();
   db.delete(domainAliases).run();
   db.delete(orgAccounts).run();
   db.delete(organizations).run();
@@ -263,6 +270,76 @@ describe("searchReleases", () => {
       query: "release",
       organization: "nonexistent",
     });
+    expect(resultText(result)).toContain("No organization found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getOrganization
+// ---------------------------------------------------------------------------
+describe("getOrganization", () => {
+  it("returns detailed org info by slug", async () => {
+    seedData();
+    const result = await getOrganization(getDb() as any, { identifier: "acme" });
+    const txt = resultText(result);
+    expect(txt).toContain("Acme Corp");
+    expect(txt).toContain("acme.com");
+    expect(txt).toContain("github/acme-gh");
+    expect(txt).toContain("Acme CLI");
+    expect(txt).toContain("Acme Web");
+  });
+
+  it("resolves by domain", async () => {
+    seedData();
+    const result = await getOrganization(getDb() as any, { identifier: "acme.com" });
+    const txt = resultText(result);
+    expect(txt).toContain("Acme Corp");
+  });
+
+  it("resolves by domain alias", async () => {
+    seedData();
+    const result = await getOrganization(getDb() as any, { identifier: "acme-alias.com" });
+    const txt = resultText(result);
+    expect(txt).toContain("Acme Corp");
+  });
+
+  it("resolves by account handle", async () => {
+    seedData();
+    const result = await getOrganization(getDb() as any, { identifier: "acme-gh" });
+    const txt = resultText(result);
+    expect(txt).toContain("Acme Corp");
+  });
+
+  it("includes tags when present", async () => {
+    const { acme } = seedData();
+    const db = getDb();
+    const [tag] = db.insert(tags).values({ name: "typescript", slug: "typescript" }).returning().all();
+    db.insert(orgTags).values({ orgId: acme.id, tagId: tag.id }).run();
+
+    const result = await getOrganization(db as any, { identifier: "acme" });
+    expect(resultText(result)).toContain("typescript");
+  });
+
+  it("includes products when present", async () => {
+    const { acme } = seedData();
+    const db = getDb();
+    db.insert(products).values({ name: "Acme CLI Pro", slug: "acme-cli-pro", orgId: acme.id, url: "https://acme.com/cli-pro" }).run();
+
+    const result = await getOrganization(db as any, { identifier: "acme" });
+    const txt = resultText(result);
+    expect(txt).toContain("Acme CLI Pro");
+    expect(txt).toContain("acme-cli-pro");
+  });
+
+  it("includes aliases", async () => {
+    seedData();
+    const result = await getOrganization(getDb() as any, { identifier: "acme" });
+    expect(resultText(result)).toContain("acme-alias.com");
+  });
+
+  it("returns not-found for unknown identifier", async () => {
+    seedData();
+    const result = await getOrganization(getDb() as any, { identifier: "nonexistent" });
     expect(resultText(result)).toContain("No organization found");
   });
 });

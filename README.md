@@ -179,6 +179,7 @@ releases serve
 | `compare_products` | AI comparison between two products | Gated | Gated |
 | `list_sources` | List all tracked sources | Yes | Yes |
 | `list_organizations` | List all organizations with their linked sources | Yes | Yes |
+| `get_organization` | Detailed view of a single org (accounts, tags, sources, products, aliases) | Yes | Yes |
 | `add_source` | Add a new changelog source from a URL | -- | Yes |
 | `remove_source` | Remove a source from the index | -- | Yes |
 | `fetch_source` | Fetch new releases from a source | -- | Yes |

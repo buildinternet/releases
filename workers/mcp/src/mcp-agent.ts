@@ -7,6 +7,7 @@ import {
   getLatestReleases,
   listSources,
   listOrganizations,
+  getOrganization,
   summarizeChanges,
   compareProducts,
 } from "./tools.js";
@@ -70,6 +71,13 @@ export function createServer(env: Env) {
       platform: z.string().optional().describe("Filter to orgs with an account on this platform"),
     },
   }, async (params) => listOrganizations(db, params));
+
+  server.registerTool("get_organization", {
+    description: "Get detailed information about a single organization including accounts, tags, sources, products, and aliases",
+    inputSchema: {
+      identifier: z.string().describe("Organization slug, domain, name, or account handle"),
+    },
+  }, async (params) => getOrganization(db, params));
 
   if (env.ENABLE_AI_TOOLS === "true") {
     server.registerTool("summarize_changes", {
