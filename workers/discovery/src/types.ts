@@ -14,8 +14,10 @@ export interface OnboardResponse {
 export interface UpdateRequest {
   /** Label for StatusHub — can be an org name or description like "stale sources". */
   company: string;
-  /** Source slugs to fetch. */
-  sourceSlugs: string[];
+  /** Source IDs (src_...) or slugs to fetch. IDs preferred. */
+  sourceIdentifiers: string[];
+  /** @deprecated Use sourceIdentifiers instead. */
+  sourceSlugs?: string[];
 }
 
 export interface StatusResponse {

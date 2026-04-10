@@ -6,6 +6,7 @@ import { sha256Hex } from "../../src/lib/hash.js";
 import { CATEGORIES } from "../../src/lib/categories.js";
 import { parseArgs } from "../../src/shared/parse-args.js";
 import { buildDiscoverySystemPrompt } from "../../src/shared/discovery-prompt.js";
+import { buildWorkerSystemPrompt } from "../../src/shared/worker-prompt.js";
 
 /**
  * Unit tests for managed-discovery module internals.
@@ -299,6 +300,89 @@ describe("status event mapping", () => {
     expect(event.company).toBe("Acme");
     expect(event.type).toBe("session:progress");
     expect(event.step).toBe("discovery");
+  });
+});
+
+// ── Worker prompt content ──
+
+describe("buildWorkerSystemPrompt", () => {
+  const prompt = buildWorkerSystemPrompt({ categories: CATEGORIES });
+
+  it("instructs agent to use identifier parameter", () => {
+    expect(prompt).toContain("`identifier`");
+  });
+
+  it("shows source ID example format", () => {
+    expect(prompt).toContain("src_");
+  });
+
+  it("mentions fetch_source tool", () => {
+    expect(prompt).toContain("fetch_source");
+  });
+
+  it("includes all categories", () => {
+    for (const cat of CATEGORIES) {
+      expect(prompt).toContain(cat);
+    }
+  });
+});
+
+// ── Update session error detection (mirrors logic in managed-agents-session.ts) ──
+
+describe("update session error detection", () => {
+  /**
+   * Mirrors the decision logic at the end of runSession() for update mode.
+   * Given tool call counts, determines whether the session should fail or complete.
+   */
+  function shouldFail(toolCallCount: number, toolErrors: number): boolean {
+    return toolCallCount === 0 || (toolErrors > 0 && toolErrors >= toolCallCount);
+  }
+
+  it("fails when no tool calls were made", () => {
+    expect(shouldFail(0, 0)).toBe(true);
+  });
+
+  it("fails when all tool calls errored", () => {
+    expect(shouldFail(1, 1)).toBe(true);
+    expect(shouldFail(3, 3)).toBe(true);
+  });
+
+  it("succeeds when some tool calls succeeded", () => {
+    expect(shouldFail(3, 1)).toBe(false);
+    expect(shouldFail(5, 2)).toBe(false);
+  });
+
+  it("succeeds when no errors occurred", () => {
+    expect(shouldFail(1, 0)).toBe(false);
+    expect(shouldFail(5, 0)).toBe(false);
+  });
+
+  it("fails when more errors than calls (edge case)", () => {
+    // Shouldn't happen in practice, but should still fail
+    expect(shouldFail(1, 2)).toBe(true);
+  });
+});
+
+// ── Error string detection (mirrors sendResult check in managed-agents-session.ts) ──
+
+describe("tool error detection via result prefix", () => {
+  function isError(result: string): boolean {
+    return result.startsWith("Error");
+  }
+
+  it("detects standard error responses", () => {
+    expect(isError("Error: identifier is required")).toBe(true);
+    expect(isError("Error (HTTP 404): not found")).toBe(true);
+  });
+
+  it("does not flag success responses", () => {
+    expect(isError("Fetched 5 releases")).toBe(false);
+    expect(isError("State captured successfully.")).toBe(false);
+    expect(isError("Source removed")).toBe(false);
+  });
+
+  it("does not flag unknown tool responses", () => {
+    expect(isError("Unknown tool: bad_tool")).toBe(false);
   });
 });
 

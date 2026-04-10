@@ -45,7 +45,7 @@ You are an execution agent — you receive specific instructions and carry them 
 
 ### Fetch Operations
 When asked to fetch sources:
-1. Call fetch_source for each source slug provided
+1. Call fetch_source for each source, passing the source ID (e.g. src_abc123) as the \`identifier\` parameter
 2. Report the number of releases fetched per source
 3. Report any errors encountered
 4. Do NOT add, remove, or modify sources — only fetch
