@@ -47,10 +47,12 @@ export interface Env {
   API_WORKER?: Fetcher;
   /** Discovery engine toggle: "managed-agents" (default) or "sandbox". */
   RELEASED_DISCOVERY_ENGINE?: string;
-  /** Pre-created Anthropic Managed Agent ID. */
+  /** Pre-created Anthropic Managed Agent ID (discovery — Sonnet). */
   ANTHROPIC_AGENT_ID?: string;
   /** Pre-created Anthropic Managed Agent version. */
   ANTHROPIC_AGENT_VERSION?: string;
+  /** Pre-created Anthropic Worker Agent ID (Haiku — fetches/updates). */
+  ANTHROPIC_WORKER_AGENT_ID?: string;
   /** Pre-created Anthropic Environment ID. */
   ANTHROPIC_ENVIRONMENT_ID?: string;
   /** Pre-created Anthropic Vault ID for MCP server access. */

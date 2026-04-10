@@ -70,8 +70,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   }
 
   private async runSession(params: SessionParams): Promise<void> {
-    const { sessionId, agentId, agentVersion, environmentId, mode } = params;
-    const sessionType = mode === "update" ? "update" : "onboard";
+    const { sessionId, environmentId, mode } = params;
+
+    // Route update sessions to the worker agent (Haiku) for lower cost
+    const workerAgentId = this.env.ANTHROPIC_WORKER_AGENT_ID;
+    const useWorker = mode === "update" && workerAgentId;
+    const agentId = useWorker ? workerAgentId : params.agentId;
+    const agentVersion = useWorker ? undefined : params.agentVersion;
 
     try {
       const anthropicApiKey = await this.env.ANTHROPIC_API_KEY.get();
@@ -97,7 +102,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         type: "session:start",
         sessionId,
         company: params.company,
-        sessionType,
+        sessionType: mode,
       }, releasedApiKey);
 
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
@@ -204,7 +209,10 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         try { stream.controller.abort(); } catch { /* closed */ }
       }
 
-      // Archive session (agent + environment are long-lived, not archived)
+      // Archive session (agent + environment are long-lived, not archived).
+      // NOTE: Worker agent (Haiku) sessions show as "terminated" in the Anthropic
+      // console while discovery agent sessions do not — possibly a timing/state
+      // difference. Both paths call archive identically. Monitor if this causes issues.
       try { await (client.beta.sessions as any).archive(session.id); } catch { /* non-critical */ }
 
       if (capturedState) {
