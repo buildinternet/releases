@@ -222,7 +222,7 @@ export const AGENT_TOOLS = [
     type: "custom",
     name: "fetch_source",
     description:
-      "Trigger a fetch for a source to pull its latest releases. For feed/GitHub sources, fetches server-side. For scrape/agent sources, flags for CLI pickup.",
+      "Trigger a fetch for a source to pull its latest releases. For feed/GitHub sources, fetches server-side. For scrape/agent sources, runs the full pipeline (render → parse → insert) in managed agent sessions, or flags for CLI pickup otherwise.",
     input_schema: {
       type: "object" as const,
       properties: {

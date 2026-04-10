@@ -151,8 +151,10 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       let prompt: string;
       if (mode === "update") {
         const idList = (params.sourceIdentifiers ?? []).map(s => `- ${s}`).join("\n");
-        const orgRef = params.orgId ?? params.company;
-        prompt = `Fetch release updates for organization "${params.company}". Sources to fetch:\n${idList}\n\nFirst, call get_source_guide with organization "${orgRef}" to understand how each source works — extraction patterns, known quirks, and what to expect. Then call fetch_source for each source using the source ID as the \`identifier\` parameter (e.g. \`{"identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
+        const guideStep = params.orgId
+          ? `\n\nFirst, call get_source_guide with organization "${params.orgId}" to understand how each source works — extraction patterns, known quirks, and what to expect. Then call`
+          : `\n\nCall`;
+        prompt = `Fetch release updates for "${params.company}". Sources to fetch:\n${idList}${guideStep} fetch_source for each source using the source ID as the \`identifier\` parameter (e.g. \`{"identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
       } else {
         const systemContext = buildDiscoverySystemPrompt({
           evaluateAvailable: false,
