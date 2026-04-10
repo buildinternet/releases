@@ -20,15 +20,19 @@ After fetching content, the pipeline parses it:
 - **Incremental parsing** — if the source already has releases in the database, extract only new ones by comparing against known releases. This is the default for subsequent fetches.
 - **Bulk parsing** — parse the entire page into releases. Used on first fetch or when `--full` is specified.
 
-## Tools
+## Fetching
 
-### `fetch_source`
+Trigger a fetch for a source by slug. CLI: `releases fetch <slug> [--dry-run] [--max <n>]`. Typed tool: `fetch_source` with slug param.
 
-Trigger a fetch for a source by slug. For feed/GitHub sources, the fetch runs server-side. For scrape/agent sources, the source is flagged for CLI pickup.
+Key CLI flags (not available via typed tool — the typed tool always does a full server-side fetch):
+- `--dry-run` — parse but don't persist. Essential for validation.
+- `--max <n>` — limit releases to extract (default: 200).
+- `--full` — bypass incremental parsing, force full re-parse.
+- `--crawl` / `--no-crawl` — enable/disable crawl mode.
 
 ### Checking results
 
-Use `get_latest_releases` with the source slug after fetching to verify releases were persisted. Use `get_organization` to see the full picture of an org's sources and their fetch status.
+After fetching, verify releases were persisted. CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source param. Use `get_organization` (or `releases org show <slug> --json`) to see the full picture of an org's sources.
 
 ## Incremental vs Bulk Parsing
 
@@ -51,7 +55,7 @@ Enable with `--crawl` flag or by setting `metadata.crawlEnabled: true` on the so
 
 ## Enrichment
 
-Enrichment hydrates releases that have sparse content by fetching full page content and extracting richer data. Enrichment runs server-side and is not available as a managed agent tool — it is triggered automatically for sources with `autoEnrich: true` in their metadata, or run via the CLI.
+Enrichment hydrates releases that have sparse content by fetching full page content and extracting richer data. CLI: `releases enrich <slug> [--dry-run] [--force]`. Enrichment is not available as a typed agent tool — it is triggered automatically for sources with `autoEnrich: true` in their metadata, or run directly via CLI.
 
 ## Feed Content Depth Assessment
 
@@ -68,9 +72,9 @@ Do NOT fetch release URLs in the parent agent — always delegate to a subagent 
 **What to do based on the result:**
 
 If pages are richer than feed content (more text, images, videos, or code examples):
-1. Record and enable auto-enrichment via `edit_source` — set metadata to indicate summary-only content depth and auto-enrichment
-2. Enrichment will run automatically on future fetches
-3. Verify with `get_latest_releases` — check content is richer after enrichment
+1. Record and enable auto-enrichment. CLI: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only","autoEnrich":true}'`. Typed tool: `edit_source` with appropriate metadata.
+2. Run enrichment if using CLI: `releases enrich <slug>`. Via typed tools, enrichment will run automatically on future fetches.
+3. Verify results. CLI: `releases list <slug> --json`. Typed tool: `get_latest_releases` — check content is richer after enrichment.
 
 If feed already provides full content with no meaningful additions on the page:
 1. No enrichment needed for this source
@@ -83,7 +87,7 @@ Once `feedContentDepth` is set, skip the sampling step on future encounters. Sou
 
 When adding a new source, always validate before committing:
 
-1. Use `fetch_source` with the slug — check the results
-2. Use `get_latest_releases` with the source slug to verify releases were persisted
-3. If results are poor, try a different URL or type via `edit_source`
-4. If no usable releases, `remove_source` the slug
+1. **Fetch** — CLI: `releases fetch <slug> --dry-run` then `releases fetch <slug>`. Typed tool: `fetch_source` with slug.
+2. **Verify** — CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source slug.
+3. **If poor results** — try a different URL or type. CLI: `releases edit <slug> --type feed`. Typed tool: `edit_source`.
+4. **If no usable releases** — remove the source. CLI: `releases remove <slug> --ignore --reason "..."`. Typed tool: `remove_source` then `exclude_url`.

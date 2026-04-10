@@ -104,11 +104,9 @@ Sources found via these mechanisms are tagged:
 
 Both carry `confidence: "high"` since they represent explicit publisher intent.
 
-## Using the Tools
+## Evaluation
 
-### `evaluate_url`
-
-Runs automated pre-checks (provider detection, feed discovery) and returns a recommendation.
+Evaluate a URL to determine the best ingestion method. CLI: `releases evaluate <url> --json`. Typed tool: `evaluate_url` with url param.
 
 Key fields in output:
 - `recommendedMethod`: `feed`, `github`, `markdown`, `scrape`, or `crawl`
@@ -119,13 +117,13 @@ Key fields in output:
 - `confidence`: `high` (structured source found), `medium` (clear page structure), `low` (unclear)
 - `alternatives`: Other viable sources found
 
-### `list_sources` with query
+## Checking Existing Sources
 
-Use with a domain or company name query to check what sources already exist. Use as a starting point when you don't know where a company's changelogs live.
+Search with a domain or company name query to check what sources already exist. CLI: `releases list --query <text> --json`. Typed tool: `list_sources` with query param. Use as a starting point when you don't know where a company's changelogs live.
 
 ## Pre-checks (automated)
 
-The `evaluate` command runs these before returning:
+The evaluate operation runs these before returning:
 
 - **Provider fingerprinting** — identifies the hosting platform (Mintlify, ReadMe, Docusaurus, Ghost, etc.) via DNS CNAME, HTTP headers, and HTML patterns. Each provider has known capabilities.
 - **Feed discovery** — probes ~15 well-known feed paths and HTML `<link rel="alternate">` tags.
@@ -133,7 +131,7 @@ The `evaluate` command runs these before returning:
 
 ## When to Evaluate Manually
 
-If `evaluate_url` returns `confidence: low` or `recommendedMethod: scrape`, you may want to investigate the page yourself:
+If evaluation returns `confidence: low` or `recommendedMethod: scrape`, you may want to investigate the page yourself:
 
 1. **Fetch the page** with `WebFetch` and look at the HTML source.
 2. **Look for feeds** — feed URLs embedded in JavaScript, non-standard paths, or links to RSS/Atom.
@@ -145,7 +143,7 @@ If `evaluate_url` returns `confidence: low` or `recommendedMethod: scrape`, you 
 
 When evaluating multiple changelog sources for an org, identify which one is the company's **primary changelog** — the top-level, platform-wide changelog that covers the product as a whole. This is typically a website changelog page (e.g., `example.com/changelog`) rather than individual GitHub repos or product-specific pages.
 
-After adding sources, mark the primary one with `edit_source` (slug, is_primary: true). Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
+After adding sources, mark the primary one. CLI: `releases edit <slug> --primary`. Typed tool: `edit_source` with slug and is_primary: true. Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
 
 ## When to Use Crawl
 
@@ -208,7 +206,7 @@ When in doubt, add and pause rather than skip entirely. A focused index with 3 c
 
 When you find a source that matches the staleness or ecosystem criteria above, **still add it to the database** but immediately set it to `--priority paused`. This prevents future onboard runs from rediscovering the same source and re-evaluating it. The source record serves as documentation that "we know about this, and we decided not to track it."
 
-Use `add_source` with name, url, organization, and type params, then `edit_source` with fetch_priority: "paused".
+Add the source and immediately set it to paused priority. CLI: `releases add <name> --url <url> --org <org> --type github && releases edit <slug> --priority paused`. Typed tools: `add_source` then `edit_source` with fetch_priority: "paused".
 
 Do the same for ecosystem plugins, deprecated products, and low-value repos. The goal is to capture the discovery decision, not to lose the knowledge.
 
@@ -216,6 +214,6 @@ Do the same for ecosystem plugins, deprecated products, and low-value repos. The
 
 Organizations can have multiple distinct products (e.g., Vercel → Next.js, Turborepo, v0). When discovering sources for an org, consider whether they belong to separate products.
 
-Use the `manage_product`, `manage_org`, and `list_categories` tools to organize what you find. The full list of valid categories is provided in your system prompt.
+Use product and org management operations to organize what you find. CLI: `releases product add`, `releases org tag add`, `releases categories`. Typed tools: `manage_product`, `manage_org`, `list_categories`. The full list of valid categories is provided in your system prompt.
 
 Don't force product groupings when sources are ambiguous — leave them at the org level and note suggestions in the state file.
