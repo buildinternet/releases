@@ -2,6 +2,10 @@ import type { Source } from "../db/schema.js";
 import { updateSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { logger } from "../lib/logger.js";
+import { getSourceMeta, type SourceMetadata } from "./source-meta.js";
+
+// Re-export for backwards compatibility — existing importers don't need to change.
+export { getSourceMeta, type SourceMetadata } from "./source-meta.js";
 
 // ── Feed types ──────────────────────────────────────────────────────
 
@@ -10,57 +14,6 @@ type FeedType = "rss" | "atom" | "jsonfeed";
 interface DiscoveredFeed {
   url: string;
   type: FeedType;
-}
-
-export interface SourceMetadata {
-  // Feed fields
-  feedUrl?: string;
-  feedType?: FeedType;
-  feedDiscoveredAt?: string;
-  feedEtag?: string;
-  feedLastModified?: string;
-  feedContentLength?: string;
-  noFeedFound?: boolean;
-
-  // Crawl fields
-  crawlEnabled?: boolean;
-  crawlPattern?: string;
-  lastCrawlJobId?: string;
-  lastCrawlAt?: string;
-  crawlMaxAge?: number;       // seconds — Cloudflare R2 cache TTL (default 86400, max 604800)
-  crawlRender?: boolean;      // false = skip headless browser, fast HTML-only fetch
-  crawlSource?: "all" | "sitemaps" | "links"; // URL discovery method
-
-  // Provider detection
-  provider?: string;
-  providerDetectedAt?: string;
-
-  // Evaluation fields (from `releases evaluate`)
-  markdownUrl?: string;
-  evaluatedMethod?: string;
-  evaluatedAt?: string;
-
-  // GitHub fields
-  changelogUrl?: string;
-  changelogDetectedAt?: string;
-
-  // Content depth assessment
-  feedContentDepth?: "full" | "summary-only";
-  autoEnrich?: boolean;  // true = auto-enrich new releases after feed fetch (for summary-only feeds)
-
-  // Per-source AI guidance
-  parseInstructions?: string;  // freeform text appended to AI parsing prompts
-
-  // Summary generation
-  summarize?: boolean; // false = opt-out of AI summaries
-
-  // Page HEAD check fields (scrape sources without feeds)
-  pageEtag?: string;
-  pageLastModified?: string;
-  pageContentLength?: string;
-  headCheckUseless?: boolean;      // server never returns useful headers
-  headCheckSkips?: number;         // times HEAD said unchanged and content hash agreed
-  headCheckFalseNegatives?: number; // times HEAD said unchanged but content hash differed
 }
 
 // ── Feed discovery ──────────────────────────────────────────────────
@@ -711,15 +664,6 @@ export function decodeHtmlEntities(text: string): string {
 }
 
 // ── Source metadata helpers ──────────────────────────────────────────
-
-export function getSourceMeta(source: Source): SourceMetadata {
-  try {
-    const raw = source.metadata ?? "{}";
-    return typeof raw === "string" ? JSON.parse(raw) : raw;
-  } catch {
-    return {};
-  }
-}
 
 /** Merge partial source metadata into the source's metadata JSON column. */
 export async function updateSourceMeta(source: Source, meta: Partial<SourceMetadata>): Promise<void> {

@@ -9,7 +9,10 @@
     "noEmit": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "isolatedModules": true
+    "isolatedModules": true,
+    "paths": {
+      "@releases/*": ["../../src/*"]
+    }
   },
   "include": ["src/**/*.ts", "../../src/shared/**/*.ts"]
 }

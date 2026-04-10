@@ -3,7 +3,7 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { searchToMarkdown } from "@releases/lib/formatters.js";
 import { foldSourcesIntoProducts } from "@releases/api/types.js";
 import type { Env } from "../index.js";
-import type { SearchReleaseHit } from "../../../../src/api/types.js";
+import type { SearchReleaseHit } from "@releases/api/types.js";
 import { createDb } from "../db.js";
 import {
   searchOrgs,

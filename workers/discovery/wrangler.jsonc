@@ -5,6 +5,10 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-03-27",
   "compatibility_flags": ["nodejs_compat"],
+  "alias": {
+    "@releases": "../../src",
+    "bun:sqlite": "./src/stubs/bun-sqlite.ts"
+  },
   "observability": {
     "enabled": true
   },

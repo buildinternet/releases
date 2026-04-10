@@ -12,9 +12,9 @@
 
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
-import { createTypedExecutor, handleCustomToolUse } from "../../../src/shared/agent-tools.js";
-import { buildDiscoverySystemPrompt } from "../../../src/shared/discovery-prompt.js";
-import { CATEGORIES } from "../../../src/lib/categories.js";
+import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
+import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
+import { CATEGORIES } from "@releases/lib/categories.js";
 
 export interface SessionParams {
   company: string;
