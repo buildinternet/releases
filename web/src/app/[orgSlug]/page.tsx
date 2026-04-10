@@ -12,6 +12,7 @@ import { OrgReleaseList } from "@/components/org-release-list";
 import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
 import { groupSourcesByProduct } from "@/lib/sources";
+import { InactiveSourcesToggle } from "@/components/inactive-sources-toggle";
 import { KnowledgePageView } from "@/components/knowledge-page-view";
 import { SourceGuideView } from "@/components/source-guide-view";
 
@@ -45,17 +46,29 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
     return 0;
   });
 
+  const activeSources = sortedSources.filter((s) => s.releaseCount > 0);
+  const inactiveSources = sortedSources.filter((s) => s.releaseCount === 0);
+
   if (org.products.length === 0) {
     return (
-      <div className="space-y-2">
-        {sortedSources.map((source) => (
-          <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
-        ))}
+      <div>
+        <div className="space-y-2">
+          {activeSources.map((source) => (
+            <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
+          ))}
+        </div>
+        <InactiveSourcesToggle count={inactiveSources.length}>
+          <div className="space-y-2">
+            {inactiveSources.map((source) => (
+              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
+            ))}
+          </div>
+        </InactiveSourcesToggle>
       </div>
     );
   }
 
-  const { grouped, ungrouped } = groupSourcesByProduct(sortedSources, org.products);
+  const { grouped, ungrouped } = groupSourcesByProduct(activeSources, org.products);
 
   return (
     <div className="space-y-6">
@@ -93,6 +106,13 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
           </div>
         </div>
       )}
+      <InactiveSourcesToggle count={inactiveSources.length}>
+        <div className="space-y-2">
+          {inactiveSources.map((source) => (
+            <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={false} />
+          ))}
+        </div>
+      </InactiveSourcesToggle>
     </div>
   );
 }
