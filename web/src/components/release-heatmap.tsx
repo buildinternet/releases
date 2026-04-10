@@ -127,7 +127,10 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
     const el = containerRef.current;
     if (!el) return;
     function measure() {
-      const available = el!.clientWidth - DAY_LABEL_WIDTH - 8; // 8px for flex gap
+      // clientWidth includes padding — subtract it to get the actual content box width
+      const cs = getComputedStyle(el!);
+      const contentWidth = el!.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const available = contentWidth - DAY_LABEL_WIDTH - 8; // 8px for flex gap
       const sizeAt52 = Math.floor((available + CELL_GAP) / MAX_WEEKS - CELL_GAP);
       if (sizeAt52 >= MIN_CELL_SIZE) {
         // All 52 weeks fit — use the largest cell size that works
