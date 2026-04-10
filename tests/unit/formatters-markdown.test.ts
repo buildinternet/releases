@@ -55,10 +55,9 @@ const searchResults: UnifiedSearchResponse = {
   ],
   products: [
     { slug: "react", name: "React", orgSlug: "meta", orgName: "Meta", category: "frontend" },
+    { slug: "react-native", name: "React Native", orgSlug: "meta", orgName: "Meta", category: null, kind: "source", sourceSlug: "react-native" },
   ],
-  sources: [
-    { slug: "react-releases", name: "React Releases", type: "github", orgSlug: "meta", orgName: "Meta", productSlug: "react" },
-  ],
+  sources: [],
   releases: [
     {
       sourceSlug: "react-releases",
@@ -220,19 +219,14 @@ describe("searchToMarkdown", () => {
     expect(md).toContain("[ai]");
   });
 
-  it("has Products section with product details", () => {
+  it("has Products section with product and standalone source details", () => {
     const md = searchToMarkdown(searchResults);
     expect(md).toContain("## Products");
     expect(md).toContain("**React**");
     expect(md).toContain("`react`");
     expect(md).toContain("(Meta)");
-  });
-
-  it("has Sources section with source details", () => {
-    const md = searchToMarkdown(searchResults);
-    expect(md).toContain("## Sources");
-    expect(md).toContain("**React Releases**");
-    expect(md).toContain("github");
+    expect(md).toContain("**React Native**");
+    expect(md).not.toContain("## Sources");
   });
 
   it("has Releases section with release details", () => {
@@ -251,7 +245,8 @@ describe("searchToMarkdown", () => {
   it("includes view links when baseUrl is provided", () => {
     const md = searchToMarkdown(searchResults, { baseUrl: "https://releases.sh" });
     expect(md).toContain("[view](https://releases.sh/meta)");
-    expect(md).toContain("[view](https://releases.sh/meta/react-releases)");
+    expect(md).toContain("[view](https://releases.sh/meta/product/react)");
+    expect(md).toContain("[view](https://releases.sh/meta/react-native)");
   });
 
   it("shows 'No results found' when all arrays are empty", () => {

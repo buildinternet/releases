@@ -37,12 +37,13 @@ describe("unified search", () => {
     expect(result.products[0].slug).toBe("next-js");
   });
 
-  it("returns sources matching by name", () => {
-    const result = cliJson<{ sources: { slug: string }[] }>(dataDir, [
+  it("folds standalone sources into products", () => {
+    const result = cliJson<{ products: { slug: string; kind?: string }[] }>(dataDir, [
       "search", "vercel blog", "--json",
     ]);
-    expect(result.sources.length).toBeGreaterThan(0);
-    expect(result.sources[0].slug).toBe("vercel-blog");
+    const source = result.products.find((p) => p.slug === "vercel-blog");
+    expect(source).toBeDefined();
+    expect(source!.kind).toBe("source");
   });
 
   it("filters to a single type with --type", () => {
@@ -55,13 +56,12 @@ describe("unified search", () => {
   });
 
   it("returns empty gracefully", () => {
-    const result = cliJson<{ orgs: unknown[]; products: unknown[]; sources: unknown[]; releases: unknown[] }>(
+    const result = cliJson<{ orgs: unknown[]; products: unknown[]; releases: unknown[] }>(
       dataDir,
       ["search", "zzzznonexistent", "--json"],
     );
     expect(result.orgs).toEqual([]);
     expect(result.products).toEqual([]);
-    expect(result.sources).toEqual([]);
     expect(result.releases).toEqual([]);
   });
 
@@ -69,7 +69,7 @@ describe("unified search", () => {
     const result = cli(dataDir, ["search", "vercel"]);
     expect(result.exitCode).toBe(0);
     expect(result.stdout).toContain("Organizations");
-    expect(result.stdout).toContain("Sources");
+    expect(result.stdout).toContain("Products");
   });
 
   it("text output shows no results message", () => {

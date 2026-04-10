@@ -3,8 +3,8 @@ import type { D1Db } from "../db.js";
 import type {
   SearchOrgHit,
   SearchProductHit,
-  SearchSourceHit,
   SearchReleaseHit,
+  RawSourceHit,
 } from "../../../../src/api/types.js";
 
 export async function searchOrgs(db: D1Db, pattern: string, limit: number): Promise<SearchOrgHit[]> {
@@ -29,10 +29,10 @@ export async function searchProducts(db: D1Db, pattern: string, limit: number): 
   `);
 }
 
-export async function searchSources(db: D1Db, pattern: string, limit: number): Promise<SearchSourceHit[]> {
-  return db.all<SearchSourceHit>(sql`
+export async function searchSources(db: D1Db, pattern: string, limit: number): Promise<RawSourceHit[]> {
+  return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
-           p.slug as productSlug
+           p.slug as productSlug, p.name as productName, p.category as productCategory
     FROM sources s
     LEFT JOIN organizations o ON o.id = s.org_id
     LEFT JOIN products p ON p.id = s.product_id

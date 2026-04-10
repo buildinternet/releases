@@ -7,10 +7,10 @@ import type { UnifiedSearchResponse } from "../../api/types.js";
 export function registerSearchCommand(program: Command) {
   program
     .command("search")
-    .description("Search across organizations, products, sources, and releases")
+    .description("Search across organizations, products, and releases")
     .argument("<query>", "Search query")
     .option("-l, --limit <n>", "Max results per type", "10")
-    .option("--type <type>", "Limit to a result type: orgs, products, sources, releases")
+    .option("--type <type>", "Limit to a result type: orgs, products, releases")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
@@ -25,7 +25,7 @@ Examples:
       // Filter to specific type if requested
       const types = opts.type
         ? [opts.type as keyof Omit<UnifiedSearchResponse, "query">]
-        : (["orgs", "products", "sources", "releases"] as const);
+        : (["orgs", "products", "releases"] as const);
 
       if (opts.json) {
         const filtered: Record<string, unknown> = { query: response.query };
@@ -57,17 +57,6 @@ Examples:
         }
         console.log();
         totalResults += response.products.length;
-      }
-
-      // ── Sources ──
-      if (types.includes("sources") && response.sources.length > 0) {
-        console.log(chalk.bold.underline("Sources"));
-        for (const s of response.sources) {
-          const org = s.orgName ? ` ${chalk.dim(`— ${stripAnsi(s.orgName)}`)}` : "";
-          console.log(`  ${chalk.cyan.bold(stripAnsi(s.name))} ${chalk.dim(`(${s.slug})`)}${org}`);
-        }
-        console.log();
-        totalResults += response.sources.length;
       }
 
       // ── Releases ──

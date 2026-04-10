@@ -339,20 +339,11 @@ export function searchToMarkdown(
     lines.push("");
     for (const p of results.products) {
       const orgInfo = p.orgSlug ? ` (${p.orgName})` : "";
-      lines.push(`- **${p.name}** (\`${p.slug}\`)${orgInfo}${p.category ? ` [${p.category}]` : ""}`);
-    }
-    lines.push("");
-  }
-
-  if (results.sources.length > 0) {
-    lines.push("## Sources");
-    lines.push("");
-    for (const s of results.sources) {
-      const orgInfo = s.orgSlug ? ` (${s.orgName})` : "";
-      const url = opts.baseUrl && s.orgSlug
-        ? ` — [view](${opts.baseUrl}/${s.orgSlug}/${s.slug})`
+      const viewSlug = p.kind === "source" && p.sourceSlug ? p.sourceSlug : `product/${p.slug}`;
+      const url = opts.baseUrl && p.orgSlug
+        ? ` — [view](${opts.baseUrl}/${p.orgSlug}/${viewSlug})`
         : "";
-      lines.push(`- **${s.name}** (\`${s.slug}\`, ${s.type})${orgInfo}${url}`);
+      lines.push(`- **${p.name}** (\`${p.slug}\`)${orgInfo}${p.category ? ` [${p.category}]` : ""}${url}`);
     }
     lines.push("");
   }
@@ -372,7 +363,7 @@ export function searchToMarkdown(
   }
 
   if (results.orgs.length === 0 && results.products.length === 0 &&
-      results.sources.length === 0 && results.releases.length === 0) {
+      results.releases.length === 0) {
     lines.push("No results found.");
     lines.push("");
   }

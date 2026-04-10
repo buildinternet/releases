@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { searchToMarkdown } from "@releases/lib/formatters.js";
+import { foldSourcesIntoProducts } from "@releases/api/types.js";
 import type { Env } from "../index.js";
 import type { SearchReleaseHit } from "../../../../src/api/types.js";
 import { createDb } from "../db.js";
@@ -28,24 +29,26 @@ searchRoutes.get("/search", async (c) => {
   const db = createDb(c.env.DB);
   const pattern = `%${q}%`;
 
-  const [orgs, products, sources, ftsReleases] = await Promise.all([
+  const [orgs, rawProducts, rawSources, ftsReleases] = await Promise.all([
     searchOrgs(db, pattern, limit),
     searchProducts(db, pattern, limit),
     searchSources(db, pattern, limit),
     searchReleasesFts(db, q, limit, offset).catch(() => [] as SearchReleaseHit[]),
   ]);
 
+  const products = foldSourcesIntoProducts(rawProducts, rawSources);
+
   let releases = ftsReleases;
   if (releases.length === 0 && (orgs.length > 0 || products.length > 0)) {
     releases = await searchReleasesFromMatchedEntities(
       db,
       orgs.map((o) => o.slug),
-      products.map((p) => p.slug),
+      products.filter((p) => p.kind !== "source").map((p) => p.slug),
       limit,
     );
   }
 
-  const result = { query: q, orgs, products, sources, releases };
+  const result = { query: q, orgs, products, sources: [], releases };
 
   if (wantsMarkdown(c)) {
     return markdownResponse(c, searchToMarkdown(result));
