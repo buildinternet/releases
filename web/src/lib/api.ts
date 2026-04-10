@@ -110,6 +110,4 @@ export const api = {
   orgHeatmap: (slug: string) => fetchApi<OrgHeatmap>(`/v1/orgs/${slug}/heatmap`),
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
-  knowledge: (scope: "org" | "product", slug: string) =>
-    fetchApi<import("@shared/api/types").KnowledgePageItem | null>(`/v1/knowledge?scope=${scope}&slug=${slug}`),
 };

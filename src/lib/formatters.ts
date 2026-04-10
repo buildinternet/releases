@@ -427,7 +427,7 @@ export function knowledgeToMarkdown(
   }
   lines.push(yamlLine("generated", isoDateOnly(knowledge.generatedAt)));
   if (opts.baseUrl && opts.orgSlug) {
-    lines.push(yamlLine("canonical", `${opts.baseUrl}/${opts.orgSlug}`));
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/${opts.orgSlug}/knowledge.md`));
   }
   lines.push("---");
   lines.push("");

@@ -478,7 +478,7 @@ describe("knowledgeToMarkdown", () => {
       baseUrl: "https://releases.sh",
       orgSlug: "vercel",
     });
-    expect(md).toContain("canonical: https://releases.sh/vercel");
+    expect(md).toContain("canonical: https://releases.sh/vercel/knowledge.md");
   });
 
   it("includes product slug for product-scoped pages", () => {
