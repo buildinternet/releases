@@ -6,9 +6,13 @@
  * does the actual work using the discovery worker's Cloudflare and Anthropic
  * secrets, then inserts results via the API worker service binding.
  *
- * Intentionally minimal — single-page Cloudflare render → incremental AI
- * parse → API insert. No crawl, no markdown URL fallback. Those can be
- * added later.
+ * Supports two content acquisition paths:
+ * 1. Markdown URL — direct fetch when source has `markdownUrl` in metadata
+ *    (skips Cloudflare rendering entirely)
+ * 2. Cloudflare Browser Rendering — single-page render for all other sources
+ *
+ * Both paths feed into the same incremental AI parse → API insert pipeline.
+ * No crawl support — that requires the full CLI adapter.
  */
 
 import Anthropic from "@anthropic-ai/sdk";
@@ -236,6 +240,23 @@ async function writeFetchLog(
   }).catch(() => {}); // best-effort
 }
 
+// ── Markdown URL fetch (direct, no Cloudflare needed) ────────────
+
+async function fetchMarkdownUrl(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": "releases/0.1 (+https://releases.sh)" },
+      redirect: "follow",
+      signal: AbortSignal.timeout(30_000),
+    });
+    if (!res.ok) return null;
+    const text = await res.text();
+    return text.trim() || null;
+  } catch {
+    return null;
+  }
+}
+
 // ── Main entry point ──────────────────────────────────────────────
 
 export async function scrapeFetch(
@@ -251,11 +272,28 @@ export async function scrapeFetch(
 
   const meta = getSourceMeta({ metadata: source.metadata } as any);
 
-  // 2. Render page + fetch known releases in parallel (no dependency between them)
-  const [markdown, knownReleases] = await Promise.all([
+  // 2. Get content — prefer markdown URL (cheap) over Cloudflare render (expensive)
+  const knownReleasesPromise = fetchKnownReleases(env, source.slug);
+
+  let markdown: string | null = null;
+
+  if (meta.markdownUrl) {
+    const [md, known] = await Promise.all([
+      fetchMarkdownUrl(meta.markdownUrl),
+      knownReleasesPromise,
+    ]);
+    markdown = md;
+    if (markdown) {
+      return runParseAndInsert(env, source, meta, markdown, known, start);
+    }
+    // Fall through to Cloudflare if markdown URL failed
+  }
+
+  const [rendered, knownReleases] = await Promise.all([
     renderToMarkdown(source.url, env.cloudflareAccountId, env.cloudflareApiToken),
-    fetchKnownReleases(env, source.slug),
+    knownReleasesPromise,
   ]);
+  markdown = rendered;
 
   if (!markdown) {
     const durationMs = Date.now() - start;
@@ -266,7 +304,19 @@ export async function scrapeFetch(
     return `Error: Cloudflare Browser Rendering returned no content for ${source.url}`;
   }
 
-  // 4. Run incremental AI parse
+  return runParseAndInsert(env, source, meta, markdown, knownReleases, start);
+}
+
+// ── Shared parse + insert pipeline ───────────────────────────────
+
+async function runParseAndInsert(
+  env: ScrapeEnv,
+  source: { id: string; slug: string; url: string },
+  meta: ReturnType<typeof getSourceMeta>,
+  markdown: string,
+  knownReleases: KnownRelease[],
+  start: number,
+): Promise<string> {
   const client = new Anthropic({ apiKey: env.anthropicApiKey });
   const releases = await incrementalParse(client, markdown, knownReleases, meta.parseInstructions);
 
@@ -286,10 +336,8 @@ export async function scrapeFetch(
     });
   }
 
-  // 5. Insert releases via API worker
   const inserted = await insertReleases(env, source.slug, releases);
 
-  // 6. Update source metadata + write fetch log
   const finalDuration = Date.now() - start;
   await Promise.all([
     updateSourceAfterFetch(env, source.id),
