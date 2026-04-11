@@ -31,7 +31,7 @@ function getLevel(count: number): number {
 }
 
 const LEVEL_COLORS = [
-  "var(--color-heat-0, #1c2129)",
+  "var(--color-heat-0, #e7e5e4)",
   "var(--color-heat-1, rgba(56, 132, 244, 0.25))",
   "var(--color-heat-2, rgba(56, 132, 244, 0.50))",
   "var(--color-heat-3, rgba(56, 132, 244, 0.75))",
@@ -194,12 +194,12 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
   const patternId = "heatmap-stripe";
 
   return (
-    <div ref={containerRef} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4">
+    <div ref={containerRef} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
       {/* SVG defs for stripe pattern */}
       <svg width="0" height="0" className="absolute">
         <defs>
           <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-            <rect width="4" height="4" fill="var(--color-heat-0, #1c2129)" />
+            <rect width="4" height="4" fill="var(--color-heat-0, #e7e5e4)" />
             <line x1="0" y1="0" x2="0" y2="4" stroke="rgba(255,255,255,0.08)" strokeWidth="2" />
           </pattern>
         </defs>
