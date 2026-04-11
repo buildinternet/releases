@@ -4,12 +4,12 @@ import { createDb } from "../db.js";
 import { sources, releases, organizations, releaseSummaries, products } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek } from "../utils.js";
+import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
-import { getSourcesWithStats, getSourceReleasesPaginated, getSourceActivityBuckets } from "../queries/sources.js";
+import { getSourcesWithStats, getSourceReleasesPaginated, getSourceActivityBuckets, getSourceHeatmapData } from "../queries/sources.js";
 import { notDisabled } from "../queries/shared.js";
 import { regenerateSourceGuide } from "../source-guide-regen.js";
 
@@ -468,6 +468,25 @@ sourceRoutes.get("/sources/:slug/activity", async (c) => {
       earliestVersion: r.earliest_version ?? null,
       latestVersion: r.latest_version ?? null,
     })),
+  });
+});
+
+// Daily release heatmap for source contribution-graph visualization
+sourceRoutes.get("/sources/:slug/heatmap", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  const { from, to, toExclusive } = heatmapDateRange();
+  const { rows, total } = await getSourceHeatmapData(db, src.id, from, toExclusive);
+
+  return c.json({
+    source: { slug: src.slug, name: src.name },
+    range: { from, to },
+    dailyCounts: rows.map((r) => ({ date: r.date, count: r.cnt })),
+    total,
   });
 });
 

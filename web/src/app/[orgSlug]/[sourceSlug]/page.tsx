@@ -60,10 +60,12 @@ export default async function SourcePage({
 
   let source;
   let activity;
+  let heatmap;
   try {
-    [source, activity] = await Promise.all([
+    [source, activity, heatmap] = await Promise.all([
       getSource(sourceSlug, page),
       api.sourceActivity(sourceSlug, activityFrom).catch(() => null),
+      api.sourceHeatmap(sourceSlug).catch(() => null),
     ]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
@@ -129,7 +131,7 @@ export default async function SourcePage({
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0">
             {activity && (
-              <SourceTimeline activity={activity} />
+              <SourceTimeline activity={activity} heatmap={heatmap} trackingSince={source.trackingSince} />
             )}
             <SourceTabs hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)} />
             {(tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (

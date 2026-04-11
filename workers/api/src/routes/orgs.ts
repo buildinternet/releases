@@ -5,7 +5,7 @@ import { organizations, orgAccounts, sources, releases, products, tags, orgTags,
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { isValidCategory } from "@releases/lib/categories.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { isConflictError, computeAvgPerWeek, getOrCreateTagD1, orgWhere } from "../utils.js";
+import { isConflictError, computeAvgPerWeek, getOrCreateTagD1, orgWhere, heatmapDateRange } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import { assembleSourceGuide } from "@releases/ai/source-guide.js";
@@ -539,17 +539,7 @@ orgRoutes.get("/orgs/:slug/heatmap", async (c) => {
   const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const today = new Date();
-  const to = today.toISOString().slice(0, 10);
-
-  const toExclusiveDate = new Date(today);
-  toExclusiveDate.setUTCDate(toExclusiveDate.getUTCDate() + 1);
-  const toExclusive = toExclusiveDate.toISOString().slice(0, 10);
-
-  const fromDate = new Date(today);
-  fromDate.setUTCDate(fromDate.getUTCDate() - 52 * 7);
-  const from = fromDate.toISOString().slice(0, 10);
-
+  const { from, to, toExclusive } = heatmapDateRange();
   const { rows, total } = await getOrgHeatmapData(db, org.id, from, toExclusive);
 
   return c.json({

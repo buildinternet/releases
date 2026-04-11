@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
-import type { OrgHeatmap } from "@/lib/api";
+/** Shape accepted by the heatmap — works with both OrgHeatmap and SourceHeatmap. */
+export interface HeatmapData {
+  range: { from: string; to: string };
+  dailyCounts: Array<{ date: string; count: number }>;
+  total: number;
+}
 
 const MIN_CELL_SIZE = 7;
 const MAX_CELL_SIZE = 13;
@@ -26,7 +31,7 @@ function getLevel(count: number): number {
 }
 
 const LEVEL_COLORS = [
-  "var(--color-heat-0, #1c2129)",
+  "var(--color-heat-0, #e7e5e4)",
   "var(--color-heat-1, rgba(56, 132, 244, 0.25))",
   "var(--color-heat-2, rgba(56, 132, 244, 0.50))",
   "var(--color-heat-3, rgba(56, 132, 244, 0.75))",
@@ -56,7 +61,7 @@ interface MonthLabel {
   col: number;
 }
 
-function buildGrid(heatmap: OrgHeatmap, visibleWeeks: number): { cells: CellData[]; monthLabels: MonthLabel[] } {
+function buildGrid(heatmap: HeatmapData, visibleWeeks: number): { cells: CellData[]; monthLabels: MonthLabel[] } {
   const countMap = new Map<string, number>();
   for (const entry of heatmap.dailyCounts) {
     countMap.set(entry.date, entry.count);
@@ -104,7 +109,7 @@ function buildGrid(heatmap: OrgHeatmap, visibleWeeks: number): { cells: CellData
 }
 
 /** Find the date of the earliest release with count > 0 from the heatmap data. */
-function findEarliestRelease(heatmap: OrgHeatmap): string | null {
+function findEarliestRelease(heatmap: HeatmapData): string | null {
   const withCounts = heatmap.dailyCounts.filter((d) => d.count > 0);
   if (withCounts.length === 0) return null;
   withCounts.sort((a, b) => a.date.localeCompare(b.date));
@@ -112,7 +117,7 @@ function findEarliestRelease(heatmap: OrgHeatmap): string | null {
 }
 
 interface ReleaseHeatmapProps {
-  heatmap: OrgHeatmap;
+  heatmap: HeatmapData;
   trackingSince?: string | null;
 }
 
@@ -189,12 +194,12 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
   const patternId = "heatmap-stripe";
 
   return (
-    <div ref={containerRef} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4">
+    <div ref={containerRef} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
       {/* SVG defs for stripe pattern */}
       <svg width="0" height="0" className="absolute">
         <defs>
           <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-            <rect width="4" height="4" fill="var(--color-heat-0, #1c2129)" />
+            <rect width="4" height="4" fill="var(--color-heat-0, #e7e5e4)" />
             <line x1="0" y1="0" x2="0" y2="4" stroke="rgba(255,255,255,0.08)" strokeWidth="2" />
           </pattern>
         </defs>

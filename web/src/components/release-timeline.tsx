@@ -7,6 +7,7 @@ import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
+import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
 import { groupSourcesByProduct } from "@/lib/sources";
 
 /** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
@@ -22,8 +23,6 @@ function mergeBuckets(bucketArrays: WeeklyBucket[][]): WeeklyBucket[] {
     .sort(([a], [b]) => a - b)
     .map(([ts, count]) => ({ weekStart: new Date(ts), count }));
 }
-
-type ViewMode = "heatmap" | "chart";
 
 interface ReleaseTimelineProps {
   activity: OrgActivity;
@@ -280,30 +279,8 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
 
   return (
     <div className="mt-5 mb-2">
-      {/* View toggle */}
       {heatmap && (
-        <div className="inline-flex bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-md p-0.5 mb-4">
-          <button
-            className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-              viewMode === "heatmap"
-                ? "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm"
-                : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
-            }`}
-            onClick={() => setViewMode("heatmap")}
-          >
-            Activity
-          </button>
-          <button
-            className={`px-3 py-1 text-xs font-medium rounded transition-all ${
-              viewMode === "chart"
-                ? "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm"
-                : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300"
-            }`}
-            onClick={() => setViewMode("chart")}
-          >
-            Timeline
-          </button>
-        </div>
+        <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
       )}
 
       {/* Heatmap view */}

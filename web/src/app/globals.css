@@ -7,6 +7,9 @@
 }
 
 :root {
+  /* Heatmap inactive cell — light stone for light mode */
+  --color-heat-0: #e7e5e4;  /* stone-200 */
+
   /* Product palette for multi-product charts */
   --color-product-0: oklch(0.637 0.153 254.4);  /* blue-400 */
   --color-product-1: oklch(0.723 0.191 149.6);  /* green-400 */
@@ -16,6 +19,10 @@
   --color-product-5: oklch(0.718 0.176 349.8);  /* pink-400 */
   --color-product-6: oklch(0.789 0.109 197.5);  /* cyan-400 */
   --color-product-7: oklch(0.750 0.160 55.0);   /* orange-400 */
+}
+
+.dark {
+  --color-heat-0: #1c2129;
 }
 
 /* Range navigator bar states */

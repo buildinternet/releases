@@ -8,6 +8,7 @@ import type {
   SourceActivity,
   OrgActivity,
   OrgHeatmap,
+  SourceHeatmap,
   OrgSparklines,
   OrgReleasesResponse,
   ReleaseDetail,
@@ -36,6 +37,7 @@ export type {
   SourceActivity,
   OrgActivity,
   OrgHeatmap,
+  SourceHeatmap,
   OrgSparklines,
   OrgReleasesResponse,
   ReleaseDetail,
@@ -113,5 +115,6 @@ export const api = {
   orgHeatmap: (slug: string) => fetchApi<OrgHeatmap>(`/v1/orgs/${slug}/heatmap`),
   orgSparklines: (slug: string) => fetchApi<OrgSparklines>(`/v1/orgs/${slug}/sparklines`),
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`),
+  sourceHeatmap: (slug: string) => fetchApi<SourceHeatmap>(`/v1/sources/${slug}/heatmap`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
 };
