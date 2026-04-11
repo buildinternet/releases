@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { SourceListItem, OrgDetail } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
+import { Sparkline } from "@/components/sparkline";
 
 const typeBadgeClass = "text-[11px] px-1.5 py-0.5 rounded font-medium";
 
@@ -29,10 +30,12 @@ export function SourceTable({
   sources,
   products,
   orgSlug,
+  sourceSparklines,
 }: {
   sources: SourceListItem[];
   products: OrgDetail["products"];
   orgSlug: string;
+  sourceSparklines?: Record<string, number[]>;
 }) {
   const sorted = [...sources].sort((a, b) => {
     if (a.isPrimary && !b.isPrimary) return -1;
@@ -54,6 +57,9 @@ export function SourceTable({
                 <th className="text-left px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 hidden sm:table-cell">Product</th>
               )}
               <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500">Releases</th>
+              {sourceSparklines && (
+                <th className="px-4 py-2.5 hidden md:table-cell"><span className="sr-only">Activity</span></th>
+              )}
               <th className="text-right px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 hidden sm:table-cell">Latest</th>
             </tr>
           </thead>
@@ -81,9 +87,19 @@ export function SourceTable({
                     {source.productSlug ? productMap.get(source.productSlug) ?? "—" : "—"}
                   </td>
                 )}
-                <td className="px-4 py-3 text-right tabular-nums text-stone-700 dark:text-stone-300">
+                <td className="px-4 py-3 text-right font-mono tabular-nums text-stone-700 dark:text-stone-300">
                   {source.releaseCount}
                 </td>
+                {sourceSparklines && (
+                  <td className={`px-4 py-3 hidden md:table-cell ${source.releaseCount > 0 ? "text-stone-500 dark:text-stone-400" : "text-stone-300 dark:text-stone-700"}`}>
+                    <Sparkline
+                      data={sourceSparklines[source.slug] ?? []}
+                      width={80}
+                      height={24}
+                      id={source.slug}
+                    />
+                  </td>
+                )}
                 <td className="px-4 py-3 text-right text-stone-500 dark:text-stone-400 text-[13px] hidden sm:table-cell">
                   {source.latestVersion ? (
                     <span className="text-stone-600 dark:text-stone-300">{source.latestVersion}</span>
