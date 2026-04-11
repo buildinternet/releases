@@ -640,7 +640,15 @@ sourceRoutes.post("/sources", async (c) => {
   }
 
   const slug = body.slug ?? toSlug(body.name);
-  const type = body.type ?? "scrape";
+
+  // Auto-detect feed type when metadata contains a feedUrl and no explicit type was provided
+  let type = body.type ?? "scrape";
+  if (!body.type && body.metadata) {
+    try {
+      const meta = JSON.parse(body.metadata);
+      if (meta.feedUrl) type = "feed";
+    } catch { /* invalid metadata JSON — ignore */ }
+  }
 
   // Resolve org by slug if orgSlug provided (preferred over raw orgId)
   let orgId = body.orgId ?? null;

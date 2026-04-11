@@ -421,6 +421,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
           url: input.url,
         };
         if (input.type) body.type = input.type;
+        else if (input.feed_url) body.type = "feed";
         if (input.organization) body.orgSlug = input.organization;
         if (input.feed_url) {
           body.metadata = JSON.stringify({ feedUrl: input.feed_url });
