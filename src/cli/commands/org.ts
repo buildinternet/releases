@@ -6,7 +6,13 @@ import {
   getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
   getProductsByOrg, addTagsToOrg, removeTagsFromOrg, getTagsForOrg, updateOrg,
   listDomainAliases, addDomainAlias, removeDomainAlias,
+  getKnowledgePageForOrg, getRecentReleases, upsertKnowledgePage,
 } from "../../db/queries.js";
+import { generateKnowledgePage } from "../../ai/knowledge.js";
+import { DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
+import { daysAgoIso } from "../../lib/dates.js";
+import { stripAnsi } from "../../lib/sanitize.js";
+import { logger } from "../../lib/logger.js";
 import { orgNotFound } from "../suggest.js";
 import { toSlug } from "../../lib/slug.js";
 import { isValidCategory, CATEGORIES } from "../../lib/categories.js";
@@ -123,27 +129,74 @@ full details including linked accounts, tags, sources, and products.`)
     .description("Show organization details")
     .argument("<identifier>", "Org slug, domain, name, or account handle")
     .option("--json", "Output as JSON")
+    .option("--regenerate", "Regenerate the AI overview from recent releases")
     .addHelpText("after", `
 Examples:
   releases org show acme
   releases org show acme.com
-  releases org show acme --json`)
-    .action(async (identifier: string, opts: { json?: boolean }) => {
+  releases org show acme --json
+  releases org show acme --regenerate`)
+    .action(async (identifier: string, opts: { json?: boolean; regenerate?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
         return orgNotFound(identifier);
       }
 
-      const [accounts, orgProducts, linkedSources, orgTags, aliases] = await Promise.all([
+      const [accounts, orgProducts, linkedSources, orgTags, aliases, overview] = await Promise.all([
         getOrgAccountsBySlug(found.slug, found.id),
         getProductsByOrg(found.id),
         getSourcesByOrg(found.id),
         getTagsForOrg(found.id),
         listDomainAliases({ orgId: found.id }),
+        getKnowledgePageForOrg(found.id, found.slug).catch(() => null),
       ]);
 
+      // Regenerate overview if requested
+      if (opts.regenerate) {
+        const windowDays = DEFAULT_WINDOW_DAYS;
+        const cutoff = daysAgoIso(windowDays);
+        const releaseArrays = await Promise.all(
+          linkedSources.map((source) => getRecentReleases(source.id, cutoff, source.slug)),
+        );
+        const allReleases = releaseArrays.flat().sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
+        if (allReleases.length === 0) {
+          logger.warn(`No releases in the last ${windowDays} days for ${found.name} — cannot generate overview`);
+        } else {
+          logger.info(`Generating overview for ${found.name} (${allReleases.length} releases)...`);
+          const result = await generateKnowledgePage({
+            name: found.name,
+            slug: found.slug,
+            description: found.description || undefined,
+            existingContent: overview?.content,
+            newReleases: allReleases.slice(0, 50),
+            totalReleaseCount: allReleases.length,
+            sourceNames: linkedSources.map((s) => s.name),
+          });
+          if (result) {
+            await upsertKnowledgePage({
+              scope: "org",
+              orgId: found.id,
+              content: result.content,
+              releaseCount: result.releaseCount,
+              lastContributingReleaseAt: allReleases[0]?.publishedAt ?? null,
+            });
+            // Re-read so the display below shows the new content
+            const updated = await getKnowledgePageForOrg(found.id, found.slug);
+            if (updated) Object.assign(overview ?? {}, updated);
+          }
+        }
+      }
+
       if (opts.json) {
-        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources, tags: orgTags, aliases: aliases.map((a) => a.domain) }, null, 2));
+        console.log(JSON.stringify({
+          ...found,
+          accounts,
+          products: orgProducts,
+          sources: linkedSources,
+          tags: orgTags,
+          aliases: aliases.map((a) => a.domain),
+          overview: overview?.content ?? null,
+        }, null, 2));
         return;
       }
 
@@ -191,6 +244,12 @@ Examples:
           console.log(`  ${chalk.cyan(s.slug.padEnd(30))} ${status} ${fetched}`);
           console.log(`  ${" ".repeat(30)} ${chalk.dim(s.url)}`);
         }
+      }
+
+      if (overview?.content) {
+        console.log();
+        console.log(chalk.bold("Overview:"));
+        console.log(stripAnsi(overview.content));
       }
     });
 

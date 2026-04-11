@@ -43,6 +43,13 @@
       "when": 1775750400000,
       "tag": "0005_fetch_log_session_id",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1775922600061,
+      "tag": "0006_tricky_overlord",
+      "breakpoints": true
     }
   ]
 }

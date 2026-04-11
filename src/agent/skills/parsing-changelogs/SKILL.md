@@ -87,7 +87,7 @@ Once `feedContentDepth` is set, skip the sampling step on future encounters. Sou
 
 Engineering blogs and news pages mix product announcements with educational content, opinion pieces, and corporate news. They can be useful supplementary sources but require aggressive filtering via `parseInstructions` to avoid noise.
 
-**Before working with blog sources:** Check the org's source guide (`releases knowledge guide <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
+**Before working with blog sources:** Check the org's source guide (`releases guide <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
 
 **When to add a blog source:**
 - The org's primary changelogs don't cover major product announcements (new models, new services)
