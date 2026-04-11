@@ -58,9 +58,7 @@ const AGENT_HEADERS = {
 interface SkillMapping {
   [displayTitle: string]: {
     skillId: string;
-    latestVersion: string;
     localDir: string;
-    updatedAt: string;
   };
 }
 
@@ -71,7 +69,6 @@ interface SkillConfig {
   toolsHash?: string;
   workerAgentId?: string;
   workerPromptHash?: string;
-  lastSyncedAt: string;
 }
 
 interface ApiSkill {
@@ -317,7 +314,6 @@ async function main() {
   const config = loadConfig() || {
     skills: {},
     agentId,
-    lastSyncedAt: "",
   };
 
   // Only fetch discovery agent state when we need it
@@ -351,9 +347,7 @@ async function main() {
           const newVersion = await createSkillVersion(apiKey, existingId, content, dirName);
           config.skills[displayTitle] = {
             skillId: existingId,
-            latestVersion: newVersion.version,
             localDir: dirName,
-            updatedAt: new Date().toISOString(),
           };
           console.log(`  ✓ Version ${newVersion.version}\n`);
         } else {
@@ -367,9 +361,7 @@ async function main() {
           const created = await createSkill(apiKey, displayTitle, content, dirName);
           config.skills[displayTitle] = {
             skillId: created.id,
-            latestVersion: created.latest_version,
             localDir: dirName,
-            updatedAt: new Date().toISOString(),
           };
           skillIds.push({ type: "custom", skill_id: created.id, version: "latest" });
           console.log(`  ✓ Created ${created.id}\n`);
@@ -467,7 +459,6 @@ async function main() {
         config.agentId = agentId;
         config.promptHash = discoveryPromptHash;
         config.toolsHash = currentToolsHash;
-        config.lastSyncedAt = new Date().toISOString();
       },
     });
     console.log();
