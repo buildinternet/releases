@@ -10,12 +10,16 @@
 /** Prefix written into release content at fetch/ingest time. */
 export const MEDIA_PREFIX = "/_media/";
 
-const LEGACY_ABSOLUTE = /https?:\/\/api\.releases\.sh\/v1\/media\//g;
-const LEGACY_RELATIVE = /\/v1\/media\//g;
+/** Cloudflare Image Transformation params applied to raster images. */
+const IMAGE_TRANSFORM = "cdn-cgi/image/width=1200,quality=80,format=auto";
+
+/** Extensions eligible for Image Transformations (not SVG — it's vector). */
+const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif)$/i;
 
 /**
  * Replace portable `/_media/` prefixes (and legacy `/v1/media/` references)
- * in content with the given media origin URL.
+ * in content with the given media origin URL. Raster image URLs get
+ * Cloudflare Image Transformation params for automatic resize + format negotiation.
  *
  * Returns the original string unchanged if mediaOrigin is empty or
  * content contains no media references.
@@ -25,16 +29,19 @@ export function hydrateMediaUrls(content: string, mediaOrigin: string): string {
   if (!content.includes("/_media/") && !content.includes("/v1/media/")) return content;
 
   const origin = mediaOrigin.endsWith("/") ? mediaOrigin.slice(0, -1) : mediaOrigin;
-  const replacement = `${origin}/`;
 
-  return content
-    .replaceAll(MEDIA_PREFIX, replacement)
-    .replace(LEGACY_ABSOLUTE, replacement)
-    .replace(LEGACY_RELATIVE, replacement);
+  return content.replace(
+    /(?:\/_media\/|https?:\/\/api\.releases\.sh\/v1\/media\/|\/v1\/media\/)(\S+)/g,
+    (_, key) => {
+      const prefix = IMAGE_EXTENSIONS.test(key) ? `${origin}/${IMAGE_TRANSFORM}/` : `${origin}/`;
+      return `${prefix}${key}`;
+    },
+  );
 }
 
 /** Build an absolute media URL from an R2 key, or undefined if no key. */
 export function resolveR2Url(r2Key: string | undefined | null, mediaOrigin: string): string | undefined {
   if (!r2Key) return undefined;
-  return `${mediaOrigin}/${r2Key}`;
+  const prefix = IMAGE_EXTENSIONS.test(r2Key) ? `${mediaOrigin}/${IMAGE_TRANSFORM}` : mediaOrigin;
+  return `${prefix}/${r2Key}`;
 }
