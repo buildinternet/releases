@@ -17,40 +17,20 @@ type Env = {
 
 export const mediaRoutes = new Hono<Env>();
 
-// Raster image types eligible for Cloudflare Image Transforms (no SVG — it's vector)
-const RASTER_IMAGE_TYPES = new Set([
-  "image/png", "image/jpeg", "image/gif", "image/webp", "image/avif",
-]);
-
 // ---------------------------------------------------------------------------
-// Public: serve media from R2 with optional Cloudflare Image Transforms
+// Public: redirect to R2 custom domain, or serve directly as fallback
 // ---------------------------------------------------------------------------
 
 mediaRoutes.get("/media/:key{.+}", async (c) => {
   const key = c.req.param("key");
   const mediaOrigin = c.env.MEDIA_ORIGIN;
 
-  // Use head() to check existence and content-type without downloading the body
-  const meta = await c.env.MEDIA.head(key);
-  if (!meta) {
-    return c.json({ error: "not_found" }, 404);
+  // Redirect to R2 custom domain when configured — avoids proxying through the Worker
+  if (mediaOrigin) {
+    return c.redirect(`${mediaOrigin}/${key}`, 301);
   }
 
-  const contentType = meta.httpMetadata?.contentType ?? "";
-
-  // If we have a MEDIA_ORIGIN (R2 custom domain) and this is a raster image,
-  // use Cloudflare Image Transformations for automatic resize + format negotiation.
-  if (mediaOrigin && RASTER_IMAGE_TYPES.has(contentType)) {
-    const transformed = await fetch(`${mediaOrigin}/${key}`, {
-      headers: { Accept: c.req.header("Accept") ?? "image/*" },
-      cf: { image: { width: 1200, fit: "scale-down", quality: 80, format: "auto" } },
-    } as unknown as RequestInit);
-    const resp = new Response(transformed.body, transformed);
-    resp.headers.set("X-Content-Type-Options", "nosniff");
-    return resp;
-  }
-
-  // Serve directly from R2
+  // Fallback: serve directly from R2 (no custom domain configured)
   const object = await c.env.MEDIA.get(key);
   if (!object) return c.json({ error: "not_found" }, 404);
 

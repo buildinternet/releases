@@ -13,7 +13,8 @@
     "enabled": true
   },
   "vars": {
-    "CRON_ENABLED": "true"
+    "CRON_ENABLED": "true",
+    "MEDIA_ORIGIN": "https://media.releases.sh"
   },
   "d1_databases": [
     {
