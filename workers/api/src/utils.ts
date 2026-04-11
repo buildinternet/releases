@@ -52,11 +52,22 @@ export async function getOrCreateTagD1(
   return created;
 }
 
-export function computeAvgPerWeek(totalReleases: number, oldestPublishedAt: string | null): number {
-  if (totalReleases === 0 || !oldestPublishedAt) return 0;
-  const weeks = (Date.now() - new Date(oldestPublishedAt).getTime()) / (7 * 24 * 60 * 60 * 1000);
-  if (weeks < 1) return totalReleases;
-  return Math.round((totalReleases / weeks) * 10) / 10;
+/**
+ * Compute average releases per week over a rolling window (default 90 days).
+ * If the source has less history than the window, use the actual span instead.
+ */
+export function computeAvgPerWeek(
+  releasesInWindow: number,
+  oldestPublishedAt: string | null,
+  windowDays = 90,
+): number {
+  if (releasesInWindow === 0 || !oldestPublishedAt) return 0;
+  const ageMs = Date.now() - new Date(oldestPublishedAt).getTime();
+  const ageDays = ageMs / (24 * 60 * 60 * 1000);
+  const effectiveDays = Math.min(windowDays, ageDays);
+  const weeks = effectiveDays / 7;
+  if (weeks < 1) return releasesInWindow;
+  return Math.round((releasesInWindow / weeks) * 10) / 10;
 }
 
 /** Generate a knowledge page ID. Shared by route handlers and source-guide-regen. */

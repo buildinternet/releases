@@ -557,6 +557,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
 
   // Compute source metrics inline — use fetchedAt as fallback when publishedAt is NULL
   const cutoff = daysAgoIso(30);
+  const cutoff90d = daysAgoIso(90);
   const dateCol = sql`COALESCE(${releases.publishedAt}, ${releases.fetchedAt})`;
 
   const [recent] = await db
@@ -569,8 +570,13 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     .from(releases)
     .where(and(eq(releases.sourceId, src.id), notSuppressed));
 
+  const [windowed] = await db
+    .select({ n: count() })
+    .from(releases)
+    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${dateCol} >= ${cutoff90d}`));
+
   const releasesLast30Days = recent.n;
-  const avgReleasesPerWeek = computeAvgPerWeek(totals.total, totals.oldest);
+  const avgReleasesPerWeek = computeAvgPerWeek(windowed.n, totals.oldest);
   const totalPages = Math.ceil(relCount.n / pageSize);
 
   // Earliest published_at across all releases — ignores fetched_at so we reflect actual release history

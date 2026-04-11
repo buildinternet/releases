@@ -72,6 +72,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const cutoff = daysAgoIso(30);
+  const cutoff90d = daysAgoIso(90);
 
   const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgePageRows] = await Promise.all([
     db
@@ -152,13 +153,14 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .select({
         total: count(),
         recent: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
+        recent90d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff90d} THEN 1 END)`,
         oldest: min(releases.publishedAt),
       })
       .from(releases)
       .where(and(inArray(releases.sourceId, orgSourceIds), sql`${releases.publishedAt} IS NOT NULL`));
 
     releasesLast30Days = metrics.recent;
-    avgReleasesPerWeek = computeAvgPerWeek(metrics.total, metrics.oldest);
+    avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
     oldestReleaseDate = metrics.oldest;
   }
 
