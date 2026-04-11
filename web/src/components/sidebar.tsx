@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
 import { InfoTooltip } from "./info-tooltip";
+import { LocalTimestamp } from "./local-timestamp";
 
 function stalenessColor(isoDate: string | null | undefined): string {
   if (!isoDate) return "text-stone-400 dark:text-stone-500";
@@ -57,9 +58,13 @@ export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitl
       )}
       {(footnote || formatPath) && (
         <div className="border-t border-stone-200 dark:border-stone-800 pt-4 mb-6">
-          {footnote && (
-            <div className={`text-[11px] mb-3 cursor-default ${stalenessColor(footnoteTitle)}`} title={footnoteTitle ?? undefined}>{footnote}</div>
-          )}
+          {footnoteTitle ? (
+            <div className={`text-[11px] mb-3 cursor-default ${stalenessColor(footnoteTitle)}`}>
+              <LocalTimestamp iso={footnoteTitle} prefix="Last fetched " />
+            </div>
+          ) : footnote ? (
+            <div className={`text-[11px] mb-3 cursor-default text-stone-400 dark:text-stone-500`}>{footnote}</div>
+          ) : null}
           {formatPath && (
             <div className="flex gap-2 text-[11px] text-stone-400 dark:text-stone-500">
               <a href={`${formatPath}.json`} className="hover:text-stone-600 dark:hover:text-stone-300">.json</a>
