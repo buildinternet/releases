@@ -33,7 +33,7 @@ import { registerGuideCommand } from "./commands/guide.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
 
-export const VERSION = "0.9.1";
+export const VERSION = "0.9.2";
 
 type AdminEntry = {
   name: string;
