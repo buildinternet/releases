@@ -102,11 +102,20 @@ mediaRoutes.post("/media/assets", authMiddleware, async (c) => {
     assets: Array<UploadResult & { sourceId?: string | null; releaseId?: string | null }>;
   }>();
 
+  // Deduplicate by r2Key — duplicate images in a single batch cause
+  // UNIQUE constraint failures that ON CONFLICT DO NOTHING can't handle.
+  const seen = new Set<string>();
+  const deduped = assets.filter((a) => {
+    if (seen.has(a.r2Key)) return false;
+    seen.add(a.r2Key);
+    return true;
+  });
+
   let inserted = 0;
   // D1 has a ~1MB query size limit; 25 is safe for small media_asset rows.
   // Release inserts use 5 because content fields are much larger.
-  for (let i = 0; i < assets.length; i += 25) {
-    const chunk = assets.slice(i, i + 25).map((a) => ({
+  for (let i = 0; i < deduped.length; i += 25) {
+    const chunk = deduped.slice(i, i + 25).map((a) => ({
       r2Key: a.r2Key,
       sourceUrl: a.sourceUrl,
       sourceFilename: a.sourceFilename ?? null,
