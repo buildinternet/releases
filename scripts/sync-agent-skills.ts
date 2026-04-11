@@ -67,11 +67,9 @@ interface SkillMapping {
 interface SkillConfig {
   skills: SkillMapping;
   agentId: string;
-  agentVersion?: number;
   promptHash?: string;
   toolsHash?: string;
   workerAgentId?: string;
-  workerAgentVersion?: number;
   workerPromptHash?: string;
   lastSyncedAt: string;
 }
@@ -324,10 +322,8 @@ async function main() {
 
   // Only fetch discovery agent state when we need it
   let agent: { version: number; model: { id: string } } | null = null;
-  let agentVersion = 0;
   if (syncDiscovery && syncAgent) {
     agent = await getAgent(apiKey, agentId);
-    agentVersion = agent.version;
   }
 
   // ── 1. Sync skills ────────────────────────────────────────────
@@ -396,7 +392,7 @@ async function main() {
     cachedPromptHash: string | undefined;
     model: string;
     remoteAgent: { version: number; model: { id: string } };
-    onSuccess: (version: number) => void;
+    onSuccess: () => void;
   }
 
   /** Diff an agent's prompt/tools/model/skills against remote and apply updates. */
@@ -442,7 +438,7 @@ async function main() {
     console.log(`Updating ${label.toLowerCase()}: ${changes.join(", ")}...`);
     if (!dryRun) {
       const updated = await updateAgent(apiKey, id, remoteAgent.version, payload);
-      onSuccess(updated.version);
+      onSuccess();
       saveConfig(config);
       console.log(`✓ ${label} updated to v${updated.version}`);
     } else {
@@ -467,9 +463,8 @@ async function main() {
       cachedPromptHash: config.promptHash,
       model: process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6",
       remoteAgent: agent!,
-      onSuccess: (version) => {
+      onSuccess: () => {
         config.agentId = agentId;
-        config.agentVersion = version;
         config.promptHash = discoveryPromptHash;
         config.toolsHash = currentToolsHash;
         config.lastSyncedAt = new Date().toISOString();
@@ -497,9 +492,8 @@ async function main() {
         cachedPromptHash: config.workerPromptHash,
         model: workerModel,
         remoteAgent: workerAgent,
-        onSuccess: (version) => {
+        onSuccess: () => {
           config.workerAgentId = workerAgentId;
-          config.workerAgentVersion = version;
           config.workerPromptHash = workerPromptHash;
           config.toolsHash = currentToolsHash;
         },
@@ -515,7 +509,6 @@ async function main() {
           ...(skillIds.length > 0 ? { skills: skillIds } : {}),
         });
         config.workerAgentId = created.id;
-        config.workerAgentVersion = created.version;
         config.workerPromptHash = workerPromptHash;
         saveConfig(config);
         console.log(`✓ Worker agent created: ${created.id} (v${created.version})`);
