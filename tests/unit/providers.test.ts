@@ -171,6 +171,70 @@ describe("detectProviderFromHtml", () => {
   });
 });
 
+// ── staticContent hint ──────────────────────────────────────────────
+
+describe("staticContent hint", () => {
+  it("docusaurus has staticContent: true", () => {
+    const hints = getProviderHints("docusaurus");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).toBe(true);
+  });
+
+  it("vitepress has staticContent: true", () => {
+    const hints = getProviderHints("vitepress");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).toBe(true);
+  });
+
+  it("nextra has staticContent: true", () => {
+    const hints = getProviderHints("nextra");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).toBe(true);
+  });
+
+  it("mintlify has staticContent: true", () => {
+    const hints = getProviderHints("mintlify");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).toBe(true);
+  });
+
+  it("ghost has staticContent: true", () => {
+    const hints = getProviderHints("ghost");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).toBe(true);
+  });
+
+  it("wordpress has staticContent: true", () => {
+    const hints = getProviderHints("wordpress");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).toBe(true);
+  });
+
+  it("hashnode has staticContent: true", () => {
+    const hints = getProviderHints("hashnode");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).toBe(true);
+  });
+
+  it("notion does not have staticContent: true", () => {
+    const hints = getProviderHints("notion");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).not.toBe(true);
+  });
+
+  it("vercel-docs does not have staticContent: true", () => {
+    const hints = getProviderHints("vercel-docs");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).not.toBe(true);
+  });
+
+  it("gitbook does not have staticContent: true", () => {
+    const hints = getProviderHints("gitbook");
+    expect(hints).not.toBeNull();
+    expect(hints!.staticContent).not.toBe(true);
+  });
+});
+
 // ── getProviderHints ────────────────────────────────────────────────
 
 describe("getProviderHints", () => {

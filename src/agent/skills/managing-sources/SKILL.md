@@ -137,6 +137,18 @@ Write notes during onboarding after you've fetched and validated sources. Update
 
 **Product context:** Source guides group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the guide calls these out as "Organization-Level Sources" with a note about which products they may cover.
 
+## Rendering Control
+
+The scrape adapter can fetch pages with or without a headless browser. Static-site providers (Docusaurus, VitePress, WordPress, Ghost, Mintlify) are fetched without rendering by default — this is ~10-30x faster.
+
+To override the default for a specific source:
+- `releases edit <slug> --no-render` — force fast fetch (no headless browser)
+- `releases edit <slug> --render` — force headless browser rendering
+
+Use `--render` when you know a source needs JavaScript execution. Use `--no-render` when you've verified the content is in the initial HTML for a provider not yet in the static list.
+
+After adding a new scrape source with an unknown provider, check the first fetch results. If content is complete, consider setting `--no-render` and noting the provider behavior in the source guide.
+
 ## Duplicate Detection
 
 Before adding sources, search for overlapping URLs.

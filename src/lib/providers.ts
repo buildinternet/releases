@@ -13,6 +13,8 @@ export interface ProviderHints {
   preferredType?: "feed" | "scrape";
   /** Additional well-known changelog paths for this provider */
   changelogPaths?: string[];
+  /** Whether this provider serves pre-rendered HTML (no JS needed for content) */
+  staticContent?: boolean;
 }
 
 export interface DetectedProvider {
@@ -54,6 +56,7 @@ const PROVIDERS: ProviderDef[] = [
       markdownSuffix: true,
       preferredType: "feed",
       changelogPaths: ["/changelog", "/docs/changelog"],
+      staticContent: true,
     },
   },
   {
@@ -97,6 +100,7 @@ const PROVIDERS: ProviderDef[] = [
       feedPaths: ["/blog/rss.xml", "/blog/atom.xml", "/blog/feed.json"],
       changelogPaths: ["/blog", "/changelog"],
       preferredType: "feed",
+      staticContent: true,
     },
   },
   {
@@ -108,6 +112,7 @@ const PROVIDERS: ProviderDef[] = [
     hints: {
       feedPaths: ["/rss/", "/rss"],
       preferredType: "feed",
+      staticContent: true,
     },
   },
   {
@@ -118,6 +123,7 @@ const PROVIDERS: ProviderDef[] = [
       feedPaths: ["/feed/", "/feed"],
       changelogPaths: ["/category/releases", "/category/changelog", "/tag/release"],
       preferredType: "feed",
+      staticContent: true,
     },
   },
   {
@@ -128,6 +134,7 @@ const PROVIDERS: ProviderDef[] = [
     hints: {
       feedPaths: ["/rss.xml"],
       preferredType: "feed",
+      staticContent: true,
     },
   },
   {
@@ -138,6 +145,7 @@ const PROVIDERS: ProviderDef[] = [
       feedPaths: ["/feed.xml", "/rss.xml"],
       changelogPaths: ["/changelog", "/blog"],
       preferredType: "feed",
+      staticContent: true,
     },
   },
   {
@@ -148,6 +156,7 @@ const PROVIDERS: ProviderDef[] = [
       feedPaths: ["/feed.xml", "/feed.rss"],
       changelogPaths: ["/changelog", "/blog"],
       preferredType: "feed",
+      staticContent: true,
     },
   },
   {

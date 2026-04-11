@@ -158,19 +158,31 @@ Do NOT use crawl for single-page changelogs or feeds.
 
 Detected automatically in pre-checks. Listed for reference:
 
-| Provider | Feed Paths | Markdown Suffix | Notes |
-|----------|-----------|-----------------|-------|
-| Mintlify | `/rss.xml` | Yes (`.md`) | — |
-| Fern | `/changelog.rss`, `/docs/changelog.rss` | — | RSS contains `fve-mdx-b64` attributes (noise, stripped automatically). `<generator>` tag = `buildwithfern.com`. |
-| ReadMe | `/changelog.rss` | — | — |
-| Docusaurus | `/blog/rss.xml`, `/blog/atom.xml`, `/blog/feed.json` | — | — |
-| Ghost | `/rss/` | — | — |
-| WordPress | `/feed/` | — | — |
-| Productboard | `/changelog.rss`, `/changelog/feed` | — | — |
-| Headway | `/feed` | — | — |
-| Beamer | `/feed` | — | — |
-| LaunchNotes | `/rss` | — | — |
-| GitBook, Notion, Intercom, Zendesk, etc. | — | — | No feeds; use crawl or scrape |
+| Provider | Feed Paths | Markdown Suffix | Static | Notes |
+|----------|-----------|-----------------|--------|-------|
+| Mintlify | `/rss.xml` | Yes (`.md`) | Yes | — |
+| Fern | `/changelog.rss`, `/docs/changelog.rss` | — | No | RSS contains `fve-mdx-b64` attributes (noise, stripped automatically). `<generator>` tag = `buildwithfern.com`. |
+| ReadMe | `/changelog.rss` | — | No | — |
+| Docusaurus | `/blog/rss.xml`, `/blog/atom.xml`, `/blog/feed.json` | — | Yes | — |
+| Ghost | `/rss/` | — | Yes | — |
+| WordPress | `/feed/` | — | Yes | — |
+| Productboard | `/changelog.rss`, `/changelog/feed` | — | No | — |
+| Headway | `/feed` | — | No | — |
+| Beamer | `/feed` | — | No | — |
+| LaunchNotes | `/rss` | — | No | — |
+| GitBook, Notion, Intercom, Zendesk, etc. | — | — | No | No feeds; use crawl or scrape |
+
+## Rendering Optimization
+
+When a source uses the `scrape` type and falls through to the single-page Cloudflare path, the adapter checks whether the provider serves pre-rendered HTML. Static providers (Docusaurus, VitePress, WordPress, Ghost, Mintlify, etc.) don't need a headless browser — the content is already in the HTML response.
+
+For static providers, the adapter automatically uses Cloudflare's crawl API with `render: false`, which is ~10-30x faster than headless browser rendering and currently free.
+
+**When evaluating a new scrape source**, note the provider in the source guide. If the provider isn't in the table above but you can see from the page source that content is in the initial HTML (no loading spinners, no `<div id="root"></div>` shells), set `--no-render` on the source to enable the fast path.
+
+**If a fast fetch returns incomplete content**, the adapter falls back to full rendering automatically. If you notice this happening repeatedly for a source, set `--render` to force headless rendering and note the reason in the source guide.
+
+The agent's role is to evaluate content completeness after the first fetch — check that releases have titles, dates, and content. If they do, the fast path is working. If releases are empty or missing, the page likely needs JS rendering.
 
 ## Source Selection and Scope
 

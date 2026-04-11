@@ -13,8 +13,8 @@ The fetch pipeline follows this priority order:
 
 1. **Feed adapter** — if the source has a known feed URL (in `metadata.feedUrl`), fetch and parse the feed directly. Fastest and most reliable.
 2. **Markdown fetch** — if `metadata.markdownUrl` is set, fetch raw markdown instead of rendered HTML.
-3. **Cloudflare rendering** — for JS-heavy pages, use Cloudflare's browser rendering API to get the fully-rendered HTML.
-4. **Direct fetch** — fetch the page HTML directly as a fallback.
+3. **Fast fetch (static providers)** — for providers known to serve pre-rendered HTML (Docusaurus, VitePress, WordPress, Ghost, Mintlify), fetch without headless browser rendering. Uses Cloudflare crawl API with `render: false`. ~10-30x faster than full rendering. Controlled by provider `staticContent` hint or per-source `renderRequired` metadata.
+4. **Cloudflare rendering** — for JS-heavy pages (React SPAs, Notion, etc.), use Cloudflare's browser rendering API to get the fully-rendered HTML. Fallback when fast fetch returns no content.
 
 After fetching content, the pipeline parses it:
 - **Incremental parsing** — if the source already has releases in the database, extract only new ones by comparing against known releases. This is the default for subsequent fetches.

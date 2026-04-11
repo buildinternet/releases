@@ -27,6 +27,9 @@ export interface SourceMetadata {
   crawlRender?: boolean;      // false = skip headless browser, fast HTML-only fetch
   crawlSource?: "all" | "sitemaps" | "links"; // URL discovery method
 
+  /** Agent/user override — true = always use headless browser, false = fast fetch OK, absent = use provider hint */
+  renderRequired?: boolean;
+
   // Provider detection
   provider?: string;
   providerDetectedAt?: string;
