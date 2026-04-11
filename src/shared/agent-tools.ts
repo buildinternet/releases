@@ -394,7 +394,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
       case "get_source_guide": {
         const org = String(input.organization ?? "");
         if (!org) return "Error: organization is required";
-        const result = await api("GET", `/knowledge?scope=source-guide&slug=${encodeURIComponent(org)}`);
+        const result = await api("GET", `/guide?slug=${encodeURIComponent(org)}`);
         if (result === "null" || result.trim() === "null") {
           return `No source guide exists yet for "${org}". A guide will be auto-generated when you add, edit, or remove a source for this org.`;
         }
@@ -410,7 +410,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
         const org = String(input.organization ?? "");
         if (!org) return "Error: organization is required";
         if (input.notes === undefined) return "Error: notes is required";
-        return api("PATCH", `/knowledge/notes?slug=${encodeURIComponent(org)}`, { notes: String(input.notes) });
+        return api("PATCH", `/guide/notes?slug=${encodeURIComponent(org)}`, { notes: String(input.notes) });
       }
 
       // ── Write tools ──

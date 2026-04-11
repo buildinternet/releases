@@ -425,10 +425,10 @@ describe("orgToMarkdown", () => {
     expect(md).toContain("name: Vercel");
   });
 
-  it("includes knowledge_url when knowledgePage exists and baseUrl is provided", () => {
+  it("includes overview_url when overview exists and baseUrl is provided", () => {
     const org: FormatOrgDetail = {
       ...fullOrg,
-      knowledgePage: {
+      overview: {
         scope: "org",
         content: "test",
         releaseCount: 10,
@@ -438,12 +438,12 @@ describe("orgToMarkdown", () => {
       },
     };
     const md = orgToMarkdown(org, { baseUrl: "https://releases.sh" });
-    expect(md).toContain("knowledge_url: https://releases.sh/vercel/knowledge.md");
+    expect(md).toContain("overview_url: https://releases.sh/vercel/overview.md");
   });
 
-  it("omits knowledge_url when knowledgePage is absent", () => {
+  it("omits overview_url when overview is absent", () => {
     const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
-    expect(md).not.toContain("knowledge_url:");
+    expect(md).not.toContain("overview_url:");
   });
 });
 
@@ -479,7 +479,7 @@ describe("knowledgeToMarkdown", () => {
       baseUrl: "https://releases.sh",
       orgSlug: "vercel",
     });
-    expect(md).toContain("canonical: https://releases.sh/vercel/knowledge.md");
+    expect(md).toContain("canonical: https://releases.sh/vercel/overview.md");
   });
 
   it("includes product slug for product-scoped pages", () => {

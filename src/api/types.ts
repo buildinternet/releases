@@ -64,7 +64,9 @@ export interface OrgDetail {
     sourceCount: number;
   }>;
   sources: SourceListItem[];
-  knowledgePage?: KnowledgePageItem | null;
+  overview?: OverviewPageItem | null;
+  /** @deprecated Use overview */
+  knowledgePage?: OverviewPageItem | null;
   sourceGuide?: { scope: "source-guide"; content: string; updatedAt: string } | null;
 }
 
@@ -234,9 +236,9 @@ export interface UnifiedSearchResponse {
   releases: SearchReleaseHit[];
 }
 
-// ── Knowledge Pages ──
+// ── Overview Pages ──
 
-export interface KnowledgePageItem {
+export interface OverviewPageItem {
   scope: "org" | "product";
   orgSlug?: string | null;
   productSlug?: string | null;
@@ -246,6 +248,9 @@ export interface KnowledgePageItem {
   generatedAt: string;
   updatedAt: string;
 }
+
+/** @deprecated Use OverviewPageItem */
+export type KnowledgePageItem = OverviewPageItem;
 
 /** @deprecated Use UnifiedSearchResponse */
 export type SearchResult = SearchReleaseHit;

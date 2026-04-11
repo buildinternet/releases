@@ -1433,11 +1433,11 @@ export async function getMonthlySummary(
   return row;
 }
 
-// ── Knowledge Pages ──
+// ── Overview Pages ──
 
-export async function getKnowledgePageForOrg(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
+export async function getOrgOverview(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
   if (isRemoteMode() && orgSlug) {
-    return apiClient.getKnowledgePage("org", orgSlug);
+    return apiClient.getOverview("org", orgSlug);
   }
   const db = getDb();
   const [row] = await db
@@ -1447,9 +1447,9 @@ export async function getKnowledgePageForOrg(orgId: string, orgSlug?: string): P
   return row ?? null;
 }
 
-export async function getKnowledgePageForProduct(productId: string, productSlug?: string): Promise<KnowledgePage | null> {
+export async function getProductOverview(productId: string, productSlug?: string): Promise<KnowledgePage | null> {
   if (isRemoteMode() && productSlug) {
-    return apiClient.getKnowledgePage("product", productSlug);
+    return apiClient.getOverview("product", productSlug);
   }
   const db = getDb();
   const [row] = await db
@@ -1461,7 +1461,7 @@ export async function getKnowledgePageForProduct(productId: string, productSlug?
 
 export async function getSourceGuideForOrg(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
   if (isRemoteMode() && orgSlug) {
-    return apiClient.getKnowledgePage("source-guide", orgSlug);
+    return apiClient.getSourceGuide(orgSlug);
   }
   const db = getDb();
   const [row] = await db
@@ -1471,11 +1471,11 @@ export async function getSourceGuideForOrg(orgId: string, orgSlug?: string): Pro
   return row ?? null;
 }
 
-export async function upsertKnowledgePage(
+export async function upsertOverviewPage(
   data: { scope: "org" | "product" | "source-guide"; orgId?: string | null; productId?: string | null; content: string; notes?: string | null; releaseCount: number; lastContributingReleaseAt?: string | null },
 ): Promise<void> {
   if (isRemoteMode()) {
-    return apiClient.upsertKnowledgePage(data);
+    return apiClient.upsertOverview(data);
   }
   const db = getDb();
   const now = new Date().toISOString();

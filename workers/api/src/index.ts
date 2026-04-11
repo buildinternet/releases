@@ -17,6 +17,8 @@ import { mediaRoutes } from "./routes/media.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import knowledge from "./routes/knowledge.js";
+import overview from "./routes/overview.js";
+import guide from "./routes/guide.js";
 import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
@@ -70,7 +72,7 @@ v1.route("/", mediaRoutes);
 // Public-read routes: GET is open, writes require auth
 const publicReadRoutes = [
   "stats", "orgs", "sources", "search", "releases",
-  "products", "summaries", "knowledge", "tags",
+  "products", "summaries", "knowledge", "overview", "guide", "tags",
 ];
 for (const r of publicReadRoutes) {
   v1.use(`/${r}`, publicReadAuthMiddleware, dbHealthCheck);
@@ -117,7 +119,9 @@ v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
 v1.route("/", releaseRoutes);
 v1.route("/summaries", summaries);
-v1.route("/knowledge", knowledge);
+v1.route("/overview", overview);
+v1.route("/guide", guide);
+v1.route("/knowledge", knowledge); // deprecated — alias for overview/guide
 v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);

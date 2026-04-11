@@ -12,7 +12,7 @@ import {
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
   insertMediaAssets, clearChangeDetected,
-  getKnowledgePageForOrg, upsertKnowledgePage,
+  getOrgOverview, upsertOverviewPage,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -885,7 +885,7 @@ Examples:
           const orgSources = await getSourcesByOrg(org.id);
           const [releaseArrays, existingPage] = await Promise.all([
             Promise.all(orgSources.map((s) => getRecentReleases(s.id, cutoff, s.slug))),
-            getKnowledgePageForOrg(org.id, org.slug),
+            getOrgOverview(org.id, org.slug),
           ]);
           const allOrgReleases = releaseArrays.flat()
             .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
@@ -904,7 +904,7 @@ Examples:
 
           if (result) {
             const latestDate = allOrgReleases[0]?.publishedAt ?? null;
-            await upsertKnowledgePage({
+            await upsertOverviewPage({
               scope: "org",
               orgId: org.id,
               content: result.content,

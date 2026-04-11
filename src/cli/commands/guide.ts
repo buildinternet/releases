@@ -2,7 +2,7 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import {
   findOrg, getSourcesByOrg, getProductsByOrg,
-  getSourceGuideForOrg, upsertKnowledgePage,
+  getSourceGuideForOrg, upsertOverviewPage,
   updateSourceGuideNotes,
 } from "../../db/queries.js";
 import { generateSourceGuideHeader, assembleSourceGuide, extractNotesFromLegacyGuide } from "../../ai/source-guide.js";
@@ -80,7 +80,7 @@ Examples:
         notes = extractNotesFromLegacyGuide(existingPage.content);
       }
 
-      await upsertKnowledgePage({
+      await upsertOverviewPage({
         scope: "source-guide",
         orgId: org.id,
         content: header,

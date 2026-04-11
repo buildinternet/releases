@@ -14,7 +14,7 @@ import type {
   OrgDetail,
   OrgReleaseItem,
   UnifiedSearchResponse,
-  KnowledgePageItem,
+  OverviewPageItem,
 } from "../api/types.js";
 
 // Re-export under the old names for any callers still using them
@@ -192,8 +192,8 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): s
 
   if (opts.baseUrl) {
     lines.push(yamlLine("canonical", `${opts.baseUrl}/${org.slug}`));
-    if (org.knowledgePage) {
-      lines.push(yamlLine("knowledge_url", `${opts.baseUrl}/${org.slug}/knowledge.md`));
+    if (org.overview || org.knowledgePage) {
+      lines.push(yamlLine("overview_url", `${opts.baseUrl}/${org.slug}/overview.md`));
     }
   }
 
@@ -405,34 +405,37 @@ export function searchToMarkdown(
   return lines.join("\n");
 }
 
-// ── Knowledge Page → Markdown ─────────────────────────────────────
+// ── Overview Page → Markdown ──────────────────────────────────────
 
-export function knowledgeToMarkdown(
-  knowledge: KnowledgePageItem,
+export function overviewToMarkdown(
+  overview: OverviewPageItem,
   opts: FormatOptions & { orgSlug?: string; productSlug?: string } = {},
 ): string {
   const lines: string[] = [];
 
   lines.push("---");
-  lines.push(yamlLine("scope", knowledge.scope));
+  lines.push(yamlLine("scope", overview.scope));
   if (opts.orgSlug) {
     lines.push(yamlLine("organization", opts.orgSlug));
   }
   if (opts.productSlug) {
     lines.push(yamlLine("product", opts.productSlug));
   }
-  lines.push(yamlLine("release_count", knowledge.releaseCount));
-  if (knowledge.lastContributingReleaseAt) {
-    lines.push(yamlLine("last_release", isoDateOnly(knowledge.lastContributingReleaseAt)));
+  lines.push(yamlLine("release_count", overview.releaseCount));
+  if (overview.lastContributingReleaseAt) {
+    lines.push(yamlLine("last_release", isoDateOnly(overview.lastContributingReleaseAt)));
   }
-  lines.push(yamlLine("generated", isoDateOnly(knowledge.generatedAt)));
+  lines.push(yamlLine("generated", isoDateOnly(overview.generatedAt)));
   if (opts.baseUrl && opts.orgSlug) {
-    lines.push(yamlLine("canonical", `${opts.baseUrl}/${opts.orgSlug}/knowledge.md`));
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/${opts.orgSlug}/overview.md`));
   }
   lines.push("---");
   lines.push("");
-  lines.push(knowledge.content);
+  lines.push(overview.content);
   lines.push("");
 
   return lines.join("\n");
 }
+
+/** @deprecated Use overviewToMarkdown */
+export const knowledgeToMarkdown = overviewToMarkdown;
