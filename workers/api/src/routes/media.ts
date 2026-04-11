@@ -71,7 +71,6 @@ mediaRoutes.get("/media/:key{.+}", async (c) => {
   }
 
   headers.set("X-Content-Type-Options", "nosniff");
-  headers.set("Content-Disposition", "attachment");
 
   return new Response(object.body, { headers });
 });

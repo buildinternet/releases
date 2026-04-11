@@ -18,8 +18,11 @@ function stripLeadingTitle(content: string, title: string | null): string {
   if (firstNewline === -1) return content;
   const firstLine = content.slice(0, firstNewline).replace(/^#+\s+/, "").trim();
   if (firstLine.toLowerCase() === title.toLowerCase()) {
-    return content.slice(firstNewline + 1).trimStart();
+    content = content.slice(firstNewline + 1).trimStart();
   }
+  // Strip empty markdown artifacts left by HTML-to-markdown conversion
+  // (orphan list items, empty headings, bare bullets)
+  content = content.replace(/^(?:-\s*\n|#+\s*\n)+/, "");
   return content;
 }
 
@@ -31,7 +34,7 @@ function MediaGallery({
   content: string;
 }) {
   if (!media || media.length === 0) return null;
-  const extra = media.filter((m) => !content.includes(m.url));
+  const extra = media.filter((m) => !content.includes(m.url) && !(m.r2Url && content.includes(m.r2Url)));
   if (extra.length === 0) return null;
 
   return (

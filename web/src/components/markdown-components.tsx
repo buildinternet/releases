@@ -85,6 +85,18 @@ export function createMarkdownComponents(
         );
       }
 
+      // Direct video file link (.mp4, .webm)
+      if (/\.(mp4|webm)(\?.*)?$/i.test(href)) {
+        return (
+          <video
+            src={href}
+            controls
+            preload="metadata"
+            className={`rounded-md max-w-full ${videoClass}`}
+          />
+        );
+      }
+
       // Regular link
       return (
         <a href={href} target="_blank" rel="noopener noreferrer">
@@ -115,6 +127,7 @@ export const collapsedMarkdownComponents: Record<string, any> = {
     const children = props.children;
     if (!isSafeHref(href)) return <>{children}</>;
     if (/youtube|vimeo|loom/i.test(href)) return <>{children}</>;
+    if (/\.(mp4|webm)(\?.*)?$/i.test(href)) return null;
     return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
   },
 };

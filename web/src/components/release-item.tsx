@@ -12,23 +12,27 @@ import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
 
-/** Strip a leading markdown heading that duplicates the release title */
+/** Strip a leading markdown heading that duplicates the release title,
+ *  and empty artifacts left by HTML-to-markdown conversion. */
 function stripLeadingTitle(content: string, title: string | null): string {
   if (!title || !content) return content;
   const firstNewline = content.indexOf("\n");
   if (firstNewline === -1) return content;
   const firstLine = content.slice(0, firstNewline).replace(/^#+\s+/, "").trim();
   if (firstLine.toLowerCase() === title.toLowerCase()) {
-    return content.slice(firstNewline + 1).trimStart();
+    content = content.slice(firstNewline + 1).trimStart();
   }
+  // Strip empty markdown artifacts (orphan list items, empty headings)
+  content = content.replace(/^(?:-\s*\n|#+\s*\n)+/, "");
   return content;
 }
 
 function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content: string }) {
   if (!media || media.length === 0) return null;
 
-  // Filter out items already rendered inline via markdown content
-  const extra = media.filter(m => !content.includes(m.url));
+  // Filter out items already rendered inline via markdown content.
+  // Content URLs may be rewritten from original to R2 paths, so check both.
+  const extra = media.filter(m => !content.includes(m.url) && !(m.r2Url && content.includes(m.r2Url)));
   if (extra.length === 0) return null;
 
   return (
