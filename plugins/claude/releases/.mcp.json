@@ -1,0 +1,6 @@
+{
+  "releases": {
+    "type": "http",
+    "url": "https://mcp.releases.sh/mcp"
+  }
+}
