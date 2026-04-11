@@ -49,7 +49,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
           </div>
           {rolling.generatedAt && (
             <div className="text-[10px] text-stone-400 dark:text-stone-600 mt-3 tabular-nums">
-              Generated {new Date(rolling.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" })}
+              Generated {new Date(rolling.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}
             </div>
           )}
         </div>

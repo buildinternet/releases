@@ -13,6 +13,7 @@ export function AbsoluteDateTooltip({ iso }: { iso: string | null }) {
     year: "numeric",
     hour: "numeric",
     minute: "2-digit",
+    timeZoneName: "short",
   });
 
   return (
