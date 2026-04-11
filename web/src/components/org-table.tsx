@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { OrgListItem } from "@/lib/api";
 import { HoverCard } from "@/components/hover-card";
+import { Sparkline } from "@/components/sparkline";
 
 import { formatRelativeDate } from "@/lib/formatters";
 
@@ -29,6 +30,32 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   );
 }
 
+function AbsoluteDateTooltip({ iso }: { iso: string | null }) {
+  if (!iso) return <span>{"\u2014"}</span>;
+
+  const formatted = new Date(iso).toLocaleString(undefined, {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  });
+
+  return (
+    <HoverCard.Root>
+      <HoverCard.Trigger className="inline">
+        <span>{formatRelativeDate(iso)}</span>
+      </HoverCard.Trigger>
+      <HoverCard.Content side="top" align="end" sideOffset={4}>
+        <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-1.5 text-[11px] text-stone-600 dark:text-stone-300 font-mono tabular-nums whitespace-nowrap">
+          {formatted}
+        </div>
+      </HoverCard.Content>
+    </HoverCard.Root>
+  );
+}
+
 function OrgHoverContent({ org }: { org: OrgListItem }) {
   return (
     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg p-3 w-[220px]">
@@ -51,16 +78,16 @@ function OrgHoverContent({ org }: { org: OrgListItem }) {
         <div className="flex gap-4">
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-0.5">Sources</div>
-            <div className="text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100">{org.sourceCount}</div>
+            <div className="text-sm font-medium font-mono tabular-nums text-stone-900 dark:text-stone-100">{org.sourceCount}</div>
           </div>
           <div>
             <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-0.5">Releases</div>
-            <div className="text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100">{org.releaseCount.toLocaleString()}</div>
+            <div className="text-sm font-medium font-mono tabular-nums text-stone-900 dark:text-stone-100">{org.releaseCount.toLocaleString()}</div>
           </div>
           {org.recentReleaseCount > 0 && (
             <div>
               <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-0.5">Last 30d</div>
-              <div className="text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100">{org.recentReleaseCount}</div>
+              <div className="text-sm font-medium font-mono tabular-nums text-stone-900 dark:text-stone-100">{org.recentReleaseCount}</div>
             </div>
           )}
         </div>
@@ -114,6 +141,9 @@ export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
             <th className={`${th} text-right hidden sm:table-cell`} onClick={() => toggleSort("recentReleaseCount")}>
               Last 30d<SortIcon active={sortKey === "recentReleaseCount"} dir={sortDir} />
             </th>
+            <th className={`${th} hidden md:table-cell`}>
+              <span className="sr-only">Activity</span>
+            </th>
             <th className={`${th} text-right`} onClick={() => toggleSort("lastActivity")}>
               <HoverCard.Root>
                 <HoverCard.Trigger className="inline">
@@ -151,9 +181,19 @@ export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
                   </HoverCard.Content>
                 </HoverCard.Root>
               </td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-stone-600 dark:text-stone-400 hidden sm:table-cell">{(org.recentReleaseCount ?? 0) > 0 ? org.recentReleaseCount.toLocaleString() : "—"}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-stone-500 dark:text-stone-400 text-xs whitespace-nowrap">
-                {formatRelativeDate(org.lastActivity)}
+              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-stone-600 dark:text-stone-400 hidden sm:table-cell">
+                {org.recentReleaseCount > 0 ? org.recentReleaseCount.toLocaleString() : "\u2014"}
+              </td>
+              <td className={`px-4 py-2.5 hidden md:table-cell ${org.recentReleaseCount > 0 ? "text-stone-500 dark:text-stone-400" : "text-stone-300 dark:text-stone-700"}`}>
+                <Sparkline
+                  data={org.sparkline ?? []}
+                  width={80}
+                  height={24}
+                  id={org.slug}
+                />
+              </td>
+              <td className="px-4 py-2.5 text-right font-mono tabular-nums text-stone-500 dark:text-stone-400 text-xs whitespace-nowrap">
+                <AbsoluteDateTooltip iso={org.lastActivity} />
               </td>
             </tr>
           ))}

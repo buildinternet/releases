@@ -41,6 +41,32 @@ export async function getOrgSourcesWithStats(
   `);
 }
 
+export type OrgSparklineRow = {
+  org_id: string;
+  date: string;
+  cnt: number;
+};
+
+export async function getOrgSparklines(
+  db: D1Db,
+  cutoff30d: string,
+): Promise<OrgSparklineRow[]> {
+  return db.all<OrgSparklineRow>(sql`
+    SELECT
+      s.org_id,
+      DATE(r.published_at) AS date,
+      COUNT(*) AS cnt
+    FROM releases r
+    INNER JOIN sources s ON s.id = r.source_id
+    WHERE
+      r.published_at >= ${cutoff30d}
+      AND r.published_at IS NOT NULL
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+    GROUP BY s.org_id, DATE(r.published_at)
+    ORDER BY s.org_id, date
+  `);
+}
+
 export type OrgActivityBucketRow = {
   source_id: string;
   week_start: string;
