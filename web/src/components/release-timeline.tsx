@@ -301,7 +301,7 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
             }`}
             onClick={() => setViewMode("chart")}
           >
-            Chart
+            Timeline
           </button>
         </div>
       )}
@@ -326,9 +326,9 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
         </RangeNavigator.Root>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 mb-2">
+      <div className={`grid grid-cols-1 ${viewMode === "heatmap" ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-3 mt-4 mb-2`}>
         {([
-          { label: "Releases", value: String(summaryStats.totalReleases), tooltip: "Total releases in the selected chart range." },
+          ...(viewMode !== "heatmap" ? [{ label: "Releases", value: String(summaryStats.totalReleases), tooltip: "Total releases in the selected timeline range." }] : []),
           { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014", tooltip: "Average time between releases in the selected range." },
           { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk`, tooltip: "Average release frequency in the selected range." },
         ]).map((stat) => (
