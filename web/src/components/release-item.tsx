@@ -10,11 +10,7 @@ import type { ReleaseItem } from "@/lib/api";
 import { isOptimizableImage } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
-
-function formatDate(iso: string | null) {
-  if (!iso) return null;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
+import { formatDate } from "@/lib/formatters";
 
 /** Strip a leading markdown heading that duplicates the release title */
 function stripLeadingTitle(content: string, title: string | null): string {

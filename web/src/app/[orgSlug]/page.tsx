@@ -54,13 +54,19 @@ export default async function OrgPage({
   let activity;
   let heatmap: OrgHeatmap | null = null;
   let initialReleases: OrgReleasesResponse | null = null;
+  let sparklines: { sources: { slug: string; name: string; sparkline: number[] }[] } | null = null;
   try {
     if (activeTab === "releases") {
       [org, initialReleases] = await Promise.all([
         getOrg(orgSlug),
         api.orgReleases(orgSlug).catch(() => null),
       ]);
-    } else if (activeTab === "sources" || activeTab === "guide") {
+    } else if (activeTab === "sources") {
+      [org, sparklines] = await Promise.all([
+        getOrg(orgSlug),
+        api.orgSparklines(orgSlug).catch(() => null),
+      ]);
+    } else if (activeTab === "guide") {
       org = await getOrg(orgSlug);
     } else {
       [org, activity, heatmap] = await Promise.all([
@@ -151,7 +157,15 @@ export default async function OrgPage({
                 </div>
               )
             ) : activeTab === "sources" ? (
-              <SourceTable sources={org.sources} products={org.products} orgSlug={orgSlug} />
+              <SourceTable sources={org.sources} products={org.products} orgSlug={orgSlug} sourceSparklines={(() => {
+                const map: Record<string, number[]> = {};
+                if (sparklines) {
+                  for (const s of sparklines.sources) {
+                    map[s.slug] = s.sparkline;
+                  }
+                }
+                return Object.keys(map).length > 0 ? map : undefined;
+              })()} />
             ) : activeTab === "guide" && org.sourceGuide ? (
               <SourceGuideView guide={org.sourceGuide} />
             ) : (

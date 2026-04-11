@@ -10,7 +10,7 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import { assembleSourceGuide } from "@releases/ai/source-guide.js";
 import type { Env } from "../index.js";
-import { getOrgsWithStats, getOrgSparklines, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgReleasesFeed } from "../queries/orgs.js";
+import { getOrgsWithStats, getOrgSparklines, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgSourceSparklines, getOrgReleasesFeed } from "../queries/orgs.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -72,6 +72,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const cutoff = daysAgoIso(30);
+  const cutoff90d = daysAgoIso(90);
 
   const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgePageRows] = await Promise.all([
     db
@@ -152,13 +153,14 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .select({
         total: count(),
         recent: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
+        recent90d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff90d} THEN 1 END)`,
         oldest: min(releases.publishedAt),
       })
       .from(releases)
       .where(and(inArray(releases.sourceId, orgSourceIds), sql`${releases.publishedAt} IS NOT NULL`));
 
     releasesLast30Days = metrics.recent;
-    avgReleasesPerWeek = computeAvgPerWeek(metrics.total, metrics.oldest);
+    avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
     oldestReleaseDate = metrics.oldest;
   }
 
@@ -555,6 +557,109 @@ orgRoutes.get("/orgs/:slug/heatmap", async (c) => {
     range: { from, to },
     dailyCounts: rows.map((r) => ({ date: r.date, count: r.cnt })),
     total,
+  });
+});
+
+// Per-source and per-product sparklines (30-day daily release counts)
+orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+
+  let [org] = await db.select().from(organizations).where(orgWhere(slug));
+  if (!org) {
+    const [alias] = await db
+      .select({ org: organizations })
+      .from(domainAliases)
+      .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
+      .where(eq(domainAliases.domain, slug));
+    if (alias) org = alias.org;
+  }
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  const cutoff30d = daysAgoIso(30);
+  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+  const fromDate = new Date(today);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 29);
+  const from = fromDate.toISOString().slice(0, 10);
+  const to = today.toISOString().slice(0, 10);
+
+  const [sparklineRows, orgSources, productRows] = await Promise.all([
+    getOrgSourceSparklines(db, org.id, cutoff30d),
+    db
+      .select({ id: sources.id, slug: sources.slug, name: sources.name, productId: sources.productId })
+      .from(sources)
+      .where(eq(sources.orgId, org.id))
+      .orderBy(sources.name),
+    db
+      .select({ id: products.id, slug: products.slug, name: products.name })
+      .from(products)
+      .where(eq(products.orgId, org.id))
+      .orderBy(products.name),
+  ]);
+
+  // Build per-source sparkline arrays (30 entries, index 0 = 30d ago)
+  const sourceSparklineMap = new Map<string, number[]>();
+  for (const src of orgSources) {
+    sourceSparklineMap.set(src.id, new Array(30).fill(0));
+  }
+  for (const row of sparklineRows) {
+    let arr = sourceSparklineMap.get(row.source_id);
+    if (!arr) {
+      arr = new Array(30).fill(0);
+      sourceSparklineMap.set(row.source_id, arr);
+    }
+    const dayDate = new Date(row.date + "T00:00:00Z");
+    const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
+    const idx = 29 - daysAgo;
+    if (idx >= 0 && idx < 30) {
+      arr[idx] = row.cnt;
+    }
+  }
+
+  // Assemble per-source output
+  const sourcesOut = orgSources.map((src) => ({
+    slug: src.slug,
+    name: src.name,
+    sparkline: sourceSparklineMap.get(src.id) ?? new Array(30).fill(0),
+  }));
+
+  // Aggregate per-product by summing source sparklines
+  const productSourceMap = new Map<string, string[]>();
+  for (const src of orgSources) {
+    if (src.productId) {
+      let arr = productSourceMap.get(src.productId);
+      if (!arr) { arr = []; productSourceMap.set(src.productId, arr); }
+      arr.push(src.id);
+    }
+  }
+
+  const productsOut = productRows.map((prod) => {
+    const sourceIds = productSourceMap.get(prod.id) ?? [];
+    const sparkline = new Array(30).fill(0);
+    for (const srcId of sourceIds) {
+      const srcSparkline = sourceSparklineMap.get(srcId);
+      if (srcSparkline) {
+        for (let i = 0; i < 30; i++) sparkline[i] += srcSparkline[i];
+      }
+    }
+    return { slug: prod.slug, name: prod.name, sparkline };
+  });
+
+  // Aggregate total across all sources
+  const aggregate = new Array(30).fill(0);
+  for (const src of orgSources) {
+    const srcSparkline = sourceSparklineMap.get(src.id);
+    if (srcSparkline) {
+      for (let i = 0; i < 30; i++) aggregate[i] += srcSparkline[i];
+    }
+  }
+
+  return c.json({
+    org: { slug: org.slug, name: org.name },
+    range: { from, to },
+    aggregate,
+    sources: sourcesOut,
+    products: productsOut,
   });
 });
 

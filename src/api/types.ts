@@ -294,6 +294,16 @@ export interface OrgActivity {
   aggregateWeekly: Array<{ weekStart: string; count: number }>;
 }
 
+// ── Org Sparklines (per-source/product breakdown) ──
+
+export interface OrgSparklines {
+  org: { slug: string; name: string };
+  range: { from: string; to: string };
+  aggregate: number[];
+  sources: Array<{ slug: string; name: string; sparkline: number[] }>;
+  products: Array<{ slug: string; name: string; sparkline: number[] }>;
+}
+
 // ── Org Heatmap ──
 
 export interface OrgHeatmap {
