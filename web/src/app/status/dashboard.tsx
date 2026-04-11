@@ -8,6 +8,7 @@ interface SessionState {
   type?: "onboard" | "update";
   agent?: "sonnet" | "haiku";
   status: "running" | "complete" | "error";
+  warnings?: string[];
   step?: string;
   sourcesFound?: number;
   sourcesValidated?: number;
@@ -559,7 +560,7 @@ function SessionsTable({
                 {formatTime(session.startedAt)}
               </div>
               <div>
-                <StepBadge step={session.step} status={session.status} type={session.type} />
+                <StepBadge step={session.step} status={session.status} type={session.type} warnings={session.warnings} />
               </div>
               <div className="text-stone-500">
                 {session.status === "error" ? (
@@ -642,7 +643,10 @@ function SessionsTable({
   );
 }
 
-function StepBadge({ step, status, type }: { step?: string; status: string; type?: string }) {
+function StepBadge({ step, status, type, warnings }: { step?: string; status: string; type?: string; warnings?: string[] }) {
+  if (status === "complete" && warnings && warnings.length > 0) {
+    return <span className="text-amber-500" title={warnings.join("\n")}>Complete <span className="text-xs">⚠ {warnings.length}</span></span>;
+  }
   if (status === "complete") return <span className="text-green-600">Complete</span>;
   if (status === "error") return <span className="text-red-500">Error</span>;
   if (!step) return <span className="text-stone-400">Starting...</span>;

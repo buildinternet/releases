@@ -575,7 +575,7 @@ Examples:
                 `${source.name}: found ${imageCount} image${imageCount !== 1 ? "s" : ""}, ${videoCount} video${videoCount !== 1 ? "s" : ""} in ${releasesWithMedia} release${releasesWithMedia !== 1 ? "s" : ""}`,
               );
 
-              const uploadResults = await processMediaForR2(allMedia, source.slug, (progress: MediaUploadProgress) => {
+              const { uploads: uploadResults, failureReasons } = await processMediaForR2(allMedia, source.slug, (progress: MediaUploadProgress) => {
                 progressSession(
                   `${source.name}: uploading ${progress.uploaded}/${progress.total} images to R2...`,
                 );
@@ -591,8 +591,11 @@ Examples:
                 );
               }
               if (failedCount > 0) {
+                const reasonSummary = Object.entries(failureReasons)
+                  .map(([reason, count]) => `${reason} (${count})`)
+                  .join(", ");
                 progressSession(
-                  `${source.name}: failed to upload ${failedCount} image${failedCount !== 1 ? "s" : ""}`,
+                  `${source.name}: failed to upload ${failedCount} image${failedCount !== 1 ? "s" : ""}${reasonSummary ? `: ${reasonSummary}` : ""}`,
                 );
               }
 

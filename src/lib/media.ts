@@ -23,6 +23,16 @@ export interface UploadResult {
   byteSize: number;
 }
 
+/** Returned when an upload is skipped or fails, with a human-readable reason. */
+export interface UploadSkipped {
+  skipped: true;
+  reason: string;
+}
+
+function isSkipped(v: UploadResult | UploadSkipped): v is UploadSkipped {
+  return "skipped" in v;
+}
+
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
@@ -177,18 +187,18 @@ export function extractFilename(url: string): string | null {
 export async function uploadToR2(
   mediaUrl: string,
   sourceSlug: string
-): Promise<UploadResult | undefined> {
+): Promise<UploadResult | UploadSkipped> {
   const apiUrl = config.apiUrl();
   const apiKey = config.apiKey();
 
   if (!apiUrl || !apiKey) {
     logger.debug("uploadToR2: skipping — not in remote mode");
-    return undefined;
+    return { skipped: true, reason: "no API credentials" };
   }
 
   if (isSkippedUrl(mediaUrl)) {
     logger.debug("uploadToR2: skipping streaming embed URL", mediaUrl);
-    return undefined;
+    return { skipped: true, reason: "streaming embed URL" };
   }
 
   let response: Response;
@@ -201,12 +211,12 @@ export async function uploadToR2(
     });
   } catch (err) {
     logger.debug("uploadToR2: fetch failed for", mediaUrl, err);
-    return undefined;
+    return { skipped: true, reason: "download failed" };
   }
 
   if (!response.ok) {
     logger.debug("uploadToR2: non-OK status", response.status, "for", mediaUrl);
-    return undefined;
+    return { skipped: true, reason: `download HTTP ${response.status}` };
   }
 
   // Check content-type
@@ -215,7 +225,7 @@ export async function uploadToR2(
 
   if (!UPLOADABLE_CONTENT_TYPES.has(contentType)) {
     logger.debug("uploadToR2: unsupported content-type", contentType, "for", mediaUrl);
-    return undefined;
+    return { skipped: true, reason: `unsupported type: ${contentType}` };
   }
 
   // Check content-length header before reading body
@@ -229,7 +239,7 @@ export async function uploadToR2(
         "exceeds 10 MB for",
         mediaUrl
       );
-      return undefined;
+      return { skipped: true, reason: "too large (>10MB)" };
     }
   }
 
@@ -239,7 +249,7 @@ export async function uploadToR2(
     body = await response.arrayBuffer();
   } catch (err) {
     logger.debug("uploadToR2: failed to read body for", mediaUrl, err);
-    return undefined;
+    return { skipped: true, reason: "download failed" };
   }
 
   if (body.byteLength > MAX_BYTES) {
@@ -249,7 +259,7 @@ export async function uploadToR2(
       "exceeds 10 MB for",
       mediaUrl
     );
-    return undefined;
+    return { skipped: true, reason: "too large (>10MB)" };
   }
 
   if (body.byteLength < MIN_BYTES) {
@@ -259,7 +269,7 @@ export async function uploadToR2(
       "under 5 KB for",
       mediaUrl
     );
-    return undefined;
+    return { skipped: true, reason: "too small (<5KB)" };
   }
 
   // Build deterministic R2 key
@@ -289,7 +299,7 @@ export async function uploadToR2(
         "for key",
         key
       );
-      return undefined;
+      return { skipped: true, reason: `upload HTTP ${putRes.status}` };
     }
 
     logger.debug("uploadToR2: uploaded", key);
@@ -303,7 +313,7 @@ export async function uploadToR2(
     };
   } catch (err) {
     logger.warn("uploadToR2: PUT request failed for key", key, err);
-    return undefined;
+    return { skipped: true, reason: "upload failed" };
   }
 }
 
@@ -316,22 +326,30 @@ export interface MediaUploadProgress {
   total: number;
   failed: number;
   skipped: number;
+  /** Aggregated failure reasons, e.g. { "download failed": 2, "too small (<5KB)": 1 } */
+  failureReasons: Record<string, number>;
+}
+
+export interface MediaUploadResult {
+  uploads: UploadResult[];
+  failureReasons: Record<string, number>;
 }
 
 /**
  * Processes a batch of media refs, uploading uploadable items to R2.
  * Mutates `media` in place by setting `r2Key` where uploads succeed.
- * Returns upload results for media asset registration.
+ * Returns upload results and aggregated failure reasons.
  */
 export async function processMediaForR2(
   media: MediaRef[],
   sourceSlug: string,
   onProgress?: (progress: MediaUploadProgress) => void,
-): Promise<UploadResult[]> {
+): Promise<MediaUploadResult> {
   const uploadable = media.filter((m) => !isSkippedUrl(m.url));
   const uploadResults: UploadResult[] = [];
   let failed = 0;
   const skipped = media.length - uploadable.length;
+  const failureReasons: Record<string, number> = {};
 
   // Process in batches of 5
   const BATCH_SIZE = 5;
@@ -343,11 +361,14 @@ export async function processMediaForR2(
 
     for (let j = 0; j < batch.length; j++) {
       const result = results[j];
-      if (result.status === "fulfilled" && result.value) {
-        batch[j].r2Key = result.value.r2Key;
-        uploadResults.push(result.value);
+      const val = result.status === "fulfilled" ? result.value : null;
+      if (val && !isSkipped(val)) {
+        batch[j].r2Key = val.r2Key;
+        uploadResults.push(val);
       } else {
         failed++;
+        const reason = val && isSkipped(val) ? val.reason : "unexpected error";
+        failureReasons[reason] = (failureReasons[reason] ?? 0) + 1;
       }
     }
 
@@ -356,8 +377,9 @@ export async function processMediaForR2(
       total: uploadable.length,
       failed,
       skipped,
+      failureReasons: { ...failureReasons },
     });
   }
 
-  return uploadResults;
+  return { uploads: uploadResults, failureReasons };
 }
