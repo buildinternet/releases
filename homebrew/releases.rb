@@ -17,20 +17,20 @@ class Releases < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-darwin-arm64.gz"
-      sha256 "PLACEHOLDER_DARWIN_ARM64_SHA256"
+      sha256 "8af0f590256d86b3d1a9266053dce37ab40d6fc708188aa0f75348b5a1d21711"
     else
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-darwin-x64.gz"
-      sha256 "PLACEHOLDER_DARWIN_X64_SHA256"
+      sha256 "f3551d99eab244c19bc552d9adc0e66ea7f4be3fab4c124b7b932c6843ec4952"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-linux-arm64.gz"
-      sha256 "PLACEHOLDER_LINUX_ARM64_SHA256"
+      sha256 "b7690c6b2b7a918459aabe3b6fb6caac2d878028b445641a59131f0dd4b78f5f"
     else
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-linux-x64.gz"
-      sha256 "PLACEHOLDER_LINUX_X64_SHA256"
+      sha256 "a3e41d22a2c86cf4d7d535cba758dc0a31e072ffca6a66e445395ee6785d2912"
     end
   end
 
