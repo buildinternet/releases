@@ -36,6 +36,7 @@ export interface OrgListItem {
   recentReleaseCount: number;
   lastActivity: string | null;
   topProducts: string[];
+  sparkline: number[];
 }
 
 export interface OrgDetail {

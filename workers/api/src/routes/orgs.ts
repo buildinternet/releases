@@ -10,7 +10,7 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import { assembleSourceGuide } from "@releases/ai/source-guide.js";
 import type { Env } from "../index.js";
-import { getOrgsWithStats, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgReleasesFeed } from "../queries/orgs.js";
+import { getOrgsWithStats, getOrgSparklines, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgReleasesFeed } from "../queries/orgs.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -18,7 +18,25 @@ orgRoutes.get("/orgs", async (c) => {
   const db = createDb(c.env.DB);
   const cutoff30d = daysAgoIso(30);
 
-  const rows = await getOrgsWithStats(db, cutoff30d);
+  const [rows, sparklineRows] = await Promise.all([
+    getOrgsWithStats(db, cutoff30d),
+    getOrgSparklines(db, cutoff30d),
+  ]);
+
+  // Build a 30-day sparkline array per org (align to UTC midnight to avoid off-by-one near day boundary)
+  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+  const sparklineMap = new Map<string, number[]>();
+  for (const row of sparklineRows) {
+    if (!sparklineMap.has(row.org_id)) {
+      sparklineMap.set(row.org_id, new Array(30).fill(0));
+    }
+    const dayDate = new Date(row.date + "T00:00:00Z");
+    const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
+    const idx = 29 - daysAgo;
+    if (idx >= 0 && idx < 30) {
+      sparklineMap.get(row.org_id)![idx] = row.cnt;
+    }
+  }
 
   const result = rows.map((row) => ({
     id: row.id,
@@ -32,6 +50,7 @@ orgRoutes.get("/orgs", async (c) => {
     recentReleaseCount: row.recent_release_count,
     lastActivity: row.last_activity ?? null,
     topProducts: row.top_products ? row.top_products.split("||") : [],
+    sparkline: sparklineMap.get(row.id) ?? new Array(30).fill(0),
   }));
 
   return c.json(result);
