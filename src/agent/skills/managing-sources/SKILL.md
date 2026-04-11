@@ -30,8 +30,8 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Ignore URL | `releases ignore add --org <org> <url>` | `exclude_url` action "ignore" with url, organization |
 | Block URL | `releases block add <url>` | `exclude_url` action "block" with url |
 | List categories | `releases categories --json` | `list_categories` |
-| Get source guide | `releases knowledge guide <org>` | `get_source_guide` with organization param |
-| Update guide notes | `releases knowledge guide <org> --notes "..."` | `update_source_guide_notes` with organization, notes params |
+| Get source guide | `releases guide <org>` | `get_source_guide` with organization param |
+| Update guide notes | `releases guide <org> --notes "..."` | `update_source_guide_notes` with organization, notes params |
 
 ## Listing Sources
 
@@ -87,7 +87,7 @@ Each org has a **source guide** — a README that tells any agent how to efficie
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
 - **Agent notes** — free-form markdown that you fully control. This is the most important part of the guide. Write it like a README for a teammate who needs to fetch releases from this org without asking questions.
 
-**Always read the source guide before fetching or working with an org's sources.** Typed tool: `get_source_guide` with organization param. CLI: `releases knowledge guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
+**Always read the source guide before fetching or working with an org's sources.** Typed tool: `get_source_guide` with organization param. CLI: `releases guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
 ### Writing good agent notes
 

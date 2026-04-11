@@ -29,7 +29,7 @@ import { registerEnrichCommand } from "./commands/enrich.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
-import { registerKnowledgeCommand } from "./commands/knowledge.js";
+import { registerGuideCommand } from "./commands/guide.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
 
@@ -63,7 +63,7 @@ const ADMIN_COMMANDS: AdminEntry[] = [
   { name: "onboard", helpLabel: "onboard <company>", description: "AI-powered company onboarding", register: registerOnboardCommand },
   { name: "task", helpLabel: "task <action>", description: "Manage remote sessions", register: registerTaskCommand },
   { name: "media", helpLabel: "media <action>", description: "Media management (backfill)", register: registerMediaCommand },
-  { name: "knowledge", helpLabel: "knowledge <action>", description: "Generate knowledge pages", register: registerKnowledgeCommand },
+  { name: "guide", helpLabel: "guide <org>", description: "Show or manage source guides", register: registerGuideCommand },
 ];
 
 function adminKeyError(name: string): never {

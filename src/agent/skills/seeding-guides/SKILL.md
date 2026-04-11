@@ -97,13 +97,13 @@ Write one paragraph per source under Extraction patterns. Bullet points for Know
 Narrative for Source coverage.
 
 Save by running:
-bun src/index.ts knowledge guide {slug} --regenerate 2>/dev/null
-bun src/index.ts knowledge guide {slug} --notes "$(cat <<'NOTES'
+bun src/index.ts guide {slug} --regenerate 2>/dev/null
+bun src/index.ts guide {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts knowledge guide {slug} 2>/dev/null | tail -20
+Verify with: bun src/index.ts guide {slug} 2>/dev/null | tail -20
 ```
 
 ### Verified prompt template
@@ -134,13 +134,13 @@ Every claim must cite observed data. If uncertain, say so explicitly.
 
 ## Step 4: Save
 
-bun src/index.ts knowledge guide {slug} --regenerate 2>/dev/null
-bun src/index.ts knowledge guide {slug} --notes "$(cat <<'NOTES'
+bun src/index.ts guide {slug} --regenerate 2>/dev/null
+bun src/index.ts guide {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts knowledge guide {slug} 2>/dev/null | tail -20
+Verify with: bun src/index.ts guide {slug} 2>/dev/null | tail -20
 ```
 
 ### Dispatch pattern
@@ -163,8 +163,8 @@ Sub-agents may be blocked from saving notes via Bash (heredoc permission issues)
 2. The parent agent (you) saves the notes manually:
 
 ```bash
-bun src/index.ts knowledge guide {slug} --regenerate 2>/dev/null
-bun src/index.ts knowledge guide {slug} --notes "$(cat <<'NOTES'
+bun src/index.ts guide {slug} --regenerate 2>/dev/null
+bun src/index.ts guide {slug} --notes "$(cat <<'NOTES'
 {paste notes from agent result}
 NOTES
 )" 2>/dev/null
