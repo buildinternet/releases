@@ -2,31 +2,22 @@
   "skills": {
     "Finding Changelogs": {
       "skillId": "skill_01NxvZfnCY4J3REEQY4HqtaV",
-      "latestVersion": "1775933944912967",
-      "localDir": "finding-changelogs",
-      "updatedAt": "2026-04-11T18:59:06.461Z"
+      "localDir": "finding-changelogs"
     },
     "Managing Sources": {
       "skillId": "skill_019Hwp3waa38APFdJQdhyC7X",
-      "latestVersion": "1775933946662211",
-      "localDir": "managing-sources",
-      "updatedAt": "2026-04-11T18:59:08.117Z"
+      "localDir": "managing-sources"
     },
     "Parsing Changelogs": {
       "skillId": "skill_014ABz5JwznotCKHwRWPV8HT",
-      "latestVersion": "1775933948319444",
-      "localDir": "parsing-changelogs",
-      "updatedAt": "2026-04-11T18:59:09.714Z"
+      "localDir": "parsing-changelogs"
     },
     "Analyzing Releases": {
       "skillId": "skill_019FiqtkAUTte7yfNTDAjRLp",
-      "latestVersion": "1775933949907407",
-      "localDir": "analyzing-releases",
-      "updatedAt": "2026-04-11T18:59:11.238Z"
+      "localDir": "analyzing-releases"
     }
   },
   "agentId": "agent_011CZtWpasPtsYjF3aysf2ZH",
-  "lastSyncedAt": "2026-04-11T18:59:11.691Z",
   "promptHash": "a1e5dae34a9471de",
   "toolsHash": "312d2d2535f3acd2",
   "workerAgentId": "agent_011CZvdgPKDQ2eRs8gTrLnNA",
