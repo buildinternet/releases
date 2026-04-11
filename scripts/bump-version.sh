@@ -67,15 +67,15 @@ echo "Done. Version is now $NEW_VERSION."
 if [[ "${2:-}" == "--tag" ]]; then
   git add -A
   git commit -m "chore: bump CLI version to $NEW_VERSION"
-  git tag "releases@$NEW_VERSION"
+  git tag "cli@$NEW_VERSION"
   echo ""
-  echo "Tagged releases@$NEW_VERSION. Push to trigger the release workflow:"
+  echo "Tagged cli@$NEW_VERSION. Push to trigger the release workflow:"
   echo "  git push origin main --tags"
 else
   echo ""
   echo "Next steps:"
   echo "  1. Commit the version bump"
-  echo "  2. git tag releases@$NEW_VERSION"
+  echo "  2. git tag cli@$NEW_VERSION"
   echo "  3. git push origin main --tags    # triggers CI release"
   echo ""
   echo "Or re-run with --tag to commit and tag automatically:"

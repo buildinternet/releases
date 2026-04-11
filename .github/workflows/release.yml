@@ -3,7 +3,7 @@ name: Release CLI
 on:
   push:
     tags:
-      - "releases@*"
+      - "cli@*"
 
 permissions:
   contents: write
@@ -39,7 +39,7 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          VERSION="${TAG_NAME#releases@}"
+          VERSION="${TAG_NAME#cli@}"
           for pkg in releases releases-darwin-arm64 releases-darwin-x64 releases-linux-x64 releases-linux-arm64; do
             node -e "
               const fs = require('fs');
@@ -83,7 +83,7 @@ jobs:
         env:
           TAG_NAME: ${{ github.ref_name }}
         run: |
-          VERSION="${TAG_NAME#releases@}"
+          VERSION="${TAG_NAME#cli@}"
           DARWIN_ARM64=$(cat dist/release/releases-darwin-arm64.gz.sha256)
           DARWIN_X64=$(cat dist/release/releases-darwin-x64.gz.sha256)
           LINUX_ARM64=$(cat dist/release/releases-linux-arm64.gz.sha256)
