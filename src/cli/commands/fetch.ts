@@ -110,9 +110,17 @@ Examples:
           sourceIdentifiers = sources.map(s => s.id);
           label = `${sourceIdentifiers.length} stale sources (>${hours}h)`;
         } else if (opts.changed) {
-          const sources = await listSourcesWithChanges();
+          const allChanged = await listSourcesWithChanges();
+          // Filter to scrape/agent sources only — feed and github sources are
+          // already fetched deterministically by the API cron, so sending them
+          // to a managed agent wastes tokens for no benefit.
+          const sources = allChanged.filter(s => s.type === "scrape" || s.type === "agent");
+          const skipped = allChanged.length - sources.length;
+          if (skipped > 0) {
+            logger.info(`Skipping ${skipped} feed/github source(s) (handled by cron)`);
+          }
           sourceIdentifiers = sources.map(s => s.id);
-          label = `${sourceIdentifiers.length} changed sources`;
+          label = `${sourceIdentifiers.length} changed scrape/agent sources`;
         } else if (opts.retryErrors) {
           const sources = await listFetchableSources({ mode: "retry_errors" });
           sourceIdentifiers = sources.map(s => s.id);
