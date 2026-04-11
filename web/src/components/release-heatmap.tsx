@@ -1,7 +1,12 @@
 "use client";
 
 import { useMemo, useState, useCallback, useRef, useEffect } from "react";
-import type { OrgHeatmap } from "@/lib/api";
+/** Shape accepted by the heatmap — works with both OrgHeatmap and SourceHeatmap. */
+export interface HeatmapData {
+  range: { from: string; to: string };
+  dailyCounts: Array<{ date: string; count: number }>;
+  total: number;
+}
 
 const MIN_CELL_SIZE = 7;
 const MAX_CELL_SIZE = 13;
@@ -56,7 +61,7 @@ interface MonthLabel {
   col: number;
 }
 
-function buildGrid(heatmap: OrgHeatmap, visibleWeeks: number): { cells: CellData[]; monthLabels: MonthLabel[] } {
+function buildGrid(heatmap: HeatmapData, visibleWeeks: number): { cells: CellData[]; monthLabels: MonthLabel[] } {
   const countMap = new Map<string, number>();
   for (const entry of heatmap.dailyCounts) {
     countMap.set(entry.date, entry.count);
@@ -104,7 +109,7 @@ function buildGrid(heatmap: OrgHeatmap, visibleWeeks: number): { cells: CellData
 }
 
 /** Find the date of the earliest release with count > 0 from the heatmap data. */
-function findEarliestRelease(heatmap: OrgHeatmap): string | null {
+function findEarliestRelease(heatmap: HeatmapData): string | null {
   const withCounts = heatmap.dailyCounts.filter((d) => d.count > 0);
   if (withCounts.length === 0) return null;
   withCounts.sort((a, b) => a.date.localeCompare(b.date));
@@ -112,7 +117,7 @@ function findEarliestRelease(heatmap: OrgHeatmap): string | null {
 }
 
 interface ReleaseHeatmapProps {
-  heatmap: OrgHeatmap;
+  heatmap: HeatmapData;
   trackingSince?: string | null;
 }
 

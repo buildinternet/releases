@@ -71,3 +71,16 @@ export function newKnowledgePageId(): string {
   const base64 = btoa(String.fromCharCode(...bytes));
   return "kp_" + base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
+
+/** Compute the 52-week date range used for heatmap endpoints. */
+export function heatmapDateRange(): { from: string; to: string; toExclusive: string } {
+  const today = new Date();
+  const to = today.toISOString().slice(0, 10);
+  const toExclusiveDate = new Date(today);
+  toExclusiveDate.setUTCDate(toExclusiveDate.getUTCDate() + 1);
+  const toExclusive = toExclusiveDate.toISOString().slice(0, 10);
+  const fromDate = new Date(today);
+  fromDate.setUTCDate(fromDate.getUTCDate() - 52 * 7);
+  const from = fromDate.toISOString().slice(0, 10);
+  return { from, to, toExclusive };
+}

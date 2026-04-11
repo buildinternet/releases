@@ -122,3 +122,33 @@ export async function getSourceActivityBuckets(
     ORDER BY week_start
   `);
 }
+
+export type SourceHeatmapRow = {
+  date: string;
+  cnt: number;
+};
+
+export async function getSourceHeatmapData(
+  db: D1Db,
+  sourceId: string,
+  from: string,
+  toExclusive: string,
+): Promise<{ rows: SourceHeatmapRow[]; total: number }> {
+  const rows = await db.all<SourceHeatmapRow>(sql`
+    SELECT
+      DATE(r.published_at) AS date,
+      COUNT(*) AS cnt
+    FROM releases r
+    WHERE
+      r.source_id = ${sourceId}
+      AND r.published_at IS NOT NULL
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      AND r.published_at >= ${from}
+      AND r.published_at < ${toExclusive}
+    GROUP BY DATE(r.published_at)
+    ORDER BY date
+  `);
+
+  const total = rows.reduce((sum, r) => sum + r.cnt, 0);
+  return { rows, total };
+}
