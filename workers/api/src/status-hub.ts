@@ -23,6 +23,7 @@ interface SessionState {
   startedAt: number;
   lastUpdatedAt: number;
   error?: string;
+  warnings?: string[];
   usage?: { inputTokens?: number; outputTokens?: number };
   dismissed?: boolean;
   activeSources?: string[];
@@ -265,6 +266,10 @@ export class StatusHub extends DurableObject {
         if (event.releasesFound !== undefined) existing.releasesFound = event.releasesFound as number;
         if (event.releasesInserted !== undefined) existing.releasesInserted = event.releasesInserted as number;
         if (event.activeSources !== undefined) existing.activeSources = event.activeSources as string[];
+        if (typeof event.warning === "string") {
+          existing.warnings = existing.warnings ?? [];
+          existing.warnings.push(event.warning);
+        }
         existing.lastUpdatedAt = now;
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
@@ -290,6 +295,9 @@ export class StatusHub extends DurableObject {
         }
         if (event.usage && typeof event.usage === "object") {
           existing.usage = event.usage as SessionState["usage"];
+        }
+        if (Array.isArray(event.warnings) && event.warnings.length > 0) {
+          existing.warnings = [...(existing.warnings ?? []), ...(event.warnings as string[])];
         }
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
       }
