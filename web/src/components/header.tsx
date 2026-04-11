@@ -12,6 +12,7 @@ export async function Header() {
         <Link href="/" className="hover:text-stone-700 dark:hover:text-stone-300">Browse</Link>
         <Link href="/search" className="hover:text-stone-700 dark:hover:text-stone-300">Search</Link>
         {docsEnabled && <Link href="/docs" className="hover:text-stone-700 dark:hover:text-stone-300">Docs</Link>}
+        {process.env.NODE_ENV === "development" && <Link href="/status" className="hover:text-stone-700 dark:hover:text-stone-300">Status</Link>}
         <ThemeToggle />
       </nav>
     </header>

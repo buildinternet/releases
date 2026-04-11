@@ -6,7 +6,6 @@ import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
-import { InactiveSourcesToggle } from "@/components/inactive-sources-toggle";
 import { groupSourcesByProduct } from "@/lib/sources";
 
 /** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
@@ -32,7 +31,6 @@ interface ReleaseTimelineProps {
   sources: SourceListItem[];
   products: OrgDetail["products"];
   trackingSince?: string | null;
-  children?: React.ReactNode;
 }
 
 function ProductGroupedSources({
@@ -76,7 +74,7 @@ function ProductGroupedSources({
   );
 }
 
-export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products, trackingSince, children }: ReleaseTimelineProps) {
+export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products, trackingSince }: ReleaseTimelineProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(heatmap ? "heatmap" : "chart");
 
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
@@ -187,13 +185,11 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
   const cardData = useMemo(() => {
     return parsedSources
       .map((source) => {
-        // Build lookup from source's actual buckets (keyed by week-start timestamp)
         const bucketMap = new Map<number, WeeklyBucket>();
         for (const b of source.allBuckets) {
           bucketMap.set(b.weekStart.getTime(), b);
         }
 
-        // Map onto the canonical grid so all cards have the same number of bars
         const completeBuckets: WeeklyBucket[] = brushedWeekGrid.map((week) => {
           const srcBucket = bucketMap.get(week.weekStart.getTime());
           return {
@@ -272,25 +268,17 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
     });
   }, [sources, cadenceMap]);
 
-  // Split sources into active (have releases in brush window) and inactive
-  const { activeSources, inactiveSources } = useMemo(() => {
-    const active: SourceListItem[] = [];
-    const inactive: SourceListItem[] = [];
-    for (const source of sortedSources) {
-      const cd = cadenceMap.get(source.slug);
-      if (cd && cd.releaseCount > 0) {
-        active.push(source);
-      } else {
-        inactive.push(source);
-      }
-    }
-    return { activeSources: active, inactiveSources: inactive };
+  const activeSources = useMemo(() => {
+    return sortedSources.filter((s) => {
+      const cd = cadenceMap.get(s.slug);
+      return cd && cd.releaseCount > 0;
+    });
   }, [sortedSources, cadenceMap]);
 
   if (cardData.length === 0) return null;
 
   return (
-    <div className="mt-8 mb-2">
+    <div className="mt-5 mb-2">
       {/* View toggle */}
       {heatmap && (
         <div className="inline-flex bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-md p-0.5 mb-4">
@@ -337,7 +325,7 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
         </RangeNavigator.Root>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 mb-2">
         {([
           { label: "Releases", value: String(summaryStats.totalReleases) },
           { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014" },
@@ -349,8 +337,6 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
           </div>
         ))}
       </div>
-
-      {children}
 
       <div className="mt-5">
         {products.length > 0 ? (
@@ -367,13 +353,6 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
             ))}
           </div>
         )}
-        <InactiveSourcesToggle count={inactiveSources.length}>
-          <div className="space-y-2">
-            {inactiveSources.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
-            ))}
-          </div>
-        </InactiveSourcesToggle>
       </div>
 
     </div>

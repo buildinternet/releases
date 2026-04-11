@@ -3,16 +3,25 @@
 import { useSearchParams, useRouter, usePathname } from "next/navigation";
 import { tabButtonClass } from "@/lib/styles";
 
-export function OrgTabs() {
+function CodeBrackets() {
+  return (
+    <svg className="inline-block w-3.5 h-3.5 mr-1 -mt-px opacity-40" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5.5 4 2 8l3.5 4" />
+      <path d="M10.5 4 14 8l-3.5 4" />
+    </svg>
+  );
+}
+
+export function OrgTabs({ hasGuide }: { hasGuide?: boolean }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
 
-  const activeTab = searchParams.get("tab") ?? "sources";
+  const activeTab = searchParams.get("tab") ?? "overview";
 
   function setTab(tab: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (tab === "sources") {
+    if (tab === "overview") {
       params.delete("tab");
     } else {
       params.set("tab", tab);
@@ -23,12 +32,21 @@ export function OrgTabs() {
 
   return (
     <div className="flex gap-5 border-b border-stone-200 dark:border-stone-800 mt-5">
-      <button onClick={() => setTab("sources")} className={tabButtonClass(activeTab === "sources")}>
+      <button onClick={() => setTab("overview")} className={tabButtonClass(activeTab === "overview")}>
         Overview
       </button>
       <button onClick={() => setTab("releases")} className={tabButtonClass(activeTab === "releases")}>
         Releases
       </button>
+      <button onClick={() => setTab("sources")} className={tabButtonClass(activeTab === "sources")}>
+        Sources
+      </button>
+      {hasGuide && (
+        <button onClick={() => setTab("guide")} className={`${tabButtonClass(activeTab === "guide")} ml-auto`}>
+          <CodeBrackets />
+          Guide
+        </button>
+      )}
     </div>
   );
 }
