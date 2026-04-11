@@ -560,23 +560,18 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const cutoff90d = daysAgoIso(90);
   const dateCol = sql`COALESCE(${releases.publishedAt}, ${releases.fetchedAt})`;
 
-  const [recent] = await db
-    .select({ n: count() })
-    .from(releases)
-    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${dateCol} >= ${cutoff}`));
-
-  const [totals] = await db
-    .select({ total: count(), oldest: min(dateCol) })
+  const [metrics] = await db
+    .select({
+      total: count(),
+      oldest: min(dateCol),
+      recent: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff} THEN 1 END)`,
+      recent90d: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff90d} THEN 1 END)`,
+    })
     .from(releases)
     .where(and(eq(releases.sourceId, src.id), notSuppressed));
 
-  const [windowed] = await db
-    .select({ n: count() })
-    .from(releases)
-    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${dateCol} >= ${cutoff90d}`));
-
-  const releasesLast30Days = recent.n;
-  const avgReleasesPerWeek = computeAvgPerWeek(windowed.n, totals.oldest);
+  const releasesLast30Days = metrics.recent;
+  const avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
   const totalPages = Math.ceil(relCount.n / pageSize);
 
   // Earliest published_at across all releases — ignores fetched_at so we reflect actual release history
@@ -614,7 +609,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     latestDate,
     changelogUrl: parsedMeta.changelogUrl ?? null,
     lastFetchedAt: src.lastFetchedAt,
-    trackingSince: earliest?.date ?? totals.oldest ?? src.createdAt,
+    trackingSince: earliest?.date ?? metrics.oldest ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },
     summaries: {

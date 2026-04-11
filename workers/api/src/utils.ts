@@ -52,19 +52,14 @@ export async function getOrCreateTagD1(
   return created;
 }
 
-/**
- * Compute average releases per week over a rolling window (default 90 days).
- * If the source has less history than the window, use the actual span instead.
- */
-export function computeAvgPerWeek(
-  releasesInWindow: number,
-  oldestPublishedAt: string | null,
-  windowDays = 90,
-): number {
+const ROLLING_WINDOW_DAYS = 90;
+
+/** Avg releases/week over a rolling 90-day window, or the actual span if shorter. */
+export function computeAvgPerWeek(releasesInWindow: number, oldestPublishedAt: string | null): number {
   if (releasesInWindow === 0 || !oldestPublishedAt) return 0;
   const ageMs = Date.now() - new Date(oldestPublishedAt).getTime();
   const ageDays = ageMs / (24 * 60 * 60 * 1000);
-  const effectiveDays = Math.min(windowDays, ageDays);
+  const effectiveDays = Math.min(ROLLING_WINDOW_DAYS, ageDays);
   const weeks = effectiveDays / 7;
   if (weeks < 1) return releasesInWindow;
   return Math.round((releasesInWindow / weeks) * 10) / 10;
