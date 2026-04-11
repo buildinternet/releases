@@ -35,6 +35,8 @@ export interface SessionParams {
   sourceIdentifiers?: string[];
   /** Organization ID (org_...) for source guide lookup in update mode. */
   orgId?: string;
+  /** Correlation ID from the originating client for end-to-end tracing. */
+  correlationId?: string;
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
@@ -125,14 +127,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           }
         : undefined;
 
-      await this.notifyStatusHub({
-        type: "session:start",
-        sessionId,
-        company: params.company,
-        sessionType: mode,
-        agent: useWorker ? "haiku" : "sonnet",
-      }, releasedApiKey);
-
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
       const client = new Anthropic({ apiKey: anthropicApiKey });
 
@@ -147,6 +141,16 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         ...(vaultId ? { vault_ids: [vaultId] } : {}),
         title: sessionTitle,
       });
+
+      await this.notifyStatusHub({
+        type: "session:start",
+        sessionId,
+        company: params.company,
+        sessionType: mode,
+        agent: useWorker ? "haiku" : "sonnet",
+        anthropicSessionId: session.id,
+        ...(params.correlationId ? { correlationId: params.correlationId } : {}),
+      }, releasedApiKey);
 
       let prompt: string;
       if (mode === "update") {

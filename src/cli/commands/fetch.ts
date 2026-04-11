@@ -1,4 +1,5 @@
 import { Command } from "commander";
+import os from "node:os";
 import chalk from "chalk";
 import type { Source } from "../../db/schema.js";
 import { sourceNotFound } from "../suggest.js";
@@ -22,6 +23,7 @@ import { config } from "../../lib/config.js";
 import { enrichReleases } from "../../adapters/enrich.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
 import { isRemoteMode } from "../../lib/mode.js";
+import { newCorrelationId } from "../../lib/id.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import * as apiClient from "../../api/client.js";
 
@@ -151,7 +153,7 @@ Examples:
             "Content-Type": "application/json",
             Authorization: `Bearer ${apiKey}`,
           },
-          body: JSON.stringify({ company: label, sourceIdentifiers, orgId }),
+          body: JSON.stringify({ company: label, sourceIdentifiers, orgId, correlationId: newCorrelationId() }),
         });
 
         if (!res.ok) {
@@ -288,6 +290,7 @@ Examples:
       }
 
       // ── Session tracking for remote mode ──
+      const correlationId = newCorrelationId();
       const sessionId = crypto.randomUUID();
       let sessionCompany = "";
       let sessionReleasesFound = 0;
@@ -301,11 +304,14 @@ Examples:
         sessionCompany = targetSources.length === 1
           ? targetSources[0].name
           : `${targetSources.length} sources`;
+        const runner = process.env.RELEASED_RUNNER_ID || os.hostname();
         await apiClient.postStatusEvent({
           type: "session:start",
           sessionId,
           company: sessionCompany,
           sessionType: "update",
+          runner,
+          correlationId,
           activeSources: targetSources.map((s) => s.slug),
         }).catch(() => {});
       }

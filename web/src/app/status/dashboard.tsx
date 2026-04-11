@@ -7,6 +7,12 @@ interface SessionState {
   company: string;
   type?: "onboard" | "update";
   agent?: "sonnet" | "haiku";
+  /** Identifies the client that started this session (e.g. hostname, "sandbox-prod"). */
+  runner?: string;
+  /** Correlation ID for end-to-end tracing across CLI → API → managed agent. */
+  correlationId?: string;
+  /** Anthropic session ID for linking to the Anthropic console logs. */
+  anthropicSessionId?: string;
   status: "running" | "complete" | "error";
   warnings?: string[];
   step?: string;
@@ -217,6 +223,9 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
         sessionId: msg.sessionId as string,
         company: msg.company as string,
         agent: msg.agent as SessionState["agent"],
+        runner: msg.runner as string | undefined,
+        correlationId: msg.correlationId as string | undefined,
+        anthropicSessionId: msg.anthropicSessionId as string | undefined,
         status: "running",
         startedAt: Date.now(),
       }, ...prev]);
@@ -235,6 +244,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
                 sourcesFetched: msg.sourcesFetched as number | undefined,
                 releasesFound: msg.releasesFound as number | undefined,
                 releasesInserted: msg.releasesInserted as number | undefined,
+                ...(msg.anthropicSessionId ? { anthropicSessionId: msg.anthropicSessionId as string } : {}),
               }
             : s
         )
@@ -554,7 +564,7 @@ function SessionsTable({
               <div className="text-stone-900 dark:text-stone-100">
                 <span className="mr-1.5 text-stone-300 dark:text-stone-600">{isExpanded ? "▾" : "▸"}</span>
                 {session.company}
-                {session.agent && <AgentBadge agent={session.agent} />}
+                <AgentBadge agent={session.agent} runner={session.runner} />
               </div>
               <div className="text-stone-500 dark:text-stone-400">
                 {formatTime(session.startedAt)}
@@ -612,7 +622,7 @@ function SessionsTable({
               </div>
             </button>
             {isExpanded && (
-              <SessionLogPanel sessionId={session.sessionId} logs={sessionLogs[session.sessionId] ?? []} stdout={sessionStdout[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
+              <SessionLogPanel sessionId={session.sessionId} correlationId={session.correlationId} anthropicSessionId={session.anthropicSessionId} logs={sessionLogs[session.sessionId] ?? []} stdout={sessionStdout[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
             )}
           </div>);
         })}
@@ -670,12 +680,20 @@ const agentStyles: Record<string, { bg: string; label: string }> = {
   sonnet: { bg: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400", label: "Sonnet" },
 };
 
-function AgentBadge({ agent }: { agent: string }): ReactNode {
-  const style = agentStyles[agent];
-  if (!style) return null;
+function AgentBadge({ agent, runner }: { agent?: string; runner?: string }): ReactNode {
+  if (agent) {
+    const style = agentStyles[agent];
+    if (!style) return null;
+    return (
+      <span className={`ml-2 text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-full ${style.bg}`}>
+        {style.label}
+      </span>
+    );
+  }
+  const label = runner || "CLI";
   return (
-    <span className={`ml-2 text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-full ${style.bg}`}>
-      {style.label}
+    <span className="ml-2 text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-full bg-stone-100 text-stone-500 dark:bg-stone-800 dark:text-stone-400">
+      {label}
     </span>
   );
 }
@@ -693,7 +711,7 @@ function SessionTokens({ usage }: { usage?: SessionState["usage"] }): ReactNode 
 
 type LogMode = "structured" | "raw";
 
-function SessionLogPanel({ sessionId, logs, stdout, currentAction, status }: { sessionId: string; logs: string[]; stdout: string[]; currentAction?: string; status: string }) {
+function SessionLogPanel({ sessionId, correlationId, anthropicSessionId, logs, stdout, currentAction, status }: { sessionId: string; correlationId?: string; anthropicSessionId?: string; logs: string[]; stdout: string[]; currentAction?: string; status: string }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<LogMode>("structured");
 
@@ -730,6 +748,16 @@ function SessionLogPanel({ sessionId, logs, stdout, currentAction, status }: { s
         >
           Raw
         </button>
+        {(anthropicSessionId || correlationId) && (
+          <span className="ml-auto flex items-center gap-3 text-[10px] text-stone-500 font-mono">
+            {anthropicSessionId && (
+              <span title={anthropicSessionId}>anthropic:{anthropicSessionId.slice(0, 16)}</span>
+            )}
+            {correlationId && (
+              <span title={correlationId}>cid:{correlationId.slice(0, 12)}</span>
+            )}
+          </span>
+        )}
       </div>
       <div ref={containerRef} className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed">
         {lines.length === 0 && mode === "structured" && currentAction && (
