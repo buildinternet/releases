@@ -1527,19 +1527,30 @@ export interface MediaAssetInput extends UploadResult {
   releaseId?: string | null;
 }
 
-/** Insert media assets, deduplicating by content_hash. Returns count of newly inserted rows. */
+/** Insert media assets, deduplicating by r2Key. Returns count of newly inserted rows. */
 export async function insertMediaAssets(assets: MediaAssetInput[]): Promise<number> {
   if (assets.length === 0) return 0;
 
+  // Deduplicate by r2Key — the same image can appear multiple times in a single
+  // batch when a changelog post embeds the same screenshot more than once.
+  // SQLite's ON CONFLICT DO NOTHING only resolves conflicts against existing rows,
+  // not between rows in the same INSERT statement.
+  const seen = new Set<string>();
+  const deduped = assets.filter((a) => {
+    if (seen.has(a.r2Key)) return false;
+    seen.add(a.r2Key);
+    return true;
+  });
+
   if (isRemoteMode()) {
-    const result = await apiClient.insertMediaAssets(assets);
+    const result = await apiClient.insertMediaAssets(deduped);
     return result.inserted;
   }
 
   const db = getDb();
   let inserted = 0;
-  for (let i = 0; i < assets.length; i += 500) {
-    const chunk = assets.slice(i, i + 500);
+  for (let i = 0; i < deduped.length; i += 500) {
+    const chunk = deduped.slice(i, i + 500);
     const result = await db
       .insert(mediaAssets)
       .values(chunk.map((a) => ({
