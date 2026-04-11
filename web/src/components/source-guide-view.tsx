@@ -7,7 +7,7 @@ interface SourceGuideViewProps {
   guide: { content: string; updatedAt: string };
 }
 
-const proseClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13.5px] leading-relaxed [&_p]:my-2 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
+const proseClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13.5px] leading-relaxed [&_p]:my-2 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300 overflow-x-auto [&_table]:w-full [&_table]:text-[12.5px] [&_td]:break-all [&_td]:max-w-[200px]";
 
 export function SourceGuideView({ guide }: SourceGuideViewProps) {
   const updatedDate = new Date(guide.updatedAt).toLocaleDateString("en-US", {
