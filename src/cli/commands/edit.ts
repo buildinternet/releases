@@ -31,6 +31,8 @@ export function registerEditCommand(program: Command) {
     .option("--feed-url <feedUrl>", "Set or update the feed URL")
     .option("--no-feed-url", "Remove stored feed URL")
     .option("--markdown-url <markdownUrl>", "Set the raw markdown URL for this source")
+    .option("--parse-instructions <text>", "Set AI parsing instructions for this source")
+    .option("--no-parse-instructions", "Remove AI parsing instructions")
     .option("--provider <provider>", "Set the detected provider (e.g., mintlify, docusaurus)")
     .option("--fetch-method <fetchMethod>", "Set the recommended fetch method (feed, markdown, scrape, crawl, github)")
     .option("--primary", "Mark as the org's primary changelog source")
@@ -56,6 +58,7 @@ Examples:
       name?: string; url?: string; type?: string; slug?: string;
       org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
+      parseInstructions?: string | boolean;
       primary?: boolean;
       priority?: string;
       disable?: boolean;
@@ -159,8 +162,8 @@ Examples:
 
       // Handle --feed-url / --no-feed-url
       if (opts.feedUrl === false) {
-        Object.assign(metaUpdates, { feedUrl: undefined, feedType: undefined, feedDiscoveredAt: undefined });
-        changes.push("feed URL removed");
+        Object.assign(metaUpdates, { feedUrl: undefined, feedType: undefined, feedDiscoveredAt: undefined, noFeedFound: true });
+        changes.push("feed URL removed (feed discovery disabled)");
       } else if (typeof opts.feedUrl === "string") {
         const feedType = inferFeedTypeFromUrl(opts.feedUrl);
         Object.assign(metaUpdates, { feedUrl: opts.feedUrl, feedType, feedDiscoveredAt: new Date().toISOString(), noFeedFound: false });
@@ -185,6 +188,15 @@ Examples:
         metaUpdates.evaluatedMethod = opts.fetchMethod;
         metaUpdates.evaluatedAt = new Date().toISOString();
         changes.push(`fetch method → ${opts.fetchMethod}`);
+      }
+
+      // Handle --parse-instructions / --no-parse-instructions
+      if (opts.parseInstructions === false) {
+        metaUpdates.parseInstructions = undefined;
+        changes.push("parse instructions removed");
+      } else if (typeof opts.parseInstructions === "string") {
+        metaUpdates.parseInstructions = opts.parseInstructions;
+        changes.push(`parse instructions → "${opts.parseInstructions.slice(0, 60)}${opts.parseInstructions.length > 60 ? "..." : ""}"`);
       }
 
       if (Object.keys(metaUpdates).length > 0) {
