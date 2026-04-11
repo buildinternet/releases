@@ -112,10 +112,10 @@ mediaRoutes.post("/media/assets", authMiddleware, async (c) => {
   });
 
   let inserted = 0;
-  // D1 has a ~1MB query size limit; 25 is safe for small media_asset rows.
-  // Release inserts use 5 because content fields are much larger.
-  for (let i = 0; i < deduped.length; i += 25) {
-    const chunk = deduped.slice(i, i + 25).map((a) => ({
+  const createdAt = new Date().toISOString();
+  // D1 caps bound params at 100; 10 fields per row → batch 9 at a time.
+  for (let i = 0; i < deduped.length; i += 9) {
+    const chunk = deduped.slice(i, i + 9).map((a) => ({
       r2Key: a.r2Key,
       sourceUrl: a.sourceUrl,
       sourceFilename: a.sourceFilename ?? null,
@@ -124,6 +124,7 @@ mediaRoutes.post("/media/assets", authMiddleware, async (c) => {
       byteSize: a.byteSize,
       sourceId: a.sourceId ?? null,
       releaseId: a.releaseId ?? null,
+      createdAt,
     }));
     const rows = await db
       .insert(mediaAssets)

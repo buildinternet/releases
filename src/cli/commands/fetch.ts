@@ -442,8 +442,8 @@ Examples:
           if (!opts.json && deletedCount > 0) {
             logger.info(`Cleared ${deletedCount} existing release(s) for ${source.name}`);
           }
-          await updateSource(source, { lastContentHash: null });
-          await updateSourceMeta(source, { lastCrawlAt: undefined });
+          await updateSource(source, { lastContentHash: null, lastFetchedAt: null });
+          await updateSourceMeta(source, { lastCrawlAt: undefined, feedEtag: undefined, feedLastModified: undefined, feedContentLength: undefined });
           sourceModified = true;
         }
 
