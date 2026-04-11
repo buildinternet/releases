@@ -137,9 +137,21 @@ Both agents are deployed via `bun run deploy:agents`. Use `deploy:agents:discove
 
 The local-only unified agent (`src/agent/releases.ts`) handles all judgment-based changelog work when not using managed agents.
 
-- **Agent skills** live in `src/agent/skills/` as application code (not in `.claude/`). Each skill is a `SKILL.md` with YAML frontmatter. At runtime, `resolveSkillsDir()` finds skills via: `RELEASED_SKILLS_DIR` env var → `/usr/share/releases/skills/` (container) → `~/.releases/skills/` (local) → source tree fallback. The agent symlinks the resolved directory to `.claude/skills/` for SDK discovery.
+- **Agent skills** live in `src/agent/skills/` as application code (not in `.claude/`). Each skill is a `SKILL.md` with YAML frontmatter. At runtime, `resolveSkillsDir()` finds skills via: `RELEASED_SKILLS_DIR` env var → `/usr/share/releases/skills/` (container) → `~/.releases/skills/` (local) → source tree fallback. The agent symlinks the resolved directory to `.claude/skills/` for SDK discovery. Skills are also synced to the Claude Code plugin (`plugins/claude/releases/skills/`) via `bun run sync:plugin-skills` — this runs automatically as part of `deploy:skills`. Synced copies have an auto-generated comment; edit the source in `src/agent/skills/`, not the plugin copies.
 - **Deterministic pipeline** (ingest, incremental, enrich, summarize) stays as direct Messages API calls — not routed through the agent.
 - **`evaluate` CLI command** runs pre-checks only (provider detection, feed discovery). The agent handles deeper evaluation when needed.
+
+## Claude Code Plugin
+
+A Claude Code plugin at `plugins/claude/releases/` exposes the registry for use in Claude Code sessions. It connects to the remote MCP server at `mcp.releases.sh` and adapts the managed agent prompts for CLI-based operation.
+
+**Components:** `.mcp.json` (MCP connection), 2 agents (discovery/worker), 1 command (`/releases`), 6 skills (1 consumer + 5 synced from `src/agent/skills/`).
+
+**Test locally:** `claude --plugin-dir plugins/claude/releases`
+
+**Validate:** `claude plugin validate plugins/claude/releases`
+
+**Skill sync:** Operational skills are copied from `src/agent/skills/` into the plugin by `scripts/sync-plugin-skills.ts`. This runs as part of `bun run deploy:skills`. The plugin directory is self-contained and committable — synced files include an auto-generated comment warning against direct edits.
 
 ## Environment
 

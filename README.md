@@ -126,6 +126,28 @@ The API server exposes read-only JSON endpoints (`/api/stats`, `/api/orgs`, `/ap
 
 Production deployment: the API and frontend are deployed separately. The frontend will be hosted at [releases.sh](https://releases.sh).
 
+### Claude Code Plugin
+
+Install the plugin to get MCP tools, auto-triggering skills, and operational agents directly in Claude Code:
+
+```bash
+claude plugin add /path/to/released/plugins/claude/releases
+```
+
+Or load for a single session:
+
+```bash
+claude --plugin-dir plugins/claude/releases
+```
+
+The plugin includes:
+- **MCP tools** — search releases, list orgs, compare products (via `mcp.releases.sh`)
+- **Skills** — auto-triggers on changelog/release questions, plus operational skills for source management
+- **Agents** — `discovery` (Sonnet, finds and onboards sources) and `worker` (Haiku, executes fetches)
+- **Commands** — `/releases <product> [query]` for quick lookups
+
+See [`plugins/claude/releases/README.md`](plugins/claude/releases/README.md) for full details.
+
 ### MCP Server
 
 Released is available as an MCP server for AI agent integration. There are two ways to connect:
