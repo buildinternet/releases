@@ -39,9 +39,12 @@ export function hydrateMediaUrls(content: string, mediaOrigin: string): string {
   );
 }
 
-/** Build an absolute media URL from an R2 key, or undefined if no key. */
+/**
+ * Build an absolute media URL from an R2 key, or undefined if no key.
+ * Returns a plain URL without Image Transforms — gallery images go through
+ * next/image which handles its own optimization.
+ */
 export function resolveR2Url(r2Key: string | undefined | null, mediaOrigin: string): string | undefined {
   if (!r2Key) return undefined;
-  const prefix = IMAGE_EXTENSIONS.test(r2Key) ? `${mediaOrigin}/${IMAGE_TRANSFORM}` : mediaOrigin;
-  return `${prefix}/${r2Key}`;
+  return `${mediaOrigin}/${r2Key}`;
 }
