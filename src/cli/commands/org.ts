@@ -148,7 +148,7 @@ Examples:
         getSourcesByOrg(found.id),
         getTagsForOrg(found.id),
         listDomainAliases({ orgId: found.id }),
-        getKnowledgePageForOrg(found.id, found.slug),
+        getKnowledgePageForOrg(found.id, found.slug).catch(() => null),
       ]);
 
       // Regenerate overview if requested
