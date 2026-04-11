@@ -85,16 +85,20 @@ Launch one agent per org, in parallel. Use batches of 10 to avoid overwhelming t
 ```
 Write source guide agent notes for the org "{slug}" and save them using the CLI.
 
-Source guides help agents understand how to fetch releases from each org's sources.
-Notes have three headings: `### Extraction patterns`, `### Known quirks`, `### Source coverage`.
+Source guides are **skills for agents that will fetch from this org**. Write in imperative voice — tell the agent what to do, not what things are.
+
+Notes have three headings: `### Fetch instructions`, `### Traps`, `### Coverage`.
 
 **{Org name}'s sources:**
 {list each source with: slug, type, url, and any notable metadata}
 
 Products: {product list or "none"}
 
-Write one paragraph per source under Extraction patterns. Bullet points for Known quirks.
-Narrative for Source coverage.
+**Fetch instructions**: One paragraph per source in imperative voice. Tell the agent what to do ("Set version=null", "Parse <h2> as version boundaries", "No filtering needed"), what to expect (cadence, content quality), and when to skip.
+
+**Traps**: Bullet list with **bolded trigger labels**. Only include things that would cause wasted work or bad data. Include "Don't re-discover" warnings for disabled sources.
+
+**Coverage**: 2-3 sentences. Which sources are canonical, whether there are gaps.
 
 Save by running:
 bun src/index.ts guide {slug} --regenerate 2>/dev/null
@@ -112,6 +116,8 @@ Verify with: bun src/index.ts guide {slug} 2>/dev/null | tail -20
 Write a **verified** source guide for the org "{slug}".
 Unlike a basic guide, you must do actual research first.
 
+Source guides are **skills for agents that will fetch from this org**. Write in imperative voice — tell the agent what to do, not what things are.
+
 ## Step 1: Gather data (run all of these)
 
 bun src/index.ts org show {slug} --json 2>/dev/null
@@ -127,9 +133,16 @@ Before writing, answer these questions from the data:
 - Are there fetch errors in the logs? What kind?
 - Are there releases with missing dates, empty content, or data quality issues?
 
-## Step 3: Write notes grounded in data
+## Step 3: Write skill-style notes grounded in data
 
-Structure: `### Extraction patterns`, `### Known quirks`, `### Source coverage`.
+Structure: `### Fetch instructions`, `### Traps`, `### Coverage`.
+
+**Fetch instructions**: One paragraph per source in imperative voice. Tell the agent what to do ("Set version=null", "Parse <h2> as version boundaries"), what to expect (cadence, content quality), and when to skip. Cite version format examples from actual data.
+
+**Traps**: Bullet list with **bolded trigger labels**. Only include things backed by evidence from fetch logs or release data. Include "Don't re-discover" warnings for disabled sources.
+
+**Coverage**: 2-3 sentences. Which sources are canonical, whether there are gaps.
+
 Every claim must cite observed data. If uncertain, say so explicitly.
 
 ## Step 4: Save
