@@ -1,20 +1,18 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiSetupError, type OrgDetail, type OrgHeatmap, type OrgReleasesResponse } from "@/lib/api";
+import { api, ApiSetupError, type OrgHeatmap, type OrgReleasesResponse } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
-import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import { OrgTabs } from "@/components/org-tabs";
 import { OrgReleaseList } from "@/components/org-release-list";
 import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
-import { groupSourcesByProduct } from "@/lib/sources";
-import { InactiveSourcesToggle } from "@/components/inactive-sources-toggle";
 import { OverviewView } from "@/components/overview-view";
 import { SourceGuideView } from "@/components/source-guide-view";
+import { SourceTable } from "@/components/source-table";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
 
@@ -37,86 +35,6 @@ function formatDate(iso: string | null) {
   return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
-function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
-  const sortedSources = [...org.sources].sort((a, b) => {
-    if (a.isPrimary && !b.isPrimary) return -1;
-    if (!a.isPrimary && b.isPrimary) return 1;
-    if (a.type === "github" && b.type !== "github") return 1;
-    if (a.type !== "github" && b.type === "github") return -1;
-    return 0;
-  });
-
-  const activeSources = sortedSources.filter((s) => s.releaseCount > 0);
-  const inactiveSources = sortedSources.filter((s) => s.releaseCount === 0);
-
-  if (org.products.length === 0) {
-    return (
-      <div>
-        <div className="space-y-2">
-          {activeSources.map((source) => (
-            <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
-          ))}
-        </div>
-        <InactiveSourcesToggle count={inactiveSources.length}>
-          <div className="space-y-2">
-            {inactiveSources.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
-            ))}
-          </div>
-        </InactiveSourcesToggle>
-      </div>
-    );
-  }
-
-  const { grouped, ungrouped } = groupSourcesByProduct(activeSources, org.products);
-
-  return (
-    <div className="space-y-6">
-      {grouped.map(({ product, sources }) => (
-        <div key={product.slug}>
-          <Link
-            href={`/${orgSlug}/product/${product.slug}`}
-            className="flex items-center gap-2 mb-2 group"
-          >
-            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 group-hover:text-stone-900 dark:group-hover:text-stone-100">
-              {product.name}
-            </h3>
-            {product.description && (
-              <span className="text-xs text-stone-400 dark:text-stone-500 hidden sm:inline">
-                {product.description}
-              </span>
-            )}
-          </Link>
-          <div className="space-y-2">
-            {sources.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={sources.length > 1 || source.name !== product.name} />
-            ))}
-          </div>
-        </div>
-      ))}
-      {ungrouped.length > 0 && (
-        <div>
-          {grouped.length > 0 && (
-            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">Other Sources</h3>
-          )}
-          <div className="space-y-2">
-            {ungrouped.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={false} />
-            ))}
-          </div>
-        </div>
-      )}
-      <InactiveSourcesToggle count={inactiveSources.length}>
-        <div className="space-y-2">
-          {inactiveSources.map((source) => (
-            <SourceCard key={source.slug} source={source} orgSlug={orgSlug} showProductBadge={false} />
-          ))}
-        </div>
-      </InactiveSourcesToggle>
-    </div>
-  );
-}
-
 export default async function OrgPage({
   params,
   searchParams,
@@ -126,8 +44,7 @@ export default async function OrgPage({
 }) {
   const { orgSlug } = await params;
   const { tab } = await searchParams;
-  const showReleases = tab === "releases";
-  const isDev = process.env.NODE_ENV === "development";
+  const activeTab = tab ?? "overview";
 
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -138,11 +55,13 @@ export default async function OrgPage({
   let heatmap: OrgHeatmap | null = null;
   let initialReleases: OrgReleasesResponse | null = null;
   try {
-    if (showReleases) {
+    if (activeTab === "releases") {
       [org, initialReleases] = await Promise.all([
         getOrg(orgSlug),
         api.orgReleases(orgSlug).catch(() => null),
       ]);
+    } else if (activeTab === "sources" || activeTab === "guide") {
+      org = await getOrg(orgSlug);
     } else {
       [org, activity, heatmap] = await Promise.all([
         getOrg(orgSlug),
@@ -216,41 +135,31 @@ export default async function OrgPage({
         )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            {showReleases ? (
-              <>
-                <OrgTabs />
-                {initialReleases ? (
-                  <OrgReleaseList
-                    orgSlug={orgSlug}
-                    initialReleases={initialReleases.releases}
-                    initialCursor={initialReleases.pagination.nextCursor}
-                    multipleSourcesExist={org.sources.length > 1}
-                  />
-                ) : (
-                  <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
-                    No releases yet.
-                  </div>
-                )}
-              </>
-            ) : activity ? (
-              <>
-                <ReleaseTimeline activity={activity} heatmap={heatmap} orgSlug={org.slug} sources={org.sources} products={org.products} trackingSince={org.trackingSince}>
-                  <OrgTabs />
-                </ReleaseTimeline>
-                {org.overview && <OverviewView page={org.overview} />}
-                {isDev && org.sourceGuide && <SourceGuideView guide={org.sourceGuide} />}
-                <div className="mt-6">
-                  <SourceList org={org} orgSlug={orgSlug} />
+            <OrgTabs hasGuide={!!org.sourceGuide} />
+
+            {activeTab === "releases" ? (
+              initialReleases ? (
+                <OrgReleaseList
+                  orgSlug={orgSlug}
+                  initialReleases={initialReleases.releases}
+                  initialCursor={initialReleases.pagination.nextCursor}
+                  multipleSourcesExist={org.sources.length > 1}
+                />
+              ) : (
+                <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
+                  No releases yet.
                 </div>
-              </>
+              )
+            ) : activeTab === "sources" ? (
+              <SourceTable sources={org.sources} products={org.products} orgSlug={orgSlug} />
+            ) : activeTab === "guide" && org.sourceGuide ? (
+              <SourceGuideView guide={org.sourceGuide} />
             ) : (
               <>
-                <OrgTabs />
+                {activity && (
+                  <ReleaseTimeline activity={activity} heatmap={heatmap} orgSlug={orgSlug} sources={org.sources} products={org.products} trackingSince={org.trackingSince} />
+                )}
                 {org.overview && <OverviewView page={org.overview} />}
-                {isDev && org.sourceGuide && <SourceGuideView guide={org.sourceGuide} />}
-                <div className="mt-6">
-                  <SourceList org={org} orgSlug={orgSlug} />
-                </div>
               </>
             )}
           </div>
