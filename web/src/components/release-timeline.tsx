@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { type OrgActivity, type OrgHeatmap, type SourceListItem, type OrgDetail } from "@/lib/api";
 import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
 import { groupSourcesByProduct } from "@/lib/sources";
@@ -327,12 +328,15 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-4 mb-2">
         {([
-          { label: "Releases", value: String(summaryStats.totalReleases) },
-          { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014" },
-          { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk` },
-        ] as const).map((stat) => (
+          { label: "Releases", value: String(summaryStats.totalReleases), tooltip: "Total releases in the selected chart range." },
+          { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014", tooltip: "Average time between releases in the selected range." },
+          { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk`, tooltip: "Average release frequency in the selected range." },
+        ]).map((stat) => (
           <div key={stat.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1">{stat.label}</div>
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1 flex items-center gap-1">
+              {stat.label}
+              <InfoTooltip text={stat.tooltip} />
+            </div>
             <div className="text-xl font-bold text-stone-900 dark:text-stone-100 tabular-nums">{stat.value}</div>
           </div>
         ))}
