@@ -8,10 +8,10 @@ import { sha256Hex } from "../lib/hash.js";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
-import { fetchViaFeed } from "./feed.js";
-import { getSourceMeta, updateSourceMeta } from "./feed.js";
-import { fetchCloudflareMarkdown } from "./cloudflare.js";
+import { fetchViaFeed, getSourceMeta, updateSourceMeta } from "./feed.js";
+import { fetchCloudflareMarkdown, fetchCloudflareMarkdownFast } from "./cloudflare.js";
 import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
+import { shouldUseFastFetch } from "../lib/render-hint.js";
 
 function toFragmentUrl(baseUrl: string, version: string | undefined, title: string): string {
   const raw = version ?? title;
@@ -219,8 +219,23 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
     );
   }
 
-  logger.info(`Fetching page via Cloudflare...`);
-  const markdown = await fetchCloudflareMarkdown(source.url, accountId, apiToken);
+  const useFastFetch = shouldUseFastFetch(meta);
+  let markdown: string | null = null;
+
+  if (useFastFetch) {
+    logger.info(`Fetching page without rendering (static provider: ${meta.provider ?? "override"})...`);
+    markdown = await fetchCloudflareMarkdownFast(source.url);
+    if (markdown) {
+      logger.info(`Fast fetch returned ${markdown.length.toLocaleString()} chars`);
+    } else {
+      logger.warn(`Fast fetch returned no content — falling back to full render`);
+    }
+  }
+
+  if (!markdown) {
+    logger.info(`Fetching page via Cloudflare (headless browser)...`);
+    markdown = await fetchCloudflareMarkdown(source.url, accountId, apiToken);
+  }
 
   if (!markdown) {
     throw new AdapterError(

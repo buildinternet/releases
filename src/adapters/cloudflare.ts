@@ -1,4 +1,5 @@
 import { logger } from "../lib/logger.js";
+import { startCrawl, pollCrawlResults } from "./crawl.js";
 
 /** Resource types to block when rendering pages via Cloudflare Browser Rendering. */
 export const CF_REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
@@ -37,4 +38,20 @@ async function fetchCloudflareRendered(
 
 export function fetchCloudflareMarkdown(url: string, accountId: string, apiToken: string): Promise<string | null> {
   return fetchCloudflareRendered(url, accountId, apiToken, "markdown");
+}
+
+/**
+ * Fetch markdown from a URL without headless browser rendering.
+ * Reuses startCrawl/pollCrawlResults from crawl.ts with render: false.
+ * Returns the first page's markdown, or null on any failure.
+ */
+export async function fetchCloudflareMarkdownFast(url: string): Promise<string | null> {
+  try {
+    const jobId = await startCrawl(url, { render: false, limit: 1 });
+    const pages = await pollCrawlResults(jobId);
+    return pages[0]?.markdown ?? null;
+  } catch (err) {
+    logger.debug(`Fast markdown fetch failed for ${url}: ${err}`);
+    return null;
+  }
 }

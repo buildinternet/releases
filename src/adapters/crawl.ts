@@ -3,7 +3,8 @@ import { AdapterError, CrawlTimeoutError, CrawlJobError } from "../lib/errors.js
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
 import type { RawRelease, FetchOptions } from "./types.js";
-import { CF_REJECT_RESOURCE_TYPES } from "./cloudflare.js";
+/** Resource types to block when rendering (duplicated from cloudflare.ts to avoid circular import). */
+const REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
 
 // NOTE: The crawl flow is currently synchronous (poll until done). This is
 // designed to be split into start/retrieve phases for background execution.
@@ -54,7 +55,7 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
   const body: Record<string, unknown> = {
     url,
     formats: ["markdown"],
-    rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
+    rejectResourceTypes: [...REJECT_RESOURCE_TYPES],
     // Wait for JS-rendered pages to fully hydrate before extracting links/content
     gotoOptions: { waitUntil: "networkidle2" },
     // Declare crawl purposes per Cloudflare Content Signals policy.
@@ -69,8 +70,9 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
 
   if (options.render === false) {
     body.render = false;
-    // No need for gotoOptions when not rendering
+    // Browser-only options are invalid when not rendering
     delete body.gotoOptions;
+    delete body.rejectResourceTypes;
   }
 
   if (options.source) {

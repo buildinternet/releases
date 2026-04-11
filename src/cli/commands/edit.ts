@@ -33,6 +33,8 @@ export function registerEditCommand(program: Command) {
     .option("--markdown-url <markdownUrl>", "Set the raw markdown URL for this source")
     .option("--parse-instructions <text>", "Set AI parsing instructions for this source")
     .option("--no-parse-instructions", "Remove AI parsing instructions")
+    .option("--render", "Force headless browser rendering for this source")
+    .option("--no-render", "Allow fast fetch without headless browser rendering")
     .option("--provider <provider>", "Set the detected provider (e.g., mintlify, docusaurus)")
     .option("--fetch-method <fetchMethod>", "Set the recommended fetch method (feed, markdown, scrape, crawl, github)")
     .option("--primary", "Mark as the org's primary changelog source")
@@ -59,6 +61,7 @@ Examples:
       org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
       parseInstructions?: string | boolean;
+      render?: boolean;
       primary?: boolean;
       priority?: string;
       disable?: boolean;
@@ -197,6 +200,15 @@ Examples:
       } else if (typeof opts.parseInstructions === "string") {
         metaUpdates.parseInstructions = opts.parseInstructions;
         changes.push(`parse instructions → "${opts.parseInstructions.slice(0, 60)}${opts.parseInstructions.length > 60 ? "..." : ""}"`);
+      }
+
+      // Handle --render / --no-render
+      if (opts.render === true) {
+        metaUpdates.renderRequired = true;
+        changes.push("rendering → required (headless browser)");
+      } else if (opts.render === false) {
+        metaUpdates.renderRequired = false;
+        changes.push("rendering → disabled (fast fetch)");
       }
 
       if (Object.keys(metaUpdates).length > 0) {
