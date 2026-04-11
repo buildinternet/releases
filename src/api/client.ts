@@ -792,16 +792,31 @@ export async function getMonthlySummary(
   return rows[0];
 }
 
-// ── Knowledge Pages ──
+// ── Overview / Guide Pages ──
 
+export async function getOverview(
+  scope: "org" | "product",
+  slug: string,
+): Promise<KnowledgePage | null> {
+  return apiFetch<KnowledgePage | null>(`/v1/overview?scope=${scope}&slug=${slug}`);
+}
+
+export async function getSourceGuide(
+  slug: string,
+): Promise<KnowledgePage | null> {
+  return apiFetch<KnowledgePage | null>(`/v1/guide?slug=${slug}`);
+}
+
+/** @deprecated Use getOverview */
 export async function getKnowledgePage(
   scope: "org" | "product" | "source-guide",
   slug: string,
 ): Promise<KnowledgePage | null> {
-  return apiFetch<KnowledgePage | null>(`/v1/knowledge?scope=${scope}&slug=${slug}`);
+  if (scope === "source-guide") return getSourceGuide(slug);
+  return getOverview(scope, slug);
 }
 
-export async function upsertKnowledgePage(data: {
+export async function upsertOverview(data: {
   scope: "org" | "product" | "source-guide";
   orgId?: string | null;
   productId?: string | null;
@@ -809,14 +824,17 @@ export async function upsertKnowledgePage(data: {
   releaseCount: number;
   lastContributingReleaseAt?: string | null;
 }): Promise<void> {
-  await apiFetch("/v1/knowledge", {
+  await apiFetch("/v1/overview", {
     method: "POST",
     body: JSON.stringify(data),
   });
 }
 
+/** @deprecated Use upsertOverview */
+export const upsertKnowledgePage = upsertOverview;
+
 export async function updateSourceGuideNotes(orgSlug: string, notes: string): Promise<void> {
-  await apiFetch(`/v1/knowledge/notes?slug=${encodeURIComponent(orgSlug)}`, {
+  await apiFetch(`/v1/guide/notes?slug=${encodeURIComponent(orgSlug)}`, {
     method: "PATCH",
     body: JSON.stringify({ notes }),
   });

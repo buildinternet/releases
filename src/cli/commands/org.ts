@@ -6,7 +6,7 @@ import {
   getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
   getProductsByOrg, addTagsToOrg, removeTagsFromOrg, getTagsForOrg, updateOrg,
   listDomainAliases, addDomainAlias, removeDomainAlias,
-  getKnowledgePageForOrg, getRecentReleases, upsertKnowledgePage,
+  getOrgOverview, getRecentReleases, upsertOverviewPage,
 } from "../../db/queries.js";
 import { generateKnowledgePage } from "../../ai/knowledge.js";
 import { DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
@@ -148,7 +148,7 @@ Examples:
         getSourcesByOrg(found.id),
         getTagsForOrg(found.id),
         listDomainAliases({ orgId: found.id }),
-        getKnowledgePageForOrg(found.id, found.slug).catch(() => null),
+        getOrgOverview(found.id, found.slug).catch(() => null),
       ]);
 
       // Regenerate overview if requested
@@ -173,7 +173,7 @@ Examples:
             sourceNames: linkedSources.map((s) => s.name),
           });
           if (result) {
-            await upsertKnowledgePage({
+            await upsertOverviewPage({
               scope: "org",
               orgId: found.id,
               content: result.content,
@@ -181,7 +181,7 @@ Examples:
               lastContributingReleaseAt: allReleases[0]?.publishedAt ?? null,
             });
             // Re-read so the display below shows the new content
-            const updated = await getKnowledgePageForOrg(found.id, found.slug);
+            const updated = await getOrgOverview(found.id, found.slug);
             if (updated) Object.assign(overview ?? {}, updated);
           }
         }

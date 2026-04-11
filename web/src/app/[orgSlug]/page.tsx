@@ -13,7 +13,7 @@ import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
 import { groupSourcesByProduct } from "@/lib/sources";
 import { InactiveSourcesToggle } from "@/components/inactive-sources-toggle";
-import { KnowledgePageView } from "@/components/knowledge-page-view";
+import { OverviewView } from "@/components/overview-view";
 import { SourceGuideView } from "@/components/source-guide-view";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
@@ -237,7 +237,7 @@ export default async function OrgPage({
                 <ReleaseTimeline activity={activity} heatmap={heatmap} orgSlug={org.slug} sources={org.sources} products={org.products} trackingSince={org.trackingSince}>
                   <OrgTabs />
                 </ReleaseTimeline>
-                {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}
+                {org.overview && <OverviewView page={org.overview} />}
                 {isDev && org.sourceGuide && <SourceGuideView guide={org.sourceGuide} />}
                 <div className="mt-6">
                   <SourceList org={org} orgSlug={orgSlug} />
@@ -246,7 +246,7 @@ export default async function OrgPage({
             ) : (
               <>
                 <OrgTabs />
-                {org.knowledgePage && <KnowledgePageView page={org.knowledgePage} />}
+                {org.overview && <OverviewView page={org.overview} />}
                 {isDev && org.sourceGuide && <SourceGuideView guide={org.sourceGuide} />}
                 <div className="mt-6">
                   <SourceList org={org} orgSlug={orgSlug} />

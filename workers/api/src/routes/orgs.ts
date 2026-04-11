@@ -54,7 +54,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
   const cutoff = daysAgoIso(30);
 
-  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgeRow, sourceGuideRow] = await Promise.all([
+  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgePageRows] = await Promise.all([
     db
       .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts)
@@ -101,17 +101,11 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .from(sources)
       .where(eq(sources.orgId, org.id)),
 
-    // Knowledge page for this org
+    // Overview + source guide pages for this org (single query, split client-side)
     db
       .select()
       .from(knowledgePages)
-      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id))),
-
-    // Source guide for this org
-    db
-      .select()
-      .from(knowledgePages)
-      .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, org.id))),
+      .where(and(inArray(knowledgePages.scope, ["org", "source-guide"]), eq(knowledgePages.orgId, org.id))),
   ]);
 
   const sourcesWithStats = orgSources.map((row) => ({
@@ -151,6 +145,17 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
   const totalReleases = totalReleaseRow[0];
   const latestFetch = latestFetchRow[0];
+  const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
+  const sourceGuideRow = knowledgePageRows.find((r) => r.scope === "source-guide") ?? null;
+
+  const overviewData = knowledgeRow ? {
+    scope: knowledgeRow.scope as "org",
+    content: knowledgeRow.content,
+    releaseCount: knowledgeRow.releaseCount,
+    lastContributingReleaseAt: knowledgeRow.lastContributingReleaseAt,
+    generatedAt: knowledgeRow.generatedAt,
+    updatedAt: knowledgeRow.updatedAt,
+  } : null;
 
   const result = {
     id: org.id,
@@ -170,18 +175,12 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     accounts,
     products: productRows,
     sources: sourcesWithStats,
-    knowledgePage: knowledgeRow[0] ? {
-      scope: knowledgeRow[0].scope as "org",
-      content: knowledgeRow[0].content,
-      releaseCount: knowledgeRow[0].releaseCount,
-      lastContributingReleaseAt: knowledgeRow[0].lastContributingReleaseAt,
-      generatedAt: knowledgeRow[0].generatedAt,
-      updatedAt: knowledgeRow[0].updatedAt,
-    } : null,
-    sourceGuide: sourceGuideRow[0] ? {
-      scope: sourceGuideRow[0].scope as "source-guide",
-      content: assembleSourceGuide(sourceGuideRow[0].content, sourceGuideRow[0].notes),
-      updatedAt: sourceGuideRow[0].updatedAt,
+    overview: overviewData,
+    knowledgePage: overviewData, // deprecated — use overview
+    sourceGuide: sourceGuideRow ? {
+      scope: sourceGuideRow.scope as "source-guide",
+      content: assembleSourceGuide(sourceGuideRow.content, sourceGuideRow.notes),
+      updatedAt: sourceGuideRow.updatedAt,
     } : null,
   };
 

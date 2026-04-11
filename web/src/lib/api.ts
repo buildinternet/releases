@@ -21,6 +21,7 @@ export type {
   SearchProductHit,
   SearchSourceHit,
   OrgReleaseItem,
+  OverviewPageItem,
   KnowledgePageItem,
 } from "@shared/api/types";
 
