@@ -141,7 +141,7 @@ export default async function OrgPage({
         )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            <OrgTabs hasGuide={!!org.sourceGuide} />
+            <OrgTabs hasGuide={process.env.NODE_ENV === 'development' && !!org.sourceGuide} />
 
             {activeTab === "releases" ? (
               initialReleases ? (
@@ -166,7 +166,7 @@ export default async function OrgPage({
                 }
                 return Object.keys(map).length > 0 ? map : undefined;
               })()} />
-            ) : activeTab === "guide" && org.sourceGuide ? (
+            ) : activeTab === "guide" && process.env.NODE_ENV === 'development' && org.sourceGuide ? (
               <SourceGuideView guide={org.sourceGuide} />
             ) : (
               <>
