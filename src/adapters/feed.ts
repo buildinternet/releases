@@ -456,21 +456,27 @@ export function parseJsonFeed(json: string): RawRelease[] {
     title?: string;
     content_html?: string;
     content_text?: string;
+    summary?: string;
     url?: string;
     date_published?: string;
+    date_modified?: string;
   }> = feed.items ?? [];
 
   return items
     .filter((item) => item.title)
-    .map((item) => ({
-      title: item.title!,
-      content: item.content_text ?? htmlToMarkdown(item.content_html ?? ""),
-      url: item.url,
-      publishedAt: item.date_published ? new Date(item.date_published) : undefined,
-      version: extractVersionFromTitle(item.title!),
-      isBreaking: detectBreaking(item.title!, item.content_text ?? item.content_html ?? ""),
-      media: item.content_html ? extractMedia(item.content_html) : [],
-    }));
+    .map((item) => {
+      const html = item.content_html ?? item.summary ?? "";
+      const dateStr = item.date_published ?? item.date_modified;
+      return {
+        title: item.title!,
+        content: item.content_text ?? htmlToMarkdown(html),
+        url: item.url,
+        publishedAt: dateStr ? new Date(dateStr) : undefined,
+        version: extractVersionFromTitle(item.title!),
+        isBreaking: detectBreaking(item.title!, item.content_text ?? html),
+        media: html ? extractMedia(html) : [],
+      };
+    });
 }
 
 // ── XML helpers (no external dependency) ────────────────────────────
