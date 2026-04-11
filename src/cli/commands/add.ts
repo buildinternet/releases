@@ -18,10 +18,9 @@ export function isGitHubUrl(url: string): boolean {
   return /^https?:\/\/(www\.)?github\.com\/[^/]+\/[^/]+/.test(url);
 }
 
-// All non-GitHub methods map to "scrape" — the scrape adapter reads metadata
-// (feedUrl, markdownUrl, evaluatedMethod) to pick its actual fetch strategy.
 function mapMethodToType(method: EvaluationResult["recommendedMethod"]): SourceType {
   if (method === "github") return "github";
+  if (method === "feed") return "feed";
   return "scrape";
 }
 
@@ -97,7 +96,7 @@ async function addSingleSource(input: AddSourceInput): Promise<AddSourceResult> 
 
   if (input.feedUrl) {
     // Explicit feed URL — skip evaluation
-    sourceType = (input.type as SourceType) ?? "scrape";
+    sourceType = (input.type as SourceType) ?? "feed";
     metadata.feedUrl = input.feedUrl;
     metadata.feedType = "unknown";
     metadata.feedDiscoveredAt = new Date().toISOString();
