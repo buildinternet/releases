@@ -209,6 +209,7 @@ export default {
           mode: "update",
           sourceIdentifiers: identifiers,
           orgId: body.orgId,
+          correlationId: body.correlationId,
         });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

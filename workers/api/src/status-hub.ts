@@ -11,6 +11,12 @@ interface SessionState {
   company: string;
   type: "onboard" | "update";
   agent?: "sonnet" | "haiku";
+  /** Identifies the client that started this session (e.g. hostname, "sandbox-prod"). */
+  runner?: string;
+  /** Correlation ID for end-to-end tracing across CLI → API → managed agent. */
+  correlationId?: string;
+  /** Anthropic session ID for linking to the Anthropic console logs. */
+  anthropicSessionId?: string;
   status: "running" | "complete" | "error" | "cancelled";
   step?: string;
   sourcesFound?: number;
@@ -243,6 +249,9 @@ export class StatusHub extends DurableObject {
         company: event.company as string,
         type: (event.sessionType as SessionState["type"]) ?? "onboard",
         agent: event.agent as SessionState["agent"],
+        runner: event.runner as string | undefined,
+        correlationId: event.correlationId as string | undefined,
+        anthropicSessionId: event.anthropicSessionId as string | undefined,
         status: "running",
         startedAt: now,
         lastUpdatedAt: now,
@@ -266,6 +275,7 @@ export class StatusHub extends DurableObject {
         if (event.releasesFound !== undefined) existing.releasesFound = event.releasesFound as number;
         if (event.releasesInserted !== undefined) existing.releasesInserted = event.releasesInserted as number;
         if (event.activeSources !== undefined) existing.activeSources = event.activeSources as string[];
+        if (event.anthropicSessionId !== undefined) existing.anthropicSessionId = event.anthropicSessionId as string;
         if (typeof event.warning === "string") {
           existing.warnings = existing.warnings ?? [];
           existing.warnings.push(event.warning);

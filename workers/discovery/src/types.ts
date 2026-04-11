@@ -18,6 +18,8 @@ export interface UpdateRequest {
   sourceIdentifiers: string[];
   /** Organization ID (org_...) for source guide lookup. */
   orgId?: string;
+  /** Correlation ID from the originating client — flows through to managed agent sessions and status events. */
+  correlationId?: string;
   /** @deprecated Use sourceIdentifiers instead. */
   sourceSlugs?: string[];
 }
