@@ -11,8 +11,8 @@ interface HighlightsViewProps {
 const summaryClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
 
 function formatMonth(year: number, month: number): string {
-  const date = new Date(year, month - 1);
-  return date.toLocaleDateString("en-US", { month: "short", year: "numeric" });
+  const date = new Date(Date.UTC(year, month - 1));
+  return date.toLocaleDateString("en-US", { month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
@@ -49,7 +49,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
           </div>
           {rolling.generatedAt && (
             <div className="text-[10px] text-stone-400 dark:text-stone-600 mt-3 tabular-nums">
-              Generated {new Date(rolling.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}
+              Generated {new Date(rolling.generatedAt).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "UTC" })}
             </div>
           )}
         </div>

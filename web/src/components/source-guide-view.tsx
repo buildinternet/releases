@@ -14,6 +14,7 @@ export function SourceGuideView({ guide }: SourceGuideViewProps) {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 
   return (
