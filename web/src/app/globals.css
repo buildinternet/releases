@@ -7,9 +7,6 @@
 }
 
 :root {
-  /* Heatmap inactive cell — light stone for light mode */
-  --color-heat-0: #e7e5e4;  /* stone-200 */
-
   /* Product palette for multi-product charts */
   --color-product-0: oklch(0.637 0.153 254.4);  /* blue-400 */
   --color-product-1: oklch(0.723 0.191 149.6);  /* green-400 */
@@ -21,8 +18,16 @@
   --color-product-7: oklch(0.750 0.160 55.0);   /* orange-400 */
 }
 
-.dark {
-  --color-heat-0: #1c2129;
+/* Heatmap empty cell — level 0 fill (light/dark) */
+@layer base {
+  [data-heat-level="0"] {
+    fill: #e7e5e4;           /* stone-200 */
+    background-color: #e7e5e4;
+  }
+  .dark [data-heat-level="0"] {
+    fill: #1c2129;
+    background-color: #1c2129;
+  }
 }
 
 /* Range navigator bar states */

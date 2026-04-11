@@ -30,12 +30,13 @@ function getLevel(count: number): number {
   return Math.min(count, 4);
 }
 
-const LEVEL_COLORS = [
-  "var(--color-heat-0, #e7e5e4)",
-  "var(--color-heat-1, rgba(56, 132, 244, 0.25))",
-  "var(--color-heat-2, rgba(56, 132, 244, 0.50))",
-  "var(--color-heat-3, rgba(56, 132, 244, 0.75))",
-  "var(--color-heat-4, rgba(56, 132, 244, 1.0))",
+/** Active level colors for the legend (levels 1–4). Level 0 is handled via CSS. */
+const LEGEND_COLORS = [
+  null, // level 0 — styled by CSS via data-heat-level
+  "rgba(56, 132, 244, 0.25)",
+  "rgba(56, 132, 244, 0.50)",
+  "rgba(56, 132, 244, 0.75)",
+  "rgba(56, 132, 244, 1.0)",
 ];
 
 function formatTooltipDate(dateStr: string): string {
@@ -199,7 +200,7 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
       <svg width="0" height="0" className="absolute">
         <defs>
           <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
-            <rect width="4" height="4" fill="var(--color-heat-0, #e7e5e4)" />
+            <rect width="4" height="4" data-heat-level={0} />
             <line x1="0" y1="0" x2="0" y2="4" stroke="rgba(255,255,255,0.08)" strokeWidth="2" />
           </pattern>
         </defs>
@@ -267,7 +268,8 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
                         width={cellSize}
                         height={cellSize}
                         rx={2}
-                        fill={isPreTracking ? `url(#${patternId})` : LEVEL_COLORS[cell.level]}
+                        data-heat-level={cell.level}
+                        fill={isPreTracking ? `url(#${patternId})` : (cell.level > 0 ? LEGEND_COLORS[cell.level]! : undefined)}
                       />
                     </svg>
                   );
@@ -281,11 +283,12 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
       {/* Footer — legend */}
       <div className="flex justify-end items-center gap-1 mt-2.5">
         <span className="text-[10px] text-stone-400 dark:text-stone-500 mr-0.5">Less</span>
-        {LEVEL_COLORS.map((color, i) => (
+        {LEGEND_COLORS.map((color, i) => (
           <div
             key={i}
             className="rounded-[2px]"
-            style={{ width: cellSize, height: cellSize, background: color }}
+            data-heat-level={i}
+            style={{ width: cellSize, height: cellSize, background: color ?? undefined }}
           />
         ))}
         <span className="text-[10px] text-stone-400 dark:text-stone-500 ml-0.5">More</span>
