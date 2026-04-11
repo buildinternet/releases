@@ -32,7 +32,7 @@ function makeSource(overrides: Partial<Source> = {}): Source {
 }
 
 describe("generateSourceGuideHeader", () => {
-  it("generates a basic header with one source", () => {
+  it("generates a basic header with one source as a table", () => {
     const header = generateSourceGuideHeader({
       orgName: "Acme",
       orgSlug: "acme",
@@ -41,12 +41,15 @@ describe("generateSourceGuideHeader", () => {
 
     expect(header).toContain("# Acme — Source Guide");
     expect(header).toContain("**1** active source");
-    expect(header).toContain("Test Source (`test-source`)");
+    // Table format: name, ID, type, URL columns
+    expect(header).toContain("Test Source");
+    expect(header).toContain("`src_1`");
     expect(header).toContain("https://example.com/changelog");
+    expect(header).toContain("| Name |");
     expect(header).not.toContain("Agent Notes");
   });
 
-  it("includes domain when provided", () => {
+  it("includes domain in summary line", () => {
     const header = generateSourceGuideHeader({
       orgName: "Acme",
       orgSlug: "acme",
@@ -54,17 +57,17 @@ describe("generateSourceGuideHeader", () => {
       sources: [makeSource()],
     });
 
-    expect(header).toContain("Primary domain: acme.com");
+    expect(header).toContain("domain: acme.com");
   });
 
-  it("groups sources by product", () => {
+  it("shows product column when products exist", () => {
     const header = generateSourceGuideHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [
-        makeSource({ name: "CLI Changelog", slug: "cli", productId: "prod_1" }),
-        makeSource({ name: "API Changelog", slug: "api", productId: "prod_2" }),
-        makeSource({ name: "Blog", slug: "blog", productId: null }),
+        makeSource({ id: "src_1", name: "CLI Changelog", slug: "cli", productId: "prod_1" }),
+        makeSource({ id: "src_2", name: "API Changelog", slug: "api", productId: "prod_2" }),
+        makeSource({ id: "src_3", name: "Blog", slug: "blog", productId: null }),
       ],
       products: [
         { id: "prod_1", name: "CLI", slug: "cli" },
@@ -72,47 +75,92 @@ describe("generateSourceGuideHeader", () => {
       ],
     });
 
-    expect(header).toContain("Sources by Product");
-    expect(header).toContain("### CLI (`cli`)");
-    expect(header).toContain("### API (`api`)");
-    expect(header).toContain("Organization-Level Sources");
-    expect(header).toContain("Blog");
+    expect(header).toContain("| Product |");
+    expect(header).toContain("| CLI |");
+    expect(header).toContain("| API |");
+    // Unassigned source shows dash
+    expect(header).toContain("| — |");
   });
 
-  it("separates disabled sources", () => {
+  it("separates disabled sources with strikethrough and ID", () => {
     const header = generateSourceGuideHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [
-        makeSource({ name: "Active", slug: "active", isHidden: false }),
-        makeSource({ name: "Disabled", slug: "disabled", isHidden: true }),
+        makeSource({ id: "src_1", name: "Active", slug: "active", isHidden: false }),
+        makeSource({ id: "src_2", name: "Disabled", slug: "disabled", isHidden: true }),
       ],
     });
 
-    expect(header).toContain("## Active Sources");
-    expect(header).toContain("## Disabled Sources");
+    expect(header).toContain("## Sources");
+    expect(header).toContain("## Disabled");
+    expect(header).toContain("~~Disabled~~");
+    expect(header).toContain("`src_2`");
     expect(header).toContain("1 disabled");
   });
 
-  it("shows parseInstructions reminder when sources have them", () => {
+  it("shows parseInstructions in a separate section", () => {
     const header = generateSourceGuideHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ metadata: JSON.stringify({ parseInstructions: "Only extract new features" }) })],
     });
 
-    expect(header).toContain("parseInstructions");
+    expect(header).toContain("## Parse Instructions");
+    expect(header).toContain("Only extract new features");
     expect(header).toContain("edit_source");
   });
 
-  it("shows priority badge for non-normal priorities", () => {
+  it("shows priority in type column for non-normal priorities", () => {
     const header = generateSourceGuideHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ fetchPriority: "low" })],
     });
 
-    expect(header).toContain("priority: low");
+    expect(header).toContain("scrape · low");
+  });
+
+  it("includes source ID in table", () => {
+    const header = generateSourceGuideHeader({
+      orgName: "Acme",
+      orgSlug: "acme",
+      sources: [makeSource({ id: "src_abc123" })],
+    });
+
+    expect(header).toContain("`src_abc123`");
+  });
+
+  it("includes URL as plain text in table", () => {
+    const header = generateSourceGuideHeader({
+      orgName: "Acme",
+      orgSlug: "acme",
+      sources: [makeSource({ url: "https://example.com/changelog" })],
+    });
+
+    // URL should appear as plain text, not as a markdown link
+    expect(header).toContain("https://example.com/changelog");
+    expect(header).not.toContain("[test-source](");
+  });
+
+  it("formats last fetched as short date", () => {
+    const header = generateSourceGuideHeader({
+      orgName: "Acme",
+      orgSlug: "acme",
+      sources: [makeSource({ lastFetchedAt: "2026-04-11T17:00:00.000Z" })],
+    });
+
+    expect(header).toContain("Apr 11");
+  });
+
+  it("shows 'never' when not fetched", () => {
+    const header = generateSourceGuideHeader({
+      orgName: "Acme",
+      orgSlug: "acme",
+      sources: [makeSource({ lastFetchedAt: null })],
+    });
+
+    expect(header).toContain("never");
   });
 });
 

@@ -49,85 +49,85 @@ export function generateSourceGuideHeader(input: SourceGuideInput): string {
   lines.push("");
 
   // Summary
-  lines.push(`## Overview`);
-  lines.push("");
-  lines.push(`- **${active.length}** active source${active.length === 1 ? "" : "s"}${disabled.length > 0 ? `, ${disabled.length} disabled` : ""}`);
+  const summaryParts: string[] = [];
+  summaryParts.push(`**${active.length}** active source${active.length === 1 ? "" : "s"}${disabled.length > 0 ? `, ${disabled.length} disabled` : ""}`);
   if (hasProducts) {
-    lines.push(`- **${productMap.size}** product${productMap.size === 1 ? "" : "s"}: ${[...productMap.values()].map((p) => p.name).join(", ")}`);
+    summaryParts.push(`**${productMap.size}** product${productMap.size === 1 ? "" : "s"}: ${[...productMap.values()].map((p) => p.name).join(", ")}`);
   }
   if (input.domain) {
-    lines.push(`- Primary domain: ${input.domain}`);
+    summaryParts.push(`domain: ${input.domain}`);
   }
+  lines.push(summaryParts.join(" · "));
   lines.push("");
 
-  // Active sources — grouped by product when products exist
+  // Sources table
   if (active.length > 0) {
-    if (hasProducts) {
-      const byProduct = new Map<string, Source[]>();
-      const unassigned: Source[] = [];
+    lines.push(`## Sources`);
+    lines.push("");
 
-      for (const source of active) {
-        if (source.productId && productMap.has(source.productId)) {
-          const group = byProduct.get(source.productId) ?? [];
-          group.push(source);
-          byProduct.set(source.productId, group);
-        } else {
-          unassigned.push(source);
-        }
-      }
-
-      lines.push(`## Sources by Product`);
-      lines.push("");
-
-      for (const [productId, productSources] of byProduct) {
-        const product = productMap.get(productId)!;
-        lines.push(`### ${product.name} (\`${product.slug}\`)`);
-        lines.push("");
-        if (product.description) {
-          lines.push(`${product.description}`);
-          lines.push("");
-        }
-        for (const source of productSources) {
-          lines.push(formatSource(source, 4));
-        }
-      }
-
-      if (unassigned.length > 0) {
-        const productNames = [...productMap.values()].map((p) => p.name);
-        lines.push(`### Organization-Level Sources`);
-        lines.push("");
-        lines.push(`_Not tied to a specific product, but content may span any of: ${productNames.join(", ")}. Check individual releases for product relevance._`);
-        lines.push("");
-        for (const source of unassigned) {
-          lines.push(formatSource(source, 4));
-        }
-      }
+    const showProduct = hasProducts;
+    if (showProduct) {
+      lines.push(`| Name | ID | Type | URL | Product | Last Fetched |`);
+      lines.push(`|------|-----|------|-----|---------|--------------|`);
     } else {
-      lines.push(`## Active Sources`);
-      lines.push("");
-      for (const source of active) {
-        lines.push(formatSource(source));
-      }
+      lines.push(`| Name | ID | Type | URL | Last Fetched |`);
+      lines.push(`|------|-----|------|-----|--------------|`);
     }
+
+    for (const source of active) {
+      lines.push(formatSourceRow(source, productMap, showProduct));
+    }
+    lines.push("");
   }
 
-  // Disabled sources
+  // Disabled sources (compact list, not a full table)
   if (disabled.length > 0) {
-    lines.push(`## Disabled Sources`);
+    lines.push(`## Disabled`);
     lines.push("");
     for (const source of disabled) {
-      lines.push(formatSource(source));
+      const meta = getSourceMeta(source);
+      const reason = meta.parseInstructions ? ` — ${meta.parseInstructions.split(".")[0]}.` : "";
+      lines.push(`- ~~${source.name}~~ (\`${source.id}\`) ${source.url}${reason}`);
     }
+    lines.push("");
   }
 
-  // Inline reminder about editing source metadata
-  const sourcesWithInstructions = [...active, ...disabled].filter((s) => getSourceMeta(s).parseInstructions);
+  // Parse instructions — shown as footnotes below the table
+  const sourcesWithInstructions = [...active, ...disabled]
+    .map((s) => ({ source: s, meta: getSourceMeta(s) }))
+    .filter(({ meta }) => meta.parseInstructions);
   if (sourcesWithInstructions.length > 0) {
-    lines.push(`> **Note:** ${sourcesWithInstructions.length} source${sourcesWithInstructions.length === 1 ? " has" : "s have"} \`parseInstructions\` configured. To update these, use \`edit_source\` with metadata — do not edit the guide header directly.`);
+    lines.push(`## Parse Instructions`);
     lines.push("");
+    lines.push(`> To update, use \`edit_source\` with metadata — do not edit the guide header.`);
+    lines.push("");
+    for (const { source, meta } of sourcesWithInstructions) {
+      lines.push(`**${source.name}** (\`${source.slug}\`): ${meta.parseInstructions!.replace(/\n/g, " ")}`);
+      lines.push("");
+    }
   }
 
   return lines.join("\n");
+}
+
+function formatSourceRow(source: Source, productMap: Map<string, ProductInfo>, showProduct: boolean): string {
+  const priority = source.fetchPriority ?? "normal";
+  const type = priority !== "normal" ? `${source.type} · ${priority}` : source.type;
+  const fetched = formatShortDate(source.lastFetchedAt);
+  const product = source.productId ? productMap.get(source.productId)?.name ?? "—" : "—";
+
+  if (showProduct) {
+    return `| ${source.name} | \`${source.id}\` | ${type} | ${source.url} | ${product} | ${fetched} |`;
+  }
+  return `| ${source.name} | \`${source.id}\` | ${type} | ${source.url} | ${fetched} |`;
+}
+
+function formatShortDate(iso: string | null): string {
+  if (!iso) return "never";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
 /**
@@ -138,49 +138,9 @@ export function assembleSourceGuide(header: string, notes: string | null): strin
   const trimmedNotes = notes?.trim();
   const notesBody = trimmedNotes
     ? trimmedNotes
-    : "_No agent notes yet. Use `update_source_guide_notes` to add observations about these sources._";
+    : "_No agent notes yet. Use `update_source_guide_notes` to add skill-style notes with three sections: `### Fetch instructions` (per-source playbook — what to do, what to expect), `### Traps` (concise warnings that prevent wasted work), `### Coverage` (what's tracked, what's not, why)._";
 
   return `${header}\n## Agent Notes\n\n${notesBody}\n`;
-}
-
-function formatSource(source: Source, headingLevel = 3): string {
-  const meta = getSourceMeta(source);
-  const lines: string[] = [];
-
-  const priority = source.fetchPriority ?? "normal";
-  const badges = priority !== "normal" ? `${source.type}, priority: ${priority}` : source.type;
-  const heading = "#".repeat(headingLevel);
-
-  lines.push(`${heading} ${source.name} (\`${source.slug}\`)`);
-  lines.push("");
-  lines.push(`- **URL:** ${source.url}`);
-  lines.push(`- **Type:** ${badges}`);
-
-  if (meta.feedUrl) {
-    lines.push(`- **Feed:** ${meta.feedUrl}`);
-  }
-  if (meta.markdownUrl) {
-    lines.push(`- **Markdown URL:** ${meta.markdownUrl}`);
-  }
-  if (meta.provider) {
-    lines.push(`- **Provider:** ${meta.provider}`);
-  }
-  if (meta.crawlEnabled) {
-    lines.push(`- **Crawl mode:** enabled${meta.crawlPattern ? ` (pattern: \`${meta.crawlPattern}\`)` : ""}`);
-  }
-  if (meta.autoEnrich) {
-    lines.push(`- **Auto-enrich:** yes (feed content is summary-only)`);
-  }
-
-  lines.push(`- **Last fetched:** ${source.lastFetchedAt ?? "never"}`);
-
-  if (meta.parseInstructions) {
-    lines.push(`- **Parse instructions:**`);
-    lines.push(`  > ${meta.parseInstructions.replace(/\n/g, "\n  > ")}`);
-  }
-
-  lines.push("");
-  return lines.join("\n");
 }
 
 // ── Legacy helpers (kept for migration from old format) ──

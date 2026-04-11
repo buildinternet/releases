@@ -91,30 +91,26 @@ Each org has a **source guide** — a README that tells any agent how to efficie
 
 ### Writing good agent notes
 
-The notes should answer: "If I need to fetch the latest releases from this org, what do I need to know?" Organize notes under these headings:
+Write notes like a **skill for the agent that will fetch from this org** — imperative, action-oriented, concise. The reader is an agent about to do work; tell it what to do and what to watch for, not what things are.
 
-**`### Extraction patterns`** — One paragraph per source describing:
-- How the page is structured (single long page with sections? paginated? date-grouped entries?)
-- What individual releases look like (headings, bullet lists, cards?)
-- Version format (semver, dates, codenames, or none — set version to null). Cite actual versions observed.
-- Publish cadence with evidence (e.g., "~1.4 releases/week — March 2026: 4 releases, Feb 2026: 5 releases")
-- Whether the page needs JS rendering or is static HTML
-- Whether filtering is needed or all content is relevant
-- Content quality: are releases complete or do some have empty content fields?
+Organize notes under these headings:
 
-**`### Known quirks`** — Anything that has caused issues or requires special handling:
-- Non-obvious parseInstructions and why they exist
-- URL path oddities (doubled paths, relative links, redirects)
-- Content that looks like releases but isn't
-- Sources where crawl mode helps or hurts
-- Data quality issues: null dates, empty content, broken feeds, date drift between title and publishedAt
-- Fetch failures or stale data (changeDetectedAt set but no recent successful fetch)
+**`### Fetch instructions`** — One paragraph per source. Use imperative voice:
+- What to do: "Set version=null", "Parse `<h2>` elements as version boundaries", "No filtering needed"
+- What to expect: cadence, content quality, whether rendering is needed
+- When to skip or deprioritize: "Only fetch when looking for launch announcements specifically"
+- Cite version format examples where useful (e.g., "semver like 2.1.98")
 
-**`### Source coverage`** — The big picture:
+**`### Traps`** — Concise warnings with **bolded trigger labels**:
+- Each trap is a bullet with a bold label and a one-sentence explanation
+- Example: `**Doubled paths on Platform**: Relative doc links get prefixed with the source URL, producing doubled paths.`
+- Include disabled sources with "Don't re-discover" warnings so agents don't re-evaluate them
+- Only include traps that would cause wasted work or bad data — skip informational notes
+
+**`### Coverage`** — Two or three sentences max:
 - Which sources are canonical vs supplementary
-- Whether the active sources cover the org's full release surface or if there are gaps
-- Why disabled sources were disabled (so they don't get re-evaluated)
-- Missing sources: repos or changelogs that exist but aren't tracked
+- Whether active sources cover the org's full release surface
+- Any known gaps worth noting
 
 ### Levels of guide quality
 

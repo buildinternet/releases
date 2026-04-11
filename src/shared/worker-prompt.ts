@@ -51,7 +51,7 @@ When asked to fetch sources:
 2. Call fetch_source for each source, passing the source ID (e.g. src_abc123) as the \`identifier\` parameter
 3. Report the number of releases fetched per source
 4. Report any errors encountered
-5. **Update the source guide** if you encountered something unexpected — errors, changed page structure, new quirks. Call update_source_guide_notes to append your findings so future agents benefit.
+5. **Update the source guide** if you encountered something unexpected — errors, changed page structure, new traps. Call update_source_guide_notes to update findings. Notes use skill-style sections: \`### Fetch instructions\` (per-source playbook), \`### Traps\` (warnings that prevent wasted work), \`### Coverage\` (what's tracked and gaps).
 6. Do NOT add, remove, or modify sources — only fetch
 
 ### Update Operations
