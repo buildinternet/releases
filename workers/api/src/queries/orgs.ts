@@ -12,7 +12,8 @@ export async function getOrgsWithStats(
       COUNT(DISTINCT s.id) AS source_count,
       COUNT(CASE WHEN r.id IS NOT NULL AND (r.suppressed IS NULL OR r.suppressed = 0) THEN 1 END) AS release_count,
       MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
-      COUNT(CASE WHEN r.published_at >= ${cutoff30d} AND (r.suppressed IS NULL OR r.suppressed = 0) THEN 1 END) AS recent_release_count
+      COUNT(CASE WHEN r.published_at >= ${cutoff30d} AND (r.suppressed IS NULL OR r.suppressed = 0) THEN 1 END) AS recent_release_count,
+      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products
     FROM organizations o
     LEFT JOIN sources s ON s.org_id = o.id
     LEFT JOIN releases r ON r.source_id = s.id

@@ -35,4 +35,5 @@ export type OrgListRow = {
   release_count: number;
   last_activity: string | null;
   recent_release_count: number;
+  top_products: string | null;
 };

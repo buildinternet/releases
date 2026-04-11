@@ -31,6 +31,7 @@ orgRoutes.get("/orgs", async (c) => {
     releaseCount: row.release_count,
     recentReleaseCount: row.recent_release_count,
     lastActivity: row.last_activity ?? null,
+    topProducts: row.top_products ? row.top_products.split("||") : [],
   }));
 
   return c.json(result);

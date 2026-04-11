@@ -140,11 +140,11 @@ function toDate(ctx: { min: Date; max: Date }, pct: number): Date {
 }
 
 function fmtDate(d: Date) {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
 }
 
 function fmtMonth(d: Date) {
-  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit" });
+  return d.toLocaleDateString("en-US", { month: "short", year: "2-digit", timeZone: "UTC" });
 }
 
 function pillCls(active: boolean) {

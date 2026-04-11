@@ -34,6 +34,7 @@ function formatDate(iso: string | null) {
     month: "long",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 }
 

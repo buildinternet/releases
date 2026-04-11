@@ -1,10 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import type { OrgListItem } from "@/lib/api";
+import { HoverCard } from "@/components/hover-card";
 
-type SortKey = "name" | "domain" | "sourceCount" | "releaseCount" | "recentReleaseCount";
+import { formatRelativeDate } from "@/lib/formatters";
+
+type SortKey = "name" | "recentReleaseCount" | "lastActivity";
 type SortDir = "asc" | "desc";
 
 function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
@@ -26,6 +29,46 @@ function SortIcon({ active, dir }: { active: boolean; dir: SortDir }) {
   );
 }
 
+function OrgHoverContent({ org }: { org: OrgListItem }) {
+  return (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg p-3 w-[220px]">
+      <div className="space-y-2.5">
+        {org.domain && (
+          <div className="text-[11px] text-stone-400 dark:text-stone-500">{org.domain}</div>
+        )}
+        {org.topProducts?.length > 0 && (
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1">Products</div>
+            <div className="flex flex-wrap gap-1">
+              {org.topProducts.map((name) => (
+                <span key={name} className="text-[11px] px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400">
+                  {name}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="flex gap-4">
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-0.5">Sources</div>
+            <div className="text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100">{org.sourceCount}</div>
+          </div>
+          <div>
+            <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-0.5">Releases</div>
+            <div className="text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100">{org.releaseCount.toLocaleString()}</div>
+          </div>
+          {org.recentReleaseCount > 0 && (
+            <div>
+              <div className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-0.5">Last 30d</div>
+              <div className="text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100">{org.recentReleaseCount}</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
   const router = useRouter();
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -36,19 +79,27 @@ export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
       setSortDir(sortDir === "asc" ? "desc" : "asc");
     } else {
       setSortKey(key);
-      setSortDir(key === "name" || key === "domain" ? "asc" : "desc");
+      setSortDir(key === "name" ? "asc" : "desc");
     }
   }
 
-  const sorted = [...orgs].sort((a, b) => {
+  const sorted = useMemo(() => [...orgs].sort((a, b) => {
     const dir = sortDir === "asc" ? 1 : -1;
-    if (sortKey === "name" || sortKey === "domain") {
-      const av = (a[sortKey] ?? "").toLowerCase();
-      const bv = (b[sortKey] ?? "").toLowerCase();
+    if (sortKey === "name") {
+      const av = (a.name ?? "").toLowerCase();
+      const bv = (b.name ?? "").toLowerCase();
       return av < bv ? -dir : av > bv ? dir : 0;
     }
-    return ((a[sortKey] ?? 0) - (b[sortKey] ?? 0)) * dir;
-  });
+    if (sortKey === "lastActivity") {
+      const av = a.lastActivity ?? "";
+      const bv = b.lastActivity ?? "";
+      return av < bv ? -dir : av > bv ? dir : 0;
+    }
+    if (sortKey === "recentReleaseCount") {
+      return ((a.recentReleaseCount ?? 0) - (b.recentReleaseCount ?? 0)) * dir;
+    }
+    return 0;
+  }), [orgs, sortKey, sortDir]);
 
   const th = "px-4 py-2.5 text-xs font-medium text-stone-500 dark:text-stone-400 cursor-pointer select-none hover:text-stone-700 dark:hover:text-stone-300 transition-colors";
 
@@ -60,17 +111,26 @@ export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
             <th className={`${th} text-left`} onClick={() => toggleSort("name")}>
               Name<SortIcon active={sortKey === "name"} dir={sortDir} />
             </th>
-            <th className={`${th} text-left hidden sm:table-cell`} onClick={() => toggleSort("domain")}>
-              Domain<SortIcon active={sortKey === "domain"} dir={sortDir} />
-            </th>
-            <th className={`${th} text-right`} onClick={() => toggleSort("sourceCount")}>
-              Sources<SortIcon active={sortKey === "sourceCount"} dir={sortDir} />
-            </th>
-            <th className={`${th} text-right hidden sm:table-cell`} onClick={() => toggleSort("releaseCount")}>
-              Releases<SortIcon active={sortKey === "releaseCount"} dir={sortDir} />
-            </th>
             <th className={`${th} text-right hidden sm:table-cell`} onClick={() => toggleSort("recentReleaseCount")}>
               Last 30d<SortIcon active={sortKey === "recentReleaseCount"} dir={sortDir} />
+            </th>
+            <th className={`${th} text-right`} onClick={() => toggleSort("lastActivity")}>
+              <HoverCard.Root>
+                <HoverCard.Trigger className="inline">
+                  <span>
+                    <svg className="inline mr-1 text-stone-400 dark:text-stone-500 -mt-px" width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <circle cx="8" cy="8" r="6.5" />
+                      <path d="M8 5v3.5M8 10.5v.5" strokeLinecap="round" />
+                    </svg>
+                    Last Release<SortIcon active={sortKey === "lastActivity"} dir={sortDir} />
+                  </span>
+                </HoverCard.Trigger>
+                <HoverCard.Content side="bottom" align="end" sideOffset={4}>
+                  <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 text-[11px] text-stone-500 dark:text-stone-400 w-[200px] font-normal">
+                    Based on last lookup. May be missing newer releases.
+                  </div>
+                </HoverCard.Content>
+              </HoverCard.Root>
             </th>
           </tr>
         </thead>
@@ -81,11 +141,20 @@ export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
               onClick={() => router.push(`/${org.slug}`)}
               className={`cursor-pointer hover:bg-stone-50 dark:hover:bg-stone-800/50 transition-colors ${i < sorted.length - 1 ? "border-b border-stone-100 dark:border-stone-800/50" : ""}`}
             >
-              <td className="px-4 py-2.5 font-medium text-stone-900 dark:text-stone-100">{org.name}</td>
-              <td className="px-4 py-2.5 text-stone-400 dark:text-stone-500 text-xs hidden sm:table-cell">{org.domain ?? "—"}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-stone-600 dark:text-stone-400">{org.sourceCount}</td>
-              <td className="px-4 py-2.5 text-right tabular-nums text-stone-600 dark:text-stone-400 hidden sm:table-cell">{org.releaseCount.toLocaleString()}</td>
+              <td className="px-4 py-2.5 font-medium text-stone-900 dark:text-stone-100">
+                <HoverCard.Root>
+                  <HoverCard.Trigger>
+                    <span className="truncate">{org.name}</span>
+                  </HoverCard.Trigger>
+                  <HoverCard.Content side="bottom" align="start" sideOffset={4}>
+                    <OrgHoverContent org={org} />
+                  </HoverCard.Content>
+                </HoverCard.Root>
+              </td>
               <td className="px-4 py-2.5 text-right tabular-nums text-stone-600 dark:text-stone-400 hidden sm:table-cell">{(org.recentReleaseCount ?? 0) > 0 ? org.recentReleaseCount.toLocaleString() : "—"}</td>
+              <td className="px-4 py-2.5 text-right tabular-nums text-stone-500 dark:text-stone-400 text-xs whitespace-nowrap">
+                {formatRelativeDate(org.lastActivity)}
+              </td>
             </tr>
           ))}
         </tbody>

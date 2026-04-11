@@ -7,7 +7,7 @@ export const WEEK_MS = 7 * DAY_MS;
 export const FETCH_CAP = 200;
 
 export function fmtWeek(d: Date): string {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
 }
 
 export type CadenceKey = "daily" | "weekly" | "biweekly" | "monthly" | "sparse";

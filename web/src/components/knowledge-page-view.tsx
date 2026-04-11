@@ -15,6 +15,7 @@ export function KnowledgePageView({ page }: KnowledgePageViewProps) {
     month: "short",
     day: "numeric",
     year: "numeric",
+    timeZone: "UTC",
   });
 
   return (
