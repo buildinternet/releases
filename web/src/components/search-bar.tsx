@@ -41,6 +41,7 @@ export function SearchBar({
       <input
         name="q"
         type="text"
+        autoFocus
         defaultValue={defaultValue}
         onChange={(e) => updateUrl(e.target.value)}
         placeholder="Search organizations, products, and releases..."
