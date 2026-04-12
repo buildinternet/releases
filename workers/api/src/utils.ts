@@ -1,6 +1,7 @@
 import { eq } from "drizzle-orm";
 import { tags, sources, organizations, products } from "@releases/db/schema.js";
 import { toSlug } from "@releases/lib/slug.js";
+export { hydrateMediaUrls, resolveR2Url } from "@releases/lib/media-url.js";
 
 /** Resolve a source by ID (src_ prefix) or slug */
 export function sourceWhere(identifier: string) {

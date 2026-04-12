@@ -5,7 +5,7 @@ import { organizations, orgAccounts, sources, releases, products, tags, orgTags,
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { isValidCategory } from "@releases/lib/categories.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { isConflictError, computeAvgPerWeek, getOrCreateTagD1, orgWhere, heatmapDateRange } from "../utils.js";
+import { isConflictError, computeAvgPerWeek, getOrCreateTagD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import { assembleSourceGuide } from "@releases/ai/source-guide.js";
@@ -705,19 +705,20 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
       : `|${last.id}`;
   }
 
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
   const releasesFormatted = pageRows.map((r) => ({
     id: r.id,
     version: r.version,
     title: r.title,
     summary: r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    content: r.content,
+    content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
     media: (() => {
       try { return JSON.parse(r.media ?? "[]"); } catch { return []; }
     })().map((m: any) => ({
       ...m,
-      r2Url: m.r2Key ? `/v1/media/${m.r2Key}` : undefined,
+      r2Url: resolveR2Url(m.r2Key, mediaOrigin),
     })),
     source: {
       slug: r.source_slug,

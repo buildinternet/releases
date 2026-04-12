@@ -4,7 +4,7 @@ import { createDb } from "../db.js";
 import { sources, releases, organizations, releaseSummaries, products } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange } from "../utils.js";
+import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
@@ -516,6 +516,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const offset = (page - 1) * pageSize;
   const releaseRows = await getSourceReleasesPaginated(db, src.id, pageSize, offset);
 
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
   const releasesFormatted = releaseRows.map((r) => ({
     id: r.id,
     version: r.version,
@@ -523,12 +524,12 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     summary:
       r.content_summary ??
       (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    content: r.content,
+    content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
     media: JSON.parse(r.media ?? "[]").map((m: any) => ({
       ...m,
-      r2Url: m.r2Key ? `/v1/media/${m.r2Key}` : undefined,
+      r2Url: resolveR2Url(m.r2Key, mediaOrigin),
     })),
   }));
 
@@ -816,13 +817,15 @@ sourceRoutes.get("/releases/:id", async (c) => {
 
   const { release, sourceName, sourceSlug, sourceType, orgSlug, orgName } = rows[0];
   const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
   const media = JSON.parse((release.media as string) ?? "[]").map((m: any) => ({
     ...m,
-    r2Url: m.r2Key ? `/v1/media/${m.r2Key}` : undefined,
+    r2Url: resolveR2Url(m.r2Key, mediaOrigin),
   }));
 
-  const result = { ...release, media, sourceName, sourceSlug, sourceType, org };
+  const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
+  const result = { ...release, content: hydratedContent, media, sourceName, sourceSlug, sourceType, org };
 
   if (wantsMarkdown(c)) {
     return markdownResponse(c, releaseToMarkdown(result as any));

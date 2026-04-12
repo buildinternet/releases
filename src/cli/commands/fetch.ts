@@ -19,6 +19,7 @@ import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { generateKnowledgePage } from "../../ai/knowledge.js";
 import { logger } from "../../lib/logger.js";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
+import { MEDIA_PREFIX } from "../../lib/media-url.js";
 import { config } from "../../lib/config.js";
 import { enrichReleases } from "../../adapters/enrich.js";
 import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
@@ -618,7 +619,7 @@ Examples:
                 if (media.length === 0) continue;
                 let content = rows[i].content;
                 for (const m of media) {
-                  if (m.r2Key) content = content.replaceAll(m.url, `${apiUrl}/v1/media/${m.r2Key}`);
+                  if (m.r2Key) content = content.replaceAll(m.url, `${MEDIA_PREFIX}${m.r2Key}`);
                 }
                 rows[i].content = content;
                 rows[i].media = JSON.stringify(media);

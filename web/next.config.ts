@@ -16,6 +16,7 @@ const nextConfig: NextConfig = {
       { protocol: "https", hostname: "github.com", pathname: "/*.png" },
       { protocol: "https", hostname: "*.githubusercontent.com" },
       { protocol: apiHostname === "localhost" ? "http" : "https", hostname: apiHostname },
+      { protocol: "https", hostname: "media.releases.sh" },
     ],
   },
   turbopack: {
