@@ -31,7 +31,7 @@ export function hydrateMediaUrls(content: string, mediaOrigin: string): string {
   const origin = mediaOrigin.endsWith("/") ? mediaOrigin.slice(0, -1) : mediaOrigin;
 
   return content.replace(
-    /(?:\/_media\/|https?:\/\/api\.releases\.sh\/v1\/media\/|\/v1\/media\/)(\S+)/g,
+    /(?:\/_media\/|https?:\/\/api\.releases\.sh\/v1\/media\/|\/v1\/media\/)([\w/.%-]+)/g,
     (_, key) => {
       const prefix = IMAGE_EXTENSIONS.test(key) ? `${origin}/${IMAGE_TRANSFORM}/` : `${origin}/`;
       return `${prefix}${key}`;
