@@ -8,6 +8,9 @@ export default defineConfig({
   dialect: "sqlite",
   schema: "./src/db/schema.ts",
   out: "./src/db/migrations",
+  migrations: {
+    prefix: "timestamp",
+  },
   dbCredentials: {
     url: join(dataDir, "releases.db"),
   },
