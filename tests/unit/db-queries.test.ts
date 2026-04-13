@@ -300,6 +300,37 @@ describe("Releases", () => {
     expect(rows[0].id).toMatch(/^rel_/);
   });
 
+  it("defaults type to 'feature' when unset", () => {
+    const db = getDb();
+    db.insert(releases)
+      .values({
+        sourceId,
+        title: "v2.0.0",
+        content: "Release",
+        url: "https://example.com/v2",
+      })
+      .run();
+
+    const row = db.select().from(releases).where(eq(releases.sourceId, sourceId)).get();
+    expect(row?.type).toBe("feature");
+  });
+
+  it("persists type='rollup' when set", () => {
+    const db = getDb();
+    db.insert(releases)
+      .values({
+        sourceId,
+        title: "Fall Release 2025",
+        content: "Quarterly rollup",
+        url: "https://example.com/fall-2025",
+        type: "rollup",
+      })
+      .run();
+
+    const row = db.select().from(releases).where(eq(releases.sourceId, sourceId)).get();
+    expect(row?.type).toBe("rollup");
+  });
+
   it("prevents duplicate URLs for the same source", () => {
     const db = getDb();
     db.insert(releases)

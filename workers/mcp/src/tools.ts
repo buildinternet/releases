@@ -9,6 +9,7 @@ import {
   orgTags,
   products,
   domainAliases,
+  type ReleaseType,
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import type { D1Db } from "./db.js";
@@ -98,7 +99,7 @@ async function resolveSource(db: D1Db, identifier: string) {
 
 export async function searchReleases(
   db: D1Db,
-  params: { query: string; product?: string; organization?: string; type?: "feature" | "rollup"; limit?: number },
+  params: { query: string; product?: string; organization?: string; type?: ReleaseType; limit?: number },
 ): Promise<ToolResult> {
   const maxResults = params.limit ?? 20;
   const typeFilter = params.type;
@@ -163,7 +164,7 @@ export async function searchReleases(
 
 export async function getLatestReleases(
   db: D1Db,
-  params: { product?: string; organization?: string; type?: "feature" | "rollup"; count?: number },
+  params: { product?: string; organization?: string; type?: ReleaseType; count?: number },
 ): Promise<ToolResult> {
   const maxCount = params.count ?? 10;
 

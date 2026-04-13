@@ -39,7 +39,6 @@ server.registerTool("search_releases", {
     limit: z.number().optional().describe("Max results to return (default 20)"),
   },
 }, async ({ query, product, organization, type: typeFilter, limit }) => {
-  const db = getDb();
   const maxResults = limit ?? 20;
 
   // Build a set of allowed source IDs when filtering by org
@@ -57,31 +56,20 @@ server.registerTool("search_releases", {
   const needsPostFilter = product || orgSourceIds || typeFilter;
   let results = searchReleases(query, needsPostFilter ? maxResults * 5 : maxResults);
 
+  let productSourceId: string | undefined;
   if (product) {
     const source = await findSource(product);
     if (!source) {
       return textResult(`No product found with slug "${product}"`);
     }
-    const sourceReleases = await db
-      .select({ id: releases.id })
-      .from(releases)
-      .where(eq(releases.sourceId, source.id));
-    const sourceReleaseIds = new Set(sourceReleases.map((r) => r.id));
-    results = results.filter((r) => sourceReleaseIds.has(r.id));
+    productSourceId = source.id;
   }
 
-  if (orgSourceIds || typeFilter) {
-    // FTS results have release IDs; look up their sourceId/type to filter
-    const releaseRows = await db
-      .select({ id: releases.id, sourceId: releases.sourceId, type: releases.type })
-      .from(releases)
-      .where(inArray(releases.id, results.map((r) => r.id)));
-    const releaseInfoMap = new Map(releaseRows.map((r) => [r.id, r]));
+  if (productSourceId || orgSourceIds || typeFilter) {
     results = results.filter((r) => {
-      const info = releaseInfoMap.get(r.id);
-      if (!info) return false;
-      if (orgSourceIds && !orgSourceIds.has(info.sourceId)) return false;
-      if (typeFilter && info.type !== typeFilter) return false;
+      if (productSourceId && r.sourceId !== productSourceId) return false;
+      if (orgSourceIds && !orgSourceIds.has(r.sourceId)) return false;
+      if (typeFilter && r.type !== typeFilter) return false;
       return true;
     });
   }

@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Source } from "../db/schema.js";
+import type { Source, ReleaseType } from "../db/schema.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { checkContentHash } from "../db/queries.js";
 import { config } from "../lib/config.js";
@@ -74,7 +74,7 @@ interface ExtractedEntry {
   content: string;
   publishedAt?: string;
   isBreaking: boolean;
-  type?: "feature" | "rollup";
+  type?: ReleaseType;
 }
 
 // ── Primary path: server-side web_fetch with dynamic filtering ───────

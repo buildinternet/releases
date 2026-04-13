@@ -1,5 +1,7 @@
 /** Shared utilities for release extraction across AI parsers and adapters. */
 
+import { RELEASE_TYPES } from "../db/schema.js";
+
 /** Matches placeholder version strings the model sometimes returns instead of omitting the field. */
 export const PLACEHOLDER_RE = /^<?(unknown|none|n\/a|null|undefined)>?$/i;
 
@@ -34,7 +36,7 @@ export const releaseItemProperties = {
   },
   type: {
     type: "string" as const,
-    enum: ["feature", "rollup"],
+    enum: [...RELEASE_TYPES],
     description:
       "Classification of the release. Use \"feature\" (default) for a single feature, version, or tight group of changes. Use \"rollup\" for seasonal, quarterly, or annual catch-all pages that span many features (e.g. \"Fall Release 2025\", \"What's New in Q3\", \"Year in Review\"). Omit to default to feature.",
   },

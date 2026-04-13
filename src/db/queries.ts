@@ -5,7 +5,7 @@ import {
   sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
-  type KnowledgePage, type NewKnowledgePage,
+  type KnowledgePage, type NewKnowledgePage, type ReleaseType,
 } from "./schema.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
@@ -1149,7 +1149,7 @@ export async function deleteReleasesForSource(source: Source): Promise<number> {
 export async function insertReleases(source: Source, rows: Array<{
   sourceId: string; version: string | null; title: string; content: string;
   url: string | null; contentHash: string | null; publishedAt: string | null;
-  media?: string | null; type?: "feature" | "rollup";
+  media?: string | null; type?: ReleaseType;
 }>): Promise<number> {
   if (isRemoteMode()) {
     const result = await apiClient.insertReleasesBatch(source.slug, rows);

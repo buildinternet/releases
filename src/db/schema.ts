@@ -1,6 +1,9 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId } from "../lib/id.js";
 
+export const RELEASE_TYPES = ["feature", "rollup"] as const;
+export type ReleaseType = (typeof RELEASE_TYPES)[number];
+
 export const organizations = sqliteTable("organizations", {
   id: text("id").primaryKey().$defaultFn(newOrgId),
   name: text("name").notNull(),
@@ -138,7 +141,7 @@ export const releases = sqliteTable(
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
     version: text("version"),
-    type: text("type", { enum: ["feature", "rollup"] }).notNull().default("feature"),
+    type: text("type", { enum: RELEASE_TYPES }).notNull().default("feature"),
     title: text("title").notNull(),
     content: text("content").notNull(),
     contentSummary: text("content_summary"),

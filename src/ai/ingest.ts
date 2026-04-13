@@ -4,6 +4,7 @@ import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired, withParseInstructions } from "./shared.js";
+import type { ReleaseType } from "../db/schema.js";
 
 export interface ParsedRelease {
   version?: string;
@@ -11,8 +12,7 @@ export interface ParsedRelease {
   content: string;
   publishedAt?: string; // ISO 8601
   isBreaking: boolean;
-  /** "feature" (default) or "rollup" for seasonal/quarterly catch-alls. */
-  type?: "feature" | "rollup";
+  type?: ReleaseType;
   media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }>;
 }
 
