@@ -1,9 +1,8 @@
-import Image from "next/image";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { isOptimizableImage } from "@/lib/sanitize";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { detailMarkdownComponents } from "@/components/markdown-components";
+import { FallbackImage } from "@/components/fallback-image";
 
 interface MediaItem {
   type: "image" | "video" | "gif";
@@ -43,14 +42,13 @@ function MediaGallery({
         if (item.type === "image" || item.type === "gif") {
           const src = item.r2Url ?? item.url;
           return (
-            <Image
+            <FallbackImage
               key={i}
               src={src}
               alt={item.alt || ""}
               width={600}
               height={320}
               className="rounded-md object-contain max-h-80 w-auto"
-              unoptimized={!isOptimizableImage(src)}
             />
           );
         }

@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { FallbackPlainImage } from "./fallback-image";
 
 interface MarkdownComponentOptions {
   imgClass?: string;
@@ -25,10 +26,9 @@ export function createMarkdownComponents(
       const src = props.src as string | undefined;
       if (!isSafeImgSrc(src)) return null;
       return (
-        <img
-          src={src}
+        <FallbackPlainImage
+          src={src!}
           alt={props.alt || ""}
-          loading="lazy"
           className={`rounded-md max-w-full h-auto ${imgClass}`}
         />
       );

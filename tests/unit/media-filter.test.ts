@@ -2,6 +2,7 @@ import { describe, it, expect } from "bun:test";
 import {
   preCheckMedia,
   filterJunkMedia,
+  normalizeMediaUrl,
   type MediaRef,
   type AmbiguousMediaClassifier,
 } from "../../src/lib/media.js";
@@ -114,6 +115,49 @@ describe("preCheckMedia — ambiguous cases routed to classifier", () => {
   });
 });
 
+// ── normalizeMediaUrl ───────────────────────────────────────────────
+
+describe("normalizeMediaUrl", () => {
+  it("unwraps Next.js basePath-prefixed image optimizer URLs", () => {
+    const wrapped =
+      "https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2F6jz6vxxd%2Fproduction%2Fabc-878x802.png%3Ffit%3Dmax%26auto%3Dformat&w=1920&q=75";
+    expect(normalizeMediaUrl(wrapped)).toBe(
+      "https://cdn.sanity.io/images/6jz6vxxd/production/abc-878x802.png?fit=max&auto=format",
+    );
+  });
+
+  it("unwraps exact /_next/image paths", () => {
+    const wrapped =
+      "https://example.com/_next/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75";
+    expect(normalizeMediaUrl(wrapped)).toBe("https://cdn.example.com/hero.png");
+  });
+
+  it("unwraps /_vercel/image paths", () => {
+    const wrapped =
+      "https://example.com/_vercel/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75";
+    expect(normalizeMediaUrl(wrapped)).toBe("https://cdn.example.com/hero.png");
+  });
+
+  it("resolves relative inner URLs against the proxy origin", () => {
+    const wrapped = "https://example.com/_next/image?url=%2Fstatic%2Fhero.png&w=640&q=75";
+    expect(normalizeMediaUrl(wrapped)).toBe("https://example.com/static/hero.png");
+  });
+
+  it("returns input unchanged for non-proxy URLs", () => {
+    const url = "https://cdn.example.com/hero.png";
+    expect(normalizeMediaUrl(url)).toBe(url);
+  });
+
+  it("returns input unchanged for proxy URL with no inner url param", () => {
+    const url = "https://example.com/_next/image?w=1920&q=75";
+    expect(normalizeMediaUrl(url)).toBe(url);
+  });
+
+  it("returns input unchanged for invalid URLs", () => {
+    expect(normalizeMediaUrl("not a url")).toBe("not a url");
+  });
+});
+
 // ── filterJunkMedia (full pipeline) ─────────────────────────────────
 
 describe("filterJunkMedia — full two-stage pipeline", () => {
@@ -217,6 +261,20 @@ describe("filterJunkMedia — full two-stage pipeline", () => {
     expect(result.content).not.toContain("favicon.ico");
     expect(result.content).toContain("before");
     expect(result.content).toContain("after");
+  });
+
+  it("unwraps Next.js proxy URLs and rewrites inline markdown references", async () => {
+    const wrapped =
+      "https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fabc.png&w=1920&q=75";
+    const unwrapped = "https://cdn.sanity.io/abc.png";
+    const media: MediaRef[] = [{ type: "image", url: wrapped, alt: "hero" }];
+    const content = `before\n\n![hero](${wrapped})\n\nafter`;
+    const result = await filterJunkMedia(media, content, {
+      classifier: async () => [],
+    });
+    expect(result.media[0].url).toBe(unwrapped);
+    expect(result.content).toContain(`![hero](${unwrapped})`);
+    expect(result.content).not.toContain("_next/image");
   });
 
   it("passes release context to the classifier", async () => {

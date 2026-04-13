@@ -3,11 +3,10 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import Image from "next/image";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
-import { isOptimizableImage } from "@/lib/sanitize";
+import { FallbackImage } from "./fallback-image";
 import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
@@ -41,14 +40,13 @@ function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content
         if (item.type === "image" || item.type === "gif") {
           const src = item.r2Url ?? item.url;
           return (
-            <Image
+            <FallbackImage
               key={i}
               src={src}
               alt={item.alt || ""}
               width={400}
               height={192}
               className="rounded-md object-contain max-h-48 w-auto"
-              unoptimized={!isOptimizableImage(src)}
             />
           );
         }
