@@ -89,6 +89,32 @@ export type PreCheckVerdict =
   | { kind: "keep"; reason: string }
   | { kind: "ambiguous" };
 
+/**
+ * Paths that belong to image-proxy / optimizer endpoints (Next.js, Vercel).
+ * Requests to these from off-origin crawlers typically 404 — Next's image
+ * optimizer checks referer and is effectively same-origin. Always unwrap
+ * to the underlying asset URL from the `url` query param.
+ */
+const IMAGE_PROXY_PATHS = ["/_next/image", "/_vercel/image"];
+
+export function normalizeMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    // Match exact path or any basePath-prefixed variant (e.g. Ramp's
+    // `/product-releases/_next/image` when Next.js is mounted under a
+    // `basePath` config).
+    const isProxy = IMAGE_PROXY_PATHS.some(
+      (p) => parsed.pathname === p || parsed.pathname.endsWith(p),
+    );
+    if (!isProxy) return url;
+    const inner = parsed.searchParams.get("url");
+    if (!inner) return url;
+    return new URL(inner, parsed.origin).toString();
+  } catch {
+    return url;
+  }
+}
+
 const TRACKING_PIXEL_PATTERNS = [
   "/1x1.",
   "1x1.png",
@@ -175,7 +201,19 @@ export async function filterJunkMedia(
   const kept: MediaRef[] = [];
   const ambiguous: MediaRef[] = [];
 
-  for (const item of media) {
+  // Normalize proxy URLs (Next/Vercel image optimizers) to the underlying
+  // asset. Rewrite the markdown body so later dedupe-by-URL still matches.
+  let normalizedContent = content;
+  const normalized: MediaRef[] = media.map((m) => {
+    const url = normalizeMediaUrl(m.url);
+    if (url !== m.url) {
+      const escaped = m.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      normalizedContent = normalizedContent.replace(new RegExp(escaped, "g"), url);
+    }
+    return url === m.url ? m : { ...m, url };
+  });
+
+  for (const item of normalized) {
     const verdict = preCheckMedia(item.url);
     switch (verdict.kind) {
       case "drop":
@@ -205,7 +243,7 @@ export async function filterJunkMedia(
   }
 
   // Strip dropped image URLs from markdown content
-  let cleanContent = content;
+  let cleanContent = normalizedContent;
   for (const { url } of dropped) {
     const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
     cleanContent = cleanContent.replace(
