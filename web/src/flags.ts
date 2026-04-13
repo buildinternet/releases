@@ -10,7 +10,7 @@ export const publicDocs = flag<boolean>({
 
 export const adminDocs = flag<boolean>({
   key: "admin-docs",
-  description: "Controls whether admin CLI documentation (fetching, enrichment, source management) is visible",
+  description: "Controls whether admin CLI documentation (fetching, source management) is visible",
   adapter: vercelAdapter(),
   defaultValue: process.env.NODE_ENV === "development",
 });

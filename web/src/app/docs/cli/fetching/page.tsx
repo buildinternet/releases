@@ -82,13 +82,6 @@ released fetch my-source --crawl --crawl-pattern "https://example.com/changelog/
 released poll --changed      # Show only sources with changes
 released poll --json         # Machine-readable output`}</code></pre>
 
-      <h2>Enrichment</h2>
-      <p>
-        Feed-based releases often have truncated content. The <code>enrich</code> command
-        fetches the full page content for sparse releases:
-      </p>
-      <pre><code>{`released enrich my-source`}</code></pre>
-
       <h2>Options reference</h2>
       <table>
         <thead>
