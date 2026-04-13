@@ -163,14 +163,40 @@ Released is available as an MCP server for AI agent integration. There are two w
 
 #### Remote server (recommended)
 
-Connect to the hosted MCP server at `mcp.releases.sh` — no installation or API keys required for read-only tools:
+Connect to the hosted MCP server at `https://mcp.releases.sh/mcp` — no installation or API keys required for read-only tools.
+
+**General endpoint**
+
+The hosted server uses Streamable HTTP at:
+
+```text
+https://mcp.releases.sh/mcp
+```
+
+Use that URL directly in clients with native remote MCP support. For clients that only support stdio MCP servers, use `mcp-remote` as a compatibility bridge.
+
+**Client setup**
+
+Claude Code:
+
+```bash
+claude mcp add --transport http releases https://mcp.releases.sh/mcp
+```
+
+Codex:
+
+```bash
+codex mcp add releases --url https://mcp.releases.sh/mcp
+```
+
+VS Code, Windsurf, Zed, and other stdio-only clients:
 
 ```json
 {
   "mcpServers": {
     "releases": {
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.releases.sh/mcp"]
+      "args": ["-y", "mcp-remote", "https://mcp.releases.sh/mcp"]
     }
   }
 }

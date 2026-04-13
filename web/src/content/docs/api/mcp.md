@@ -9,7 +9,19 @@ Use Releases as an AI agent tool server via the Model Context Protocol.
 
 ## Remote server (recommended)
 
-Connect to the hosted MCP server at `mcp.releases.sh`. No installation or API keys required — all tools are read-only and public.
+Connect to the hosted MCP server at `https://mcp.releases.sh/mcp`. No installation or API keys required — all tools are read-only and public.
+
+## Setup instructions
+
+### General
+
+The hosted MCP server supports Streamable HTTP at:
+
+```text
+https://mcp.releases.sh/mcp
+```
+
+Use that URL directly in clients with native remote MCP support. For clients that only support stdio MCP servers, use `mcp-remote` as a compatibility bridge.
 
 ### One-click install
 
@@ -17,16 +29,28 @@ Click to install in a supported editor. The deeplink opens the app and prompts y
 
 <!-- slot:mcp-install-buttons -->
 
-### Manual configuration
+### Claude Code
 
-For Claude Desktop, Claude Code, Windsurf, or any other MCP-compatible client, add the following to your MCP config:
+```bash
+claude mcp add --transport http releases https://mcp.releases.sh/mcp
+```
+
+### Codex
+
+```bash
+codex mcp add releases --url https://mcp.releases.sh/mcp
+```
+
+### VS Code, Windsurf, Zed, and others
+
+For clients without native remote MCP support, use `mcp-remote`:
 
 ```json
 {
   "mcpServers": {
     "releases": {
       "command": "npx",
-      "args": ["mcp-remote", "https://mcp.releases.sh/mcp"]
+      "args": ["-y", "mcp-remote", "https://mcp.releases.sh/mcp"]
     }
   }
 }
@@ -37,14 +61,14 @@ For Claude Desktop, Claude Code, Windsurf, or any other MCP-compatible client, a
 Run a local MCP server over stdio with the full tool set, including admin tools for adding sources, fetching releases, and managing organizations:
 
 ```bash
-released serve
+releases serve
 ```
 
 ```json
 {
   "mcpServers": {
     "releases": {
-      "command": "released",
+      "command": "releases",
       "args": ["serve"]
     }
   }
