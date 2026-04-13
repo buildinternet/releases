@@ -81,7 +81,7 @@ export default async function ReleaseDetailPage({
     "headline": heading,
     "datePublished": release.publishedAt ?? undefined,
     "author": { "@type": "Organization", "name": release.sourceName },
-    "publisher": { "@type": "Organization", "name": "Released", "url": "https://releases.sh" },
+    "publisher": { "@type": "Organization", "name": "Releases", "url": "https://releases.sh" },
   };
 
   return (

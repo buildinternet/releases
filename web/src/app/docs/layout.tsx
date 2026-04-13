@@ -3,10 +3,6 @@ import { Header } from "@/components/header";
 import { DocsNav } from "@/components/docs-nav";
 import { publicDocs, adminDocs } from "@/flags";
 
-export const metadata = {
-  title: "Docs",
-};
-
 export default async function DocsLayout({ children }: { children: React.ReactNode }) {
   const docsEnabled = await publicDocs();
   if (!docsEnabled) notFound();

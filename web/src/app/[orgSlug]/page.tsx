@@ -22,7 +22,7 @@ export async function generateMetadata({ params }: { params: Promise<{ orgSlug: 
     const org = await getOrg(orgSlug);
     return {
       title: org.name,
-      description: `${org.name} changelog releases on Released`,
+      description: `${org.name} changelog releases on Releases`,
       openGraph: { type: "website" },
     };
   } catch {

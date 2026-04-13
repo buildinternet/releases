@@ -1,0 +1,58 @@
+---
+title: "Summaries & Comparisons"
+adminOnly: false
+---
+
+# Summaries & Comparisons
+
+AI-powered analysis of release activity across sources and organizations.
+
+## Summary
+
+Generate a natural-language summary of recent releases for a source or across an entire organization.
+
+```bash
+released summary my-source
+released summary --org vercel --days 7
+released summary my-source --instructions "focus on breaking changes"
+released summary --json
+```
+
+### Options
+
+| Flag | Description |
+| --- | --- |
+| `--days <n>` | Look-back window in days (default 30) |
+| `--org <slug>` | Summarize across all sources in an org |
+| `--instructions <text>` | Additional guidance for the summarizer |
+| `--json` | Structured output |
+
+## Compare
+
+Generate a head-to-head comparison of recent releases between two sources. Useful for competitive analysis or tracking convergence between related tools.
+
+```bash
+released compare next-js remix --days 30
+released compare neon-changelog planetscale-changelog --days 60
+released compare --json
+```
+
+### What the comparison covers
+
+- **Convergent features** — capabilities both products shipped in the same window
+- **Divergent bets** — areas where one is investing and the other isn't
+- **Breaking changes** — deprecations or migrations that signal strategic shifts
+
+## Example: competitive intelligence
+
+Compare recent activity across competing products:
+
+```bash
+# Summarize each company's recent releases
+released summary --org neon --days 60
+released summary --org supabase --days 60
+
+# Run head-to-head comparisons
+released compare neon-changelog planetscale-changelog --days 60
+released compare neon-changelog supabase --days 60
+```
