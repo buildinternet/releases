@@ -75,9 +75,15 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
     delete body.rejectResourceTypes;
   }
 
-  if (options.source) {
-    body.source = options.source;
-  }
+  // Default to "links" so the crawler follows links from the starting page in
+  // DOM order (which on most changelog index pages is newest-first). Two
+  // reasons this matters: (1) Cloudflare's own default is sitemaps-only, which
+  // silently returns just the starting page on sites whose sitemaps don't
+  // enumerate the changelog (e.g. langfuse.com). (2) "all" discovers via
+  // sitemap first, which on many sites means oldest-first — a limited crawl
+  // (`--max 30`) then captures ancient history instead of the latest posts.
+  // Per-source metadata can still override via `crawlSource`.
+  body.source = options.source ?? "links";
 
   if (options.includePatterns?.length) {
     body.options = { includePatterns: options.includePatterns };

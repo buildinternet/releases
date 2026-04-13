@@ -22,6 +22,8 @@ export interface FetchOptions {
   full?: boolean;
   /** Preview mode — avoid persisting side-effects like content hashes */
   dryRun?: boolean;
+  /** Bypass upstream caches (e.g. Cloudflare crawl R2 cache). Set by --force. */
+  bustCache?: boolean;
   /** Called when a parsing chunk completes (for progress reporting) */
   onParseProgress?: (completed: number, total: number) => void;
 }
