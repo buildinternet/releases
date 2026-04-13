@@ -2,10 +2,12 @@ import { describe, it, expect } from "bun:test";
 import {
   preCheckMedia,
   filterJunkMedia,
-  normalizeMediaUrl,
   type MediaRef,
   type AmbiguousMediaClassifier,
 } from "../../src/lib/media.js";
+// normalizeMediaUrl lives in media-url.ts so the workers can import it
+// without pulling in the Node-only classifier/upload code.
+import { normalizeMediaUrl } from "../../src/lib/media-url.js";
 
 // ── preCheckMedia (deterministic) ───────────────────────────────────
 

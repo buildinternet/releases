@@ -40,6 +40,35 @@ export function hydrateMediaUrls(content: string, mediaOrigin: string): string {
 }
 
 /**
+ * Paths that belong to image-proxy / optimizer endpoints (Next.js, Vercel).
+ * Requests to these from off-origin crawlers typically 404 — Next's image
+ * optimizer checks referer and is effectively same-origin. Always unwrap
+ * to the underlying asset URL from the `url` query param.
+ */
+const IMAGE_PROXY_PATHS = ["/_next/image", "/_vercel/image"];
+
+/**
+ * Unwraps Next.js / Vercel image optimizer URLs to the underlying asset.
+ * Matches exact path or any basePath-prefixed variant (e.g. Ramp's
+ * `/product-releases/_next/image` when Next is mounted under a `basePath`).
+ * Returns the input unchanged for non-proxy or malformed URLs.
+ */
+export function normalizeMediaUrl(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const isProxy = IMAGE_PROXY_PATHS.some(
+      (p) => parsed.pathname === p || parsed.pathname.endsWith(p),
+    );
+    if (!isProxy) return url;
+    const inner = parsed.searchParams.get("url");
+    if (!inner) return url;
+    return new URL(inner, parsed.origin).toString();
+  } catch {
+    return url;
+  }
+}
+
+/**
  * Build an absolute media URL from an R2 key, or undefined if no key.
  * Returns a plain URL without Image Transforms — gallery images go through
  * next/image which handles its own optimization.

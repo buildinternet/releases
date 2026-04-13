@@ -1,6 +1,9 @@
 import { createHash } from "crypto";
 import { config } from "./config.js";
 import { logger } from "./logger.js";
+import { normalizeMediaUrl } from "./media-url.js";
+
+export { normalizeMediaUrl };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -88,32 +91,6 @@ export type PreCheckVerdict =
   | { kind: "drop"; reason: string }
   | { kind: "keep"; reason: string }
   | { kind: "ambiguous" };
-
-/**
- * Paths that belong to image-proxy / optimizer endpoints (Next.js, Vercel).
- * Requests to these from off-origin crawlers typically 404 — Next's image
- * optimizer checks referer and is effectively same-origin. Always unwrap
- * to the underlying asset URL from the `url` query param.
- */
-const IMAGE_PROXY_PATHS = ["/_next/image", "/_vercel/image"];
-
-export function normalizeMediaUrl(url: string): string {
-  try {
-    const parsed = new URL(url);
-    // Match exact path or any basePath-prefixed variant (e.g. Ramp's
-    // `/product-releases/_next/image` when Next.js is mounted under a
-    // `basePath` config).
-    const isProxy = IMAGE_PROXY_PATHS.some(
-      (p) => parsed.pathname === p || parsed.pathname.endsWith(p),
-    );
-    if (!isProxy) return url;
-    const inner = parsed.searchParams.get("url");
-    if (!inner) return url;
-    return new URL(inner, parsed.origin).toString();
-  } catch {
-    return url;
-  }
-}
 
 const TRACKING_PIXEL_PATTERNS = [
   "/1x1.",
