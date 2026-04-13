@@ -202,6 +202,7 @@ export async function parseCrawlPages(
           url: page.url,
           publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
           isBreaking: entry.isBreaking,
+          type: entry.type,
           media: entry.media,
         } as RawRelease));
       }),

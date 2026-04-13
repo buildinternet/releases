@@ -32,6 +32,12 @@ export const releaseItemProperties = {
     type: "boolean" as const,
     description: "Whether this release contains breaking changes.",
   },
+  type: {
+    type: "string" as const,
+    enum: ["feature", "rollup"],
+    description:
+      "Classification of the release. Use \"feature\" (default) for a single feature, version, or tight group of changes. Use \"rollup\" for seasonal, quarterly, or annual catch-all pages that span many features (e.g. \"Fall Release 2025\", \"What's New in Q3\", \"Year in Review\"). Omit to default to feature.",
+  },
   media: {
     type: "array" as const,
     description:
@@ -76,6 +82,7 @@ Rules:
 - Keep content concise: key changes, features, and fixes.
 - Dates should be ISO 8601. If no date is found, omit publishedAt.
 - Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
+- Set type to "rollup" for seasonal/quarterly/annual catch-all pages that span many features (e.g. "Fall Release 2025", "Q3 2025 Recap", "Year in Review"). Otherwise leave type unset or "feature".
 - For each release, populate the media array with every product image and video URL found in the content. Images go as type "image", YouTube/Vimeo/Loom links go as type "video".
 - If the provided lines don't contain changelog content (e.g. all navigation or headers), set needsMoreContext to true and return an empty releases array.
 - If you can see the changelog and everything matches what we already have, return an empty releases array with needsMoreContext false.

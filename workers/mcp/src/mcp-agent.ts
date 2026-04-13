@@ -59,6 +59,7 @@ export function createServer(env: Env) {
       query: z.string().describe("Search query"),
       product: z.string().optional().describe("Filter to a specific product slug"),
       organization: z.string().optional().describe("Filter to sources belonging to this organization"),
+      type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
       limit: z.number().optional().describe("Max results to return (default 20)"),
     },
   }, withMedia(async (params) => searchReleases(db, params)));
@@ -68,6 +69,7 @@ export function createServer(env: Env) {
     inputSchema: {
       product: z.string().optional().describe("Filter to a specific product slug"),
       organization: z.string().optional().describe("Filter to sources belonging to this organization"),
+      type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
       count: z.number().optional().describe("Number of releases to return (default 10)"),
     },
   }, withMedia(async (params) => getLatestReleases(db, params)));

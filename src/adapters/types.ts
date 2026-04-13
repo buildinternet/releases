@@ -7,6 +7,8 @@ export interface RawRelease {
   url?: string;
   publishedAt?: Date;
   isBreaking?: boolean;
+  /** Release classification. `feature` = individual change/version. `rollup` = seasonal/quarterly catch-all spanning many features. Defaults to `feature` when omitted. */
+  type?: "feature" | "rollup";
   media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }>;
 }
 

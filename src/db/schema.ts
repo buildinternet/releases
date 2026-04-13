@@ -138,6 +138,7 @@ export const releases = sqliteTable(
       .notNull()
       .references(() => sources.id, { onDelete: "cascade" }),
     version: text("version"),
+    type: text("type", { enum: ["feature", "rollup"] }).notNull().default("feature"),
     title: text("title").notNull(),
     content: text("content").notNull(),
     contentSummary: text("content_summary"),

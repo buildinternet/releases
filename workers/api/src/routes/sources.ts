@@ -234,7 +234,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   const body = await c.req.json<{ releases: Array<{
     version?: string | null; title: string; content: string;
     url?: string | null; contentHash?: string; publishedAt?: string | null;
-    media?: string | null;
+    media?: string | null; type?: "feature" | "rollup";
   }> }>();
 
   try {
@@ -244,6 +244,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
       const chunk = body.releases.slice(i, i + 5).map((r) => ({
         sourceId: src.id,
         version: r.version ?? null,
+        type: r.type ?? "feature",
         title: r.title,
         content: r.content,
         url: r.url ?? null,
@@ -732,6 +733,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     id?: string; version?: string; title: string; content: string;
     contentSummary?: string; url?: string; contentHash?: string;
     metadata?: string; publishedAt?: string; fetchedAt?: string;
+    type?: "feature" | "rollup";
   }>();
 
   try {
@@ -741,6 +743,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
         id: body.id,
         sourceId: src.id,
         version: body.version ?? null,
+        type: body.type ?? "feature",
         title: body.title,
         content: body.content,
         contentSummary: body.contentSummary ?? null,

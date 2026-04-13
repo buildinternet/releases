@@ -153,6 +153,7 @@ export async function getRecentReleasesByOrg(
       id: releases.id,
       sourceId: releases.sourceId,
       version: releases.version,
+      type: releases.type,
       title: releases.title,
       content: releases.content,
       contentSummary: releases.contentSummary,
@@ -1148,7 +1149,7 @@ export async function deleteReleasesForSource(source: Source): Promise<number> {
 export async function insertReleases(source: Source, rows: Array<{
   sourceId: string; version: string | null; title: string; content: string;
   url: string | null; contentHash: string | null; publishedAt: string | null;
-  media?: string | null;
+  media?: string | null; type?: "feature" | "rollup";
 }>): Promise<number> {
   if (isRemoteMode()) {
     const result = await apiClient.insertReleasesBatch(source.slug, rows);

@@ -561,6 +561,7 @@ export async function deleteSource(slug: string): Promise<void> {
 export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array<{
   version?: string | null; title: string; content: string;
   url?: string | null; contentHash?: string | null; publishedAt?: string | null;
+  type?: "feature" | "rollup";
 }>): Promise<{ inserted: number; total: number }> {
   // Send in concurrent chunks to stay under D1/Worker request size limits
   const chunks: typeof releaseRows[] = [];

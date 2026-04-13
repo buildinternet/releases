@@ -570,6 +570,7 @@ Examples:
           const rows = rawReleases.map((raw) => ({
             sourceId: source.id,
             version: raw.version ?? null,
+            type: raw.type ?? "feature",
             title: raw.title,
             content: raw.content,
             url: raw.url ?? null,
