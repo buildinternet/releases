@@ -371,6 +371,8 @@ async function main() {
         }
       }
     }
+
+    if (!dryRun) saveConfig(config);
   }
 
   // ── 2. Sync agents ─────────────────────────────────────────────
