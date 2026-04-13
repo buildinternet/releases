@@ -40,6 +40,25 @@ describe("preCheckMedia — obvious drops", () => {
     const v = preCheckMedia("https://example.com/assets/spacer.gif");
     expect(v.kind).toBe("drop");
   });
+
+  // Regression: substring-matching `url.includes("t.co")` falsely flagged any
+  // URL containing the sequence "t.co" — e.g. "githubusercontenT.COm" — as a
+  // t.co tracking link. Tracking domain match must be host-based.
+  it("does not flag github avatars as t.co tracking", () => {
+    const v = preCheckMedia("https://avatars.githubusercontent.com/u/14985020?v=4");
+    expect(v.kind).toBe("ambiguous");
+  });
+
+  it("still drops real t.co links", () => {
+    const v = preCheckMedia("https://t.co/abc123");
+    expect(v.kind).toBe("drop");
+    if (v.kind === "drop") expect(v.reason).toBe("tracking domain: t.co");
+  });
+
+  it("drops t.co subdomains", () => {
+    const v = preCheckMedia("https://sub.t.co/x");
+    expect(v.kind).toBe("drop");
+  });
 });
 
 describe("preCheckMedia — obvious keeps (streaming embeds)", () => {

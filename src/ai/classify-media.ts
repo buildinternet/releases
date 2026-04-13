@@ -43,26 +43,18 @@ export interface MediaClassification {
 
 let cachedSkillText: string | null = null;
 
-function resolveSkillFile(): string | null {
+function loadSkillText(): string | null {
+  if (cachedSkillText) return cachedSkillText;
+
   const envDir = process.env.RELEASED_SKILLS_DIR;
   const candidates = [
-    envDir ? resolve(envDir, "classify-media-relevance/SKILL.md") : null,
+    envDir && resolve(envDir, "classify-media-relevance/SKILL.md"),
     "/usr/share/releases/skills/classify-media-relevance/SKILL.md",
     resolve(homedir(), ".releases/skills/classify-media-relevance/SKILL.md"),
-    // Dev fallback: source tree relative to this module
     resolve(import.meta.dir, "../agent/skills/classify-media-relevance/SKILL.md"),
   ].filter((p): p is string => !!p);
 
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) return candidate;
-  }
-  return null;
-}
-
-/** Loads the skill markdown body from disk. Cached after first read. */
-export function loadClassifyMediaSkill(): string | null {
-  if (cachedSkillText) return cachedSkillText;
-  const path = resolveSkillFile();
+  const path = candidates.find((p) => existsSync(p));
   if (!path) {
     logger.debug("classify-media: SKILL.md not found on any conventional path");
     return null;
@@ -74,11 +66,6 @@ export function loadClassifyMediaSkill(): string | null {
     logger.debug("classify-media: failed to read SKILL.md", err);
     return null;
   }
-}
-
-/** Reset the cached skill text (test helper). */
-export function _resetSkillCache(): void {
-  cachedSkillText = null;
 }
 
 // ── Classification ──────────────────────────────────────────────────
@@ -107,7 +94,7 @@ export async function classifyAmbiguousMedia(
 ): Promise<MediaClassification[] | null> {
   if (items.length === 0) return [];
 
-  const skillText = loadClassifyMediaSkill();
+  const skillText = loadSkillText();
   if (!skillText) return null;
 
   if (!config.anthropicApiKey()) {
