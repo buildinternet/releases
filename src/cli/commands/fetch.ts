@@ -459,6 +459,7 @@ Examples:
           crawl: opts.crawl,
           full: opts.full,
           dryRun: opts.dryRun,
+          bustCache: opts.force,
           onParseProgress: (completed, total) => {
             progressSession(`${source.name}: parsing chunk ${completed}/${total}`);
           },

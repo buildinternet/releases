@@ -97,8 +97,11 @@ async function fetchViaCrawl(
   const jobId = await startCrawl(source.url, {
     includePatterns: [pattern],
     limit: options?.maxEntries,
-    modifiedSince,
-    maxAge: meta.crawlMaxAge,
+    // Skip modifiedSince on cache-bust so Cloudflare re-discovers URLs from
+    // scratch — a prior broken crawl (e.g. index-only) would otherwise pin
+    // discovery to that stale URL set.
+    modifiedSince: options?.bustCache ? undefined : modifiedSince,
+    maxAge: options?.bustCache ? 0 : meta.crawlMaxAge,
     render: meta.crawlRender,
     source: meta.crawlSource,
   });
