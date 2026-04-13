@@ -6,6 +6,13 @@ import {
   getRelease, deleteRelease, updateRelease, deleteReleasesByFilter, deleteReleasesForSource,
 } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
+import { normalizeReleaseId } from "../../lib/id.js";
+
+function releaseNotFound(id: string): never {
+  console.error(chalk.red(`Release not found: ${id}`));
+  console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. rel_abc123…).`));
+  process.exit(1);
+}
 
 export function registerReleaseCommand(program: Command) {
   const release = program
@@ -22,13 +29,11 @@ export function registerReleaseCommand(program: Command) {
 Examples:
   releases release show abc123
   releases release show abc123 --json`)
-    .action(async (id: string, opts: { json?: boolean }) => {
+    .action(async (rawId: string, opts: { json?: boolean }) => {
+      const id = normalizeReleaseId(rawId);
       const result = await getRelease(id);
 
-      if (!result) {
-        console.error(chalk.red(`Release not found: ${id}`));
-        process.exit(1);
-      }
+      if (!result) releaseNotFound(id);
 
       const { release: rel, sourceName, sourceSlug } = result;
 
@@ -77,7 +82,8 @@ Examples:
   releases release delete --source my-source
   releases release delete --source my-source --before 2024-01-01
   releases release delete --source my-source --dry-run`)
-    .action(async (id: string | undefined, opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean }) => {
+    .action(async (rawId: string | undefined, opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean }) => {
+      const id = rawId ? normalizeReleaseId(rawId) : undefined;
       if (!id && !opts.source && !opts.before) {
         console.error("Error: provide a release ID, --source, or --before\n");
         console.error("  releases release delete abc123");
@@ -102,10 +108,7 @@ Examples:
       if (id) {
         if (opts.dryRun) {
           const existing = await getRelease(id);
-          if (!existing) {
-            console.error(chalk.red(`Release not found: ${id}`));
-            process.exit(1);
-          }
+          if (!existing) releaseNotFound(id);
           if (opts.json) {
             console.log(JSON.stringify({ wouldDelete: 1, releases: [{ id, title: existing.release.title }] }, null, 2));
           } else {
@@ -204,12 +207,10 @@ Examples:
   releases release edit abc123 --title "New Title"
   releases release edit abc123 --version "2.0.0"
   releases release edit abc123 --json`)
-    .action(async (id: string, opts: { title?: string; version?: string; content?: string; json?: boolean }) => {
+    .action(async (rawId: string, opts: { title?: string; version?: string; content?: string; json?: boolean }) => {
+      const id = normalizeReleaseId(rawId);
       const existing = await getRelease(id);
-      if (!existing) {
-        console.error(chalk.red(`Release not found: ${id}`));
-        process.exit(1);
-      }
+      if (!existing) releaseNotFound(id);
 
       const updates: Record<string, unknown> = {};
       const changes: string[] = [];
@@ -261,7 +262,8 @@ Examples:
 Examples:
   releases release suppress abc123 --reason "promotional content"
   releases release suppress abc123 --dry-run`)
-    .action(async (id: string, opts: { reason?: string; dryRun?: boolean; json?: boolean }) => {
+    .action(async (rawId: string, opts: { reason?: string; dryRun?: boolean; json?: boolean }) => {
+      const id = normalizeReleaseId(rawId);
       if (opts.dryRun) {
         if (opts.json) {
           console.log(JSON.stringify({ id, suppressed: true, reason: opts.reason ?? null, dryRun: true }));
@@ -272,10 +274,7 @@ Examples:
       }
 
       const found = await suppressRelease(id, opts.reason);
-      if (!found) {
-        console.error(chalk.red(`Release not found: ${id}`));
-        process.exit(1);
-      }
+      if (!found) releaseNotFound(id);
 
       if (opts.json) {
         console.log(JSON.stringify({ id, suppressed: true, reason: opts.reason ?? null }));
@@ -293,12 +292,10 @@ Examples:
     .addHelpText("after", `
 Examples:
   releases release unsuppress abc123`)
-    .action(async (id: string, opts: { json?: boolean }) => {
+    .action(async (rawId: string, opts: { json?: boolean }) => {
+      const id = normalizeReleaseId(rawId);
       const found = await unsuppressRelease(id);
-      if (!found) {
-        console.error(chalk.red(`Release not found: ${id}`));
-        process.exit(1);
-      }
+      if (!found) releaseNotFound(id);
 
       if (opts.json) {
         console.log(JSON.stringify({ id, suppressed: false }));
