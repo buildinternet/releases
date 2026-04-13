@@ -137,18 +137,3 @@ Get cached AI summaries for a source.
 | `type` | `rolling` or `monthly` |
 | `year` | Filter by year (for monthly summaries) |
 | `month` | Filter by month |
-
----
-
-## Format exports
-
-The web app exposes format endpoints for machine-readable export of release data:
-
-```bash
-GET /api/format/:orgSlug.json        # Org releases as JSON
-GET /api/format/:orgSlug.md          # Org releases as Markdown
-GET /api/format/:orgSlug/:source.json
-GET /api/format/:orgSlug/:source.md
-GET /api/format/source/:slug.json
-GET /api/format/source/:slug.md
-```

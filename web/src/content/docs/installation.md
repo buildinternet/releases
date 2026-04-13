@@ -54,15 +54,26 @@ releases --help
 
 ## MCP server
 
-To use Releases as an MCP tool server, the easiest path is the hosted remote server at `mcp.releases.sh`.
+To use Releases as an MCP tool server, the easiest path is the hosted remote server at `https://mcp.releases.sh/mcp`.
 
 <!-- slot:mcp-install-buttons -->
 
-
-Or run a local stdio server with the full tool set (including admin tools):
+Codex:
 
 ```bash
-released serve
+codex mcp add releases --url https://mcp.releases.sh/mcp
 ```
 
-See the [MCP Server](/docs/api/mcp) docs for Claude Desktop, Claude Code, and Windsurf configuration.
+Claude Code:
+
+```bash
+claude mcp add --transport http releases https://mcp.releases.sh/mcp
+```
+
+Or run a local stdio server with the full tool set, including admin tools:
+
+```bash
+releases serve
+```
+
+See the [MCP Server](/docs/api/mcp) docs for the general endpoint, client-specific setup, and stdio fallback configuration.

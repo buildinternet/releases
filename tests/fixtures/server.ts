@@ -2,7 +2,6 @@ import { readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { mkdtempSync, rmSync } from "fs";
-import { spawnSync } from "child_process";
 
 const FEEDS_DIR = join(import.meta.dirname, "feeds");
 
@@ -70,6 +69,10 @@ export interface SubprocessFixtureServer {
   stop: () => void;
 }
 
+function sleepMs(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
 /**
  * Start a fixture server in a separate subprocess so that spawnSync-based
  * CLI helpers don't deadlock the server's event loop.
@@ -100,7 +103,7 @@ export function startSubprocessFixtureServer(
     } catch {
       // file not yet written — keep polling
     }
-    spawnSync("sleep", ["0.05"]);
+    sleepMs(50);
   }
 
   if (!port) {
