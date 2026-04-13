@@ -46,7 +46,7 @@ const EXTRACTION_RULES = `Rules:
 - COMPLETENESS: Extract every single entry you can find. Do not skip or filter out entries.
 - Extract the real URL to each individual entry from links in the page content.
 - Keep content concise: key changes, features, and fixes. Don't reproduce entire pages.
-- Dates should be ISO 8601. For month-only dates (e.g. "April 2026"), use the first of the month: 2026-04-01. For year-only dates, use January 1. If no date is recoverable, omit publishedAt.
+- Dates should be ISO 8601. For month-only dates (e.g. "April 2026"), use the first of the month: 2026-04-01. For quarter or season headings (e.g. "Q3 2025", "Fall 2025"), use the first day of the period (Q3 → 2025-07-01, Fall → 2025-09-01). For year-only dates, use January 1. If no date is recoverable, omit publishedAt.
 - Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
 - Set type to "rollup" for seasonal/quarterly/annual catch-all pages that span many features (e.g. "Fall Release 2025", "Q3 2025 Recap"). Otherwise omit or use "feature".
 - If no version is explicitly stated, omit the version field.
