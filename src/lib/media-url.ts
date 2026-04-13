@@ -21,20 +21,55 @@ const IMAGE_EXTENSIONS = /\.(png|jpe?g|gif|webp|avif)$/i;
  * in content with the given media origin URL. Raster image URLs get
  * Cloudflare Image Transformation params for automatic resize + format negotiation.
  *
- * Returns the original string unchanged if mediaOrigin is empty or
- * content contains no media references.
+ * Also unwraps any `_next/image` / `_vercel/image` optimizer URLs embedded in
+ * content bodies — those proxy endpoints 404 for off-origin fetchers, so
+ * legacy records ingested before the unwrap fix still need to be rewritten
+ * at read time.
+ *
+ * Returns the original string unchanged if it has no media references to
+ * rewrite.
  */
 export function hydrateMediaUrls(content: string, mediaOrigin: string): string {
-  if (!mediaOrigin || !content) return content;
-  if (!content.includes("/_media/") && !content.includes("/v1/media/")) return content;
+  if (!content) return content;
 
-  const origin = mediaOrigin.endsWith("/") ? mediaOrigin.slice(0, -1) : mediaOrigin;
+  let out = unwrapImageProxyUrls(content);
+
+  if (mediaOrigin && (out.includes("/_media/") || out.includes("/v1/media/"))) {
+    const origin = mediaOrigin.endsWith("/") ? mediaOrigin.slice(0, -1) : mediaOrigin;
+    out = out.replace(
+      /(?:\/_media\/|https?:\/\/api\.releases\.sh\/v1\/media\/|\/v1\/media\/)([\w/.%-]+)/g,
+      (_, key) => {
+        const prefix = IMAGE_EXTENSIONS.test(key) ? `${origin}/${IMAGE_TRANSFORM}/` : `${origin}/`;
+        return `${prefix}${key}`;
+      },
+    );
+  }
+
+  return out;
+}
+
+/**
+ * Rewrite any absolute `_next/image` / `_vercel/image` optimizer URLs in a
+ * content string to the underlying asset URL via `normalizeMediaUrl`. Safe
+ * to call on content that doesn't contain any proxy URLs — it's a no-op in
+ * that case.
+ *
+ * The content may contain raw URLs, markdown image links, or HTML-escaped
+ * `&amp;` ampersands. We match `_next/image` / `_vercel/image` query-string
+ * URLs up to the next whitespace, quote, closing bracket/paren, or `<`, then
+ * HTML-unescape `&amp;` to `&` so `URL` can parse the query params. Inputs
+ * with no proxy URLs (or malformed matches) are returned unchanged.
+ */
+export function unwrapImageProxyUrls(content: string): string {
+  if (!content) return content;
+  if (!content.includes("_next/image") && !content.includes("_vercel/image")) return content;
 
   return content.replace(
-    /(?:\/_media\/|https?:\/\/api\.releases\.sh\/v1\/media\/|\/v1\/media\/)([\w/.%-]+)/g,
-    (_, key) => {
-      const prefix = IMAGE_EXTENSIONS.test(key) ? `${origin}/${IMAGE_TRANSFORM}/` : `${origin}/`;
-      return `${prefix}${key}`;
+    /https?:\/\/[^\s"'<>)\]]*?\/_(?:next|vercel)\/image\?[^\s"'<>)\]]+/g,
+    (match) => {
+      const decoded = match.replace(/&amp;/g, "&");
+      const unwrapped = normalizeMediaUrl(decoded);
+      return unwrapped === decoded ? match : unwrapped;
     },
   );
 }

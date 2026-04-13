@@ -56,14 +56,20 @@ export class ApiSetupError extends Error {
   }
 }
 
-async function fetchApi<T>(path: string): Promise<T> {
+async function fetchApi<T>(path: string, init?: { cache?: RequestCache; next?: { revalidate?: number | false } }): Promise<T> {
   let res: Response;
   const headers: Record<string, string> = {};
   if (API_SECRET) {
     headers["Authorization"] = `Bearer ${API_SECRET}`;
   }
+  const fetchInit: RequestInit = { headers };
+  if (init?.cache) {
+    fetchInit.cache = init.cache;
+  } else {
+    (fetchInit as { next?: { revalidate?: number | false } }).next = init?.next ?? { revalidate: 60 };
+  }
   try {
-    res = await fetch(`${API_URL}${path}`, { headers, next: { revalidate: 60 } });
+    res = await fetch(`${API_URL}${path}`, fetchInit);
   } catch {
     throw new ApiSetupError(
       `Cannot connect to the API at ${API_URL}. Is the server running?`,
@@ -114,7 +120,10 @@ export const api = {
   },
   orgHeatmap: (slug: string) => fetchApi<OrgHeatmap>(`/v1/orgs/${slug}/heatmap`),
   orgSparklines: (slug: string) => fetchApi<OrgSparklines>(`/v1/orgs/${slug}/sparklines`),
-  release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`),
+  // Release details bypass Next's Data Cache so stale successful responses
+  // don't outlive a delete/replace on the API side — a deleted release must
+  // 404 on the very next request, not on the next revalidate cycle.
+  release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`, { cache: "no-store" }),
   sourceHeatmap: (slug: string) => fetchApi<SourceHeatmap>(`/v1/sources/${slug}/heatmap`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
 };
