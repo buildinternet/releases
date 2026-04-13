@@ -63,21 +63,8 @@ const CONTENT_TYPE_EXT: Record<string, string> = {
   "video/webm": "webm",
 };
 
-const SKIP_DOMAINS = ["youtube", "vimeo", "loom"];
-
-/** URL path substrings that indicate site chrome, not release content. Case-insensitive. */
-const JUNK_PATH_PATTERNS = [
-  "/avatar", "/avatars/",
-  "/icon", "/icons/",
-  "/logo", "/logos/",
-  "/badge", "/badges/",
-  "/emoji", "/emojis/",
-  "/favicon",
-  "/sprite",
-  "/pixel", "/spacer", "/tracking", "/beacon",
-  "1x1",
-  "/wp-content/plugins/",
-];
+/** Streaming-video hosts that are always kept as `type: "video"` references. */
+const STREAMING_EMBED_HOSTS = ["youtube.com", "youtu.be", "vimeo.com", "loom.com"];
 
 /** Domains known to serve tracking pixels, not real images. */
 const TRACKING_DOMAINS = [
@@ -88,27 +75,130 @@ const TRACKING_DOMAINS = [
   "bat.bing.com",
 ];
 
+/**
+ * Deterministic pre-check classifier. Looks at URL signals only (no HTTP).
+ * Byte-level checks (size, content-type) happen later in `uploadToR2`.
+ *
+ * Anything not hard-dropped or hard-kept here — including /avatar, /icon,
+ * /logo, /badge paths — falls through as "ambiguous" for the AI classifier.
+ * Per the classify-media-relevance skill spec, those are weak negative
+ * signals, not hard drops.
+ */
+export type PreCheckVerdict =
+  | { kind: "drop"; reason: string }
+  | { kind: "keep"; reason: string }
+  | { kind: "ambiguous" };
+
+const TRACKING_PIXEL_PATTERNS = [
+  "/1x1.",
+  "1x1.png",
+  "1x1.gif",
+  "/spacer.",
+  "/pixel.",
+  "/beacon.",
+  "/tracking.",
+];
+
+export function preCheckMedia(url: string): PreCheckVerdict {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    // Invalid URL — let the uploader handle failure.
+    return { kind: "ambiguous" };
+  }
+
+  const host = parsed.hostname.toLowerCase();
+  const pathname = parsed.pathname.toLowerCase();
+  const hostAndPath = host + pathname;
+
+  const trackingDomain = TRACKING_DOMAINS.find(
+    (d) => host === d || host.endsWith("." + d) || hostAndPath.startsWith(d),
+  );
+  if (trackingDomain) return { kind: "drop", reason: `tracking domain: ${trackingDomain}` };
+
+  const embedHost = STREAMING_EMBED_HOSTS.find((h) => host === h || host.endsWith("." + h));
+  if (embedHost) return { kind: "keep", reason: `streaming embed: ${embedHost}` };
+  const filename = pathname.split("/").pop() ?? "";
+  if (filename.startsWith("favicon.") || pathname === "/favicon.ico") {
+    return { kind: "drop", reason: "favicon" };
+  }
+
+  const pixelPattern = TRACKING_PIXEL_PATTERNS.find((p) => pathname.includes(p));
+  if (pixelPattern) return { kind: "drop", reason: `tracking pixel pattern: ${pixelPattern}` };
+
+  return { kind: "ambiguous" };
+}
+
 export interface FilterResult {
   media: MediaRef[];
   content: string;
   dropped: Array<{ url: string; reason: string }>;
 }
 
+/** Async classifier signature, used to inject a stub in tests. */
+export type AmbiguousMediaClassifier = (
+  items: Array<{ url: string; alt?: string; type: MediaRef["type"] }>,
+  ctx: { releaseTitle?: string; releaseContent?: string; sourceSlug?: string },
+) => Promise<Array<{ url: string; decision: "keep" | "drop"; confidence: "high" | "low"; reason: string }> | null>;
+
+export interface FilterMediaOptions {
+  /** Release title for classifier context. */
+  releaseTitle?: string;
+  /** Release body for classifier context. */
+  releaseContent?: string;
+  /** Source slug for logging. */
+  sourceSlug?: string;
+  /** Override the classifier (used by tests). Default: `classifyAmbiguousMedia`. */
+  classifier?: AmbiguousMediaClassifier;
+}
+
 /**
- * Filters junk images (avatars, logos, icons, tracking pixels) from media
- * and strips their markdown image references from content.
+ * Filters release-page media using a two-stage pipeline:
+ *
+ *   1. Cheap deterministic pre-checks (`preCheckMedia`) — tracking domains,
+ *      streaming embeds, favicons, 1x1 spacer pixels.
+ *   2. AI classifier for the ambiguous middle — URL patterns that overlap
+ *      between chrome and editorial content (/avatar, /icon, /logo, etc.).
+ *
+ * Low-confidence AI drops are kept conservatively (precision-over-recall).
+ * If the AI classifier is unavailable, ambiguous items are kept.
+ *
+ * Also strips markdown image references for dropped URLs from `content`.
  */
-export function filterJunkMedia(
+export async function filterJunkMedia(
   media: MediaRef[],
   content: string,
-): FilterResult {
+  opts: FilterMediaOptions = {},
+): Promise<FilterResult> {
   const dropped: Array<{ url: string; reason: string }> = [];
   const kept: MediaRef[] = [];
+  const ambiguous: MediaRef[] = [];
 
   for (const item of media) {
-    const reason = getJunkReason(item.url);
-    if (reason) {
-      dropped.push({ url: item.url, reason });
+    const verdict = preCheckMedia(item.url);
+    switch (verdict.kind) {
+      case "drop":
+        dropped.push({ url: item.url, reason: verdict.reason });
+        break;
+      case "keep":
+        kept.push(item);
+        break;
+      case "ambiguous":
+        ambiguous.push(item);
+        break;
+    }
+  }
+
+  // Second stage: classify the ambiguous middle. Low-confidence drops are
+  // kept conservatively (precision-over-recall). Missing decisions, thrown
+  // classifiers, and null returns all fall back to "keep".
+  const decisions = ambiguous.length > 0 ? await runClassifier(ambiguous, opts) : null;
+  const decisionByUrl = new Map(decisions?.map((d) => [d.url, d]));
+  for (const item of ambiguous) {
+    const d = decisionByUrl.get(item.url);
+    if (d && d.decision === "drop" && d.confidence === "high") {
+      dropped.push({ url: item.url, reason: `classifier: ${d.reason}` });
     } else {
       kept.push(item);
     }
@@ -130,24 +220,39 @@ export function filterJunkMedia(
   return { media: kept, content: cleanContent, dropped };
 }
 
-/** Returns the reason a URL is junk, or null if it should be kept. */
-function getJunkReason(url: string): string | null {
-  const lower = url.toLowerCase();
-
-  for (const domain of TRACKING_DOMAINS) {
-    if (lower.includes(domain)) return `tracking domain: ${domain}`;
-  }
-
+async function runClassifier(
+  ambiguous: MediaRef[],
+  opts: FilterMediaOptions,
+): Promise<Awaited<ReturnType<AmbiguousMediaClassifier>>> {
+  const classifier = opts.classifier ?? (await getDefaultClassifier());
+  if (!classifier) return null;
   try {
-    const pathname = new URL(url).pathname.toLowerCase();
-    for (const pattern of JUNK_PATH_PATTERNS) {
-      if (pathname.includes(pattern)) return `path pattern: ${pattern}`;
-    }
-  } catch {
-    // Invalid URL — keep it, let downstream handle the error
+    return await classifier(
+      ambiguous.map((m) => ({ url: m.url, alt: m.alt, type: m.type })),
+      {
+        releaseTitle: opts.releaseTitle,
+        releaseContent: opts.releaseContent,
+        sourceSlug: opts.sourceSlug,
+      },
+    );
+  } catch (err) {
+    logger.debug("filterJunkMedia: classifier threw, keeping ambiguous items", err);
+    return null;
   }
+}
 
-  return null;
+/**
+ * Lazy import to avoid a static dep cycle between `lib/media.ts` and
+ * `ai/classify-media.ts` (which transitively imports config/logger/client).
+ */
+async function getDefaultClassifier(): Promise<AmbiguousMediaClassifier | null> {
+  try {
+    const mod = await import("../ai/classify-media.js");
+    return (items, ctx) => mod.classifyAmbiguousMedia(items, ctx);
+  } catch (err) {
+    logger.debug("filterJunkMedia: failed to load default classifier", err);
+    return null;
+  }
 }
 
 const DOWNLOAD_TIMEOUT_MS = 15_000;
@@ -161,7 +266,12 @@ function sha256HexBuffer(buf: ArrayBuffer): string {
 }
 
 function isSkippedUrl(url: string): boolean {
-  return SKIP_DOMAINS.some((d) => url.includes(d));
+  try {
+    const host = new URL(url).hostname.toLowerCase();
+    return STREAMING_EMBED_HOSTS.some((h) => host === h || host.endsWith("." + h));
+  } catch {
+    return false;
+  }
 }
 
 /** Extract filename from URL path, e.g. "cli.jpg" from "https://cdn.example.com/posts/cli.jpg" */

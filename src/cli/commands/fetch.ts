@@ -544,11 +544,17 @@ Examples:
             return;
           }
 
-          // Filter junk media (avatars, logos, tracking pixels) before storing
+          // Filter junk media (avatars, logos, tracking pixels) before storing.
+          // Two-stage: deterministic pre-checks + AI classifier for ambiguous URLs
+          // (classify-media-relevance skill, see src/ai/classify-media.ts).
           let totalDropped = 0;
           for (const raw of rawReleases) {
             if (raw.media && raw.media.length > 0) {
-              const filtered = filterJunkMedia(raw.media, raw.content);
+              const filtered = await filterJunkMedia(raw.media, raw.content, {
+                releaseTitle: raw.title,
+                releaseContent: raw.content,
+                sourceSlug: source.slug,
+              });
               raw.media = filtered.media;
               raw.content = filtered.content;
               totalDropped += filtered.dropped.length;
