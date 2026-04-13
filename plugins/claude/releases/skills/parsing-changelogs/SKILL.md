@@ -128,6 +128,18 @@ office openings, funding, acquisitions, research publications, safety reports, a
 
 **Content depth:** Blog index pages typically show card summaries, not full post content. The extracted releases will have thin content. Enable crawl mode (`--crawl`) to follow links to full posts if richer content is needed, but this is expensive — only enable for high-value sources.
 
+## Dates
+
+Every release should get a `publishedAt` if one can be recovered from the page, even an approximate one — sources with no dates drop out of the release feed's time-based views entirely.
+
+- **Full dates** ("March 3, 2026", "2026-03-03"): use the exact ISO date — `2026-03-03`.
+- **Month-only headings** ("April 2026", "March 2026"): use the **first of the month** — `2026-04-01`. Many API changelogs (e.g. Brex Developer API) group entries by month; this is the right call, not "omit date."
+- **Quarter or season** ("Q3 2025", "Fall 2025"): use the first day of the quarter/season (Q3 → `2025-07-01`, Fall → `2025-09-01`).
+- **Year only** ("2025"): use `2025-01-01`.
+- **Nothing recoverable**: omit `publishedAt`. Only do this if there truly is no date signal anywhere — check adjacent headings, breadcrumbs, and the URL slug before giving up.
+
+Approximation is better than omission. A release with an approximate month-start date still surfaces in sort orders, "last 30 days" windows, and monthly groupings.
+
 ## Classifying Rollups
 
 Most releases are **features** — individual version bumps, single product announcements, or tight incremental changelog entries. Some are **rollups** — seasonal, quarterly, or annual catch-all pages that collect many already-shipped features into a single banner post. The parser assigns each release a `type` field so agents and the web UI can treat them differently.
