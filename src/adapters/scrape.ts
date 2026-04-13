@@ -185,6 +185,7 @@ async function fetchViaMarkdown(
           version: r.version,
           publishedAt: r.publishedAt ? new Date(r.publishedAt) : undefined,
           isBreaking: r.isBreaking,
+          type: r.type,
           media: r.media,
         })),
       };
@@ -203,6 +204,7 @@ async function fetchViaMarkdown(
       version: r.version,
       publishedAt: r.publishedAt ? new Date(r.publishedAt) : undefined,
       isBreaking: r.isBreaking,
+      type: r.type,
       media: r.media,
     })),
   };
@@ -314,6 +316,7 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
       url: toFragmentUrl(source.url, entry.version, entry.title),
       publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
       isBreaking: entry.isBreaking,
+      type: entry.type,
       media: entry.media,
     };
   });

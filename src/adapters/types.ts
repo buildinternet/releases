@@ -1,4 +1,4 @@
-import type { Source } from "../db/schema.js";
+import type { Source, ReleaseType } from "../db/schema.js";
 
 export interface RawRelease {
   version?: string;
@@ -7,6 +7,7 @@ export interface RawRelease {
   url?: string;
   publishedAt?: Date;
   isBreaking?: boolean;
+  type?: ReleaseType;
   media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }>;
 }
 

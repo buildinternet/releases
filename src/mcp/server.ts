@@ -35,10 +35,10 @@ server.registerTool("search_releases", {
     query: z.string().describe("Search query"),
     product: z.string().optional().describe("Filter to a specific product slug"),
     organization: z.string().optional().describe("Filter to sources belonging to this organization"),
+    type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
     limit: z.number().optional().describe("Max results to return (default 20)"),
   },
-}, async ({ query, product, organization, limit }) => {
-  const db = getDb();
+}, async ({ query, product, organization, type: typeFilter, limit }) => {
   const maxResults = limit ?? 20;
 
   // Build a set of allowed source IDs when filtering by org
@@ -53,32 +53,24 @@ server.registerTool("search_releases", {
   }
 
   // Fetch more than needed when filtering, since FTS limit applies globally
-  const needsPostFilter = product || orgSourceIds;
+  const needsPostFilter = product || orgSourceIds || typeFilter;
   let results = searchReleases(query, needsPostFilter ? maxResults * 5 : maxResults);
 
+  let productSourceId: string | undefined;
   if (product) {
     const source = await findSource(product);
     if (!source) {
       return textResult(`No product found with slug "${product}"`);
     }
-    const sourceReleases = await db
-      .select({ id: releases.id })
-      .from(releases)
-      .where(eq(releases.sourceId, source.id));
-    const sourceReleaseIds = new Set(sourceReleases.map((r) => r.id));
-    results = results.filter((r) => sourceReleaseIds.has(r.id));
+    productSourceId = source.id;
   }
 
-  if (orgSourceIds) {
-    // FTS results have release IDs; look up their sourceId to filter
-    const releaseRows = await db
-      .select({ id: releases.id, sourceId: releases.sourceId })
-      .from(releases)
-      .where(inArray(releases.id, results.map((r) => r.id)));
-    const releaseSourceMap = new Map(releaseRows.map((r) => [r.id, r.sourceId]));
+  if (productSourceId || orgSourceIds || typeFilter) {
     results = results.filter((r) => {
-      const sid = releaseSourceMap.get(r.id);
-      return sid !== undefined && orgSourceIds!.has(sid);
+      if (productSourceId && r.sourceId !== productSourceId) return false;
+      if (orgSourceIds && !orgSourceIds.has(r.sourceId)) return false;
+      if (typeFilter && r.type !== typeFilter) return false;
+      return true;
     });
   }
 
@@ -104,9 +96,10 @@ server.registerTool("get_latest_releases", {
   inputSchema: {
     product: z.string().optional().describe("Filter to a specific product slug"),
     organization: z.string().optional().describe("Filter to sources belonging to this organization"),
+    type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
     count: z.number().optional().describe("Number of releases to return (default 10)"),
   },
-}, async ({ product, organization, count }) => {
+}, async ({ product, organization, type: typeFilter, count }) => {
   const db = getDb();
   const maxCount = count ?? 10;
 
@@ -135,6 +128,7 @@ server.registerTool("get_latest_releases", {
       id: releases.id,
       title: releases.title,
       version: releases.version,
+      type: releases.type,
       content: releases.content,
       contentSummary: releases.contentSummary,
       publishedAt: releases.publishedAt,
@@ -153,6 +147,9 @@ server.registerTool("get_latest_releases", {
       return textResult("No sources found for this organization.");
     }
     conditions.push(inArray(releases.sourceId, ids));
+  }
+  if (typeFilter) {
+    conditions.push(eq(releases.type, typeFilter));
   }
 
   const filtered = conditions.length > 0
@@ -432,6 +429,7 @@ server.registerTool("fetch_source", {
     const rows = rawReleases.map((raw) => ({
       sourceId: source.id,
       version: raw.version ?? null,
+      type: raw.type ?? "feature",
       title: raw.title,
       content: raw.content,
       url: raw.url ?? null,

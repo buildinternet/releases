@@ -125,6 +125,37 @@ office openings, funding, acquisitions, research publications, safety reports, a
 
 **Content depth:** Blog index pages typically show card summaries, not full post content. The extracted releases will have thin content. Enable crawl mode (`--crawl`) to follow links to full posts if richer content is needed, but this is expensive — only enable for high-value sources.
 
+## Classifying Rollups
+
+Most releases are **features** — individual version bumps, single product announcements, or tight incremental changelog entries. Some are **rollups** — seasonal, quarterly, or annual catch-all pages that collect many already-shipped features into a single banner post. The parser assigns each release a `type` field so agents and the web UI can treat them differently.
+
+**When to set `type: "rollup"`:**
+
+- The title names a season, quarter, or year range: "Fall Release 2025", "Spring 2026", "Q3 2025", "Summer '25 Edition", "New on Ramp January Edition", "Year in Review 2025", "What Shipped This Summer".
+- The page re-announces many shipped features under section headings, rather than describing a single change.
+- The post is published once, rarely updates, and anchors a date range (not a single `publishedAt` moment).
+- The destination may be a full microsite or editorial landing page (not just a blog post) — rollups often get custom design treatment because they're marketing moments as well as product updates.
+- Common examples: Shopify Editions (`shopify.com/editions/summer2025`, twice-yearly microsite with 100+ features), Brex Fall Release, Ramp quarterly blog posts, Vercel Ship recaps, Stripe Sessions roundups, AWS re:Invent summaries.
+
+**When NOT to set rollup:**
+
+- Single version releases (v2.0.0, v15.1), even when they bundle multiple fixes — those are features.
+- Dated changelog entries like "March 3, 2026" that cover one day's changes.
+- Blog posts announcing a single new product.
+- Named platform launches (Next.js 15, Node 22 LTS) — those are version-anchored features, not rollups.
+
+**How to recognize rollup sources:**
+
+Before parsing, **always read the source guide** (CLI: `releases guide <org>`, typed tool: `get_source_guide` with organization param). If a company publishes rollups as its primary cadence — quarterly, seasonal, "every few months" — the guide notes should say so explicitly. Example notes:
+
+- "Brex publishes quarterly seasonal rollup pages at `/product-announcements/{fall,spring,summer,winter}-release-YYYY`. Treat each as `type: rollup`."
+- "Ramp's blog series `/blog/new-on-ramp-*-edition` and `/new-on-ramp-q*-*` are quarterly/monthly rollups. Classify as `type: rollup`; individual features within are not separately indexed."
+- "Shopify publishes twice-yearly Editions as standalone microsites at `/editions/{summer,winter}YYYY` — index page at `/editions` lists all of them. Each Edition is a `type: rollup` with 100+ features under themed sections; crawl mode needed to pull the full page."
+
+When you encounter a new rollup source during discovery or fetch, update the source guide notes so future fetches classify correctly without re-deriving the pattern. See the `managing-sources` skill for how to update notes.
+
+**Leave `type` unset or `"feature"` by default.** Only mark rollup when the signals are clear.
+
 ## Validation Workflow
 
 When adding a new source, always validate before committing:

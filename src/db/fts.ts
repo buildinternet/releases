@@ -7,9 +7,11 @@ import { foldSourcesIntoProducts } from "../api/types.js";
 
 export interface FtsResult {
   id: string;
+  sourceId: string;
   title: string;
   content: string;
   contentSummary: string | null;
+  type: "feature" | "rollup";
   rank: number;
 }
 
@@ -22,9 +24,11 @@ export function searchReleases(query: string, limit = 20): FtsResult[] {
     const results = db.all<FtsResult>(sql`
       SELECT
         r.id,
+        r.source_id as sourceId,
         r.title,
         r.content,
         r.content_summary as contentSummary,
+        r.type,
         rank
       FROM releases_fts
       JOIN releases r ON r.rowid = releases_fts.rowid

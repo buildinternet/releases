@@ -1,0 +1,1 @@
+ALTER TABLE `releases` ADD `type` text DEFAULT 'feature' NOT NULL;

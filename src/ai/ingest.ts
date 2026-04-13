@@ -4,6 +4,7 @@ import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired, withParseInstructions } from "./shared.js";
+import type { ReleaseType } from "../db/schema.js";
 
 export interface ParsedRelease {
   version?: string;
@@ -11,6 +12,7 @@ export interface ParsedRelease {
   content: string;
   publishedAt?: string; // ISO 8601
   isBreaking: boolean;
+  type?: ReleaseType;
   media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }>;
 }
 
@@ -45,6 +47,7 @@ Rules:
 - For each release, populate the media array with every product image and video URL found in the content. Do not leave media empty if the content contains image references or video links. Images go as type "image", YouTube/Vimeo/Loom links go as type "video".
 - If a date is present, convert it to ISO 8601 format (YYYY-MM-DD or full datetime).
 - Mark isBreaking as true if the release mentions breaking changes, deprecations that remove functionality, or backwards-incompatible changes.
+- Set type to "rollup" for seasonal, quarterly, or annual catch-all pages that collect many shipped features into one post (e.g. "Fall Release 2025", "New on Ramp Q3 2025", "Year in Review"). Signals: the title names a season, quarter, or year range; the content re-announces many features under section headings; the page publishes once and rarely updates. Use the default ("feature") for individual version releases, single feature announcements, and standard incremental changelog entries.
 - If no version is explicitly stated, omit the version field.
 - Always call the extract_releases tool with your results.`;
 

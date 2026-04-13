@@ -103,6 +103,14 @@ function seedData() {
         publishedAt: now.toISOString(),
         contentHash: "hash4",
       },
+      {
+        sourceId: acmeWeb.id,
+        title: "Fall Release 2025",
+        content: "Quarterly rollup of everything shipped this fall",
+        publishedAt: new Date(now.getTime() - 1000 * 60 * 60 * 2).toISOString(),
+        contentHash: "hash5",
+        type: "rollup",
+      },
     ])
     .run();
 
@@ -248,6 +256,31 @@ describe("getLatestReleases", () => {
   it("returns empty message when no releases", async () => {
     const result = await getLatestReleases(getDb() as any, {});
     expect(resultText(result)).toBe("No releases found.");
+  });
+
+  it("badges rollups in output", async () => {
+    seedData();
+    const result = await getLatestReleases(getDb() as any, {});
+    const txt = resultText(result);
+    expect(txt).toContain("Fall Release 2025");
+    expect(txt).toContain("_(rollup)_");
+  });
+
+  it("filters to rollups only when type=rollup", async () => {
+    seedData();
+    const result = await getLatestReleases(getDb() as any, { type: "rollup" });
+    const txt = resultText(result);
+    expect(txt).toContain("Fall Release 2025");
+    expect(txt).not.toContain("v1.1 Bugfix");
+    expect(txt).not.toContain("Beta API v2");
+  });
+
+  it("excludes rollups when type=feature", async () => {
+    seedData();
+    const result = await getLatestReleases(getDb() as any, { type: "feature" });
+    const txt = resultText(result);
+    expect(txt).not.toContain("Fall Release 2025");
+    expect(txt).toContain("v1.1 Bugfix");
   });
 });
 

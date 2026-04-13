@@ -9,6 +9,7 @@ import {
   orgTags,
   products,
   domainAliases,
+  type ReleaseType,
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import type { D1Db } from "./db.js";
@@ -98,9 +99,10 @@ async function resolveSource(db: D1Db, identifier: string) {
 
 export async function searchReleases(
   db: D1Db,
-  params: { query: string; product?: string; organization?: string; limit?: number },
+  params: { query: string; product?: string; organization?: string; type?: ReleaseType; limit?: number },
 ): Promise<ToolResult> {
   const maxResults = params.limit ?? 20;
+  const typeFilter = params.type;
 
   let orgSourceIds: string[] | undefined;
   if (params.organization) {
@@ -125,12 +127,13 @@ export async function searchReleases(
     title: string;
     summary: string;
     version: string | null;
+    type: string;
     publishedAt: string | null;
     sourceSlug: string;
     sourceName: string;
   }>(sql`
     SELECT s.slug as sourceSlug, s.name as sourceName,
-           r.version, r.title,
+           r.version, r.title, r.type,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
            r.published_at as publishedAt
     FROM releases_fts
@@ -141,13 +144,17 @@ export async function searchReleases(
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       ${sourceId ? sql`AND r.source_id = ${sourceId}` : sql``}
       ${orgSourceIds ? sql`AND r.source_id IN (${sql.join(orgSourceIds.map((id) => sql`${id}`), sql`, `)})` : sql``}
+      ${typeFilter ? sql`AND r.type = ${typeFilter}` : sql``}
     ORDER BY rank LIMIT ${maxResults}
   `);
 
   if (rows.length === 0) return text("No releases found matching the query.");
 
   const result = rows
-    .map((r) => `**${r.title}**\nSource: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n${r.summary}`)
+    .map((r) => {
+      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      return `${titleLine}\nSource: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n${r.summary}`;
+    })
     .join("\n\n---\n\n");
 
   return text(result);
@@ -157,7 +164,7 @@ export async function searchReleases(
 
 export async function getLatestReleases(
   db: D1Db,
-  params: { product?: string; organization?: string; count?: number },
+  params: { product?: string; organization?: string; type?: ReleaseType; count?: number },
 ): Promise<ToolResult> {
   const maxCount = params.count ?? 10;
 
@@ -183,12 +190,14 @@ export async function getLatestReleases(
   const conditions: ReturnType<typeof eq>[] = [];
   if (sourceFilter) conditions.push(eq(releases.sourceId, sourceFilter));
   if (orgSourceIds) conditions.push(inArray(releases.sourceId, orgSourceIds));
+  if (params.type) conditions.push(eq(releases.type, params.type));
 
   const query = db
     .select({
       id: releases.id,
       title: releases.title,
       version: releases.version,
+      type: releases.type,
       content: releases.content,
       contentSummary: releases.contentSummary,
       publishedAt: releases.publishedAt,
@@ -212,8 +221,9 @@ export async function getLatestReleases(
     .map((r) => {
       const sourceName = sourceMap.get(r.sourceId) ?? "Unknown";
       const preview = (r.contentSummary || r.content).slice(0, 500);
+      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
       return [
-        `**${r.title}**`,
+        titleLine,
         `Source: ${sourceName} | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
         preview,
       ].join("\n");

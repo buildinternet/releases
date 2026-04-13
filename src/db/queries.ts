@@ -5,7 +5,7 @@ import {
   sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
-  type KnowledgePage, type NewKnowledgePage,
+  type KnowledgePage, type NewKnowledgePage, type ReleaseType,
 } from "./schema.js";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "./release-upsert.js";
 import { isRemoteMode } from "../lib/mode.js";
@@ -154,6 +154,7 @@ export async function getRecentReleasesByOrg(
       id: releases.id,
       sourceId: releases.sourceId,
       version: releases.version,
+      type: releases.type,
       title: releases.title,
       content: releases.content,
       contentSummary: releases.contentSummary,

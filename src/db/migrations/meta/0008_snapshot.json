@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "b4cf42ad-ce83-4d22-9d5b-74769f8bcb1d",
-  "prevId": "eb6a8b74-2ba2-4ba9-a453-f58856942864",
+  "id": "785bdb4e-0c1e-43c7-a79d-5853b7a4da6b",
+  "prevId": "b4cf42ad-ce83-4d22-9d5b-74769f8bcb1d",
   "tables": {
     "blocked_urls": {
       "name": "blocked_urls",
@@ -1286,14 +1286,6 @@
           "columns": [
             "source_id",
             "url"
-          ],
-          "isUnique": true
-        },
-        "idx_releases_source_hash": {
-          "name": "idx_releases_source_hash",
-          "columns": [
-            "source_id",
-            "content_hash"
           ],
           "isUnique": true
         },
