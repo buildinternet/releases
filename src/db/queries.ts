@@ -53,30 +53,6 @@ export async function getRecentReleases(
     .orderBy(desc(releases.publishedAt));
 }
 
-export async function getEnrichableReleases(
-  sourceId: string,
-  sourceSlug?: string,
-  limit?: number,
-): Promise<Release[]> {
-  if (isRemoteMode() && sourceSlug) {
-    return apiClient.getEnrichableReleases(sourceSlug, limit);
-  }
-  const db = getDb();
-  const query = db
-    .select()
-    .from(releases)
-    .where(
-      and(
-        eq(releases.sourceId, sourceId),
-        isNotNull(releases.url),
-        eq(releases.suppressed, false),
-      ),
-    )
-    .orderBy(desc(releases.publishedAt));
-  if (limit) return query.limit(limit);
-  return query;
-}
-
 export async function findOrg(identifier: string): Promise<Organization | null> {
   // 0. ID (exact — IDs are case-sensitive)
   if (identifier.startsWith("org_")) {
@@ -408,7 +384,6 @@ export async function listSourcesWithOrg(opts?: {
   orgSlug?: string;
   productSlug?: string;
   hasFeed?: boolean;
-  enrichable?: boolean;
   query?: string;
   includeHidden?: boolean;
   category?: string;
@@ -439,15 +414,9 @@ export async function listSourcesWithOrg(opts?: {
     );
   }
 
-  if (opts?.hasFeed || opts?.enrichable) {
+  if (opts?.hasFeed) {
     conditions.push(
       sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL AND json_extract(${sources.metadata}, '$.feedUrl') != ''`,
-    );
-  }
-
-  if (opts?.enrichable) {
-    conditions.push(
-      sql`(json_extract(${sources.metadata}, '$.feedContentDepth') IS NULL OR json_extract(${sources.metadata}, '$.feedContentDepth') = 'summary-only')`,
     );
   }
 
@@ -1188,7 +1157,7 @@ export async function insertReleases(source: Source, rows: Array<{
   const db = getDb();
   // Batch insert in chunks of 500 (SQLite variable limit).
   // On URL conflict, backfill content if the incoming row has non-empty content
-  // and the existing row is empty (lets feed enrichment update sparse releases).
+  // and the existing row is empty (lets re-fetches fill in sparse rows).
   let inserted = 0;
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500);

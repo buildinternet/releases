@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { getDb } from "../../db/connection.js";
-import { releases, sources } from "../../db/schema.js";
+import { releases } from "../../db/schema.js";
 import { insertMediaAssets, type MediaAssetInput } from "../../db/queries.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";
@@ -75,7 +75,7 @@ export function registerMediaCommand(program: Command) {
 
   media
     .command("backfill")
-    .description("Register existing R2 media refs from release JSON into media_assets table")
+    .description("Register existing media references from release content into the media asset index")
     .option("--dry-run", "Show what would be registered without writing")
     .option("--json", "Output as JSON")
     .addHelpText("after", `

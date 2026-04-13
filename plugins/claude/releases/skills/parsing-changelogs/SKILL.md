@@ -56,13 +56,11 @@ For index-style pages that link to individual release pages:
 
 Enable with `--crawl` flag or by setting `metadata.crawlEnabled: true` on the source.
 
-## Enrichment
-
-Enrichment hydrates releases that have sparse content by fetching full page content and extracting richer data. CLI: `releases enrich <slug> [--dry-run] [--force]`. Enrichment is not available as a typed agent tool — it is triggered automatically for sources with `autoEnrich: true` in their metadata, or run directly via CLI.
-
 ## Feed Content Depth Assessment
 
 **This is a mandatory step during onboarding for every feed and scrape source.** Always spot-check individual release pages even if the feed content looks adequate. Many feeds provide decent text summaries but the actual pages have significantly richer content — product screenshots, video demos, detailed code examples, and inline media that the feed strips out.
+
+**The anti-pattern to avoid:** fetching the bare changelog index, seeing that content came back, and declaring success without ever checking whether each release has a dedicated article page with more detail. A paragraph of feed text is not evidence that the page is equally thin.
 
 **When to check:** After every feed fetch, regardless of content length. Do not skip this because feed entries have multiple sentences. The question is not "does the feed have some content?" but "does the actual page have substantially more?"
 
@@ -75,14 +73,14 @@ Do NOT fetch release URLs in the parent agent — always delegate to a subagent 
 **What to do based on the result:**
 
 If pages are richer than feed content (more text, images, videos, or code examples):
-1. Record and enable auto-enrichment. CLI: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only","autoEnrich":true}'`. Typed tool: `edit_source` with appropriate metadata.
-2. Run enrichment if using CLI: `releases enrich <slug>`. Via typed tools, enrichment will run automatically on future fetches.
-3. Verify results. CLI: `releases list <slug> --json`. Typed tool: `get_latest_releases` — check content is richer after enrichment.
+1. Record the assessment and enable crawl mode. CLI: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only","crawlEnabled":true}'`. Typed tool: `edit_source` with the same metadata. Subsequent fetches will follow links to per-release pages and extract full content in one pass.
+2. Re-fetch the source once to backfill. CLI: `releases fetch <slug> --full`. Typed tool: `fetch_source`.
+3. Verify results. CLI: `releases list <slug> --json` or `releases latest <slug>`. Typed tool: `get_latest_releases` — check content is richer after the re-fetch.
 
 If feed already provides full content with no meaningful additions on the page:
-1. No enrichment needed for this source
+1. Record `feedContentDepth: "full"` so future sessions skip the sampling step.
 
-Once `feedContentDepth` is set, skip the sampling step on future encounters. Sources with `autoEnrich: true` will automatically enrich new releases after each feed fetch.
+Once `feedContentDepth` is set, skip the sampling step on future encounters. Crawl mode handles the rest during normal fetches — there is no separate enrichment phase.
 
 **Per-source AI instructions:** If a source has unique content patterns (e.g., videos always embedded, unusual changelog format), note this in the discovery state so parseInstructions can be set later via the CLI.
 

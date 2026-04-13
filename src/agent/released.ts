@@ -60,7 +60,7 @@ You have access to the Released CLI at: ${cliCmd}
 
 ## Available Commands
 
-- list [slug] [--json] [--org <org>] [--has-feed] [--enrichable]: Show indexed sources
+- list [slug] [--json] [--org <org>] [--has-feed]: Show indexed sources
 - evaluate <url> [--json]: Evaluate a URL for the best ingestion method
 - discover <domain> [--json]: Probe a domain for changelog URLs, feeds, and GitHub repos
 - add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>] [--skip-eval] [--batch <file>]: Add source(s)
@@ -71,7 +71,6 @@ You have access to the Released CLI at: ${cliCmd}
 - ignore add --org <org> <url>: Ignore a URL for an org
 - block list --json: Show globally blocked URLs/domains
 - block add <url>: Block a URL globally
-- enrich <slug> [--dry-run] [--limit <n>] [--json]: Enrich sparse releases with full page content
 - org add <name> [--domain <domain>] [--description <text>] [--slug <slug>] [--category <cat>] [--tags <t1,t2>]: Create an organization
 - org edit <slug> [--category <cat>] [--no-category]: Edit an organization
 - org show <slug>: Show org details
@@ -100,7 +99,7 @@ Some organizations ship multiple distinct products (e.g., Vercel ships Next.js, 
 
 ## Subagents
 
-Delegate CLI tasks to the "bulk-worker" subagent when you need to run multiple commands in parallel (e.g., validating several sources with dry-run fetches, enriching multiple sources).
+Delegate CLI tasks to the "bulk-worker" subagent when you need to run multiple commands in parallel (e.g., validating several sources with dry-run fetches).
 
 ## Onboarding Workflow
 
@@ -110,7 +109,7 @@ When onboarding a new company, follow this sequence:
 2. **Add** — add sources with appropriate types
 3. **Validate** — dry-run fetch each source to check quality
 4. **Fetch** — for validated sources, run a real fetch (without --dry-run) with --max 50 to seed initial releases
-5. **Enrich feed sources** — after fetching, assess feed content depth and enrich sparse sources. See the "Feed Content Depth Assessment" section in the parsing-changelogs skill. Delegate enrichment to the bulk-worker subagent.
+5. **Assess feed content depth** — after fetching, check whether feed entries are full articles or summaries pointing to richer pages. If summary-only, enable crawl mode on the source so per-release pages are fetched during parse. See the "Feed Content Depth Assessment" section in the parsing-changelogs skill.
 
 ## Output
 
@@ -319,7 +318,7 @@ export function buildDiscoveryPrompt(options: Pick<DiscoveryOptions, "company" |
   if (options.domain) hints.push(`Their website is ${options.domain}.`);
   if (options.githubOrg) hints.push(`Their GitHub organization is ${options.githubOrg}.`);
   const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-  return `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so enrichment can be run after fetching.`;
+  return `Find and evaluate changelog sources for "${options.company}".${hintStr} Check what we already have, discover new sources, validate them with dry-run fetches, then do a real fetch (--max 50) for each validated source to seed initial releases. For feed sources, note in the state file whether content appears sparse (short summaries) so crawl mode can be enabled after fetching.`;
 }
 
 export async function runDiscovery(options: DiscoveryOptions): Promise<DiscoveryState> {

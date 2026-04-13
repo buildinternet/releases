@@ -43,9 +43,9 @@ export interface SourceMetadata {
   changelogUrl?: string;
   changelogDetectedAt?: string;
 
-  // Content depth assessment
+  // Content depth assessment — set during onboarding. If "summary-only",
+  // prefer enabling crawlEnabled so per-release pages are fetched during parse.
   feedContentDepth?: "full" | "summary-only";
-  autoEnrich?: boolean;  // true = auto-enrich new releases after feed fetch (for summary-only feeds)
 
   // Per-source AI guidance
   parseInstructions?: string;  // freeform text appended to AI parsing prompts

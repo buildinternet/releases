@@ -36,7 +36,6 @@ export function registerListCommand(program: Command) {
     .option("--org <org>", "Filter by organization slug")
     .option("--product <product>", "Filter by product slug")
     .option("--has-feed", "Only show sources that have a discovered feed URL")
-    .option("--enrichable", "Only show sources eligible for content enrichment (have feed, missing or sparse content depth)")
     .option("--query <text>", "Filter by name, slug, or URL (case-insensitive substring match)")
     .option("--category <category>", "Filter by organization or product category")
     .option("--include-disabled", "Include disabled sources in the list")
@@ -46,11 +45,10 @@ Examples:
   releases list claude-code           Show details for a single source
   releases list --json                List all sources as JSON
   releases list --has-feed            Sources with a discovered feed URL
-  releases list --enrichable          Sources eligible for content enrichment
   releases list --query shadcn        Filter sources by name, slug, or URL
   releases list --include-disabled        Include disabled sources
   releases list --has-feed --org sentry   Combine filters`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; enrichable?: boolean; query?: string; includeDisabled?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; query?: string; includeDisabled?: boolean }) => {
       // ── Single-source detail view ──
       if (slug) {
         const source = await findSource(slug);
@@ -89,7 +87,6 @@ Examples:
         productSlug: opts.product,
         category: opts.category,
         hasFeed: opts.hasFeed,
-        enrichable: opts.enrichable,
         query: opts.query,
         includeHidden: opts.includeDisabled,
       });

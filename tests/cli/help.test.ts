@@ -49,12 +49,11 @@ describe("CLI command gating (public mode)", () => {
     const { stdout } = runCli(["--help"], { env: publicEnv });
     expect(stdout).not.toContain("Admin:");
     expect(stdout).not.toContain("onboard");
-    expect(stdout).not.toContain("enrich");
     expect(stdout).not.toContain("Manage organizations");
   });
 
   it("blocks admin commands with a clear error", () => {
-    for (const cmd of ["fetch", "onboard", "org", "enrich", "poll"]) {
+    for (const cmd of ["fetch", "onboard", "org", "poll"]) {
       const { stderr, exitCode } = runCli([cmd], { env: publicEnv });
       expect(exitCode).toBe(1);
       expect(stderr).toContain(`"${cmd}" requires an API key`);
@@ -84,7 +83,6 @@ describe("CLI command gating (admin mode)", () => {
     expect(stdout).toContain("onboard");
     expect(stdout).toContain("fetch");
     expect(stdout).toContain("org");
-    expect(stdout).toContain("enrich");
   });
 
   it("allows admin subcommand help", () => {

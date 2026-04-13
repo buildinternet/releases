@@ -42,13 +42,13 @@ export function registerOnboardCommand(program: Command) {
     .option("--github-org <org>", "Seed the agent with the company's GitHub organization")
     .option("--remote", "Run discovery on the remote worker (default when RELEASED_API_URL is set)")
     .option("--local", "Run discovery locally even when remote mode is configured")
-    .option("--managed-agents", "Use Anthropic Managed Agents (default)")
-    .option("--sandbox", "Use legacy Cloudflare Sandbox engine")
+    .option("--managed-agents", "Use the managed-agents discovery engine (default)")
+    .option("--sandbox", "Use the legacy sandbox discovery engine")
     .option("--json", "Output results as JSON")
     .addHelpText("after", `
 Engine selection (RELEASED_DISCOVERY_ENGINE env var, default: managed-agents):
   releases onboard "Acme"                   # uses managed agents (default)
-  releases onboard "Acme" --sandbox         # uses Cloudflare Sandbox
+  releases onboard "Acme" --sandbox         # uses the sandbox engine
   RELEASED_DISCOVERY_ENGINE=sandbox releases onboard "Acme"
 
 Examples:
