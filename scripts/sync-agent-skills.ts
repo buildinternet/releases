@@ -37,6 +37,7 @@ const SKILL_DIRS = [
   "managing-sources",
   "parsing-changelogs",
   "analyzing-releases",
+  "classify-media-relevance",
 ];
 
 const ANTHROPIC_API = "https://api.anthropic.com";

@@ -15,6 +15,10 @@
     "Analyzing Releases": {
       "skillId": "skill_019FiqtkAUTte7yfNTDAjRLp",
       "localDir": "analyzing-releases"
+    },
+    "Classify Media Relevance": {
+      "skillId": "skill_0126gHoZAt735mnE3hZgcbf2",
+      "localDir": "classify-media-relevance"
     }
   },
   "agentId": "agent_011CZtWpasPtsYjF3aysf2ZH",
