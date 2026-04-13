@@ -1,5 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Source } from "../db/schema.js";
+import type { Source, ReleaseType } from "../db/schema.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { checkContentHash } from "../db/queries.js";
 import { config } from "../lib/config.js";
@@ -48,6 +48,7 @@ const EXTRACTION_RULES = `Rules:
 - Keep content concise: key changes, features, and fixes. Don't reproduce entire pages.
 - Dates should be ISO 8601. If no date is found, omit publishedAt.
 - Mark isBreaking only if the entry mentions breaking or backwards-incompatible changes.
+- Set type to "rollup" for seasonal/quarterly/annual catch-all pages that span many features (e.g. "Fall Release 2025", "Q3 2025 Recap"). Otherwise omit or use "feature".
 - If no version is explicitly stated, omit the version field.
 - Return entries newest first.
 - Always call the extract_releases tool with your results.`;
@@ -73,6 +74,7 @@ interface ExtractedEntry {
   content: string;
   publishedAt?: string;
   isBreaking: boolean;
+  type?: ReleaseType;
 }
 
 // ── Primary path: server-side web_fetch with dynamic filtering ───────
@@ -305,6 +307,7 @@ function mapEntries(entries: ExtractedEntry[], sourceUrl: string): RawRelease[] 
         version,
         publishedAt: e.publishedAt ? new Date(e.publishedAt) : undefined,
         isBreaking: e.isBreaking,
+        type: e.type,
       };
     });
 }

@@ -254,6 +254,7 @@ export type OrgReleaseRow = {
   source_slug: string;
   source_name: string;
   source_type: string;
+  type: string;
 };
 
 /** Uses raw D1 prepare/bind instead of Drizzle because cursor WHERE fragments are dynamic strings. */
@@ -264,7 +265,7 @@ export async function getOrgReleasesFeed(
   limit: number,
 ): Promise<OrgReleaseRow[]> {
   const stmt = d1.prepare(`
-    SELECT r.id, r.version, r.title, r.content, r.content_summary,
+    SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
            r.published_at, r.fetched_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
     FROM releases r

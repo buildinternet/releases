@@ -230,8 +230,8 @@ releases serve
 
 | Tool | Description | Remote | Local |
 |------|-------------|:------:|:-----:|
-| `search_releases` | Full-text search across all indexed releases | Yes | Yes |
-| `get_latest_releases` | Most recent releases, optionally filtered by product or org | Yes | Yes |
+| `search_releases` | Full-text search across all indexed releases (filter by product, org, or `type`) | Yes | Yes |
+| `get_latest_releases` | Most recent releases (filter by product, org, or `type`) | Yes | Yes |
 | `summarize_changes` | AI summary of a product's recent changes | Gated | Gated |
 | `compare_products` | AI comparison between two products | Gated | Gated |
 | `list_sources` | List all tracked sources | Yes | Yes |

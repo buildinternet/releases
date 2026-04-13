@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, releaseSummaries, products } from "@releases/db/schema.js";
+import { sources, releases, organizations, releaseSummaries, products, type ReleaseType } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
@@ -234,7 +234,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   const body = await c.req.json<{ releases: Array<{
     version?: string | null; title: string; content: string;
     url?: string | null; contentHash?: string; publishedAt?: string | null;
-    media?: string | null;
+    media?: string | null; type?: ReleaseType;
   }> }>();
 
   try {
@@ -244,6 +244,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
       const chunk = body.releases.slice(i, i + 5).map((r) => ({
         sourceId: src.id,
         version: r.version ?? null,
+        type: r.type ?? "feature",
         title: r.title,
         content: r.content,
         url: r.url ?? null,
@@ -732,6 +733,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     id?: string; version?: string; title: string; content: string;
     contentSummary?: string; url?: string; contentHash?: string;
     metadata?: string; publishedAt?: string; fetchedAt?: string;
+    type?: ReleaseType;
   }>();
 
   try {
@@ -741,6 +743,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
         id: body.id,
         sourceId: src.id,
         version: body.version ?? null,
+        type: body.type ?? "feature",
         title: body.title,
         content: body.content,
         contentSummary: body.contentSummary ?? null,
