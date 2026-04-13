@@ -121,7 +121,12 @@ function recordsToPages(records: CrawlRecord[]): CrawlPage[] {
 }
 
 export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
-  const url = `${crawlBaseUrl()}/${jobId}`;
+  // Request completed records explicitly. The default response mixes up to 50 records
+  // of any status (completed, skipped, errored) with no cursor when the total fits in
+  // one page — so a crawl with many skipped URLs can drop all but the first completed
+  // page. Filtering to `status=completed` makes the records list contain only the pages
+  // we actually want markdown for. Job-level status (`result.status`) is unaffected.
+  const url = `${crawlBaseUrl()}/${jobId}?status=completed`;
   const deadline = Date.now() + POLL_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
