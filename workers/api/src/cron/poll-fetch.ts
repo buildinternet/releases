@@ -7,6 +7,7 @@ import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapt
 import type { SourceMetadata } from "@releases/adapters/feed.js";
 import { contentHash } from "@releases/adapters/resolve.js";
 import type { RawRelease } from "@releases/adapters/types.js";
+import { normalizeMediaUrl } from "@releases/lib/media-url.js";
 
 // ── Tier intervals (hours) ──
 
@@ -248,7 +249,12 @@ export async function fetchOne(
       url: raw.url ?? null,
       contentHash: contentHash(raw),
       publishedAt: raw.publishedAt?.toISOString() ?? null,
-      media: JSON.stringify(raw.media ?? []),
+      // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
+      // and direct rendering both see the underlying CDN asset. Mirrors the
+      // CLI-side filterJunkMedia normalize step in src/lib/media.ts.
+      media: JSON.stringify(
+        (raw.media ?? []).map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
+      ),
     }));
 
     let inserted = 0;
