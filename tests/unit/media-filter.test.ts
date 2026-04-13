@@ -7,7 +7,7 @@ import {
 } from "../../src/lib/media.js";
 // normalizeMediaUrl lives in media-url.ts so the workers can import it
 // without pulling in the Node-only classifier/upload code.
-import { normalizeMediaUrl } from "../../src/lib/media-url.js";
+import { normalizeMediaUrl, unwrapImageProxyUrls, hydrateMediaUrls } from "../../src/lib/media-url.js";
 
 // ── preCheckMedia (deterministic) ───────────────────────────────────
 
@@ -157,6 +157,62 @@ describe("normalizeMediaUrl", () => {
 
   it("returns input unchanged for invalid URLs", () => {
     expect(normalizeMediaUrl("not a url")).toBe("not a url");
+  });
+});
+
+// ── unwrapImageProxyUrls (content-level) ────────────────────────────
+
+describe("unwrapImageProxyUrls", () => {
+  it("rewrites a markdown image with a Next.js basePath optimizer URL", () => {
+    const content = "Here's a screenshot:\n\n![shot](https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2F6jz6vxxd%2Fproduction%2Fabc-878x802.png&w=1920&q=75)";
+    const out = unwrapImageProxyUrls(content);
+    expect(out).toContain("https://cdn.sanity.io/images/6jz6vxxd/production/abc-878x802.png");
+    expect(out).not.toContain("_next/image");
+  });
+
+  it("rewrites an HTML img tag with an optimizer URL", () => {
+    const content = '<p>intro</p><img src="https://example.com/_next/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75" alt="hero"/>';
+    const out = unwrapImageProxyUrls(content);
+    expect(out).toContain('src="https://cdn.example.com/hero.png"');
+    expect(out).not.toContain("_next/image");
+  });
+
+  it("resolves relative inner URLs against the proxy origin", () => {
+    const content = "![](https://supabase.com/blog/launch-week-15-top-10/_next/image?url=%2Fimages%2Fblog%2Fwrap.png&w=3840&q=75)";
+    const out = unwrapImageProxyUrls(content);
+    expect(out).toContain("https://supabase.com/images/blog/wrap.png");
+    expect(out).not.toContain("_next/image");
+  });
+
+  it("handles HTML-escaped ampersands in content", () => {
+    const content = 'See <img src="https://example.com/_next/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&amp;w=1920&amp;q=75"/>.';
+    const out = unwrapImageProxyUrls(content);
+    expect(out).toContain("https://cdn.example.com/hero.png");
+    expect(out).not.toContain("_next/image");
+  });
+
+  it("rewrites /_vercel/image URLs too", () => {
+    const content = "![](https://example.com/_vercel/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75)";
+    const out = unwrapImageProxyUrls(content);
+    expect(out).toContain("https://cdn.example.com/hero.png");
+    expect(out).not.toContain("_vercel/image");
+  });
+
+  it("leaves content without proxy URLs unchanged", () => {
+    const content = "## Heading\n\nJust some prose. ![](https://cdn.example.com/ok.png)";
+    expect(unwrapImageProxyUrls(content)).toBe(content);
+  });
+
+  it("is a no-op for empty content", () => {
+    expect(unwrapImageProxyUrls("")).toBe("");
+  });
+
+  it("runs automatically inside hydrateMediaUrls", () => {
+    const content = "![](https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fa.png&w=1920&q=75) and /_media/foo/bar.png";
+    const out = hydrateMediaUrls(content, "https://media.example.com");
+    expect(out).toContain("https://cdn.sanity.io/a.png");
+    expect(out).toContain("https://media.example.com/");
+    expect(out).not.toContain("_next/image");
   });
 });
 
