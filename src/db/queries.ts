@@ -7,6 +7,7 @@ import {
   type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
   type KnowledgePage, type NewKnowledgePage, type ReleaseType,
 } from "./schema.js";
+import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "./release-upsert.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import { toSlug } from "../lib/slug.js";
@@ -1146,31 +1147,17 @@ export async function deleteReleasesForSource(source: Source): Promise<number> {
   return deleted.length;
 }
 
-export async function insertReleases(source: Source, rows: Array<{
-  sourceId: string; version: string | null; title: string; content: string;
-  url: string | null; contentHash: string | null; publishedAt: string | null;
-  media?: string | null; type?: ReleaseType;
-}>): Promise<number> {
+export async function insertReleases(source: Source, rows: ReleaseUpsertRow[]): Promise<number> {
   if (isRemoteMode()) {
     const result = await apiClient.insertReleasesBatch(source.slug, rows);
     return result.inserted;
   }
   const db = getDb();
-  // Batch insert in chunks of 500 (SQLite variable limit).
-  // On URL conflict, backfill content if the incoming row has non-empty content
-  // and the existing row is empty (lets re-fetches fill in sparse rows).
   let inserted = 0;
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500);
     const result = await db.insert(releases).values(chunk)
-      .onConflictDoUpdate({
-        target: [releases.sourceId, releases.url],
-        set: {
-          content: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content ELSE releases.content END`,
-          contentHash: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_hash ELSE releases.content_hash END`,
-        },
-        where: sql`excluded.content != '' AND releases.content = ''`,
-      })
+      .onConflictDoUpdate(RELEASE_URL_UPSERT)
       .returning({ id: releases.id });
     inserted += result.length;
   }

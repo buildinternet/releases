@@ -354,7 +354,10 @@ describe("Releases", () => {
     }).toThrow();
   });
 
-  it("prevents duplicate content hashes for the same source", () => {
+  it("allows duplicate content hashes for the same source (dedup is URL-based)", () => {
+    // The UNIQUE(source_id, content_hash) index was dropped because it
+    // silently 500'd the batch upsert whenever a re-fetch produced the same
+    // content under a drifted URL. URL-based upsert is the primary dedup path.
     const db = getDb();
     db.insert(releases)
       .values({
@@ -366,17 +369,18 @@ describe("Releases", () => {
       })
       .run();
 
-    expect(() => {
-      db.insert(releases)
-        .values({
-          sourceId,
-          title: "v1.0.1",
-          content: "Different title same hash",
-          url: "https://example.com/b",
-          contentHash: "abc123",
-        })
-        .run();
-    }).toThrow();
+    db.insert(releases)
+      .values({
+        sourceId,
+        title: "v1.0.1",
+        content: "Different title same hash",
+        url: "https://example.com/b",
+        contentHash: "abc123",
+      })
+      .run();
+
+    const rows = db.select().from(releases).where(eq(releases.sourceId, sourceId)).all();
+    expect(rows).toHaveLength(2);
   });
 
   it("orders by publishedAt descending", () => {

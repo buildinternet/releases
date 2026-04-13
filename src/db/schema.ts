@@ -156,7 +156,6 @@ export const releases = sqliteTable(
   },
   (table) => [
     uniqueIndex("idx_releases_source_url").on(table.sourceId, table.url),
-    uniqueIndex("idx_releases_source_hash").on(table.sourceId, table.contentHash),
     index("idx_releases_source_published").on(table.sourceId, table.publishedAt),
     index("idx_releases_published").on(table.publishedAt),
     index("idx_releases_source_suppressed_published").on(

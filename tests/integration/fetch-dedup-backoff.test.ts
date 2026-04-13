@@ -86,7 +86,7 @@ describe("release dedup (UNIQUE constraints)", () => {
     ).rejects.toThrow(/UNIQUE/);
   });
 
-  it("rejects duplicate contentHash for same source", async () => {
+  it("allows duplicate contentHash with different URLs for same source", async () => {
     const { source } = await seedSource(testDb.db);
     const raw = makeRawRelease();
     const hash = contentHash(raw);
@@ -103,12 +103,14 @@ describe("release dedup (UNIQUE constraints)", () => {
 
     await testDb.db.insert(releases).values(row);
 
-    await expect(
-      testDb.db.insert(releases).values({
-        ...row,
-        url: "https://example.com/r/2",
-      }).execute(),
-    ).rejects.toThrow(/UNIQUE/);
+    const result = await testDb.db
+      .insert(releases)
+      .values({ ...row, url: "https://example.com/r/2" })
+      .returning();
+    expect(result).toHaveLength(1);
+
+    const allRows = await testDb.db.select().from(releases);
+    expect(allRows).toHaveLength(2);
   });
 
   it("allows same URL across different sources", async () => {
