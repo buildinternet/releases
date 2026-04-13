@@ -13,6 +13,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -22,6 +24,21 @@ jobs:
 
       - name: Type-check
         run: npx tsc --noEmit
+
+      - name: Check migration filenames
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: ./scripts/check-migration-filenames.sh "origin/$BASE_REF"
+
+      - name: Check for uncommitted schema drift
+        run: |
+          RELEASED_DATA_DIR=/tmp/drizzle-drift-check bunx drizzle-kit generate > /tmp/drift.log 2>&1
+          if ! grep -q "No schema changes" /tmp/drift.log; then
+            echo "ERROR: schema.ts has changes that weren't captured by 'bun run db:generate'." >&2
+            tail -20 /tmp/drift.log >&2
+            exit 1
+          fi
 
       - name: Run tests
         run: bun run test
