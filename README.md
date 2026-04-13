@@ -30,8 +30,17 @@ The public CLI connects to the hosted API at `api.releases.sh` automatically. Re
 
 ```bash
 bun install
-bun link        # makes `releases` available as a CLI command
+bun link           # register this package
+bun link releases  # symlink `releases` into $HOME/.bun/bin
 ```
+
+If `releases` isn't on your PATH after linking, add `$HOME/.bun/bin` to your shell's PATH:
+
+```bash
+export PATH="$HOME/.bun/bin:$PATH"
+```
+
+The linked binary runs `src/index.ts` via Bun, so edits are picked up immediately — no rebuild step. The `.env` at the repo root is auto-loaded, so `releases latest` routes to remote mode out of the box.
 
 ### Environment Variables
 

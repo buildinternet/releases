@@ -15,8 +15,11 @@ Changelog indexer and registry for AI agents and developers.
 ## Commands
 
 ```bash
-bun src/index.ts <command>    # run directly during development
+releases <command>            # after `bun link` (see Development Setup in README.md)
+bun src/index.ts <command>    # equivalent, works without linking
 ```
+
+The project `.env` is auto-loaded by Bun, so `RELEASED_API_URL` and `RELEASED_API_KEY` are already set — no need to prefix commands with them. Remote mode is the default for day-to-day development.
 
 Type-check: `npx tsc --noEmit`
 
@@ -64,29 +67,29 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 ## Common CLI Patterns
 
 ```bash
-bun src/index.ts list <slug> --json     # Inspect a single source
-bun src/index.ts list --query <text>    # Filter sources by name, slug, or URL
-bun src/index.ts list --has-feed        # Sources with a discovered feed URL
-bun src/index.ts list --product nextjs  # Filter sources by product
-bun src/index.ts fetch <slug> --max 5   # Fetch limited releases for one source
-bun src/index.ts fetch --changed        # Fetch only sources where poll detected changes
-bun src/index.ts fetch-log <slug>       # Check recent fetch history for a source
-bun src/index.ts task list              # List active/recent remote sessions
-bun src/index.ts task cancel <id>       # Cancel a running remote session
-bun src/index.ts product list vercel    # List products for an org
-bun src/index.ts product adopt nextjs --into vercel  # Convert org to product
-bun src/index.ts categories             # List valid categories
-bun src/index.ts org add "Acme" --category cloud --tags typescript,edge
-bun src/index.ts org edit acme --category developer-tools
-bun src/index.ts org show acme              # Full details: accounts, tags, sources, products
-bun src/index.ts org tag add acme react serverless
-bun src/index.ts org tag list acme
-bun src/index.ts product add "CLI" --org acme --category developer-tools --tags golang
-bun src/index.ts product tag add acme-cli testing
-bun src/index.ts list --category ai     # Filter sources by category
-bun src/index.ts poll                   # Check all feed sources for upstream changes
-bun src/index.ts poll --changed         # Show only sources with detected changes
-bun src/index.ts poll --json            # Machine-readable output
+releases list <slug> --json     # Inspect a single source
+releases list --query <text>    # Filter sources by name, slug, or URL
+releases list --has-feed        # Sources with a discovered feed URL
+releases list --product nextjs  # Filter sources by product
+releases fetch <slug> --max 5   # Fetch limited releases for one source
+releases fetch --changed        # Fetch only sources where poll detected changes
+releases fetch-log <slug>       # Check recent fetch history for a source
+releases task list              # List active/recent remote sessions
+releases task cancel <id>       # Cancel a running remote session
+releases product list vercel    # List products for an org
+releases product adopt nextjs --into vercel  # Convert org to product
+releases categories             # List valid categories
+releases org add "Acme" --category cloud --tags typescript,edge
+releases org edit acme --category developer-tools
+releases org show acme              # Full details: accounts, tags, sources, products
+releases org tag add acme react serverless
+releases org tag list acme
+releases product add "CLI" --org acme --category developer-tools --tags golang
+releases product tag add acme-cli testing
+releases list --category ai     # Filter sources by category
+releases poll                   # Check all feed sources for upstream changes
+releases poll --changed         # Show only sources with detected changes
+releases poll --json            # Machine-readable output
 ```
 
 - Commands accept entity IDs (`org_...`, `src_...`, `prod_...`) or slugs. IDs are preferred for durability — slugs can change, IDs cannot.
