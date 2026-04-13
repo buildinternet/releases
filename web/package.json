@@ -12,6 +12,7 @@
     "@shikijs/rehype": "^4.0.2",
     "@tailwindcss/typography": "^0.5.19",
     "flags": "^4.0.6",
+    "gray-matter": "^4.0.3",
     "next": "^16.2.3",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
