@@ -3,34 +3,38 @@ import type { SourceListItem, OrgDetail } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/formatters";
 import { Sparkline } from "@/components/sparkline";
 
-const typeBadgeClass = "text-[11px] px-1.5 py-0.5 rounded font-medium";
-
-const typeLabels: Record<string, string> = {
+const TYPE_LABELS: Record<string, string> = {
   github: "GitHub",
   feed: "Feed",
   scrape: "Webpage",
   agent: "Agent",
 };
 
+const TYPE_COLORS: Record<string, string> = {
+  github: "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400",
+  feed: "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
+  scrape: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
+  agent: "bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400",
+};
+
+const HEADER_CELL_CLASS =
+  "px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 whitespace-nowrap";
+
 function TypeBadge({ type }: { type: string }) {
-  const colors: Record<string, string> = {
-    github: "bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400",
-    feed: "bg-blue-50 dark:bg-blue-950/30 text-blue-600 dark:text-blue-400",
-    scrape: "bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400",
-    agent: "bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400",
-  };
   return (
-    <span className={`${typeBadgeClass} ${colors[type] ?? colors.github}`}>
-      {typeLabels[type] ?? type}
+    <span
+      className={`text-[11px] px-1.5 py-0.5 rounded font-medium ${TYPE_COLORS[type] ?? TYPE_COLORS.github}`}
+    >
+      {TYPE_LABELS[type] ?? type}
     </span>
   );
 }
 
-function StateBadge({ label, title }: { label: string; title?: string }) {
+function StateBadge({ label, title }: { label: string; title: string }) {
   return (
     <span
       title={title}
-      className="text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700"
+      className="shrink-0 text-[10px] px-1.5 py-0.5 rounded font-medium uppercase tracking-wider bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 border border-stone-200 dark:border-stone-700"
     >
       {label}
     </span>
@@ -51,7 +55,7 @@ function getSourceState(
 
 function isInactive(source: SourceListItem): boolean {
   return (
-    source.isHidden === true ||
+    Boolean(source.isHidden) ||
     source.fetchPriority === "paused" ||
     source.releaseCount === 0
   );
@@ -100,7 +104,7 @@ export function SourceTable({
             >
               {source.name}
             </Link>
-            {state && <span className="shrink-0"><StateBadge label={state.label} title={state.title} /></span>}
+            {state && <StateBadge label={state.label} title={state.title} />}
           </div>
           {source.url && (
             <div
@@ -150,16 +154,16 @@ export function SourceTable({
         <table className="w-full text-sm table-fixed border-collapse min-w-[520px]">
           <thead>
             <tr className="bg-stone-50 dark:bg-stone-900 border-b border-stone-200 dark:border-stone-800">
-              <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 whitespace-nowrap">Source</th>
-              <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 whitespace-nowrap w-[84px]">Type</th>
+              <th className={`text-left ${HEADER_CELL_CLASS}`}>Source</th>
+              <th className={`text-left w-[84px] ${HEADER_CELL_CLASS}`}>Type</th>
               {hasProducts && (
-                <th className="text-left px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 whitespace-nowrap hidden sm:table-cell w-[120px]">Product</th>
+                <th className={`text-left hidden sm:table-cell w-[120px] ${HEADER_CELL_CLASS}`}>Product</th>
               )}
-              <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 whitespace-nowrap w-[72px]">Releases</th>
+              <th className={`text-right w-[72px] ${HEADER_CELL_CLASS}`}>Releases</th>
               {sourceSparklines && (
                 <th className="px-3 py-2.5 hidden lg:table-cell w-[72px]"><span className="sr-only">Activity</span></th>
               )}
-              <th className="text-right px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 whitespace-nowrap hidden sm:table-cell w-[96px]">Last update</th>
+              <th className={`text-right hidden sm:table-cell w-[96px] ${HEADER_CELL_CLASS}`}>Last update</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800/50">
