@@ -29,6 +29,7 @@ import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
 import { registerGuideCommand } from "./commands/guide.js";
+import { registerShowCommand } from "./commands/show.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
 
@@ -108,6 +109,7 @@ function printStyledHelp(): string {
   lines.push(row("summary <slug>", "Summarize recent changes"));
   lines.push(row("compare <a> <b>", "Compare releases between sources"));
   lines.push(row("list [slug]", "List sources or inspect one"));
+  lines.push(row("show <id|slug>", "Show any entity by ID or slug"));
   lines.push(row("stats", "Show database statistics"));
   lines.push(row("usage", "Show API usage stats"));
   lines.push(row("categories", "List valid category values"));
@@ -159,6 +161,7 @@ registerCompareCommand(program);
 registerStatsCommand(program);
 registerUsageCommand(program);
 registerListCommand(program);
+registerShowCommand(program);
 registerServeCommand(program);
 registerApiCommand(program);
 

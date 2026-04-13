@@ -81,6 +81,21 @@ releases list --category ai            # filter by category
 releases list --json                   # machine-readable output
 ```
 
+Use the top-level `show` command to inspect any entity by ID or slug. It
+dispatches to the right entity based on the ID prefix (`rel_`, `src_`, `org_`,
+`prod_`) and falls back to a slug lookup for bare strings:
+
+```bash
+releases show rel_XqbzLaOqBFz7VSAIqx2zs    # release details
+releases show src_abc123                    # source summary
+releases show org_abc123                    # org summary
+releases show prod_abc123                   # product summary
+releases show vercel                        # slug fallthrough (org → product → source)
+```
+
+For deeper views, use the nested commands (`list <src>`, `org show <slug>`,
+`product list <org>`, `release show <id>`).
+
 ### Summaries
 
 Generate a natural-language summary of recent releases for a source or organization:

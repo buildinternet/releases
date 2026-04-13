@@ -69,6 +69,7 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 ## Common CLI Patterns
 
 ```bash
+releases show <id|slug>         # Inspect any entity by ID (rel_/src_/org_/prod_) or slug
 releases list <slug> --json     # Inspect a single source
 releases list --query <text>    # Filter sources by name, slug, or URL
 releases list --has-feed        # Sources with a discovered feed URL
@@ -94,7 +95,7 @@ releases poll --changed         # Show only sources with detected changes
 releases poll --json            # Machine-readable output
 ```
 
-- Commands accept entity IDs (`org_...`, `src_...`, `prod_...`) or slugs. IDs are preferred for durability — slugs can change, IDs cannot.
+- Commands accept entity IDs (`org_...`, `src_...`, `prod_...`, `rel_...`) or slugs. IDs are preferred for durability — slugs can change, IDs cannot. The top-level `show <id|slug>` command dispatches to the right entity based on the ID prefix, and falls back to a slug lookup (org → product → source) for bare strings.
 - Source slug is always a **positional argument** (e.g., `fetch claude-code`), not a flag. The `fetch` command also accepts `--source <slug>` as an alias for convenience.
 - `org list` returns a summary view (counts, last activity) without accounts or tags. Use `org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
 
