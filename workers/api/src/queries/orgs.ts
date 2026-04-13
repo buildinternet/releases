@@ -28,12 +28,13 @@ export async function getOrgSourcesWithStats(
 ): Promise<SourceWithStats[]> {
   return db.all<SourceWithStats>(sql`
     SELECT
-      s.id, s.slug, s.name, s.type, s.url, s.is_primary,
+      s.id, s.slug, s.name, s.type, s.url, s.is_primary, s.is_hidden, s.fetch_priority,
       p.slug AS product_slug, p.name AS product_name,
       (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
       (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND r2.published_at IS NOT NULL AND (r2.suppressed IS NULL OR r2.suppressed = 0) ORDER BY r2.published_at DESC LIMIT 1) AS latest_version_by_date,
       (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND r3.published_at IS NOT NULL AND (r3.suppressed IS NULL OR r3.suppressed = 0) ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
-      (SELECT r4.version FROM releases r4 WHERE r4.source_id = s.id AND (r4.suppressed IS NULL OR r4.suppressed = 0) ORDER BY r4.fetched_at DESC LIMIT 1) AS latest_version_by_fetch
+      (SELECT r4.version FROM releases r4 WHERE r4.source_id = s.id AND (r4.suppressed IS NULL OR r4.suppressed = 0) ORDER BY r4.fetched_at DESC LIMIT 1) AS latest_version_by_fetch,
+      (SELECT MAX(r5.fetched_at) FROM releases r5 WHERE r5.source_id = s.id AND (r5.suppressed IS NULL OR r5.suppressed = 0)) AS latest_added_at
     FROM sources s
     LEFT JOIN products p ON p.id = s.product_id
     WHERE s.org_id = ${orgId}
