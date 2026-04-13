@@ -24,7 +24,7 @@ npx @buildinternet/releases search "react"
 curl -fsSL https://releases.sh/install | bash
 ```
 
-The public CLI connects to the hosted API at `api.releases.sh` automatically. Read-only commands (search, latest, stats, list, categories) work without any configuration. Admin commands (fetch, onboard, enrich) require an API key.
+The public CLI connects to the hosted API at `api.releases.sh` automatically. Read-only commands (search, latest, stats, list, categories) work without any configuration. Admin commands (fetch, onboard) require an API key.
 
 ## Development Setup
 
@@ -143,7 +143,7 @@ claude --plugin-dir plugins/claude/releases
 The plugin includes:
 - **MCP tools** — search releases, list orgs, compare products (via `mcp.releases.sh`)
 - **Skills** — auto-triggers on changelog/release questions, plus operational skills for source management
-- **Agents** — `discovery` (Sonnet, finds and onboards sources) and `worker` (Haiku, executes fetches)
+- **Agents** — `discovery` (finds and onboards sources) and `worker` (executes fetches)
 - **Commands** — `/releases <product> [query]` for quick lookups
 
 See [`plugins/claude/releases/README.md`](plugins/claude/releases/README.md) for full details.
@@ -303,20 +303,6 @@ releases fetch linear --no-crawl                 # one-off skip, keeps setting
 
 Crawl mode persists on the source — subsequent `releases fetch linear` calls will automatically crawl. Only works with `scrape` sources.
 
-### Enrich releases
-
-For feed sources with sparse content (short summaries), hydrate releases with full page content:
-
-```bash
-releases enrich sentry-changelog              # enrich sparse releases
-releases enrich sentry-changelog --dry-run    # preview what would be enriched
-releases enrich sentry-changelog --limit 5    # process at most 5 releases
-releases enrich sentry-changelog --force      # bypass triage, re-enrich all candidates
-releases enrich sentry-changelog --json       # machine-readable output
-```
-
-Enrichment uses AI triage (Haiku) to judge which releases need enrichment, then fetches and extracts full page content. Token usage is reported per run. Use `--force` to bypass triage and re-process all releases — useful for backfilling media on previously-enriched releases or re-enriching after adding `parseInstructions`. Media from new extractions is merged with existing media (deduped by URL), so `--force` never drops previously-captured media.
-
 ### Feed change detection
 
 ```bash
@@ -453,15 +439,14 @@ releases task cancel <sessionId>
 
 ## Architecture
 
-- **TypeScript + Bun** — single package, compiles to a self-contained binary via `bun build --compile`. Distributed as `@buildinternet/releases` on npm with platform-specific packages (macOS arm64/x64, Linux x64/arm64)
-- **SQLite** (Bun built-in + Drizzle ORM) with WAL mode and FTS5 for search
-- **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, Cloudflare Browser Rendering for scraping
-- **AI Layer** — Anthropic SDK for changelog parsing (ingestion) and summarization (query)
-- **Agent** — Discovery uses Anthropic Managed Agents by default (`RELEASED_DISCOVERY_ENGINE=managed-agents`). Two agents are deployed: a discovery agent (Sonnet, for onboarding/evaluation) and a worker agent (Haiku, for fetches/updates). Agent definitions (system prompt, tools, skills, model) are synced via `bun run deploy:agents`. Domain knowledge lives in skill files at `src/agent/skills/`, synced to the Anthropic Skills API. The deterministic fetch pipeline (ingest, incremental, enrich, summarize) stays as direct Messages API calls.
-- **MCP Server** — Local: `@modelcontextprotocol/sdk` on stdio. Remote: Cloudflare Worker at `mcp.releases.sh` using `createMcpHandler` with Streamable HTTP transport (read-only tools, no auth)
-- **API Server** — Bun HTTP server with JSON endpoints, CORS enabled. GET endpoints are public (no auth); write operations require a Bearer token
-- **Web Frontend** — Next.js 15 (App Router) + Tailwind CSS in `web/`
-- **Migrations** — Drizzle Kit (`bun run db:generate` to create, applied automatically at startup)
+- **CLI** — TypeScript, single package, compiles to a self-contained binary. Distributed as `@buildinternet/releases` on npm with platform-specific packages (macOS arm64/x64, Linux x64/arm64)
+- **Storage** — Local SQLite with full-text search; remote mode backed by a hosted database via the API worker
+- **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, and headless-browser scraping for pages without feeds
+- **AI Layer** — changelog parsing (ingestion) and summarization (query) via AI provider SDK calls
+- **Agents** — two agents power discovery and fetch work: a discovery agent for onboarding/evaluation and a worker agent for fetches/updates. Agent definitions (system prompt, tools, skills, model) are synced via `bun run deploy:agents`. The deterministic fetch pipeline (ingest, incremental, summarize) runs as direct SDK calls
+- **MCP Server** — Local: stdio transport. Remote: hosted at `mcp.releases.sh` with read-only tools, no auth required
+- **API Server** — JSON endpoints with CORS. GET endpoints are public; write operations require a Bearer token
+- **Web Frontend** — Next.js app in `web/`
 
 ## Data Storage
 

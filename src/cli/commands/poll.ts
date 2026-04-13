@@ -104,7 +104,7 @@ function typeLabel(type: "feed" | "page"): string {
 export function registerPollCommand(program: Command) {
   program
     .command("poll [slug]")
-    .description("Check feed and scrape sources for upstream changes via HEAD requests")
+    .description("Check feed and scrape sources for upstream changes")
     .option("--json", "Output as JSON")
     .option("--changed", "Only show sources with detected changes")
     .option("--scrape-only", "Only poll scrape sources (page HEAD check)")

@@ -126,13 +126,13 @@ Organize notes under these headings:
 3. Analyze: calculate real cadence from dates, identify empty content or null fields, spot date drift
 4. Write notes citing specific data points, not general assumptions
 
-Use the verified approach for high-value orgs, when onboarding new orgs with scrape sources, or when enriching stale compilation-only guides. The difference: "this source likely needs JS rendering" (compilation) vs "all 50 releases have empty content — the RSS feed delivers summaries only, needs enrichment" (verified).
+Use the verified approach for high-value orgs, when onboarding new orgs with scrape sources, or when refreshing stale compilation-only guides. The difference: "this source likely needs JS rendering" (compilation) vs "all 50 releases have empty content — the RSS feed delivers summaries only, needs crawl mode on per-release pages" (verified).
 
 Write notes during onboarding after you've fetched and validated sources. Update them when you discover new quirks or when source behavior changes. If notes are empty or stale, write them before doing fetch work — future agents (including yourself in later sessions) will benefit.
 
 **Updating notes:** Use `update_source_guide_notes` with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
 
-**Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `autoEnrich`, use `edit_source` with metadata — the header updates automatically.
+**Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `edit_source` with metadata — the header updates automatically.
 
 **Product context:** Source guides group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the guide calls these out as "Organization-Level Sources" with a note about which products they may cover.
 

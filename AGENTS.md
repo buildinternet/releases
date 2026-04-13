@@ -67,13 +67,10 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 bun src/index.ts list <slug> --json     # Inspect a single source
 bun src/index.ts list --query <text>    # Filter sources by name, slug, or URL
 bun src/index.ts list --has-feed        # Sources with a discovered feed URL
-bun src/index.ts list --enrichable      # Sources eligible for content enrichment
 bun src/index.ts list --product nextjs  # Filter sources by product
 bun src/index.ts fetch <slug> --max 5   # Fetch limited releases for one source
 bun src/index.ts fetch --changed        # Fetch only sources where poll detected changes
 bun src/index.ts fetch-log <slug>       # Check recent fetch history for a source
-bun src/index.ts enrich <slug>          # Enrich sparse feed releases with full page content
-bun src/index.ts enrich <slug> --force  # Bypass triage, re-enrich all (backfill media, re-apply parseInstructions)
 bun src/index.ts task list              # List active/recent remote sessions
 bun src/index.ts task cancel <id>       # Cancel a running remote session
 bun src/index.ts product list vercel    # List products for an org
@@ -138,7 +135,7 @@ Both agents are deployed via `bun run deploy:agents`. Use `deploy:agents:discove
 The local-only unified agent (`src/agent/releases.ts`) handles all judgment-based changelog work when not using managed agents.
 
 - **Agent skills** live in `src/agent/skills/` as application code (not in `.claude/`). Each skill is a `SKILL.md` with YAML frontmatter. At runtime, `resolveSkillsDir()` finds skills via: `RELEASED_SKILLS_DIR` env var → `/usr/share/releases/skills/` (container) → `~/.releases/skills/` (local) → source tree fallback. The agent symlinks the resolved directory to `.claude/skills/` for SDK discovery. Skills are also synced to the Claude Code plugin (`plugins/claude/releases/skills/`) via `bun run sync:plugin-skills` — this runs automatically as part of `deploy:skills`. Synced copies have an auto-generated comment; edit the source in `src/agent/skills/`, not the plugin copies.
-- **Deterministic pipeline** (ingest, incremental, enrich, summarize) stays as direct Messages API calls — not routed through the agent.
+- **Deterministic pipeline** (ingest, incremental, summarize) stays as direct Messages API calls — not routed through the agent.
 - **`evaluate` CLI command** runs pre-checks only (provider detection, feed discovery). The agent handles deeper evaluation when needed.
 
 ## Claude Code Plugin

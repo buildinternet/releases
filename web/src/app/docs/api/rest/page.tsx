@@ -82,7 +82,6 @@ export default function RestApiPage() {
           <tr><td><code>orgSlug</code></td><td>Filter by organization slug</td></tr>
           <tr><td><code>productSlug</code></td><td>Filter by product slug</td></tr>
           <tr><td><code>hasFeed</code></td><td>Only sources with a feed URL</td></tr>
-          <tr><td><code>enrichable</code></td><td>Sources eligible for enrichment</td></tr>
           <tr><td><code>query</code></td><td>Substring search on name, slug, or URL</td></tr>
           <tr><td><code>category</code></td><td>Filter by category</td></tr>
         </tbody>

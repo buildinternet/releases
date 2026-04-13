@@ -25,7 +25,6 @@ import { registerBlockCommand } from "./commands/block.js";
 import { registerImportCommand } from "./commands/import.js";
 import { registerEvaluateCommand } from "./commands/evaluate.js";
 import { registerSummarizeCommand } from "./commands/summarize.js";
-import { registerEnrichCommand } from "./commands/enrich.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
@@ -53,7 +52,6 @@ const ADMIN_COMMANDS: AdminEntry[] = [
   { name: "fetch-log", helpLabel: "fetch-log [slug]", description: "View recent fetch history", register: registerFetchLogCommand },
   { name: "check", helpLabel: "check <slug>", description: "Check a source URL for changes", register: registerCheckCommand },
   { name: "poll", helpLabel: "poll [slug]", description: "Poll feed sources for upstream changes", register: registerPollCommand },
-  { name: "enrich", helpLabel: "enrich <slug>", description: "Enrich sparse releases with full content", register: registerEnrichCommand },
   { name: "summarize", helpLabel: "summarize <slug>", description: "AI-powered release summary", register: registerSummarizeCommand },
   { name: "org", helpLabel: "org <action>", description: "Manage organizations", register: registerOrgCommand },
   { name: "product", helpLabel: "product <action>", description: "Manage products within orgs", register: registerProductCommand },

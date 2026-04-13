@@ -222,7 +222,6 @@ export async function listSourcesWithOrg(opts?: {
   orgSlug?: string;
   productSlug?: string;
   hasFeed?: boolean;
-  enrichable?: boolean;
   query?: string;
   includeHidden?: boolean;
   category?: string;
@@ -231,7 +230,6 @@ export async function listSourcesWithOrg(opts?: {
   if (opts?.orgSlug) params.set("orgSlug", opts.orgSlug);
   if (opts?.productSlug) params.set("productSlug", opts.productSlug);
   if (opts?.hasFeed) params.set("has_feed", "true");
-  if (opts?.enrichable) params.set("enrichable", "true");
   if (opts?.query) params.set("query", opts.query);
   if (opts?.includeHidden) params.set("include_hidden", "true");
   if (opts?.category) params.set("category", opts.category);
@@ -514,15 +512,6 @@ export async function getLatestReleases(opts: {
   const sourcesData = await apiFetch<Array<{ slug: string; name: string }>>("/v1/sources");
   const all = await collectReleasesFromSources(sourcesData.slice(0, 10).map((s) => s.slug), opts.count);
   return all.sort(byPublishedAtDesc).slice(0, opts.count);
-}
-
-// ── Enrichable releases ──
-
-export async function getEnrichableReleases(sourceSlug: string, limit?: number): Promise<Release[]> {
-  const params = new URLSearchParams({ enrichable: "true" });
-  if (limit) params.set("limit", String(limit));
-  const res = await apiFetch<{ releases: Release[] }>(`/v1/sources/${sourceSlug}/releases?${params}`);
-  return res?.releases ?? [];
 }
 
 // ── Known releases for incremental parsing ──
