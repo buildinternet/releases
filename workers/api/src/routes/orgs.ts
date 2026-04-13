@@ -135,9 +135,12 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     type: row.type,
     url: row.url,
     isPrimary: row.is_primary ? true : false,
+    isHidden: row.is_hidden ? true : false,
+    fetchPriority: (row.fetch_priority ?? null) as "normal" | "low" | "paused" | null,
     releaseCount: row.release_count,
     latestVersion: row.latest_version_by_date ?? row.latest_version_by_fetch ?? null,
     latestDate: row.latest_date ?? null,
+    latestAddedAt: row.latest_added_at ?? null,
     productSlug: row.product_slug ?? null,
     productName: row.product_name ?? null,
   }));

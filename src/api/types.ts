@@ -82,7 +82,10 @@ export interface SourceListItem {
   releaseCount: number;
   latestVersion: string | null;
   latestDate: string | null;
+  latestAddedAt?: string | null;
   isPrimary?: boolean;
+  isHidden?: boolean;
+  fetchPriority?: "normal" | "low" | "paused" | null;
   metadata?: string | null;
   productName?: string | null;
   productSlug?: string | null;
