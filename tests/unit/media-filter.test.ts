@@ -263,6 +263,20 @@ describe("filterJunkMedia — full two-stage pipeline", () => {
     expect(result.content).toContain("after");
   });
 
+  it("unwraps Next.js proxy URLs and rewrites inline markdown references", async () => {
+    const wrapped =
+      "https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fabc.png&w=1920&q=75";
+    const unwrapped = "https://cdn.sanity.io/abc.png";
+    const media: MediaRef[] = [{ type: "image", url: wrapped, alt: "hero" }];
+    const content = `before\n\n![hero](${wrapped})\n\nafter`;
+    const result = await filterJunkMedia(media, content, {
+      classifier: async () => [],
+    });
+    expect(result.media[0].url).toBe(unwrapped);
+    expect(result.content).toContain(`![hero](${unwrapped})`);
+    expect(result.content).not.toContain("_next/image");
+  });
+
   it("passes release context to the classifier", async () => {
     let seenCtx: { releaseTitle?: string; sourceSlug?: string } | null = null;
     const classifier: AmbiguousMediaClassifier = async (_items, ctx) => {

@@ -206,11 +206,9 @@ export async function filterJunkMedia(
   let normalizedContent = content;
   const normalized: MediaRef[] = media.map((m) => {
     const url = normalizeMediaUrl(m.url);
-    if (url !== m.url) {
-      const escaped = m.url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-      normalizedContent = normalizedContent.replace(new RegExp(escaped, "g"), url);
-    }
-    return url === m.url ? m : { ...m, url };
+    if (url === m.url) return m;
+    normalizedContent = normalizedContent.split(m.url).join(url);
+    return { ...m, url };
   });
 
   for (const item of normalized) {
