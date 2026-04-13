@@ -134,10 +134,11 @@ Most releases are **features** — individual version bumps, single product anno
 
 **When to set `type: "rollup"`:**
 
-- The title names a season, quarter, or year range: "Fall Release 2025", "Spring 2026", "Q3 2025", "New on Ramp January Edition", "Year in Review 2025", "What Shipped This Summer".
+- The title names a season, quarter, or year range: "Fall Release 2025", "Spring 2026", "Q3 2025", "Summer '25 Edition", "New on Ramp January Edition", "Year in Review 2025", "What Shipped This Summer".
 - The page re-announces many shipped features under section headings, rather than describing a single change.
 - The post is published once, rarely updates, and anchors a date range (not a single `publishedAt` moment).
-- Common examples: Brex Fall Release, Ramp quarterly blog posts, Vercel Ship recaps, Stripe Sessions roundups, AWS re:Invent summaries.
+- The destination may be a full microsite or editorial landing page (not just a blog post) — rollups often get custom design treatment because they're marketing moments as well as product updates.
+- Common examples: Shopify Editions (`shopify.com/editions/summer2025`, twice-yearly microsite with 100+ features), Brex Fall Release, Ramp quarterly blog posts, Vercel Ship recaps, Stripe Sessions roundups, AWS re:Invent summaries.
 
 **When NOT to set rollup:**
 
@@ -152,6 +153,7 @@ Before parsing, **always read the source guide** (CLI: `releases guide <org>`, t
 
 - "Brex publishes quarterly seasonal rollup pages at `/product-announcements/{fall,spring,summer,winter}-release-YYYY`. Treat each as `type: rollup`."
 - "Ramp's blog series `/blog/new-on-ramp-*-edition` and `/new-on-ramp-q*-*` are quarterly/monthly rollups. Classify as `type: rollup`; individual features within are not separately indexed."
+- "Shopify publishes twice-yearly Editions as standalone microsites at `/editions/{summer,winter}YYYY` — index page at `/editions` lists all of them. Each Edition is a `type: rollup` with 100+ features under themed sections; crawl mode needed to pull the full page."
 
 When you encounter a new rollup source during discovery or fetch, update the source guide notes so future fetches classify correctly without re-deriving the pattern. See the `managing-sources` skill for how to update notes.
 

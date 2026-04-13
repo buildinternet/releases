@@ -115,7 +115,7 @@ Organize notes under these headings:
 - Whether active sources cover the org's full release surface
 - Any known gaps worth noting
 
-**`### Release cadence`** — Call out rollup publishers explicitly. Some orgs don't ship incremental changelog entries at all — they publish seasonal, quarterly, or annual **rollup** pages that collect many features into one banner post (e.g. Brex Fall Release, Ramp quarterly blog). When this is the case, say so in the notes and tell the parser to classify matching pages as `type: rollup`. Example:
+**`### Release cadence`** — Call out rollup publishers explicitly. Some orgs don't ship incremental changelog entries at all — they publish seasonal, quarterly, or annual **rollup** pages that collect many features into one banner post or microsite (e.g. Shopify Editions, Brex Fall Release, Ramp quarterly blog). When this is the case, say so in the notes and tell the parser to classify matching pages as `type: rollup`. Example:
 
 > Ramp publishes quarterly rollups at `/blog/new-on-ramp-q*-*` and monthly editions at `/blog/new-on-ramp-*-edition`. Classify all entries from this source as `type: rollup` — individual features within a rollup are not separately indexed.
 
