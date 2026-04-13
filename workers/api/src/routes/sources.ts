@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { sources, releases, organizations, releaseSummaries, products } from "@releases/db/schema.js";
+import { RELEASE_URL_UPSERT } from "@releases/db/release-upsert.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
@@ -252,14 +253,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
         media: r.media ?? "[]",
       }));
       const rows = await db.insert(releases).values(chunk)
-        .onConflictDoUpdate({
-          target: [releases.sourceId, releases.url],
-          set: {
-            content: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content ELSE releases.content END`,
-            contentHash: sql`CASE WHEN excluded.content != '' AND releases.content = '' THEN excluded.content_hash ELSE releases.content_hash END`,
-          },
-          where: sql`excluded.content != '' AND releases.content = ''`,
-        })
+        .onConflictDoUpdate(RELEASE_URL_UPSERT)
         .returning({ id: releases.id });
       inserted += rows.length;
     }
@@ -267,7 +261,14 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
     const [{ n: total }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
     return c.json({ inserted, total });
   } catch (err) {
-    return c.json({ error: "insert_failed", message: "Failed to insert releases" }, 500);
+    console.error("[/sources/:slug/releases/batch] insert failed", {
+      sourceId: src.id,
+      slug,
+      error: String(err),
+      stack: (err as Error).stack,
+    });
+    const message = (err as Error).message ?? "Failed to insert releases";
+    return c.json({ error: "insert_failed", message }, 500);
   }
 });
 

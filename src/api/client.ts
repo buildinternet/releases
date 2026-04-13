@@ -1,4 +1,5 @@
 import { getApiUrl, getApiKey, isAdminMode } from "../lib/mode.js";
+import { logger } from "../lib/logger.js";
 import { daysAgoIso } from "../lib/dates.js";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
@@ -562,12 +563,11 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
   version?: string | null; title: string; content: string;
   url?: string | null; contentHash?: string | null; publishedAt?: string | null;
 }>): Promise<{ inserted: number; total: number }> {
-  // Send in concurrent chunks to stay under D1/Worker request size limits
   const chunks: typeof releaseRows[] = [];
   for (let i = 0; i < releaseRows.length; i += 5) {
     chunks.push(releaseRows.slice(i, i + 5));
   }
-  const results = await Promise.all(
+  const settled = await Promise.allSettled(
     chunks.map((chunk) =>
       apiFetch<{ inserted: number; total: number }>(`/v1/sources/${sourceSlug}/releases/batch`, {
         method: "POST",
@@ -575,9 +575,23 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
       })
     )
   );
-  const totalInserted = results.reduce((sum, r) => sum + r.inserted, 0);
-  const lastTotal = results[results.length - 1]?.total ?? 0;
-  return { inserted: totalInserted, total: lastTotal };
+
+  const succeeded = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+  const failures = settled.flatMap((r) => (r.status === "rejected" ? [r.reason] : []));
+
+  if (succeeded.length === 0 && failures.length > 0) {
+    throw failures[0];
+  }
+
+  if (failures.length > 0) {
+    logger.warn(
+      `insertReleasesBatch(${sourceSlug}): ${failures.length}/${chunks.length} chunk(s) failed — ${failures.map(String).join("; ")}`,
+    );
+  }
+
+  const inserted = succeeded.reduce((sum, r) => sum + r.inserted, 0);
+  const total = succeeded[succeeded.length - 1]?.total ?? 0;
+  return { inserted, total };
 }
 
 export async function deleteReleasesForSource(sourceSlug: string): Promise<{ deleted: number }> {
