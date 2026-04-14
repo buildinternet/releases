@@ -158,7 +158,7 @@ claude --plugin-dir plugins/claude/releases
 ```
 
 The plugin includes:
-- **MCP tools** — search releases, list orgs, compare products (via `mcp.releases.sh`)
+- **MCP tools** — search releases, inspect orgs/products/sources, read stored CHANGELOGs (via `mcp.releases.sh`)
 - **Skills** — auto-triggers on changelog/release questions, plus operational skills for source management
 - **Agents** — `discovery` (finds and onboards sources) and `worker` (executes fetches)
 - **Commands** — `/releases <product> [query]` for quick lookups
@@ -240,11 +240,16 @@ releases admin mcp serve
 |------|-------------|:------:|:-----:|
 | `search_releases` | Full-text search across all indexed releases (filter by product, org, or `type`) | Yes | Yes |
 | `get_latest_releases` | Most recent releases (filter by product, org, or `type`) | Yes | Yes |
+| `get_release` | Full content of a single release by id (accepts `rel_` prefix or bare nanoid) | Yes | Yes |
 | `summarize_changes` | AI summary of a product's recent changes | Gated | Gated |
 | `compare_products` | AI comparison between two products | Gated | Gated |
 | `list_sources` | List all tracked sources | Yes | Yes |
+| `get_source` | Detail for a single source with org/product linkage, release count, and whether a CHANGELOG file is stored | Yes | Yes |
+| `get_source_changelog` | Canonical `CHANGELOG.md` stored for a GitHub source, with heading-aligned `offset` / `limit` slicing for Context7-style paging through large files | Yes | Yes |
 | `list_organizations` | List all organizations with their linked sources | Yes | Yes |
 | `get_organization` | Detailed view of a single org (accounts, tags, sources, products, aliases) | Yes | Yes |
+| `list_products` | List products, optionally scoped to one organization | Yes | Yes |
+| `get_product` | Detail for a single product with its organization, tags, and the sources grouped under it | Yes | Yes |
 | `add_source` | Add a new changelog source from a URL | -- | Admin only |
 | `remove_source` | Remove a source from the index | -- | Admin only |
 | `fetch_source` | Fetch new releases from a source | -- | Admin only |
@@ -324,7 +329,7 @@ releases admin source fetch next-js --skip-changelog  # skip CHANGELOG.md fetch
 
 By default, fetch caps at 200 releases per source to avoid API pagination limits (e.g., GitHub's 10K result cap). Use `--max <n>` to request more, or `--all` to remove the cap entirely.
 
-For `github` sources, the root-level `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) is fetched alongside tagged releases and surfaced on the web as a "Changelog" tab. Content is capped at 1MB and refreshed on a 24h TTL. Use `--skip-changelog` to opt out for a single run, or run `releases admin source refresh-changelog <slug>` to refresh manually (local mode only; the API worker cron handles remote mode).
+For `github` sources, the root-level `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) is fetched alongside tagged releases and surfaced on the web as a "Changelog" tab. Content is capped at 1MB and refresh piggybacks on every GitHub fetch — a content-hash short-circuit means unchanged files skip writes. Use `--skip-changelog` to opt out for a single run, or run `releases admin source refresh-changelog <slug>` to refresh manually (local mode only; the API worker cron handles remote mode).
 
 Read a tracked CHANGELOG directly, with optional heading-aligned slicing for large files:
 

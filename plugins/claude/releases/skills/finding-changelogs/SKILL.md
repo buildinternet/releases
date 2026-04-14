@@ -31,7 +31,7 @@ If the entries don't look like releases, the feed is likely the wrong one. Look 
 
 Well-known files > Link relations > Feeds > GitHub Releases API > raw markdown > page scraping.
 
-For `github` sources, the fetch pipeline ingests tagged releases **and** the repo's canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md` at the repo root) — the file is surfaced in the web UI as a separate tab and is often the richer source when a project ships entries that never became tagged releases. You don't need to add a second source for the CHANGELOG file; the github adapter handles both.
+For `github` sources, the fetch pipeline ingests tagged releases **and** the repo's canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md` at the repo root) on every fetch pass — the file is surfaced in the web UI as a separate tab, exposed via the `get_source_changelog` MCP tool, and is often the richer source when a project ships entries that never became tagged releases. The refresh piggybacks on each GitHub fetch with a content-hash short-circuit, so stored files stay in sync with tagged releases. You don't need to add a second source for the CHANGELOG file; the github adapter handles both.
 
 ### Reading a tracked CHANGELOG
 

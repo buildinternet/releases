@@ -10,6 +10,10 @@ import {
   listOrganizations,
   getOrganization,
   getSourceChangelog,
+  getRelease,
+  getSource,
+  listProducts,
+  getProduct,
   summarizeChanges,
   compareProducts,
 } from "./tools.js";
@@ -26,7 +30,7 @@ export interface Env {
 export function createServer(env: Env) {
   const server = new McpServer({
     name: "releases",
-    version: "0.9.1",
+    version: "0.10.0",
   });
 
   const db = createDb(env.DB);
@@ -97,6 +101,13 @@ export function createServer(env: Env) {
     },
   }, async (params) => getOrganization(db, params));
 
+  server.registerTool("get_source", {
+    description: "Detail for a single indexed source: organization, optional product linkage, release count (excluding suppressed), last-fetched timestamp, and whether a tracked CHANGELOG file is available for get_source_changelog. Use this after list_sources or search_releases when the user wants to understand one source in depth (e.g. 'tell me about the apollo-client source').",
+    inputSchema: {
+      identifier: z.string().describe("Source slug (e.g. 'apollo-client') or src_ id"),
+    },
+  }, async (params) => getSource(db, params));
+
   server.registerTool("get_source_changelog", {
     description: "Read the canonical CHANGELOG.md file tracked for a GitHub source. Supports heading-aligned slicing — pass offset/limit to read a range of characters, and chain successive calls via the returned next offset to page through large files (e.g. Apollo Client's 700KB CHANGELOG). Omit both params to get the first 40k characters.",
     inputSchema: {
@@ -105,6 +116,28 @@ export function createServer(env: Env) {
       limit: z.number().optional().describe("Target slice size in characters. The slice ends at a heading boundary; defaults to 40000 when slicing."),
     },
   }, withMedia(async (params) => getSourceChangelog(db, params)));
+
+  server.registerTool("get_release", {
+    description: "Fetch the full content of a single release by id. Release ids are returned by search_releases / get_latest_releases — pass them here to read the whole entry (e.g. to quote a specific Next.js release note). Accepts the full rel_<nanoid> form or the bare 21-char nanoid.",
+    inputSchema: {
+      id: z.string().describe("Release id — 'rel_<nanoid>' or a bare 21-char nanoid"),
+    },
+  }, withMedia(async (params) => getRelease(db, params)));
+
+  server.registerTool("list_products", {
+    description: "List products — the optional grouping layer between organizations and sources. Multi-product orgs (e.g. Vercel → Next.js, Turborepo) expose their lineup here. Pass an organization filter to scope to one org; omit it to see every indexed product.",
+    inputSchema: {
+      organization: z.string().optional().describe("Organization slug, domain, name, or org_ id (e.g. 'vercel')"),
+    },
+  }, async (params) => listProducts(db, params));
+
+  server.registerTool("get_product", {
+    description: "Detail for a single product including its organization, category, tags, and the sources grouped under it. Use when the user asks about a specific product (e.g. 'what sources does Next.js have?' on Vercel) rather than the whole organization.",
+    inputSchema: {
+      identifier: z.string().describe("Product slug (e.g. 'nextjs') or prod_ id"),
+    },
+  }, async (params) => getProduct(db, params));
+
 
   if (env.ENABLE_AI_TOOLS === "true") {
     server.registerTool("summarize_changes", {

@@ -9,7 +9,10 @@ import {
   tags,
   orgTags,
   products,
+  productTags,
+  sourceChangelogFiles,
 } from "../../src/db/schema.js";
+import { eq } from "drizzle-orm";
 
 // The MCP tools accept a drizzle DB instance. The bun-sqlite drizzle
 // instance is API-compatible with the D1 drizzle instance for queries
@@ -20,6 +23,11 @@ import {
   listSources,
   listOrganizations,
   getOrganization,
+  getSourceChangelog,
+  getRelease,
+  getSource,
+  listProducts,
+  getProduct,
 } from "../../workers/mcp/src/tools.js";
 
 let testDatabase: TestDatabase;
@@ -69,6 +77,52 @@ function seedData() {
   const acmeWeb = allSources.find((s) => s.slug === "acme-web")!;
   const betaApi = allSources.find((s) => s.slug === "beta-api")!;
 
+  db.insert(products)
+    .values({
+      name: "Acme CLI Pro",
+      slug: "acme-cli-pro",
+      orgId: acme.id,
+      url: "https://acme.com/cli-pro",
+      description: "Pro CLI tools",
+      category: "developer-tools",
+    })
+    .run();
+  // Intentionally empty: fixture for `Sources: none` / `Tags: none` assertions in getProduct tests.
+  db.insert(products)
+    .values({
+      name: "Acme Empty",
+      slug: "acme-empty",
+      orgId: acme.id,
+      category: "developer-tools",
+    })
+    .run();
+  const allProducts = db.select().from(products).all();
+  const acmeCliPro = allProducts.find((p) => p.slug === "acme-cli-pro")!;
+
+  db.update(sources)
+    .set({ productId: acmeCliPro.id })
+    .where(eq(sources.id, acmeCli.id))
+    .run();
+
+  db.insert(tags).values({ name: "cli", slug: "cli" }).run();
+  const cliTag = db.select().from(tags).where(eq(tags.slug, "cli")).all()[0]!;
+  db.insert(productTags)
+    .values({ productId: acmeCliPro.id, tagId: cliTag.id })
+    .run();
+
+  db.insert(sourceChangelogFiles)
+    .values({
+      sourceId: acmeCli.id,
+      path: "CHANGELOG.md",
+      filename: "CHANGELOG.md",
+      url: "https://github.com/acme/cli/blob/HEAD/CHANGELOG.md",
+      rawUrl: "https://raw.githubusercontent.com/acme/cli/HEAD/CHANGELOG.md",
+      content: "# Changelog\n\n## v1.1\n- Fixed parsing error",
+      contentHash: "scf-hash-1",
+      bytes: 47,
+    })
+    .run();
+
   const now = new Date();
   db.insert(releases)
     .values([
@@ -111,17 +165,43 @@ function seedData() {
         contentHash: "hash5",
         type: "rollup",
       },
+      {
+        sourceId: betaApi.id,
+        title: "Beta Suppressed",
+        content: "Hidden release that should never surface",
+        version: "2.1.0",
+        publishedAt: now.toISOString(),
+        contentHash: "hash6",
+        suppressed: true,
+      },
     ])
     .run();
 
-  return { acme, beta, acmeCli, acmeWeb, betaApi };
+  const allReleases = db.select().from(releases).all();
+  const acmeCliV10 = allReleases.find(
+    (r) => r.sourceId === acmeCli.id && r.title === "v1.0 Release",
+  )!;
+  const suppressedRelease = allReleases.find((r) => r.title === "Beta Suppressed")!;
+
+  return {
+    acme,
+    beta,
+    acmeCli,
+    acmeWeb,
+    betaApi,
+    acmeCliPro,
+    acmeCliV10Id: acmeCliV10.id,
+    suppressedReleaseId: suppressedRelease.id,
+  };
 }
 
 beforeEach(() => {
   const db = getDb();
   db.delete(releases).run();
+  db.delete(sourceChangelogFiles).run();
   db.delete(sources).run();
   db.delete(orgTags).run();
+  db.delete(productTags).run();
   db.delete(tags).run();
   db.delete(products).run();
   db.delete(domainAliases).run();
@@ -354,10 +434,8 @@ describe("getOrganization", () => {
   });
 
   it("includes products when present", async () => {
-    const { acme } = seedData();
+    seedData();
     const db = getDb();
-    db.insert(products).values({ name: "Acme CLI Pro", slug: "acme-cli-pro", orgId: acme.id, url: "https://acme.com/cli-pro" }).run();
-
     const result = await getOrganization(db as any, { identifier: "acme" });
     const txt = resultText(result);
     expect(txt).toContain("Acme CLI Pro");
@@ -374,5 +452,228 @@ describe("getOrganization", () => {
     seedData();
     const result = await getOrganization(getDb() as any, { identifier: "nonexistent" });
     expect(resultText(result)).toContain("No organization found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSourceChangelog
+// ---------------------------------------------------------------------------
+describe("getSourceChangelog", () => {
+  it("returns stored content for a source with a changelog", async () => {
+    seedData();
+    const result = await getSourceChangelog(getDb() as any, { source: "acme-cli" });
+    const txt = resultText(result);
+    expect(txt).toContain("Acme CLI");
+    expect(txt).toContain("CHANGELOG.md");
+    expect(txt).toContain("Fixed parsing error");
+    expect(txt).toContain("(end of file)");
+  });
+
+  it("returns not-found message when source has no changelog", async () => {
+    seedData();
+    const result = await getSourceChangelog(getDb() as any, { source: "beta-api" });
+    expect(resultText(result)).toBe(
+      'No CHANGELOG file is tracked for "beta-api". Only GitHub sources expose this.',
+    );
+  });
+
+  it("returns not-found for unknown source", async () => {
+    seedData();
+    const result = await getSourceChangelog(getDb() as any, { source: "nope" });
+    expect(resultText(result)).toBe('No source found matching "nope"');
+  });
+
+  it("resolves by src_ id", async () => {
+    const { acmeCli } = seedData();
+    const result = await getSourceChangelog(getDb() as any, { source: acmeCli.id });
+    expect(resultText(result)).toContain("CHANGELOG.md");
+  });
+
+  it("supports offset/limit range slicing", async () => {
+    seedData();
+    const result = await getSourceChangelog(getDb() as any, {
+      source: "acme-cli",
+      offset: 0,
+      limit: 20,
+    });
+    const txt = resultText(result);
+    expect(txt).toMatch(/Slice: chars 0–\d+ of \d+/);
+    expect(txt).toContain("next: offset=");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getRelease
+// ---------------------------------------------------------------------------
+describe("getRelease", () => {
+  it("returns formatted detail for a real rel_ id", async () => {
+    const { acmeCliV10Id } = seedData();
+    const result = await getRelease(getDb() as any, { id: acmeCliV10Id });
+    const txt = resultText(result);
+    expect(txt).toContain("v1.0 Release");
+    expect(txt).toContain(`ID: ${acmeCliV10Id}`);
+    expect(txt).toContain("Version: 1.0.0");
+    expect(txt).toContain("Acme CLI");
+    expect(txt).toContain("Acme Corp");
+    expect(txt).toContain("Initial release with core CLI commands");
+  });
+
+  it("accepts a bare nanoid (strips rel_ prefix)", async () => {
+    const { acmeCliV10Id } = seedData();
+    const bare = acmeCliV10Id.replace(/^rel_/, "");
+    const result = await getRelease(getDb() as any, { id: bare });
+    expect(resultText(result)).toContain("v1.0 Release");
+  });
+
+  it("returns not-found for an unknown rel_ id", async () => {
+    seedData();
+    const result = await getRelease(getDb() as any, { id: "rel_aaaaaaaaaaaaaaaaaaaaa" });
+    expect(resultText(result)).toContain("No release found matching");
+  });
+
+  it("returns not-found for a suppressed release", async () => {
+    const { suppressedReleaseId } = seedData();
+    const result = await getRelease(getDb() as any, { id: suppressedReleaseId });
+    expect(resultText(result)).toContain("No release found matching");
+  });
+
+  it("badges rollup releases in the header", async () => {
+    seedData();
+    // Find the rollup by selecting directly
+    const db = getDb();
+    const rollup = db
+      .select()
+      .from(releases)
+      .where(eq(releases.title, "Fall Release 2025"))
+      .all()[0]!;
+    const result = await getRelease(db as any, { id: rollup.id });
+    expect(resultText(result)).toContain("_(rollup)_");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getSource
+// ---------------------------------------------------------------------------
+describe("getSource", () => {
+  it("returns detail for acme-cli with org, product, release count, and changelog", async () => {
+    seedData();
+    const result = await getSource(getDb() as any, { identifier: "acme-cli" });
+    const txt = resultText(result);
+    expect(txt).toContain("**Source: Acme CLI**");
+    expect(txt).toContain("Slug: acme-cli");
+    expect(txt).toContain("Organization: Acme Corp (acme)");
+    expect(txt).toContain("Product: Acme CLI Pro (acme-cli-pro)");
+    expect(txt).toContain("Release count: 2");
+    expect(txt).toContain("Changelog file stored: yes");
+  });
+
+  it("reports Changelog file stored: no for sources without a file", async () => {
+    seedData();
+    const result = await getSource(getDb() as any, { identifier: "beta-api" });
+    expect(resultText(result)).toContain("Changelog file stored: no");
+  });
+
+  it("reports Product: none for sources without a product", async () => {
+    seedData();
+    const result = await getSource(getDb() as any, { identifier: "acme-web" });
+    expect(resultText(result)).toContain("Product: none");
+  });
+
+  it("excludes suppressed releases from the release count", async () => {
+    seedData();
+    // beta-api has one non-suppressed release + one suppressed → count should be 1
+    const result = await getSource(getDb() as any, { identifier: "beta-api" });
+    expect(resultText(result)).toContain("Release count: 1");
+  });
+
+  it("returns not-found for unknown source", async () => {
+    seedData();
+    const result = await getSource(getDb() as any, { identifier: "nope" });
+    expect(resultText(result)).toBe('No source found matching "nope"');
+  });
+
+  it("resolves by src_ id", async () => {
+    const { acmeCli } = seedData();
+    const result = await getSource(getDb() as any, { identifier: acmeCli.id });
+    expect(resultText(result)).toContain("**Source: Acme CLI**");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// listProducts
+// ---------------------------------------------------------------------------
+describe("listProducts", () => {
+  it("lists all products when no filter", async () => {
+    seedData();
+    const result = await listProducts(getDb() as any, {});
+    const txt = resultText(result);
+    expect(txt).toContain("Acme CLI Pro");
+    expect(txt).toContain("Slug: acme-cli-pro");
+    expect(txt).toContain("Organization: acme");
+    expect(txt).toContain("URL: https://acme.com/cli-pro");
+    expect(txt).toContain("Description: Pro CLI tools");
+  });
+
+  it("filters by organization slug", async () => {
+    seedData();
+    const result = await listProducts(getDb() as any, { organization: "acme" });
+    const txt = resultText(result);
+    expect(txt).toContain("Acme CLI Pro");
+  });
+
+  it("returns No products found for an org with zero products", async () => {
+    seedData();
+    const result = await listProducts(getDb() as any, { organization: "beta" });
+    expect(resultText(result)).toBe("No products found.");
+  });
+
+  it("returns not-found for an unknown org filter", async () => {
+    seedData();
+    const result = await listProducts(getDb() as any, { organization: "nope" });
+    expect(resultText(result)).toContain("No organization found");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getProduct
+// ---------------------------------------------------------------------------
+describe("getProduct", () => {
+  it("returns detail for acme-cli-pro by slug", async () => {
+    seedData();
+    const result = await getProduct(getDb() as any, { identifier: "acme-cli-pro" });
+    const txt = resultText(result);
+    expect(txt).toContain("**Product: Acme CLI Pro**");
+    expect(txt).toContain("Slug: acme-cli-pro");
+    expect(txt).toContain("Organization: Acme Corp (acme)");
+    expect(txt).toContain("Category: developer-tools");
+    expect(txt).toContain("URL: https://acme.com/cli-pro");
+    expect(txt).toContain("Description: Pro CLI tools");
+    expect(txt).toContain("Tags: cli");
+    expect(txt).toContain("Acme CLI");
+    expect(txt).toContain("(acme-cli)");
+  });
+
+  it("resolves by prod_ id", async () => {
+    const { acmeCliPro } = seedData();
+    const result = await getProduct(getDb() as any, { identifier: acmeCliPro.id });
+    expect(resultText(result)).toContain("**Product: Acme CLI Pro**");
+  });
+
+  it("returns not-found for unknown product", async () => {
+    seedData();
+    const result = await getProduct(getDb() as any, { identifier: "nope" });
+    expect(resultText(result)).toBe('No product found matching "nope"');
+  });
+
+  it("reports Sources: none for a product with no linked sources", async () => {
+    seedData();
+    const result = await getProduct(getDb() as any, { identifier: "acme-empty" });
+    expect(resultText(result)).toContain("Sources: none");
+  });
+
+  it("reports Tags: none for a product with no product_tags", async () => {
+    seedData();
+    const result = await getProduct(getDb() as any, { identifier: "acme-empty" });
+    expect(resultText(result)).toContain("Tags: none");
   });
 });

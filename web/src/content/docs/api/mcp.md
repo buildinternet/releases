@@ -83,12 +83,16 @@ Available on both the remote and local servers.
 
 | Tool | Description |
 | --- | --- |
-| `search_releases` | Full-text search across all indexed release notes. Supports filtering by product slug or organization. |
-| `get_latest_releases` | Get the most recent releases, optionally filtered by product or organization. |
-| `list_products` | List all changelog sources (products) in the index. |
+| `search_releases` | Full-text search across all indexed release notes. Supports filtering by product slug, organization, or release `type`. |
+| `get_latest_releases` | Get the most recent releases, optionally filtered by product, organization, or release `type`. |
+| `get_release` | Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid. |
+| `list_sources` | List all indexed changelog sources, optionally filtered to one organization. |
+| `get_source` | Detail for a single source with org/product linkage, release count, last-fetched timestamp, and whether a CHANGELOG file is stored. |
+| `get_source_changelog` | Read the canonical `CHANGELOG.md` tracked for a GitHub source, refreshed on every fetch. Supports heading-aligned slicing via `offset` / `limit` — chain successive calls through the returned next offset to page through large files (e.g. Apollo Client's 700KB CHANGELOG) without blowing out the context window. |
 | `list_organizations` | List all organizations, searchable by name, slug, domain, or account handle. |
 | `get_organization` | Detailed view of a single organization including accounts, tags, sources, products, and domain aliases. |
-| `get_source_changelog` | Read the canonical `CHANGELOG.md` tracked for a GitHub source. Supports heading-aligned slicing via `offset` / `limit` — chain successive calls through the returned next offset to page through large files (e.g. Apollo Client's 700KB CHANGELOG) without blowing out the context window. |
+| `list_products` | List products, optionally scoped to one organization. |
+| `get_product` | Detail for a single product with its organization, category, tags, and the sources grouped under it. |
 
 ### Analysis tools
 

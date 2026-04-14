@@ -21,7 +21,7 @@ Activate when the user:
 
 ### Step 1: Find the Organization or Product
 
-Call `list_organizations` with the library/product name as the `query` parameter.
+Call `list_organizations` with the library/product name as the `query` parameter. Multi-product orgs (e.g. Vercel → Next.js, Turborepo) are exposed via `list_products` and `get_product` — use those when the user's question is product-specific rather than company-wide.
 
 If the query returns no results, try variations:
 - The company name instead of the product name (e.g., "Vercel" instead of "Next.js")
@@ -32,6 +32,9 @@ If the query returns no results, try variations:
 
 - **"What's new?" / "Latest releases"** → Use `get_latest_releases` with the organization or product slug
 - **Specific feature or keyword** → Use `search_releases` with a descriptive query and organization filter
+- **Single release by id** → Use `get_release` when you already have a `rel_` id (search results include ids)
+- **Source or product deep-dive** → Use `get_source`, `get_product`, or `get_organization` for metadata, tags, and linkage
+- **Canonical CHANGELOG.md from a GitHub repo** → Use `get_source_changelog` when the user wants the full maintained file, not just the tagged releases (it's refreshed on every fetch)
 - **Compare two products** → Use `compare_products` with an array of two product slugs
 - **Summarize recent activity** → Use `summarize_changes` with the product slug
 

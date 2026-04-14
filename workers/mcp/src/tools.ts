@@ -1,4 +1,4 @@
-import { eq, desc, inArray, and, sql } from "drizzle-orm";
+import { eq, desc, inArray, and, or, isNull, sql } from "drizzle-orm";
 import {
   sources,
   releases,
@@ -8,11 +8,13 @@ import {
   tags,
   orgTags,
   products,
+  productTags,
   domainAliases,
   sourceChangelogFiles,
   type ReleaseType,
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
+import { getEntityType, normalizeReleaseId } from "@releases/lib/id.js";
 import { buildChangelogResponse } from "@releases/lib/changelog-slice.js";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
@@ -86,14 +88,18 @@ async function callAnthropic(
 }
 
 async function resolveSource(db: D1Db, identifier: string) {
-  const condition = identifier.startsWith("src_")
+  const condition = getEntityType(identifier) === "source"
     ? eq(sources.id, identifier)
     : eq(sources.slug, identifier);
-  const rows = await db
-    .select({ id: sources.id, name: sources.name, slug: sources.slug })
-    .from(sources)
-    .where(condition)
-    .limit(1);
+  const rows = await db.select().from(sources).where(condition).limit(1);
+  return rows.length > 0 ? rows[0] : null;
+}
+
+async function resolveProduct(db: D1Db, identifier: string) {
+  const condition = getEntityType(identifier) === "product"
+    ? eq(products.id, identifier)
+    : eq(products.slug, identifier);
+  const rows = await db.select().from(products).where(condition).limit(1);
   return rows.length > 0 ? rows[0] : null;
 }
 
@@ -560,4 +566,210 @@ export async function compareProducts(
       },
     ],
   }, releasesA.length + releasesB.length);
+}
+
+// ── get_release ──────────────────────────────────────────────────────
+
+export async function getRelease(
+  db: D1Db,
+  params: { id: string },
+): Promise<ToolResult> {
+  const id = normalizeReleaseId(params.id);
+
+  const rows = await db
+    .select({
+      id: releases.id,
+      title: releases.title,
+      version: releases.version,
+      type: releases.type,
+      content: releases.content,
+      contentSummary: releases.contentSummary,
+      publishedAt: releases.publishedAt,
+      url: releases.url,
+      suppressed: releases.suppressed,
+      sourceName: sources.name,
+      sourceSlug: sources.slug,
+      orgName: organizations.name,
+      orgSlug: organizations.slug,
+    })
+    .from(releases)
+    .leftJoin(sources, eq(releases.sourceId, sources.id))
+    .leftJoin(organizations, eq(sources.orgId, organizations.id))
+    .where(eq(releases.id, id))
+    .limit(1);
+
+  if (rows.length === 0) return text(`No release found matching "${params.id}"`);
+  const r = rows[0];
+  if (r.suppressed) return text(`No release found matching "${params.id}"`);
+
+  const body = r.content && r.content.length > 0 ? r.content : (r.contentSummary ?? "");
+
+  const lines: string[] = [];
+  const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+  lines.push(titleLine);
+  lines.push(`ID: ${r.id}`);
+  if (r.version) lines.push(`Version: ${r.version}`);
+  if (r.publishedAt) lines.push(`Published: ${r.publishedAt}`);
+  lines.push(
+    `Source: ${r.sourceName ?? "Unknown"}${r.sourceSlug ? ` (${r.sourceSlug})` : ""}`,
+  );
+  if (r.orgName) {
+    lines.push(`Organization: ${r.orgName}${r.orgSlug ? ` (${r.orgSlug})` : ""}`);
+  }
+  if (r.url) lines.push(`URL: ${r.url}`);
+  lines.push("");
+  lines.push(body);
+
+  return text(lines.join("\n"));
+}
+
+// ── get_source ───────────────────────────────────────────────────────
+
+export async function getSource(
+  db: D1Db,
+  params: { identifier: string },
+): Promise<ToolResult> {
+  const src = await resolveSource(db, params.identifier);
+  if (!src) return text(`No source found matching "${params.identifier}"`);
+
+  const [orgRows, productRows, relCountRows, changelogRows] = await Promise.all([
+    src.orgId
+      ? db.select({ slug: organizations.slug, name: organizations.name })
+          .from(organizations).where(eq(organizations.id, src.orgId)).limit(1)
+      : Promise.resolve([]),
+    src.productId
+      ? db.select({ slug: products.slug, name: products.name })
+          .from(products).where(eq(products.id, src.productId)).limit(1)
+      : Promise.resolve([]),
+    db.select({ n: sql<number>`count(*)` })
+      .from(releases)
+      .where(and(
+        eq(releases.sourceId, src.id),
+        or(isNull(releases.suppressed), eq(releases.suppressed, false)),
+      )),
+    db.select({ id: sourceChangelogFiles.id })
+      .from(sourceChangelogFiles)
+      .where(eq(sourceChangelogFiles.sourceId, src.id))
+      .limit(1),
+  ]);
+
+  const org = orgRows[0] ?? null;
+  const product = productRows[0] ?? null;
+  const releaseCount = Number(relCountRows[0]?.n ?? 0);
+  const hasChangelog = changelogRows.length > 0;
+
+  const lines: string[] = [];
+  lines.push(`**Source: ${src.name}**`);
+  lines.push(`Slug: ${src.slug} | Type: ${src.type}`);
+  lines.push(`URL: ${src.url}`);
+  lines.push(`Organization: ${org ? `${org.name} (${org.slug})` : "none"}`);
+  lines.push(`Product: ${product ? `${product.name} (${product.slug})` : "none"}`);
+  lines.push(`Release count: ${releaseCount}`);
+  lines.push(`Last fetched: ${src.lastFetchedAt ?? "Never"}`);
+  lines.push(`Changelog file stored: ${hasChangelog ? "yes" : "no"}`);
+
+  return text(lines.join("\n"));
+}
+
+// ── list_products ────────────────────────────────────────────────────
+
+export async function listProducts(
+  db: D1Db,
+  params: { organization?: string },
+): Promise<ToolResult> {
+  let orgId: string | undefined;
+  if (params.organization) {
+    const org = await findOrg(db, params.organization);
+    if (!org) return text(`No organization found matching "${params.organization}"`);
+    orgId = org.id;
+  }
+
+  const rows = await db.all<{
+    name: string;
+    slug: string;
+    url: string | null;
+    description: string | null;
+    orgSlug: string | null;
+  }>(sql`
+    SELECT p.name, p.slug, p.url, p.description, o.slug as orgSlug
+    FROM products p
+    LEFT JOIN organizations o ON o.id = p.org_id
+    ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
+    ORDER BY p.name
+  `);
+
+  if (rows.length === 0) return text("No products found.");
+
+  const result = rows
+    .map((p) => {
+      const parts = [
+        `**${p.name}**`,
+        `  Slug: ${p.slug}`,
+        `  Organization: ${p.orgSlug ?? "N/A"}`,
+      ];
+      if (p.url) parts.push(`  URL: ${p.url}`);
+      if (p.description) parts.push(`  Description: ${p.description}`);
+      return parts.join("\n");
+    })
+    .join("\n\n");
+
+  return text(result);
+}
+
+// ── get_product ──────────────────────────────────────────────────────
+
+export async function getProduct(
+  db: D1Db,
+  params: { identifier: string },
+): Promise<ToolResult> {
+  const product = await resolveProduct(db, params.identifier);
+  if (!product) return text(`No product found matching "${params.identifier}"`);
+
+  const [orgRows, productSources, tagRows] = await Promise.all([
+    db.select({ slug: organizations.slug, name: organizations.name })
+      .from(organizations).where(eq(organizations.id, product.orgId)).limit(1),
+    db.select({
+        slug: sources.slug,
+        name: sources.name,
+        type: sources.type,
+        url: sources.url,
+        lastFetchedAt: sources.lastFetchedAt,
+      })
+      .from(sources).where(eq(sources.productId, product.id)),
+    db.select({ name: tags.name })
+      .from(productTags)
+      .innerJoin(tags, eq(productTags.tagId, tags.id))
+      .where(eq(productTags.productId, product.id)),
+  ]);
+  const orgRow = orgRows[0] ?? null;
+
+  const lines: string[] = [];
+  lines.push(`**Product: ${product.name}**`);
+  lines.push(
+    `Slug: ${product.slug} | Organization: ${orgRow ? `${orgRow.name} (${orgRow.slug})` : "N/A"} | Category: ${product.category ?? "N/A"}`,
+  );
+  if (product.url) lines.push(`URL: ${product.url}`);
+  if (product.description) lines.push(`Description: ${product.description}`);
+
+  lines.push("");
+  lines.push(
+    tagRows.length > 0
+      ? `Tags: ${tagRows.map((t) => t.name).join(", ")}`
+      : "Tags: none",
+  );
+
+  if (productSources.length > 0) {
+    lines.push("");
+    lines.push("Sources:");
+    for (const s of productSources) {
+      lines.push(`- **${s.name}** (${s.slug})`);
+      lines.push(`  Type: ${s.type} | URL: ${s.url}`);
+      lines.push(`  Last fetched: ${s.lastFetchedAt ?? "Never"}`);
+    }
+  } else {
+    lines.push("");
+    lines.push("Sources: none");
+  }
+
+  return text(lines.join("\n"));
 }
