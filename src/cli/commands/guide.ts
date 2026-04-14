@@ -17,10 +17,10 @@ export function registerGuideCommand(program: Command) {
     .description("Show or manage the source guide for an organization")
     .addHelpText("after", `
 Examples:
-  releases guide vercel
-  releases guide vercel --json
-  releases guide vercel --regenerate
-  releases guide vercel --notes "### Extraction patterns\\n..."`)
+  releases admin content guide vercel
+  releases admin content guide vercel --json
+  releases admin content guide vercel --regenerate
+  releases admin content guide vercel --notes "### Extraction patterns\\n..."`)
     .action(async (orgSlug: string, opts: { json?: boolean; regenerate?: boolean; notes?: string }) => {
       const org = await findOrg(orgSlug);
       if (!org) {

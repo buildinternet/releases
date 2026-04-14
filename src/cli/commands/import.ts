@@ -187,10 +187,10 @@ export function registerImportCommand(program: Command) {
     .option("--skip-existing", "Skip sources that already exist (default: error)")
     .addHelpText("after", `
 Examples:
-  releases import manifest.json
-  releases import manifest.json --dry-run
-  releases import manifest.json --skip-existing
-  releases import manifest.json --json`)
+  releases admin source import manifest.json
+  releases admin source import manifest.json --dry-run
+  releases admin source import manifest.json --skip-existing
+  releases admin source import manifest.json --json`)
     .action(async (file: string, opts: { dryRun?: boolean; json?: boolean; skipExisting?: boolean }) => {
       // 1. Read and parse JSON file
       if (!existsSync(file)) {

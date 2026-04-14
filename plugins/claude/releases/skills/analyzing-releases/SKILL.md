@@ -21,7 +21,7 @@ Turn changelog data into competitive intelligence by analyzing release patterns 
 | Operation | CLI | Typed tool |
 |-----------|-----|------------|
 | Check existing sources | `releases list --query <company> --json` | `list_sources` with query param |
-| Fetch releases | `releases fetch <slug> --max 50` | `fetch_source` with identifier (ID or slug) |
+| Fetch releases | `releases admin source fetch <slug> --max 50` | `fetch_source` with identifier (ID or slug) |
 | Get latest releases | `releases latest <slug> --json` | `get_latest_releases` with source/org and limit |
 | Search releases | `releases search <query> --json` | `search_releases` with query |
 | Summarize | `releases summary <slug> --json` | (not available as typed tool) |

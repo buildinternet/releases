@@ -53,18 +53,18 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 - CLI commands that return data support `--json` for machine-readable output.
 - Batch DB inserts in chunks of 500 (SQLite variable limit).
 - Dedup via `UNIQUE(source_id, url)` and the shared `RELEASE_URL_UPSERT` config in `src/db/release-upsert.ts` — on URL collision, content is backfilled when the incoming row is non-empty and the existing row is empty. Both the local (`src/db/queries.ts`) and worker (`workers/api/src/routes/sources.ts`) batch-insert paths import that helper so they can't drift.
-- `releases import <file>` bulk-imports orgs and sources from a JSON manifest. Used as the discovery agent handoff point. Supports `--dry-run`, `--json`, `--skip-existing`.
-- Smart fetch: `fetch --stale <hours>` respects backoff (`nextFetchAfter`) and `fetchPriority`. `fetch --changed` targets sources where `poll` detected upstream changes (`changeDetectedAt IS NOT NULL`). `fetch --retry-errors` retries sources whose last fetch failed. Backoff counters (`consecutiveNoChange`, `consecutiveErrors`) on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h). Default max of 200 releases per source prevents API pagination limits (e.g., GitHub's 10K cap). Use `--max <n>` to adjust or `--all` to remove the cap.
+- `releases admin source import <file>` bulk-imports orgs and sources from a JSON manifest. Used as the discovery agent handoff point. Supports `--dry-run`, `--json`, `--skip-existing`.
+- Smart fetch: `releases admin source fetch --stale <hours>` respects backoff (`nextFetchAfter`) and `fetchPriority`. `releases admin source fetch --changed` targets sources where `releases admin source poll` detected upstream changes (`changeDetectedAt IS NOT NULL`). `releases admin source fetch --retry-errors` retries sources whose last fetch failed. Backoff counters (`consecutiveNoChange`, `consecutiveErrors`) on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h). Default max of 200 releases per source prevents API pagination limits (e.g., GitHub's 10K cap). Use `--max <n>` to adjust or `--all` to remove the cap.
 - Categories are validated against `CATEGORIES` in `src/lib/categories.ts`. Adding a new category requires a code change. Tags are freeform — get-or-create semantics via `tags` table. Tag join tables use separate `org_tags` and `product_tags` with proper FK cascades (not polymorphic).
-- Domain aliases (`domain_aliases` table) map alternate domains to orgs or products for searchability and dedup. An alias domain is globally unique — only one org or product can claim it. CLI: `org alias add/remove/list`, `product alias add/remove/list`. Aliases are checked by `findOrg()` and `findProduct()` as a final fallback step, and matched in search queries via LEFT JOIN.
-- Products are an **optional** grouping layer between organizations and sources. Multi-product orgs (e.g., Vercel → Next.js, Turborepo) use products to group their sources. Sources have a nullable `productId` — simple orgs skip this layer. CLI: `product list/add/edit/remove/adopt`. The `product adopt` command converts an org that should be a product into a product under another org, moving sources and accounts. Products have an optional canonical `url` field.
-- Ignored URLs are **org-scoped** — a URL ignored for one org can still be valid for another. The `ignored_urls` table requires `orgId`. CLI: `ignore list/add/remove --org <org>`. Blocked URLs (`blocked_urls` table) are **global** — for spam domains and known-bad URLs. CLI: `block list/add/remove`. Both lists are checked by `isUrlExcluded()` before adding sources.
-- Release suppression: individual releases can be suppressed (`release suppress <id> --reason "..."`) to hide them from queries and search without deleting. Suppressed releases are filtered out of all read paths (search, latest, stats, API). Use `release unsuppress <id>` to restore.
+- Domain aliases (`domain_aliases` table) map alternate domains to orgs or products for searchability and dedup. An alias domain is globally unique — only one org or product can claim it. CLI: `releases admin org alias add/remove/list`, `releases admin product alias add/remove/list`. Aliases are checked by `findOrg()` and `findProduct()` as a final fallback step, and matched in search queries via LEFT JOIN.
+- Products are an **optional** grouping layer between organizations and sources. Multi-product orgs (e.g., Vercel → Next.js, Turborepo) use products to group their sources. Sources have a nullable `productId` — simple orgs skip this layer. CLI: `releases admin product list/add/edit/remove/adopt`. The `product adopt` command converts an org that should be a product into a product under another org, moving sources and accounts. Products have an optional canonical `url` field.
+- Ignored URLs are **org-scoped** — a URL ignored for one org can still be valid for another. The `ignored_urls` table requires `orgId`. CLI: `releases admin policy ignore list/add/remove --org <org>`. Blocked URLs (`blocked_urls` table) are **global** — for spam domains and known-bad URLs. CLI: `releases admin policy block list/add/remove`. Both lists are checked by `isUrlExcluded()` before adding sources.
+- Release suppression: individual releases can be suppressed (`releases admin release suppress <id> --reason "..."`) to hide them from queries and search without deleting. Suppressed releases are filtered out of all read paths (search, latest, stats, API). Use `releases admin release unsuppress <id>` to restore.
 - Release type: each release carries a `type` column — `feature` (default, incremental change or single version) or `rollup` (seasonal/quarterly catch-all page that spans many features, e.g. Brex Fall Release, Ramp quarterly blog). Classification is skill-driven by the parse agent via the `parsing-changelogs` skill; source-level cadence signals live in the source guide notes, not in source metadata. `RELEASE_TYPES` / `ReleaseType` are exported from `src/db/schema.ts` — import from there rather than inlining the string union. The `search_releases` and `get_latest_releases` MCP tools accept an optional `type` filter.
-- Feed change detection: `releases poll` uses HTTP HEAD requests to flag sources with upstream changes (`changeDetectedAt` column). The `fetch` command uses HEAD as a pre-filter to skip unchanged feeds. Both are purely mechanical — no AI or content parsing involved. The API Worker runs an hourly cron that polls feed sources on tier-based intervals (`fetchPriority`: normal=4h, low=24h, paused=never) and fetches changed feed/GitHub sources directly via D1. Scrape/agent sources are flagged (`changeDetectedAt`) for processing by managed agent sessions or CLI `fetch --changed`. The `lastPolledAt` column tracks when each source was last polled by the cron.
+- Feed change detection: `releases admin source poll` uses HTTP HEAD requests to flag sources with upstream changes (`changeDetectedAt` column). `releases admin source fetch` uses HEAD as a pre-filter to skip unchanged feeds. Both are purely mechanical — no AI or content parsing involved. The API Worker runs an hourly cron that polls feed sources on tier-based intervals (`fetchPriority`: normal=4h, low=24h, paused=never) and fetches changed feed/GitHub sources directly via D1. Scrape/agent sources are flagged (`changeDetectedAt`) for processing by managed agent sessions or CLI `releases admin source fetch --changed`. The `lastPolledAt` column tracks when each source was last polled by the cron.
 - Entity resolution prefers IDs over slugs. All lookups (CLI args, API paths, agent tools) accept either an ID (`org_...`, `src_...`, `prod_...`) or a slug. IDs are immutable and globally unique; prefer them when available.
 - Media pipeline: extracted media URLs go through `filterJunkMedia()` in `src/lib/media.ts` (drops tracking pixels, favicons, and AI-classified chrome), then `processMediaForR2()` downloads and uploads survivors to R2. `normalizeMediaUrl()` unwraps Next.js/Vercel image optimizer URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset before upload — those proxy endpoints 404 for off-origin fetchers. The web renders `r2Url ?? url`, and `FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder on load error.
-- Remote mode fetch requires a filter (`--stale`, `--unfetched`, `--changed`, `--retry-errors`, or a source slug). Bare `fetch` is blocked in remote mode to prevent expensive bulk operations. Remote concurrency defaults to 3, capped at 5.
+- Remote mode fetch requires a filter (`--stale`, `--unfetched`, `--changed`, `--retry-errors`, or a source slug). Bare `releases admin source fetch` is blocked in remote mode to prevent expensive bulk operations. Remote concurrency defaults to 3, capped at 5.
 
 ## Common CLI Patterns
 
@@ -74,30 +74,30 @@ releases list <slug> --json     # Inspect a single source
 releases list --query <text>    # Filter sources by name, slug, or URL
 releases list --has-feed        # Sources with a discovered feed URL
 releases list --product nextjs  # Filter sources by product
-releases fetch <slug> --max 5   # Fetch limited releases for one source
-releases fetch --changed        # Fetch only sources where poll detected changes
-releases fetch-log <slug>       # Check recent fetch history for a source
-releases task list              # List active/recent remote sessions
-releases task cancel <id>       # Cancel a running remote session
-releases product list vercel    # List products for an org
-releases product adopt nextjs --into vercel  # Convert org to product
+releases admin source fetch <slug> --max 5   # Fetch limited releases for one source
+releases admin source fetch --changed        # Fetch only sources where poll detected changes
+releases admin source fetch-log <slug>       # Check recent fetch history for a source
+releases admin discovery task list           # List active/recent remote sessions
+releases admin discovery task cancel <id>    # Cancel a running remote session
+releases admin product list vercel           # List products for an org
+releases admin product adopt nextjs --into vercel  # Convert org to product
 releases categories             # List valid categories
-releases org add "Acme" --category cloud --tags typescript,edge
-releases org edit acme --category developer-tools
-releases org show acme              # Full details: accounts, tags, sources, products
-releases org tag add acme react serverless
-releases org tag list acme
-releases product add "CLI" --org acme --category developer-tools --tags golang
-releases product tag add acme-cli testing
+releases admin org add "Acme" --category cloud --tags typescript,edge
+releases admin org edit acme --category developer-tools
+releases admin org show acme              # Full details: accounts, tags, sources, products
+releases admin org tag add acme react serverless
+releases admin org tag list acme
+releases admin product add "CLI" --org acme --category developer-tools --tags golang
+releases admin product tag add acme-cli testing
 releases list --category ai     # Filter sources by category
-releases poll                   # Check all feed sources for upstream changes
-releases poll --changed         # Show only sources with detected changes
-releases poll --json            # Machine-readable output
+releases admin source poll                   # Check all feed sources for upstream changes
+releases admin source poll --changed         # Show only sources with detected changes
+releases admin source poll --json            # Machine-readable output
 ```
 
 - Commands accept entity IDs (`org_...`, `src_...`, `prod_...`, `rel_...`) or slugs. IDs are preferred for durability — slugs can change, IDs cannot. The top-level `show <id|slug>` command dispatches to the right entity based on the ID prefix, and falls back to a slug lookup (org → product → source) for bare strings.
-- Source slug is always a **positional argument** (e.g., `fetch claude-code`), not a flag. The `fetch` command also accepts `--source <slug>` as an alias for convenience.
-- `org list` returns a summary view (counts, last activity) without accounts or tags. Use `org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
+- Source slug is always a **positional argument** (e.g., `admin source fetch claude-code`), not a flag. The fetch command also accepts `--source <slug>` as an alias for convenience.
+- `releases admin org list` returns a summary view (counts, last activity) without accounts or tags. Use `releases admin org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
 
 ## npm Distribution
 

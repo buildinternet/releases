@@ -24,11 +24,11 @@ export function registerProductCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases product list acme
-  releases product list acme --json`)
+  releases admin product list acme
+  releases admin product list acme --json`)
     .action(async (orgSlug: string | undefined, opts: { json?: boolean }) => {
       if (!orgSlug) {
-        console.error(chalk.red("Please specify an org slug: releases product list <org-slug>"));
+        console.error(chalk.red("Please specify an org slug: releases admin product list <org-slug>"));
         process.exit(1);
       }
 
@@ -89,9 +89,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases product add "Acme CLI" --org acme
-  releases product add "Acme CLI" --org acme --slug acme-cli --url https://acme.com/cli
-  releases product add "Acme CLI" --org acme --description "Command-line tool for Acme" --json`)
+  releases admin product add "Acme CLI" --org acme
+  releases admin product add "Acme CLI" --org acme --slug acme-cli --url https://acme.com/cli
+  releases admin product add "Acme CLI" --org acme --description "Command-line tool for Acme" --json`)
     .action(async (name: string, opts: { org: string; slug?: string; url?: string; description?: string; category?: string; tags?: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
@@ -151,8 +151,8 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases product edit acme-cli --name "Acme CLI v2"
-  releases product edit acme-cli --url https://acme.com/cli --json`)
+  releases admin product edit acme-cli --name "Acme CLI v2"
+  releases admin product edit acme-cli --url https://acme.com/cli --json`)
     .action(async (slug: string, opts: { name?: string; url?: string; description?: string; category?: string | boolean; json?: boolean }) => {
       const found = await findProduct(slug);
       if (!found) {
@@ -198,9 +198,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases product remove acme-cli
-  releases product remove acme-cli --dry-run
-  releases product remove acme-cli --json`)
+  releases admin product remove acme-cli
+  releases admin product remove acme-cli --dry-run
+  releases admin product remove acme-cli --json`)
     .action(async (slug: string, opts: { dryRun?: boolean; json?: boolean }) => {
       const found = await findProduct(slug);
       if (!found) {
@@ -238,9 +238,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases product adopt acme-cli --into acme
-  releases product adopt acme-cli --into acme --slug cli --dry-run
-  releases product adopt acme-cli --into acme --url https://acme.com/cli --json`)
+  releases admin product adopt acme-cli --into acme
+  releases admin product adopt acme-cli --into acme --slug cli --dry-run
+  releases admin product adopt acme-cli --into acme --url https://acme.com/cli --json`)
     .action(async (sourceOrgSlug: string, opts: { into: string; slug?: string; url?: string; dryRun?: boolean; json?: boolean }) => {
       const sourceOrg = await findOrg(sourceOrgSlug);
       if (!sourceOrg) {

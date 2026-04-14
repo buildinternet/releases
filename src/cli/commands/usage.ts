@@ -21,8 +21,8 @@ export function registerUsageCommand(program: Command) {
     .option("--days <n>", "Number of days to look back", "7")
     .addHelpText("after", `
 Examples:
-  releases usage
-  releases usage --days 30`)
+  releases admin stats usage
+  releases admin stats usage --days 30`)
     .action(async (opts: { days: string }) => {
       const days = parseInt(opts.days, 10) || 7;
       const stats = await getUsageStats(days);

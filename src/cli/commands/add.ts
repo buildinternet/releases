@@ -182,12 +182,12 @@ export function registerAddCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases add "Next.js" --url https://github.com/vercel/next.js
-  releases add "Tailwind Blog" --url https://tailwindcss.com/blog --org "Tailwind Labs"
-  releases add "Astro" --url https://astro.build/blog --type scrape
-  releases add --name "Astro" --url https://astro.build/blog
-  releases add --batch sources.json
-  cat sources.json | releases add --batch -`)
+  releases admin source add "Next.js" --url https://github.com/vercel/next.js
+  releases admin source add "Tailwind Blog" --url https://tailwindcss.com/blog --org "Tailwind Labs"
+  releases admin source add "Astro" --url https://astro.build/blog --type scrape
+  releases admin source add --name "Astro" --url https://astro.build/blog
+  releases admin source add --batch sources.json
+  cat sources.json | releases admin source add --batch -`)
     .action(async (name: string | undefined, opts: { type?: string; url?: string; slug?: string; org?: string; product?: string; name?: string; feedUrl?: string; batch?: string; skipEval?: boolean; json?: boolean }) => {
       // --- Batch mode ---
       if (opts.batch) {
@@ -255,14 +255,14 @@ Examples:
       const effectiveName = name ?? opts.name;
       if (!effectiveName) {
         console.error("Error: missing required argument: name\n");
-        console.error("  releases add \"My Source\" --url https://example.com/changelog");
-        console.error("  releases add --name \"My Source\" --url https://example.com/changelog");
-        console.error("  releases add --batch sources.json");
+        console.error("  releases admin source add \"My Source\" --url https://example.com/changelog");
+        console.error("  releases admin source add --name \"My Source\" --url https://example.com/changelog");
+        console.error("  releases admin source add --batch sources.json");
         process.exit(1);
       }
       if (!opts.url) {
         console.error("Error: missing required option: --url\n");
-        console.error(`  releases add "${effectiveName}" --url https://example.com/changelog`);
+        console.error(`  releases admin source add "${effectiveName}" --url https://example.com/changelog`);
         process.exit(1);
       }
 

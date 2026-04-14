@@ -14,24 +14,24 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Operation | CLI | Typed tool |
 |-----------|-----|------------|
 | List sources | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>]` | `list_sources` with query, organization, category, has_feed params |
-| Add source | `releases add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]` | `add_source` with name, url, type, organization, feed_url params |
-| Edit source | `releases edit <slug> [--primary] [--priority <p>]` | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
-| Remove source | `releases remove <slug> [--ignore --reason <reason>]` | `remove_source` with identifier (ID or slug) param |
-| Fetch releases | `releases fetch <slug> [--dry-run] [--max <n>]` | `fetch_source` with identifier (ID or slug) param |
+| Add source | `releases admin source add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]` | `add_source` with name, url, type, organization, feed_url params |
+| Edit source | `releases admin source edit <slug> [--primary] [--priority <p>]` | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
+| Remove source | `releases admin source remove <slug> [--ignore --reason <reason>]` | `remove_source` with identifier (ID or slug) param |
+| Fetch releases | `releases admin source fetch <slug> [--dry-run] [--max <n>]` | `fetch_source` with identifier (ID or slug) param |
 | Get latest releases | `releases latest [slug] --json [--org <org>]` | `get_latest_releases` with source, organization, limit params |
 | Search releases | `releases search <query> --json` | `search_releases` with query, limit params |
-| Evaluate URL | `releases evaluate <url> --json` | `evaluate_url` with url param |
-| Add org | `releases org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` | `manage_org` action "add" with name, domain, description, category, tags |
-| Edit org | `releases org edit <slug> [--category <c>]` | `manage_org` action "edit" with identifier, category |
-| Show org | `releases org show <slug> --json` | `get_organization` with identifier |
-| Add tags to org | `releases org tag add <slug> <tags...>` | `manage_org` action "tag_add" with identifier, tags |
-| Link account | `releases org link <slug> --platform <p> --handle <h>` | `manage_org` action "link_account" with identifier, platform, handle |
-| Add product | `releases product add <name> --org <org> [--category <c>] [--tags <t>]` | `manage_product` action "add" with name, organization, category, tags |
-| Ignore URL | `releases ignore add --org <org> <url>` | `exclude_url` action "ignore" with url, organization |
-| Block URL | `releases block add <url>` | `exclude_url` action "block" with url |
+| Evaluate URL | `releases admin discovery evaluate <url> --json` | `evaluate_url` with url param |
+| Add org | `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` | `manage_org` action "add" with name, domain, description, category, tags |
+| Edit org | `releases admin org edit <slug> [--category <c>]` | `manage_org` action "edit" with identifier, category |
+| Show org | `releases admin org show <slug> --json` | `get_organization` with identifier |
+| Add tags to org | `releases admin org tag add <slug> <tags...>` | `manage_org` action "tag_add" with identifier, tags |
+| Link account | `releases admin org link <slug> --platform <p> --handle <h>` | `manage_org` action "link_account" with identifier, platform, handle |
+| Add product | `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]` | `manage_product` action "add" with name, organization, category, tags |
+| Ignore URL | `releases admin policy ignore add --org <org> <url>` | `exclude_url` action "ignore" with url, organization |
+| Block URL | `releases admin policy block add <url>` | `exclude_url` action "block" with url |
 | List categories | `releases categories --json` | `list_categories` |
-| Get source guide | `releases guide <org>` | `get_source_guide` with organization param |
-| Update guide notes | `releases guide <org> --notes "..."` | `update_source_guide_notes` with organization, notes params |
+| Get source guide | `releases admin content guide <org>` | `get_source_guide` with organization param |
+| Update guide notes | `releases admin content guide <org> --notes "..."` | `update_source_guide_notes` with organization, notes params |
 
 ## Listing Sources
 
@@ -54,7 +54,7 @@ When creating an org, include a brief one-sentence product description. This gro
 
 ## Removing Sources
 
-When removing discovery results, also ignore the URL to prevent re-discovery. In CLI: `releases remove <slug> --ignore --reason "..."`. With typed tools: call `remove_source` then `exclude_url` with action "ignore".
+When removing discovery results, also ignore the URL to prevent re-discovery. In CLI: `releases admin source remove <slug> --ignore --reason "..."`. With typed tools: call `remove_source` then `exclude_url` with action "ignore".
 
 ## Ignored URLs (org-scoped)
 
@@ -87,7 +87,7 @@ Each org has a **source guide** — a README that tells any agent how to efficie
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
 - **Agent notes** — free-form markdown that you fully control. This is the most important part of the guide. Write it like a README for a teammate who needs to fetch releases from this org without asking questions.
 
-**Always read the source guide before fetching or working with an org's sources.** Typed tool: `get_source_guide` with organization param. CLI: `releases guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
+**Always read the source guide before fetching or working with an org's sources.** Typed tool: `get_source_guide` with organization param. CLI: `releases admin content guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
 ### Writing good agent notes
 
@@ -125,7 +125,7 @@ The `parsing-changelogs` skill ("Classifying Rollups" section) covers what rollu
 **Verified** (thorough, from actual data): Before writing, query release data and fetch logs to ground every claim in observation:
 
 1. `releases list <slug> --json` — Check actual version formats, titles, content length, publishedAt patterns
-2. `releases fetch-log <slug> --json` — Check for errors, success rates, stale data
+2. `releases admin source fetch-log <slug> --json` — Check for errors, success rates, stale data
 3. Analyze: calculate real cadence from dates, identify empty content or null fields, spot date drift
 4. Write notes citing specific data points, not general assumptions
 
@@ -144,8 +144,8 @@ Write notes during onboarding after you've fetched and validated sources. Update
 The scrape adapter can fetch pages with or without a headless browser. Static-site providers (Docusaurus, VitePress, WordPress, Ghost, Mintlify) are fetched without rendering by default — this is ~10-30x faster.
 
 To override the default for a specific source:
-- `releases edit <slug> --no-render` — force fast fetch (no headless browser)
-- `releases edit <slug> --render` — force headless browser rendering
+- `releases admin source edit <slug> --no-render` — force fast fetch (no headless browser)
+- `releases admin source edit <slug> --render` — force headless browser rendering
 
 Use `--render` when you know a source needs JavaScript execution. Use `--no-render` when you've verified the content is in the initial HTML for a provider not yet in the static list.
 

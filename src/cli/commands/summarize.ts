@@ -8,9 +8,12 @@ import { daysAgoIso } from "../../lib/dates.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { logger } from "../../lib/logger.js";
 
-export function registerSummarizeCommand(program: Command) {
+export function registerSummarizeCommand(
+  program: Command,
+  opts?: { commandName?: string },
+) {
   program
-    .command("summarize")
+    .command(opts?.commandName ?? "summarize")
     .argument("<slug>", "Source slug")
     .option("--monthly", "Generate monthly summary for last month")
     .option("--window <days>", "Rolling window in days", String(DEFAULT_WINDOW_DAYS))

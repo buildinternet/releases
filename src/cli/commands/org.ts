@@ -36,10 +36,10 @@ export function registerOrgCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases org add "Acme Corp"
-  releases org add "Acme Corp" --domain acme.com
-  releases org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
-  releases org add "Acme Corp" --slug acme --json`)
+  releases admin org add "Acme Corp"
+  releases admin org add "Acme Corp" --domain acme.com
+  releases admin org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
+  releases admin org add "Acme Corp" --slug acme --json`)
     .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; category?: string; tags?: string; avatar?: string; json?: boolean }) => {
       const slug = opts.slug ?? toSlug(name);
 
@@ -79,11 +79,11 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases org list
-  releases org list --query vercel
-  releases org list --platform github --json
+  releases admin org list
+  releases admin org list --query vercel
+  releases admin org list --platform github --json
 
-Note: org list shows a summary view (counts, last activity). Use "org show <slug>" to see
+Note: org list shows a summary view (counts, last activity). Use "admin org show <slug>" to see
 full details including linked accounts, tags, sources, and products.`)
     .action(async (opts: { query?: string; platform?: string; json?: boolean }) => {
       const allOrgs = await listOrgs({ query: opts.query, platform: opts.platform });
@@ -132,10 +132,10 @@ full details including linked accounts, tags, sources, and products.`)
     .option("--regenerate", "Regenerate the AI overview from recent releases")
     .addHelpText("after", `
 Examples:
-  releases org show acme
-  releases org show acme.com
-  releases org show acme --json
-  releases org show acme --regenerate`)
+  releases admin org show acme
+  releases admin org show acme.com
+  releases admin org show acme --json
+  releases admin org show acme --regenerate`)
     .action(async (identifier: string, opts: { json?: boolean; regenerate?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -318,9 +318,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases org remove acme
-  releases org remove acme --dry-run
-  releases org remove acme --json`)
+  releases admin org remove acme
+  releases admin org remove acme --dry-run
+  releases admin org remove acme --json`)
     .action(async (identifier: string, opts: { json?: boolean; dryRun?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -355,8 +355,8 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases org link acme --platform github --handle acme-corp
-  releases org link acme --platform x --handle acmecorp --json`)
+  releases admin org link acme --platform github --handle acme-corp
+  releases admin org link acme --platform x --handle acmecorp --json`)
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -382,7 +382,7 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases org unlink acme --platform github --handle acme-corp`)
+  releases admin org unlink acme --platform github --handle acme-corp`)
     .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {

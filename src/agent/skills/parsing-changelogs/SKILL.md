@@ -22,7 +22,7 @@ After fetching content, the pipeline parses it:
 
 ## Fetching
 
-Trigger a fetch for a source by ID or slug. CLI: `releases fetch <slug> [--dry-run] [--max <n>]`. Typed tool: `fetch_source` with identifier (ID or slug) param.
+Trigger a fetch for a source by ID or slug. CLI: `releases admin source fetch <slug> [--dry-run] [--max <n>]`. Typed tool: `fetch_source` with identifier (ID or slug) param.
 
 Key CLI flags (not available via typed tool — the typed tool always does a full server-side fetch):
 - `--dry-run` — parse but don't persist. Essential for validation.
@@ -32,7 +32,7 @@ Key CLI flags (not available via typed tool — the typed tool always does a ful
 
 ### Checking results
 
-After fetching, verify releases were persisted. CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source param. Use `get_organization` (or `releases org show <slug> --json`) to see the full picture of an org's sources.
+After fetching, verify releases were persisted. CLI: `releases latest <slug> --json` or `releases admin source fetch-log <slug>`. Typed tool: `get_latest_releases` with source param. Use `get_organization` (or `releases admin org show <slug> --json`) to see the full picture of an org's sources.
 
 ## Incremental vs Bulk Parsing
 
@@ -70,8 +70,8 @@ Do NOT fetch release URLs in the parent agent — always delegate to a subagent 
 **What to do based on the result:**
 
 If pages are richer than feed content (more text, images, videos, or code examples):
-1. Record the assessment and enable crawl mode. CLI: `releases edit <slug> --metadata '{"feedContentDepth":"summary-only","crawlEnabled":true}'`. Typed tool: `edit_source` with the same metadata. Subsequent fetches will follow links to per-release pages and extract full content in one pass.
-2. Re-fetch the source once to backfill. CLI: `releases fetch <slug> --full`. Typed tool: `fetch_source`.
+1. Record the assessment and enable crawl mode. CLI: `releases admin source edit <slug> --metadata '{"feedContentDepth":"summary-only","crawlEnabled":true}'`. Typed tool: `edit_source` with the same metadata. Subsequent fetches will follow links to per-release pages and extract full content in one pass.
+2. Re-fetch the source once to backfill. CLI: `releases admin source fetch <slug> --full`. Typed tool: `fetch_source`.
 3. Verify results. CLI: `releases list <slug> --json` or `releases latest <slug>`. Typed tool: `get_latest_releases` — check content is richer after the re-fetch.
 
 If feed already provides full content with no meaningful additions on the page:
@@ -85,7 +85,7 @@ Once `feedContentDepth` is set, skip the sampling step on future encounters. Cra
 
 Engineering blogs and news pages mix product announcements with educational content, opinion pieces, and corporate news. They can be useful supplementary sources but require aggressive filtering via `parseInstructions` to avoid noise.
 
-**Before working with blog sources:** Check the org's source guide (`releases guide <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
+**Before working with blog sources:** Check the org's source guide (`releases admin content guide <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
 
 **When to add a blog source:**
 - The org's primary changelogs don't cover major product announcements (new models, new services)
@@ -95,7 +95,7 @@ Engineering blogs and news pages mix product announcements with educational cont
 **How to configure:**
 1. Add as `--type scrape` with `--priority low` (blog pages change infrequently)
 2. Set `parseInstructions` that tell the AI what to include and — more importantly — what to skip
-3. Always dry-run first: `releases fetch <slug> --dry-run` to check signal-to-noise ratio
+3. Always dry-run first: `releases admin source fetch <slug> --dry-run` to check signal-to-noise ratio
 4. Iterate on instructions: tighten if too many irrelevant posts, loosen if genuine announcements are being filtered
 
 **Writing effective parseInstructions for blogs:**
@@ -158,7 +158,7 @@ Most releases are **features** — individual version bumps, single product anno
 
 **How to recognize rollup sources:**
 
-Before parsing, **always read the source guide** (CLI: `releases guide <org>`, typed tool: `get_source_guide` with organization param). If a company publishes rollups as its primary cadence — quarterly, seasonal, "every few months" — the guide notes should say so explicitly. Example notes:
+Before parsing, **always read the source guide** (CLI: `releases admin content guide <org>`, typed tool: `get_source_guide` with organization param). If a company publishes rollups as its primary cadence — quarterly, seasonal, "every few months" — the guide notes should say so explicitly. Example notes:
 
 - "Brex publishes quarterly seasonal rollup pages at `/product-announcements/{fall,spring,summer,winter}-release-YYYY`. Treat each as `type: rollup`."
 - "Ramp's blog series `/blog/new-on-ramp-*-edition` and `/new-on-ramp-q*-*` are quarterly/monthly rollups. Classify as `type: rollup`; individual features within are not separately indexed."
@@ -172,7 +172,7 @@ When you encounter a new rollup source during discovery or fetch, update the sou
 
 When adding a new source, always validate before committing:
 
-1. **Fetch** — CLI: `releases fetch <slug> --dry-run` then `releases fetch <slug>`. Typed tool: `fetch_source` with identifier (ID or slug).
-2. **Verify** — CLI: `releases latest <slug> --json` or `releases fetch-log <slug>`. Typed tool: `get_latest_releases` with source identifier.
-3. **If poor results** — try a different URL or type. CLI: `releases edit <slug> --type feed`. Typed tool: `edit_source` with identifier.
-4. **If no usable releases** — remove the source. CLI: `releases remove <slug> --ignore --reason "..."`. Typed tool: `remove_source` with identifier, then `exclude_url`.
+1. **Fetch** — CLI: `releases admin source fetch <slug> --dry-run` then `releases admin source fetch <slug>`. Typed tool: `fetch_source` with identifier (ID or slug).
+2. **Verify** — CLI: `releases latest <slug> --json` or `releases admin source fetch-log <slug>`. Typed tool: `get_latest_releases` with source identifier.
+3. **If poor results** — try a different URL or type. CLI: `releases admin source edit <slug> --type feed`. Typed tool: `edit_source` with identifier.
+4. **If no usable releases** — remove the source. CLI: `releases admin source remove <slug> --ignore --reason "..."`. Typed tool: `remove_source` with identifier, then `exclude_url`.

@@ -71,7 +71,7 @@ async function showRelease(id: string, opts: { json?: boolean }) {
   if (rel.suppressed) {
     console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`);
   }
-  console.log(chalk.dim(`\n  Run "releases release show ${rel.id}" for full content.`));
+  console.log(chalk.dim(`\n  Run "releases admin release show ${rel.id}" for full content.`));
 }
 
 async function showSource(identifier: string, opts: { json?: boolean }) {
@@ -129,7 +129,7 @@ function renderOrg(org: { id: string; name: string; slug: string; domain: string
   console.log(`  Slug:      ${org.slug}`);
   console.log(`  Domain:    ${org.domain ?? chalk.dim("—")}`);
   console.log(`  Category:  ${org.category ?? chalk.dim("—")}`);
-  console.log(chalk.dim(`\n  Run "releases org show ${org.slug}" for full details.`));
+  console.log(chalk.dim(`\n  Run "releases admin org show ${org.slug}" for full details.`));
 }
 
 function renderProduct(product: { id: string; name: string; slug: string; orgId: string; url: string | null; category: string | null }, opts: { json?: boolean }) {
@@ -144,5 +144,5 @@ function renderProduct(product: { id: string; name: string; slug: string; orgId:
   console.log(`  Org:       ${product.orgId}`);
   console.log(`  URL:       ${product.url ?? chalk.dim("—")}`);
   console.log(`  Category:  ${product.category ?? chalk.dim("—")}`);
-  console.log(chalk.dim(`\n  Run "releases product list ${product.orgId}" to see siblings.`));
+  console.log(chalk.dim(`\n  Run "releases admin product list ${product.orgId}" to see siblings.`));
 }
