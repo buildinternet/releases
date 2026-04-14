@@ -1,6 +1,15 @@
 "use client";
 
 import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import {
+  type FetchLogEntry,
+  type FetchLogStatusFilter,
+  FetchStatusBadge,
+  FetchLogResultCell,
+  FetchLogDetail,
+  formatFetchDuration,
+  FETCH_LOG_FILTER_BUTTONS,
+} from "@/components/fetch-log-shared";
 
 interface SessionState {
   sessionId: string;
@@ -27,23 +36,6 @@ interface SessionState {
   lastUpdatedAt?: number;
   error?: string;
   usage?: { inputTokens?: number; outputTokens?: number };
-}
-
-interface FetchLogEntry {
-  id: string;
-  sourceId: string;
-  sessionId?: string | null;
-  sourceName?: string;
-  sourceSlug?: string;
-  orgName?: string;
-  orgSlug?: string;
-  releasesFound: number;
-  releasesInserted: number;
-  durationMs?: number;
-  status: "success" | "error" | "no_change" | "dry_run";
-  error?: string;
-  rawContent?: string;
-  createdAt: string;
 }
 
 interface UsageEntry {
@@ -134,16 +126,6 @@ function formatElapsed(startedAt: number, endedAt?: number): string {
   const seconds = Math.floor((end - startedAt) / 1000);
   if (seconds <= 0) return "—";
   if (seconds < 60) return `${seconds}s`;
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
-  return `${minutes}m ${secs}s`;
-}
-
-function formatDuration(ms?: number | null): string {
-  if (ms == null) return "-";
-  if (ms < 1000) return `${ms}ms`;
-  const seconds = Math.floor(ms / 1000);
-  if (seconds < 60) return `${(ms / 1000).toFixed(1)}s`;
   const minutes = Math.floor(seconds / 60);
   const secs = seconds % 60;
   return `${minutes}m ${secs}s`;
@@ -781,10 +763,8 @@ function SessionLogPanel({ sessionId, correlationId, anthropicSessionId, logs, s
   );
 }
 
-type FetchStatusFilter = FetchLogEntry["status"] | "all";
-
 function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEntry[]; page: number; perPage: number; onPageChange: (p: number) => void }) {
-  const [filter, setFilter] = useState<FetchStatusFilter>("all");
+  const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
 
   const filtered = filter === "all" ? logs : logs.filter((l) => l.status === filter);
@@ -796,19 +776,10 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
 
-  const filterButtons: { value: FetchStatusFilter; label: string }[] = [
-    { value: "all", label: "All" },
-    { value: "success", label: "Success" },
-    { value: "error", label: "Errors" },
-    { value: "no_change", label: "No change" },
-    { value: "dry_run", label: "Dry runs" },
-  ];
-
   return (
     <div>
-      {/* Status filter */}
       <div className="flex gap-1 mb-3">
-        {filterButtons.map((f) => {
+        {FETCH_LOG_FILTER_BUTTONS.map((f) => {
           const count = f.value === "all" ? logs.length : logs.filter((l) => l.status === f.value).length;
           if (count === 0 && f.value !== "all") return null;
           return (
@@ -871,23 +842,9 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
                 <div className="text-stone-500">
                   {formatTime(new Date(log.createdAt).getTime())}
                 </div>
-                <div>
-                  <FetchStatusBadge status={log.status} />
-                </div>
-                <div className="text-stone-500">
-                  {log.status === "no_change" ? (
-                    <span className="text-stone-400">no changes</span>
-                  ) : log.status === "error" ? (
-                    <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>
-                  ) : (
-                    <span>
-                      {log.releasesFound > 0 && <span>{log.releasesFound} found</span>}
-                      {log.releasesInserted > 0 && <span className="ml-1.5 text-green-600">+{log.releasesInserted}</span>}
-                      {log.releasesFound === 0 && log.releasesInserted === 0 && <span className="text-stone-400">—</span>}
-                    </span>
-                  )}
-                </div>
-                <div className="text-stone-400 text-right">{formatDuration(log.durationMs)}</div>
+                <div><FetchStatusBadge status={log.status} /></div>
+                <div className="text-stone-500"><FetchLogResultCell log={log} /></div>
+                <div className="text-stone-400 text-right">{formatFetchDuration(log.durationMs)}</div>
               </button>
               {isExpanded && <FetchLogDetail log={log} />}
             </div>
@@ -918,51 +875,6 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
       )}
     </div>
   );
-}
-
-function FetchLogDetail({ log }: { log: FetchLogEntry }) {
-  return (
-    <div className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200 dark:border-stone-800">
-      <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-2">
-        <div><span className="text-stone-500">Source ID:</span> {log.sourceId}</div>
-        <div><span className="text-stone-500">Duration:</span> {formatDuration(log.durationMs)}</div>
-        <div><span className="text-stone-500">Releases found:</span> {log.releasesFound}</div>
-        <div><span className="text-stone-500">Releases inserted:</span> {log.releasesInserted}</div>
-        {log.orgName && <div><span className="text-stone-500">Organization:</span> {log.orgName}</div>}
-      </div>
-      {log.error && (
-        <div className="mt-2">
-          <div className="text-stone-500 mb-1">Error:</div>
-          <div className="text-red-400 whitespace-pre-wrap">{log.error}</div>
-        </div>
-      )}
-      {log.rawContent && (
-        <div className="mt-2">
-          <div className="text-stone-500 mb-1">Raw content preview:</div>
-          <div className="max-h-48 overflow-y-auto text-stone-400 whitespace-pre-wrap">{log.rawContent.slice(0, 2000)}{log.rawContent.length > 2000 ? "\n..." : ""}</div>
-        </div>
-      )}
-      {!log.error && !log.rawContent && (
-        <div className="text-stone-600">No additional details available.</div>
-      )}
-    </div>
-  );
-}
-
-function FetchStatusBadge({ status }: { status: FetchLogEntry["status"] }) {
-  const styles: Record<string, string> = {
-    success: "text-green-600",
-    error: "text-red-500",
-    no_change: "text-stone-400",
-    dry_run: "text-blue-500",
-  };
-  const labels: Record<string, string> = {
-    success: "Success",
-    error: "Error",
-    no_change: "No change",
-    dry_run: "Dry run",
-  };
-  return <span className={`${styles[status] ?? "text-stone-400"}`}>{labels[status] ?? status}</span>;
 }
 
 type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
@@ -1091,7 +1003,7 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
                     {result.error ? (
                       <span className="text-red-500">{result.error.slice(0, 30)}</span>
                     ) : result.fetched ? (
-                      <span className="text-green-600">+{result.releasesInserted ?? 0} ({formatDuration(result.durationMs)})</span>
+                      <span className="text-green-600">+{result.releasesInserted ?? 0} ({formatFetchDuration(result.durationMs)})</span>
                     ) : result.queued ? (
                       <span className="text-amber-500">Queued</span>
                     ) : null}

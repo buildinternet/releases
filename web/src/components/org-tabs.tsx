@@ -12,7 +12,7 @@ function CodeBrackets() {
   );
 }
 
-export function OrgTabs({ hasPlaybook }: { hasPlaybook?: boolean }) {
+export function OrgTabs({ hasPlaybook, hasFetchLog }: { hasPlaybook?: boolean; hasFetchLog?: boolean }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -41,11 +41,21 @@ export function OrgTabs({ hasPlaybook }: { hasPlaybook?: boolean }) {
       <button onClick={() => setTab("sources")} className={tabButtonClass(activeTab === "sources")}>
         Sources
       </button>
-      {hasPlaybook && (
-        <button onClick={() => setTab("playbook")} className={`${tabButtonClass(activeTab === "playbook")} ml-auto`}>
-          <CodeBrackets />
-          Playbook
-        </button>
+      {(hasFetchLog || hasPlaybook) && (
+        <div className="flex gap-5 ml-auto">
+          {hasFetchLog && (
+            <button onClick={() => setTab("fetch-log")} className={tabButtonClass(activeTab === "fetch-log")}>
+              <CodeBrackets />
+              Fetch Log
+            </button>
+          )}
+          {hasPlaybook && (
+            <button onClick={() => setTab("playbook")} className={tabButtonClass(activeTab === "playbook")}>
+              {!hasFetchLog && <CodeBrackets />}
+              Playbook
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

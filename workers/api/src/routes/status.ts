@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, sql, gte, lte } from "drizzle-orm";
+import { and, desc, eq, sql, gte, lte } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources, organizations, usageLog } from "@releases/db/schema.js";
 import type { Env } from "../index.js";
@@ -19,10 +19,12 @@ statusRoutes.get("/status/fetch-log", async (c) => {
   const limit = parseInt(c.req.query("limit") ?? "200", 10);
   const after = c.req.query("after");   // ISO date string
   const before = c.req.query("before"); // ISO date string
+  const org = c.req.query("org");       // org slug filter
 
   const conditions = [];
   if (after) conditions.push(gte(fetchLog.createdAt, after));
   if (before) conditions.push(lte(fetchLog.createdAt, before));
+  if (org) conditions.push(eq(organizations.slug, org));
 
   const logs = await db
     .select({
