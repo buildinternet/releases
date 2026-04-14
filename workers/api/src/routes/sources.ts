@@ -5,6 +5,7 @@ import { sources, releases, organizations, releaseSummaries, products, sourceCha
 import { RELEASE_URL_UPSERT } from "@releases/db/release-upsert.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
+import { sliceChangelog, hasRangeParams, parseRangeParam } from "@releases/lib/changelog-slice.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
@@ -469,15 +470,33 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
     .orderBy(sourceChangelogFiles.path)
     .limit(1);
   if (!row) return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
-  return c.json({
+
+  const offsetParam = c.req.query("offset");
+  const limitParam = c.req.query("limit");
+  const ranged = hasRangeParams({ offset: offsetParam, limit: limitParam });
+  const base = {
     path: row.path,
     filename: row.filename,
     url: row.url,
     rawUrl: row.rawUrl,
-    content: row.content,
     bytes: row.bytes,
     fetchedAt: row.fetchedAt,
+  };
+  if (!ranged) {
+    return c.json({
+      ...base,
+      content: row.content,
+      totalChars: row.content.length,
+      offset: 0,
+      limit: row.content.length,
+      nextOffset: null,
+    });
+  }
+  const slice = sliceChangelog(row.content, {
+    offset: parseRangeParam(offsetParam),
+    limit: parseRangeParam(limitParam),
   });
+  return c.json({ ...base, ...slice });
 });
 
 sourceRoutes.get("/sources/:slug", async (c) => {

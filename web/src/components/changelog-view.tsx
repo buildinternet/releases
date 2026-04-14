@@ -4,6 +4,9 @@ import { rehypeShikiPlugin } from "@/lib/shiki";
 import { markdownComponents } from "./markdown-components";
 import { api } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/formatters";
+import { ChangelogStream } from "./changelog-stream";
+
+const INITIAL_SLICE_LIMIT = 40_000;
 
 const markdownClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 
@@ -31,7 +34,7 @@ export function ChangelogSkeleton() {
 export async function ChangelogView({ sourceSlug }: { sourceSlug: string }) {
   let file;
   try {
-    file = await api.sourceChangelog(sourceSlug);
+    file = await api.sourceChangelog(sourceSlug, { limit: INITIAL_SLICE_LIMIT });
   } catch {
     file = null;
   }
@@ -43,6 +46,16 @@ export async function ChangelogView({ sourceSlug }: { sourceSlug: string }) {
       </div>
     );
   }
+
+  const initial = (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      rehypePlugins={[rehypeShikiPlugin]}
+      components={markdownComponents}
+    >
+      {file.content}
+    </ReactMarkdown>
+  );
 
   return (
     <div className="mt-5">
@@ -58,11 +71,15 @@ export async function ChangelogView({ sourceSlug }: { sourceSlug: string }) {
           View on GitHub
         </a>
       </div>
-      <div className={markdownClasses}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]} components={markdownComponents}>
-          {file.content}
-        </ReactMarkdown>
-      </div>
+      <ChangelogStream
+        slug={sourceSlug}
+        markdownClassName={markdownClasses}
+        initial={initial}
+        initialNextOffset={file.nextOffset ?? null}
+        totalChars={file.totalChars ?? file.content.length}
+        initialOffset={file.offset ?? 0}
+        initialLimit={INITIAL_SLICE_LIMIT}
+      />
     </div>
   );
 }

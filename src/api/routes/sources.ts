@@ -3,6 +3,7 @@ import { getDb } from "../../db/connection.js";
 import { sources, releases, organizations, sourceChangelogFiles } from "../../db/schema.js";
 import { getSourceMetrics } from "../metrics.js";
 import type { SourceChangelogResponse } from "../types.js";
+import { sliceChangelog, hasRangeParams, parseRangeParam } from "../../lib/changelog-slice.js";
 
 export function handleSourceActivity(slug: string, searchParams: URLSearchParams) {
   const db = getDb();
@@ -193,7 +194,10 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   };
 }
 
-export function handleSourceChangelog(slug: string): SourceChangelogResponse | null {
+export function handleSourceChangelog(
+  slug: string,
+  searchParams?: URLSearchParams,
+): SourceChangelogResponse | null {
   const db = getDb();
   const [src] = db.select().from(sources).where(eq(sources.slug, slug)).all();
   if (!src) return null;
@@ -205,13 +209,30 @@ export function handleSourceChangelog(slug: string): SourceChangelogResponse | n
     .limit(1)
     .all();
   if (!row) return null;
-  return {
+
+  const offsetParam = searchParams?.get("offset") ?? null;
+  const limitParam = searchParams?.get("limit") ?? null;
+  const base = {
     path: row.path,
     filename: row.filename,
     url: row.url,
     rawUrl: row.rawUrl,
-    content: row.content,
     bytes: row.bytes,
     fetchedAt: row.fetchedAt,
   };
+  if (!hasRangeParams({ offset: offsetParam, limit: limitParam })) {
+    return {
+      ...base,
+      content: row.content,
+      totalChars: row.content.length,
+      offset: 0,
+      limit: row.content.length,
+      nextOffset: null,
+    };
+  }
+  const slice = sliceChangelog(row.content, {
+    offset: parseRangeParam(offsetParam),
+    limit: parseRangeParam(limitParam),
+  });
+  return { ...base, ...slice };
 }

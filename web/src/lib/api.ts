@@ -128,6 +128,13 @@ export const api = {
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`, { cache: "no-store" }),
   sourceHeatmap: (slug: string) => fetchApi<SourceHeatmap>(`/v1/sources/${slug}/heatmap`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
-  sourceChangelog: (slug: string) =>
-    fetchApi<SourceChangelogResponse>(`/v1/sources/${slug}/changelog`),
+  sourceChangelog: (slug: string, range?: { offset?: number; limit?: number }) => {
+    const params = new URLSearchParams();
+    if (range?.offset !== undefined) params.set("offset", String(range.offset));
+    if (range?.limit !== undefined) params.set("limit", String(range.limit));
+    const qs = params.toString();
+    return fetchApi<SourceChangelogResponse>(
+      `/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`,
+    );
+  },
 };

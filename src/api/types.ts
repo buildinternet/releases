@@ -99,6 +99,14 @@ export interface SourceChangelogResponse {
   content: string;
   bytes: number;
   fetchedAt: string;
+  /** Character offset of the first character in `content` within the full file. */
+  offset: number;
+  /** The limit (in chars) that was applied to produce this slice. */
+  limit: number;
+  /** Next offset to request for the next slice, or null if `content` is the tail. */
+  nextOffset: number | null;
+  /** Total length of the full file in characters. */
+  totalChars: number;
 }
 
 export interface SourceDetail {
