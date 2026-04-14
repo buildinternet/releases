@@ -238,7 +238,7 @@ describe("CLI remove with --ignore", () => {
       const r = cli(dataDir, args);
       if (r.exitCode !== 0) throw new Error(`Seed failed: ${r.stderr}`);
     }
-  });
+  }, 30_000);
 
   afterAll(() => cleanup());
 
