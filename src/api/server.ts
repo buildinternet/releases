@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger.js";
 import { handleStats } from "./routes/stats.js";
 import { handleOrgs, handleOrgDetail } from "./routes/orgs.js";
-import { handleSources, handleSourceDetail, handleSourceActivity } from "./routes/sources.js";
+import { handleSources, handleSourceDetail, handleSourceActivity, handleSourceChangelog } from "./routes/sources.js";
 import { handleSearch } from "./routes/search.js";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -66,6 +66,14 @@ export function startApiServer(port: number) {
         if (sourceActivityMatch) {
           const result = handleSourceActivity(sourceActivityMatch[1], url.searchParams);
           if (!result) return errorResponse("not_found", "Source not found", 404);
+          return jsonResponse(result);
+        }
+
+        // GET /v1/sources/:slug/changelog
+        const sourceChangelogMatch = pathname.match(/^\/v1\/sources\/([^/]+)\/changelog$/);
+        if (sourceChangelogMatch) {
+          const result = handleSourceChangelog(sourceChangelogMatch[1]);
+          if (!result) return errorResponse("not_found", "Changelog file not found", 404);
           return jsonResponse(result);
         }
 

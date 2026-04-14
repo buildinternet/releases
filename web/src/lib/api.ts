@@ -13,6 +13,7 @@ import type {
   OrgReleasesResponse,
   ReleaseDetail,
   ProductDetail,
+  SourceChangelogResponse,
 } from "@shared/api/types";
 
 export type {
@@ -42,6 +43,7 @@ export type {
   OrgReleasesResponse,
   ReleaseDetail,
   ProductDetail,
+  SourceChangelogResponse,
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
@@ -126,4 +128,6 @@ export const api = {
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`, { cache: "no-store" }),
   sourceHeatmap: (slug: string) => fetchApi<SourceHeatmap>(`/v1/sources/${slug}/heatmap`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
+  sourceChangelog: (slug: string) =>
+    fetchApi<SourceChangelogResponse>(`/v1/sources/${slug}/changelog`),
 };

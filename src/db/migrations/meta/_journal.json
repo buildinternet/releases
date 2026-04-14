@@ -64,6 +64,13 @@
       "when": 1776104745862,
       "tag": "0008_nifty_prowler",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1776166599896,
+      "tag": "20260414113639_flashy_silver_fox",
+      "breakpoints": true
     }
   ]
 }

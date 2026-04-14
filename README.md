@@ -319,9 +319,12 @@ releases admin source fetch --stale 24  # only stale sources, with backoff
 releases admin source fetch --retry-errors
 releases admin source fetch --unfetched --concurrency 5
 releases admin source fetch next-js --no-summarize
+releases admin source fetch next-js --skip-changelog  # skip CHANGELOG.md fetch
 ```
 
 By default, fetch caps at 200 releases per source to avoid API pagination limits (e.g., GitHub's 10K result cap). Use `--max <n>` to request more, or `--all` to remove the cap entirely.
+
+For `github` sources, the root-level `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) is fetched alongside tagged releases and surfaced on the web as a "Changelog" tab. Content is capped at 1MB and refreshed on a 24h TTL. Use `--skip-changelog` to opt out for a single run, or run `releases admin source refresh-changelog <slug>` to refresh manually (local mode only; the API worker cron handles remote mode).
 
 > **Remote mode:** bare `releases admin source fetch` (no slug or filter) is blocked to prevent expensive bulk operations. Use `--stale`, `--unfetched`, `--retry-errors`, or a source slug. Remote concurrency defaults to 3 (max 5). Duplicate source fetches are detected and blocked.
 

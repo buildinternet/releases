@@ -6,7 +6,7 @@ import type {
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
 } from "../db/schema.js";
-import type { SourceListItem, Stats, UnifiedSearchResponse } from "./types.js";
+import type { SourceListItem, Stats, UnifiedSearchResponse, SourceChangelogResponse } from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${getApiUrl()}${path}`;
@@ -39,6 +39,10 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
 export async function findSource(identifier: string): Promise<Source | null> {
   // API returns enriched data — extra fields are harmlessly ignored by callers expecting Source
   return apiFetch<Source | null>(`/v1/sources/${identifier}`);
+}
+
+export async function sourceChangelog(slug: string): Promise<SourceChangelogResponse | null> {
+  return apiFetch<SourceChangelogResponse | null>(`/v1/sources/${slug}/changelog`);
 }
 
 export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {

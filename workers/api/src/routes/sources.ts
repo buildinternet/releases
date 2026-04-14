@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, releaseSummaries, products, type ReleaseType } from "@releases/db/schema.js";
+import { sources, releases, organizations, releaseSummaries, products, sourceChangelogFiles, type ReleaseType } from "@releases/db/schema.js";
 import { RELEASE_URL_UPSERT } from "@releases/db/release-upsert.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
@@ -457,6 +457,29 @@ sourceRoutes.get("/sources/:slug/heatmap", async (c) => {
   });
 });
 
+sourceRoutes.get("/sources/:slug/changelog", async (c) => {
+  const slug = c.req.param("slug");
+  const db = createDb(c.env.DB);
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+  const [row] = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, src.id))
+    .orderBy(sourceChangelogFiles.path)
+    .limit(1);
+  if (!row) return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
+  return c.json({
+    path: row.path,
+    filename: row.filename,
+    url: row.url,
+    rawUrl: row.rawUrl,
+    content: row.content,
+    bytes: row.bytes,
+    fetchedAt: row.fetchedAt,
+  });
+});
+
 sourceRoutes.get("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const page = parseInt(c.req.query("page") ?? "1", 10);
@@ -579,6 +602,13 @@ sourceRoutes.get("/sources/:slug", async (c) => {
 
   const parsedMeta = JSON.parse(src.metadata || "{}");
 
+  const changelogExistsRows = await db
+    .select({ one: sql<number>`1` })
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, src.id))
+    .limit(1);
+  const hasChangelogFile = changelogExistsRows.length > 0;
+
   const result = {
     id: src.id,
     slug: src.slug,
@@ -595,6 +625,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     latestVersion,
     latestDate,
     changelogUrl: parsedMeta.changelogUrl ?? null,
+    hasChangelogFile,
     lastFetchedAt: src.lastFetchedAt,
     trackingSince: earliest?.date ?? metrics.oldest ?? src.createdAt,
     releases: releasesFormatted,

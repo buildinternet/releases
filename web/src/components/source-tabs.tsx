@@ -5,9 +5,10 @@ import { tabButtonClass } from "@/lib/styles";
 
 interface SourceTabsProps {
   hasHighlights: boolean;
+  hasChangelog?: boolean;
 }
 
-export function SourceTabs({ hasHighlights }: SourceTabsProps) {
+export function SourceTabs({ hasHighlights, hasChangelog = false }: SourceTabsProps) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -43,6 +44,14 @@ export function SourceTabs({ hasHighlights }: SourceTabsProps) {
       >
         All Releases
       </button>
+      {hasChangelog && (
+        <button
+          onClick={() => setTab("changelog")}
+          className={tabButtonClass(activeTab === "changelog")}
+        >
+          Changelog
+        </button>
+      )}
     </div>
   );
 }

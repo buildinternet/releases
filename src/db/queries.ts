@@ -2,10 +2,10 @@ import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages,
+  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages, sourceChangelogFiles,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
-  type KnowledgePage, type NewKnowledgePage, type ReleaseType,
+  type KnowledgePage, type NewKnowledgePage, type ReleaseType, type SourceChangelogFile,
 } from "./schema.js";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "./release-upsert.js";
 import { isRemoteMode } from "../lib/mode.js";
@@ -1540,4 +1540,71 @@ export async function getMediaAssetStats(): Promise<{ count: number; totalBytes:
     })
     .from(mediaAssets);
   return { count: row?.count ?? 0, totalBytes: row?.totalBytes ?? 0 };
+}
+
+// ── Source changelog files ──
+
+export interface ChangelogFileInput {
+  path: string;
+  filename: string;
+  url: string;
+  rawUrl: string;
+  content: string;
+  contentHash: string;
+  bytes: number;
+}
+
+/** Local-mode only. The worker mirrors this in workers/api/src/cron/poll-fetch.ts. */
+export async function upsertChangelogFile(sourceId: string, file: ChangelogFileInput): Promise<{ inserted: boolean; updated: boolean }> {
+  const db = getDb();
+  const now = new Date().toISOString();
+  const [existing] = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(and(eq(sourceChangelogFiles.sourceId, sourceId), eq(sourceChangelogFiles.path, file.path)));
+
+  if (!existing) {
+    await db.insert(sourceChangelogFiles).values({
+      sourceId,
+      path: file.path,
+      filename: file.filename,
+      url: file.url,
+      rawUrl: file.rawUrl,
+      content: file.content,
+      contentHash: file.contentHash,
+      bytes: file.bytes,
+      fetchedAt: now,
+    });
+    return { inserted: true, updated: false };
+  }
+
+  if (existing.contentHash === file.contentHash) {
+    // Touch fetchedAt only so TTL-based refresh logic resets
+    await db.update(sourceChangelogFiles)
+      .set({ fetchedAt: now })
+      .where(eq(sourceChangelogFiles.id, existing.id));
+    return { inserted: false, updated: false };
+  }
+
+  await db.update(sourceChangelogFiles).set({
+    filename: file.filename,
+    url: file.url,
+    rawUrl: file.rawUrl,
+    content: file.content,
+    contentHash: file.contentHash,
+    bytes: file.bytes,
+    fetchedAt: now,
+  }).where(eq(sourceChangelogFiles.id, existing.id));
+  return { inserted: false, updated: true };
+}
+
+export async function getChangelogFile(sourceId: string): Promise<SourceChangelogFile | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, sourceId))
+    .orderBy(sourceChangelogFiles.path)
+    .limit(1);
+  return rows[0] ?? null;
 }

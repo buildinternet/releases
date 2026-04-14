@@ -1,6 +1,6 @@
 import { eq, and, or, sql, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { sources, releases, fetchLog } from "@releases/db/schema.js";
+import { sources, releases, fetchLog, sourceChangelogFiles } from "@releases/db/schema.js";
 import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@releases/db/schema.js";
 import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapters/feed.js";
@@ -284,6 +284,16 @@ export async function fetchOne(
       }).where(eq(sources.id, source.id)),
     ]);
 
+    // Refresh canonical CHANGELOG file for GitHub sources (mirrors CLI fetch step
+    // in src/cli/commands/fetch.ts). Never fail the outer fetch if this errors.
+    if (source.type === "github") {
+      try {
+        await refreshChangelogFile(db, source, env.GITHUB_TOKEN);
+      } catch (err) {
+        console.warn(`[cron] Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+
     const dur = Date.now() - start;
     console.log(`[cron] Fetch ${source.slug}: ${inserted} new (${dur}ms)`);
     return { releasesFound: rawReleases.length, releasesInserted: inserted, durationMs: dur, status: inserted > 0 ? "success" as const : "no_change" as const };
@@ -309,6 +319,142 @@ export async function fetchOne(
     }).where(eq(sources.id, source.id)).catch(() => {});
 
     return { releasesFound: 0, releasesInserted: 0, durationMs: Date.now() - start, status: "error" as const, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+// Source of truth: src/adapters/github.ts#fetchChangelogFile. Worker uses
+// Web Crypto + Hono db binding, so the implementation is duplicated rather
+// than imported to keep the worker bundle free of Node/Bun globals.
+
+const CHANGELOG_FILENAMES = [
+  "CHANGELOG.md",
+  "CHANGELOG.rst",
+  "CHANGELOG.txt",
+  "CHANGELOG",
+  "CHANGES.md",
+  "CHANGES.rst",
+  "HISTORY.md",
+  "RELEASES.md",
+  "NEWS.md",
+];
+
+const CHANGELOG_MAX_BYTES = 1024 * 1024;
+const CHANGELOG_TTL_MS = 24 * 3600 * 1000;
+
+interface GitHubContentEntry {
+  name: string;
+  type: "file" | "dir" | "symlink" | "submodule";
+}
+
+async function sha256HexWorker(input: string): Promise<string> {
+  const buf = new TextEncoder().encode(input);
+  const hash = await crypto.subtle.digest("SHA-256", buf);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+async function refreshChangelogFile(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  token: string | undefined,
+): Promise<void> {
+  const [existing] = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, source.id));
+  if (existing && existing.fetchedAt && Date.now() - new Date(existing.fetchedAt).getTime() < CHANGELOG_TTL_MS) {
+    return;
+  }
+
+  const match = source.url.match(/github\.com\/([^/]+)\/([^/]+)/);
+  if (!match) return;
+  const [, owner, rawRepo] = match;
+  const repo = rawRepo.replace(/\.git$/, "");
+
+  const apiHeaders: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": "releases/0.1",
+  };
+  if (token) apiHeaders.Authorization = `Bearer ${token}`;
+
+  let entries: GitHubContentEntry[];
+  try {
+    const listing = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/`,
+      { headers: apiHeaders },
+    );
+    if (!listing.ok) {
+      console.warn(`[cron] refreshChangelogFile(${source.slug}): root listing returned ${listing.status}`);
+      return;
+    }
+    entries = (await listing.json()) as GitHubContentEntry[];
+  } catch (err) {
+    console.warn(`[cron] refreshChangelogFile(${source.slug}): root listing failed: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+
+  const rootFiles = new Set(entries.filter((e) => e.type === "file").map((e) => e.name));
+  const filename = CHANGELOG_FILENAMES.find((name) => rootFiles.has(name));
+  if (!filename) return;
+
+  const rawHeaders: Record<string, string> = { "User-Agent": "releases/0.1" };
+  if (token) rawHeaders.Authorization = `Bearer ${token}`;
+
+  const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${filename}`;
+  let res: Response;
+  try {
+    res = await fetch(rawUrl, { headers: rawHeaders });
+  } catch (err) {
+    console.warn(`[cron] refreshChangelogFile(${source.slug}): raw fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  if (!res.ok) {
+    console.warn(`[cron] refreshChangelogFile(${source.slug}): raw fetch returned ${res.status}`);
+    return;
+  }
+  const content = await res.text();
+  const bytes = new TextEncoder().encode(content).length;
+  if (bytes > CHANGELOG_MAX_BYTES) {
+    console.warn(`[cron] refreshChangelogFile(${source.slug}): ${filename} exceeds size cap (${bytes} bytes)`);
+    return;
+  }
+  const contentHashHex = await sha256HexWorker(content);
+  const url = `https://github.com/${owner}/${repo}/blob/HEAD/${filename}`;
+  const now = new Date().toISOString();
+
+  if (!existing) {
+    await db.insert(sourceChangelogFiles).values({
+      sourceId: source.id,
+      path: filename,
+      filename,
+      url,
+      rawUrl,
+      content,
+      contentHash: contentHashHex,
+      bytes,
+      fetchedAt: now,
+    });
+    console.log(`[cron] Fetched ${filename} for ${source.slug} (${bytes} bytes)`);
+  } else if (existing.contentHash === contentHashHex) {
+    await db
+      .update(sourceChangelogFiles)
+      .set({ fetchedAt: now })
+      .where(eq(sourceChangelogFiles.id, existing.id));
+  } else {
+    await db
+      .update(sourceChangelogFiles)
+      .set({
+        filename,
+        url,
+        rawUrl,
+        content,
+        contentHash: contentHashHex,
+        bytes,
+        fetchedAt: now,
+      })
+      .where(eq(sourceChangelogFiles.id, existing.id));
+    console.log(`[cron] Updated ${filename} for ${source.slug} (${bytes} bytes)`);
   }
 }
 

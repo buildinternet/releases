@@ -10,6 +10,7 @@ import { Pagination } from "@/components/pagination";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { HighlightsView } from "@/components/highlights-view";
+import { ChangelogView } from "@/components/changelog-view";
 import { SourceTimeline } from "@/components/source-timeline";
 import Link from "next/link";
 
@@ -133,8 +134,13 @@ export default async function SourcePage({
             {activity && (
               <SourceTimeline activity={activity} heatmap={heatmap} trackingSince={source.trackingSince} />
             )}
-            <SourceTabs hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)} />
-            {(tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
+            <SourceTabs
+              hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
+              hasChangelog={!!source.hasChangelogFile}
+            />
+            {tab === "changelog" && source.hasChangelogFile ? (
+              <ChangelogView sourceSlug={source.slug} />
+            ) : (tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
               <>
                 {source.releases.map((release, i) => (
                   <ReleaseListItem key={i} release={release} hideDate={i > 0 && release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)} />
