@@ -34,7 +34,7 @@ import { registerShowCommand } from "./commands/show.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
 
-export const VERSION = "0.9.2";
+export const VERSION = "0.10.0";
 
 function adminKeyError(name = "admin"): never {
   console.error(

@@ -2,19 +2,24 @@ name: Release CLI
 
 on:
   push:
-    tags:
-      - "cli@*"
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
-    name: Build & Publish
+    name: Version or Publish
     runs-on: ubuntu-latest
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -35,41 +40,27 @@ jobs:
           bun build --compile src/index.ts --outfile npm/releases-linux-x64/releases --target=bun-linux-x64
           bun build --compile src/index.ts --outfile npm/releases-linux-arm64/releases --target=bun-linux-arm64
 
-      - name: Sync npm package versions
+      - name: Configure npm auth
         env:
-          TAG_NAME: ${{ github.ref_name }}
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
         run: |
-          VERSION="${TAG_NAME#cli@}"
-          for pkg in releases releases-darwin-arm64 releases-darwin-x64 releases-linux-x64 releases-linux-arm64; do
-            node -e "
-              const fs = require('fs');
-              const p = JSON.parse(fs.readFileSync('npm/$pkg/package.json', 'utf8'));
-              p.version = '$VERSION';
-              if (p.optionalDependencies) {
-                for (const k of Object.keys(p.optionalDependencies)) {
-                  p.optionalDependencies[k] = '$VERSION';
-                }
-              }
-              fs.writeFileSync('npm/$pkg/package.json', JSON.stringify(p, null, 2) + '\n');
-            "
-          done
-
-      - name: Publish to npm
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
-        run: |
-          echo "//registry.npmjs.org/:_authToken=${NODE_AUTH_TOKEN}" > ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
           echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
-          npm whoami
-          for pkg in releases-darwin-arm64 releases-darwin-x64 releases-linux-x64 releases-linux-arm64 releases; do
-            cd npm/$pkg
-            npm pack --dry-run
-            npm publish --access public --registry https://registry.npmjs.org/
-            cd ../..
-          done
-          rm ~/.npmrc
+
+      - name: Create Release PR or Publish
+        id: changesets
+        uses: changesets/action@v1
+        with:
+          version: bun run changeset:version
+          publish: bun run changeset:publish
+          commit: "chore: version packages"
+          title: "chore: version packages"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
 
       - name: Prepare release assets
+        if: steps.changesets.outputs.published == 'true'
         run: |
           mkdir -p dist/release
           for target in darwin-arm64 darwin-x64 linux-x64 linux-arm64; do
@@ -80,18 +71,14 @@ jobs:
           sha256sum dist/release/*.gz > dist/release/checksums.txt
 
       - name: Update Homebrew formula
-        env:
-          TAG_NAME: ${{ github.ref_name }}
+        if: steps.changesets.outputs.published == 'true'
         run: |
-          VERSION="${TAG_NAME#cli@}"
+          VERSION=$(jq -r .version npm/releases/package.json)
           DARWIN_ARM64=$(cat dist/release/releases-darwin-arm64.gz.sha256)
           DARWIN_X64=$(cat dist/release/releases-darwin-x64.gz.sha256)
           LINUX_ARM64=$(cat dist/release/releases-linux-arm64.gz.sha256)
           LINUX_X64=$(cat dist/release/releases-linux-x64.gz.sha256)
-          # Update version
           sed -i "s/version \".*\"/version \"${VERSION}\"/" homebrew/releases.rb
-          # Update SHA256 hashes — uses line-context matching so each sha256
-          # line is replaced based on the url line above it
           sed -i "/releases-darwin-arm64\.gz/{n;s/sha256 \"[^\"]*\"/sha256 \"${DARWIN_ARM64}\"/;}" homebrew/releases.rb
           sed -i "/releases-darwin-x64\.gz/{n;s/sha256 \"[^\"]*\"/sha256 \"${DARWIN_X64}\"/;}" homebrew/releases.rb
           sed -i "/releases-linux-arm64\.gz/{n;s/sha256 \"[^\"]*\"/sha256 \"${LINUX_ARM64}\"/;}" homebrew/releases.rb
@@ -103,8 +90,11 @@ jobs:
           git push origin HEAD:main
 
       - name: Create GitHub Release
+        if: steps.changesets.outputs.published == 'true'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: cli@${{ fromJson(steps.changesets.outputs.publishedPackages)[0].version }}
+          name: CLI ${{ fromJson(steps.changesets.outputs.publishedPackages)[0].version }}
           generate_release_notes: true
           files: |
             dist/release/releases-darwin-arm64.gz
