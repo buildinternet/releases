@@ -326,6 +326,16 @@ By default, fetch caps at 200 releases per source to avoid API pagination limits
 
 For `github` sources, the root-level `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) is fetched alongside tagged releases and surfaced on the web as a "Changelog" tab. Content is capped at 1MB and refreshed on a 24h TTL. Use `--skip-changelog` to opt out for a single run, or run `releases admin source refresh-changelog <slug>` to refresh manually (local mode only; the API worker cron handles remote mode).
 
+Read a tracked CHANGELOG directly, with optional heading-aligned slicing for large files:
+
+```bash
+releases admin source changelog apollo-client                         # full file to stdout
+releases admin source changelog apollo-client --limit 10000           # first 10k chars, ending at a heading
+releases admin source changelog apollo-client --offset 10000 --json   # next chunk as JSON
+```
+
+The same slicing is exposed over the API and MCP: `GET /v1/sources/:slug/changelog?offset=&limit=` and the `get_source_changelog` MCP tool. Chain successive requests by feeding the returned `nextOffset` back as the next `offset`. The slicer snaps boundaries to `##` headings so sections are never cut mid-entry — useful for agent-friendly Context7-style access to large files (e.g. Apollo Client's 700KB CHANGELOG).
+
 > **Remote mode:** bare `releases admin source fetch` (no slug or filter) is blocked to prevent expensive bulk operations. Use `--stale`, `--unfetched`, `--retry-errors`, or a source slug. Remote concurrency defaults to 3 (max 5). Duplicate source fetches are detected and blocked.
 
 ### Smart fetch

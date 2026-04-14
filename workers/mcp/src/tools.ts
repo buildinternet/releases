@@ -9,9 +9,11 @@ import {
   orgTags,
   products,
   domainAliases,
+  sourceChangelogFiles,
   type ReleaseType,
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
+import { buildChangelogResponse } from "@releases/lib/changelog-slice.js";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -88,7 +90,7 @@ async function resolveSource(db: D1Db, identifier: string) {
     ? eq(sources.id, identifier)
     : eq(sources.slug, identifier);
   const rows = await db
-    .select({ id: sources.id, name: sources.name })
+    .select({ id: sources.id, name: sources.name, slug: sources.slug })
     .from(sources)
     .where(condition)
     .limit(1);
@@ -411,6 +413,39 @@ export async function getOrganization(
   }
 
   return text(lines.join("\n"));
+}
+
+// ── get_source_changelog ─────────────────────────────────────────────
+
+export async function getSourceChangelog(
+  db: D1Db,
+  params: { source: string; offset?: number; limit?: number },
+): Promise<ToolResult> {
+  const source = await resolveSource(db, params.source);
+  if (!source) return text(`No source found matching "${params.source}"`);
+
+  const [row] = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, source.id))
+    .orderBy(sourceChangelogFiles.path)
+    .limit(1);
+  if (!row) return text(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
+
+  const response = buildChangelogResponse(row, {
+    offset: params.offset !== undefined ? String(params.offset) : null,
+    limit: params.limit !== undefined ? String(params.limit) : (params.offset !== undefined ? "40000" : null),
+  });
+
+  const header = [
+    `**${source.name}** — ${response.filename}`,
+    `Source: ${response.url}`,
+    `Slice: chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars}${response.nextOffset != null ? ` (next: offset=${response.nextOffset})` : " (end of file)"}`,
+    "",
+    response.content,
+  ].join("\n");
+
+  return text(header);
 }
 
 // ── summarize_changes ────────────────────────────────────────────────

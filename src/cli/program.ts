@@ -28,7 +28,7 @@ import { registerSummarizeCommand } from "./commands/summarize.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
-import { registerRefreshChangelogCommand } from "./commands/refresh-changelog.js";
+import { registerRefreshChangelogCommand, registerChangelogCommand } from "./commands/refresh-changelog.js";
 import { registerGuideCommand } from "./commands/guide.js";
 import { registerShowCommand } from "./commands/show.js";
 import { CATEGORIES } from "../lib/categories.js";
@@ -168,6 +168,7 @@ registerFetchLogCommand(sourceAdmin);
 registerCheckCommand(sourceAdmin);
 registerPollCommand(sourceAdmin);
 registerRefreshChangelogCommand(sourceAdmin);
+registerChangelogCommand(sourceAdmin);
 
 registerOrgCommand(admin);
 registerProductCommand(admin);

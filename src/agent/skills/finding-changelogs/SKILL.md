@@ -30,6 +30,10 @@ Well-known files > Link relations > Feeds > GitHub Releases API > raw markdown >
 
 For `github` sources, the fetch pipeline ingests tagged releases **and** the repo's canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md` at the repo root) — the file is surfaced in the web UI as a separate tab and is often the richer source when a project ships entries that never became tagged releases. You don't need to add a second source for the CHANGELOG file; the github adapter handles both.
 
+### Reading a tracked CHANGELOG
+
+Once a github source is tracked, its CHANGELOG is readable via `GET /v1/sources/:slug/changelog` (REST), the `get_source_changelog` MCP tool, or `releases admin source changelog <slug>` (CLI). All three support heading-aligned range slicing via `offset` / `limit` — pass them for Context7-style partial reads, then chain successive calls via the returned `nextOffset` to page through big files (e.g. Apollo Client's 700KB CHANGELOG) without pulling the whole thing at once.
+
 ## Well-Known Files & Link Relations
 
 The discovery pipeline checks for standardized changelog metadata before falling back to heuristic methods.

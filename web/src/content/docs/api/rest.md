@@ -101,6 +101,35 @@ Weekly release activity for a source. Accepts `from` and `to` date params.
 
 Releases after a cutoff date. Requires `?cutoff=ISO-date`.
 
+### `GET /v1/sources/:slug/changelog`
+
+Read the canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) tracked for a GitHub source. Supports heading-aligned range slicing — useful for agent-friendly Context7-style access to large files (e.g. Apollo Client's 700KB CHANGELOG).
+
+| Param | Description |
+| --- | --- |
+| `offset` | Character offset into the full file. Snapped forward to the next `##`/`###`/`#` heading unless 0. |
+| `limit` | Target slice size in characters. The slice ends at a heading boundary; overshoots to the next heading if a single section is bigger than `limit`. Default 40000 when either range param is present. |
+
+With no range params, the full file is returned (back-compat). Response body:
+
+```json
+{
+  "path": "CHANGELOG.md",
+  "filename": "CHANGELOG.md",
+  "url": "https://github.com/org/repo/blob/HEAD/CHANGELOG.md",
+  "rawUrl": "https://raw.githubusercontent.com/org/repo/HEAD/CHANGELOG.md",
+  "bytes": 732634,
+  "fetchedAt": "2026-04-14T12:17:50.633Z",
+  "content": "## 4.1.7\n\n...",
+  "offset": 0,
+  "limit": 40000,
+  "nextOffset": 40234,
+  "totalChars": 732571
+}
+```
+
+Chain successive requests by passing the returned `nextOffset` back as the next `offset`. `nextOffset` is `null` when the slice reaches the end of the file. The canonical file is refreshed on a 24h TTL by the API worker cron for `github` sources.
+
 ---
 
 ## Releases
