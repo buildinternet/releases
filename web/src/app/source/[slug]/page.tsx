@@ -1,4 +1,4 @@
-import { cache } from "react";
+import { cache, Suspense } from "react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
@@ -10,7 +10,7 @@ import { Pagination } from "@/components/pagination";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { HighlightsView } from "@/components/highlights-view";
-import { ChangelogView } from "@/components/changelog-view";
+import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
 import { SourceTimeline } from "@/components/source-timeline";
 import Link from "next/link";
 
@@ -134,7 +134,9 @@ export default async function IndependentSourcePage({
               hasChangelog={!!source.hasChangelogFile}
             />
             {tab === "changelog" && source.hasChangelogFile ? (
-              <ChangelogView sourceSlug={source.slug} />
+              <Suspense key={source.slug} fallback={<ChangelogSkeleton />}>
+                <ChangelogView sourceSlug={source.slug} />
+              </Suspense>
             ) : (tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
               <>
                 {source.releases.map((release, i) => (
