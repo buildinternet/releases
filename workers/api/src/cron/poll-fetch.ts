@@ -339,7 +339,6 @@ const CHANGELOG_FILENAMES = [
 ];
 
 const CHANGELOG_MAX_BYTES = 1024 * 1024;
-const CHANGELOG_TTL_MS = 24 * 3600 * 1000;
 
 interface GitHubContentEntry {
   name: string;
@@ -359,14 +358,6 @@ async function refreshChangelogFile(
   source: Source,
   token: string | undefined,
 ): Promise<void> {
-  const [existing] = await db
-    .select()
-    .from(sourceChangelogFiles)
-    .where(eq(sourceChangelogFiles.sourceId, source.id));
-  if (existing && existing.fetchedAt && Date.now() - new Date(existing.fetchedAt).getTime() < CHANGELOG_TTL_MS) {
-    return;
-  }
-
   const match = source.url.match(/github\.com\/([^/]+)\/([^/]+)/);
   if (!match) return;
   const [, owner, rawRepo] = match;
@@ -422,6 +413,11 @@ async function refreshChangelogFile(
   const contentHashHex = await sha256HexWorker(content);
   const url = `https://github.com/${owner}/${repo}/blob/HEAD/${filename}`;
   const now = new Date().toISOString();
+
+  const [existing] = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, source.id));
 
   if (!existing) {
     await db.insert(sourceChangelogFiles).values({

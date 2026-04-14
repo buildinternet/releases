@@ -13,7 +13,7 @@ import {
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
   insertMediaAssets, clearChangeDetected,
   getOrgOverview, upsertOverviewPage,
-  upsertChangelogFile, getChangelogFile,
+  upsertChangelogFile,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -669,22 +669,15 @@ Examples:
             !isRemoteMode()
           ) {
             try {
-              const existing = await getChangelogFile(source.id);
-              const ttlMs = 24 * 3600 * 1000;
-              const stale =
-                !existing ||
-                (existing.fetchedAt && Date.now() - new Date(existing.fetchedAt).getTime() > ttlMs);
-              if (stale) {
-                const file = await fetchChangelogFile(source);
-                if (file) {
-                  const result = await upsertChangelogFile(source.id, file);
-                  if (result.inserted) {
-                    logger.info(`Fetched ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
-                  } else if (result.updated) {
-                    logger.info(`Updated ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
-                  } else {
-                    logger.debug(`${file.filename} for ${source.slug} unchanged (cached)`);
-                  }
+              const file = await fetchChangelogFile(source);
+              if (file) {
+                const result = await upsertChangelogFile(source.id, file);
+                if (result.inserted) {
+                  logger.info(`Fetched ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
+                } else if (result.updated) {
+                  logger.info(`Updated ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
+                } else {
+                  logger.debug(`${file.filename} for ${source.slug} unchanged (cached)`);
                 }
               }
             } catch (err) {
