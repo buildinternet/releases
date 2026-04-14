@@ -88,6 +88,7 @@ Available on both the remote and local servers.
 | `list_products` | List all changelog sources (products) in the index. |
 | `list_organizations` | List all organizations, searchable by name, slug, domain, or account handle. |
 | `get_organization` | Detailed view of a single organization including accounts, tags, sources, products, and domain aliases. |
+| `get_source_changelog` | Read the canonical `CHANGELOG.md` tracked for a GitHub source. Supports heading-aligned slicing via `offset` / `limit` — chain successive calls through the returned next offset to page through large files (e.g. Apollo Client's 700KB CHANGELOG) without blowing out the context window. |
 
 ### Analysis tools
 

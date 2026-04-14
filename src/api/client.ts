@@ -41,8 +41,15 @@ export async function findSource(identifier: string): Promise<Source | null> {
   return apiFetch<Source | null>(`/v1/sources/${identifier}`);
 }
 
-export async function sourceChangelog(slug: string): Promise<SourceChangelogResponse | null> {
-  return apiFetch<SourceChangelogResponse | null>(`/v1/sources/${slug}/changelog`);
+export async function sourceChangelog(
+  slug: string,
+  range?: { offset?: number; limit?: number },
+): Promise<SourceChangelogResponse | null> {
+  const params = new URLSearchParams();
+  if (range?.offset !== undefined) params.set("offset", String(range.offset));
+  if (range?.limit !== undefined) params.set("limit", String(range.limit));
+  const qs = params.toString();
+  return apiFetch<SourceChangelogResponse | null>(`/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`);
 }
 
 export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {

@@ -9,6 +9,7 @@ import {
   listSources,
   listOrganizations,
   getOrganization,
+  getSourceChangelog,
   summarizeChanges,
   compareProducts,
 } from "./tools.js";
@@ -95,6 +96,15 @@ export function createServer(env: Env) {
       identifier: z.string().describe("Organization slug, domain, name, or account handle"),
     },
   }, async (params) => getOrganization(db, params));
+
+  server.registerTool("get_source_changelog", {
+    description: "Read the canonical CHANGELOG.md file tracked for a GitHub source. Supports heading-aligned slicing — pass offset/limit to read a range of characters, and chain successive calls via the returned next offset to page through large files (e.g. Apollo Client's 700KB CHANGELOG). Omit both params to get the first 40k characters.",
+    inputSchema: {
+      source: z.string().describe("Source slug or ID (e.g. 'apollo-client' or 'src_...')"),
+      offset: z.number().optional().describe("Character offset into the full file. Snapped forward to the next heading unless 0."),
+      limit: z.number().optional().describe("Target slice size in characters. The slice ends at a heading boundary; defaults to 40000 when slicing."),
+    },
+  }, withMedia(async (params) => getSourceChangelog(db, params)));
 
   if (env.ENABLE_AI_TOOLS === "true") {
     server.registerTool("summarize_changes", {

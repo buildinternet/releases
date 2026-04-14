@@ -5,6 +5,7 @@ import { sources, releases, organizations, releaseSummaries, products, sourceCha
 import { RELEASE_URL_UPSERT } from "@releases/db/release-upsert.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
+import { buildChangelogResponse } from "@releases/lib/changelog-slice.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
@@ -469,15 +470,10 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
     .orderBy(sourceChangelogFiles.path)
     .limit(1);
   if (!row) return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
-  return c.json({
-    path: row.path,
-    filename: row.filename,
-    url: row.url,
-    rawUrl: row.rawUrl,
-    content: row.content,
-    bytes: row.bytes,
-    fetchedAt: row.fetchedAt,
-  });
+  return c.json(buildChangelogResponse(row, {
+    offset: c.req.query("offset") ?? null,
+    limit: c.req.query("limit") ?? null,
+  }));
 });
 
 sourceRoutes.get("/sources/:slug", async (c) => {

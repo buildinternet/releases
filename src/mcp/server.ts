@@ -4,7 +4,8 @@ import * as z from "zod/v4";
 import { eq, desc, inArray, and } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
-import { sources, releases, organizations, orgAccounts, fetchLog, type Source } from "../db/schema.js";
+import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "../db/schema.js";
+import { buildChangelogResponse } from "../lib/changelog-slice.js";
 import { searchReleases } from "../db/fts.js";
 import {
   findSource, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
@@ -376,6 +377,43 @@ server.registerTool("get_organization", {
   }
 
   return textResult(lines.join("\n"));
+});
+
+// ── get_source_changelog ─────────────────────────────────────────────
+server.registerTool("get_source_changelog", {
+  description: "Read the canonical CHANGELOG.md file tracked for a GitHub source. Supports heading-aligned slicing — pass offset/limit to read a range of characters, and chain successive calls via the returned next offset to page through large files. Omit both params to get the first 40k characters.",
+  inputSchema: {
+    source: z.string().describe("Source slug or ID (e.g. 'apollo-client' or 'src_...')"),
+    offset: z.number().optional().describe("Character offset into the full file. Snapped forward to the next heading unless 0."),
+    limit: z.number().optional().describe("Target slice size in characters. The slice ends at a heading boundary; defaults to 40000 when slicing."),
+  },
+}, async ({ source: identifier, offset, limit }) => {
+  const db = getDb();
+  const source = await findSource(identifier);
+  if (!source) return textResult(`No source found matching "${identifier}"`);
+
+  const [row] = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, source.id))
+    .orderBy(sourceChangelogFiles.path)
+    .limit(1);
+  if (!row) return textResult(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
+
+  const response = buildChangelogResponse(row, {
+    offset: offset !== undefined ? String(offset) : null,
+    limit: limit !== undefined ? String(limit) : (offset !== undefined ? "40000" : null),
+  });
+
+  const text = [
+    `**${source.name}** — ${response.filename}`,
+    `Source: ${response.url}`,
+    `Slice: chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars}${response.nextOffset != null ? ` (next: offset=${response.nextOffset})` : " (end of file)"}`,
+    "",
+    response.content,
+  ].join("\n");
+
+  return textResult(text);
 });
 
 if (isAdminMode()) {

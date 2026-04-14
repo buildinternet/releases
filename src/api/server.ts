@@ -72,7 +72,7 @@ export function startApiServer(port: number) {
         // GET /v1/sources/:slug/changelog
         const sourceChangelogMatch = pathname.match(/^\/v1\/sources\/([^/]+)\/changelog$/);
         if (sourceChangelogMatch) {
-          const result = handleSourceChangelog(sourceChangelogMatch[1]);
+          const result = handleSourceChangelog(sourceChangelogMatch[1], url.searchParams);
           if (!result) return errorResponse("not_found", "Changelog file not found", 404);
           return jsonResponse(result);
         }

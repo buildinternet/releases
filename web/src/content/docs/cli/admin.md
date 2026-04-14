@@ -39,6 +39,25 @@ releases admin source edit my-blog --primary
 releases admin source remove my-blog
 ```
 
+## Read or refresh a CHANGELOG file
+
+For `github` sources, the root-level `CHANGELOG.md` is tracked alongside tagged releases and surfaced in the web UI as a separate tab.
+
+```bash
+# Print the full file to stdout
+releases admin source changelog apollo-client
+
+# Slice a range, snapped to heading boundaries (Context7-style)
+releases admin source changelog apollo-client --limit 10000
+releases admin source changelog apollo-client --offset 10000 --limit 10000
+releases admin source changelog apollo-client --limit 5000 --json  # with offset/nextOffset/totalChars
+
+# Manually refresh the cached copy (local mode only — remote mode uses a worker cron on a 24h TTL)
+releases admin source refresh-changelog apollo-client
+```
+
+Works in both local and remote mode. The slicer snaps boundaries to `##` headings so sections are never cut mid-entry. Chain successive calls by feeding `nextOffset` back as `--offset`.
+
 ## Evaluate
 
 Evaluate a URL without adding it as a source:
