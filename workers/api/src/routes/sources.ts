@@ -5,7 +5,7 @@ import { sources, releases, organizations, releaseSummaries, products, sourceCha
 import { RELEASE_URL_UPSERT } from "@releases/db/release-upsert.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { buildChangelogResponse } from "@releases/lib/changelog-slice.js";
+import { buildChangelogResponse, selectChangelogFile } from "@releases/lib/changelog-slice.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
@@ -472,20 +472,13 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
     return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
   }
 
-  const requestedPath = c.req.query("path");
-  let selected = allRows[0];
-  if (requestedPath) {
-    const match = allRows.find((r) => r.path === requestedPath);
-    if (!match) {
-      return c.json(
-        { error: "not_found", message: `Changelog file not found for path: ${requestedPath}` },
-        404,
-      );
-    }
-    selected = match;
-  } else {
-    const root = allRows.find((r) => !r.path.includes("/"));
-    if (root) selected = root;
+  const requestedPath = c.req.query("path") ?? null;
+  const selected = selectChangelogFile(allRows, requestedPath);
+  if (!selected) {
+    return c.json(
+      { error: "not_found", message: `Changelog file not found for path: ${requestedPath}` },
+      404,
+    );
   }
 
   const files = allRows.map((r) => ({

@@ -71,59 +71,6 @@ export function parseWorkspaces(pkgJsonText: string): string[] {
   return [];
 }
 
-/**
- * Resolve a single workspace glob entry to a list of concrete package
- * directories via one GitHub Contents API listing (for "dir/*" globs) or
- * an identity pass-through (for literal entries). Only "dir/*" one-level
- * wildcards and literal dirs are supported in phase 1 — anything else
- * (globstars, nested wildcards, negations) is dropped.
- */
-export async function resolveWorkspaceGlob(
-  owner: string,
-  repo: string,
-  glob: string,
-  apiHeaders: Record<string, string>,
-  listRoot: (url: string) => Promise<GitHubContentEntry[] | null> = defaultListRoot,
-): Promise<string[]> {
-  if (glob.startsWith("!") || glob.includes("**")) return [];
-  const trimmed = glob.replace(/\/$/, "");
-  if (!trimmed.endsWith("/*")) {
-    if (trimmed.includes("*")) return []; // unsupported glob shape
-    return [trimmed];
-  }
-  const parent = trimmed.slice(0, -2);
-  if (!parent || parent.includes("*")) return [];
-  const entries = await listRoot(
-    `https://api.github.com/repos/${owner}/${repo}/contents/${parent}?headers=${encodeURIComponent(
-      JSON.stringify(apiHeaders),
-    )}`,
-  );
-  if (!entries) return [];
-  return entries
-    .filter((e) => e.type === "dir")
-    .map((e) => `${parent}/${e.name}`);
-}
-
-// Default implementation passed through resolveWorkspaceGlob so tests can
-// substitute a mock without touching network.
-async function defaultListRoot(urlWithHeaders: string): Promise<GitHubContentEntry[] | null> {
-  // URL-of-headers hack keeps the helper signature simple while letting
-  // tests inject; production code hits this branch and parses back out.
-  const markerIndex = urlWithHeaders.indexOf("?headers=");
-  const url = markerIndex === -1 ? urlWithHeaders : urlWithHeaders.slice(0, markerIndex);
-  const headers =
-    markerIndex === -1
-      ? {}
-      : (JSON.parse(decodeURIComponent(urlWithHeaders.slice(markerIndex + "?headers=".length))) as Record<string, string>);
-  try {
-    const res = await fetch(url, { headers });
-    if (!res.ok) return null;
-    return (await res.json()) as GitHubContentEntry[];
-  } catch {
-    return null;
-  }
-}
-
 /** Pick the first matching changelog filename from a directory listing. */
 export function pickChangelogInDir(entries: GitHubContentEntry[]): string | null {
   const files = new Set(entries.filter((e) => e.type === "file").map((e) => e.name));
@@ -251,9 +198,6 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
 
   const cache: ListingCache = { map: new Map() };
   let requestCount = 0;
-
-  // Determine candidate directories (dirPath strings; "" means repo root).
-  const dirs: string[] = [""];
 
   // Override path: skip discovery entirely.
   const meta = parseMetadata(source.metadata);

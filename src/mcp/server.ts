@@ -5,7 +5,7 @@ import { eq, desc, inArray, and } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
 import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "../db/schema.js";
-import { buildChangelogResponse } from "../lib/changelog-slice.js";
+import { buildChangelogResponse, selectChangelogFile } from "../lib/changelog-slice.js";
 import { searchReleases } from "../db/fts.js";
 import {
   findSource, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
@@ -402,17 +402,10 @@ server.registerTool("get_source_changelog", {
     return textResult(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
   }
 
-  let selected = allRows[0];
-  if (requestedPath) {
-    const match = allRows.find((r) => r.path === requestedPath);
-    if (!match) {
-      const available = allRows.map((r) => `- ${r.path}`).join("\n");
-      return textResult(`No CHANGELOG file found at path "${requestedPath}" for "${source.slug}". Available files:\n${available}`);
-    }
-    selected = match;
-  } else {
-    const root = allRows.find((r) => !r.path.includes("/"));
-    if (root) selected = root;
+  const selected = selectChangelogFile(allRows, requestedPath);
+  if (!selected) {
+    const available = allRows.map((r) => `- ${r.path}`).join("\n");
+    return textResult(`No CHANGELOG file found at path "${requestedPath}" for "${source.slug}". Available files:\n${available}`);
   }
 
   const files = allRows.map((r) => ({

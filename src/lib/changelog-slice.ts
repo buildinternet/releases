@@ -156,6 +156,22 @@ export function isTruncated(bytes: number): boolean {
   return bytes >= CHANGELOG_MAX_BYTES;
 }
 
+/**
+ * Pick the row a changelog read should serve. Callers guarantee `rows` is
+ * non-empty. When `requestedPath` is set, returns the exact match or `null`
+ * to signal "not found". Otherwise prefers the root CHANGELOG (no slash in
+ * path) and falls back to the first row by caller-provided order.
+ */
+export function selectChangelogFile<T extends { path: string }>(
+  rows: readonly T[],
+  requestedPath: string | null | undefined,
+): T | null {
+  if (requestedPath) {
+    return rows.find((r) => r.path === requestedPath) ?? null;
+  }
+  return rows.find((r) => !r.path.includes("/")) ?? rows[0];
+}
+
 export interface ChangelogResponse extends ChangelogFileRow, ChangelogSliceResult {
   truncated: boolean;
   truncatedAt: number | null;

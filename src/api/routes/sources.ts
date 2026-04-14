@@ -3,7 +3,7 @@ import { getDb } from "../../db/connection.js";
 import { sources, releases, organizations, sourceChangelogFiles } from "../../db/schema.js";
 import { getSourceMetrics } from "../metrics.js";
 import type { SourceChangelogResponse } from "../types.js";
-import { buildChangelogResponse } from "../../lib/changelog-slice.js";
+import { buildChangelogResponse, selectChangelogFile } from "../../lib/changelog-slice.js";
 
 export function handleSourceActivity(slug: string, searchParams: URLSearchParams) {
   const db = getDb();
@@ -216,16 +216,8 @@ export function handleSourceChangelog(
   if (allRows.length === 0) return null;
 
   const requestedPath = searchParams?.get("path") ?? null;
-  let selected = allRows[0];
-  if (requestedPath) {
-    const match = allRows.find((r) => r.path === requestedPath);
-    if (!match) return CHANGELOG_PATH_NOT_FOUND;
-    selected = match;
-  } else {
-    // Default to the root CHANGELOG (no slash in path) when available.
-    const root = allRows.find((r) => !r.path.includes("/"));
-    if (root) selected = root;
-  }
+  const selected = selectChangelogFile(allRows, requestedPath);
+  if (!selected) return CHANGELOG_PATH_NOT_FOUND;
 
   const files = allRows.map((r) => ({
     path: r.path,

@@ -15,7 +15,7 @@ import {
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { getEntityType, normalizeReleaseId } from "@releases/lib/id.js";
-import { buildChangelogResponse } from "@releases/lib/changelog-slice.js";
+import { buildChangelogResponse, selectChangelogFile } from "@releases/lib/changelog-slice.js";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -439,17 +439,10 @@ export async function getSourceChangelog(
     return text(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
   }
 
-  let selected = allRows[0];
-  if (params.path) {
-    const match = allRows.find((r) => r.path === params.path);
-    if (!match) {
-      const available = allRows.map((r) => `- ${r.path}`).join("\n");
-      return text(`No CHANGELOG file found at path "${params.path}" for "${source.slug}". Available files:\n${available}`);
-    }
-    selected = match;
-  } else {
-    const root = allRows.find((r) => !r.path.includes("/"));
-    if (root) selected = root;
+  const selected = selectChangelogFile(allRows, params.path ?? null);
+  if (!selected) {
+    const available = allRows.map((r) => `- ${r.path}`).join("\n");
+    return text(`No CHANGELOG file found at path "${params.path}" for "${source.slug}". Available files:\n${available}`);
   }
 
   const files = allRows.map((r) => ({
