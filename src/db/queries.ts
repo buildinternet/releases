@@ -1552,6 +1552,13 @@ export interface ChangelogFileInput {
   content: string;
   contentHash: string;
   bytes: number;
+  /**
+   * True when the raw file exceeded the 1MB cap and content was sliced.
+   * Derived at fetch time and threaded through to API/MCP/web responses.
+   * Not persisted as a column — `bytes === CHANGELOG_MAX_BYTES` is a
+   * sufficient stable signal across reads.
+   */
+  truncated?: boolean;
 }
 
 /** Local-mode only. The worker mirrors this in workers/api/src/cron/poll-fetch.ts. */
@@ -1604,7 +1611,55 @@ export async function getChangelogFile(sourceId: string): Promise<SourceChangelo
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, sourceId))
-    .orderBy(sourceChangelogFiles.path)
+    .orderBy(sourceChangelogFiles.path);
+  if (rows.length === 0) return null;
+  // Prefer the root CHANGELOG over the first-by-path fallback so single-file
+  // sources and monorepos both return the canonical root file by default.
+  const root = rows.find((r) => !r.path.includes("/"));
+  return root ?? rows[0];
+}
+
+export async function listChangelogFiles(sourceId: string): Promise<SourceChangelogFile[]> {
+  const db = getDb();
+  return db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, sourceId))
+    .orderBy(sourceChangelogFiles.path);
+}
+
+export async function getChangelogFileByPath(
+  sourceId: string,
+  path: string,
+): Promise<SourceChangelogFile | null> {
+  const db = getDb();
+  const rows = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(and(eq(sourceChangelogFiles.sourceId, sourceId), eq(sourceChangelogFiles.path, path)))
     .limit(1);
   return rows[0] ?? null;
+}
+
+/**
+ * Delete changelog rows whose `path` is no longer in the discovered set.
+ * Used to prune per-package CHANGELOGs that have been removed from a
+ * monorepo upstream. Pass an empty array to delete all rows for a source.
+ */
+export async function deleteChangelogFilesNotIn(
+  sourceId: string,
+  keepPaths: string[],
+): Promise<number> {
+  const db = getDb();
+  const existing = await db
+    .select({ id: sourceChangelogFiles.id, path: sourceChangelogFiles.path })
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, sourceId));
+  const keep = new Set(keepPaths);
+  const toDelete = existing.filter((row) => !keep.has(row.path));
+  if (toDelete.length === 0) return 0;
+  for (const row of toDelete) {
+    await db.delete(sourceChangelogFiles).where(eq(sourceChangelogFiles.id, row.id));
+  }
+  return toDelete.length;
 }

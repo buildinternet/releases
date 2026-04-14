@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger.js";
 import { handleStats } from "./routes/stats.js";
 import { handleOrgs, handleOrgDetail } from "./routes/orgs.js";
-import { handleSources, handleSourceDetail, handleSourceActivity, handleSourceChangelog } from "./routes/sources.js";
+import { handleSources, handleSourceDetail, handleSourceActivity, handleSourceChangelog, CHANGELOG_PATH_NOT_FOUND } from "./routes/sources.js";
 import { handleSearch } from "./routes/search.js";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -73,6 +73,9 @@ export function startApiServer(port: number) {
         const sourceChangelogMatch = pathname.match(/^\/v1\/sources\/([^/]+)\/changelog$/);
         if (sourceChangelogMatch) {
           const result = handleSourceChangelog(sourceChangelogMatch[1], url.searchParams);
+          if (result === CHANGELOG_PATH_NOT_FOUND) {
+            return errorResponse("not_found", `Changelog file not found for path: ${url.searchParams.get("path")}`, 404);
+          }
           if (!result) return errorResponse("not_found", "Changelog file not found", 404);
           return jsonResponse(result);
         }

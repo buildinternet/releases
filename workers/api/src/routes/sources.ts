@@ -463,17 +463,49 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
   const db = createDb(c.env.DB);
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
-  const [row] = await db
+  const allRows = await db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
-    .orderBy(sourceChangelogFiles.path)
-    .limit(1);
-  if (!row) return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
-  return c.json(buildChangelogResponse(row, {
-    offset: c.req.query("offset") ?? null,
-    limit: c.req.query("limit") ?? null,
+    .orderBy(sourceChangelogFiles.path);
+  if (allRows.length === 0) {
+    return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
+  }
+
+  const requestedPath = c.req.query("path");
+  let selected = allRows[0];
+  if (requestedPath) {
+    const match = allRows.find((r) => r.path === requestedPath);
+    if (!match) {
+      return c.json(
+        { error: "not_found", message: `Changelog file not found for path: ${requestedPath}` },
+        404,
+      );
+    }
+    selected = match;
+  } else {
+    const root = allRows.find((r) => !r.path.includes("/"));
+    if (root) selected = root;
+  }
+
+  const files = allRows.map((r) => ({
+    path: r.path,
+    filename: r.filename,
+    url: r.url,
+    bytes: r.bytes,
+    fetchedAt: r.fetchedAt,
   }));
+
+  return c.json(
+    buildChangelogResponse(
+      selected,
+      {
+        offset: c.req.query("offset") ?? null,
+        limit: c.req.query("limit") ?? null,
+      },
+      files,
+    ),
+  );
 });
 
 sourceRoutes.get("/sources/:slug", async (c) => {

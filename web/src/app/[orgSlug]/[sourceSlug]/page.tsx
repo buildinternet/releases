@@ -36,10 +36,10 @@ export default async function SourcePage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string; sourceSlug: string }>;
-  searchParams: Promise<{ page?: string; tab?: string }>;
+  searchParams: Promise<{ page?: string; tab?: string; path?: string }>;
 }) {
   const { orgSlug, sourceSlug } = await params;
-  const { page: pageParam, tab } = await searchParams;
+  const { page: pageParam, tab, path: changelogPath } = await searchParams;
   const page = parseInt(pageParam ?? "1", 10) || 1;
 
   const twoYearsAgo = new Date();
@@ -125,7 +125,7 @@ export default async function SourcePage({
               hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
               hasChangelog={!!source.hasChangelogFile}
             />
-            <SourceMainContent source={source} tab={tab} basePath={`/${orgSlug}/${sourceSlug}`} />
+            <SourceMainContent source={source} tab={tab} basePath={`/${orgSlug}/${sourceSlug}`} changelogPath={changelogPath} />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>

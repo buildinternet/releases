@@ -19,6 +19,8 @@ interface ChangelogStreamProps {
   slug: string;
   markdownClassName: string;
   initial: InitialSlice;
+  /** Active file path for multi-file sources; threaded into lazy-load fetches. */
+  activePath?: string;
 }
 
 interface Chunk {
@@ -30,6 +32,7 @@ export function ChangelogStream({
   slug,
   markdownClassName,
   initial,
+  activePath,
 }: ChangelogStreamProps) {
   const [chunks, setChunks] = useState<Chunk[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(initial.nextOffset);
@@ -44,8 +47,12 @@ export function ChangelogStream({
     setLoading(true);
     setError(null);
     try {
+      const params = new URLSearchParams();
+      params.set("offset", String(nextOffset));
+      params.set("limit", String(initial.limit));
+      if (activePath) params.set("path", activePath);
       const res = await fetch(
-        `/api/sources/${encodeURIComponent(slug)}/changelog?offset=${nextOffset}&limit=${initial.limit}`,
+        `/api/sources/${encodeURIComponent(slug)}/changelog?${params.toString()}`,
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: SourceChangelogResponse = await res.json();
@@ -58,7 +65,7 @@ export function ChangelogStream({
     } finally {
       setLoading(false);
     }
-  }, [loading, nextOffset, slug, initial.limit]);
+  }, [loading, nextOffset, slug, initial.limit, activePath]);
 
   useEffect(() => {
     if (nextOffset == null) return;

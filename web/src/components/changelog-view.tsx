@@ -5,6 +5,7 @@ import { markdownComponents } from "./markdown-components";
 import { api } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/formatters";
 import { ChangelogStream } from "./changelog-stream";
+import { ChangelogFilePicker } from "./changelog-file-picker";
 import { DEFAULT_CHANGELOG_SLICE_LIMIT } from "@shared/changelog-slice";
 
 const markdownClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
@@ -30,10 +31,19 @@ export function ChangelogSkeleton() {
   );
 }
 
-export async function ChangelogView({ sourceSlug }: { sourceSlug: string }) {
+export async function ChangelogView({
+  sourceSlug,
+  path,
+}: {
+  sourceSlug: string;
+  path?: string;
+}) {
   let file;
   try {
-    file = await api.sourceChangelog(sourceSlug, { limit: DEFAULT_CHANGELOG_SLICE_LIMIT });
+    file = await api.sourceChangelog(sourceSlug, {
+      path,
+      limit: DEFAULT_CHANGELOG_SLICE_LIMIT,
+    });
   } catch {
     file = null;
   }
@@ -56,10 +66,17 @@ export async function ChangelogView({ sourceSlug }: { sourceSlug: string }) {
     </ReactMarkdown>
   );
 
+  const files = file.files ?? [];
+  const hasMultiple = files.length > 1;
+
   return (
     <div className="mt-5">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 text-[12px] text-stone-500 dark:text-stone-400 mb-3">
-        <span className="font-mono text-stone-600 dark:text-stone-300">{file.filename}</span>
+        {hasMultiple ? (
+          <ChangelogFilePicker files={files} activePath={file.path} />
+        ) : (
+          <span className="font-mono text-stone-600 dark:text-stone-300">{file.filename}</span>
+        )}
         <span title={file.fetchedAt}>Last fetched {formatRelativeDate(file.fetchedAt)}</span>
         <a
           href={file.url}
@@ -70,8 +87,20 @@ export async function ChangelogView({ sourceSlug }: { sourceSlug: string }) {
           View on GitHub
         </a>
       </div>
+      {file.truncated && (
+        <div
+          role="alert"
+          className="mb-4 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[12px] text-amber-800 dark:text-amber-200"
+        >
+          This file exceeds 1MB and has been truncated{file.truncatedAt !== null ? ` at byte ${file.truncatedAt.toLocaleString()}` : ""}. The tail of the upstream file is not shown.
+        </div>
+      )}
       <ChangelogStream
+        // Keying by path resets stream state on file switch so chunks from a
+        // prior file don't bleed into the new one.
+        key={file.path}
         slug={sourceSlug}
+        activePath={file.path}
         markdownClassName={markdownClasses}
         initial={{
           content: initial,

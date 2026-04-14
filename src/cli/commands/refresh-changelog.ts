@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findSource, upsertChangelogFile, getChangelogFile } from "../../db/queries.js";
-import { fetchChangelogFile } from "../../adapters/github.js";
+import { findSource, upsertChangelogFile, deleteChangelogFilesNotIn, getChangelogFile, listChangelogFiles } from "../../db/queries.js";
+import { fetchChangelogFiles } from "../../adapters/github.js";
 import { buildChangelogResponse } from "../../lib/changelog-slice.js";
 import { sourceChangelog as sourceChangelogRemote } from "../../api/client.js";
 import { sourceNotFound } from "../suggest.js";
@@ -28,8 +28,8 @@ export function registerRefreshChangelogCommand(program: Command) {
         process.exit(1);
       }
 
-      const file = await fetchChangelogFile(source);
-      if (!file) {
+      const files = await fetchChangelogFiles(source);
+      if (files.length === 0) {
         if (opts.json) {
           console.log(JSON.stringify({ ok: false, reason: "no_changelog_found" }, null, 2));
         } else {
@@ -38,23 +38,33 @@ export function registerRefreshChangelogCommand(program: Command) {
         process.exit(1);
       }
 
-      const result = await upsertChangelogFile(source.id, file);
-
-      if (opts.json) {
-        console.log(JSON.stringify({
-          ok: true,
+      const results: { path: string; bytes: number; truncated: boolean; contentHash: string; inserted: boolean; updated: boolean }[] = [];
+      for (const file of files) {
+        const result = await upsertChangelogFile(source.id, file);
+        results.push({
           path: file.path,
           bytes: file.bytes,
+          truncated: !!file.truncated,
           contentHash: file.contentHash,
           inserted: result.inserted,
           updated: result.updated,
-        }, null, 2));
+        });
+      }
+      const pruned = await deleteChangelogFilesNotIn(source.id, files.map((f) => f.path));
+
+      if (opts.json) {
+        console.log(JSON.stringify({ ok: true, files: results, pruned }, null, 2));
         return;
       }
 
-      const verb = result.inserted ? "Inserted" : result.updated ? "Updated" : "Refreshed (no change)";
-      console.log(chalk.green(`${verb} ${file.filename} for ${source.slug} (${file.bytes} bytes)`));
-      console.log(chalk.dim(`URL: ${file.url}`));
+      for (const r of results) {
+        const verb = r.inserted ? "Inserted" : r.updated ? "Updated" : "Refreshed (no change)";
+        const suffix = r.truncated ? ", truncated" : "";
+        console.log(chalk.green(`${verb} ${r.path} for ${source.slug} (${r.bytes} bytes${suffix})`));
+      }
+      if (pruned > 0) {
+        console.log(chalk.dim(`Pruned ${pruned} stale file(s)`));
+      }
     });
 }
 
@@ -63,10 +73,11 @@ export function registerChangelogCommand(program: Command) {
     .command("changelog")
     .description("Print the tracked CHANGELOG file for a source, optionally sliced by char range")
     .argument("<slug>", "Source ID or slug")
+    .option("--path <path>", "Specific file path to read (e.g. packages/next/CHANGELOG.md)")
     .option("--offset <n>", "Character offset to start reading from", (v) => parseInt(v, 10))
     .option("--limit <n>", "Max characters to read (snapped to heading boundaries)", (v) => parseInt(v, 10))
     .option("--json", "Output as JSON with offset, nextOffset, totalChars")
-    .action(async (slug: string, opts: { offset?: number; limit?: number; json?: boolean }) => {
+    .action(async (slug: string, opts: { path?: string; offset?: number; limit?: number; json?: boolean }) => {
       const source = await findSource(slug);
       if (!source) return sourceNotFound(slug);
 
@@ -75,6 +86,7 @@ export function registerChangelogCommand(program: Command) {
       let response;
       if (isRemoteMode()) {
         const remote = await sourceChangelogRemote(source.slug, {
+          path: opts.path,
           offset: opts.offset,
           limit: opts.limit ?? (ranging ? 40_000 : undefined),
         });
@@ -84,15 +96,38 @@ export function registerChangelogCommand(program: Command) {
         }
         response = remote;
       } else {
-        const row = await getChangelogFile(source.id);
-        if (!row) {
+        const allRows = await listChangelogFiles(source.id);
+        if (allRows.length === 0) {
           logger.error(`No CHANGELOG file is tracked for ${source.slug}. Run 'releases admin source refresh-changelog ${source.slug}' first.`);
           process.exit(1);
         }
-        response = buildChangelogResponse(row, {
-          offset: opts.offset !== undefined ? String(opts.offset) : null,
-          limit: opts.limit !== undefined ? String(opts.limit) : (ranging ? "40000" : null),
-        });
+        let selected = allRows[0];
+        if (opts.path) {
+          const match = allRows.find((r) => r.path === opts.path);
+          if (!match) {
+            logger.error(`No CHANGELOG file at path "${opts.path}" for ${source.slug}. Available: ${allRows.map((r) => r.path).join(", ")}`);
+            process.exit(1);
+          }
+          selected = match;
+        } else {
+          const root = await getChangelogFile(source.id);
+          if (root) selected = root;
+        }
+        const files = allRows.map((r) => ({
+          path: r.path,
+          filename: r.filename,
+          url: r.url,
+          bytes: r.bytes,
+          fetchedAt: r.fetchedAt,
+        }));
+        response = buildChangelogResponse(
+          selected,
+          {
+            offset: opts.offset !== undefined ? String(opts.offset) : null,
+            limit: opts.limit !== undefined ? String(opts.limit) : (ranging ? "40000" : null),
+          },
+          files,
+        );
       }
 
       if (opts.json) {

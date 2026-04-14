@@ -5,7 +5,7 @@ import type { Source } from "../../db/schema.js";
 import { sourceNotFound } from "../suggest.js";
 import type { FetchOptions } from "../../adapters/types.js";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
-import { detectChangelogUrl, fetchChangelogFile } from "../../adapters/github.js";
+import { detectChangelogUrl, fetchChangelogFiles } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
   findSource, listAllSources, listFetchableSources, listSourcesWithChanges,
@@ -14,6 +14,7 @@ import {
   insertMediaAssets, clearChangeDetected,
   getOrgOverview, upsertOverviewPage,
   upsertChangelogFile,
+  deleteChangelogFilesNotIn,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -669,16 +670,23 @@ Examples:
             !isRemoteMode()
           ) {
             try {
-              const file = await fetchChangelogFile(source);
-              if (file) {
+              const files = await fetchChangelogFiles(source);
+              for (const file of files) {
                 const result = await upsertChangelogFile(source.id, file);
                 if (result.inserted) {
-                  logger.info(`Fetched ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
+                  logger.info(`Fetched ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
                 } else if (result.updated) {
-                  logger.info(`Updated ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
+                  logger.info(`Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
                 } else {
-                  logger.debug(`${file.filename} for ${source.slug} unchanged (cached)`);
+                  logger.debug(`${file.path} for ${source.slug} unchanged (cached)`);
                 }
+              }
+              const pruned = await deleteChangelogFilesNotIn(
+                source.id,
+                files.map((f) => f.path),
+              );
+              if (pruned > 0) {
+                logger.info(`Pruned ${pruned} stale changelog file(s) for ${source.slug}`);
               }
             } catch (err) {
               logger.warn(`Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);

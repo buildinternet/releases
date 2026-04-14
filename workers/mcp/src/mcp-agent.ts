@@ -109,10 +109,11 @@ export function createServer(env: Env) {
   }, async (params) => getSource(db, params));
 
   server.registerTool("get_source_changelog", {
-    description: "Read the canonical CHANGELOG.md file tracked for a GitHub source. Supports heading-aligned slicing — pass offset/limit to read a range of characters, and chain successive calls via the returned next offset to page through large files (e.g. Apollo Client's 700KB CHANGELOG). Omit both params to get the first 40k characters.",
+    description: "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root (or the only file for single-file sources). The response lists every file tracked for the source so you can discover siblings in one round-trip. Supports heading-aligned slicing — pass offset/limit to page through large files. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
     inputSchema: {
       source: z.string().describe("Source slug or ID (e.g. 'apollo-client' or 'src_...')"),
-      offset: z.number().optional().describe("Character offset into the full file. Snapped forward to the next heading unless 0."),
+      path: z.string().optional().describe("Specific file path to read (e.g. 'packages/next/CHANGELOG.md'). Defaults to the root CHANGELOG."),
+      offset: z.number().optional().describe("Character offset into the selected file. Snapped forward to the next heading unless 0."),
       limit: z.number().optional().describe("Target slice size in characters. The slice ends at a heading boundary; defaults to 40000 when slicing."),
     },
   }, withMedia(async (params) => getSourceChangelog(db, params)));

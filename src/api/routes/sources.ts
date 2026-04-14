@@ -194,23 +194,53 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   };
 }
 
+/**
+ * Symbol returned when an explicit `path` param doesn't match any file.
+ * Callers should surface this as a 404 distinct from "source has no files".
+ */
+export const CHANGELOG_PATH_NOT_FOUND = Symbol("changelog_path_not_found");
+
 export function handleSourceChangelog(
   slug: string,
   searchParams?: URLSearchParams,
-): SourceChangelogResponse | null {
+): SourceChangelogResponse | null | typeof CHANGELOG_PATH_NOT_FOUND {
   const db = getDb();
   const [src] = db.select().from(sources).where(eq(sources.slug, slug)).all();
   if (!src) return null;
-  const [row] = db
+  const allRows = db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
     .orderBy(sourceChangelogFiles.path)
-    .limit(1)
     .all();
-  if (!row) return null;
-  return buildChangelogResponse(row, {
-    offset: searchParams?.get("offset") ?? null,
-    limit: searchParams?.get("limit") ?? null,
-  });
+  if (allRows.length === 0) return null;
+
+  const requestedPath = searchParams?.get("path") ?? null;
+  let selected = allRows[0];
+  if (requestedPath) {
+    const match = allRows.find((r) => r.path === requestedPath);
+    if (!match) return CHANGELOG_PATH_NOT_FOUND;
+    selected = match;
+  } else {
+    // Default to the root CHANGELOG (no slash in path) when available.
+    const root = allRows.find((r) => !r.path.includes("/"));
+    if (root) selected = root;
+  }
+
+  const files = allRows.map((r) => ({
+    path: r.path,
+    filename: r.filename,
+    url: r.url,
+    bytes: r.bytes,
+    fetchedAt: r.fetchedAt,
+  }));
+
+  return buildChangelogResponse(
+    selected,
+    {
+      offset: searchParams?.get("offset") ?? null,
+      limit: searchParams?.get("limit") ?? null,
+    },
+    files,
+  );
 }

@@ -9,6 +9,7 @@ export async function GET(
   const { slug } = await params;
   const url = new URL(req.url);
   const range = {
+    path: url.searchParams.get("path") ?? undefined,
     offset: parseRangeParam(url.searchParams.get("offset")),
     limit: parseRangeParam(url.searchParams.get("limit")),
   };

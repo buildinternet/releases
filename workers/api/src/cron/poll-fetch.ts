@@ -322,7 +322,7 @@ export async function fetchOne(
   }
 }
 
-// Source of truth: src/adapters/github.ts#fetchChangelogFile. Worker uses
+// Source of truth: src/adapters/github.ts#fetchChangelogFiles. Worker uses
 // Web Crypto + Hono db binding, so the implementation is duplicated rather
 // than imported to keep the worker bundle free of Node/Bun globals.
 
@@ -339,6 +339,7 @@ const CHANGELOG_FILENAMES = [
 ];
 
 const CHANGELOG_MAX_BYTES = 1024 * 1024;
+const CHANGELOG_MAX_FILES = 20;
 
 interface GitHubContentEntry {
   name: string;
@@ -353,6 +354,119 @@ async function sha256HexWorker(input: string): Promise<string> {
     .join("");
 }
 
+function truncateToByteCap(content: string): { content: string; bytes: number; truncated: boolean } {
+  const encoder = new TextEncoder();
+  const bytes = encoder.encode(content).length;
+  if (bytes <= CHANGELOG_MAX_BYTES) return { content, bytes, truncated: false };
+  let lo = 0;
+  let hi = content.length;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >>> 1;
+    if (encoder.encode(content.slice(0, mid)).length <= CHANGELOG_MAX_BYTES) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  const sliced = content.slice(0, lo);
+  return { content: sliced, bytes: encoder.encode(sliced).length, truncated: true };
+}
+
+function parseWorkspaces(pkgJsonText: string): string[] {
+  try {
+    const parsed = JSON.parse(pkgJsonText) as { workspaces?: unknown };
+    const ws = parsed.workspaces;
+    if (!ws) return [];
+    if (Array.isArray(ws)) return ws.filter((x): x is string => typeof x === "string");
+    if (typeof ws === "object" && ws !== null && Array.isArray((ws as { packages?: unknown }).packages)) {
+      return ((ws as { packages: unknown[] }).packages).filter((x): x is string => typeof x === "string");
+    }
+    return [];
+  } catch {
+    return [];
+  }
+}
+
+async function listDirContents(
+  owner: string,
+  repo: string,
+  dir: string,
+  apiHeaders: Record<string, string>,
+): Promise<GitHubContentEntry[] | null> {
+  try {
+    const url = dir
+      ? `https://api.github.com/repos/${owner}/${repo}/contents/${dir}`
+      : `https://api.github.com/repos/${owner}/${repo}/contents/`;
+    const res = await fetch(url, { headers: apiHeaders });
+    if (!res.ok) return null;
+    return (await res.json()) as GitHubContentEntry[];
+  } catch {
+    return null;
+  }
+}
+
+function pickChangelog(entries: GitHubContentEntry[]): string | null {
+  const files = new Set(entries.filter((e) => e.type === "file").map((e) => e.name));
+  return CHANGELOG_FILENAMES.find((name) => files.has(name)) ?? null;
+}
+
+interface WorkerFetchedFile {
+  path: string;
+  filename: string;
+  url: string;
+  rawUrl: string;
+  content: string;
+  contentHashHex: string;
+  bytes: number;
+  truncated: boolean;
+}
+
+async function fetchOneFile(
+  owner: string,
+  repo: string,
+  dir: string,
+  filename: string,
+  rawHeaders: Record<string, string>,
+  sourceSlug: string,
+): Promise<WorkerFetchedFile | null> {
+  const fullPath = dir ? `${dir}/${filename}` : filename;
+  const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${fullPath}`;
+  let res: Response;
+  try {
+    res = await fetch(rawUrl, { headers: rawHeaders });
+  } catch (err) {
+    console.warn(`[cron] refreshChangelogFile(${sourceSlug}): raw fetch failed for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+  if (!res.ok) {
+    console.warn(`[cron] refreshChangelogFile(${sourceSlug}): raw fetch ${res.status} for ${fullPath}`);
+    return null;
+  }
+  const raw = await res.text();
+  const { content, bytes, truncated } = truncateToByteCap(raw);
+  if (truncated) {
+    console.warn(`[cron] refreshChangelogFile(${sourceSlug}): ${fullPath} exceeds size cap, truncated to ${bytes} bytes`);
+  }
+  const contentHashHex = await sha256HexWorker(content);
+  return {
+    path: fullPath,
+    filename,
+    url: `https://github.com/${owner}/${repo}/blob/HEAD/${fullPath}`,
+    rawUrl,
+    content,
+    contentHashHex,
+    bytes,
+    truncated,
+  };
+}
+
+/**
+ * Discover and refresh all tracked CHANGELOG files for a GitHub source —
+ * root plus per-package files resolved from `package.json#workspaces`.
+ * Capped at CHANGELOG_MAX_FILES. Emits one info log summarizing file/request
+ * counts. Callers (cron) wrap this in a try/catch so the outer fetch never
+ * fails on a changelog refresh error.
+ */
 async function refreshChangelogFile(
   db: ReturnType<typeof drizzle>,
   source: Source,
@@ -368,89 +482,154 @@ async function refreshChangelogFile(
     "User-Agent": "releases/0.1",
   };
   if (token) apiHeaders.Authorization = `Bearer ${token}`;
-
-  let entries: GitHubContentEntry[];
-  try {
-    const listing = await fetch(
-      `https://api.github.com/repos/${owner}/${repo}/contents/`,
-      { headers: apiHeaders },
-    );
-    if (!listing.ok) {
-      console.warn(`[cron] refreshChangelogFile(${source.slug}): root listing returned ${listing.status}`);
-      return;
-    }
-    entries = (await listing.json()) as GitHubContentEntry[];
-  } catch (err) {
-    console.warn(`[cron] refreshChangelogFile(${source.slug}): root listing failed: ${err instanceof Error ? err.message : String(err)}`);
-    return;
-  }
-
-  const rootFiles = new Set(entries.filter((e) => e.type === "file").map((e) => e.name));
-  const filename = CHANGELOG_FILENAMES.find((name) => rootFiles.has(name));
-  if (!filename) return;
-
   const rawHeaders: Record<string, string> = { "User-Agent": "releases/0.1" };
   if (token) rawHeaders.Authorization = `Bearer ${token}`;
 
-  const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${filename}`;
-  let res: Response;
-  try {
-    res = await fetch(rawUrl, { headers: rawHeaders });
-  } catch (err) {
-    console.warn(`[cron] refreshChangelogFile(${source.slug}): raw fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+  let requestCount = 0;
+  const fetched: WorkerFetchedFile[] = [];
+
+  // Override path via source.metadata.changelogPaths.
+  let override: string[] | null = null;
+  if (source.metadata) {
+    try {
+      const meta = JSON.parse(source.metadata) as { changelogPaths?: unknown };
+      if (Array.isArray(meta.changelogPaths)) {
+        override = (meta.changelogPaths as unknown[]).filter((x): x is string => typeof x === "string");
+      }
+    } catch {
+      override = null;
+    }
+  }
+
+  const rootListing = await listDirContents(owner, repo, "", apiHeaders);
+  requestCount++;
+  if (!rootListing) {
+    console.log(`[cron] refreshChangelogFile(${source.slug}): 0 files, ${requestCount} requests`);
     return;
   }
-  if (!res.ok) {
-    console.warn(`[cron] refreshChangelogFile(${source.slug}): raw fetch returned ${res.status}`);
-    return;
+  const rootFilename = pickChangelog(rootListing);
+  if (rootFilename) {
+    const f = await fetchOneFile(owner, repo, "", rootFilename, rawHeaders, source.slug);
+    requestCount++;
+    if (f) fetched.push(f);
   }
-  const content = await res.text();
-  const bytes = new TextEncoder().encode(content).length;
-  if (bytes > CHANGELOG_MAX_BYTES) {
-    console.warn(`[cron] refreshChangelogFile(${source.slug}): ${filename} exceeds size cap (${bytes} bytes)`);
-    return;
+
+  if (override && override.length > 0) {
+    const seen = new Set(fetched.map((f) => f.path));
+    for (const entry of override) {
+      if (fetched.length >= CHANGELOG_MAX_FILES) break;
+      const normalized = entry.replace(/^\.?\//, "");
+      if (seen.has(normalized)) continue;
+      const lastSlash = normalized.lastIndexOf("/");
+      const dir = lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
+      const filename = lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
+      const f = await fetchOneFile(owner, repo, dir, filename, rawHeaders, source.slug);
+      requestCount++;
+      if (f) {
+        fetched.push(f);
+        seen.add(f.path);
+      }
+    }
+  } else {
+    const hasPkg = rootListing.some((e) => e.type === "file" && e.name === "package.json");
+    if (hasPkg) {
+      let pkgText: string | null = null;
+      try {
+        const pr = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/package.json`, { headers: rawHeaders });
+        requestCount++;
+        if (pr.ok) pkgText = await pr.text();
+      } catch {
+        pkgText = null;
+      }
+      const globs = pkgText ? parseWorkspaces(pkgText) : [];
+      const packageDirs: string[] = [];
+      for (const glob of globs) {
+        if (packageDirs.length + fetched.length >= CHANGELOG_MAX_FILES) break;
+        const trimmed = glob.replace(/\/$/, "");
+        if (trimmed.startsWith("!") || trimmed.includes("**")) continue;
+        if (trimmed.endsWith("/*")) {
+          const parent = trimmed.slice(0, -2);
+          if (!parent || parent.includes("*")) continue;
+          const parentEntries = await listDirContents(owner, repo, parent, apiHeaders);
+          requestCount++;
+          if (!parentEntries) continue;
+          for (const entry of parentEntries) {
+            if (entry.type !== "dir") continue;
+            packageDirs.push(`${parent}/${entry.name}`);
+            if (packageDirs.length + fetched.length >= CHANGELOG_MAX_FILES) break;
+          }
+        } else if (!trimmed.includes("*")) {
+          packageDirs.push(trimmed);
+        }
+      }
+      for (const dir of packageDirs) {
+        if (fetched.length >= CHANGELOG_MAX_FILES) break;
+        const entries = await listDirContents(owner, repo, dir, apiHeaders);
+        requestCount++;
+        if (!entries) continue;
+        const filename = pickChangelog(entries);
+        if (!filename) continue;
+        const f = await fetchOneFile(owner, repo, dir, filename, rawHeaders, source.slug);
+        requestCount++;
+        if (f) fetched.push(f);
+      }
+    }
   }
-  const contentHashHex = await sha256HexWorker(content);
-  const url = `https://github.com/${owner}/${repo}/blob/HEAD/${filename}`;
+
+  console.log(`[cron] refreshChangelogFile(${source.slug}): ${fetched.length} files, ${requestCount} requests`);
+
   const now = new Date().toISOString();
 
-  const [existing] = await db
+  // Upsert each fetched file.
+  const existing = await db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, source.id));
+  const existingByPath = new Map(existing.map((e) => [e.path, e]));
 
-  if (!existing) {
-    await db.insert(sourceChangelogFiles).values({
-      sourceId: source.id,
-      path: filename,
-      filename,
-      url,
-      rawUrl,
-      content,
-      contentHash: contentHashHex,
-      bytes,
-      fetchedAt: now,
-    });
-    console.log(`[cron] Fetched ${filename} for ${source.slug} (${bytes} bytes)`);
-  } else if (existing.contentHash === contentHashHex) {
-    await db
-      .update(sourceChangelogFiles)
-      .set({ fetchedAt: now })
-      .where(eq(sourceChangelogFiles.id, existing.id));
-  } else {
-    await db
-      .update(sourceChangelogFiles)
-      .set({
-        filename,
-        url,
-        rawUrl,
-        content,
-        contentHash: contentHashHex,
-        bytes,
+  for (const file of fetched) {
+    const prior = existingByPath.get(file.path);
+    if (!prior) {
+      await db.insert(sourceChangelogFiles).values({
+        sourceId: source.id,
+        path: file.path,
+        filename: file.filename,
+        url: file.url,
+        rawUrl: file.rawUrl,
+        content: file.content,
+        contentHash: file.contentHashHex,
+        bytes: file.bytes,
         fetchedAt: now,
-      })
-      .where(eq(sourceChangelogFiles.id, existing.id));
-    console.log(`[cron] Updated ${filename} for ${source.slug} (${bytes} bytes)`);
+      });
+      console.log(`[cron] Inserted ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
+    } else if (prior.contentHash === file.contentHashHex) {
+      await db
+        .update(sourceChangelogFiles)
+        .set({ fetchedAt: now })
+        .where(eq(sourceChangelogFiles.id, prior.id));
+    } else {
+      await db
+        .update(sourceChangelogFiles)
+        .set({
+          filename: file.filename,
+          url: file.url,
+          rawUrl: file.rawUrl,
+          content: file.content,
+          contentHash: file.contentHashHex,
+          bytes: file.bytes,
+          fetchedAt: now,
+        })
+        .where(eq(sourceChangelogFiles.id, prior.id));
+      console.log(`[cron] Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
+    }
+  }
+
+  // Prune any rows that are no longer in the discovered set.
+  const keep = new Set(fetched.map((f) => f.path));
+  const toDelete = existing.filter((row) => !keep.has(row.path));
+  for (const row of toDelete) {
+    await db.delete(sourceChangelogFiles).where(eq(sourceChangelogFiles.id, row.id));
+    console.log(`[cron] Pruned ${row.path} for ${source.slug}`);
   }
 }
 

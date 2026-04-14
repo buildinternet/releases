@@ -381,39 +381,77 @@ server.registerTool("get_organization", {
 
 // ── get_source_changelog ─────────────────────────────────────────────
 server.registerTool("get_source_changelog", {
-  description: "Read the canonical CHANGELOG.md file tracked for a GitHub source. Supports heading-aligned slicing — pass offset/limit to read a range of characters, and chain successive calls via the returned next offset to page through large files. Omit both params to get the first 40k characters.",
+  description: "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root. Response lists every tracked file so siblings can be discovered in one round-trip. Supports heading-aligned slicing via offset/limit. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
   inputSchema: {
     source: z.string().describe("Source slug or ID (e.g. 'apollo-client' or 'src_...')"),
-    offset: z.number().optional().describe("Character offset into the full file. Snapped forward to the next heading unless 0."),
+    path: z.string().optional().describe("Specific file path to read (e.g. 'packages/next/CHANGELOG.md'). Defaults to the root CHANGELOG."),
+    offset: z.number().optional().describe("Character offset into the selected file. Snapped forward to the next heading unless 0."),
     limit: z.number().optional().describe("Target slice size in characters. The slice ends at a heading boundary; defaults to 40000 when slicing."),
   },
-}, async ({ source: identifier, offset, limit }) => {
+}, async ({ source: identifier, path: requestedPath, offset, limit }) => {
   const db = getDb();
   const source = await findSource(identifier);
   if (!source) return textResult(`No source found matching "${identifier}"`);
 
-  const [row] = await db
+  const allRows = await db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, source.id))
-    .orderBy(sourceChangelogFiles.path)
-    .limit(1);
-  if (!row) return textResult(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
+    .orderBy(sourceChangelogFiles.path);
+  if (allRows.length === 0) {
+    return textResult(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
+  }
 
-  const response = buildChangelogResponse(row, {
-    offset: offset !== undefined ? String(offset) : null,
-    limit: limit !== undefined ? String(limit) : (offset !== undefined ? "40000" : null),
-  });
+  let selected = allRows[0];
+  if (requestedPath) {
+    const match = allRows.find((r) => r.path === requestedPath);
+    if (!match) {
+      const available = allRows.map((r) => `- ${r.path}`).join("\n");
+      return textResult(`No CHANGELOG file found at path "${requestedPath}" for "${source.slug}". Available files:\n${available}`);
+    }
+    selected = match;
+  } else {
+    const root = allRows.find((r) => !r.path.includes("/"));
+    if (root) selected = root;
+  }
 
-  const text = [
-    `**${source.name}** — ${response.filename}`,
+  const files = allRows.map((r) => ({
+    path: r.path,
+    filename: r.filename,
+    url: r.url,
+    bytes: r.bytes,
+    fetchedAt: r.fetchedAt,
+  }));
+
+  const response = buildChangelogResponse(
+    selected,
+    {
+      offset: offset !== undefined ? String(offset) : null,
+      limit: limit !== undefined ? String(limit) : (offset !== undefined ? "40000" : null),
+    },
+    files,
+  );
+
+  const lines: string[] = [
+    `**${source.name}** — ${response.path}`,
     `Source: ${response.url}`,
     `Slice: chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars}${response.nextOffset != null ? ` (next: offset=${response.nextOffset})` : " (end of file)"}`,
-    "",
-    response.content,
-  ].join("\n");
+  ];
+  if (response.truncated) {
+    lines.push(`⚠ TRUNCATED: upstream file exceeds 1MB cap, content cut at byte ${response.truncatedAt}. Tail is missing.`);
+  }
+  if (files.length > 1) {
+    lines.push("");
+    lines.push(`Files tracked for this source (${files.length}):`);
+    for (const f of files) {
+      lines.push(`  ${f.path === response.path ? "*" : " "} ${f.path} (${f.bytes} bytes)`);
+    }
+    lines.push("Pass `path` to read a different file.");
+  }
+  lines.push("");
+  lines.push(response.content);
 
-  return textResult(text);
+  return textResult(lines.join("\n"));
 });
 
 if (isAdminMode()) {

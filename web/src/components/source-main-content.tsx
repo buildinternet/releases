@@ -9,16 +9,19 @@ interface SourceMainContentProps {
   source: SourceDetail;
   tab: string | undefined;
   basePath: string;
+  changelogPath?: string;
 }
 
 /** Renders the main column for a source detail page — tab-aware. */
-export function SourceMainContent({ source, tab, basePath }: SourceMainContentProps) {
+export function SourceMainContent({ source, tab, basePath, changelogPath }: SourceMainContentProps) {
   const hasHighlights = !!(source.summaries?.rolling || source.summaries?.monthly?.length);
 
   if (tab === "changelog" && source.hasChangelogFile) {
+    // Keying by path ensures Suspense re-triggers when the user picks a
+    // different file in the picker — ChangelogView's await needs to re-run.
     return (
-      <Suspense key={source.slug} fallback={<ChangelogSkeleton />}>
-        <ChangelogView sourceSlug={source.slug} />
+      <Suspense key={`${source.slug}:${changelogPath ?? ""}`} fallback={<ChangelogSkeleton />}>
+        <ChangelogView sourceSlug={source.slug} path={changelogPath} />
       </Suspense>
     );
   }

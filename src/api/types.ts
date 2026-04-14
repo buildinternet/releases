@@ -91,6 +91,15 @@ export interface SourceListItem {
   productSlug?: string | null;
 }
 
+/** Lightweight summary of a changelog file — used for the file index. */
+export interface ChangelogFileSummary {
+  path: string;
+  filename: string;
+  url: string;
+  bytes: number;
+  fetchedAt: string;
+}
+
 export interface SourceChangelogResponse {
   path: string;
   filename: string;
@@ -107,6 +116,16 @@ export interface SourceChangelogResponse {
   nextOffset: number | null;
   /** Total length of the full file in characters. */
   totalChars: number;
+  /** True when the upstream file exceeded the 1MB cap and content was sliced. */
+  truncated: boolean;
+  /** Byte offset where the file was truncated, or null when not truncated. */
+  truncatedAt: number | null;
+  /**
+   * Index of every changelog file tracked for this source (root plus any
+   * discovered per-package files). Always present even for single-file
+   * sources so clients can lazily render a file picker.
+   */
+  files: ChangelogFileSummary[];
 }
 
 export interface SourceDetail {
