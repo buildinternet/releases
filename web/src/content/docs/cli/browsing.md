@@ -12,13 +12,13 @@ Find organizations, sources, and releases in the index.
 The `list` command shows all configured changelog sources, or details for a single one.
 
 ```bash
-released list                        # All sources
-released list claude-code            # Details for one source
-released list --org vercel           # Sources for an org
-released list --has-feed             # Only sources with a feed URL
-released list --query "tailwind"     # Search by name, slug, or URL
-released list --category ai          # Filter by category
-released list --json                 # Machine-readable output
+releases list                        # All sources
+releases list claude-code            # Details for one source
+releases list --org vercel           # Sources for an org
+releases list --has-feed             # Only sources with a feed URL
+releases list --query "tailwind"     # Search by name, slug, or URL
+releases list --category ai          # Filter by category
+releases list --json                 # Machine-readable output
 ```
 
 ### Filters
@@ -37,10 +37,10 @@ released list --json                 # Machine-readable output
 The `latest` command shows the most recent releases, optionally filtered by source or org.
 
 ```bash
-released latest                          # Across all sources
-released latest claude-code              # From one source
-released latest --org vercel --count 20  # Latest 20 from an org
-released latest --json                   # JSON output
+releases latest                          # Across all sources
+releases latest claude-code              # From one source
+releases latest --org vercel --count 20  # Latest 20 from an org
+releases latest --json                   # JSON output
 ```
 
 ## Search
@@ -48,9 +48,9 @@ released latest --json                   # JSON output
 Full-text search across organizations, products, sources, and releases.
 
 ```bash
-released search "breaking change"
-released search "authentication" --type releases --limit 5
-released search "vercel" --json
+releases search "breaking change"
+releases search "authentication" --type releases --limit 5
+releases search "vercel" --json
 ```
 
 ### Options
@@ -66,7 +66,7 @@ released search "vercel" --json
 Organizations and products are tagged with a category. List valid values with:
 
 ```bash
-released categories
+releases categories
 ```
 
 ## Stats
@@ -74,5 +74,5 @@ released categories
 Get a quick count of organizations, sources, releases, and products in the database:
 
 ```bash
-released stats
+releases stats
 ```

@@ -119,7 +119,7 @@ Examples:
         }
         console.log(activityTable.toString());
       } else {
-        console.log(chalk.dim("\nNo fetch activity recorded yet. Run `releases fetch` to start."));
+        console.log(chalk.dim("\nNo fetch activity recorded yet. Run `releases admin source fetch` to start."));
       }
     });
 }

@@ -27,8 +27,8 @@ export function registerReleaseCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases release show abc123
-  releases release show abc123 --json`)
+  releases admin release show abc123
+  releases admin release show abc123 --json`)
     .action(async (rawId: string, opts: { json?: boolean }) => {
       const id = normalizeReleaseId(rawId);
       const result = await getRelease(id);
@@ -78,17 +78,17 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases release delete abc123
-  releases release delete --source my-source
-  releases release delete --source my-source --before 2024-01-01
-  releases release delete --source my-source --dry-run`)
+  releases admin release delete abc123
+  releases admin release delete --source my-source
+  releases admin release delete --source my-source --before 2024-01-01
+  releases admin release delete --source my-source --dry-run`)
     .action(async (rawId: string | undefined, opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean }) => {
       const id = rawId ? normalizeReleaseId(rawId) : undefined;
       if (!id && !opts.source && !opts.before) {
         console.error("Error: provide a release ID, --source, or --before\n");
-        console.error("  releases release delete abc123");
-        console.error("  releases release delete --source my-source");
-        console.error("  releases release delete --before 2024-01-01");
+        console.error("  releases admin release delete abc123");
+        console.error("  releases admin release delete --source my-source");
+        console.error("  releases admin release delete --before 2024-01-01");
         process.exit(1);
       }
 
@@ -204,9 +204,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases release edit abc123 --title "New Title"
-  releases release edit abc123 --version "2.0.0"
-  releases release edit abc123 --json`)
+  releases admin release edit abc123 --title "New Title"
+  releases admin release edit abc123 --version "2.0.0"
+  releases admin release edit abc123 --json`)
     .action(async (rawId: string, opts: { title?: string; version?: string; content?: string; json?: boolean }) => {
       const id = normalizeReleaseId(rawId);
       const existing = await getRelease(id);
@@ -260,8 +260,8 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases release suppress abc123 --reason "promotional content"
-  releases release suppress abc123 --dry-run`)
+  releases admin release suppress abc123 --reason "promotional content"
+  releases admin release suppress abc123 --dry-run`)
     .action(async (rawId: string, opts: { reason?: string; dryRun?: boolean; json?: boolean }) => {
       const id = normalizeReleaseId(rawId);
       if (opts.dryRun) {
@@ -291,7 +291,7 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases release unsuppress abc123`)
+  releases admin release unsuppress abc123`)
     .action(async (rawId: string, opts: { json?: boolean }) => {
       const id = normalizeReleaseId(rawId);
       const found = await unsuppressRelease(id);

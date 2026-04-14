@@ -18,10 +18,10 @@ export function registerDiscoverCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases discover vercel.com
-  releases discover --org acme
-  releases discover vercel.com --add
-  releases discover vercel.com --verify --json`)
+  releases admin discovery discover vercel.com
+  releases admin discovery discover --org acme
+  releases admin discovery discover vercel.com --add
+  releases admin discovery discover vercel.com --verify --json`)
     .action(async (domain: string | undefined, opts: { org?: string; add?: boolean; verify?: boolean; json?: boolean }) => {
       let scanDomain: string | undefined = domain;
       let githubHandle: string | undefined;
@@ -50,8 +50,8 @@ Examples:
 
       if (!scanDomain && !githubHandle) {
         console.error("Error: provide a domain or use --org\n");
-        console.error("  releases discover vercel.com");
-        console.error("  releases discover --org acme");
+        console.error("  releases admin discovery discover vercel.com");
+        console.error("  releases admin discovery discover --org acme");
         process.exit(1);
       }
 

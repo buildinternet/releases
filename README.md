@@ -24,7 +24,7 @@ npx @buildinternet/releases search "react"
 curl -fsSL https://releases.sh/install | bash
 ```
 
-The public CLI connects to the hosted API at `api.releases.sh` automatically. Read-only commands (search, latest, stats, list, categories) work without any configuration. Admin commands (fetch, onboard) require an API key.
+The public CLI connects to the hosted API at `api.releases.sh` automatically. Reader commands (`search`, `latest`, `summary`, `list`, `show`, `stats`, `categories`) work without any configuration. Operator workflows live under `releases admin ...` and require an API key.
 
 ## Development Setup
 
@@ -93,8 +93,8 @@ releases show prod_abc123                   # product summary
 releases show vercel                        # slug fallthrough (org → product → source)
 ```
 
-For deeper views, use the nested commands (`list <src>`, `org show <slug>`,
-`product list <org>`, `release show <id>`).
+For deeper operator views, use the admin commands (`admin org show <slug>`,
+`admin product list <org>`, `admin release show <id>`).
 
 ### Summaries
 
@@ -130,19 +130,12 @@ releases stats --days 7    # adjust period
 releases stats --json      # machine-readable output
 ```
 
-### Usage tracking
-
-```bash
-releases usage             # show API token usage summary
-releases usage --days 7    # last 7 days
-```
-
 ### Web Frontend
 
 Browse the catalog in your browser:
 
 ```bash
-releases api              # start the API server on :3456
+releases admin api serve  # start the API server on :3456
 cd web && bun run dev     # start the Next.js frontend on :3000
 ```
 
@@ -219,10 +212,10 @@ VS Code, Windsurf, Zed, and other stdio-only clients:
 
 #### Local server
 
-Run a local MCP server over stdio with the full tool set (including admin tools):
+Run a local MCP server over stdio. In default mode it exposes the same read-oriented surface as the hosted MCP server. Admin/write tools are only registered when an API key is configured:
 
 ```bash
-releases serve
+releases admin mcp serve
 ```
 
 ```json
@@ -230,7 +223,7 @@ releases serve
   "mcpServers": {
     "releases": {
       "command": "releases",
-      "args": ["serve"],
+      "args": ["admin", "mcp", "serve"],
       "env": {
         "ANTHROPIC_API_KEY": "...",
         "CLOUDFLARE_ACCOUNT_ID": "...",
@@ -252,15 +245,15 @@ releases serve
 | `list_sources` | List all tracked sources | Yes | Yes |
 | `list_organizations` | List all organizations with their linked sources | Yes | Yes |
 | `get_organization` | Detailed view of a single org (accounts, tags, sources, products, aliases) | Yes | Yes |
-| `add_source` | Add a new changelog source from a URL | -- | Yes |
-| `remove_source` | Remove a source from the index | -- | Yes |
-| `fetch_source` | Fetch new releases from a source | -- | Yes |
-| `add_organization` | Create a new organization | -- | Yes |
-| `link_account` | Link a platform account to an organization | -- | Yes |
-| `suppress_release` / `unsuppress_release` | Hide or restore a release | -- | Yes |
-| `ignore_url` / `unignore_url` | Manage org-scoped URL ignore list | -- | Yes |
-| `block_url` / `unblock_url` / `list_blocked_urls` | Manage global URL block list | -- | Yes |
-| `list_ignored_urls` | List ignored URLs for an organization | -- | Yes |
+| `add_source` | Add a new changelog source from a URL | -- | Admin only |
+| `remove_source` | Remove a source from the index | -- | Admin only |
+| `fetch_source` | Fetch new releases from a source | -- | Admin only |
+| `add_organization` | Create a new organization | -- | Admin only |
+| `link_account` | Link a platform account to an organization | -- | Admin only |
+| `suppress_release` / `unsuppress_release` | Hide or restore a release | -- | Admin only |
+| `ignore_url` / `unignore_url` | Manage org-scoped URL ignore list | -- | Admin only |
+| `block_url` / `unblock_url` / `list_blocked_urls` | Manage global URL block list | -- | Admin only |
+| `list_ignored_urls` | List ignored URLs for an organization | -- | Admin only |
 
 **Gated** = requires `ENABLE_AI_TOOLS=true`. These tools make Anthropic API calls and are disabled by default. Set the env var in the worker config or local environment to enable them.
 
@@ -268,14 +261,14 @@ releases serve
 
 ## Admin CLI
 
-The following commands require an API key (`RELEASED_API_KEY`). They are not available in the public CLI.
+Operator workflows require an API key (`RELEASED_API_KEY`) and now live under `releases admin ...`.
 
 ### Add sources
 
 ```bash
-releases add "Next.js" --url https://github.com/vercel/next.js
-releases add "Linear" --url https://linear.app/changelog
-releases add --name "My Blog" --url https://example.com/changelog
+releases admin source add "Next.js" --url https://github.com/vercel/next.js
+releases admin source add "Linear" --url https://linear.app/changelog
+releases admin source add --name "My Blog" --url https://example.com/changelog
 ```
 
 The name can be a positional argument or passed via `--name`.
@@ -289,54 +282,54 @@ You can override detection with `--type github`, `--type scrape`, or `--type fee
 If you know the feed URL and it isn't easily discoverable, provide it explicitly (skips evaluation):
 
 ```bash
-releases add "Claude Code" --url https://docs.anthropic.com/en/changelog \
+releases admin source add "Claude Code" --url https://docs.anthropic.com/en/changelog \
   --feed-url https://docs.anthropic.com/en/changelog/rss.xml
 ```
 
 To evaluate a URL without adding it as a source:
 
 ```bash
-releases evaluate https://linear.app/changelog
+releases admin discovery evaluate https://linear.app/changelog
 ```
 
 ### Edit sources
 
 ```bash
-releases edit next-js --url https://github.com/vercel/next.js/releases
-releases edit linear --name "Linear Changelog" --feed-url https://linear.app/rss/changelog.json
-releases edit my-blog --org acme               # set organization
-releases edit my-blog --no-org                  # remove organization
-releases edit my-blog --type feed               # change adapter type
-releases edit my-blog --no-feed-url             # clear stored feed URL
-releases edit my-blog --markdown-url https://example.com/changelog.md
-releases edit my-blog --fetch-method markdown   # set recommended fetch method
-releases edit my-blog --provider mintlify       # set detected provider
-releases edit my-blog --primary                 # mark as org's primary changelog
-releases edit my-blog --no-primary              # unmark as primary
+releases admin source edit next-js --url https://github.com/vercel/next.js/releases
+releases admin source edit linear --name "Linear Changelog" --feed-url https://linear.app/rss/changelog.json
+releases admin source edit my-blog --org acme               # set organization
+releases admin source edit my-blog --no-org                # remove organization
+releases admin source edit my-blog --type feed             # change adapter type
+releases admin source edit my-blog --no-feed-url           # clear stored feed URL
+releases admin source edit my-blog --markdown-url https://example.com/changelog.md
+releases admin source edit my-blog --fetch-method markdown # set recommended fetch method
+releases admin source edit my-blog --provider mintlify     # set detected provider
+releases admin source edit my-blog --primary               # mark as org's primary changelog
+releases admin source edit my-blog --no-primary            # unmark as primary
 ```
 
 ### Fetch releases
 
 ```bash
-releases fetch next-js     # one source (or: releases fetch --source next-js)
-releases fetch --since 2025-01-01 --max 50
-releases fetch --max 500   # fetch up to 500 releases per source
-releases fetch --all       # no date/count limits
-releases fetch --stale 24  # only stale sources, with backoff
-releases fetch --retry-errors  # retry failed sources
-releases fetch --unfetched --concurrency 5  # parallel fetch
-releases fetch next-js --no-summarize      # skip summary generation
+releases admin source fetch next-js     # one source (or: --source next-js)
+releases admin source fetch --since 2025-01-01 --max 50
+releases admin source fetch --max 500   # fetch up to 500 releases per source
+releases admin source fetch --all       # no date/count limits
+releases admin source fetch --stale 24  # only stale sources, with backoff
+releases admin source fetch --retry-errors
+releases admin source fetch --unfetched --concurrency 5
+releases admin source fetch next-js --no-summarize
 ```
 
 By default, fetch caps at 200 releases per source to avoid API pagination limits (e.g., GitHub's 10K result cap). Use `--max <n>` to request more, or `--all` to remove the cap entirely.
 
-> **Remote mode:** bare `releases fetch` (no slug or filter) is blocked to prevent expensive bulk operations. Use `--stale`, `--unfetched`, `--retry-errors`, or a source slug. Remote concurrency defaults to 3 (max 5). Duplicate source fetches are detected and blocked.
+> **Remote mode:** bare `releases admin source fetch` (no slug or filter) is blocked to prevent expensive bulk operations. Use `--stale`, `--unfetched`, `--retry-errors`, or a source slug. Remote concurrency defaults to 3 (max 5). Duplicate source fetches are detected and blocked.
 
 ### Smart fetch
 
 ```bash
-releases fetch --stale 24          # only fetch sources older than 24h, respecting backoff
-releases fetch --retry-errors      # only fetch sources whose last attempt failed
+releases admin source fetch --stale 24
+releases admin source fetch --retry-errors
 ```
 
 Sources that repeatedly return no changes back off automatically (1h → 2h → 4h → ... up to 48h). Error backoff caps at 72h. Successful fetches reset all counters. Paused sources (`fetchPriority = "paused"`) are always skipped by `--stale`. The default 200-release cap applies to smart fetch as well — use `--max` to adjust per-run.
@@ -346,19 +339,19 @@ Sources that repeatedly return no changes back off automatically (1h → 2h → 
 For changelogs spread across multiple pages, crawl mode follows links and parses each page individually:
 
 ```bash
-releases fetch linear --crawl                    # enable crawl, auto-detect pattern
-releases fetch linear --crawl --crawl-pattern "https://linear.app/changelog/*"
-releases fetch linear --no-crawl                 # one-off skip, keeps setting
+releases admin source fetch linear --crawl
+releases admin source fetch linear --crawl --crawl-pattern "https://linear.app/changelog/*"
+releases admin source fetch linear --no-crawl
 ```
 
-Crawl mode persists on the source — subsequent `releases fetch linear` calls will automatically crawl. Only works with `scrape` sources.
+Crawl mode persists on the source — subsequent `releases admin source fetch linear` calls will automatically crawl. Only works with `scrape` sources.
 
 ### Feed change detection
 
 ```bash
-releases poll                  # check all feed sources for changes
-releases poll next-js          # check a single source
-releases poll --changed        # only show sources with detected changes
+releases admin source poll                  # check all feed sources for changes
+releases admin source poll next-js          # check a single source
+releases admin source poll --changed        # only show sources with detected changes
 ```
 
 ### Organizations
@@ -366,11 +359,11 @@ releases poll --changed        # only show sources with detected changes
 Group sources under organizations for aggregate queries:
 
 ```bash
-releases org add "Vercel"
-releases org link vercel --platform github --handle vercel
-releases add "Next.js" --type github --url https://github.com/vercel/next.js --org vercel
-releases org list                                          # summary: name, domain, counts
-releases org show vercel                                   # full details: accounts, tags, sources
+releases admin org add "Vercel"
+releases admin org link vercel --platform github --handle vercel
+releases admin source add "Next.js" --type github --url https://github.com/vercel/next.js --org vercel
+releases admin org list                                    # summary: name, domain, counts
+releases admin org show vercel                             # full details: accounts, tags, sources
 ```
 
 ### Products
@@ -378,32 +371,32 @@ releases org show vercel                                   # full details: accou
 Group sources under products within an organization — useful for multi-product orgs like Vercel (Next.js, Turborepo, v0):
 
 ```bash
-releases product add "Next.js" --org vercel --url https://nextjs.org
-releases product add "Turborepo" --org vercel --url https://turbo.build
-releases product list vercel
-releases product edit nextjs --description "React framework for production"
-releases product remove nextjs                    # sources become unlinked, not deleted
+releases admin product add "Next.js" --org vercel --url https://nextjs.org
+releases admin product add "Turborepo" --org vercel --url https://turbo.build
+releases admin product list vercel
+releases admin product edit nextjs --description "React framework for production"
+releases admin product remove nextjs              # sources become unlinked, not deleted
 ```
 
 Convert an org that should be a product:
 
 ```bash
-releases product adopt nextjs --into vercel
+releases admin product adopt nextjs --into vercel
 ```
 
 ### Domain aliases
 
 ```bash
-releases org alias add anthropic claude.ai claude.com
-releases product alias add nextjs nextjs.org
+releases admin org alias add anthropic claude.ai claude.com
+releases admin product alias add nextjs nextjs.org
 ```
 
 ### Categories & tags
 
 ```bash
-releases org add "Acme" --category cloud --tags typescript,edge
-releases org tag add acme react serverless
-releases product tag add acme-cli testing
+releases admin org add "Acme" --category cloud --tags typescript,edge
+releases admin org tag add acme react serverless
+releases admin product tag add acme-cli testing
 releases list --category ai
 ```
 
@@ -412,9 +405,9 @@ releases list --category ai
 Bulk-import organizations and sources from a JSON file:
 
 ```bash
-releases import manifest.json
-releases import manifest.json --dry-run
-releases import manifest.json --skip-existing
+releases admin source import manifest.json
+releases admin source import manifest.json --dry-run
+releases admin source import manifest.json --skip-existing
 ```
 
 ### AI-powered onboarding
@@ -422,8 +415,8 @@ releases import manifest.json --skip-existing
 Use the AI agent to discover, validate, and add changelog sources for a company:
 
 ```bash
-releases onboard "Vercel"
-releases onboard "Stripe" --domain stripe.com --github-org stripe
+releases admin discovery onboard "Vercel"
+releases admin discovery onboard "Stripe" --domain stripe.com --github-org stripe
 ```
 
 ### Discover sources
@@ -431,27 +424,27 @@ releases onboard "Stripe" --domain stripe.com --github-org stripe
 Automatically find changelog and release-note pages for a domain:
 
 ```bash
-releases discover vercel.com
-releases discover vercel.com --verify     # AI verification pass
-releases discover vercel.com --add        # auto-add all discovered sources
+releases admin discovery discover vercel.com
+releases admin discovery discover vercel.com --verify
+releases admin discovery discover vercel.com --add
 ```
 
 ### Ignored URLs & blocked URLs
 
 ```bash
-releases ignore add https://example.com/blog --org vercel --reason "Not a changelog"
-releases ignore list --org vercel
-releases block add medium.com --domain --reason "Aggregator"
-releases block list
+releases admin policy ignore add https://example.com/blog --org vercel --reason "Not a changelog"
+releases admin policy ignore list --org vercel
+releases admin policy block add medium.com --domain --reason "Aggregator"
+releases admin policy block list
 ```
 
 ### Release management
 
 ```bash
-releases release show rel_abc123
-releases release edit rel_abc123 --title "Fixed title" --version "v2.0.1"
-releases release delete rel_abc123
-releases release suppress rel_abc123 --reason "promotional content"
+releases admin release show rel_abc123
+releases admin release edit rel_abc123 --title "Fixed title" --version "v2.0.1"
+releases admin release delete rel_abc123
+releases admin release suppress rel_abc123 --reason "promotional content"
 ```
 
 ### Release summaries
@@ -459,23 +452,23 @@ releases release suppress rel_abc123 --reason "promotional content"
 AI-generated thematic summaries, produced automatically at fetch time:
 
 ```bash
-releases summarize next-js                # generate rolling summary (last 90 days)
-releases summarize next-js --window 30    # custom window
-releases summarize next-js --monthly      # generate last month's archive summary
+releases admin content summary generate next-js                # rolling summary
+releases admin content summary generate next-js --window 30    # custom window
+releases admin content summary generate next-js --monthly      # last month's archive summary
 ```
 
 ### Source health checks
 
 ```bash
-releases check             # check all sources
-releases check next-js     # check one source
+releases admin source check             # check all sources
+releases admin source check next-js     # check one source
 ```
 
 ### Fetch history
 
 ```bash
-releases fetch-log                   # recent fetch logs across all sources
-releases fetch-log next-js           # logs for one source
+releases admin source fetch-log                   # recent fetch logs across all sources
+releases admin source fetch-log next-js           # logs for one source
 ```
 
 ### Task management
@@ -483,8 +476,8 @@ releases fetch-log next-js           # logs for one source
 Manage remote fetch and discovery sessions (requires remote mode):
 
 ```bash
-releases task list
-releases task cancel <sessionId>
+releases admin discovery task list
+releases admin discovery task cancel <sessionId>
 ```
 
 ## Architecture

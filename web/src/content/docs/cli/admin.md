@@ -5,14 +5,14 @@ adminOnly: true
 
 # Source Management
 
-Add, edit, remove, and organize changelog sources. Requires an API key.
+Add, edit, remove, and organize changelog sources. Operator workflows live under `releases admin ...` and require an API key.
 
 ## Add sources
 
 ```bash
-released add "Next.js" --url https://github.com/vercel/next.js
-released add "Linear" --url https://linear.app/changelog
-released add --name "My Blog" --url https://example.com/changelog
+releases admin source add "Next.js" --url https://github.com/vercel/next.js
+releases admin source add "Linear" --url https://linear.app/changelog
+releases admin source add --name "My Blog" --url https://example.com/changelog
 ```
 
 By default, `add` runs automated pre-checks to determine the best ingestion method. GitHub URLs use the Releases API directly; other URLs are evaluated for feed discovery, provider detection, and scrape feasibility.
@@ -20,23 +20,23 @@ By default, `add` runs automated pre-checks to determine the best ingestion meth
 Override detection with `--type github`, `--type scrape`, or `--type feed`. If you know the feed URL, provide it directly:
 
 ```bash
-released add "Claude Code" --url https://docs.anthropic.com/en/changelog \
+releases admin source add "Claude Code" --url https://docs.anthropic.com/en/changelog \
   --feed-url https://docs.anthropic.com/en/changelog/rss.xml
 ```
 
 ## Edit sources
 
 ```bash
-released edit next-js --url https://github.com/vercel/next.js/releases
-released edit my-blog --org acme
-released edit my-blog --type feed
-released edit my-blog --primary
+releases admin source edit next-js --url https://github.com/vercel/next.js/releases
+releases admin source edit my-blog --org acme
+releases admin source edit my-blog --type feed
+releases admin source edit my-blog --primary
 ```
 
 ## Remove sources
 
 ```bash
-released remove my-blog
+releases admin source remove my-blog
 ```
 
 ## Evaluate
@@ -44,7 +44,7 @@ released remove my-blog
 Evaluate a URL without adding it as a source:
 
 ```bash
-released evaluate https://linear.app/changelog
+releases admin discovery evaluate https://linear.app/changelog
 ```
 
 ## Organizations
@@ -52,10 +52,10 @@ released evaluate https://linear.app/changelog
 Group sources under organizations for aggregate queries:
 
 ```bash
-released org add "Vercel"
-released org link vercel --platform github --handle vercel
-released org list
-released org show vercel
+releases admin org add "Vercel"
+releases admin org link vercel --platform github --handle vercel
+releases admin org list
+releases admin org show vercel
 ```
 
 ## Products
@@ -63,16 +63,16 @@ released org show vercel
 Group sources under products within an organization:
 
 ```bash
-released product add "Next.js" --org vercel --url https://nextjs.org
-released product list vercel
-released product edit nextjs --description "React framework for production"
-released product remove nextjs
+releases admin product add "Next.js" --org vercel --url https://nextjs.org
+releases admin product list vercel
+releases admin product edit nextjs --description "React framework for production"
+releases admin product remove nextjs
 ```
 
 Convert an org that should be a product:
 
 ```bash
-released product adopt nextjs --into vercel
+releases admin product adopt nextjs --into vercel
 ```
 
 ## Domain aliases
@@ -80,16 +80,16 @@ released product adopt nextjs --into vercel
 Map alternate domains to organizations or products:
 
 ```bash
-released org alias add anthropic claude.ai claude.com
-released product alias add nextjs nextjs.org
+releases admin org alias add anthropic claude.ai claude.com
+releases admin product alias add nextjs nextjs.org
 ```
 
 ## Categories & tags
 
 ```bash
-released org add "Acme" --category cloud --tags typescript,edge
-released org tag add acme react serverless
-released product tag add acme-cli testing
+releases admin org add "Acme" --category cloud --tags typescript,edge
+releases admin org tag add acme react serverless
+releases admin product tag add acme-cli testing
 ```
 
 ## Import from manifest
@@ -97,9 +97,9 @@ released product tag add acme-cli testing
 Bulk-import organizations and sources from a JSON file:
 
 ```bash
-released import manifest.json
-released import manifest.json --dry-run
-released import manifest.json --skip-existing
+releases admin source import manifest.json
+releases admin source import manifest.json --dry-run
+releases admin source import manifest.json --skip-existing
 ```
 
 ## Onboarding
@@ -107,8 +107,8 @@ released import manifest.json --skip-existing
 Use the AI agent to discover, validate, and add sources for a company:
 
 ```bash
-released onboard "Vercel"
-released onboard "Stripe" --domain stripe.com --github-org stripe
+releases admin discovery onboard "Vercel"
+releases admin discovery onboard "Stripe" --domain stripe.com --github-org stripe
 ```
 
 ## Discover
@@ -116,51 +116,51 @@ released onboard "Stripe" --domain stripe.com --github-org stripe
 Find changelog pages for a domain:
 
 ```bash
-released discover vercel.com
-released discover vercel.com --verify
-released discover vercel.com --add
+releases admin discovery discover vercel.com
+releases admin discovery discover vercel.com --verify
+releases admin discovery discover vercel.com --add
 ```
 
 ## Ignored & blocked URLs
 
 ```bash
-released ignore add https://example.com/blog --org vercel --reason "Not a changelog"
-released ignore list --org vercel
-released block add medium.com --domain --reason "Aggregator"
-released block list
+releases admin policy ignore add https://example.com/blog --org vercel --reason "Not a changelog"
+releases admin policy ignore list --org vercel
+releases admin policy block add medium.com --domain --reason "Aggregator"
+releases admin policy block list
 ```
 
 ## Release management
 
 ```bash
-released release show rel_abc123
-released release edit rel_abc123 --title "Fixed title"
-released release delete rel_abc123
-released release suppress rel_abc123 --reason "promotional content"
+releases admin release show rel_abc123
+releases admin release edit rel_abc123 --title "Fixed title"
+releases admin release delete rel_abc123
+releases admin release suppress rel_abc123 --reason "promotional content"
 ```
 
-## Summarize (rolling)
+## Persisted summaries
 
 Generate cached AI summaries with configurable windows:
 
 ```bash
-released summarize next-js
-released summarize next-js --window 30
-released summarize next-js --monthly
+releases admin content summary generate next-js
+releases admin content summary generate next-js --window 30
+releases admin content summary generate next-js --monthly
 ```
 
 ## Source health checks
 
 ```bash
-released check
-released check next-js
+releases admin source check
+releases admin source check next-js
 ```
 
 ## Fetch log
 
 ```bash
-released fetch-log
-released fetch-log next-js --limit 50
+releases admin source fetch-log
+releases admin source fetch-log next-js --limit 50
 ```
 
 ## Task management
@@ -168,6 +168,6 @@ released fetch-log next-js --limit 50
 Manage remote fetch and discovery sessions:
 
 ```bash
-released task list
-released task cancel <sessionId>
+releases admin discovery task list
+releases admin discovery task cancel <sessionId>
 ```

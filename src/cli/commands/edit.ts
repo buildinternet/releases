@@ -45,17 +45,17 @@ export function registerEditCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases edit my-source --name "New Name"
-  releases edit my-source --url https://example.com/new-changelog
-  releases edit my-source --org "Acme Corp"
-  releases edit my-source --primary
-  releases edit my-source --feed-url https://example.com/feed.xml
-  releases edit my-source --markdown-url https://example.com/changelog.md
-  releases edit my-source --fetch-method markdown
-  releases edit my-source --priority low
-  releases edit my-source --disable
-  releases edit my-source --enable
-  releases edit my-source --no-org`)
+  releases admin source edit my-source --name "New Name"
+  releases admin source edit my-source --url https://example.com/new-changelog
+  releases admin source edit my-source --org "Acme Corp"
+  releases admin source edit my-source --primary
+  releases admin source edit my-source --feed-url https://example.com/feed.xml
+  releases admin source edit my-source --markdown-url https://example.com/changelog.md
+  releases admin source edit my-source --fetch-method markdown
+  releases admin source edit my-source --priority low
+  releases admin source edit my-source --disable
+  releases admin source edit my-source --enable
+  releases admin source edit my-source --no-org`)
     .action(async (slug: string, opts: {
       name?: string; url?: string; type?: string; slug?: string;
       org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; json?: boolean;

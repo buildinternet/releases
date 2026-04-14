@@ -96,9 +96,9 @@ export function registerCheckCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases check                     Check all sources
-  releases check my-source           Check a specific source
-  releases check --json              Output health data as JSON`)
+  releases admin source check                     Check all sources
+  releases admin source check my-source           Check a specific source
+  releases admin source check --json              Output health data as JSON`)
     .action(async (slug: string | undefined, opts: { json?: boolean }) => {
       let sourcesToCheck: Source[];
 

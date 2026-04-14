@@ -8,6 +8,7 @@ import { sources, releases, organizations, orgAccounts, fetchLog, type Source } 
 import { searchReleases } from "../db/fts.js";
 import {
   findSource, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
+  getOrgAccountsBySlug, getTagsForOrg, getProductsByOrg, listDomainAliases,
   isUrlExcluded, listIgnoredUrls, addIgnoredUrl, removeIgnoredUrl,
   listBlockedUrls, addBlockedUrl, removeBlockedUrl,
   suppressRelease, unsuppressRelease, createOrg,
@@ -16,6 +17,7 @@ import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.
 import { daysAgoIso } from "../lib/dates.js";
 import { toSlug } from "../lib/slug.js";
 import { logger } from "../lib/logger.js";
+import { isAdminMode } from "../lib/mode.js";
 import { getAdapter, contentHash } from "../adapters/resolve.js";
 import { isGitHubUrl } from "../cli/commands/add.js";
 
@@ -268,7 +270,7 @@ server.registerTool("list_sources", {
   }
 
   if (allSources.length === 0) {
-    return textResult("No products indexed yet. Use `releases add` to add sources.");
+    return textResult("No products indexed yet. Use `releases admin source add` to add sources.");
   }
 
   const text = allSources
@@ -311,6 +313,72 @@ server.registerTool("list_organizations", {
   return textResult(text);
 });
 
+// ── get_organization ─────────────────────────────────────────────────
+server.registerTool("get_organization", {
+  description: "Get detailed information about a single organization including accounts, tags, sources, products, and aliases",
+  inputSchema: {
+    identifier: z.string().describe("Organization slug, domain, name, or account handle"),
+  },
+}, async ({ identifier }) => {
+  const org = await findOrg(identifier);
+  if (!org) {
+    return textResult(`No organization found matching "${identifier}"`);
+  }
+
+  const [accounts, tagRows, orgSources, orgProducts, aliases] = await Promise.all([
+    getOrgAccountsBySlug(org.slug, org.id),
+    getTagsForOrg(org.id),
+    getSourcesByOrg(org.id),
+    getProductsByOrg(org.id),
+    listDomainAliases({ orgId: org.id }),
+  ]);
+
+  const lines: string[] = [];
+  lines.push(`**Organization: ${org.name}**`);
+  lines.push(
+    `Slug: ${org.slug} | Domain: ${org.domain ?? "N/A"} | Category: ${org.category ?? "N/A"}`,
+  );
+  if (org.description) lines.push(`Description: ${org.description}`);
+  lines.push("");
+  lines.push(
+    accounts.length > 0
+      ? `Accounts: ${accounts.map((a) => `${a.platform}/${a.handle}`).join(", ")}`
+      : "Accounts: none",
+  );
+  lines.push(tagRows.length > 0 ? `Tags: ${tagRows.join(", ")}` : "Tags: none");
+  lines.push(
+    aliases.length > 0
+      ? `Aliases: ${aliases.map((a) => a.domain).join(", ")}`
+      : "Aliases: none",
+  );
+
+  if (orgProducts.length > 0) {
+    lines.push("");
+    lines.push("Products:");
+    for (const p of orgProducts) {
+      const urlPart = p.url ? ` — ${p.url}` : "";
+      const descPart = p.description ? ` — ${p.description}` : "";
+      lines.push(`- ${p.name} (${p.slug})${urlPart}${descPart}`);
+    }
+  }
+
+  if (orgSources.length > 0) {
+    lines.push("");
+    lines.push("Sources:");
+    for (const s of orgSources) {
+      lines.push(`- **${s.name}** (${s.slug})`);
+      lines.push(`  Type: ${s.type} | URL: ${s.url}`);
+      lines.push(`  Last fetched: ${s.lastFetchedAt ?? "Never"}`);
+    }
+  } else {
+    lines.push("");
+    lines.push("Sources: none");
+  }
+
+  return textResult(lines.join("\n"));
+});
+
+if (isAdminMode()) {
 // ── add_source ───────────────────────────────────────────────────────
 server.registerTool("add_source", {
   description: "Add a new changelog source to the index",
@@ -634,6 +702,7 @@ server.registerTool("unsuppress_release", {
   if (!found) return textResult(`Release not found: "${id}"`);
   return textResult(`Unsuppressed release ${id}`);
 });
+}
 
 // ── Start function ───────────────────────────────────────────────────
 export async function startMcpServer() {

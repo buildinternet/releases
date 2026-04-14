@@ -56,18 +56,17 @@ export function registerFetchCommand(program: Command) {
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .addHelpText("after", `
 Examples:
-  releases fetch src_abc123               Fetch a single source by ID (preferred)
-  releases fetch my-source                Fetch a single source by slug
-  releases fetch                          Fetch all sources
-  releases fetch --stale 6                Fetch sources not updated in 6+ hours
-  releases fetch --unfetched              Fetch sources never fetched before
-  releases fetch --changed                Fetch sources where poll detected changes
-  releases fetch --retry-errors           Retry sources that errored last time
-  releases fetch src_abc123 --dry-run     Preview without writing to DB
-  releases fetch src_abc123 --force       Delete and re-fetch all releases
-  releases fetch --concurrency 5          Fetch 5 sources in parallel
-  releases fetch --json                   Output results as JSON
-  releases fetch src_abc123 --managed-agents  Delegate fetch to a managed agent`)
+  releases admin source fetch src_abc123               Fetch a single source by ID (preferred)
+  releases admin source fetch my-source                Fetch a single source by slug
+  releases admin source fetch --stale 6                Fetch sources not updated in 6+ hours
+  releases admin source fetch --unfetched              Fetch sources never fetched before
+  releases admin source fetch --changed                Fetch sources where poll detected changes
+  releases admin source fetch --retry-errors           Retry sources that errored last time
+  releases admin source fetch src_abc123 --dry-run     Preview without writing to DB
+  releases admin source fetch src_abc123 --force       Delete and re-fetch all releases
+  releases admin source fetch --concurrency 5          Fetch 5 sources in parallel
+  releases admin source fetch --json                   Output results as JSON
+  releases admin source fetch src_abc123 --managed-agents  Delegate fetch to a managed agent`)
     .action(async (slugArg: string | undefined, opts: {
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
@@ -168,7 +167,7 @@ Examples:
         } else {
           logger.info(`Update session started: ${result.sessionId}`);
           logger.info(`Fetching ${sourceIdentifiers.length} source(s): ${sourceIdentifiers.join(", ")}`);
-          logger.info(`Track progress: releases task list`);
+          logger.info(`Track progress: releases admin discovery task list`);
         }
         return;
       }
@@ -269,7 +268,7 @@ Examples:
           if (opts.json) {
             console.log(JSON.stringify([], null, 2));
           } else {
-            console.log(chalk.yellow("No sources configured. Use `releases add` to add one."));
+            console.log(chalk.yellow("No sources configured. Use `releases admin source add` to add one."));
           }
           return;
         }
@@ -820,7 +819,7 @@ Examples:
               ? overlapping.map((s) => `"${s}"`).join(", ")
               : `${overlapping.length} sources`;
             console.error(chalk.red(`Source ${sourceList} already being fetched in session ${overlapSessionId.slice(0, 8)}.`));
-            console.error(chalk.gray(`Use 'releases task cancel ${overlapSessionId.slice(0, 8)}' to stop it first.`));
+            console.error(chalk.gray(`Use 'releases admin discovery task cancel ${overlapSessionId.slice(0, 8)}' to stop it first.`));
             process.exit(1);
           }
         } catch {

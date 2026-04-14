@@ -47,15 +47,15 @@ export function registerOnboardCommand(program: Command) {
     .option("--json", "Output results as JSON")
     .addHelpText("after", `
 Engine selection (RELEASED_DISCOVERY_ENGINE env var, default: managed-agents):
-  releases onboard "Acme"                   # uses managed agents (default)
-  releases onboard "Acme" --sandbox         # uses the sandbox engine
-  RELEASED_DISCOVERY_ENGINE=sandbox releases onboard "Acme"
+  releases admin discovery onboard "Acme"                   # uses managed agents (default)
+  releases admin discovery onboard "Acme" --sandbox         # uses the sandbox engine
+  RELEASED_DISCOVERY_ENGINE=sandbox releases admin discovery onboard "Acme"
 
 Examples:
-  releases onboard "Vercel"
-  releases onboard "Stripe" --domain stripe.com --github-org stripe
-  releases onboard "Acme" --remote
-  releases onboard "Acme" --local --json`)
+  releases admin discovery onboard "Vercel"
+  releases admin discovery onboard "Stripe" --domain stripe.com --github-org stripe
+  releases admin discovery onboard "Acme" --remote
+  releases admin discovery onboard "Acme" --local --json`)
     .action(async (company: string, opts: OnboardOpts) => {
       if (opts.remote && opts.local) {
         logger.error("Cannot specify both --remote and --local");
