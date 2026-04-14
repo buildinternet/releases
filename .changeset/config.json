@@ -1,0 +1,19 @@
+{
+  "$schema": "https://unpkg.com/@changesets/config@3.1.3/schema.json",
+  "changelog": "@changesets/cli/changelog",
+  "commit": false,
+  "fixed": [
+    [
+      "@buildinternet/releases",
+      "@buildinternet/releases-darwin-arm64",
+      "@buildinternet/releases-darwin-x64",
+      "@buildinternet/releases-linux-arm64",
+      "@buildinternet/releases-linux-x64"
+    ]
+  ],
+  "linked": [],
+  "access": "public",
+  "baseBranch": "main",
+  "updateInternalDependencies": "patch",
+  "ignore": []
+}
