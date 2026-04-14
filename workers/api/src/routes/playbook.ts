@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { knowledgePages, organizations, sources, products } from "@releases/db/schema.js";
-import { generateSourceGuideHeader } from "@releases/ai/source-guide.js";
+import { generatePlaybookHeader } from "@releases/ai/playbook.js";
 import { newKnowledgePageId, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
 
-// GET /guide?slug=<orgSlug> — get assembled source guide for an org
+// GET /playbook?slug=<orgSlug> — get assembled playbook for an org
 app.get("/", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.query("slug");
@@ -26,14 +26,14 @@ app.get("/", async (c) => {
   const [row] = await db
     .select()
     .from(knowledgePages)
-    .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, org.id)));
+    .where(and(eq(knowledgePages.scope, "playbook"), eq(knowledgePages.orgId, org.id)));
 
   if (!row) return c.json(null);
 
   return c.json(row);
 });
 
-// PATCH /guide/notes?slug=<orgSlug> — update source guide notes
+// PATCH /playbook/notes?slug=<orgSlug> — update playbook notes
 app.patch("/notes", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.query("slug");
@@ -51,14 +51,14 @@ app.patch("/notes", async (c) => {
   const [existing] = await db
     .select()
     .from(knowledgePages)
-    .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, org.id)));
+    .where(and(eq(knowledgePages.scope, "playbook"), eq(knowledgePages.orgId, org.id)));
 
   const now = new Date().toISOString();
   const notes = body.notes.trim() || null;
 
   if (existing) {
     await db.run(sql`UPDATE knowledge_pages SET notes = ${notes}, updated_at = ${now}
-      WHERE scope = 'source-guide' AND org_id = ${org.id}`);
+      WHERE scope = 'playbook' AND org_id = ${org.id}`);
   } else {
     const orgSources = await db.select().from(sources).where(eq(sources.orgId, org.id));
     const orgProducts = await db
@@ -66,7 +66,7 @@ app.patch("/notes", async (c) => {
       .from(products)
       .where(eq(products.orgId, org.id));
 
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: org.name,
       orgSlug: org.slug,
       domain: org.domain,
@@ -76,7 +76,7 @@ app.patch("/notes", async (c) => {
 
     const id = newKnowledgePageId();
     await db.run(sql`INSERT INTO knowledge_pages (id, scope, org_id, product_id, content, notes, release_count, generated_at, updated_at)
-      VALUES (${id}, 'source-guide', ${org.id}, NULL, ${header}, ${notes}, ${orgSources.length}, ${now}, ${now})`);
+      VALUES (${id}, 'playbook', ${org.id}, NULL, ${header}, ${notes}, ${orgSources.length}, ${now}, ${now})`);
   }
 
   return c.json({ ok: true, notes });

@@ -68,7 +68,7 @@ export interface OrgDetail {
   overview?: OverviewPageItem | null;
   /** @deprecated Use overview */
   knowledgePage?: OverviewPageItem | null;
-  sourceGuide?: { scope: "source-guide"; content: string; updatedAt: string } | null;
+  playbook?: { scope: "playbook"; content: string; updatedAt: string } | null;
 }
 
 // ── Sources ──

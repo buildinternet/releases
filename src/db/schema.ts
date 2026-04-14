@@ -293,7 +293,7 @@ export const knowledgePages = sqliteTable(
   "knowledge_pages",
   {
     id: text("id").primaryKey().$defaultFn(newKnowledgePageId),
-    scope: text("scope", { enum: ["org", "product", "source-guide"] }).notNull(),
+    scope: text("scope", { enum: ["org", "product", "playbook"] }).notNull(),
     orgId: text("org_id").references(() => organizations.id, { onDelete: "cascade" }),
     productId: text("product_id").references(() => products.id, { onDelete: "cascade" }),
     content: text("content").notNull(),

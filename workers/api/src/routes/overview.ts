@@ -64,7 +64,7 @@ app.post("/", async (c) => {
 
   const now = new Date().toISOString();
 
-  if ((scope === "org" || scope === "source-guide") && orgId) {
+  if ((scope === "org" || scope === "playbook") && orgId) {
     const id = newKnowledgePageId();
     await db.run(sql`INSERT INTO knowledge_pages (id, scope, org_id, product_id, content, release_count, last_contributing_release_at, generated_at, updated_at)
       VALUES (${id}, ${scope}, ${orgId}, NULL, ${content}, ${releaseCount}, ${lastContributingReleaseAt ?? null}, ${now}, ${now})
@@ -75,7 +75,7 @@ app.post("/", async (c) => {
       VALUES (${id}, ${scope}, NULL, ${productId}, ${content}, ${releaseCount}, ${lastContributingReleaseAt ?? null}, ${now}, ${now})
       ON CONFLICT (scope, product_id) DO UPDATE SET content = ${content}, release_count = ${releaseCount}, last_contributing_release_at = ${lastContributingReleaseAt ?? null}, updated_at = ${now}`);
   } else {
-    return c.json({ error: "Must provide orgId (for org/source-guide scope) or productId (for product scope)" }, 400);
+    return c.json({ error: "Must provide orgId (for org/playbook scope) or productId (for product scope)" }, 400);
   }
 
   return c.json({ ok: true });

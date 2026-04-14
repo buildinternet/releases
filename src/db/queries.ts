@@ -1416,20 +1416,20 @@ export async function getProductOverview(productId: string, productSlug?: string
   return row ?? null;
 }
 
-export async function getSourceGuideForOrg(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
+export async function getPlaybookForOrg(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
   if (isRemoteMode() && orgSlug) {
-    return apiClient.getSourceGuide(orgSlug);
+    return apiClient.getPlaybook(orgSlug);
   }
   const db = getDb();
   const [row] = await db
     .select()
     .from(knowledgePages)
-    .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, orgId)));
+    .where(and(eq(knowledgePages.scope, "playbook"), eq(knowledgePages.orgId, orgId)));
   return row ?? null;
 }
 
 export async function upsertOverviewPage(
-  data: { scope: "org" | "product" | "source-guide"; orgId?: string | null; productId?: string | null; content: string; notes?: string | null; releaseCount: number; lastContributingReleaseAt?: string | null },
+  data: { scope: "org" | "product" | "playbook"; orgId?: string | null; productId?: string | null; content: string; notes?: string | null; releaseCount: number; lastContributingReleaseAt?: string | null },
 ): Promise<void> {
   if (isRemoteMode()) {
     return apiClient.upsertOverview(data);
@@ -1463,16 +1463,16 @@ export async function upsertOverviewPage(
     });
 }
 
-export async function updateSourceGuideNotes(orgId: string, orgSlug: string, notes: string): Promise<void> {
+export async function updatePlaybookNotes(orgId: string, orgSlug: string, notes: string): Promise<void> {
   if (isRemoteMode()) {
-    return apiClient.updateSourceGuideNotes(orgSlug, notes);
+    return apiClient.updatePlaybookNotes(orgSlug, notes);
   }
   const db = getDb();
   const now = new Date().toISOString();
   await db
     .update(knowledgePages)
     .set({ notes: notes.trim() || null, updatedAt: now })
-    .where(and(eq(knowledgePages.scope, "source-guide"), eq(knowledgePages.orgId, orgId)));
+    .where(and(eq(knowledgePages.scope, "playbook"), eq(knowledgePages.orgId, orgId)));
 }
 
 // ── Media Assets ──

@@ -1,40 +1,37 @@
 ---
-name: seeding-guides
-description: Coordinate bulk source guide writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Local-only (Claude Code CLI) — managed agents do not yet support spawning sub-agents.
+name: seeding-playbooks
+description: Coordinate bulk playbook writing using parallel sub-agents — covers org discovery, prompt templates, model selection, batch dispatch, verification, and the parent-saves pattern for working around subagent permission limits. Local-only (Claude Code CLI) — managed agents do not yet support spawning sub-agents.
 ---
 
-<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
+# Seeding Playbooks
 
-
-# Seeding Source Guides
-
-Coordinate bulk creation or enrichment of source guide agent notes across many orgs using parallel sub-agents.
+Coordinate bulk creation or enrichment of playbook agent notes across many orgs using parallel sub-agents.
 
 **Local-only**: This skill requires Claude Code's Agent tool to dispatch sub-agents. Managed agents (discovery worker, Haiku worker) cannot spawn sub-agents — that capability is behind a private beta and not yet available. When sub-agent support ships for managed agents, this skill can be adapted into a managed session mode.
 
 ## When to Use
 
-- Batch-populating guides for orgs that have sources but no notes
-- Re-running the verified workflow on existing guides to enrich them with data-grounded observations
-- After a wave of new orgs are onboarded and need initial guide scaffolding
+- Batch-populating playbooks for orgs that have sources but no notes
+- Re-running the verified workflow on existing playbooks to enrich them with data-grounded observations
+- After a wave of new orgs are onboarded and need initial playbook scaffolding
 
 ## Step 1: Identify Targets
 
-Find orgs that need guides. Run this to check coverage:
+Find orgs that need playbooks. Run this to check coverage:
 
 ```bash
 bun -e "
-const orgs = JSON.parse(Bun.spawnSync(['bun', 'src/index.ts', 'org', 'list', '--json'], { stderr: 'ignore' }).stdout.toString());
+const orgs = JSON.parse(Bun.spawnSync(['bun', 'src/index.ts', 'admin', 'org', 'list', '--json'], { stderr: 'ignore' }).stdout.toString());
 const active = orgs.filter(o => o.sourceCount > 0).sort((a,b) => b.releaseCount - a.releaseCount);
 for (const org of active) {
-  const guide = JSON.parse(Bun.spawnSync(['bun', 'src/index.ts', 'knowledge', 'guide', org.slug, '--json'], { stderr: 'ignore' }).stdout.toString());
-  const status = guide.notes?.length > 100 ? 'has notes (' + guide.notes.length + ' chars)' : 'NEEDS GUIDE';
+  const playbook = JSON.parse(Bun.spawnSync(['bun', 'src/index.ts', 'admin', 'content', 'playbook', org.slug, '--json'], { stderr: 'ignore' }).stdout.toString());
+  const status = playbook.notes?.length > 100 ? 'has notes (' + playbook.notes.length + ' chars)' : 'NEEDS PLAYBOOK';
   console.log(org.slug.padEnd(25) + ' sources=' + String(org.sourceCount).padStart(2) + '  ' + status);
 }
 " 2>/dev/null
 ```
 
-This produces a ranked list of orgs with their guide status. Target orgs showing "NEEDS GUIDE".
+This produces a ranked list of orgs with their playbook status. Target orgs showing "NEEDS PLAYBOOK".
 
 ## Step 2: Gather Source Details
 
@@ -43,7 +40,7 @@ Before dispatching agents, collect source metadata for the target orgs. Each age
 ```bash
 for org in <slugs>; do
   echo "=== $org ==="
-  bun src/index.ts org show "$org" --json 2>/dev/null | bun -e "
+  bun src/index.ts admin org show "$org" --json 2>/dev/null | bun -e "
     const d = JSON.parse(await Bun.stdin.text());
     const products = d.products?.map(p => p.name + ' (' + p.slug + ')').join(', ') || 'none';
     console.log('Products:', products);
@@ -67,13 +64,13 @@ done
 - Notes are educated guesses — claims about page structure and cadence are inferred, not verified
 
 ### Verified workflow (thorough, data-grounded)
-- Agent queries release data (`list <slug> --json`) and fetch logs (`fetch-log <slug> --json`) before writing
+- Agent queries release data (`list <slug> --json`) and fetch logs (`admin source fetch-log <slug> --json`) before writing
 - Good for: high-value orgs, scrape sources, orgs with known data quality issues
 - Every claim is backed by observed data — version formats, actual cadence, content quality, fetch errors
 
 ### Model selection
 
-| Model | Cost/guide | Best for |
+| Model | Cost/playbook | Best for |
 |-------|-----------|----------|
 | Opus | ~$0.07 (compilation) / ~$0.13 (verified) | Top-10 orgs, complex source sets, first-time verified runs |
 | Sonnet | ~$0.01 / ~$0.03 | Sweet spot for quality/cost. Most thorough output. Use for top-20 verified runs |
@@ -86,9 +83,9 @@ Launch one agent per org, in parallel. Use batches of 10 to avoid overwhelming t
 ### Compilation prompt template
 
 ```
-Write source guide agent notes for the org "{slug}" and save them using the CLI.
+Write playbook agent notes for the org "{slug}" and save them using the CLI.
 
-Source guides are **skills for agents that will fetch from this org**. Write in imperative voice — tell the agent what to do, not what things are.
+Playbooks are **skills for agents that will fetch from this org**. Write in imperative voice — tell the agent what to do, not what things are.
 
 Notes have three headings: `### Fetch instructions`, `### Traps`, `### Coverage`.
 
@@ -104,29 +101,29 @@ Products: {product list or "none"}
 **Coverage**: 2-3 sentences. Which sources are canonical, whether there are gaps.
 
 Save by running:
-bun src/index.ts guide {slug} --regenerate 2>/dev/null
-bun src/index.ts guide {slug} --notes "$(cat <<'NOTES'
+bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
+bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts guide {slug} 2>/dev/null | tail -20
+Verify with: bun src/index.ts admin content playbook {slug} 2>/dev/null | tail -20
 ```
 
 ### Verified prompt template
 
 ```
-Write a **verified** source guide for the org "{slug}".
-Unlike a basic guide, you must do actual research first.
+Write a **verified** playbook for the org "{slug}".
+Unlike a basic playbook, you must do actual research first.
 
-Source guides are **skills for agents that will fetch from this org**. Write in imperative voice — tell the agent what to do, not what things are.
+Playbooks are **skills for agents that will fetch from this org**. Write in imperative voice — tell the agent what to do, not what things are.
 
 ## Step 1: Gather data (run all of these)
 
-bun src/index.ts org show {slug} --json 2>/dev/null
+bun src/index.ts admin org show {slug} --json 2>/dev/null
 {for each source:}
 bun src/index.ts list {source-slug} --json 2>/dev/null
-bun src/index.ts fetch-log {source-slug} --json 2>/dev/null
+bun src/index.ts admin source fetch-log {source-slug} --json 2>/dev/null
 
 ## Step 2: Analyze what you found
 
@@ -150,13 +147,13 @@ Every claim must cite observed data. If uncertain, say so explicitly.
 
 ## Step 4: Save
 
-bun src/index.ts guide {slug} --regenerate 2>/dev/null
-bun src/index.ts guide {slug} --notes "$(cat <<'NOTES'
+bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
+bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts guide {slug} 2>/dev/null | tail -20
+Verify with: bun src/index.ts admin content playbook {slug} 2>/dev/null | tail -20
 ```
 
 ### Dispatch pattern
@@ -164,7 +161,7 @@ Verify with: bun src/index.ts guide {slug} 2>/dev/null | tail -20
 ```typescript
 // Launch up to 10 agents in parallel per batch
 Agent({
-  description: "Write guide: {slug}",
+  description: "Write playbook: {slug}",
   model: "sonnet",  // or "haiku" for bulk
   prompt: compiledPromptTemplate,
   run_in_background: true,
@@ -179,8 +176,8 @@ Sub-agents may be blocked from saving notes via Bash (heredoc permission issues)
 2. The parent agent (you) saves the notes manually:
 
 ```bash
-bun src/index.ts guide {slug} --regenerate 2>/dev/null
-bun src/index.ts guide {slug} --notes "$(cat <<'NOTES'
+bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
+bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
 {paste notes from agent result}
 NOTES
 )" 2>/dev/null
@@ -196,7 +193,7 @@ After all agents complete, verify coverage in bulk:
 bun -e "
 const orgs = [{target slugs}];
 for (const org of orgs) {
-  const proc = Bun.spawnSync(['bun', 'src/index.ts', 'knowledge', 'guide', org, '--json'], { stderr: 'ignore' });
+  const proc = Bun.spawnSync(['bun', 'src/index.ts', 'admin', 'content', 'playbook', org, '--json'], { stderr: 'ignore' });
   try {
     const d = JSON.parse(proc.stdout.toString());
     const len = d.notes?.length ?? 0;

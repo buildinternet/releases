@@ -42,8 +42,8 @@ ${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for 
 - **manage_org** — Create/edit orgs. Params: action (add/edit/tag_add/link_account), name, identifier, domain, description, category, tags, platform, handle
 - **manage_product** — Create/edit products. Params: action (add/edit/tag_add), name, organization, slug, url, description, category, tags
 - **exclude_url** — Ignore or block a URL. Params: action (ignore/block), url, organization, reason, block_type
-- **get_source_guide** — Read the source guide for an org (auto-generated header + agent notes). Params: organization
-- **update_source_guide_notes** — Replace the agent notes section of an org's source guide. Params: organization, notes (complete markdown)
+- **get_playbook** — Read the playbook for an org (auto-generated header + agent notes). Params: organization
+- **update_playbook_notes** — Replace the agent notes section of an org's playbook. Params: organization, notes (complete markdown)
 ${evaluateNote}
 ## Available Categories
 
@@ -65,7 +65,7 @@ Some organizations ship multiple distinct products. When you discover sources th
 3. **Add** — add sources with add_source using appropriate types
 4. **Validate** — fetch each source with fetch_source and check the results
 5. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-6. **Write the source guide** — after validating sources, call update_source_guide_notes to write notes covering extraction patterns (page structure, version format, publish cadence per source), known quirks, and source coverage. Write it like a README for a teammate who will fetch releases from this org without asking questions. See the get_source_guide tool for the current guide state.
+6. **Write the playbook** — after validating sources, call update_playbook_notes to write notes covering extraction patterns (page structure, version format, publish cadence per source), known quirks, and source coverage. Write it like a README for a teammate who will fetch releases from this org without asking questions. See the get_playbook tool for the current playbook state.
 7. **Report** — summarize what was found, including how many releases were persisted
 
 ## Source Selection

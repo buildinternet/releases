@@ -33,7 +33,7 @@ export interface SessionParams {
   mode: "onboard" | "update";
   /** For update mode: source IDs (src_...) or slugs. IDs preferred. */
   sourceIdentifiers?: string[];
-  /** Organization ID (org_...) for source guide lookup in update mode. */
+  /** Organization ID (org_...) for playbook lookup in update mode. */
   orgId?: string;
   /** Correlation ID from the originating client for end-to-end tracing. */
   correlationId?: string;
@@ -156,7 +156,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       if (mode === "update") {
         const idList = (params.sourceIdentifiers ?? []).map(s => `- ${s}`).join("\n");
         const guideStep = params.orgId
-          ? `\n\nFirst, call get_source_guide with organization "${params.orgId}" to understand how each source works — extraction patterns, known quirks, and what to expect. Then call`
+          ? `\n\nFirst, call get_playbook with organization "${params.orgId}" to understand how each source works — extraction patterns, known quirks, and what to expect. Then call`
           : `\n\nCall`;
         prompt = `Fetch release updates for "${params.company}". Sources to fetch:\n${idList}${guideStep} fetch_source for each source using the source ID as the \`identifier\` parameter (e.g. \`{"identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
       } else {

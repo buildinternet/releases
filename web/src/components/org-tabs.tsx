@@ -12,7 +12,7 @@ function CodeBrackets() {
   );
 }
 
-export function OrgTabs({ hasGuide }: { hasGuide?: boolean }) {
+export function OrgTabs({ hasPlaybook }: { hasPlaybook?: boolean }) {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pathname = usePathname();
@@ -41,10 +41,10 @@ export function OrgTabs({ hasGuide }: { hasGuide?: boolean }) {
       <button onClick={() => setTab("sources")} className={tabButtonClass(activeTab === "sources")}>
         Sources
       </button>
-      {hasGuide && (
-        <button onClick={() => setTab("guide")} className={`${tabButtonClass(activeTab === "guide")} ml-auto`}>
+      {hasPlaybook && (
+        <button onClick={() => setTab("playbook")} className={`${tabButtonClass(activeTab === "playbook")} ml-auto`}>
           <CodeBrackets />
-          Guide
+          Playbook
         </button>
       )}
     </div>

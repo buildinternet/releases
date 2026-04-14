@@ -2,25 +2,25 @@ import type { Command } from "commander";
 import chalk from "chalk";
 import {
   findOrg, getSourcesByOrg, getProductsByOrg,
-  getSourceGuideForOrg, upsertOverviewPage,
-  updateSourceGuideNotes,
+  getPlaybookForOrg, upsertOverviewPage,
+  updatePlaybookNotes,
 } from "../../db/queries.js";
-import { generateSourceGuideHeader, assembleSourceGuide, extractNotesFromLegacyGuide } from "../../ai/source-guide.js";
+import { generatePlaybookHeader, assemblePlaybook, extractNotesFromLegacyPlaybook } from "../../ai/playbook.js";
 
-export function registerGuideCommand(program: Command) {
+export function registerPlaybookCommand(program: Command) {
   program
-    .command("guide")
+    .command("playbook")
     .argument("<org>", "Organization slug or ID")
     .option("--json", "Output as JSON")
     .option("--regenerate", "Regenerate the header from current source metadata")
     .option("--notes <text>", "Replace the agent notes section (pass full content)")
-    .description("Show or manage the source guide for an organization")
+    .description("Show or manage the playbook for an organization")
     .addHelpText("after", `
 Examples:
-  releases admin content guide vercel
-  releases admin content guide vercel --json
-  releases admin content guide vercel --regenerate
-  releases admin content guide vercel --notes "### Extraction patterns\\n..."`)
+  releases admin content playbook vercel
+  releases admin content playbook vercel --json
+  releases admin content playbook vercel --regenerate
+  releases admin content playbook vercel --notes "### Extraction patterns\\n..."`)
     .action(async (orgSlug: string, opts: { json?: boolean; regenerate?: boolean; notes?: string }) => {
       const org = await findOrg(orgSlug);
       if (!org) {
@@ -32,21 +32,21 @@ Examples:
 
       // Update notes
       if (opts.notes !== undefined) {
-        await updateSourceGuideNotes(org.id, org.slug, opts.notes);
+        await updatePlaybookNotes(org.id, org.slug, opts.notes);
         if (opts.json) {
           console.log(JSON.stringify({ org: org.slug, notes: opts.notes, updated: true }));
         } else {
-          console.log(chalk.green(`Notes updated for ${org.name} source guide.`));
+          console.log(chalk.green(`Notes updated for ${org.name} playbook.`));
         }
         return;
       }
 
-      // Fetch existing guide
-      const existingPage = await getSourceGuideForOrg(org.id, org.slug);
+      // Fetch existing playbook
+      const existingPage = await getPlaybookForOrg(org.id, org.slug);
 
-      // Show existing guide unless --regenerate
+      // Show existing playbook unless --regenerate
       if (!opts.regenerate && existingPage) {
-        const assembled = assembleSourceGuide(existingPage.content, existingPage.notes);
+        const assembled = assemblePlaybook(existingPage.content, existingPage.notes);
         if (opts.json) {
           console.log(JSON.stringify({
             org: org.slug,
@@ -66,7 +66,7 @@ Examples:
       }
 
       const orgProducts = await getProductsByOrg(org.id);
-      const header = generateSourceGuideHeader({
+      const header = generatePlaybookHeader({
         orgName: org.name,
         orgSlug: org.slug,
         domain: org.domain,
@@ -77,23 +77,23 @@ Examples:
       // Preserve notes: from existing notes column, or migrate from old-format content
       let notes: string | null = existingPage?.notes ?? null;
       if (!notes && existingPage) {
-        notes = extractNotesFromLegacyGuide(existingPage.content);
+        notes = extractNotesFromLegacyPlaybook(existingPage.content);
       }
 
       await upsertOverviewPage({
-        scope: "source-guide",
+        scope: "playbook",
         orgId: org.id,
         content: header,
         notes,
         releaseCount: orgSources.length,
       });
 
-      const assembled = assembleSourceGuide(header, notes);
+      const assembled = assemblePlaybook(header, notes);
 
       if (opts.json) {
         console.log(JSON.stringify({ org: org.slug, content: assembled, notes, sources: orgSources.length }));
       } else {
-        console.log(chalk.green(`${existingPage ? "Regenerated" : "Generated"} source guide for ${org.name}\n`));
+        console.log(chalk.green(`${existingPage ? "Regenerated" : "Generated"} playbook for ${org.name}\n`));
         console.log(assembled);
       }
     });
