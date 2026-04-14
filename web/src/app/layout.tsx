@@ -12,10 +12,10 @@ const jetbrainsMono = JetBrains_Mono({
 
 export const metadata: Metadata = {
   title: {
-    default: "releases.sh — A unified API for product changelogs",
+    default: "releases.sh — A unified, agent-readable API for product changelogs",
     template: "%s — releases.sh",
   },
-  description: "A unified, agent-readable index of product changelogs. Query release notes from any product via CLI, API, or MCP — one consistent shape, no scraping.",
+  description: "A unified, agent-readable API for product changelogs. Query release notes from any product via CLI, API, or MCP.",
   metadataBase: new URL("https://releases.sh"),
   openGraph: {
     type: "website",
