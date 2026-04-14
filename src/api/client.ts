@@ -809,7 +809,7 @@ export async function getMonthlySummary(
   return rows[0];
 }
 
-// ── Overview / Guide Pages ──
+// ── Overview / Playbook Pages ──
 
 export async function getOverview(
   scope: "org" | "product",
@@ -818,23 +818,23 @@ export async function getOverview(
   return apiFetch<KnowledgePage | null>(`/v1/overview?scope=${scope}&slug=${slug}`);
 }
 
-export async function getSourceGuide(
+export async function getPlaybook(
   slug: string,
 ): Promise<KnowledgePage | null> {
-  return apiFetch<KnowledgePage | null>(`/v1/guide?slug=${slug}`);
+  return apiFetch<KnowledgePage | null>(`/v1/playbook?slug=${slug}`);
 }
 
 /** @deprecated Use getOverview */
 export async function getKnowledgePage(
-  scope: "org" | "product" | "source-guide",
+  scope: "org" | "product" | "playbook",
   slug: string,
 ): Promise<KnowledgePage | null> {
-  if (scope === "source-guide") return getSourceGuide(slug);
+  if (scope === "playbook") return getPlaybook(slug);
   return getOverview(scope, slug);
 }
 
 export async function upsertOverview(data: {
-  scope: "org" | "product" | "source-guide";
+  scope: "org" | "product" | "playbook";
   orgId?: string | null;
   productId?: string | null;
   content: string;
@@ -850,8 +850,8 @@ export async function upsertOverview(data: {
 /** @deprecated Use upsertOverview */
 export const upsertKnowledgePage = upsertOverview;
 
-export async function updateSourceGuideNotes(orgSlug: string, notes: string): Promise<void> {
-  await apiFetch(`/v1/guide/notes?slug=${encodeURIComponent(orgSlug)}`, {
+export async function updatePlaybookNotes(orgSlug: string, notes: string): Promise<void> {
+  await apiFetch(`/v1/playbook/notes?slug=${encodeURIComponent(orgSlug)}`, {
     method: "PATCH",
     body: JSON.stringify({ notes }),
   });

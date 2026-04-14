@@ -8,7 +8,7 @@ import { toSlug } from "@releases/lib/slug.js";
 import { isConflictError, computeAvgPerWeek, getOrCreateTagD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
-import { assembleSourceGuide } from "@releases/ai/source-guide.js";
+import { assemblePlaybook } from "@releases/ai/playbook.js";
 import type { Env } from "../index.js";
 import { getOrgsWithStats, getOrgSparklines, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgSourceSparklines, getOrgReleasesFeed } from "../queries/orgs.js";
 
@@ -121,11 +121,11 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .from(sources)
       .where(eq(sources.orgId, org.id)),
 
-    // Overview + source guide pages for this org (single query, split client-side)
+    // Overview + playbook pages for this org (single query, split client-side)
     db
       .select()
       .from(knowledgePages)
-      .where(and(inArray(knowledgePages.scope, ["org", "source-guide"]), eq(knowledgePages.orgId, org.id))),
+      .where(and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id))),
   ]);
 
   const sourcesWithStats = orgSources.map((row) => ({
@@ -170,7 +170,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   const totalReleases = totalReleaseRow[0];
   const latestFetch = latestFetchRow[0];
   const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
-  const sourceGuideRow = knowledgePageRows.find((r) => r.scope === "source-guide") ?? null;
+  const playbookRow = knowledgePageRows.find((r) => r.scope === "playbook") ?? null;
 
   const overviewData = knowledgeRow ? {
     scope: knowledgeRow.scope as "org",
@@ -201,10 +201,10 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     sources: sourcesWithStats,
     overview: overviewData,
     knowledgePage: overviewData, // deprecated — use overview
-    sourceGuide: sourceGuideRow ? {
-      scope: sourceGuideRow.scope as "source-guide",
-      content: assembleSourceGuide(sourceGuideRow.content, sourceGuideRow.notes),
-      updatedAt: sourceGuideRow.updatedAt,
+    playbook: playbookRow ? {
+      scope: playbookRow.scope as "playbook",
+      content: assemblePlaybook(playbookRow.content, playbookRow.notes),
+      updatedAt: playbookRow.updatedAt,
     } : null,
   };
 

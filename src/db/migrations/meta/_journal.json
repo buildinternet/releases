@@ -71,6 +71,13 @@
       "when": 1776166599896,
       "tag": "20260414113639_flashy_silver_fox",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1776186266000,
+      "tag": "20260414130426_playbook_rename",
+      "breakpoints": true
     }
   ]
 }

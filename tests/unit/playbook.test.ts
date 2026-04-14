@@ -1,9 +1,9 @@
 import { describe, it, expect } from "bun:test";
 import {
-  generateSourceGuideHeader,
-  assembleSourceGuide,
-  extractNotesFromLegacyGuide,
-} from "../../src/ai/source-guide.js";
+  generatePlaybookHeader,
+  assemblePlaybook,
+  extractNotesFromLegacyPlaybook,
+} from "../../src/ai/playbook.js";
 import type { Source } from "../../src/db/schema.js";
 
 function makeSource(overrides: Partial<Source> = {}): Source {
@@ -31,15 +31,15 @@ function makeSource(overrides: Partial<Source> = {}): Source {
   } as Source;
 }
 
-describe("generateSourceGuideHeader", () => {
+describe("generatePlaybookHeader", () => {
   it("generates a basic header with one source as a table", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource()],
     });
 
-    expect(header).toContain("# Acme — Source Guide");
+    expect(header).toContain("# Acme — Playbook");
     expect(header).toContain("**1** active source");
     // Table format: name, ID, type, URL columns
     expect(header).toContain("Test Source");
@@ -50,7 +50,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("includes domain in summary line", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       domain: "acme.com",
@@ -61,7 +61,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("shows product column when products exist", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [
@@ -83,7 +83,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("separates disabled sources with strikethrough and ID", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [
@@ -100,7 +100,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("shows parseInstructions in a separate section", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ metadata: JSON.stringify({ parseInstructions: "Only extract new features" }) })],
@@ -112,7 +112,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("shows priority in type column for non-normal priorities", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ fetchPriority: "low" })],
@@ -122,7 +122,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("includes source ID in table", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ id: "src_abc123" })],
@@ -132,7 +132,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("includes URL as plain text in table", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ url: "https://example.com/changelog" })],
@@ -144,7 +144,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("formats last fetched as short date", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ lastFetchedAt: "2026-04-11T17:00:00.000Z" })],
@@ -154,7 +154,7 @@ describe("generateSourceGuideHeader", () => {
   });
 
   it("shows 'never' when not fetched", () => {
-    const header = generateSourceGuideHeader({
+    const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
       sources: [makeSource({ lastFetchedAt: null })],
@@ -164,9 +164,9 @@ describe("generateSourceGuideHeader", () => {
   });
 });
 
-describe("assembleSourceGuide", () => {
+describe("assemblePlaybook", () => {
   it("appends notes to header", () => {
-    const result = assembleSourceGuide("# Header\n\nContent", "- Some agent observation");
+    const result = assemblePlaybook("# Header\n\nContent", "- Some agent observation");
 
     expect(result).toContain("# Header");
     expect(result).toContain("## Agent Notes");
@@ -174,21 +174,21 @@ describe("assembleSourceGuide", () => {
   });
 
   it("shows placeholder when notes are null", () => {
-    const result = assembleSourceGuide("# Header", null);
+    const result = assemblePlaybook("# Header", null);
 
     expect(result).toContain("## Agent Notes");
     expect(result).toContain("_No agent notes yet");
   });
 
   it("shows placeholder when notes are empty/whitespace", () => {
-    const result = assembleSourceGuide("# Header", "   ");
+    const result = assemblePlaybook("# Header", "   ");
 
     expect(result).toContain("_No agent notes yet");
   });
 });
 
-describe("extractNotesFromLegacyGuide", () => {
-  it("extracts notes from old-format guide with ## Notes heading", () => {
+describe("extractNotesFromLegacyPlaybook", () => {
+  it("extracts notes from old-format playbook with ## Notes heading", () => {
     const content = `# Acme — Source Guide
 
 ## Active Sources
@@ -199,7 +199,7 @@ Some source info
 
 - [2026-04-10] Some observation`;
 
-    const notes = extractNotesFromLegacyGuide(content);
+    const notes = extractNotesFromLegacyPlaybook(content);
     expect(notes).toBe("- [2026-04-10] Some observation");
   });
 
@@ -211,13 +211,13 @@ Some source info
 - Important finding
 `;
 
-    const notes = extractNotesFromLegacyGuide(content);
+    const notes = extractNotesFromLegacyPlaybook(content);
     expect(notes).toBe("- Important finding");
   });
 
   it("returns null when no notes section exists", () => {
     const content = `# Header\n\n## Active Sources\n\nStuff`;
-    expect(extractNotesFromLegacyGuide(content)).toBeNull();
+    expect(extractNotesFromLegacyPlaybook(content)).toBeNull();
   });
 
   it("returns null when notes section has placeholder text", () => {
@@ -228,6 +228,6 @@ Some source info
 _No agent notes yet. Agents can append observations here._
 `;
 
-    expect(extractNotesFromLegacyGuide(content)).toBeNull();
+    expect(extractNotesFromLegacyPlaybook(content)).toBeNull();
   });
 });

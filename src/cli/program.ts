@@ -29,7 +29,7 @@ import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
 import { registerRefreshChangelogCommand, registerChangelogCommand } from "./commands/refresh-changelog.js";
-import { registerGuideCommand } from "./commands/guide.js";
+import { registerPlaybookCommand } from "./commands/playbook.js";
 import { registerShowCommand } from "./commands/show.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
@@ -190,9 +190,9 @@ registerBlockCommand(policyAdmin);
 
 const contentAdmin = admin
   .command("content")
-  .description("Manage generated summaries, guides, and media backfills");
+  .description("Manage generated summaries, playbooks, and media backfills");
 registerMediaCommand(contentAdmin);
-registerGuideCommand(contentAdmin);
+registerPlaybookCommand(contentAdmin);
 const contentSummaryAdmin = contentAdmin
   .command("summary")
   .description("Generate persisted summaries");

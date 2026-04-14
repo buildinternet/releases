@@ -16,7 +16,7 @@ export interface UpdateRequest {
   company: string;
   /** Source IDs (src_...) or slugs to fetch. IDs preferred. */
   sourceIdentifiers: string[];
-  /** Organization ID (org_...) for source guide lookup. */
+  /** Organization ID (org_...) for playbook lookup. */
   orgId?: string;
   /** Correlation ID from the originating client — flows through to managed agent sessions and status events. */
   correlationId?: string;

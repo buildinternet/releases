@@ -1,5 +1,5 @@
 /**
- * Source guide generator — produces a structured markdown document describing
+ * Playbook generator — produces a structured markdown document describing
  * how to navigate an org's changelog sources. Deterministic (no AI needed).
  *
  * Two-layer architecture:
@@ -9,7 +9,7 @@
  *   document. Stored separately in the DB. Agents can rewrite, reorganize,
  *   or clear notes at any time.
  *
- * The full guide is assembled at read time by combining header + notes.
+ * The full playbook is assembled at read time by combining header + notes.
  */
 
 import type { Source } from "../db/schema.js";
@@ -22,7 +22,7 @@ export interface ProductInfo {
   description?: string | null;
 }
 
-export interface SourceGuideInput {
+export interface PlaybookInput {
   orgName: string;
   orgSlug: string;
   domain?: string | null;
@@ -31,10 +31,10 @@ export interface SourceGuideInput {
 }
 
 /**
- * Generate the programmatic header for a source guide.
+ * Generate the programmatic header for a playbook.
  * This is the auto-generated portion that reflects current source metadata.
  */
-export function generateSourceGuideHeader(input: SourceGuideInput): string {
+export function generatePlaybookHeader(input: PlaybookInput): string {
   const { orgName, orgSlug, sources, products } = input;
 
   const active = sources.filter((s) => !s.isHidden);
@@ -43,7 +43,7 @@ export function generateSourceGuideHeader(input: SourceGuideInput): string {
   const hasProducts = active.some((s) => s.productId && productMap.has(s.productId));
 
   const lines: string[] = [];
-  lines.push(`# ${orgName} — Source Guide`);
+  lines.push(`# ${orgName} — Playbook`);
   lines.push("");
   lines.push(`> Agent reference for fetching and maintaining **${orgName}** (\`${orgSlug}\`) changelog sources.`);
   lines.push("");
@@ -99,7 +99,7 @@ export function generateSourceGuideHeader(input: SourceGuideInput): string {
   if (sourcesWithInstructions.length > 0) {
     lines.push(`## Parse Instructions`);
     lines.push("");
-    lines.push(`> To update, use \`edit_source\` with metadata — do not edit the guide header.`);
+    lines.push(`> To update, use \`edit_source\` with metadata — do not edit the playbook header.`);
     lines.push("");
     for (const { source, meta } of sourcesWithInstructions) {
       lines.push(`**${source.name}** (\`${source.slug}\`): ${meta.parseInstructions!.replace(/\n/g, " ")}`);
@@ -131,22 +131,22 @@ function formatShortDate(iso: string | null): string {
 }
 
 /**
- * Assemble the full source guide from the auto-generated header and agent notes.
+ * Assemble the full playbook from the auto-generated header and agent notes.
  * Called at read time — the header reflects current metadata, notes are from storage.
  */
-export function assembleSourceGuide(header: string, notes: string | null): string {
+export function assemblePlaybook(header: string, notes: string | null): string {
   const trimmedNotes = notes?.trim();
   const notesBody = trimmedNotes
     ? trimmedNotes
-    : "_No agent notes yet. Use `update_source_guide_notes` to add skill-style notes with three sections: `### Fetch instructions` (per-source playbook — what to do, what to expect), `### Traps` (concise warnings that prevent wasted work), `### Coverage` (what's tracked, what's not, why)._";
+    : "_No agent notes yet. Use `update_playbook_notes` to add skill-style notes with three sections: `### Fetch instructions` (per-source playbook — what to do, what to expect), `### Traps` (concise warnings that prevent wasted work), `### Coverage` (what's tracked, what's not, why)._";
 
   return `${header}\n## Agent Notes\n\n${notesBody}\n`;
 }
 
 // ── Legacy helpers (kept for migration from old format) ──
 
-/** Extract just the Notes section from an old-format guide that stored everything together. */
-export function extractNotesFromLegacyGuide(content: string): string | null {
+/** Extract just the Notes section from an old-format playbook that stored everything together. */
+export function extractNotesFromLegacyPlaybook(content: string): string | null {
   const notesMatch = content.match(/^## (?:Notes|Agent Notes)\n\n([\s\S]*?)(?=\n## |\s*$)/m);
   if (!notesMatch) return null;
   const notes = notesMatch[1].trim();

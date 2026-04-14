@@ -13,7 +13,7 @@ import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
 import { getSourcesWithStats, getSourceReleasesPaginated, getSourceActivityBuckets, getSourceHeatmapData } from "../queries/sources.js";
 import { notDisabled } from "../queries/shared.js";
-import { regenerateSourceGuide } from "../source-guide-regen.js";
+import { regeneratePlaybook } from "../playbook-regen.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -710,7 +710,7 @@ sourceRoutes.post("/sources", async (c) => {
         createdAt: new Date().toISOString(),
       })
       .returning();
-    if (orgId) c.executionCtx.waitUntil(regenerateSourceGuide(db, orgId));
+    if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
     return c.json(source, 201);
   } catch (err) {
     if (isConflictError(err)) {
@@ -757,7 +757,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
-  if (src.orgId) c.executionCtx.waitUntil(regenerateSourceGuide(db, src.orgId));
+  if (src.orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, src.orgId));
   return c.json(updated);
 });
 
@@ -770,7 +770,7 @@ sourceRoutes.delete("/sources/:slug", async (c) => {
 
   const orgId = src.orgId;
   await db.delete(sources).where(eq(sources.id, src.id));
-  if (orgId) c.executionCtx.waitUntil(regenerateSourceGuide(db, orgId));
+  if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
   return c.json({ deleted: true });
 });
 

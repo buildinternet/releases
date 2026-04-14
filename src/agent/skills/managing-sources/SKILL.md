@@ -30,8 +30,8 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Ignore URL | `releases admin policy ignore add --org <org> <url>` | `exclude_url` action "ignore" with url, organization |
 | Block URL | `releases admin policy block add <url>` | `exclude_url` action "block" with url |
 | List categories | `releases categories --json` | `list_categories` |
-| Get source guide | `releases admin content guide <org>` | `get_source_guide` with organization param |
-| Update guide notes | `releases admin content guide <org> --notes "..."` | `update_source_guide_notes` with organization, notes params |
+| Get playbook | `releases admin content playbook <org>` | `get_playbook` with organization param |
+| Update playbook notes | `releases admin content playbook <org> --notes "..."` | `update_playbook_notes` with organization, notes params |
 
 ## Listing Sources
 
@@ -80,14 +80,14 @@ An org can have one source marked as its **primary changelog** — the main, com
 
 When onboarding an org, if you find a single top-level changelog alongside product-specific or GitHub sources, mark the top-level one as primary.
 
-## Source Guides
+## Playbooks
 
-Each org has a **source guide** — a README that tells any agent how to efficiently work with that org's changelog sources. The guide has two layers:
+Each org has a **playbook** — a README that tells any agent how to efficiently work with that org's changelog sources. The playbook has two layers:
 
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
-- **Agent notes** — free-form markdown that you fully control. This is the most important part of the guide. Write it like a README for a teammate who needs to fetch releases from this org without asking questions.
+- **Agent notes** — free-form markdown that you fully control. This is the most important part of the playbook. Write it like a README for a teammate who needs to fetch releases from this org without asking questions.
 
-**Always read the source guide before fetching or working with an org's sources.** Typed tool: `get_source_guide` with organization param. CLI: `releases admin content guide <org>`. If no guide exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
+**Always read the playbook before fetching or working with an org's sources.** Typed tool: `get_playbook` with organization param. CLI: `releases admin content playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
 ### Writing good agent notes
 
@@ -116,9 +116,9 @@ Organize notes under these headings:
 
 > Ramp publishes quarterly rollups at `/blog/new-on-ramp-q*-*` and monthly editions at `/blog/new-on-ramp-*-edition`. Classify all entries from this source as `type: rollup` — individual features within a rollup are not separately indexed.
 
-The `parsing-changelogs` skill ("Classifying Rollups" section) covers what rollups look like and when to set the `type` field. Your job in the source guide is to capture the org-specific signal so future fetches don't have to re-derive it from the page.
+The `parsing-changelogs` skill ("Classifying Rollups" section) covers what rollups look like and when to set the `type` field. Your job in the playbook is to capture the org-specific signal so future fetches don't have to re-derive it from the page.
 
-### Levels of guide quality
+### Levels of playbook quality
 
 **Compilation** (fast, from metadata only): Write notes based on source metadata — URL, type, priority, parseInstructions. Good for bulk coverage but claims about page structure, cadence, and version format are inferred, not verified. Suitable for initial scaffolding or low-priority orgs.
 
@@ -129,15 +129,15 @@ The `parsing-changelogs` skill ("Classifying Rollups" section) covers what rollu
 3. Analyze: calculate real cadence from dates, identify empty content or null fields, spot date drift
 4. Write notes citing specific data points, not general assumptions
 
-Use the verified approach for high-value orgs, when onboarding new orgs with scrape sources, or when refreshing stale compilation-only guides. The difference: "this source likely needs JS rendering" (compilation) vs "all 50 releases have empty content — the RSS feed delivers summaries only, needs crawl mode on per-release pages" (verified).
+Use the verified approach for high-value orgs, when onboarding new orgs with scrape sources, or when refreshing stale compilation-only playbooks. The difference: "this source likely needs JS rendering" (compilation) vs "all 50 releases have empty content — the RSS feed delivers summaries only, needs crawl mode on per-release pages" (verified).
 
 Write notes during onboarding after you've fetched and validated sources. Update them when you discover new quirks or when source behavior changes. If notes are empty or stale, write them before doing fetch work — future agents (including yourself in later sessions) will benefit.
 
-**Updating notes:** Use `update_source_guide_notes` with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
+**Updating notes:** Use `update_playbook_notes` with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
 
 **Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `edit_source` with metadata — the header updates automatically.
 
-**Product context:** Source guides group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the guide calls these out as "Organization-Level Sources" with a note about which products they may cover.
+**Product context:** Playbooks group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the playbook calls these out as "Organization-Level Sources" with a note about which products they may cover.
 
 ## Rendering Control
 
@@ -149,7 +149,7 @@ To override the default for a specific source:
 
 Use `--render` when you know a source needs JavaScript execution. Use `--no-render` when you've verified the content is in the initial HTML for a provider not yet in the static list.
 
-After adding a new scrape source with an unknown provider, check the first fetch results. If content is complete, consider setting `--no-render` and noting the provider behavior in the source guide.
+After adding a new scrape source with an unknown provider, check the first fetch results. If content is complete, consider setting `--no-render` and noting the provider behavior in the playbook.
 
 ## Duplicate Detection
 

@@ -11,7 +11,7 @@ import { OrgReleaseList } from "@/components/org-release-list";
 import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
 import { OverviewView } from "@/components/overview-view";
-import { SourceGuideView } from "@/components/source-guide-view";
+import { PlaybookView } from "@/components/playbook-view";
 import { SourceTable } from "@/components/source-table";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
@@ -141,7 +141,7 @@ export default async function OrgPage({
         )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            <OrgTabs hasGuide={process.env.NODE_ENV === 'development' && !!org.sourceGuide} />
+            <OrgTabs hasPlaybook={process.env.NODE_ENV === 'development' && !!org.playbook} />
 
             {activeTab === "releases" ? (
               initialReleases ? (
@@ -166,8 +166,8 @@ export default async function OrgPage({
                 }
                 return Object.keys(map).length > 0 ? map : undefined;
               })()} />
-            ) : activeTab === "guide" && process.env.NODE_ENV === 'development' && org.sourceGuide ? (
-              <SourceGuideView guide={org.sourceGuide} />
+            ) : activeTab === "playbook" && process.env.NODE_ENV === 'development' && org.playbook ? (
+              <PlaybookView playbook={org.playbook} />
             ) : (
               <>
                 {activity && (

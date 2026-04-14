@@ -187,9 +187,9 @@ When a source uses the `scrape` type and falls through to the single-page Cloudf
 
 For static providers, the adapter automatically uses Cloudflare's crawl API with `render: false`, which is ~10-30x faster than headless browser rendering and currently free.
 
-**When evaluating a new scrape source**, note the provider in the source guide. If the provider isn't in the table above but you can see from the page source that content is in the initial HTML (no loading spinners, no `<div id="root"></div>` shells), set `--no-render` on the source to enable the fast path.
+**When evaluating a new scrape source**, note the provider in the playbook. If the provider isn't in the table above but you can see from the page source that content is in the initial HTML (no loading spinners, no `<div id="root"></div>` shells), set `--no-render` on the source to enable the fast path.
 
-**If a fast fetch returns incomplete content**, the adapter falls back to full rendering automatically. If you notice this happening repeatedly for a source, set `--render` to force headless rendering and note the reason in the source guide.
+**If a fast fetch returns incomplete content**, the adapter falls back to full rendering automatically. If you notice this happening repeatedly for a source, set `--render` to force headless rendering and note the reason in the playbook.
 
 The agent's role is to evaluate content completeness after the first fetch — check that releases have titles, dates, and content. If they do, the fast path is working. If releases are empty or missing, the page likely needs JS rendering.
 
