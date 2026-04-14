@@ -15,8 +15,8 @@ export function registerIgnoreCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases ignore list --org acme
-  releases ignore list --org acme --json`)
+  releases admin policy ignorelist --org acme
+  releases admin policy ignorelist --org acme --json`)
     .action(async (opts: { org: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
@@ -50,9 +50,9 @@ Examples:
     .option("--dry-run", "Show what would be ignored without writing")
     .addHelpText("after", `
 Examples:
-  releases ignore add https://example.com/blog --org acme
-  releases ignore add https://example.com/blog --org acme --reason "not a changelog"
-  releases ignore add https://example.com/blog --org acme --dry-run`)
+  releases admin policy ignoreadd https://example.com/blog --org acme
+  releases admin policy ignoreadd https://example.com/blog --org acme --reason "not a changelog"
+  releases admin policy ignoreadd https://example.com/blog --org acme --dry-run`)
     .action(async (url: string, opts: { org: string; reason?: string; dryRun?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
@@ -76,7 +76,7 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases ignore remove https://example.com/blog --org acme`)
+  releases admin policy ignoreremove https://example.com/blog --org acme`)
     .action(async (url: string, opts: { org: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {

@@ -64,9 +64,9 @@ export function registerOnboardApplyCommand(onboardCmd: Command) {
     .option("--json", "Output results as JSON")
     .addHelpText("after", `
 Examples:
-  releases onboard apply discovery-state.json
-  releases onboard apply discovery-state.json --json
-  cat state.json | releases onboard apply -`)
+  releases admin discovery onboard apply discovery-state.json
+  releases admin discovery onboard apply discovery-state.json --json
+  cat state.json | releases admin discovery onboard apply -`)
     .action(async (stateFile: string, opts: { json?: boolean }) => {
       const raw = stateFile === "-"
         ? await Bun.stdin.text()

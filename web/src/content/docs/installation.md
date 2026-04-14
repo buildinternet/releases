@@ -73,7 +73,7 @@ claude mcp add --transport http releases https://mcp.releases.sh/mcp
 Or run a local stdio server with the full tool set, including admin tools:
 
 ```bash
-releases serve
+releases admin mcp serve
 ```
 
 See the [MCP Server](/docs/api/mcp) docs for the general endpoint, client-specific setup, and stdio fallback configuration.

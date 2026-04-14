@@ -34,7 +34,7 @@ export interface SourceMetadata {
   provider?: string;
   providerDetectedAt?: string;
 
-  // Evaluation fields (from `releases evaluate`)
+  // Evaluation fields (from `releases admin discovery evaluate`)
   markdownUrl?: string;
   evaluatedMethod?: string;
   evaluatedAt?: string;

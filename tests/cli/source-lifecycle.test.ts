@@ -7,7 +7,7 @@ describe("CLI source lifecycle", () => {
 
   beforeAll(() => {
     ({ dataDir, cleanup } = createTempDataDir());
-    const seed = cli(dataDir, ["org", "add", "Acme Corp", "--category", "cloud"]);
+    const seed = cli(dataDir, ["admin", "org", "add", "Acme Corp", "--category", "cloud"]);
     if (seed.exitCode !== 0) throw new Error(`Seed failed: ${seed.stderr}`);
   });
 
@@ -20,7 +20,7 @@ describe("CLI source lifecycle", () => {
 
   it("adds a source with --skip-eval", () => {
     const result = cli(dataDir, [
-      "add", "Acme Changelog",
+      "admin", "source", "add", "Acme Changelog",
       "--url", "https://example.com/changelog",
       "--org", "acme-corp",
       "--skip-eval",
@@ -52,7 +52,7 @@ describe("CLI source lifecycle", () => {
 
   it("edits source name", () => {
     const result = cli(dataDir, [
-      "edit", "acme-changelog",
+      "admin", "source", "edit", "acme-changelog",
       "--name", "Acme Release Notes",
       "--json",
     ]);
@@ -63,7 +63,7 @@ describe("CLI source lifecycle", () => {
 
   it("edits source URL", () => {
     const result = cli(dataDir, [
-      "edit", "acme-changelog",
+      "admin", "source", "edit", "acme-changelog",
       "--url", "https://example.com/releases",
       "--json",
     ]);
@@ -74,7 +74,7 @@ describe("CLI source lifecycle", () => {
 
   it("adds a GitHub source with auto-detected type", () => {
     const result = cli(dataDir, [
-      "add", "Acme Releases",
+      "admin", "source", "add", "Acme Releases",
       "--url", "https://github.com/acme/acme",
       "--org", "acme-corp",
       "--skip-eval",
@@ -87,7 +87,7 @@ describe("CLI source lifecycle", () => {
 
   it("adds a source with explicit type", () => {
     const result = cli(dataDir, [
-      "add", "Acme Feed",
+      "admin", "source", "add", "Acme Feed",
       "--url", "https://example.com/feed.xml",
       "--type", "feed",
       "--org", "acme-corp",
@@ -100,7 +100,7 @@ describe("CLI source lifecycle", () => {
 
   it("rejects invalid source type", () => {
     const result = cli(dataDir, [
-      "add", "Bad Source",
+      "admin", "source", "add", "Bad Source",
       "--url", "https://example.com",
       "--type", "invalid",
       "--json",
@@ -124,7 +124,7 @@ describe("CLI source lifecycle", () => {
   });
 
   it("removes a source", () => {
-    const result = cli(dataDir, ["remove", "acme-feed", "--json"]);
+    const result = cli(dataDir, ["admin", "source", "remove", "acme-feed", "--json"]);
     expect(result.exitCode).toBe(0);
     const removed = JSON.parse(result.stdout);
     expect(removed).toEqual([
@@ -139,12 +139,12 @@ describe("CLI source lifecycle", () => {
   });
 
   it("removing a non-existent source fails", () => {
-    const result = cli(dataDir, ["remove", "nonexistent", "--json"]);
+    const result = cli(dataDir, ["admin", "source", "remove", "nonexistent", "--json"]);
     expect(result.exitCode).toBe(1);
   });
 
   it("editing a non-existent source fails", () => {
-    const result = cli(dataDir, ["edit", "nonexistent", "--name", "foo"]);
+    const result = cli(dataDir, ["admin", "source", "edit", "nonexistent", "--name", "foo"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("not found");
   });
@@ -152,7 +152,7 @@ describe("CLI source lifecycle", () => {
   it("source shows up in org show", () => {
     const org = cliJson<{ sources: { slug: string }[] }>(
       dataDir,
-      ["org", "show", "acme-corp", "--json"],
+      ["admin", "org", "show", "acme-corp", "--json"],
     );
     expect(org.sources.length).toBeGreaterThanOrEqual(1);
     const slugs = org.sources.map((s) => s.slug);
@@ -161,7 +161,7 @@ describe("CLI source lifecycle", () => {
 
   it("adds a source with feed-url", () => {
     const result = cli(dataDir, [
-      "add", "Feed Source",
+      "admin", "source", "add", "Feed Source",
       "--url", "https://example.com/blog",
       "--feed-url", "https://example.com/blog/feed.xml",
       "--org", "acme-corp",
@@ -173,14 +173,14 @@ describe("CLI source lifecycle", () => {
   });
 
   it("marks a source as primary", () => {
-    const result = cli(dataDir, ["edit", "acme-changelog", "--primary", "--json"]);
+    const result = cli(dataDir, ["admin", "source", "edit", "acme-changelog", "--primary", "--json"]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isPrimary).toBeTruthy();
   });
 
   it("disables a source", () => {
-    const result = cli(dataDir, ["edit", "acme-changelog", "--disable", "--json"]);
+    const result = cli(dataDir, ["admin", "source", "edit", "acme-changelog", "--disable", "--json"]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isHidden).toBeTruthy();
@@ -201,7 +201,7 @@ describe("CLI source lifecycle", () => {
   });
 
   it("re-enables a source", () => {
-    const result = cli(dataDir, ["edit", "acme-changelog", "--enable", "--json"]);
+    const result = cli(dataDir, ["admin", "source", "edit", "acme-changelog", "--enable", "--json"]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isHidden).toBeFalsy();

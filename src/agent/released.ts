@@ -129,7 +129,7 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
     {
       "url": "<source url>",
       "type": "github|scrape|feed",
-      "slug": "<slug from releases add>",
+      "slug": "<slug from releases admin source add>",
       "label": "<human-readable label>",
       "confidence": "high|medium|low",
       "validated": true/false,

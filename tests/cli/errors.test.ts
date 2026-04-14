@@ -9,7 +9,7 @@ describe("CLI error handling", () => {
 
   it("shows error for fetch without required args in remote mode", () => {
     // Remote mode requires a filter - bare fetch is blocked
-    const { exitCode } = runCli(["fetch"], {
+    const { exitCode } = runCli(["admin", "source", "fetch"], {
       env: { RELEASED_API_URL: "https://example.com", RELEASED_API_KEY: "test" },
     });
     expect(exitCode).not.toBe(0);

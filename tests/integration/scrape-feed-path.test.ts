@@ -41,9 +41,9 @@ describe("scrape adapter feed-first path", () => {
 
     beforeAll(() => {
       ({ dataDir, cleanup } = createTempDataDir());
-      cli(dataDir, ["org", "add", "Feed Discovery Org", "--category", "cloud"]);
+      cli(dataDir, ["admin", "org", "add", "Feed Discovery Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "Feed Discovery Source",
+        "admin", "source", "add", "Feed Discovery Source",
         "--url", `${server.url}/changelog`,
         "--org", "feed-discovery-org",
         "--skip-eval",
@@ -53,7 +53,7 @@ describe("scrape adapter feed-first path", () => {
     afterAll(() => cleanup());
 
     it("discovers feed and fetches releases via feed path (no AI needed)", async () => {
-      const result = await cliAsync(dataDir, ["fetch", "feed-discovery-source", "--no-summarize"], { timeout: 15_000 });
+      const result = await cliAsync(dataDir, ["admin", "source", "fetch", "feed-discovery-source", "--no-summarize"], { timeout: 15_000 });
       expect(result.exitCode).toBe(0);
       expect(result.stderr).toContain("feed");
       const latest = cliJson<unknown[]>(dataDir, ["latest", "feed-discovery-source", "--json"]);
@@ -76,9 +76,9 @@ describe("scrape adapter feed-first path", () => {
 
     beforeAll(() => {
       ({ dataDir, cleanup } = createTempDataDir());
-      cli(dataDir, ["org", "add", "No Feed Org", "--category", "cloud"]);
+      cli(dataDir, ["admin", "org", "add", "No Feed Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "No Feed Source",
+        "admin", "source", "add", "No Feed Source",
         "--url", `${server.url}/no-feed`,
         "--org", "no-feed-org",
         "--skip-eval",
@@ -88,7 +88,7 @@ describe("scrape adapter feed-first path", () => {
     afterAll(() => cleanup());
 
     it("marks noFeedFound after failed discovery", async () => {
-      await cliAsync(dataDir, ["fetch", "no-feed-source", "--no-summarize"], { timeout: 15_000 });
+      await cliAsync(dataDir, ["admin", "source", "fetch", "no-feed-source", "--no-summarize"], { timeout: 15_000 });
       const source = cliJson<{ metadata?: string | Record<string, unknown> }>(dataDir, ["list", "no-feed-source", "--json"]);
       const meta = typeof source.metadata === "string"
         ? JSON.parse(source.metadata)
@@ -103,9 +103,9 @@ describe("scrape adapter feed-first path", () => {
 
     beforeAll(() => {
       ({ dataDir, cleanup } = createTempDataDir());
-      cli(dataDir, ["org", "add", "Preconfig Org", "--category", "cloud"]);
+      cli(dataDir, ["admin", "org", "add", "Preconfig Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "Preconfig Source",
+        "admin", "source", "add", "Preconfig Source",
         "--url", `${server.url}/changelog`,
         "--org", "preconfig-org",
         "--type", "feed",
@@ -116,7 +116,7 @@ describe("scrape adapter feed-first path", () => {
     afterAll(() => cleanup());
 
     it("uses feed type source to fetch directly", async () => {
-      const result = await cliAsync(dataDir, ["fetch", "preconfig-source", "--no-summarize"], { timeout: 15_000 });
+      const result = await cliAsync(dataDir, ["admin", "source", "fetch", "preconfig-source", "--no-summarize"], { timeout: 15_000 });
       expect(result.exitCode).toBe(0);
       const latest = cliJson<unknown[]>(dataDir, ["latest", "preconfig-source", "--json"]);
       expect(latest.length).toBeGreaterThan(0);

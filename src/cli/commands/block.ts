@@ -14,8 +14,8 @@ export function registerBlockCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases block list
-  releases block list --json`)
+  releases admin policy blocklist
+  releases admin policy blocklist --json`)
     .action(async (opts: { json?: boolean }) => {
       const rows = await listBlockedUrls();
 
@@ -45,9 +45,9 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases block add https://example.com/spam
-  releases block add example.com --domain --reason "spam site"
-  releases block add https://example.com/spam --dry-run`)
+  releases admin policy blockadd https://example.com/spam
+  releases admin policy blockadd example.com --domain --reason "spam site"
+  releases admin policy blockadd https://example.com/spam --dry-run`)
     .action(async (pattern: string, opts: { domain?: boolean; reason?: string; dryRun?: boolean; json?: boolean }) => {
       const type = opts.domain ? "domain" as const : "exact" as const;
       const typeLabel = type === "domain" ? "domain" : "URL";
@@ -75,8 +75,8 @@ Examples:
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
-  releases block remove https://example.com/spam
-  releases block remove example.com`)
+  releases admin policy blockremove https://example.com/spam
+  releases admin policy blockremove example.com`)
     .action(async (pattern: string, opts: { json?: boolean }) => {
       await removeBlockedUrl(pattern);
       if (opts.json) {
