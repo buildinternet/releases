@@ -5,13 +5,11 @@ import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
-import { ReleaseListItem } from "@/components/release-item";
-import { Pagination } from "@/components/pagination";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
-import { HighlightsView } from "@/components/highlights-view";
-import { ChangelogView } from "@/components/changelog-view";
+import { SourceMainContent } from "@/components/source-main-content";
 import { SourceTimeline } from "@/components/source-timeline";
+import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
 const getSource = cache((slug: string, page = 1) => api.sourceDetail(slug, page));
@@ -31,18 +29,7 @@ export async function generateMetadata({ params }: { params: Promise<{ orgSlug: 
   }
 }
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
-
-function shortUrl(url: string) {
-  try {
-    const u = new URL(url);
-    const path = u.pathname.replace(/\/$/, "");
-    return path && path !== "/" ? u.hostname + path : u.hostname;
-  } catch { return url; }
-}
+const formatDate = formatSourceDate;
 
 export default async function SourcePage({
   params,
@@ -97,7 +84,7 @@ export default async function SourcePage({
     {
       items: [
         { label: "Latest", value: source.latestVersion ?? formatDate(source.latestDate) },
-        { label: "Source", value: shortUrl(source.url), externalLink: source.url },
+        sourceUrlSidebarItem(source),
         ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
@@ -138,21 +125,7 @@ export default async function SourcePage({
               hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
               hasChangelog={!!source.hasChangelogFile}
             />
-            {tab === "changelog" && source.hasChangelogFile ? (
-              <ChangelogView sourceSlug={source.slug} />
-            ) : (tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
-              <>
-                {source.releases.map((release, i) => (
-                  <ReleaseListItem key={i} release={release} hideDate={i > 0 && release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)} />
-                ))}
-                <Pagination page={source.pagination.page} totalPages={source.pagination.totalPages} basePath={`/${orgSlug}/${sourceSlug}`} />
-              </>
-            ) : (
-              <HighlightsView
-                rolling={source.summaries?.rolling ?? null}
-                monthly={source.summaries?.monthly ?? []}
-              />
-            )}
+            <SourceMainContent source={source} tab={tab} basePath={`/${orgSlug}/${sourceSlug}`} />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>
