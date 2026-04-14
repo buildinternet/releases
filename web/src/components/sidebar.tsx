@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
 import { InfoTooltip } from "./info-tooltip";
@@ -12,7 +13,7 @@ function stalenessColor(isoDate: string | null | undefined): string {
   return "text-stone-400 dark:text-stone-500";
 }
 
-interface SidebarItem { label: string; value: string | number | null; large?: boolean; subtitle?: string; link?: string; externalLink?: string; tooltip?: string; }
+interface SidebarItem { label: string; value: ReactNode; large?: boolean; subtitle?: string; link?: string; externalLink?: string; tooltip?: string; }
 interface SidebarSection { items: SidebarItem[]; }
 interface SidebarProps { sections: SidebarSection[]; accounts?: { platform: string; handle: string }[]; formatPath?: string; footnote?: string | null; footnoteTitle?: string | null; }
 
@@ -28,9 +29,9 @@ export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitl
                 {item.tooltip && <InfoTooltip text={item.tooltip} />}
               </div>
               {item.link ? (
-                <Link href={item.link} className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300">{String(item.value)}</Link>
+                <Link href={item.link} className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300">{item.value}</Link>
               ) : item.externalLink ? (
-                <a href={item.externalLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300">{String(item.value)}</a>
+                <a href={item.externalLink} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-stone-900 dark:text-stone-100 hover:text-stone-600 dark:hover:text-stone-300">{item.value}</a>
               ) : (
                 <>
                   <div className={item.large ? "text-[22px] font-bold tabular-nums text-stone-900 dark:text-stone-100" : "text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100"}>

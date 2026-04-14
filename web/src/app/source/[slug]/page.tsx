@@ -43,6 +43,16 @@ function shortUrl(url: string) {
   } catch { return url; }
 }
 
+function githubRepoHandle(url: string): string | null {
+  try {
+    const u = new URL(url);
+    if (u.hostname !== "github.com" && u.hostname !== "www.github.com") return null;
+    const [owner, repo] = u.pathname.replace(/^\/+|\/+$/g, "").split("/");
+    if (!owner || !repo) return null;
+    return `@${owner}/${repo}`;
+  } catch { return null; }
+}
+
 export default async function IndependentSourcePage({
   params,
   searchParams,
@@ -92,7 +102,22 @@ export default async function IndependentSourcePage({
     {
       items: [
         { label: "Latest", value: source.latestVersion, subtitle: formatDate(source.latestDate) },
-        { label: "Source", value: shortUrl(source.url), externalLink: source.url },
+        (() => {
+          const ghHandle = source.type === "github" ? githubRepoHandle(source.url) : null;
+          if (ghHandle) {
+            return {
+              label: "Source",
+              value: (
+                <span className="inline-flex items-center gap-1.5">
+                  <SourceTypeIcon type="github" size={13} />
+                  <span>{ghHandle}</span>
+                </span>
+              ),
+              externalLink: source.url,
+            };
+          }
+          return { label: "Source", value: shortUrl(source.url), externalLink: source.url };
+        })(),
         ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
