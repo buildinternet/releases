@@ -1,17 +1,15 @@
-import { cache, Suspense } from "react";
+import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound, redirect } from "next/navigation";
 import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
-import { ReleaseListItem } from "@/components/release-item";
-import { Pagination } from "@/components/pagination";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
-import { HighlightsView } from "@/components/highlights-view";
-import { ChangelogView, ChangelogSkeleton } from "@/components/changelog-view";
+import { SourceMainContent } from "@/components/source-main-content";
 import { SourceTimeline } from "@/components/source-timeline";
+import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
 const getSource = cache((slug: string, page = 1) => api.sourceDetail(slug, page));
@@ -30,28 +28,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
   }
 }
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
-}
-
-function shortUrl(url: string) {
-  try {
-    const u = new URL(url);
-    const path = u.pathname.replace(/\/$/, "");
-    return path && path !== "/" ? u.hostname + path : u.hostname;
-  } catch { return url; }
-}
-
-function githubRepoHandle(url: string): string | null {
-  try {
-    const u = new URL(url);
-    if (u.hostname !== "github.com" && u.hostname !== "www.github.com") return null;
-    const [owner, repo] = u.pathname.replace(/^\/+|\/+$/g, "").split("/");
-    if (!owner || !repo) return null;
-    return `@${owner}/${repo}`;
-  } catch { return null; }
-}
+const formatDate = formatSourceDate;
 
 export default async function IndependentSourcePage({
   params,
@@ -102,22 +79,7 @@ export default async function IndependentSourcePage({
     {
       items: [
         { label: "Latest", value: source.latestVersion, subtitle: formatDate(source.latestDate) },
-        (() => {
-          const ghHandle = source.type === "github" ? githubRepoHandle(source.url) : null;
-          if (ghHandle) {
-            return {
-              label: "Source",
-              value: (
-                <span className="inline-flex items-center gap-1.5">
-                  <SourceTypeIcon type="github" size={13} />
-                  <span>{ghHandle}</span>
-                </span>
-              ),
-              externalLink: source.url,
-            };
-          }
-          return { label: "Source", value: shortUrl(source.url), externalLink: source.url };
-        })(),
+        sourceUrlSidebarItem(source),
         ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
@@ -158,23 +120,7 @@ export default async function IndependentSourcePage({
               hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
               hasChangelog={!!source.hasChangelogFile}
             />
-            {tab === "changelog" && source.hasChangelogFile ? (
-              <Suspense key={source.slug} fallback={<ChangelogSkeleton />}>
-                <ChangelogView sourceSlug={source.slug} />
-              </Suspense>
-            ) : (tab === "releases" || (!source.summaries?.rolling && !source.summaries?.monthly?.length)) ? (
-              <>
-                {source.releases.map((release, i) => (
-                  <ReleaseListItem key={i} release={release} hideDate={i > 0 && release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)} />
-                ))}
-                <Pagination page={source.pagination.page} totalPages={source.pagination.totalPages} basePath={`/source/${slug}`} />
-              </>
-            ) : (
-              <HighlightsView
-                rolling={source.summaries?.rolling ?? null}
-                monthly={source.summaries?.monthly ?? []}
-              />
-            )}
+            <SourceMainContent source={source} tab={tab} basePath={`/source/${slug}`} />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/source/${slug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>
