@@ -7,20 +7,20 @@ describe("CLI product lifecycle", () => {
 
   beforeAll(() => {
     ({ dataDir, cleanup } = createTempDataDir());
-    const seed = cli(dataDir, ["org", "add", "Vercel", "--category", "cloud"]);
+    const seed = cli(dataDir, ["admin", "org", "add", "Vercel", "--category", "cloud"]);
     if (seed.exitCode !== 0) throw new Error(`Seed failed: ${seed.stderr}`);
   });
 
   afterAll(() => cleanup());
 
   it("starts with no products", () => {
-    const products = cliJson<unknown[]>(dataDir, ["product", "list", "vercel", "--json"]);
+    const products = cliJson<unknown[]>(dataDir, ["admin", "product", "list", "vercel", "--json"]);
     expect(products).toEqual([]);
   });
 
   it("adds a product", () => {
     const result = cli(dataDir, [
-      "product", "add", "Next.js",
+      "admin", "product", "add", "Next.js",
       "--org", "vercel",
       "--url", "https://nextjs.org",
       "--description", "The React framework",
@@ -35,7 +35,7 @@ describe("CLI product lifecycle", () => {
 
   it("product appears in list", () => {
     const products = cliJson<{ slug: string }[]>(dataDir, [
-      "product", "list", "vercel", "--json",
+      "admin", "product", "list", "vercel", "--json",
     ]);
     expect(products.length).toBe(1);
     expect(products[0].slug).toBe("next-js");
@@ -43,7 +43,7 @@ describe("CLI product lifecycle", () => {
 
   it("edits product name", () => {
     const result = cli(dataDir, [
-      "product", "edit", "next-js",
+      "admin", "product", "edit", "next-js",
       "--name", "Next.js Framework",
       "--json",
     ]);
@@ -54,7 +54,7 @@ describe("CLI product lifecycle", () => {
 
   it("edits product URL", () => {
     const result = cli(dataDir, [
-      "product", "edit", "next-js",
+      "admin", "product", "edit", "next-js",
       "--url", "https://nextjs.org/blog",
       "--json",
     ]);
@@ -65,7 +65,7 @@ describe("CLI product lifecycle", () => {
 
   it("edits product description", () => {
     const result = cli(dataDir, [
-      "product", "edit", "next-js",
+      "admin", "product", "edit", "next-js",
       "--description", "A React framework for production",
       "--json",
     ]);
@@ -76,7 +76,7 @@ describe("CLI product lifecycle", () => {
 
   it("edits product category", () => {
     const result = cli(dataDir, [
-      "product", "edit", "next-js",
+      "admin", "product", "edit", "next-js",
       "--category", "framework",
       "--json",
     ]);
@@ -87,7 +87,7 @@ describe("CLI product lifecycle", () => {
 
   it("rejects invalid product category", () => {
     const result = cli(dataDir, [
-      "product", "edit", "next-js",
+      "admin", "product", "edit", "next-js",
       "--category", "nonsense",
     ]);
     expect(result.exitCode).toBe(1);
@@ -96,7 +96,7 @@ describe("CLI product lifecycle", () => {
 
   it("adds a second product", () => {
     const result = cli(dataDir, [
-      "product", "add", "Turborepo",
+      "admin", "product", "add", "Turborepo",
       "--org", "vercel",
       "--json",
     ]);
@@ -107,7 +107,7 @@ describe("CLI product lifecycle", () => {
 
   it("lists both products", () => {
     const products = cliJson<unknown[]>(dataDir, [
-      "product", "list", "vercel", "--json",
+      "admin", "product", "list", "vercel", "--json",
     ]);
     expect(products.length).toBe(2);
   });
@@ -115,7 +115,7 @@ describe("CLI product lifecycle", () => {
   it("product shows up in org show", () => {
     const org = cliJson<{ products: { slug: string }[] }>(
       dataDir,
-      ["org", "show", "vercel", "--json"],
+      ["admin", "org", "show", "vercel", "--json"],
     );
     const slugs = org.products.map((p) => p.slug);
     expect(slugs).toContain("next-js");
@@ -123,7 +123,7 @@ describe("CLI product lifecycle", () => {
   });
 
   it("removes a product", () => {
-    const result = cli(dataDir, ["product", "remove", "turborepo", "--json"]);
+    const result = cli(dataDir, ["admin", "product", "remove", "turborepo", "--json"]);
     expect(result.exitCode).toBe(0);
     const removed = JSON.parse(result.stdout);
     expect(removed.removed).toBe("turborepo");
@@ -131,38 +131,38 @@ describe("CLI product lifecycle", () => {
 
   it("product is gone after removal", () => {
     const products = cliJson<{ slug: string }[]>(dataDir, [
-      "product", "list", "vercel", "--json",
+      "admin", "product", "list", "vercel", "--json",
     ]);
     expect(products.length).toBe(1);
     expect(products[0].slug).toBe("next-js");
   });
 
   it("removing non-existent product fails", () => {
-    const result = cli(dataDir, ["product", "remove", "nonexistent"]);
+    const result = cli(dataDir, ["admin", "product", "remove", "nonexistent"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("not found");
   });
 
   it("editing non-existent product fails", () => {
-    const result = cli(dataDir, ["product", "edit", "nonexistent", "--name", "foo"]);
+    const result = cli(dataDir, ["admin", "product", "edit", "nonexistent", "--name", "foo"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("not found");
   });
 
   it("product list without org slug fails", () => {
-    const result = cli(dataDir, ["product", "list"]);
+    const result = cli(dataDir, ["admin", "product", "list"]);
     expect(result.exitCode).toBe(1);
   });
 
   it("product list with unknown org fails", () => {
-    const result = cli(dataDir, ["product", "list", "nonexistent"]);
+    const result = cli(dataDir, ["admin", "product", "list", "nonexistent"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("not found");
   });
 
   it("product dry-run remove shows what would happen", () => {
     const result = cli(dataDir, [
-      "product", "remove", "next-js", "--dry-run", "--json",
+      "admin", "product", "remove", "next-js", "--dry-run", "--json",
     ]);
     expect(result.exitCode).toBe(0);
     const plan = JSON.parse(result.stdout);
@@ -171,7 +171,7 @@ describe("CLI product lifecycle", () => {
 
   it("product still exists after dry-run", () => {
     const products = cliJson<{ slug: string }[]>(dataDir, [
-      "product", "list", "vercel", "--json",
+      "admin", "product", "list", "vercel", "--json",
     ]);
     expect(products.length).toBe(1);
     expect(products[0].slug).toBe("next-js");

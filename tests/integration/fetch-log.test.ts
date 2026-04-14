@@ -27,9 +27,9 @@ describe("fetch-log tracking", () => {
 
   beforeAll(() => {
     ({ dataDir, cleanup } = createTempDataDir());
-    cli(dataDir, ["org", "add", "Log Org", "--category", "cloud"]);
+    cli(dataDir, ["admin", "org", "add", "Log Org", "--category", "cloud"]);
     cli(dataDir, [
-      "add", "Log Source",
+      "admin", "source", "add", "Log Source",
       "--url", `${server.url}/feed.xml`,
       "--feed-url", `${server.url}/feed.xml`,
       "--org", "log-org",
@@ -41,10 +41,10 @@ describe("fetch-log tracking", () => {
   afterAll(() => cleanup());
 
   it("records successful fetch in fetch-log", () => {
-    const fetchResult = cli(dataDir, ["fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
     expect(fetchResult.exitCode).toBe(0);
 
-    const logResult = cli(dataDir, ["fetch-log", "log-source", "--json"]);
+    const logResult = cli(dataDir, ["admin", "source", "fetch-log", "log-source", "--json"]);
     expect(logResult.exitCode).toBe(0);
     const logs = JSON.parse(logResult.stdout);
     expect(logs.length).toBeGreaterThanOrEqual(1);
@@ -55,10 +55,10 @@ describe("fetch-log tracking", () => {
   }, 20_000);
 
   it("records no_change on subsequent fetch", () => {
-    const fetchResult = cli(dataDir, ["fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
     expect(fetchResult.exitCode).toBe(0);
 
-    const logResult = cli(dataDir, ["fetch-log", "log-source", "--json"]);
+    const logResult = cli(dataDir, ["admin", "source", "fetch-log", "log-source", "--json"]);
     const logs = JSON.parse(logResult.stdout);
     // Most recent log should be no_change (releases already in DB, dedup)
     expect(logs[0].status).toMatch(/no_change|success/);
@@ -66,17 +66,17 @@ describe("fetch-log tracking", () => {
 
   it("records dry_run in fetch-log", () => {
     cli(dataDir, [
-      "add", "Dry Log Source",
+      "admin", "source", "add", "Dry Log Source",
       "--url", `${server.url}/feed.xml`,
       "--feed-url", `${server.url}/feed.xml`,
       "--org", "log-org",
       "--type", "feed",
       "--skip-eval",
     ]);
-    const fetchResult = cli(dataDir, ["fetch", "dry-log-source", "--dry-run", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "dry-log-source", "--dry-run", "--no-summarize"], { timeout: 15_000 });
     expect(fetchResult.exitCode).toBe(0);
 
-    const logResult = cli(dataDir, ["fetch-log", "dry-log-source", "--json"]);
+    const logResult = cli(dataDir, ["admin", "source", "fetch-log", "dry-log-source", "--json"]);
     const logs = JSON.parse(logResult.stdout);
     expect(logs.length).toBeGreaterThanOrEqual(1);
     expect(logs[0].status).toBe("dry_run");

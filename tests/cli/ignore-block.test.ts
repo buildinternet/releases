@@ -7,7 +7,7 @@ describe("CLI ignored URLs", () => {
 
   beforeAll(() => {
     ({ dataDir, cleanup } = createTempDataDir());
-    const seed = cli(dataDir, ["org", "add", "Acme Corp"]);
+    const seed = cli(dataDir, ["admin", "org", "add", "Acme Corp"]);
     if (seed.exitCode !== 0) throw new Error(`Seed failed: ${seed.stderr}`);
   });
 
@@ -15,14 +15,14 @@ describe("CLI ignored URLs", () => {
 
   it("starts with no ignored URLs", () => {
     const rows = cliJson<unknown[]>(dataDir, [
-      "ignore", "list", "--org", "acme-corp", "--json",
+      "admin", "policy", "ignore", "list", "--org", "acme-corp", "--json",
     ]);
     expect(rows).toEqual([]);
   });
 
   it("ignores a URL", () => {
     const result = cli(dataDir, [
-      "ignore", "add", "https://example.com/blog",
+      "admin", "policy", "ignore", "add", "https://example.com/blog",
       "--org", "acme-corp",
       "--reason", "not a changelog",
     ]);
@@ -33,7 +33,7 @@ describe("CLI ignored URLs", () => {
 
   it("ignored URL appears in list", () => {
     const rows = cliJson<{ url: string; reason: string }[]>(dataDir, [
-      "ignore", "list", "--org", "acme-corp", "--json",
+      "admin", "policy", "ignore", "list", "--org", "acme-corp", "--json",
     ]);
     expect(rows.length).toBe(1);
     expect(rows[0].url).toBe("https://example.com/blog");
@@ -42,7 +42,7 @@ describe("CLI ignored URLs", () => {
 
   it("un-ignores a URL", () => {
     const result = cli(dataDir, [
-      "ignore", "remove", "https://example.com/blog",
+      "admin", "policy", "ignore", "remove", "https://example.com/blog",
       "--org", "acme-corp",
       "--json",
     ]);
@@ -53,19 +53,19 @@ describe("CLI ignored URLs", () => {
 
   it("URL is gone after un-ignoring", () => {
     const rows = cliJson<unknown[]>(dataDir, [
-      "ignore", "list", "--org", "acme-corp", "--json",
+      "admin", "policy", "ignore", "list", "--org", "acme-corp", "--json",
     ]);
     expect(rows).toEqual([]);
   });
 
   it("ignore commands require --org", () => {
-    const result = cli(dataDir, ["ignore", "list"]);
+    const result = cli(dataDir, ["admin", "policy", "ignore", "list"]);
     expect(result.exitCode).toBe(1);
   });
 
   it("ignore on unknown org fails", () => {
     const result = cli(dataDir, [
-      "ignore", "add", "https://example.com",
+      "admin", "policy", "ignore", "add", "https://example.com",
       "--org", "nonexistent",
     ]);
     expect(result.exitCode).toBe(1);
@@ -73,12 +73,12 @@ describe("CLI ignored URLs", () => {
 
   it("dry-run does not persist", () => {
     cli(dataDir, [
-      "ignore", "add", "https://example.com/dry",
+      "admin", "policy", "ignore", "add", "https://example.com/dry",
       "--org", "acme-corp",
       "--dry-run",
     ]);
     const rows = cliJson<unknown[]>(dataDir, [
-      "ignore", "list", "--org", "acme-corp", "--json",
+      "admin", "policy", "ignore", "list", "--org", "acme-corp", "--json",
     ]);
     expect(rows).toEqual([]);
   });
@@ -95,13 +95,13 @@ describe("CLI blocked URLs", () => {
   afterAll(() => cleanup());
 
   it("starts with no blocked URLs", () => {
-    const rows = cliJson<unknown[]>(dataDir, ["block", "list", "--json"]);
+    const rows = cliJson<unknown[]>(dataDir, ["admin", "policy", "block", "list", "--json"]);
     expect(rows).toEqual([]);
   });
 
   it("blocks a URL", () => {
     const result = cli(dataDir, [
-      "block", "add", "https://spam.example.com/fake",
+      "admin", "policy", "block", "add", "https://spam.example.com/fake",
       "--reason", "spam site",
       "--json",
     ]);
@@ -113,7 +113,7 @@ describe("CLI blocked URLs", () => {
 
   it("blocks a domain", () => {
     const result = cli(dataDir, [
-      "block", "add", "badsite.com",
+      "admin", "policy", "block", "add", "badsite.com",
       "--domain",
       "--reason", "known bad domain",
       "--json",
@@ -125,7 +125,7 @@ describe("CLI blocked URLs", () => {
 
   it("lists blocked entries", () => {
     const rows = cliJson<{ pattern: string; type: string }[]>(dataDir, [
-      "block", "list", "--json",
+      "admin", "policy", "block", "list", "--json",
     ]);
     expect(rows.length).toBe(2);
     const patterns = rows.map((r) => r.pattern);
@@ -135,7 +135,7 @@ describe("CLI blocked URLs", () => {
 
   it("unblocks a URL", () => {
     const result = cli(dataDir, [
-      "block", "remove", "https://spam.example.com/fake",
+      "admin", "policy", "block", "remove", "https://spam.example.com/fake",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -144,18 +144,18 @@ describe("CLI blocked URLs", () => {
   });
 
   it("only domain block remains", () => {
-    const rows = cliJson<{ pattern: string }[]>(dataDir, ["block", "list", "--json"]);
+    const rows = cliJson<{ pattern: string }[]>(dataDir, ["admin", "policy", "block", "list", "--json"]);
     expect(rows.length).toBe(1);
     expect(rows[0].pattern).toBe("badsite.com");
   });
 
   it("dry-run does not persist", () => {
     cli(dataDir, [
-      "block", "add", "https://dry-run.example.com",
+      "admin", "policy", "block", "add", "https://dry-run.example.com",
       "--dry-run",
       "--json",
     ]);
-    const rows = cliJson<{ pattern: string }[]>(dataDir, ["block", "list", "--json"]);
+    const rows = cliJson<{ pattern: string }[]>(dataDir, ["admin", "policy", "block", "list", "--json"]);
     expect(rows.length).toBe(1); // still just the domain block
   });
 });

@@ -9,10 +9,10 @@ describe("unified search", () => {
     ({ dataDir, cleanup } = createTempDataDir());
     // Seed data
     for (const args of [
-      ["org", "add", "Vercel", "--category", "cloud"],
-      ["org", "add", "Anthropic", "--category", "ai"],
-      ["product", "add", "Next.js", "--org", "vercel"],
-      ["add", "Vercel Blog", "--url", "https://vercel.com/changelog", "--org", "vercel", "--skip-eval"],
+      ["admin", "org", "add", "Vercel", "--category", "cloud"],
+      ["admin", "org", "add", "Anthropic", "--category", "ai"],
+      ["admin", "product", "add", "Next.js", "--org", "vercel"],
+      ["admin", "source", "add", "Vercel Blog", "--url", "https://vercel.com/changelog", "--org", "vercel", "--skip-eval"],
     ]) {
       const r = cli(dataDir, args);
       if (r.exitCode !== 0) throw new Error(`Seed failed (${args.join(" ")}): ${r.stderr}`);

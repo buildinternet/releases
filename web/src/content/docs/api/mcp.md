@@ -61,7 +61,7 @@ For clients without native remote MCP support, use `mcp-remote`:
 Run a local MCP server over stdio with the full tool set, including admin tools for adding sources, fetching releases, and managing organizations:
 
 ```bash
-releases serve
+releases admin mcp serve
 ```
 
 ```json
@@ -69,7 +69,7 @@ releases serve
   "mcpServers": {
     "releases": {
       "command": "releases",
-      "args": ["serve"]
+      "args": ["admin", "mcp", "serve"]
     }
   }
 }
