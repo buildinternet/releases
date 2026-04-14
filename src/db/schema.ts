@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId } from "../lib/id.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
@@ -313,3 +313,28 @@ export const knowledgePages = sqliteTable(
 
 export type KnowledgePage = typeof knowledgePages.$inferSelect;
 export type NewKnowledgePage = typeof knowledgePages.$inferInsert;
+
+export const sourceChangelogFiles = sqliteTable(
+  "source_changelog_files",
+  {
+    id: text("id").primaryKey().$defaultFn(newSourceChangelogFileId),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    filename: text("filename").notNull(),
+    url: text("url").notNull(),
+    rawUrl: text("raw_url").notNull(),
+    content: text("content").notNull(),
+    contentHash: text("content_hash").notNull(),
+    bytes: integer("bytes").notNull(),
+    fetchedAt: text("fetched_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("scf_source_path_uq").on(table.sourceId, table.path),
+    index("idx_scf_source").on(table.sourceId),
+  ],
+);
+
+export type SourceChangelogFile = typeof sourceChangelogFiles.$inferSelect;
+export type NewSourceChangelogFile = typeof sourceChangelogFiles.$inferInsert;

@@ -1,7 +1,8 @@
 import { eq, desc, count, and, sql, isNull } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { sources, releases, organizations } from "../../db/schema.js";
+import { sources, releases, organizations, sourceChangelogFiles } from "../../db/schema.js";
 import { getSourceMetrics } from "../metrics.js";
+import type { SourceChangelogResponse } from "../types.js";
 
 export function handleSourceActivity(slug: string, searchParams: URLSearchParams) {
   const db = getDb();
@@ -169,9 +170,17 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
 
   const meta = JSON.parse(src.metadata || "{}");
 
+  const changelogExistsRows = db.select({ one: sql<number>`1` })
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, src.id))
+    .limit(1)
+    .all();
+  const hasChangelogFile = changelogExistsRows.length > 0;
+
   return {
     slug: src.slug, name: src.name, type: src.type, url: src.url,
     changelogUrl: meta.changelogUrl ?? null,
+    hasChangelogFile,
     org,
     releaseCount: relCount.n,
     releasesLast30Days: metrics.releasesLast30Days,
@@ -181,5 +190,28 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
     trackingSince: metrics.oldestPublishedAt ?? src.createdAt,
     releases: releasesFormatted,
     pagination: { page, pageSize, totalPages, totalItems: relCount.n },
+  };
+}
+
+export function handleSourceChangelog(slug: string): SourceChangelogResponse | null {
+  const db = getDb();
+  const [src] = db.select().from(sources).where(eq(sources.slug, slug)).all();
+  if (!src) return null;
+  const [row] = db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, src.id))
+    .orderBy(sourceChangelogFiles.path)
+    .limit(1)
+    .all();
+  if (!row) return null;
+  return {
+    path: row.path,
+    filename: row.filename,
+    url: row.url,
+    rawUrl: row.rawUrl,
+    content: row.content,
+    bytes: row.bytes,
+    fetchedAt: row.fetchedAt,
   };
 }

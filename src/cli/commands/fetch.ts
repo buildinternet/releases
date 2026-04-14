@@ -5,7 +5,7 @@ import type { Source } from "../../db/schema.js";
 import { sourceNotFound } from "../suggest.js";
 import type { FetchOptions } from "../../adapters/types.js";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
-import { detectChangelogUrl } from "../../adapters/github.js";
+import { detectChangelogUrl, fetchChangelogFile } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";
 import {
   findSource, listAllSources, listFetchableSources, listSourcesWithChanges,
@@ -13,6 +13,7 @@ import {
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
   insertMediaAssets, clearChangeDetected,
   getOrgOverview, upsertOverviewPage,
+  upsertChangelogFile, getChangelogFile,
 } from "../../db/queries.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
@@ -52,6 +53,7 @@ export function registerFetchCommand(program: Command) {
     .option("--changed", "Only fetch sources where poll detected upstream changes")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--no-summarize", "Skip summary generation after fetching")
+    .option("--skip-changelog", "Skip CHANGELOG.md fetch for GitHub sources")
     .option("--managed-agents", "Delegate fetching to a remote managed agent session")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .addHelpText("after", `
@@ -71,7 +73,7 @@ Examples:
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
       unfetched?: boolean; stale?: string; changed?: boolean; retryErrors?: boolean; concurrency?: string;
-      summarize?: boolean; managedAgents?: boolean;
+      summarize?: boolean; managedAgents?: boolean; skipChangelog?: boolean;
     }) => {
       // Positional arg takes precedence over --source option
       const slug = slugArg ?? opts.source;
@@ -654,6 +656,39 @@ Examples:
                 changelogUrl: changelogUrl ?? undefined,
                 changelogDetectedAt: new Date().toISOString(),
               });
+            }
+          }
+
+          // Refresh canonical CHANGELOG.md for GitHub sources (only in local mode —
+          // the API worker cron handles remote-mode sources). Never fail the
+          // outer fetch if this errors.
+          if (
+            source.type === "github" &&
+            !opts.skipChangelog &&
+            !opts.dryRun &&
+            !isRemoteMode()
+          ) {
+            try {
+              const existing = await getChangelogFile(source.id);
+              const ttlMs = 24 * 3600 * 1000;
+              const stale =
+                !existing ||
+                (existing.fetchedAt && Date.now() - new Date(existing.fetchedAt).getTime() > ttlMs);
+              if (stale) {
+                const file = await fetchChangelogFile(source);
+                if (file) {
+                  const result = await upsertChangelogFile(source.id, file);
+                  if (result.inserted) {
+                    logger.info(`Fetched ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
+                  } else if (result.updated) {
+                    logger.info(`Updated ${file.filename} for ${source.slug} (${file.bytes} bytes)`);
+                  } else {
+                    logger.debug(`${file.filename} for ${source.slug} unchanged (cached)`);
+                  }
+                }
+              }
+            } catch (err) {
+              logger.warn(`Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
             }
           }
 

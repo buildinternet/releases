@@ -91,12 +91,23 @@ export interface SourceListItem {
   productSlug?: string | null;
 }
 
+export interface SourceChangelogResponse {
+  path: string;
+  filename: string;
+  url: string;
+  rawUrl: string;
+  content: string;
+  bytes: number;
+  fetchedAt: string;
+}
+
 export interface SourceDetail {
   slug: string;
   name: string;
   type: string;
   url: string;
   changelogUrl?: string | null;
+  hasChangelogFile?: boolean;
   org: { slug: string; name: string } | null;
   releaseCount: number;
   releasesLast30Days: number;

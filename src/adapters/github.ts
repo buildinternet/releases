@@ -3,6 +3,7 @@ import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js"
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import { sha256Hex } from "../lib/hash.js";
 
 function parseOwnerRepo(url: string): { owner: string; repo: string } {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
@@ -23,6 +24,97 @@ const CHANGELOG_FILENAMES = [
   "RELEASES.md",
   "NEWS.md",
 ];
+
+const CHANGELOG_MAX_BYTES = 1024 * 1024; // 1MB
+
+export interface FetchedChangelogFile {
+  path: string;
+  filename: string;
+  url: string;
+  rawUrl: string;
+  content: string;
+  contentHash: string;
+  bytes: number;
+}
+
+interface GitHubContentEntry {
+  name: string;
+  type: "file" | "dir" | "symlink" | "submodule";
+}
+
+/**
+ * Fetch the canonical CHANGELOG file from a GitHub source's repository.
+ *
+ * Lists the repo root via the GitHub Contents API in one call, picks the
+ * first matching filename, then GETs it from raw.githubusercontent.com.
+ * Caps content at 1MB and returns null on 404, network errors, or oversized
+ * files. Never throws.
+ */
+export async function fetchChangelogFile(source: Source): Promise<FetchedChangelogFile | null> {
+  let owner: string;
+  let repo: string;
+  try {
+    ({ owner, repo } = parseOwnerRepo(source.url));
+  } catch (err) {
+    logger.warn(`fetchChangelogFile: cannot parse owner/repo for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+
+  const token = config.githubToken();
+  const apiHeaders: Record<string, string> = { Accept: "application/vnd.github+json" };
+  if (token) apiHeaders.Authorization = `Bearer ${token}`;
+
+  let entries: GitHubContentEntry[];
+  try {
+    const listing = await fetch(
+      `https://api.github.com/repos/${owner}/${repo}/contents/`,
+      { headers: apiHeaders },
+    );
+    if (!listing.ok) {
+      logger.warn(`fetchChangelogFile(${source.slug}): root listing returned ${listing.status}`);
+      return null;
+    }
+    entries = (await listing.json()) as GitHubContentEntry[];
+  } catch (err) {
+    logger.warn(`fetchChangelogFile(${source.slug}): root listing failed: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+
+  const rootFiles = new Set(entries.filter((e) => e.type === "file").map((e) => e.name));
+  const filename = CHANGELOG_FILENAMES.find((name) => rootFiles.has(name));
+  if (!filename) return null;
+
+  const rawHeaders: Record<string, string> = {};
+  if (token) rawHeaders.Authorization = `Bearer ${token}`;
+
+  const rawUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/${filename}`;
+  let res: Response;
+  try {
+    res = await fetch(rawUrl, { headers: rawHeaders });
+  } catch (err) {
+    logger.warn(`fetchChangelogFile(${source.slug}): raw fetch failed: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+  if (!res.ok) {
+    logger.warn(`fetchChangelogFile(${source.slug}): raw fetch returned ${res.status} for ${filename}`);
+    return null;
+  }
+  const content = await res.text();
+  const bytes = new TextEncoder().encode(content).length;
+  if (bytes > CHANGELOG_MAX_BYTES) {
+    logger.warn(`fetchChangelogFile(${source.slug}): ${filename} exceeds size cap (${bytes} bytes), skipping`);
+    return null;
+  }
+  return {
+    path: filename,
+    filename,
+    url: `https://github.com/${owner}/${repo}/blob/HEAD/${filename}`,
+    rawUrl,
+    content,
+    contentHash: sha256Hex(content),
+    bytes,
+  };
+}
 
 export async function detectChangelogUrl(source: Source): Promise<string | null> {
   const { owner, repo } = parseOwnerRepo(source.url);
