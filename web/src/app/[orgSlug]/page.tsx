@@ -12,6 +12,7 @@ import Link from "next/link";
 import { OrgAvatar } from "@/components/org-avatar";
 import { OverviewView } from "@/components/overview-view";
 import { PlaybookView } from "@/components/playbook-view";
+import { OrgFetchLogView } from "@/components/org-fetch-log-view";
 import { SourceTable } from "@/components/source-table";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
@@ -141,7 +142,10 @@ export default async function OrgPage({
         )}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
-            <OrgTabs hasPlaybook={process.env.NODE_ENV === 'development' && !!org.playbook} />
+            <OrgTabs
+              hasPlaybook={process.env.NODE_ENV === 'development' && !!org.playbook}
+              hasFetchLog={process.env.NODE_ENV === 'development'}
+            />
 
             {activeTab === "releases" ? (
               initialReleases ? (
@@ -168,6 +172,12 @@ export default async function OrgPage({
               })()} />
             ) : activeTab === "playbook" && process.env.NODE_ENV === 'development' && org.playbook ? (
               <PlaybookView playbook={org.playbook} />
+            ) : activeTab === "fetch-log" && process.env.NODE_ENV === 'development' ? (
+              <OrgFetchLogView
+                apiUrl={process.env.RELEASED_API_URL ?? "http://localhost:3456"}
+                apiKey={process.env.RELEASED_API_KEY}
+                orgSlug={orgSlug}
+              />
             ) : (
               <>
                 {activity && (
