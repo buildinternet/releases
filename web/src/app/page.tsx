@@ -31,7 +31,7 @@ export default async function HomePage() {
     "@type": "WebSite",
     "name": "releases.sh",
     "url": "https://releases.sh",
-    "description": "Product changelogs for LLMs and agents. Search across product release notes via CLI, API, or MCP.",
+    "description": "A unified, agent-readable index of product changelogs. Query release notes from any product via CLI, API, or MCP — one consistent shape, no scraping.",
   };
 
   return (
@@ -42,8 +42,8 @@ export default async function HomePage() {
       />
       <Header />
       <div className="pt-12 pb-8 text-center px-6">
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">Product changelogs for LLMs and agents</h1>
-        <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">Search across product release notes via CLI, API, or MCP.</p>
+        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">A unified API for product changelogs</h1>
+        <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">Query release notes from any product via CLI, API, or MCP — one consistent shape, no scraping.</p>
         <SearchBar className="max-w-[480px] mx-auto" />
         <div className="flex justify-center gap-8 mt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs</span>
