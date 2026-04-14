@@ -15,7 +15,7 @@ import {
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { getEntityType, normalizeReleaseId } from "@releases/lib/id.js";
-import { buildChangelogResponse } from "@releases/lib/changelog-slice.js";
+import { buildChangelogResponse, selectChangelogFile } from "@releases/lib/changelog-slice.js";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -425,33 +425,63 @@ export async function getOrganization(
 
 export async function getSourceChangelog(
   db: D1Db,
-  params: { source: string; offset?: number; limit?: number },
+  params: { source: string; path?: string; offset?: number; limit?: number },
 ): Promise<ToolResult> {
   const source = await resolveSource(db, params.source);
   if (!source) return text(`No source found matching "${params.source}"`);
 
-  const [row] = await db
+  const allRows = await db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, source.id))
-    .orderBy(sourceChangelogFiles.path)
-    .limit(1);
-  if (!row) return text(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
+    .orderBy(sourceChangelogFiles.path);
+  if (allRows.length === 0) {
+    return text(`No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`);
+  }
 
-  const response = buildChangelogResponse(row, {
-    offset: params.offset !== undefined ? String(params.offset) : null,
-    limit: params.limit !== undefined ? String(params.limit) : (params.offset !== undefined ? "40000" : null),
-  });
+  const selected = selectChangelogFile(allRows, params.path ?? null);
+  if (!selected) {
+    const available = allRows.map((r) => `- ${r.path}`).join("\n");
+    return text(`No CHANGELOG file found at path "${params.path}" for "${source.slug}". Available files:\n${available}`);
+  }
 
-  const header = [
-    `**${source.name}** — ${response.filename}`,
+  const files = allRows.map((r) => ({
+    path: r.path,
+    filename: r.filename,
+    url: r.url,
+    bytes: r.bytes,
+    fetchedAt: r.fetchedAt,
+  }));
+
+  const response = buildChangelogResponse(
+    selected,
+    {
+      offset: params.offset !== undefined ? String(params.offset) : null,
+      limit: params.limit !== undefined ? String(params.limit) : (params.offset !== undefined ? "40000" : null),
+    },
+    files,
+  );
+
+  const header: string[] = [
+    `**${source.name}** — ${response.path}`,
     `Source: ${response.url}`,
     `Slice: chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars}${response.nextOffset != null ? ` (next: offset=${response.nextOffset})` : " (end of file)"}`,
-    "",
-    response.content,
-  ].join("\n");
+  ];
+  if (response.truncated) {
+    header.push(`⚠ TRUNCATED: upstream file exceeds 1MB cap, content cut at byte ${response.truncatedAt}. Tail is missing.`);
+  }
+  if (files.length > 1) {
+    header.push("");
+    header.push(`Files tracked for this source (${files.length}):`);
+    for (const f of files) {
+      header.push(`  ${f.path === response.path ? "*" : " "} ${f.path} (${f.bytes} bytes)`);
+    }
+    header.push("Pass `path` to read a different file.");
+  }
+  header.push("");
+  header.push(response.content);
 
-  return text(header);
+  return text(header.join("\n"));
 }
 
 // ── summarize_changes ────────────────────────────────────────────────

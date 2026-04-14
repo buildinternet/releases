@@ -5,7 +5,7 @@ import { sources, releases, organizations, releaseSummaries, products, sourceCha
 import { RELEASE_URL_UPSERT } from "@releases/db/release-upsert.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { toSlug } from "@releases/lib/slug.js";
-import { buildChangelogResponse } from "@releases/lib/changelog-slice.js";
+import { buildChangelogResponse, selectChangelogFile } from "@releases/lib/changelog-slice.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
@@ -463,17 +463,42 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
   const db = createDb(c.env.DB);
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
-  const [row] = await db
+  const allRows = await db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
-    .orderBy(sourceChangelogFiles.path)
-    .limit(1);
-  if (!row) return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
-  return c.json(buildChangelogResponse(row, {
-    offset: c.req.query("offset") ?? null,
-    limit: c.req.query("limit") ?? null,
+    .orderBy(sourceChangelogFiles.path);
+  if (allRows.length === 0) {
+    return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
+  }
+
+  const requestedPath = c.req.query("path") ?? null;
+  const selected = selectChangelogFile(allRows, requestedPath);
+  if (!selected) {
+    return c.json(
+      { error: "not_found", message: `Changelog file not found for path: ${requestedPath}` },
+      404,
+    );
+  }
+
+  const files = allRows.map((r) => ({
+    path: r.path,
+    filename: r.filename,
+    url: r.url,
+    bytes: r.bytes,
+    fetchedAt: r.fetchedAt,
   }));
+
+  return c.json(
+    buildChangelogResponse(
+      selected,
+      {
+        offset: c.req.query("offset") ?? null,
+        limit: c.req.query("limit") ?? null,
+      },
+      files,
+    ),
+  );
 });
 
 sourceRoutes.get("/sources/:slug", async (c) => {

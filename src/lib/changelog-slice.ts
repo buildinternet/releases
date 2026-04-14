@@ -135,16 +135,62 @@ interface ChangelogFileRow {
   fetchedAt: string;
 }
 
-export interface ChangelogResponse extends ChangelogFileRow, ChangelogSliceResult {}
+interface ChangelogFileSummaryLite {
+  path: string;
+  filename: string;
+  url: string;
+  bytes: number;
+  fetchedAt: string;
+}
+
+/** 1MB — mirrors CHANGELOG_MAX_BYTES in src/adapters/github.ts. */
+const CHANGELOG_MAX_BYTES = 1024 * 1024;
+
+/**
+ * Derive the `truncated` signal from the stored `bytes` column. A file
+ * whose byte length is exactly CHANGELOG_MAX_BYTES was almost certainly
+ * truncated by the fetcher — natural files are vanishingly unlikely to
+ * land on that exact boundary. Keeps us out of migration territory.
+ */
+export function isTruncated(bytes: number): boolean {
+  return bytes >= CHANGELOG_MAX_BYTES;
+}
+
+/**
+ * Pick the row a changelog read should serve. Callers guarantee `rows` is
+ * non-empty. When `requestedPath` is set, returns the exact match or `null`
+ * to signal "not found". Otherwise prefers the root CHANGELOG (no slash in
+ * path) and falls back to the first row by caller-provided order.
+ */
+export function selectChangelogFile<T extends { path: string }>(
+  rows: readonly T[],
+  requestedPath: string | null | undefined,
+): T | null {
+  if (requestedPath) {
+    return rows.find((r) => r.path === requestedPath) ?? null;
+  }
+  return rows.find((r) => !r.path.includes("/")) ?? rows[0];
+}
+
+export interface ChangelogResponse extends ChangelogFileRow, ChangelogSliceResult {
+  truncated: boolean;
+  truncatedAt: number | null;
+  files: ChangelogFileSummaryLite[];
+}
 
 /**
  * Build the `GET /v1/sources/:slug/changelog` response body from a DB row
  * and (optional) range params. Shared by the worker and local route handlers.
+ * The `files` index is attached by callers after resolving the full set of
+ * changelog files for a source.
  */
 export function buildChangelogResponse(
   row: ChangelogFileRow,
   params: { offset?: string | null; limit?: string | null },
+  files: ChangelogFileSummaryLite[] = [],
 ): ChangelogResponse {
+  const truncated = isTruncated(row.bytes);
+  const truncatedAt = truncated ? row.bytes : null;
   const base = {
     path: row.path,
     filename: row.filename,
@@ -162,11 +208,14 @@ export function buildChangelogResponse(
       limit: totalChars,
       nextOffset: null,
       totalChars,
+      truncated,
+      truncatedAt,
+      files,
     };
   }
   const slice = sliceChangelog(row.content, {
     offset: parseRangeParam(params.offset),
     limit: parseRangeParam(params.limit),
   });
-  return { ...base, ...slice };
+  return { ...base, ...slice, truncated, truncatedAt, files };
 }

@@ -4,6 +4,7 @@ import {
   hasRangeParams,
   parseRangeParam,
   DEFAULT_CHANGELOG_SLICE_LIMIT,
+  buildChangelogResponse,
 } from "../../src/lib/changelog-slice.js";
 
 const sample = [
@@ -115,5 +116,37 @@ describe("parseRangeParam", () => {
   it("parses valid numbers", () => {
     expect(parseRangeParam("42")).toBe(42);
     expect(parseRangeParam("0")).toBe(0);
+  });
+});
+
+describe("buildChangelogResponse truncation + files", () => {
+  const row = {
+    path: "CHANGELOG.md",
+    filename: "CHANGELOG.md",
+    url: "https://github.com/acme/repo/blob/HEAD/CHANGELOG.md",
+    rawUrl: "https://raw/CHANGELOG.md",
+    content: "# CHANGELOG\n\nhello",
+    bytes: 18,
+    fetchedAt: "2026-04-14T00:00:00.000Z",
+  };
+
+  it("flags truncated=false by default and includes files index", () => {
+    const res = buildChangelogResponse(row, { offset: null, limit: null }, [
+      { path: "CHANGELOG.md", filename: "CHANGELOG.md", url: row.url, bytes: 18, fetchedAt: row.fetchedAt },
+      { path: "packages/a/CHANGELOG.md", filename: "CHANGELOG.md", url: row.url, bytes: 9, fetchedAt: row.fetchedAt },
+    ]);
+    expect(res.truncated).toBe(false);
+    expect(res.truncatedAt).toBeNull();
+    expect(res.files).toHaveLength(2);
+  });
+
+  it("flags truncated=true when bytes >= 1MB and carries truncatedAt", () => {
+    const res = buildChangelogResponse(
+      { ...row, bytes: 1024 * 1024 },
+      { offset: null, limit: null },
+      [],
+    );
+    expect(res.truncated).toBe(true);
+    expect(res.truncatedAt).toBe(1024 * 1024);
   });
 });

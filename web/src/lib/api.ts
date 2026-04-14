@@ -14,6 +14,7 @@ import type {
   ReleaseDetail,
   ProductDetail,
   SourceChangelogResponse,
+  ChangelogFileSummary,
 } from "@shared/api/types";
 
 export type {
@@ -44,6 +45,7 @@ export type {
   ReleaseDetail,
   ProductDetail,
   SourceChangelogResponse,
+  ChangelogFileSummary,
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
@@ -128,8 +130,9 @@ export const api = {
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`, { cache: "no-store" }),
   sourceHeatmap: (slug: string) => fetchApi<SourceHeatmap>(`/v1/sources/${slug}/heatmap`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
-  sourceChangelog: (slug: string, range?: { offset?: number; limit?: number }) => {
+  sourceChangelog: (slug: string, range?: { path?: string; offset?: number; limit?: number }) => {
     const params = new URLSearchParams();
+    if (range?.path !== undefined) params.set("path", range.path);
     if (range?.offset !== undefined) params.set("offset", String(range.offset));
     if (range?.limit !== undefined) params.set("limit", String(range.limit));
     const qs = params.toString();

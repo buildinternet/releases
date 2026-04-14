@@ -3,7 +3,7 @@ import { getDb } from "../../db/connection.js";
 import { sources, releases, organizations, sourceChangelogFiles } from "../../db/schema.js";
 import { getSourceMetrics } from "../metrics.js";
 import type { SourceChangelogResponse } from "../types.js";
-import { buildChangelogResponse } from "../../lib/changelog-slice.js";
+import { buildChangelogResponse, selectChangelogFile } from "../../lib/changelog-slice.js";
 
 export function handleSourceActivity(slug: string, searchParams: URLSearchParams) {
   const db = getDb();
@@ -194,23 +194,45 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   };
 }
 
+/**
+ * Symbol returned when an explicit `path` param doesn't match any file.
+ * Callers should surface this as a 404 distinct from "source has no files".
+ */
+export const CHANGELOG_PATH_NOT_FOUND = Symbol("changelog_path_not_found");
+
 export function handleSourceChangelog(
   slug: string,
   searchParams?: URLSearchParams,
-): SourceChangelogResponse | null {
+): SourceChangelogResponse | null | typeof CHANGELOG_PATH_NOT_FOUND {
   const db = getDb();
   const [src] = db.select().from(sources).where(eq(sources.slug, slug)).all();
   if (!src) return null;
-  const [row] = db
+  const allRows = db
     .select()
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
     .orderBy(sourceChangelogFiles.path)
-    .limit(1)
     .all();
-  if (!row) return null;
-  return buildChangelogResponse(row, {
-    offset: searchParams?.get("offset") ?? null,
-    limit: searchParams?.get("limit") ?? null,
-  });
+  if (allRows.length === 0) return null;
+
+  const requestedPath = searchParams?.get("path") ?? null;
+  const selected = selectChangelogFile(allRows, requestedPath);
+  if (!selected) return CHANGELOG_PATH_NOT_FOUND;
+
+  const files = allRows.map((r) => ({
+    path: r.path,
+    filename: r.filename,
+    url: r.url,
+    bytes: r.bytes,
+    fetchedAt: r.fetchedAt,
+  }));
+
+  return buildChangelogResponse(
+    selected,
+    {
+      offset: searchParams?.get("offset") ?? null,
+      limit: searchParams?.get("limit") ?? null,
+    },
+    files,
+  );
 }

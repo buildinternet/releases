@@ -35,10 +35,10 @@ export default async function IndependentSourcePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string; tab?: string }>;
+  searchParams: Promise<{ page?: string; tab?: string; path?: string }>;
 }) {
   const { slug } = await params;
-  const { page: pageParam, tab } = await searchParams;
+  const { page: pageParam, tab, path: changelogPath } = await searchParams;
   const page = parseInt(pageParam ?? "1", 10) || 1;
 
   const twoYearsAgo = new Date();
@@ -120,7 +120,7 @@ export default async function IndependentSourcePage({
               hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
               hasChangelog={!!source.hasChangelogFile}
             />
-            <SourceMainContent source={source} tab={tab} basePath={`/source/${slug}`} />
+            <SourceMainContent source={source} tab={tab} basePath={`/source/${slug}`} changelogPath={changelogPath} />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/source/${slug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>
