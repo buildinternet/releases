@@ -39,13 +39,11 @@ describe("CLI command gating (public mode)", () => {
     expect(stdout).toContain("summary");
     expect(stdout).toContain("compare");
     expect(stdout).toContain("stats");
-    expect(stdout).toContain("usage");
     expect(stdout).toContain("categories");
-    expect(stdout).toContain("serve");
-    expect(stdout).toContain("api");
+    expect(stdout).toContain("admin");
   });
 
-  it("does not show admin commands in public help", () => {
+  it("keeps admin workflows behind the admin entrypoint in public help", () => {
     const { stdout } = runCli(["--help"], { env: publicEnv });
     expect(stdout).not.toContain("Admin:");
     expect(stdout).not.toContain("onboard");
@@ -53,18 +51,24 @@ describe("CLI command gating (public mode)", () => {
   });
 
   it("blocks admin commands with a clear error", () => {
-    for (const cmd of ["fetch", "onboard", "org", "poll"]) {
-      const { stderr, exitCode } = runCli([cmd], { env: publicEnv });
+    for (const args of [
+      ["admin", "source", "fetch"],
+      ["admin", "discovery", "onboard", "Acme"],
+      ["admin", "org", "list"],
+      ["admin", "source", "poll"],
+    ]) {
+      const { stderr, exitCode } = runCli(args, { env: publicEnv });
       expect(exitCode).toBe(1);
-      expect(stderr).toContain(`"${cmd}" requires an API key`);
+      expect(stderr).toContain(`"admin" requires an API key`);
       expect(stderr).toContain("RELEASED_API_KEY");
     }
   });
 
-  it("blocks admin commands via help subcommand", () => {
-    const { stderr, exitCode } = runCli(["help", "fetch"], { env: publicEnv });
-    expect(exitCode).toBe(1);
-    expect(stderr).toContain("requires an API key");
+  it("allows browsing admin help without an API key", () => {
+    const { stdout, exitCode } = runCli(["admin", "--help"], { env: publicEnv });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("source");
+    expect(stdout).toContain("discovery");
   });
 
   it("shows unknown command error for truly unknown commands", () => {
@@ -77,28 +81,34 @@ describe("CLI command gating (public mode)", () => {
 describe("CLI command gating (admin mode)", () => {
   const adminEnv = { RELEASED_API_KEY: "test-key" };
 
-  it("shows admin section in help", () => {
+  it("shows the admin entrypoint in root help", () => {
     const { stdout } = runCli(["--help"], { env: adminEnv });
-    expect(stdout).toContain("Admin:");
-    expect(stdout).toContain("onboard");
-    expect(stdout).toContain("fetch");
-    expect(stdout).toContain("org");
+    expect(stdout).toContain("admin");
+    expect(stdout).not.toContain("Admin:");
   });
 
-  it("allows admin subcommand help", () => {
-    const { stdout, exitCode } = runCli(["fetch", "--help"], { env: adminEnv });
+  it("shows admin namespace help", () => {
+    const { stdout, exitCode } = runCli(["admin", "--help"], { env: adminEnv });
+    expect(exitCode).toBe(0);
+    expect(stdout).toContain("source");
+    expect(stdout).toContain("org");
+    expect(stdout).toContain("product");
+  });
+
+  it("allows admin source help", () => {
+    const { stdout, exitCode } = runCli(["admin", "source", "fetch", "--help"], { env: adminEnv });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("fetch");
   });
 
   it("allows org subcommand help", () => {
-    const { stdout, exitCode } = runCli(["org", "--help"], { env: adminEnv });
+    const { stdout, exitCode } = runCli(["admin", "org", "--help"], { env: adminEnv });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("org");
   });
 
   it("allows product subcommand help", () => {
-    const { stdout, exitCode } = runCli(["product", "--help"], { env: adminEnv });
+    const { stdout, exitCode } = runCli(["admin", "product", "--help"], { env: adminEnv });
     expect(exitCode).toBe(0);
     expect(stdout).toContain("product");
   });
