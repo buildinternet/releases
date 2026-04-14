@@ -7,14 +7,18 @@ import { rehypeShikiPlugin } from "@/lib/shiki";
 import { markdownComponents } from "./markdown-components";
 import type { SourceChangelogResponse } from "@/lib/api";
 
+interface InitialSlice {
+  content: ReactNode;
+  offset: number;
+  limit: number;
+  nextOffset: number | null;
+  totalChars: number;
+}
+
 interface ChangelogStreamProps {
   slug: string;
   markdownClassName: string;
-  initial: ReactNode;
-  initialNextOffset: number | null;
-  totalChars: number;
-  initialOffset: number;
-  initialLimit: number;
+  initial: InitialSlice;
 }
 
 interface Chunk {
@@ -26,20 +30,13 @@ export function ChangelogStream({
   slug,
   markdownClassName,
   initial,
-  initialNextOffset,
-  totalChars,
-  initialOffset,
-  initialLimit,
 }: ChangelogStreamProps) {
   const [chunks, setChunks] = useState<Chunk[]>([]);
-  const [nextOffset, setNextOffset] = useState<number | null>(initialNextOffset);
+  const [nextOffset, setNextOffset] = useState<number | null>(initial.nextOffset);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [loadedChars, setLoadedChars] = useState(initial.nextOffset ?? initial.totalChars);
   const sentinelRef = useRef<HTMLDivElement | null>(null);
-  const loadedChars = chunks.reduce(
-    (n, c) => n + c.content.length,
-    (initialOffset === 0 ? initialLimit : 0),
-  );
   const nextChunkId = useRef(0);
 
   const loadNext = useCallback(async () => {
@@ -48,19 +45,20 @@ export function ChangelogStream({
     setError(null);
     try {
       const res = await fetch(
-        `/api/sources/${encodeURIComponent(slug)}/changelog?offset=${nextOffset}&limit=${initialLimit}`,
+        `/api/sources/${encodeURIComponent(slug)}/changelog?offset=${nextOffset}&limit=${initial.limit}`,
       );
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data: SourceChangelogResponse = await res.json();
       nextChunkId.current += 1;
       setChunks((prev) => [...prev, { id: nextChunkId.current, content: data.content }]);
+      setLoadedChars((prev) => prev + data.content.length);
       setNextOffset(data.nextOffset);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load more");
     } finally {
       setLoading(false);
     }
-  }, [loading, nextOffset, slug, initialLimit]);
+  }, [loading, nextOffset, slug, initial.limit]);
 
   useEffect(() => {
     if (nextOffset == null) return;
@@ -78,7 +76,7 @@ export function ChangelogStream({
 
   return (
     <>
-      <div className={markdownClassName}>{initial}</div>
+      <div className={markdownClassName}>{initial.content}</div>
       {chunks.map((chunk) => (
         <div key={chunk.id} className={markdownClassName}>
           <ReactMarkdown
@@ -103,7 +101,7 @@ export function ChangelogStream({
             <span>Loading more…</span>
           ) : (
             <span>
-              {Math.round((loadedChars / totalChars) * 100)}% loaded — scroll for more
+              {Math.round((loadedChars / initial.totalChars) * 100)}% loaded — scroll for more
             </span>
           )}
         </div>

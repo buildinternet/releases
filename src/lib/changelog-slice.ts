@@ -1,21 +1,9 @@
 /**
- * Heading-aware slicing for CHANGELOG files.
- *
- * Callers pass an offset/limit (character counts) and the slicer snaps the
- * returned slice to heading boundaries so sections are never cut mid-entry.
- * Used by the `/v1/sources/:slug/changelog` range API and agent-friendly
- * Context7-style slicing.
- *
- * Guarantees:
- *   - Concatenating successive slices (feeding `nextOffset` back as `offset`)
- *     reconstructs the original file exactly.
- *   - Slices start on a heading (or at offset 0 for the first slice, so the
- *     preamble is preserved).
- *   - Slices end at the *last* heading inside the requested range when
- *     possible; if a section is bigger than `limit`, the slice overshoots to
- *     the next heading so the section is returned whole.
- *   - If `limit` covers the remainder of the file, the remainder is returned
- *     in one slice and `nextOffset` is null.
+ * Heading-aware slicing for CHANGELOG files. Slices start on a heading
+ * (offset=0 preserved for preamble) and end at the last heading inside
+ * the requested range, overshooting to the next heading only when a
+ * single section is bigger than `limit`. Successive slices via
+ * `nextOffset` reconstruct the file exactly.
  */
 
 export interface ChangelogSliceOptions {
@@ -81,8 +69,6 @@ export function sliceChangelog(
   const limit = clampLimit(opts.limit);
   const headings = findHeadings(content);
 
-  // Snap start forward to the next heading (preserving offset=0 so the
-  // first slice always contains any preamble before the first heading).
   let snappedStart: number;
   if (offset === 0) {
     snappedStart = 0;
@@ -96,8 +82,6 @@ export function sliceChangelog(
   if (requestedEnd >= totalChars) {
     snappedEnd = totalChars;
   } else {
-    // Prefer the last heading inside (snappedStart, requestedEnd] — i.e. cut at
-    // the most recent section boundary we can without going over budget.
     let lastInRange = -1;
     for (let i = headings.length - 1; i >= 0; i--) {
       const h = headings[i];
@@ -109,8 +93,6 @@ export function sliceChangelog(
     if (lastInRange !== -1) {
       snappedEnd = lastInRange;
     } else {
-      // Section is bigger than the limit OR the file has no headings.
-      // Prefer overshooting to the next heading so we return a complete section.
       const overshoot = headings.find((h) => h > requestedEnd);
       snappedEnd = overshoot !== undefined ? overshoot : requestedEnd;
     }
@@ -132,10 +114,6 @@ export function sliceChangelog(
   };
 }
 
-/**
- * Whether a `/v1/sources/:slug/changelog` request is asking for a slice.
- * Callers that pass no range params get the full file (back-compat).
- */
 export function hasRangeParams(params: { offset?: string | null; limit?: string | null }): boolean {
   return params.offset != null || params.limit != null;
 }
@@ -145,4 +123,50 @@ export function parseRangeParam(raw: string | null | undefined): number | undefi
   const n = Number(raw);
   if (!Number.isFinite(n)) return undefined;
   return n;
+}
+
+interface ChangelogFileRow {
+  path: string;
+  filename: string;
+  url: string;
+  rawUrl: string;
+  content: string;
+  bytes: number;
+  fetchedAt: string;
+}
+
+export interface ChangelogResponse extends ChangelogFileRow, ChangelogSliceResult {}
+
+/**
+ * Build the `GET /v1/sources/:slug/changelog` response body from a DB row
+ * and (optional) range params. Shared by the worker and local route handlers.
+ */
+export function buildChangelogResponse(
+  row: ChangelogFileRow,
+  params: { offset?: string | null; limit?: string | null },
+): ChangelogResponse {
+  const base = {
+    path: row.path,
+    filename: row.filename,
+    url: row.url,
+    rawUrl: row.rawUrl,
+    bytes: row.bytes,
+    fetchedAt: row.fetchedAt,
+  };
+  if (!hasRangeParams(params)) {
+    const totalChars = row.content.length;
+    return {
+      ...base,
+      content: row.content,
+      offset: 0,
+      limit: totalChars,
+      nextOffset: null,
+      totalChars,
+    };
+  }
+  const slice = sliceChangelog(row.content, {
+    offset: parseRangeParam(params.offset),
+    limit: parseRangeParam(params.limit),
+  });
+  return { ...base, ...slice };
 }
