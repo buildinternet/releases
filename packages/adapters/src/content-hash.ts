@@ -1,7 +1,6 @@
-import { createHash } from "crypto";
+import { sha256Hex } from "@releases/core/hash";
 import type { RawRelease } from "./types.js";
 
 export function contentHash(raw: RawRelease): string {
-  const input = raw.title + (raw.version || "") + (raw.publishedAt?.toISOString() || "") + raw.content;
-  return createHash("sha256").update(input).digest("hex");
+  return sha256Hex(raw.title + (raw.version || "") + (raw.publishedAt?.toISOString() || "") + raw.content);
 }
