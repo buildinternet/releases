@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import os from "node:os";
 import chalk from "chalk";
-import type { Source } from "../../db/schema.js";
+import type { Source } from "@releases/core/schema";
 import { sourceNotFound } from "../suggest.js";
 import type { FetchOptions } from "../../adapters/types.js";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
@@ -23,9 +23,9 @@ import { logger } from "../../lib/logger.js";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { MEDIA_PREFIX } from "../../lib/media-url.js";
 import { config } from "../../lib/config.js";
-import { elapsedFormatted, daysAgoIso } from "../../lib/dates.js";
+import { elapsedFormatted, daysAgoIso } from "@releases/core/dates";
 import { isRemoteMode } from "../../lib/mode.js";
-import { newCorrelationId } from "../../lib/id.js";
+import { newCorrelationId } from "@releases/core/id";
 import { stripAnsi } from "../../lib/sanitize.js";
 import * as apiClient from "../../api/client.js";
 

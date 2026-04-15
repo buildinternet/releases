@@ -12,7 +12,7 @@ import {
   tags,
   orgTags,
   productTags,
-} from "../../src/db/schema.js";
+} from "@releases/core/schema";
 
 let testDatabase: TestDatabase;
 

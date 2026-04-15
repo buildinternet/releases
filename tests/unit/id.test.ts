@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { newSourceId, newReleaseId, newOrgId, newProductId, newTagId } from "../../src/lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newProductId, newTagId } from "@releases/core/id";
 
 describe("ID generators", () => {
   it("newSourceId has correct prefix", () => {

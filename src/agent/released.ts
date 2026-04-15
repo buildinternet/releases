@@ -5,7 +5,7 @@ import { existsSync, mkdirSync, symlinkSync } from "fs";
 import { config, resolveCLICmd } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 import type { Confidence } from "../lib/discover.js";
-import { CATEGORIES } from "../lib/categories.js";
+import { CATEGORIES } from "@releases/core/categories";
 
 // ── Types ──────────────────────────────────────────────────────────
 

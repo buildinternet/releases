@@ -1,11 +1,11 @@
 import { getApiUrl, getApiKey, isAdminMode } from "../lib/mode.js";
 import { logger } from "../lib/logger.js";
-import { daysAgoIso } from "../lib/dates.js";
+import { daysAgoIso } from "@releases/core/dates";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
-} from "../db/schema.js";
+} from "@releases/core/schema";
 import type { SourceListItem, Stats, UnifiedSearchResponse, SourceChangelogResponse } from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {

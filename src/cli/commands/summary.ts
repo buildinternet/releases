@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { findSource, getRecentReleases, findOrg, getRecentReleasesByOrg } from "../../db/queries.js";
 import { orgNotFound, sourceNotFound } from "../suggest.js";
 import { summarizeReleases, toReleaseInput } from "../../ai/query.js";
-import { daysAgoIso, elapsedFormatted } from "../../lib/dates.js";
+import { daysAgoIso, elapsedFormatted } from "@releases/core/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerSummaryCommand(program: Command) {

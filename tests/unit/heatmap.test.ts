@@ -5,7 +5,7 @@ import {
   organizations,
   sources,
   releases,
-} from "../../src/db/schema.js";
+} from "@releases/core/schema";
 
 let testDatabase: TestDatabase;
 testDatabase = createTestDb();

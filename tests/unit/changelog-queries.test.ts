@@ -5,8 +5,8 @@ import {
   organizations,
   sources,
   sourceChangelogFiles,
-} from "../../src/db/schema.js";
-import { isTruncated } from "../../src/lib/changelog-slice.js";
+} from "@releases/core/schema";
+import { isTruncated } from "@releases/core/changelog-slice";
 
 let testDatabase: TestDatabase;
 testDatabase = createTestDb();

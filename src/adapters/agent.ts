@@ -1,10 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Source, ReleaseType } from "../db/schema.js";
+import type { Source, ReleaseType } from "@releases/core/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { checkContentHash } from "../db/queries.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
-import { sha256Hex } from "../lib/hash.js";
+import { sha256Hex } from "@releases/core/hash";
 import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";

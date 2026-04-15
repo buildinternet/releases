@@ -1,7 +1,7 @@
 import { logger } from "../lib/logger.js";
 import { detectProvider, type DetectedProvider } from "../lib/providers.js";
 import { discoverFeed, updateSourceMeta } from "../adapters/feed.js";
-import type { Source } from "../db/schema.js";
+import type { Source } from "@releases/core/schema";
 
 // ── Types ──────────────────────────────────────────────────────────
 

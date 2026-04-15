@@ -4,7 +4,7 @@ import { logger } from "../lib/logger.js";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired, withParseInstructions } from "./shared.js";
-import type { ReleaseType } from "../db/schema.js";
+import type { ReleaseType } from "@releases/core/schema";
 
 export interface ParsedRelease {
   version?: string;

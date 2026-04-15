@@ -9,7 +9,7 @@
  * - Worker path (workers/discovery/src/managed-agents-session.ts)
  */
 
-import { CATEGORIES } from "../lib/categories.js";
+import { CATEGORIES } from "@releases/core/categories";
 import { assemblePlaybook } from "../ai/playbook.js";
 
 // ── Tool input types ─────────────────────────────────────────────────

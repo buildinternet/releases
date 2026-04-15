@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { toSlug } from "../../src/lib/slug.js";
+import { toSlug } from "@releases/core/slug";
 
 describe("toSlug", () => {
   it("lowercases and replaces spaces with hyphens", () => {
