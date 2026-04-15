@@ -6,7 +6,7 @@
  * cl100k_base) — `tokens` wins when both are passed.
  */
 
-import { countTokens, countTokensSafe } from "./tokens.js";
+import { countTokens, countTokensSafe } from "./tokens";
 
 export interface ChangelogSliceOptions {
   offset?: number;
