@@ -375,7 +375,8 @@ function DetailChart() {
     return ticks;
   }, [maxCount]);
 
-  // Month labels for the brushed window
+  // Month labels for the brushed window. Thin to ≤ TARGET_TICKS using natural
+  // strides (1/2/3/6/12 mo). Strides ≥ 12 anchor on January so year boundaries stay visible.
   const monthLabels = useMemo(() => {
     if (brushedBuckets.length === 0) return [];
     const first = brushedBuckets[0].weekStart;
@@ -383,15 +384,30 @@ function DetailChart() {
     const span = last.getTime() - first.getTime();
     if (span <= 0) return [];
 
+    const monthsInSpan =
+      (last.getFullYear() - first.getFullYear()) * 12 +
+      (last.getMonth() - first.getMonth()) + 1;
+
+    const TARGET_TICKS = 10;
+    const stride = [1, 2, 3, 6, 12].find((s) => Math.ceil(monthsInSpan / s) <= TARGET_TICKS) ?? 12;
+
     const labels: { label: string; pct: number }[] = [];
     const mo = new Date(first);
     mo.setDate(1);
     if (mo < first) mo.setMonth(mo.getMonth() + 1);
     while (mo <= last) {
-      labels.push({
-        label: fmtMonth(mo),
-        pct: ((mo.getTime() - first.getTime()) / span) * 100,
-      });
+      const m = mo.getMonth();
+      const keep = stride === 1 || (stride >= 12 ? m === 0 : m % stride === 0);
+      if (keep) {
+        labels.push({
+          label: stride >= 6
+            ? `${mo.getFullYear()}`
+            : stride >= 3
+              ? `${fmtMonth(mo)} ${String(mo.getFullYear()).slice(2)}`
+              : fmtMonth(mo),
+          pct: ((mo.getTime() - first.getTime()) / span) * 100,
+        });
+      }
       mo.setMonth(mo.getMonth() + 1);
     }
     return labels;
