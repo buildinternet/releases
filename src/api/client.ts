@@ -224,6 +224,13 @@ export interface SourceWithOrg {
   type: string;
   url: string;
   lastFetchedAt: string | null;
+  fetchPriority: string | null;
+  changeDetectedAt: string | null;
+  latestDate: string | null;
+  releaseCount: number;
+  consecutiveNoChange: number | null;
+  consecutiveErrors: number | null;
+  nextFetchAfter: string | null;
   orgName: string | null;
   productName: string | null;
   productSlug: string | null;
@@ -258,7 +265,14 @@ export async function listSourcesWithOrg(opts?: {
     slug: r.slug,
     type: r.type,
     url: r.url ?? "",
-    lastFetchedAt: null,
+    lastFetchedAt: r.lastFetchedAt ?? null,
+    fetchPriority: r.fetchPriority ?? null,
+    changeDetectedAt: r.changeDetectedAt ?? null,
+    latestDate: r.latestDate ?? null,
+    releaseCount: r.releaseCount ?? 0,
+    consecutiveNoChange: r.consecutiveNoChange ?? null,
+    consecutiveErrors: r.consecutiveErrors ?? null,
+    nextFetchAfter: r.nextFetchAfter ?? null,
     orgName: r.orgSlug ?? null,
     productName: r.productName ?? null,
     productSlug: r.productSlug ?? null,

@@ -15,6 +15,9 @@ export type SourceListRow = {
   last_fetched_at: string | null;
   fetch_priority: string | null;
   change_detected_at: string | null;
+  consecutive_no_change: number | null;
+  consecutive_errors: number | null;
+  next_fetch_after: string | null;
   org_slug: string | null;
   release_count: number;
   latest_version: string | null;

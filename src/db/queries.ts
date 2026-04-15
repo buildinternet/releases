@@ -374,6 +374,13 @@ export interface SourceWithOrg {
   type: string;
   url: string;
   lastFetchedAt: string | null;
+  fetchPriority: string | null;
+  changeDetectedAt: string | null;
+  latestDate: string | null;
+  releaseCount: number;
+  consecutiveNoChange: number | null;
+  consecutiveErrors: number | null;
+  nextFetchAfter: string | null;
   orgName: string | null;
   productName: string | null;
   productSlug: string | null;
@@ -447,21 +454,33 @@ export async function listSourcesWithOrg(opts?: {
       type: sources.type,
       url: sources.url,
       lastFetchedAt: sources.lastFetchedAt,
+      fetchPriority: sources.fetchPriority,
+      changeDetectedAt: sources.changeDetectedAt,
+      consecutiveNoChange: sources.consecutiveNoChange,
+      consecutiveErrors: sources.consecutiveErrors,
+      nextFetchAfter: sources.nextFetchAfter,
       orgName: organizations.name,
       productName: products.name,
       productSlug: products.slug,
       metadata: sources.metadata,
       isPrimary: sql<boolean>`coalesce(${sources.isPrimary}, 0)`.as("isPrimary"),
       isHidden: sources.isHidden,
+      releaseCount: sql<number>`(SELECT COUNT(*) FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0))`.as("releaseCount"),
+      latestDate: sql<string | null>`(SELECT MAX(${releases.publishedAt}) FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0))`.as("latestDate"),
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .leftJoin(products, eq(sources.productId, products.id));
 
-  if (conditions.length > 0) {
-    return query.where(and(...conditions));
-  }
-  return query;
+  const rows = conditions.length > 0
+    ? await query.where(and(...conditions))
+    : await query;
+
+  return rows.map((r) => ({
+    ...r,
+    releaseCount: r.releaseCount ?? 0,
+    latestDate: r.latestDate ?? null,
+  }));
 }
 
 // ── Stats summary (for `stats` command) ──
