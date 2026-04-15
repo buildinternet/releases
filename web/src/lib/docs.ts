@@ -21,6 +21,18 @@ export type Doc = {
 };
 
 const SLOT_COMMENT_PATTERN = /<!--\s*slot:[a-z0-9-]+\s*-->\s*/gi;
+const ADMIN_BLOCK_PATTERN = /<!--\s*admin:start\s*-->[\s\S]*?<!--\s*admin:end\s*-->\s*/gi;
+const ADMIN_MARKER_PATTERN = /<!--\s*admin:(?:start|end)\s*-->\s*/gi;
+
+/** Strip `<!-- admin:start --> ... <!-- admin:end -->` blocks from markdown. */
+export function stripAdminBlocks(content: string): string {
+  return content.replace(ADMIN_BLOCK_PATTERN, "").replace(/\n{3,}/g, "\n\n");
+}
+
+/** Remove admin markers but keep their enclosed content (for admin viewers). */
+export function keepAdminBlocks(content: string): string {
+  return content.replace(ADMIN_MARKER_PATTERN, "");
+}
 
 export const loadDoc = cache((slug: string): Doc => {
   const filePath = path.join(DOCS_DIR, `${slug}.md`);

@@ -5,7 +5,7 @@ export const publicDocs = flag<boolean>({
   key: "public-docs",
   description: "Controls whether public documentation pages are accessible",
   adapter: vercelAdapter(),
-  defaultValue: process.env.NODE_ENV === "development",
+  defaultValue: true,
 });
 
 export const adminDocs = flag<boolean>({

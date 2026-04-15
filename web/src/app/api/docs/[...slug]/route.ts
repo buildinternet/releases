@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
+import matter from "gray-matter";
 import { publicDocs, adminDocs } from "@/flags";
-import { loadDoc } from "@/lib/docs";
+import { loadDoc, stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
 
 export async function GET(
   _req: Request,
@@ -20,12 +21,16 @@ export async function GET(
     throw err;
   }
 
-  if (doc.frontmatter.adminOnly) {
-    const showAdmin = await adminDocs();
-    if (!showAdmin) notFound();
-  }
+  const showAdmin = await adminDocs();
+  if (doc.frontmatter.adminOnly && !showAdmin) notFound();
 
-  return new Response(doc.public, {
+  const parsed = matter(doc.public);
+  const transformed = showAdmin
+    ? keepAdminBlocks(parsed.content)
+    : stripAdminBlocks(parsed.content);
+  const body = matter.stringify(transformed.trimStart(), parsed.data);
+
+  return new Response(body, {
     headers: {
       "Content-Type": "text/markdown; charset=utf-8",
       "Cache-Control": "public, max-age=300, s-maxage=3600",

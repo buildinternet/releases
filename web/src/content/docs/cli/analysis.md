@@ -1,6 +1,6 @@
 ---
 title: "Summaries & Comparisons"
-adminOnly: false
+adminOnly: true
 ---
 
 # Summaries & Comparisons
@@ -32,7 +32,7 @@ releases summary --json
 Generate a head-to-head comparison of recent releases between two sources. Useful for competitive analysis or tracking convergence between related tools.
 
 ```bash
-releases compare next-js remix --days 30
+releases compare nextjs remix --days 30
 releases compare neon-changelog planetscale-changelog --days 60
 releases compare --json
 ```
