@@ -18,7 +18,9 @@
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
     // Switch to "openai" or "workers-ai" requires updating the matching secret.
-    "EMBEDDING_PROVIDER": "voyage"
+    "EMBEDDING_PROVIDER": "voyage",
+    // Kill-switch for the PUBLIC_RATE_LIMITER binding below. Tune the cap there.
+    "RATE_LIMIT_ENABLED": "false"
   },
   "d1_databases": [
     {
@@ -56,6 +58,17 @@
   ],
   "triggers": {
     "crons": ["0 * * * *"]
+  },
+  // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "PUBLIC_RATE_LIMITER",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 120, "period": 60 }
+      }
+    ]
   },
   // Secrets are managed in Cloudflare's Secrets Store (dashboard → Workers → Secrets Store).
   // To rotate or switch providers, update the secret there and redeploy.
