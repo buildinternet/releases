@@ -1,27 +1,57 @@
 import type { MetadataRoute } from "next";
 import { api, ApiSetupError } from "@/lib/api";
+import { publicDocs, adminDocs, statusDashboard } from "@/flags";
 
 export const revalidate = 3600;
 
 const BASE_URL = process.env.RELEASED_BASE_URL?.replace(/\/$/, "") ?? "https://releases.sh";
 
-const STATIC_ROUTES: Array<{ path: string; changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"]; priority: number }> = [
+type StaticRoute = {
+  path: string;
+  changeFrequency: MetadataRoute.Sitemap[number]["changeFrequency"];
+  priority: number;
+};
+
+const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/", changeFrequency: "hourly", priority: 1.0 },
   { path: "/search", changeFrequency: "weekly", priority: 0.5 },
+];
+
+const PUBLIC_DOCS_ROUTES: StaticRoute[] = [
   { path: "/docs", changeFrequency: "weekly", priority: 0.7 },
   { path: "/docs/installation", changeFrequency: "monthly", priority: 0.6 },
   { path: "/docs/api/mcp", changeFrequency: "monthly", priority: 0.6 },
   { path: "/docs/api/rest", changeFrequency: "monthly", priority: 0.6 },
+  { path: "/docs/cli/browsing", changeFrequency: "monthly", priority: 0.6 },
+];
+
+const ADMIN_DOCS_ROUTES: StaticRoute[] = [
   { path: "/docs/cli/admin", changeFrequency: "monthly", priority: 0.6 },
   { path: "/docs/cli/analysis", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/docs/cli/browsing", changeFrequency: "monthly", priority: 0.6 },
   { path: "/docs/cli/fetching", changeFrequency: "monthly", priority: 0.6 },
+];
+
+const STATUS_ROUTES: StaticRoute[] = [
+  { path: "/status", changeFrequency: "daily", priority: 0.4 },
 ];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
-  const staticEntries: MetadataRoute.Sitemap = STATIC_ROUTES.map((r) => ({
+  const [docsEnabled, showAdmin, showStatus] = await Promise.all([
+    publicDocs(),
+    adminDocs(),
+    statusDashboard(),
+  ]);
+
+  const staticRoutes: StaticRoute[] = [
+    ...ALWAYS_PUBLIC,
+    ...(docsEnabled ? PUBLIC_DOCS_ROUTES : []),
+    ...(docsEnabled && showAdmin ? ADMIN_DOCS_ROUTES : []),
+    ...(showStatus ? STATUS_ROUTES : []),
+  ];
+
+  const staticEntries: MetadataRoute.Sitemap = staticRoutes.map((r) => ({
     url: `${BASE_URL}${r.path}`,
     lastModified: now,
     changeFrequency: r.changeFrequency,
