@@ -49,7 +49,7 @@ export async function searchReleasesFts(
   offset: number,
 ): Promise<SearchReleaseHit[]> {
   return db.all<SearchReleaseHit>(sql`
-    SELECT s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
            r.published_at as publishedAt
@@ -76,7 +76,7 @@ export async function searchReleasesFromMatchedEntities(
   if (conditions.length === 0) return [];
 
   return db.all<SearchReleaseHit>(sql`
-    SELECT s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
            r.published_at as publishedAt

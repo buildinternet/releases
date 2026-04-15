@@ -60,6 +60,7 @@ const searchResults: UnifiedSearchResponse = {
   sources: [],
   releases: [
     {
+      id: "rel_react19",
       sourceSlug: "react-releases",
       sourceName: "React Releases",
       orgSlug: "meta",
@@ -273,6 +274,7 @@ describe("searchToMarkdown", () => {
       sources: [],
       releases: [
         {
+          id: "rel_foo1",
           sourceSlug: "foo",
           sourceName: "Foo",
           orgSlug: null,

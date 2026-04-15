@@ -474,6 +474,7 @@ export interface LatestRelease {
   version: string | null;
   publishedAt: string | null;
   sourceName: string;
+  sourceSlug: string;
 }
 
 type SourceReleaseResponse = {
@@ -493,10 +494,10 @@ async function collectReleasesFromSources(
   pageSize: number,
 ): Promise<LatestRelease[]> {
   const results = await Promise.all(
-    slugs.map((slug) => apiFetch<SourceReleaseResponse>(`/v1/sources/${slug}?pageSize=${pageSize}`)),
+    slugs.map(async (slug) => ({ slug, data: await apiFetch<SourceReleaseResponse>(`/v1/sources/${slug}?pageSize=${pageSize}`) })),
   );
   const all: LatestRelease[] = [];
-  for (const srcData of results) {
+  for (const { slug, data: srcData } of results) {
     if (!srcData) continue;
     for (const r of srcData.releases) {
       all.push({
@@ -505,6 +506,7 @@ async function collectReleasesFromSources(
         version: r.version,
         publishedAt: r.publishedAt,
         sourceName: srcData.name,
+        sourceSlug: slug,
       });
     }
   }
@@ -525,6 +527,7 @@ export async function getLatestReleases(opts: {
       version: r.version,
       publishedAt: r.publishedAt,
       sourceName: data.name,
+      sourceSlug: opts.slug!,
     }));
   }
 

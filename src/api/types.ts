@@ -266,6 +266,7 @@ export function foldSourcesIntoProducts(
 }
 
 export interface SearchReleaseHit {
+  id: string;
   sourceSlug: string;
   sourceName: string;
   orgSlug: string | null;

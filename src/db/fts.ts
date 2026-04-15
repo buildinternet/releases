@@ -92,7 +92,7 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
   let releases: SearchReleaseHit[] = [];
   try {
     releases = db.all(sql`
-      SELECT s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+      SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
              r.version, r.title,
              COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
              r.published_at as publishedAt
@@ -118,7 +118,7 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
     if (matchedProductSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(matchedProductSlugs.map((s) => sql`${s}`), sql`, `)})`);
     if (conditions.length > 0) {
       releases = db.all(sql`
-        SELECT s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+        SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
                r.version, r.title,
                COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
                r.published_at as publishedAt

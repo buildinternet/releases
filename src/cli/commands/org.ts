@@ -251,6 +251,8 @@ Examples:
         console.log(chalk.bold("Overview:"));
         console.log(stripAnsi(overview.content));
       }
+
+      console.log(chalk.dim(`\n  More: "releases latest --org ${found.slug}" for recent releases · "releases show <src-slug>" for a specific source`));
     });
 
   // ── org edit ──
