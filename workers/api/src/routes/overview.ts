@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { knowledgePages, organizations, products } from "@releases/db/schema.js";
+import { knowledgePages, organizations, products } from "@releases/core/schema";
 import { newKnowledgePageId, orgWhere, productWhere } from "../utils.js";
 import type { Env } from "../index.js";
 

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { releases } from "@releases/db/schema.js";
+import { releases } from "@releases/core/schema";
 
 type Env = {
   Bindings: {

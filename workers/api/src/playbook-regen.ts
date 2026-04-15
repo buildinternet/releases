@@ -7,7 +7,7 @@
 
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "./db.js";
-import { sources, organizations, products, knowledgePages } from "@releases/db/schema.js";
+import { sources, organizations, products, knowledgePages } from "@releases/core/schema";
 import { generatePlaybookHeader, extractNotesFromLegacyPlaybook } from "@releases/ai/playbook.js";
 import { newKnowledgePageId } from "./utils.js";
 

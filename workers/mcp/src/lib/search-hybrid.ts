@@ -12,7 +12,7 @@ import {
   organizations,
   products,
   sourceChangelogFiles,
-} from "@releases/db/schema.js";
+} from "@releases/core/schema";
 import {
   hybridSearch,
   type VectorizeIndex as HybridVectorizeIndex,

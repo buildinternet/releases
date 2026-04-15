@@ -1,8 +1,8 @@
 import { Hono } from "hono";
 import { sql, gte, and, isNotNull } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { usageLog } from "@releases/db/schema.js";
-import { daysAgoIso } from "@releases/lib/dates.js";
+import { usageLog } from "@releases/core/schema";
+import { daysAgoIso } from "@releases/core/dates";
 import type { Env } from "../index.js";
 
 export const usageLogRoutes = new Hono<Env>();
