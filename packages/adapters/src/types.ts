@@ -37,3 +37,9 @@ export interface FetchResult {
 export interface Adapter {
   fetch(source: Source, options?: FetchOptions): Promise<FetchResult>;
 }
+
+export interface CrawlPage {
+  url: string;
+  markdown: string;
+  title?: string;
+}

@@ -1,6 +1,7 @@
 import { config } from "../lib/config.js";
 import { AdapterError, CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
+import type { CrawlPage } from "@releases/adapters/types";
 /** Resource types to block when rendering (duplicated from cloudflare.ts to avoid circular import). */
 const REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
 
@@ -15,12 +16,6 @@ interface CrawlOptions {
   maxAge?: number;            // Cloudflare R2 cache TTL in seconds
   render?: boolean;           // false = skip headless browser rendering
   source?: "all" | "sitemaps" | "links"; // URL discovery method
-}
-
-export interface CrawlPage {
-  url: string;
-  markdown: string;
-  title?: string;
 }
 
 const TERMINAL_STATUSES = new Set([

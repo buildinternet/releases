@@ -1,7 +1,8 @@
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "./ingest.js";
-import type { CrawlPage } from "../adapters/crawl.js";
-import type { RawRelease, FetchOptions } from "@releases/adapters/types";
+import type { CrawlPage, RawRelease, FetchOptions } from "@releases/adapters/types";
+
+const CONCURRENCY = 5;
 
 export async function parseCrawlPages(
   pages: CrawlPage[],
@@ -13,13 +14,12 @@ export async function parseCrawlPages(
 
   logger.info(`Parsing ${pages.length} crawled page(s) with AI...`);
 
-  const CONCURRENCY = 5;
   const allReleases: RawRelease[] = [];
 
   for (let i = 0; i < pages.length; i += CONCURRENCY) {
     const batch = pages.slice(i, i + CONCURRENCY);
     const results = await Promise.allSettled(
-      batch.map(async (page) => {
+      batch.map(async (page): Promise<RawRelease[]> => {
         logger.debug(`Parsing page: ${page.url} (${page.markdown.length} chars)`);
         const parsed = await parseChangelog(page.markdown, sourceSlug, { parseInstructions });
         return parsed.map((entry) => ({
@@ -31,7 +31,7 @@ export async function parseCrawlPages(
           isBreaking: entry.isBreaking,
           type: entry.type,
           media: entry.media,
-        } as RawRelease));
+        }));
       }),
     );
 
@@ -45,11 +45,12 @@ export async function parseCrawlPages(
   }
 
   let filtered = allReleases;
-  if (options?.since) {
-    filtered = filtered.filter((r) => !r.publishedAt || r.publishedAt >= options.since!);
+  const { since, maxEntries } = options ?? {};
+  if (since) {
+    filtered = filtered.filter((r) => !r.publishedAt || r.publishedAt >= since);
   }
-  if (options?.maxEntries) {
-    filtered = filtered.slice(0, options.maxEntries);
+  if (maxEntries) {
+    filtered = filtered.slice(0, maxEntries);
   }
 
   return filtered;
