@@ -7,6 +7,9 @@
  */
 
 import { countTokens, countTokensSafe } from "./tokens";
+import { DEFAULT_CHANGELOG_SLICE_LIMIT, parseRangeParam } from "./changelog-range";
+
+export { DEFAULT_CHANGELOG_SLICE_LIMIT, parseRangeParam };
 
 export interface ChangelogSliceOptions {
   offset?: number;
@@ -26,7 +29,6 @@ export interface ChangelogSliceResult {
   sliceTokens?: number;
 }
 
-export const DEFAULT_CHANGELOG_SLICE_LIMIT = 40_000;
 const MAX_SLICE_LIMIT = 500_000;
 export const DEFAULT_CHANGELOG_SLICE_TOKENS = 10_000;
 const MAX_SLICE_TOKENS = 200_000;
@@ -191,13 +193,6 @@ export function sliceChangelog(
 
 export function hasRangeParams(params: { offset?: string | null; limit?: string | null; tokens?: string | null }): boolean {
   return params.offset != null || params.limit != null || params.tokens != null;
-}
-
-export function parseRangeParam(raw: string | null | undefined): number | undefined {
-  if (raw == null || raw === "") return undefined;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return undefined;
-  return n;
 }
 
 /**
