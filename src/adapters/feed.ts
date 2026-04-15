@@ -12,29 +12,7 @@ import {
 
 // Re-export the pure feed surface so existing `src/adapters/feed.js` consumers
 // keep working without reaching into @releases/adapters/feed directly.
-export {
-  discoverFeed,
-  fetchAndParseFeed,
-  headCheckFeed,
-  parseFeedLinks,
-  classifyFeedMime,
-  detectFeedTypeFromContent,
-  parseRss,
-  parseAtom,
-  parseJsonFeed,
-  extractVersionFromTitle,
-  detectBreaking,
-  extractMedia,
-  iframeSrcToWatchUrl,
-  htmlToMarkdown,
-  decodeHtmlEntities,
-  getSourceMeta,
-  type SourceMetadata,
-  type FeedType,
-  type DiscoveredFeed,
-  type HeadCheckResult,
-  type ChangeStatus,
-} from "@releases/adapters/feed";
+export * from "@releases/adapters/feed";
 
 // ── Source metadata helpers (DB-coupled) ────────────────────────────
 
