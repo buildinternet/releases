@@ -10,7 +10,8 @@ import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed, getSourceMeta, updateSourceMeta } from "./feed.js";
 import { fetchCloudflareMarkdown, fetchCloudflareMarkdownFast } from "./cloudflare.js";
-import { startCrawl, pollCrawlResults, parseCrawlPages } from "./crawl.js";
+import { startCrawl, pollCrawlResults } from "./crawl.js";
+import { parseCrawlPages } from "../ai/parse-crawl.js";
 import { shouldUseFastFetch } from "../lib/render-hint.js";
 
 function toFragmentUrl(baseUrl: string, version: string | undefined, title: string): string {
