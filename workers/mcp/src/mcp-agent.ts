@@ -109,7 +109,7 @@ export function createServer(env: Env) {
   }, async (params) => getSource(db, params));
 
   server.registerTool("get_source_changelog", {
-    description: "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root. Supports heading-aligned slicing by chars (`limit`) or by tokens (`tokens`, cl100k_base) for LLM context budgeting. Every response includes `totalTokens` for the whole file and, in token mode, `sliceTokens` for the returned chunk. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
+    description: "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root. Supports heading-aligned slicing by chars (`limit`) or by tokens (`tokens`, cl100k_base) for LLM context budgeting. Every response includes `totalTokens` for the whole file and, in token mode, `sliceTokens` for the returned chunk. `totalTokens` is an exact cl100k_base count for files under 256KB and an approximation (`ceil(totalChars / 4)`) for larger files; `sliceTokens` is always exact. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
     inputSchema: {
       source: z.string().describe("Source slug or ID (e.g. 'apollo-client' or 'src_...')"),
       path: z.string().optional().describe("Specific file path to read (e.g. 'packages/next/CHANGELOG.md'). Defaults to the root CHANGELOG."),
