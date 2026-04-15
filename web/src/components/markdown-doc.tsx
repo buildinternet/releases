@@ -45,9 +45,8 @@ export async function MarkdownDoc({
   slots?: Record<string, React.ReactNode>;
 }) {
   const doc = loadDoc(slug);
-  const showAdmin = await adminDocs();
-  const body = showAdmin ? keepAdminBlocks(doc.body) : stripAdminBlocks(doc.body);
-  const copyMarkdown = showAdmin
+  const body = adminDocs ? keepAdminBlocks(doc.body) : stripAdminBlocks(doc.body);
+  const copyMarkdown = adminDocs
     ? doc.public
     : (() => {
         const parsed = matter(doc.public);

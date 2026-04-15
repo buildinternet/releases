@@ -6,9 +6,8 @@ import { statusDashboard } from "@/flags";
 
 export const metadata: Metadata = { title: "Status" };
 
-export default async function StatusPage() {
-  const enabled = await statusDashboard();
-  if (!enabled) notFound();
+export default function StatusPage() {
+  if (!statusDashboard) notFound();
 
   const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
   const apiKey = process.env.RELEASED_API_KEY ?? "";

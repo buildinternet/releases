@@ -1,15 +1,12 @@
 import { notFound } from "next/navigation";
 import matter from "gray-matter";
-import { publicDocs, adminDocs } from "@/flags";
+import { adminDocs } from "@/flags";
 import { loadDoc, stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
 
 export async function GET(
   _req: Request,
   { params }: { params: Promise<{ slug: string[] }> },
 ) {
-  const docsEnabled = await publicDocs();
-  if (!docsEnabled) notFound();
-
   const { slug: slugParts } = await params;
   const slug = slugParts.join("/") || "index";
 
@@ -21,7 +18,7 @@ export async function GET(
     throw err;
   }
 
-  const showAdmin = await adminDocs();
+  const showAdmin = adminDocs;
   if (doc.frontmatter.adminOnly && !showAdmin) notFound();
 
   const parsed = matter(doc.public);

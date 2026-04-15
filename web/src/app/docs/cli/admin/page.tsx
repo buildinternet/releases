@@ -9,8 +9,7 @@ export function generateMetadata() {
   return { title: loadDoc(SLUG).frontmatter.title };
 }
 
-export default async function AdminPage() {
-  const showAdmin = await adminDocs();
-  if (!showAdmin) notFound();
+export default function AdminPage() {
+  if (!adminDocs) notFound();
   return <MarkdownDoc slug={SLUG} />;
 }
