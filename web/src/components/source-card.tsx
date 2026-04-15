@@ -42,36 +42,55 @@ const badgeStyles: Record<CadenceKey, string> = {
 
 function InlineSparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: string }) {
   const max = Math.max(...buckets.map((b) => b.count), 1);
+  const n = buckets.length;
+  const W = 100;
+  const H = 20;
+  const PAD_Y = 2;
+
+  const xFor = (i: number) => (n <= 1 ? W / 2 : (i / (n - 1)) * W);
+  const yFor = (count: number) => H - PAD_Y - (count / max) * (H - PAD_Y * 2);
+
+  const points = buckets.map((b, i) => `${xFor(i).toFixed(2)},${yFor(b.count).toFixed(2)}`).join(" ");
 
   return (
-    <div className="flex items-end gap-px h-6">
-      {buckets.map((bucket, i) => {
-        const h = bucket.count > 0 ? Math.max(2, (bucket.count / max) * 24) : 1;
-        const weekEnd = new Date(bucket.weekStart.getTime() + 6 * DAY_MS);
-
-        return (
-          <HoverCard.Root key={i}>
-            <HoverCard.Trigger
-              className={`flex-1 rounded-sm min-h-px ${bucket.count === 0 ? "bg-stone-100 dark:bg-stone-800" : ""}`}
-              style={{
-                height: `${h}px`,
-                backgroundColor: bucket.count > 0 ? color : undefined,
-                alignSelf: "flex-end",
-              }}
-            />
-            {bucket.count > 0 && (
-              <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
-                <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
-                  {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
-                </div>
-                <div className="text-sm font-semibold" style={{ color }}>
-                  {bucket.count} {bucket.count === 1 ? "release" : "releases"}
-                </div>
-              </HoverCard.Content>
-            )}
-          </HoverCard.Root>
-        );
-      })}
+    <div className="relative h-5">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        preserveAspectRatio="none"
+        className="absolute inset-0 w-full h-full overflow-visible"
+        aria-hidden
+      >
+        <polyline
+          points={points}
+          fill="none"
+          stroke={color}
+          strokeOpacity={0.55}
+          strokeWidth={1.25}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
+      <div className="absolute inset-0 flex">
+        {buckets.map((bucket, i) => {
+          const weekEnd = new Date(bucket.weekStart.getTime() + 6 * DAY_MS);
+          return (
+            <HoverCard.Root key={i}>
+              <HoverCard.Trigger className="flex-1 h-full" />
+              {bucket.count > 0 && (
+                <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
+                  <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
+                    {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
+                  </div>
+                  <div className="text-sm font-semibold" style={{ color }}>
+                    {bucket.count} {bucket.count === 1 ? "release" : "releases"}
+                  </div>
+                </HoverCard.Content>
+              )}
+            </HoverCard.Root>
+          );
+        })}
+      </div>
     </div>
   );
 }
