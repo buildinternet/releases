@@ -4,6 +4,20 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    "./schema": "./src/schema.ts",
+    "./release-upsert": "./src/release-upsert.ts",
+    "./categories": "./src/categories.ts",
+    "./dates": "./src/dates.ts",
+    "./tokens": "./src/tokens.ts",
+    "./changelog-range": "./src/changelog-range.ts",
+    "./changelog-slice": "./src/changelog-slice.ts",
+    "./id": "./src/id.ts",
+    "./slug": "./src/slug.ts",
+    "./hash": "./src/hash.ts"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "js-tiktoken": "^1.0.21",
+    "nanoid": "^5.1.7"
   }
 }
