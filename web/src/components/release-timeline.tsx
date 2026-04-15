@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { type OrgActivity, type OrgHeatmap, type SourceListItem, type OrgDetail } from "@/lib/api";
 import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
-import { InfoTooltip } from "@/components/info-tooltip";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
 import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
+import { RangePills, Stat, fmtCadence, highlightDaysForPreset, type RangePreset } from "@/components/timeline-chrome";
 import { groupSourcesByProduct } from "@/lib/sources";
 
 /** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
@@ -82,13 +82,27 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
 
   const aggregateBuckets = useMemo(() => parseBuckets(activity.aggregateWeekly), [activity.aggregateWeekly]);
 
-  // Default brush to last 3 months (or full range if data span < 91 days)
-  const defaultBrushStart = useMemo(() => {
-    const threeMonthsAgo = new Date(rangeEnd.getTime() - 91 * DAY_MS);
-    return threeMonthsAgo > rangeStart ? threeMonthsAgo : rangeStart;
-  }, [rangeStart, rangeEnd]);
+  const [rangePreset, setRangePreset] = useState<RangePreset>("90d");
 
-  const [brushRange, setBrushRange] = useState<[Date, Date]>([defaultBrushStart, rangeEnd]);
+  const presetStart = useCallback(
+    (preset: RangePreset): Date => {
+      if (preset === "all") return rangeStart;
+      const days = preset === "90d" ? 90 : 30;
+      const start = new Date(rangeEnd.getTime() - days * DAY_MS);
+      return start > rangeStart ? start : rangeStart;
+    },
+    [rangeStart, rangeEnd],
+  );
+
+  const [brushRange, setBrushRange] = useState<[Date, Date]>(() => [presetStart("90d"), rangeEnd]);
+
+  const setPreset = useCallback(
+    (preset: RangePreset) => {
+      setRangePreset(preset);
+      setBrushRange([presetStart(preset), rangeEnd]);
+    },
+    [presetStart, rangeEnd],
+  );
 
   // Sources inherit their product's color so chart and card colors are consistent.
   const productColorMap = useMemo(() => {
@@ -277,16 +291,42 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
 
   if (cardData.length === 0) return null;
 
-  return (
-    <div className="mt-5 mb-2">
-      {heatmap && (
-        <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-      )}
+  const cadenceLabel = fmtCadence(summaryStats.avgPerWeek, summaryStats.avgPerMonth);
+  const heatmapHighlightDays = highlightDaysForPreset(rangePreset);
+  const inHeatmapView = viewMode === "heatmap" && !!heatmap;
 
-      {/* Heatmap view */}
-      {viewMode === "heatmap" && heatmap ? (
-        <ReleaseHeatmap heatmap={heatmap} trackingSince={trackingSince} />
-      ) : (
+  const toolbar = (
+    <div className={`flex items-center flex-wrap gap-2 ${heatmap ? "justify-between" : "justify-end"}`}>
+      {heatmap && <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />}
+      <RangePills value={rangePreset} onChange={setPreset} />
+    </div>
+  );
+
+  const statsRow = (
+    <div className="flex flex-wrap items-baseline gap-x-5 gap-y-1 text-[12px] text-stone-500 dark:text-stone-400">
+      <Stat label="Releases" value={String(summaryStats.totalReleases)} />
+      <Stat
+        label="Avg Interval"
+        value={summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014"}
+      />
+      <Stat label="Avg Cadence" value={cadenceLabel} />
+    </div>
+  );
+
+  const timelineCard = inHeatmapView ? (
+    <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
+      {toolbar}
+      <div className="mt-4">
+        <ReleaseHeatmap heatmap={heatmap!} trackingSince={trackingSince} highlightDays={heatmapHighlightDays} bare />
+      </div>
+      <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">
+        {statsRow}
+      </div>
+    </div>
+  ) : (
+    <div className="mb-2">
+      {toolbar}
+      <div className="mt-3">
         <RangeNavigator.Root
           min={rangeStart}
           max={rangeEnd}
@@ -301,23 +341,14 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
           <RangeNavigator.Overview />
           <RangeNavigator.QuickRanges defaultPreset="3 months" />
         </RangeNavigator.Root>
-      )}
-
-      <div className={`grid grid-cols-1 ${viewMode === "heatmap" ? "sm:grid-cols-2" : "sm:grid-cols-3"} gap-3 mt-4 mb-2`}>
-        {([
-          ...(viewMode !== "heatmap" ? [{ label: "Releases", value: String(summaryStats.totalReleases), tooltip: "Total releases in the selected timeline range." }] : []),
-          { label: "Avg Interval", value: summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014", tooltip: "Average time between releases in the selected range." },
-          { label: "Avg Cadence", value: summaryStats.avgPerMonth >= 1 ? `${Math.round(summaryStats.avgPerMonth)}/mo` : `${Math.round(summaryStats.avgPerWeek)}/wk`, tooltip: "Average release frequency in the selected range." },
-        ]).map((stat) => (
-          <div key={stat.label} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-4 py-3">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1 flex items-center gap-1">
-              {stat.label}
-              <InfoTooltip text={stat.tooltip} />
-            </div>
-            <div className="text-xl font-bold text-stone-900 dark:text-stone-100 tabular-nums">{stat.value}</div>
-          </div>
-        ))}
       </div>
+      <div className="mt-3 mb-5">{statsRow}</div>
+    </div>
+  );
+
+  return (
+    <div className="mt-5 mb-2">
+      {timelineCard}
 
       <div className="mt-5">
         {products.length > 0 ? (

@@ -92,16 +92,6 @@ export default async function OrgPage({
     {
       items: [
         ...(org.domain ? [{ label: "Domain", value: org.domain }] : []),
-      ],
-    },
-    {
-      items: [
-        { label: "Last 30 Days", value: org.releasesLast30Days, large: true, subtitle: "releases", tooltip: "Total releases published in the last 30 days across all sources." },
-        { label: "Avg per Week", value: Math.round(org.avgReleasesPerWeek), large: true, subtitle: "releases", tooltip: "Average releases per week over the last 90 days, or since tracking began if shorter." },
-      ],
-    },
-    {
-      items: [
         { label: "Tracking Since", value: formatDate(org.trackingSince) },
       ],
     },

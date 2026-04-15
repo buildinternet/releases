@@ -6,6 +6,7 @@ import { DAY_MS, WEEK_MS, parseBuckets, fmtVersion } from "@/lib/cadence";
 import { RangeNavigator } from "@/components/range-navigator";
 import { ReleaseHeatmap, type HeatmapData } from "@/components/release-heatmap";
 import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
+import { RangePills, Stat, fmtCadence, highlightDaysForPreset, type RangePreset } from "@/components/timeline-chrome";
 
 interface SourceTimelineProps {
   activity: SourceActivity;
@@ -38,7 +39,6 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
     return result;
   }, [rawBuckets, rangeStart, rangeEnd]);
 
-  type RangePreset = "all" | "90d" | "30d";
   const [rangePreset, setRangePreset] = useState<RangePreset>("90d");
 
   const presetStart = useCallback(
@@ -97,22 +97,13 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
 
   if (buckets.length === 0) return null;
 
-  const cadenceLabel =
-    summaryStats.avgPerMonth >= 1
-      ? `${Math.round(summaryStats.avgPerMonth)}/mo`
-      : `${Math.round(summaryStats.avgPerWeek)}/wk`;
-
-  const heatmapHighlightDays = rangePreset === "30d" ? 30 : rangePreset === "90d" ? 90 : null;
-
+  const cadenceLabel = fmtCadence(summaryStats.avgPerWeek, summaryStats.avgPerMonth);
+  const heatmapHighlightDays = highlightDaysForPreset(rangePreset);
   const inHeatmapView = viewMode === "heatmap" && !!heatmap;
 
   const toolbar = (
-    <div className="flex items-center justify-between flex-wrap gap-2">
-      {heatmap ? (
-        <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />
-      ) : (
-        <span />
-      )}
+    <div className={`flex items-center flex-wrap gap-2 ${heatmap ? "justify-between" : "justify-end"}`}>
+      {heatmap && <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />}
       <RangePills value={rangePreset} onChange={setPreset} />
     </div>
   );
@@ -175,44 +166,3 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
   );
 }
 
-function Stat({ label, value, title }: { label: string; value: string; title?: string }) {
-  return (
-    <span className="inline-flex items-baseline gap-1.5" title={title}>
-      <span className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500">{label}</span>
-      <span className="text-stone-700 dark:text-stone-200 font-medium tabular-nums">{value}</span>
-    </span>
-  );
-}
-
-const pillBase =
-  "px-2.5 py-1 text-[11px] font-medium rounded transition-all";
-const pillActive = "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm";
-const pillInactive = "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300";
-
-function RangePills({
-  value,
-  onChange,
-}: {
-  value: "all" | "90d" | "30d";
-  onChange: (v: "all" | "90d" | "30d") => void;
-}) {
-  const opts: Array<{ key: "all" | "90d" | "30d"; label: string }> = [
-    { key: "all", label: "All" },
-    { key: "90d", label: "90d" },
-    { key: "30d", label: "30d" },
-  ];
-  return (
-    <div className="inline-flex bg-stone-100 dark:bg-stone-800 border border-stone-200 dark:border-stone-700 rounded-md p-0.5">
-      {opts.map((o) => (
-        <button
-          key={o.key}
-          type="button"
-          className={`${pillBase} ${value === o.key ? pillActive : pillInactive}`}
-          onClick={() => onChange(o.key)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
