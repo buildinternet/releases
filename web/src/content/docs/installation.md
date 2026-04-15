@@ -81,3 +81,14 @@ releases admin mcp serve
 <!-- admin:end -->
 
 See the [MCP Server](/docs/api/mcp) docs for the general endpoint, client-specific setup, and stdio fallback configuration.
+
+## Telemetry
+
+The CLI and local MCP server record anonymous usage events (command name, CLI version, OS/arch, exit code, duration) to help us understand what's used. No arguments, flag values, queries, or content are ever sent. Opt out any time:
+
+```bash
+releases telemetry disable              # persistent
+RELEASED_TELEMETRY_DISABLED=1 releases … # per-invocation
+```
+
+See [Privacy & Telemetry](/docs/privacy) for the full list of what is and isn't collected.

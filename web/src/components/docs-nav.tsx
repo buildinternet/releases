@@ -27,6 +27,10 @@ const publicSections: Section[] = [
       { label: "MCP Server", href: "/docs/api/mcp" },
     ],
   },
+  {
+    title: "About",
+    items: [{ label: "Privacy & Telemetry", href: "/docs/privacy" }],
+  },
 ];
 
 const adminSections: Section[] = [

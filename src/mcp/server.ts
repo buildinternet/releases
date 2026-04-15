@@ -20,6 +20,7 @@ import { daysAgoIso } from "../lib/dates.js";
 import { toSlug } from "../lib/slug.js";
 import { logger } from "../lib/logger.js";
 import { isAdminMode } from "../lib/mode.js";
+import { recordEvent } from "../lib/telemetry.js";
 import { getAdapter, contentHash } from "../adapters/resolve.js";
 import { isGitHubUrl } from "../cli/commands/add.js";
 
@@ -41,6 +42,34 @@ const server = new McpServer({
 //   `unifiedSearchLocal` helper.
 // If you add Vectorize support to local mode, update both tools to use
 // the shared hybrid helper and delete this note.
+
+// Wrap every tool handler with fire-and-forget telemetry.
+// Must run before any registerTool() calls below.
+{
+  const original = server.registerTool.bind(server);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (server as any).registerTool = (name: string, config: unknown, handler: (...args: unknown[]) => unknown) => {
+    const wrapped = async (...args: unknown[]) => {
+      const start = Date.now();
+      let exitCode = 0;
+      try {
+        return await handler(...args);
+      } catch (err) {
+        exitCode = 1;
+        throw err;
+      } finally {
+        void recordEvent({
+          surface: "mcp",
+          command: `tool ${name}`,
+          exitCode,
+          durationMs: Date.now() - start,
+        });
+      }
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return original(name as any, config as any, wrapped as any);
+  };
+}
 
 // ── search_releases ──────────────────────────────────────────────────
 server.registerTool("search_releases", {

@@ -269,6 +269,27 @@ releases admin mcp serve
 
 ---
 
+## Telemetry
+
+The CLI and local MCP server record anonymous usage events so we can see which commands and tools are used. A stable anonymous ID is generated on first run and stored at `~/.releases/telemetry-id`. It is not tied to any account, email, or hostname.
+
+**Collected:** command name (e.g. `search`, `admin source fetch`), CLI version, OS/arch, runtime, exit code, duration.
+
+**Never collected:** arguments, flag values, paths, slugs, search queries, or any content you type.
+
+**Opt out** at any time:
+
+```bash
+releases telemetry disable              # persistent opt-out
+releases telemetry status               # show current state + anon ID
+RELEASED_TELEMETRY_DISABLED=1 releases …  # one-off or CI opt-out
+DO_NOT_TRACK=1 releases …                 # also respected
+```
+
+Events are posted best-effort to `POST /v1/telemetry` with a 1.5s timeout and silently dropped on failure, so telemetry never blocks commands or produces errors.
+
+---
+
 ## Admin CLI
 
 Operator workflows require an API key (`RELEASED_API_KEY`) and now live under `releases admin ...`.

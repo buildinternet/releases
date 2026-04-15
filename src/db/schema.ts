@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId, newSourceChangelogChunkId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId, newSourceChangelogChunkId, newTelemetryEventId } from "../lib/id.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
@@ -217,6 +217,50 @@ export type Tag = typeof tags.$inferSelect;
 export type NewTag = typeof tags.$inferInsert;
 export type FetchLog = typeof fetchLog.$inferSelect;
 export type NewFetchLog = typeof fetchLog.$inferInsert;
+
+export const TELEMETRY_CLIENT_KINDS = [
+  "external",
+  "internal-agent",
+  "internal-sandbox",
+  "internal-ci",
+  "internal-dev",
+  "mcp-stdio",
+] as const;
+export type TelemetryClientKind = (typeof TELEMETRY_CLIENT_KINDS)[number];
+
+export const TELEMETRY_SURFACES = ["cli", "mcp"] as const;
+export type TelemetrySurface = (typeof TELEMETRY_SURFACES)[number];
+
+export const telemetryEvents = sqliteTable(
+  "telemetry_events",
+  {
+    id: text("id").primaryKey().$defaultFn(newTelemetryEventId),
+    anonId: text("anon_id").notNull(),
+    timestamp: integer("timestamp").notNull(),
+    surface: text("surface").notNull(),
+    clientKind: text("client_kind").notNull().default("external"),
+    sessionId: text("session_id"),
+    agentName: text("agent_name"),
+    model: text("model"),
+    command: text("command").notNull(),
+    exitCode: integer("exit_code"),
+    durationMs: integer("duration_ms"),
+    cliVersion: text("cli_version").notNull(),
+    os: text("os"),
+    arch: text("arch"),
+    runtime: text("runtime"),
+  },
+  (table) => [
+    index("idx_telemetry_timestamp").on(table.timestamp),
+    index("idx_telemetry_kind_timestamp").on(table.clientKind, table.timestamp),
+    index("idx_telemetry_command_timestamp").on(table.command, table.timestamp),
+    index("idx_telemetry_anon_timestamp").on(table.anonId, table.timestamp),
+    index("idx_telemetry_session").on(table.sessionId),
+  ],
+);
+
+export type TelemetryEvent = typeof telemetryEvents.$inferSelect;
+export type NewTelemetryEvent = typeof telemetryEvents.$inferInsert;
 
 export const ignoredUrls = sqliteTable("ignored_urls", {
   id: text("id").primaryKey().$defaultFn(newIgnoredUrlId),
