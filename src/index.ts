@@ -3,6 +3,7 @@ import { program } from "./cli/program.js";
 import { runMigrations } from "./db/migrate.js";
 import { isRemoteMode, validateRemoteMode } from "./lib/mode.js";
 import { logger } from "./lib/logger.js";
+import { recordEvent, maybeShowFirstRunNotice } from "./lib/telemetry.js";
 
 const LEGACY_COMMAND_ALIASES: Record<string, string[]> = {
   add: ["admin", "source", "add"],
@@ -69,4 +70,32 @@ if (!isRemoteMode()) {
   runMigrations();
 }
 
-program.parse(argv);
+function telemetryCommandName(argv: string[]): string {
+  const args = argv.slice(2).filter((a) => !a.startsWith("-"));
+  const name = args.slice(0, 3).join(" ");
+  return name || "(root)";
+}
+
+const telemetryStart = Date.now();
+const telemetryCmd = telemetryCommandName(argv);
+const skipTelemetry = argv[2] === "telemetry";
+
+if (!skipTelemetry) maybeShowFirstRunNotice();
+
+async function flushTelemetry(exitCode: number): Promise<void> {
+  if (skipTelemetry) return;
+  await recordEvent({
+    surface: "cli",
+    command: telemetryCmd,
+    exitCode,
+    durationMs: Date.now() - telemetryStart,
+  });
+}
+
+try {
+  await program.parseAsync(argv);
+  await flushTelemetry(typeof process.exitCode === "number" ? process.exitCode : 0);
+} catch (err) {
+  await flushTelemetry(1);
+  throw err;
+}

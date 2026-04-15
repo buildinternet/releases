@@ -32,10 +32,12 @@ import { registerRefreshChangelogCommand, registerChangelogCommand } from "./com
 import { registerPlaybookCommand } from "./commands/playbook.js";
 import { registerShowCommand } from "./commands/show.js";
 import { registerEmbedCommand } from "./commands/admin/embed.js";
+import { registerTelemetryCommand } from "./commands/telemetry.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
+import { VERSION } from "./version.js";
 
-export const VERSION = "0.10.0";
+export { VERSION };
 
 function adminKeyError(name = "admin"): never {
   console.error(
@@ -147,6 +149,7 @@ registerCompareCommand(program);
 registerStatsCommand(program);
 registerListCommand(program);
 registerShowCommand(program);
+registerTelemetryCommand(program);
 
 const admin = program
   .command("admin")

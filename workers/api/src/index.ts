@@ -24,6 +24,7 @@ import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedRoutes } from "./routes/admin-embed.js";
+import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -136,6 +137,7 @@ v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedRoutes);
+v1.route("/", telemetryRoutes);
 
 // Static endpoint — categories are defined in code, not DB
 v1.get("/categories", (c) => {
