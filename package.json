@@ -51,7 +51,8 @@
   },
   "workspaces": [
     "workers/api",
-    "npm/*"
+    "npm/*",
+    "packages/*"
   ],
   "keywords": [
     "changelog",
