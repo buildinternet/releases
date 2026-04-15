@@ -34,14 +34,25 @@ export function ChangelogSkeleton() {
 export async function ChangelogView({
   sourceSlug,
   path,
+  startOffset,
 }: {
   sourceSlug: string;
   path?: string;
+  /**
+   * Byte offset into the file where the initial slice should start.
+   * Used by search deep-links (`?tab=changelog&offset=N#chunk`) to jump
+   * directly to a matched chunk. The range API snaps forward to the next
+   * heading, so a mid-section offset still lands the user on a clean
+   * section header. Defaults to 0 (full-file start).
+   */
+  startOffset?: number;
 }) {
+  const hasDeepLink = typeof startOffset === "number" && startOffset > 0;
   let file;
   try {
     file = await api.sourceChangelog(sourceSlug, {
       path,
+      offset: startOffset,
       limit: DEFAULT_CHANGELOG_SLICE_LIMIT,
     });
   } catch {
@@ -56,7 +67,12 @@ export async function ChangelogView({
     );
   }
 
-  const initial = (
+  // When the view was deep-linked from a search chunk hit, wrap the
+  // initial slice in an anchor (`#chunk`) so the browser's hash-target
+  // scrolling lands the user on it automatically. The range API already
+  // snapped the offset forward to the nearest heading, so the first
+  // element in `file.content` is the start of the matched section.
+  const markdown = (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
       rehypePlugins={[rehypeShikiPlugin]}
@@ -64,6 +80,13 @@ export async function ChangelogView({
     >
       {file.content}
     </ReactMarkdown>
+  );
+  const initial = hasDeepLink ? (
+    <div id="chunk" style={{ scrollMarginTop: "5rem" }}>
+      {markdown}
+    </div>
+  ) : (
+    markdown
   );
 
   const files = file.files ?? [];
@@ -95,6 +118,24 @@ export async function ChangelogView({
           This file exceeds 1MB and has been truncated{file.truncatedAt !== null ? ` at byte ${file.truncatedAt.toLocaleString()}` : ""}. The tail of the upstream file is not shown.
         </div>
       )}
+      {hasDeepLink && (() => {
+        // Build a path back to the top of the changelog so users who land
+        // via a chunk deep-link can rewind to the preamble. Preserves the
+        // active file path for multi-file sources.
+        const topQs = new URLSearchParams({ tab: "changelog" });
+        if (file.path) topQs.set("path", file.path);
+        return (
+          <div className="mb-3 flex items-center justify-between gap-2 rounded border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/60 px-3 py-2 text-[12px] text-stone-600 dark:text-stone-400">
+            <span>Showing section starting at byte {file.offset.toLocaleString()} of {file.totalChars.toLocaleString()}.</span>
+            <a
+              href={`?${topQs.toString()}`}
+              className="text-stone-600 dark:text-stone-300 underline hover:text-stone-900 dark:hover:text-stone-100"
+            >
+              Jump to top
+            </a>
+          </div>
+        );
+      })()}
       <ChangelogStream
         // Keying by path resets stream state on file switch so chunks from a
         // prior file don't bleed into the new one.

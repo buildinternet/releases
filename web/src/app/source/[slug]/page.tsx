@@ -36,11 +36,18 @@ export default async function IndependentSourcePage({
   searchParams,
 }: {
   params: Promise<{ slug: string }>;
-  searchParams: Promise<{ page?: string; tab?: string; path?: string }>;
+  searchParams: Promise<{ page?: string; tab?: string; path?: string; offset?: string }>;
 }) {
   const { slug } = await params;
-  const { page: pageParam, tab, path: changelogPath } = await searchParams;
+  const { page: pageParam, tab, path: changelogPath, offset: offsetParam } = await searchParams;
   const page = parseInt(pageParam ?? "1", 10) || 1;
+  // `offset` arrives from search chunk deep-links. Parse defensively —
+  // a malformed query string should fall back to the full-file view.
+  const changelogOffset = (() => {
+    if (!offsetParam) return undefined;
+    const n = parseInt(offsetParam, 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  })();
 
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -66,7 +73,16 @@ export default async function IndependentSourcePage({
   }
 
   if (source.org) {
-    redirect(`/${source.org.slug}/${source.slug}`);
+    // Preserve search-relevant query params (tab/path/offset) across the
+    // canonical redirect so search chunk deep-links keep working when the
+    // source happens to live under an org. Drop `page` since the target
+    // page handles pagination the same way.
+    const forward = new URLSearchParams();
+    if (tab) forward.set("tab", tab);
+    if (changelogPath) forward.set("path", changelogPath);
+    if (offsetParam) forward.set("offset", offsetParam);
+    const qs = forward.toString();
+    redirect(`/${source.org.slug}/${source.slug}${qs ? `?${qs}` : ""}`);
   }
 
   const sidebarSections = [
@@ -116,7 +132,13 @@ export default async function IndependentSourcePage({
               hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
               hasChangelog={!!source.hasChangelogFile}
             />
-            <SourceMainContent source={source} tab={tab} basePath={`/source/${slug}`} changelogPath={changelogPath} />
+            <SourceMainContent
+              source={source}
+              tab={tab}
+              basePath={`/source/${slug}`}
+              changelogPath={changelogPath}
+              changelogOffset={changelogOffset}
+            />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/source/${slug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>
