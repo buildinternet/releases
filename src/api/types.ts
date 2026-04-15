@@ -288,6 +288,12 @@ export interface UnifiedSearchResponse {
   products: SearchProductHit[];
   sources: SearchSourceHit[];
   releases: SearchReleaseHit[];
+  /** Mode actually used by the server. Present for semantic/hybrid responses. */
+  mode?: "lexical" | "semantic" | "hybrid";
+  /** True when a hybrid/semantic request fell back to lexical. */
+  degraded?: boolean;
+  /** Human-readable reason for degradation (e.g., missing Vectorize binding). */
+  degradedReason?: string;
 }
 
 // ── Overview Pages ──

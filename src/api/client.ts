@@ -209,10 +209,11 @@ export async function checkContentHash(source: Source, contentHash: string): Pro
 export async function unifiedSearch(
   query: string,
   limit: number,
-  opts?: { org?: string },
+  opts?: { org?: string; mode?: "lexical" | "semantic" | "hybrid" },
 ): Promise<UnifiedSearchResponse> {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (opts?.org) params.set("org", opts.org);
+  if (opts?.mode) params.set("mode", opts.mode);
   return apiFetch<UnifiedSearchResponse>(`/v1/search?${params}`);
 }
 
