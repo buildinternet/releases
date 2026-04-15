@@ -113,6 +113,9 @@ sourceRoutes.get("/sources", async (c) => {
     lastFetchedAt: src.last_fetched_at ?? null,
     fetchPriority: src.fetch_priority ?? null,
     changeDetectedAt: src.change_detected_at ?? null,
+    consecutiveNoChange: src.consecutive_no_change ?? 0,
+    consecutiveErrors: src.consecutive_errors ?? 0,
+    nextFetchAfter: src.next_fetch_after ?? null,
   }));
 
   return c.json(result);

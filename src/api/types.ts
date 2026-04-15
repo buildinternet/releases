@@ -86,6 +86,11 @@ export interface SourceListItem {
   isPrimary?: boolean;
   isHidden?: boolean;
   fetchPriority?: "normal" | "low" | "paused" | null;
+  lastFetchedAt?: string | null;
+  changeDetectedAt?: string | null;
+  consecutiveNoChange?: number | null;
+  consecutiveErrors?: number | null;
+  nextFetchAfter?: string | null;
   metadata?: string | null;
   productName?: string | null;
   productSlug?: string | null;
