@@ -14,5 +14,5 @@
     }
   },
   "include": ["src/**/*.ts"],
-  "files": ["../../src/db/schema.ts", "../../src/lib/id.ts", "../../src/lib/dates.ts", "../../src/api/types.ts"]
+  "files": ["../../src/api/types.ts"]
 }
