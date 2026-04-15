@@ -4,8 +4,8 @@ import { getDb } from "./connection.js";
 import {
   sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages, sourceChangelogFiles,
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
-  type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
-  type KnowledgePage, type NewKnowledgePage, type ReleaseType, type SourceChangelogFile,
+  type ReleaseSummary, type NewReleaseSummary, type Product, type Tag, type DomainAlias,
+  type KnowledgePage, type SourceChangelogFile,
 } from "@releases/core/schema";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
