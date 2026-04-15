@@ -8,6 +8,7 @@ import { toSlug } from "@releases/lib/slug.js";
 import { buildChangelogResponse, selectChangelogFile } from "@releases/lib/changelog-slice.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
+import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
@@ -503,6 +504,74 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
       files,
     ),
   );
+});
+
+/**
+ * Admin-only: list changelog file rows whose content length exceeds
+ * `minBytes` (default 256KB — the live-encode cap in src/lib/tokens.ts).
+ * Used by scripts/backfill-changelog-tokens.ts to find rows whose
+ * cached `tokens` value is an estimate rather than an exact count.
+ */
+sourceRoutes.get("/sources/changelog-files/oversized", authMiddleware, async (c) => {
+  const db = createDb(c.env.DB);
+  const minBytes = parseInt(c.req.query("minBytes") ?? String(256 * 1024), 10);
+  const rows = await db
+    .select({
+      sourceSlug: sources.slug,
+      sourceName: sources.name,
+      path: sourceChangelogFiles.path,
+      filename: sourceChangelogFiles.filename,
+      bytes: sourceChangelogFiles.bytes,
+      tokens: sourceChangelogFiles.tokens,
+      fetchedAt: sourceChangelogFiles.fetchedAt,
+    })
+    .from(sourceChangelogFiles)
+    .innerJoin(sources, eq(sources.id, sourceChangelogFiles.sourceId))
+    .where(sql`length(${sourceChangelogFiles.content}) > ${minBytes}`)
+    .orderBy(sources.slug, sourceChangelogFiles.path);
+  return c.json(rows);
+});
+
+/**
+ * Admin-only: write an exact cached token count for a single changelog
+ * file. Used by scripts/backfill-changelog-tokens.ts to replace the
+ * chars/4 estimate on rows that exceed the live-encode cap. Targets the
+ * file identified by `path` (defaults to the row selected by
+ * `selectChangelogFile` when omitted).
+ */
+sourceRoutes.patch("/sources/:slug/changelog/tokens", async (c) => {
+  const slug = c.req.param("slug");
+  const db = createDb(c.env.DB);
+  const body = await c.req.json<{ tokens: number; path?: string }>();
+  if (!Number.isFinite(body.tokens) || body.tokens < 0) {
+    return c.json({ error: "invalid_tokens", message: "tokens must be a non-negative number" }, 400);
+  }
+
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  const allRows = await db
+    .select()
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.sourceId, src.id))
+    .orderBy(sourceChangelogFiles.path);
+  if (allRows.length === 0) {
+    return c.json({ error: "not_found", message: "Changelog file not found" }, 404);
+  }
+  const selected = selectChangelogFile(allRows, body.path ?? null);
+  if (!selected) {
+    return c.json(
+      { error: "not_found", message: `Changelog file not found for path: ${body.path}` },
+      404,
+    );
+  }
+  const oldTokens = selected.tokens;
+  const newTokens = Math.floor(body.tokens);
+  await db
+    .update(sourceChangelogFiles)
+    .set({ tokens: newTokens })
+    .where(eq(sourceChangelogFiles.id, selected.id));
+  return c.json({ path: selected.path, oldTokens, tokens: newTokens });
 });
 
 sourceRoutes.get("/sources/:slug", async (c) => {
