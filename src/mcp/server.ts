@@ -21,7 +21,8 @@ import { toSlug } from "@releases/core/slug";
 import { logger } from "../lib/logger.js";
 import { isAdminMode } from "../lib/mode.js";
 import { recordEvent } from "../lib/telemetry.js";
-import { getAdapter, contentHash } from "../adapters/resolve.js";
+import { getAdapter } from "../adapters/resolve.js";
+import { contentHash } from "@releases/adapters/content-hash";
 import { isGitHubUrl } from "../cli/commands/add.js";
 
 function textResult(text: string) {

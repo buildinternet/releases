@@ -1,5 +1,4 @@
-import { createHash } from "crypto";
-import type { Adapter, RawRelease } from "@releases/adapters/types";
+import type { Adapter } from "@releases/adapters/types";
 import { github } from "./github.js";
 import { scrape } from "./scrape.js";
 import { feed } from "./feed.js";
@@ -15,7 +14,3 @@ export function getAdapter(type: string): Adapter | null {
   }
 }
 
-export function contentHash(raw: RawRelease): string {
-  const input = raw.title + (raw.version || "") + (raw.publishedAt?.toISOString() || "") + raw.content;
-  return createHash("sha256").update(input).digest("hex");
-}
