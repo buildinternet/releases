@@ -20,9 +20,22 @@ export async function RelatedReleases({ anchorReleaseId, scope, heading, limit =
   let items: RelatedReleaseItem[] = [];
   try {
     const res = await api.relatedReleases(anchorReleaseId, scope, limit);
-    if (res.degraded) return null;
+    if (res.degraded) {
+      // Not an error — just no neighbors yet. Log once at info level so
+      // we can spot unexpectedly-common degradations in the web logs.
+      console.error(
+        `[related-releases] degraded scope=${scope} anchor=${anchorReleaseId} reason=${res.degradedReason ?? "unknown"}`,
+      );
+      return null;
+    }
     items = res.items;
-  } catch {
+  } catch (err) {
+    // Swallow to hide the rail — but log to stderr so prod issues are
+    // debuggable from the Next.js server logs.
+    console.error(
+      `[related-releases] fetch failed scope=${scope} anchor=${anchorReleaseId}:`,
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
   if (items.length === 0) return null;
@@ -47,9 +60,6 @@ function RelatedReleaseCard({ item }: { item: RelatedReleaseItem }) {
   const href = `/release/${item.id}`;
   const heading = item.version ?? item.title;
   const showSubtitle = !!item.version && item.title && item.title !== item.version;
-  const sourceHref = item.source.orgSlug
-    ? `/${item.source.orgSlug}/${item.source.slug}`
-    : `/source/${item.source.slug}`;
 
   return (
     <Link
@@ -69,20 +79,17 @@ function RelatedReleaseCard({ item }: { item: RelatedReleaseItem }) {
       {showSubtitle && (
         <div className="text-[12px] text-stone-600 dark:text-stone-400 truncate mt-0.5">{item.title}</div>
       )}
+      {/*
+        The source name is shown as plain text (not a nested link) because
+        the outer card is already an <a> and HTML disallows nested anchors.
+        Users can navigate to the source from the release detail page.
+      */}
       <div className="text-[11px] text-stone-400 dark:text-stone-500 mt-1 truncate">
         via{" "}
         <span className="text-stone-500 dark:text-stone-400">
           {item.source.orgName ? `${item.source.orgName} · ${item.source.name}` : item.source.name}
         </span>
       </div>
-      {/*
-        Source link is nested via a stop-propagation click so the outer card
-        anchor still takes the user to the release detail page in the common
-        case.
-      */}
-      <span className="sr-only">
-        Source: <Link href={sourceHref}>{item.source.name}</Link>
-      </span>
     </Link>
   );
 }

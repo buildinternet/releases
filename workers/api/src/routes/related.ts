@@ -95,6 +95,7 @@ relatedRoutes.get("/related/releases", async (c) => {
 
   const index = c.env.RELEASES_INDEX as unknown as ReadOnlyVectorizeIndex | undefined;
   if (!index || typeof index.getByIds !== "function") {
+    console.error("[related/releases] RELEASES_INDEX binding unavailable or missing getByIds");
     return c.json(degraded("RELEASES_INDEX unavailable"));
   }
 
@@ -120,6 +121,7 @@ relatedRoutes.get("/related/releases", async (c) => {
     const rows = await index.getByIds([anchor.id]);
     anchorVector = rows[0]?.values ?? null;
   } catch (err) {
+    console.error(`[related/releases] getByIds failed for ${anchor.id}:`, err);
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
   if (!anchorVector || anchorVector.length === 0) {
@@ -142,6 +144,7 @@ relatedRoutes.get("/related/releases", async (c) => {
     });
     matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
   } catch (err) {
+    console.error(`[related/releases] query failed for ${anchor.id} scope=${scope}:`, err);
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
 
@@ -239,6 +242,7 @@ relatedRoutes.get("/related/sources", async (c) => {
 
   const index = c.env.ENTITIES_INDEX as unknown as ReadOnlyVectorizeIndex | undefined;
   if (!index || typeof index.getByIds !== "function") {
+    console.error("[related/sources] ENTITIES_INDEX binding unavailable or missing getByIds");
     return c.json(degraded("ENTITIES_INDEX unavailable"));
   }
 
@@ -262,6 +266,7 @@ relatedRoutes.get("/related/sources", async (c) => {
     const rows = await index.getByIds([anchor.id]);
     anchorVector = rows[0]?.values ?? null;
   } catch (err) {
+    console.error(`[related/sources] getByIds failed for ${anchor.id}:`, err);
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
   if (!anchorVector || anchorVector.length === 0) {
@@ -284,6 +289,7 @@ relatedRoutes.get("/related/sources", async (c) => {
     });
     matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
   } catch (err) {
+    console.error(`[related/sources] query failed for ${anchor.id} scope=${scope}:`, err);
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
 

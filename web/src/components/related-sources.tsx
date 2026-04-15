@@ -28,9 +28,18 @@ export async function RelatedSources({
   let items: RelatedSourceItem[] = [];
   try {
     const res = await api.relatedSources(anchor, scope, limit + (excludeOrgSlug ? 4 : 0));
-    if (res.degraded) return null;
+    if (res.degraded) {
+      console.error(
+        `[related-sources] degraded scope=${scope} anchor=${anchor} reason=${res.degradedReason ?? "unknown"}`,
+      );
+      return null;
+    }
     items = res.items;
-  } catch {
+  } catch (err) {
+    console.error(
+      `[related-sources] fetch failed scope=${scope} anchor=${anchor}:`,
+      err instanceof Error ? err.message : err,
+    );
     return null;
   }
   if (excludeOrgSlug) {
