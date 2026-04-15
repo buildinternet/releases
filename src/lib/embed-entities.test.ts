@@ -119,6 +119,27 @@ describe("embedAndUpsertEntities", () => {
     expect(vec.upserted[2].metadata).toEqual({ type: "source", category: "ai" });
   });
 
+  test("orgId is written to Vectorize metadata as org_id when supplied", async () => {
+    const { fetchImpl } = fakeVoyageFetch();
+    const vec = fakeVectorize();
+    await embedAndUpsertEntities({
+      entities: [
+        { id: "org_acme", kind: "org", name: "Acme", orgId: "org_acme" },
+        { id: "prod_widget", kind: "product", name: "Widget", orgId: "org_acme" },
+        { id: "src_blog", kind: "source", name: "Acme Blog", orgId: "org_acme" },
+        // Independent source (no parent org) — should omit org_id entirely.
+        { id: "src_orphan", kind: "source", name: "Orphan" },
+      ],
+      vectorIndex: vec.index,
+      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
+    });
+    // org_id is set on the first three, absent on the last.
+    expect(vec.upserted[0].metadata).toEqual({ type: "org", org_id: "org_acme" });
+    expect(vec.upserted[1].metadata).toEqual({ type: "product", org_id: "org_acme" });
+    expect(vec.upserted[2].metadata).toEqual({ type: "source", org_id: "org_acme" });
+    expect(vec.upserted[3].metadata).toEqual({ type: "source" });
+  });
+
   test("onPersisted called with all entity ids on success", async () => {
     const { fetchImpl } = fakeVoyageFetch();
     const vec = fakeVectorize();

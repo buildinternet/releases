@@ -53,6 +53,34 @@ for idx in "${INDEXES[@]}"; do
   create_index "${idx}"
 done
 
+# Metadata indexes required for metadata.filter queries (e.g. scope=org
+# filtering on the /v1/related endpoints). Vectorize requires each filterable
+# property to be registered via `create-metadata-index`; this is idempotent.
+create_metadata_index() {
+  local index="$1"
+  local property="$2"
+  local kind="$3"
+  echo ">> Creating metadata index: ${index}.${property} (${kind})"
+  if output=$(wrangler vectorize create-metadata-index "${index}" \
+        --property-name="${property}" \
+        --type="${kind}" 2>&1); then
+    echo "${output}"
+  else
+    if echo "${output}" | grep -qiE "already exists|metadata_index_already_exists"; then
+      echo "   (already exists — skipping)"
+    else
+      echo "${output}" >&2
+      echo "!! Failed to create metadata index ${index}.${property}" >&2
+      return 1
+    fi
+  fi
+}
+
+create_metadata_index "releases-v1" "org_id" "string"
+create_metadata_index "releases-v1" "source_id" "string"
+create_metadata_index "entities-v1" "org_id" "string"
+create_metadata_index "entities-v1" "type" "string"
+
 echo ""
 echo "Done. VOYAGE_API_KEY is read from Cloudflare's Secrets Store —"
 echo "confirm it exists in the dashboard (Workers → Secrets Store) and that"

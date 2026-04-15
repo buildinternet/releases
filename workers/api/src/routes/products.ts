@@ -321,6 +321,7 @@ async function embedProductSideEffect(
         description: product.description,
         category: product.category,
         domain,
+        orgId: product.orgId ?? null,
       }],
       // Cast: workers-types VectorizeIndex has a stricter metadata value
       // type than the shared runtime-agnostic interface.

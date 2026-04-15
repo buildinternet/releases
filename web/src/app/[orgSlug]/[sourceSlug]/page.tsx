@@ -8,12 +8,72 @@ import { SourceTypeIcon } from "@/components/source-type-icon";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { SourceMainContent } from "@/components/source-main-content";
+import { RelatedReleases } from "@/components/related-releases";
+import { RelatedSources } from "@/components/related-sources";
+import { Suspense } from "react";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
 const getSource = cache((slug: string, page = 1) => api.sourceDetail(slug, page));
+
+/**
+ * Stacks related rails under the release list:
+ *   1. Related releases — within the same org (when the source has an org).
+ *   2. Related releases — global, minus anything we already rendered.
+ *   3. Related sources — within the same org (siblings).
+ *   4. Related sources — global, minus the current org.
+ *
+ * Each rail server-renders inside a Suspense boundary so a slow Vectorize
+ * roundtrip doesn't hold the rest of the page hostage. Empty / degraded
+ * rails collapse to null inside the component.
+ */
+function RelatedRails({
+  anchorReleaseId,
+  sourceSlug,
+  orgSlug,
+}: {
+  anchorReleaseId: string | null;
+  sourceSlug: string;
+  orgSlug: string | null;
+}) {
+  return (
+    <>
+      {anchorReleaseId && orgSlug && (
+        <Suspense fallback={null}>
+          <RelatedReleases
+            anchorReleaseId={anchorReleaseId}
+            scope="org"
+            heading="More from this team"
+          />
+        </Suspense>
+      )}
+      {anchorReleaseId && (
+        <Suspense fallback={null}>
+          <RelatedReleases
+            anchorReleaseId={anchorReleaseId}
+            scope="global"
+            heading="Similar releases"
+          />
+        </Suspense>
+      )}
+      {orgSlug && (
+        <Suspense fallback={null}>
+          <RelatedSources anchor={sourceSlug} scope="org" heading="Other sources from this team" />
+        </Suspense>
+      )}
+      <Suspense fallback={null}>
+        <RelatedSources
+          anchor={sourceSlug}
+          scope="global"
+          heading="Similar sources"
+          excludeOrgSlug={orgSlug}
+        />
+      </Suspense>
+    </>
+  );
+}
 
 export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string; sourceSlug: string }> }): Promise<Metadata> {
   const { orgSlug, sourceSlug } = await params;
@@ -135,6 +195,13 @@ export default async function SourcePage({
               changelogPath={changelogPath}
               changelogOffset={changelogOffset}
             />
+            {(!tab || tab === "releases") && (
+              <RelatedRails
+                anchorReleaseId={source.releases[0]?.id ?? null}
+                sourceSlug={source.slug}
+                orgSlug={source.org?.slug ?? null}
+              />
+            )}
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>

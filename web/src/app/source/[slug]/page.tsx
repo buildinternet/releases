@@ -8,6 +8,9 @@ import { SourceTypeIcon } from "@/components/source-type-icon";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { SourceMainContent } from "@/components/source-main-content";
+import { RelatedReleases } from "@/components/related-releases";
+import { RelatedSources } from "@/components/related-sources";
+import { Suspense } from "react";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
@@ -139,6 +142,20 @@ export default async function IndependentSourcePage({
               changelogPath={changelogPath}
               changelogOffset={changelogOffset}
             />
+            {(!tab || tab === "releases") && source.releases[0]?.id && (
+              <>
+                <Suspense fallback={null}>
+                  <RelatedReleases
+                    anchorReleaseId={source.releases[0].id}
+                    scope="global"
+                    heading="Similar releases"
+                  />
+                </Suspense>
+                <Suspense fallback={null}>
+                  <RelatedSources anchor={source.slug} scope="global" heading="Similar sources" />
+                </Suspense>
+              </>
+            )}
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/source/${slug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>
