@@ -12,8 +12,7 @@ Releases tracks release notes, changelogs, and version updates across hundreds o
 ## What you can do
 
 - **Browse and search** — find releases across organizations and sources by keyword, category, or date
-- **Track changes** — fetch the latest releases from GitHub repos, RSS feeds, and changelog pages
-- **AI summaries** — generate natural-language summaries and comparisons of release activity
+- **Track changes** — follow the latest releases from GitHub repos, RSS feeds, and changelog pages
 - **Integrate** — use the REST API for programmatic access or the MCP server for AI agent workflows
 
 ## Concepts

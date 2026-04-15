@@ -70,10 +70,14 @@ Claude Code:
 claude mcp add --transport http releases https://mcp.releases.sh/mcp
 ```
 
+<!-- admin:start -->
+
 Or run a local stdio server with the full tool set, including admin tools:
 
 ```bash
 releases admin mcp serve
 ```
+
+<!-- admin:end -->
 
 See the [MCP Server](/docs/api/mcp) docs for the general endpoint, client-specific setup, and stdio fallback configuration.

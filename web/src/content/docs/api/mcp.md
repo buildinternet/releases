@@ -56,6 +56,8 @@ For clients without native remote MCP support, use `mcp-remote`:
 }
 ```
 
+<!-- admin:start -->
+
 ## Local server
 
 Run a local MCP server over stdio with the full tool set, including admin tools for adding sources, fetching releases, and managing organizations:
@@ -75,11 +77,13 @@ releases admin mcp serve
 }
 ```
 
+<!-- admin:end -->
+
 ## Available tools
 
 ### Read tools
 
-Available on both the remote and local servers.
+Read-only tools available on the remote server with no authentication.
 
 | Tool | Description |
 | --- | --- |
@@ -96,12 +100,14 @@ Available on both the remote and local servers.
 
 ### Analysis tools
 
-Available on both the remote and local servers. AI-generated summaries and comparisons.
+AI-generated summaries and comparisons. Available on the remote server with no authentication.
 
 | Tool | Description |
 | --- | --- |
 | `summarize_changes` | AI-generated summary of recent releases for a product. Supports custom lookback window and additional instructions. |
 | `compare_products` | Head-to-head AI comparison of releases between two products. |
+
+<!-- admin:start -->
 
 ### Source management tools
 
@@ -129,6 +135,8 @@ Only available on the local server.
 | `block_url` | Globally block a URL pattern. |
 | `unblock_url` | Remove a global URL block. |
 | `list_blocked_urls` | List all globally blocked URLs. |
+
+<!-- admin:end -->
 
 ## Example usage with Claude
 

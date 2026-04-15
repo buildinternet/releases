@@ -1,7 +1,9 @@
 import { Fragment } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { loadDoc } from "@/lib/docs";
+import matter from "gray-matter";
+import { loadDoc, stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
+import { adminDocs } from "@/flags";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { CodeBlock } from "@/components/code-block";
 import { CopyPageButton } from "@/components/copy-page-button";
@@ -35,7 +37,7 @@ function splitBySlots(content: string): Segment[] {
   return segments;
 }
 
-export function MarkdownDoc({
+export async function MarkdownDoc({
   slug,
   slots,
 }: {
@@ -43,11 +45,19 @@ export function MarkdownDoc({
   slots?: Record<string, React.ReactNode>;
 }) {
   const doc = loadDoc(slug);
-  const segments = splitBySlots(doc.body);
+  const showAdmin = await adminDocs();
+  const body = showAdmin ? keepAdminBlocks(doc.body) : stripAdminBlocks(doc.body);
+  const copyMarkdown = showAdmin
+    ? doc.public
+    : (() => {
+        const parsed = matter(doc.public);
+        return matter.stringify(stripAdminBlocks(parsed.content).trimStart(), parsed.data);
+      })();
+  const segments = splitBySlots(body);
   return (
     <>
       <div className="not-prose mb-8 flex justify-end">
-        <CopyPageButton markdown={doc.public} slug={slug} />
+        <CopyPageButton markdown={copyMarkdown} slug={slug} />
       </div>
       {segments.map((seg, i) => (
         <Fragment key={i}>

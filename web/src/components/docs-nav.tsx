@@ -18,10 +18,7 @@ const publicSections: Section[] = [
   },
   {
     title: "CLI",
-    items: [
-      { label: "Browsing & Search", href: "/docs/cli/browsing" },
-      { label: "Summaries & Comparisons", href: "/docs/cli/analysis" },
-    ],
+    items: [{ label: "Browsing & Search", href: "/docs/cli/browsing" }],
   },
   {
     title: "API",
@@ -36,6 +33,7 @@ const adminSections: Section[] = [
   {
     title: "Admin CLI",
     items: [
+      { label: "Summaries & Comparisons", href: "/docs/cli/analysis" },
       { label: "Fetching Releases", href: "/docs/cli/fetching" },
       { label: "Source Management", href: "/docs/cli/admin" },
     ],
