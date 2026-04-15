@@ -275,10 +275,20 @@ export interface SearchReleaseHit {
   id: string;
   sourceSlug: string;
   sourceName: string;
+  /** Source type (github, scrape, feed, agent) — drives the byline icon. */
+  sourceType?: string;
   orgSlug: string | null;
   version: string | null;
   title: string;
   summary: string;
+  /**
+   * Full release body, media URLs hydrated through the MEDIA_ORIGIN proxy.
+   * Present so the web can render the same markdown + thumbnail treatment
+   * as the org/source feeds instead of a plain summary snippet.
+   */
+  content?: string;
+  /** Release media with r2Url resolved. Undefined means "not hydrated". */
+  media?: MediaItem[];
   publishedAt: string | null;
   /**
    * Hybrid fusion score. Present on hybrid/semantic responses (including

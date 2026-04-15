@@ -2,8 +2,9 @@ import { sql } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { logger } from "@releases/lib/logger";
-import type { SearchOrgHit, SearchProductHit, SearchSourceHit, SearchReleaseHit, RawSourceHit } from "../api/types.js";
+import type { SearchOrgHit, SearchProductHit, SearchSourceHit, SearchReleaseHit, RawSourceHit, MediaItem } from "../api/types.js";
 import { foldSourcesIntoProducts } from "../api/types.js";
+import { hydrateMediaUrls, resolveR2Url } from "../lib/media-url.js";
 
 export interface FtsResult {
   id: string;
@@ -51,6 +52,48 @@ export interface UnifiedSearchLocalResult {
   releases: SearchReleaseHit[];
 }
 
+interface RawLocalReleaseRow {
+  id: string;
+  sourceSlug: string;
+  sourceName: string;
+  sourceType: string;
+  orgSlug: string | null;
+  version: string | null;
+  title: string;
+  summary: string;
+  content: string;
+  media: string | null;
+  publishedAt: string | null;
+}
+
+function hydrateLocalRelease(row: RawLocalReleaseRow): SearchReleaseHit {
+  const mediaOrigin = process.env.MEDIA_ORIGIN ?? "";
+  type RawMediaRow = MediaItem & { r2Key?: string | null };
+  let media: MediaItem[] = [];
+  try {
+    const parsed = JSON.parse(row.media ?? "[]");
+    if (Array.isArray(parsed)) {
+      media = parsed.map((m: RawMediaRow) => ({
+        ...m,
+        r2Url: resolveR2Url(m.r2Key, mediaOrigin),
+      }));
+    }
+  } catch { /* malformed row — leave media empty */ }
+  return {
+    id: row.id,
+    sourceSlug: row.sourceSlug,
+    sourceName: row.sourceName,
+    sourceType: row.sourceType,
+    orgSlug: row.orgSlug,
+    version: row.version,
+    title: row.title,
+    summary: row.summary,
+    content: hydrateMediaUrls(row.content, mediaOrigin),
+    media,
+    publishedAt: row.publishedAt,
+  };
+}
+
 export function unifiedSearchLocal(query: string, limit: number, offset: number): UnifiedSearchLocalResult {
   if (isRemoteMode()) {
     throw new Error("unifiedSearchLocal() is not available in remote mode");
@@ -89,12 +132,15 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
 
   const mergedProducts = foldSourcesIntoProducts(products, rawSources);
 
-  let releases: SearchReleaseHit[] = [];
+  let rawReleases: RawLocalReleaseRow[] = [];
   try {
-    releases = db.all(sql`
-      SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+    rawReleases = db.all(sql`
+      SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
+             o.slug as orgSlug,
              r.version, r.title,
              COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
+             r.content as content,
+             r.media as media,
              r.published_at as publishedAt
       FROM releases_fts
       JOIN releases r ON r.rowid = releases_fts.rowid
@@ -104,23 +150,26 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       ORDER BY rank LIMIT ${limit} OFFSET ${offset}
-    `) as SearchReleaseHit[];
+    `) as RawLocalReleaseRow[];
   } catch (err) {
     logger.warn(`FTS search failed: ${err instanceof Error ? err.message : err}`);
   }
 
   // Cascading enrichment: show recent releases from matched orgs/products
-  if (releases.length === 0 && (orgs.length > 0 || mergedProducts.length > 0)) {
+  if (rawReleases.length === 0 && (orgs.length > 0 || mergedProducts.length > 0)) {
     const orgSlugs = orgs.map((o) => o.slug);
     const matchedProductSlugs = mergedProducts.filter((p) => p.kind !== "source").map((p) => p.slug);
     const conditions = [];
     if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
     if (matchedProductSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(matchedProductSlugs.map((s) => sql`${s}`), sql`, `)})`);
     if (conditions.length > 0) {
-      releases = db.all(sql`
-        SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+      rawReleases = db.all(sql`
+        SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
+               o.slug as orgSlug,
                r.version, r.title,
                COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
+               r.content as content,
+               r.media as media,
                r.published_at as publishedAt
         FROM releases r
         JOIN sources s ON s.id = r.source_id
@@ -130,9 +179,10 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
           AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
           AND (${sql.join(conditions, sql` OR `)})
         ORDER BY r.published_at DESC LIMIT ${limit}
-      `) as SearchReleaseHit[];
+      `) as RawLocalReleaseRow[];
     }
   }
 
+  const releases = rawReleases.map(hydrateLocalRelease);
   return { orgs, products: mergedProducts, sources: [], releases };
 }
