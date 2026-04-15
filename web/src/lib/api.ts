@@ -141,4 +141,56 @@ export const api = {
       `/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`,
     );
   },
+  relatedReleases: (releaseId: string, scope: "org" | "global" = "global", limit = 8) =>
+    fetchApi<RelatedReleasesResponse>(
+      `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}`,
+    ),
+  relatedSources: (sourceIdOrSlug: string, scope: "org" | "global" = "global", limit = 6) =>
+    fetchApi<RelatedSourcesResponse>(
+      `/v1/related/sources?source=${encodeURIComponent(sourceIdOrSlug)}&scope=${scope}&limit=${limit}`,
+    ),
 };
+
+export interface RelatedReleaseItem {
+  id: string;
+  title: string;
+  version: string | null;
+  url: string | null;
+  publishedAt: string | null;
+  summary: string;
+  score: number;
+  source: {
+    id: string;
+    slug: string;
+    name: string;
+    orgSlug: string | null;
+    orgName: string | null;
+  };
+}
+
+export interface RelatedSourceItem {
+  id: string;
+  slug: string;
+  name: string;
+  type: string;
+  url: string | null;
+  score: number;
+  orgSlug: string | null;
+  orgName: string | null;
+  releaseCount: number;
+  latestDate: string | null;
+}
+
+export interface RelatedReleasesResponse {
+  scope?: "org" | "global";
+  items: RelatedReleaseItem[];
+  degraded?: boolean;
+  degradedReason?: string;
+}
+
+export interface RelatedSourcesResponse {
+  scope?: "org" | "global";
+  items: RelatedSourceItem[];
+  degraded?: boolean;
+  degradedReason?: string;
+}

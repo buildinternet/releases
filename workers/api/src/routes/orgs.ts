@@ -800,6 +800,10 @@ async function embedOrgSideEffect(
         description: org.description,
         category: org.category,
         domain: org.domain,
+        // Set `orgId` to the org's own id so the metadata filter works
+        // uniformly — an "org scope" lookup can match orgs, products, and
+        // sources all via `filter: { org_id: <id> }`.
+        orgId: org.id,
       }],
       // Cast: workers-types VectorizeIndex has a stricter metadata value
       // type than the shared runtime-agnostic interface. Assignable at

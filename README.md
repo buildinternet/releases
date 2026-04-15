@@ -65,6 +65,8 @@ releases search "breaking change" --json
 
 Search is hybrid by default — FTS5 fused with vector similarity over both releases and chunked CHANGELOG files via Reciprocal Rank Fusion. The MCP `search_releases` tool and `GET /v1/search` endpoint accept `mode: "lexical"|"semantic"|"hybrid"` (default `hybrid`) and return a `kind` discriminator (`release` or `changelog_chunk`) on every hit; chunk hits include offset/length so agents can chain into `get_source_changelog` for surrounding context. Pass `mode: "lexical"` for the legacy FTS-only shape. A new `search_registry` MCP tool covers org/product/source lookup.
 
+Source pages on the web (`releases.sh/<org>/<source>`) surface related releases and related sources in stacked rails below the release list, backed by the same vectors. The underlying routes — `GET /v1/related/releases` and `GET /v1/related/sources` — accept a `scope` of `org` (same organization) or `global`, and are also useful for third-party clients building recommendation UIs.
+
 ### Latest releases
 
 ```bash
