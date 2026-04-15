@@ -48,6 +48,20 @@ Use `--json` (CLI) for structured output. Typed tools always return JSON.
 
 Required: **name** and **url**. Optional: **type** (github, scrape, feed, agent — auto-detected from URL if omitted), **organization** (org ID or slug to associate with), **feed_url** (direct feed URL if known).
 
+### Naming sources and products
+
+**Don't prefix names with the org name.** The org is already shown as context on every page — repeating it in each child source produces noise like "Datadog › Datadog dd-trace-py". Pick the bare, recognizable name instead.
+
+Rules, in priority order:
+
+1. **GitHub sources → use the repo name.** `DataDog/dd-trace-py` → `dd-trace-py`, `vercel/next.js` → `next.js`. That's the name devs already recognize; the `owner/repo` byline underneath disambiguates.
+2. **Website/feed sources → strip the org name if present.** `Datadog Browser SDK` → `Browser SDK`, `Stripe API Changelog` → `API Changelog`.
+3. **Keep the org prefix only when it's part of the canonical product name.** `Claude Code`, `GitHub Actions`, `Google Cloud Run`, `Amazon S3` — people say them that way. If you strip the prefix and what's left is the actual name people use, strip. If stripping produces something nobody would recognize on its own, keep the prefix.
+4. **Org-level content sources keep the prefix.** `Datadog Blog`, `Vercel Engineering Blog` — "Blog" alone is meaningless, and org-prefix is the standard convention. Same for "Newsroom", "Announcements".
+5. **Products follow the same rules.** A product under Vercel should be `Next.js`, not `Vercel Next.js`. A product under Datadog whose actual name is `Agent` stays `Agent` — the org context above it already says Datadog.
+
+When in doubt: would a developer reading this name on its own (with the org already shown above) recognize what it is? If yes, strip. If no, keep the prefix.
+
 ### Organization descriptions
 
 When creating an org, include a brief one-sentence product description. This grounds AI summaries for lesser-known products, and it's also the primary signal for the entity vector index — `search_registry` and the registry side of hybrid search match on description + category, not just name. A good description noticeably improves recall.
