@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
-import { config } from "./config.js";
-import { logger } from "./logger.js";
+import { config } from "@releases/lib/config";
+import { logger } from "@releases/lib/logger";
 import { normalizeMediaUrl } from "./media-url.js";
 
 export { normalizeMediaUrl };

@@ -6,7 +6,7 @@ import { insertMediaAssets, type MediaAssetInput } from "../../db/queries.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";
 import { sql, and, isNotNull } from "drizzle-orm";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { extractFilename, type MediaRef } from "../../lib/media.js";
 
 // Reverse mapping: file extension → content type

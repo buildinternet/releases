@@ -9,7 +9,7 @@
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "fs";
 import { basename, dirname, join } from "path";
-import { logger } from "../../src/lib/logger.js";
+import { logger } from "@releases/lib/logger";
 
 // ── Types ──────────────────────────────────────────────────────────
 

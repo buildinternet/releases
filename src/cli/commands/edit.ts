@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { findSource, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
 import { sourceNotFound } from "../suggest.js";
 import { toSlug } from "@releases/core/slug";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { updateSourceMeta } from "../../adapters/feed.js";
 
 const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;

@@ -30,7 +30,7 @@ import { Tiktoken } from "js-tiktoken/lite";
 import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 import { eq, and, sql } from "drizzle-orm";
 
-import { logger } from "../src/lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { isRemoteMode, getApiUrl, getApiKey, isAdminMode, validateRemoteMode } from "../src/lib/mode.js";
 
 // Matches LIVE_ENCODE_MAX_CHARS in src/lib/tokens.ts. Kept as a local

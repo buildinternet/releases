@@ -10,6 +10,7 @@
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@releases/adapters": "workspace:*",
         "@releases/core": "workspace:*",
+        "@releases/lib": "workspace:*",
         "chalk": "^5.6.2",
         "cli-table3": "^0.6.5",
         "commander": "^14.0.3",
@@ -74,6 +75,10 @@
         "js-tiktoken": "^1.0.21",
         "nanoid": "^5.1.7",
       },
+    },
+    "packages/lib": {
+      "name": "@releases/lib",
+      "version": "0.0.0",
     },
     "web": {
       "name": "released-web",
@@ -425,6 +430,8 @@
     "@releases/adapters": ["@releases/adapters@workspace:packages/adapters"],
 
     "@releases/core": ["@releases/core@workspace:packages/core"],
+
+    "@releases/lib": ["@releases/lib@workspace:packages/lib"],
 
     "@renovatebot/pep440": ["@renovatebot/pep440@4.2.1", "", {}, "sha512-2FK1hF93Fuf1laSdfiEmJvSJPVIDHEUTz68D3Fi9s0IZrrpaEcj6pTFBTbYvsgC5du4ogrtf5re7yMMvrKNgkw=="],
 

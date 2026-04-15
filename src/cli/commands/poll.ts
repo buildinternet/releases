@@ -5,7 +5,7 @@ import { findSource, listFeedSources, listScrapeSources, updateSource } from "..
 import { getSourceMeta, updateSourceMeta, headCheckFeed } from "../../adapters/feed.js";
 import type { ChangeStatus, SourceMetadata } from "../../adapters/feed.js";
 import { timeAgo } from "@releases/core/dates";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { stripAnsi } from "../../lib/sanitize.js";
 import type { Source } from "@releases/core/schema";
 

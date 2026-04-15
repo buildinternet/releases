@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { config } from "../lib/config.js";
-import { logger } from "../lib/logger.js";
+import { config } from "@releases/lib/config";
+import { logger } from "@releases/lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { getKnownReleasesForSource } from "../db/queries.js";

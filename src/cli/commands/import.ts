@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { readFileSync } from "fs";
 import { existsSync } from "fs";
 import { toSlug } from "@releases/core/slug";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { isGitHubUrl } from "./add.js";
 import { isValidCategory } from "@releases/core/categories";
 import {

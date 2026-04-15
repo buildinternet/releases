@@ -13,7 +13,7 @@
 
 import { Command } from "commander";
 import chalk from "chalk";
-import { logger } from "../../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { isRemoteMode } from "../../../lib/mode.js";
 import {
   embedReleases,

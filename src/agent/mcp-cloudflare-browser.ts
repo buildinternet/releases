@@ -2,7 +2,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
 import { CF_REJECT_RESOURCE_TYPES } from "../adapters/cloudflare.js";
-import { config } from "../lib/config.js";
+import { config } from "@releases/lib/config";
 
 const accountId = config.cloudflareAccountId();
 const apiToken = config.cloudflareApiToken();

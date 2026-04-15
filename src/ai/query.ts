@@ -1,5 +1,5 @@
-import { config } from "../lib/config.js";
-import { AIError } from "../lib/errors.js";
+import { config } from "@releases/lib/config";
+import { AIError } from "@releases/lib/errors";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 

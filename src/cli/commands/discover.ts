@@ -3,7 +3,7 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { findOrg, getOrgAccountByPlatform, findSourcesByUrls, createSource } from "../../db/queries.js";
 import { toSlug } from "@releases/core/slug";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { discover, type DiscoveredSource } from "../../lib/discover.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 

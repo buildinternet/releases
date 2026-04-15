@@ -1,7 +1,7 @@
 import type { Source } from "@releases/core/schema";
 import { updateSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { getSourceMeta, type SourceMetadata } from "@releases/adapters/source-meta";
 
 // Re-export for backwards compatibility — existing importers don't need to change.

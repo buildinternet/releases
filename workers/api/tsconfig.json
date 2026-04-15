@@ -10,6 +10,7 @@
     "paths": {
       "@releases/core/*": ["../../packages/core/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*", "../../src/adapters/*"],
+      "@releases/lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
       "@releases/*": ["../../src/*"]
     }
   },

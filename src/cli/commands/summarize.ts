@@ -6,7 +6,7 @@ import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { daysAgoIso } from "@releases/core/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 
 export function registerSummarizeCommand(
   program: Command,

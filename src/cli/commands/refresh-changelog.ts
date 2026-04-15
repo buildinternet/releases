@@ -5,7 +5,7 @@ import { fetchChangelogFiles } from "../../adapters/github.js";
 import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams } from "@releases/core/changelog-slice";
 import { sourceChangelog as sourceChangelogRemote } from "../../api/client.js";
 import { sourceNotFound } from "../suggest.js";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { isRemoteMode } from "../../lib/mode.js";
 
 export function registerRefreshChangelogCommand(program: Command) {

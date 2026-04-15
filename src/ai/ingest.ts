@@ -1,6 +1,6 @@
-import { config } from "../lib/config.js";
-import { AIError } from "../lib/errors.js";
-import { logger } from "../lib/logger.js";
+import { config } from "@releases/lib/config";
+import { AIError } from "@releases/lib/errors";
+import { logger } from "@releases/lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired, withParseInstructions } from "./shared.js";

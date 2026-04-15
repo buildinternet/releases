@@ -2,8 +2,9 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "path";
 import { homedir } from "os";
 import { existsSync, mkdirSync, symlinkSync } from "fs";
-import { config, resolveCLICmd } from "../lib/config.js";
-import { logger } from "../lib/logger.js";
+import { config } from "@releases/lib/config";
+import { resolveCLICmd } from "./cli-cmd.js";
+import { logger } from "@releases/lib/logger";
 import type { Confidence } from "../lib/discover.js";
 import { CATEGORIES } from "@releases/core/categories";
 

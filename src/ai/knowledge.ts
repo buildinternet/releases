@@ -1,8 +1,8 @@
 import { getAnthropicClient } from "./client.js";
-import { config } from "../lib/config.js";
+import { config } from "@releases/lib/config";
 import { logUsage } from "../lib/usage.js";
 import type { Release, ReleaseSummary } from "@releases/core/schema";
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 
 interface KnowledgeInput {
   /** Org or product name */

@@ -1,4 +1,4 @@
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { startCrawl, pollCrawlResults } from "./crawl.js";
 
 /** Resource types to block when rendering pages via Cloudflare Browser Rendering. */
