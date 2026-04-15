@@ -1018,7 +1018,7 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
 export async function unifiedSearch(
   query: string,
   limit: number,
-  opts?: { org?: string },
+  opts?: { org?: string; mode?: "lexical" | "semantic" | "hybrid" },
 ): Promise<import("../api/types.js").UnifiedSearchResponse> {
   if (isRemoteMode()) {
     return apiClient.unifiedSearch(query, limit, opts);
