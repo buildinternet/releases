@@ -5,6 +5,7 @@ import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
+import { CliCommand } from "@/components/cli-command";
 import { ReleaseContent } from "./release-content";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -151,6 +152,7 @@ export default async function ReleaseDetailPage({
               </a>
             )}
           </div>
+          <CliCommand identifier={release.id} />
         </div>
 
         {/* Content */}

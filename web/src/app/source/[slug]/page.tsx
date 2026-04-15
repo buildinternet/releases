@@ -9,6 +9,7 @@ import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { SourceMainContent } from "@/components/source-main-content";
 import { SourceTimeline } from "@/components/source-timeline";
+import { CliCommand } from "@/components/cli-command";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
@@ -105,6 +106,7 @@ export default async function IndependentSourcePage({
           <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{source.name}</h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
+        <CliCommand identifier={source.slug} />
         {activity && (
           <SourceTimeline activity={activity} />
         )}

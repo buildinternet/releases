@@ -6,6 +6,7 @@ import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
+import { CliCommand } from "@/components/cli-command";
 import Link from "next/link";
 
 const getProduct = cache((slug: string) => api.productDetail(slug));
@@ -95,6 +96,7 @@ export default async function ProductPage({
             {product.description}
           </p>
         )}
+        <CliCommand identifier={product.slug} />
 
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
