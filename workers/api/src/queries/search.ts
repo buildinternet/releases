@@ -3,9 +3,29 @@ import type { D1Db } from "../db.js";
 import type {
   SearchOrgHit,
   SearchProductHit,
-  SearchReleaseHit,
   RawSourceHit,
 } from "@releases/api/types.js";
+
+/**
+ * Raw release row returned by the search queries. `content` and `media`
+ * still need media-URL hydration + JSON parsing — the route does that so
+ * SQL helpers stay thin.
+ */
+export interface RawSearchReleaseRow {
+  id: string;
+  sourceSlug: string;
+  sourceName: string;
+  sourceType: string;
+  orgSlug: string | null;
+  version: string | null;
+  title: string;
+  summary: string;
+  /** Raw markdown with media URLs not yet rewritten through MEDIA_ORIGIN. */
+  content: string;
+  /** JSON-encoded MediaItem[] or null. */
+  media: string | null;
+  publishedAt: string | null;
+}
 
 export async function searchOrgs(db: D1Db, pattern: string, limit: number): Promise<SearchOrgHit[]> {
   return db.all<SearchOrgHit>(sql`
@@ -47,11 +67,14 @@ export async function searchReleasesFts(
   query: string,
   limit: number,
   offset: number,
-): Promise<SearchReleaseHit[]> {
-  return db.all<SearchReleaseHit>(sql`
-    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+): Promise<RawSearchReleaseRow[]> {
+  return db.all<RawSearchReleaseRow>(sql`
+    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
+           o.slug as orgSlug,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.content as content,
+           r.media as media,
            r.published_at as publishedAt
     FROM releases_fts
     JOIN releases r ON r.rowid = releases_fts.rowid
@@ -69,16 +92,19 @@ export async function searchReleasesFromMatchedEntities(
   orgSlugs: string[],
   productSlugs: string[],
   limit: number,
-): Promise<SearchReleaseHit[]> {
+): Promise<RawSearchReleaseRow[]> {
   const conditions = [];
   if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
   if (productSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(productSlugs.map((s) => sql`${s}`), sql`, `)})`);
   if (conditions.length === 0) return [];
 
-  return db.all<SearchReleaseHit>(sql`
-    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, o.slug as orgSlug,
+  return db.all<RawSearchReleaseRow>(sql`
+    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
+           o.slug as orgSlug,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.content as content,
+           r.media as media,
            r.published_at as publishedAt
     FROM releases r
     JOIN sources s ON s.id = r.source_id

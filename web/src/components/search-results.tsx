@@ -2,6 +2,8 @@
 
 import { useState, useMemo } from "react";
 import Link from "next/link";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import type {
   UnifiedSearchResponse,
   SearchOrgHit,
@@ -9,6 +11,43 @@ import type {
   SearchReleaseHit,
   SearchChunkHit,
 } from "@/lib/api";
+import { collapsedMarkdownComponents } from "./markdown-components";
+
+/**
+ * In-body heading overrides for search previews. The feed card already
+ * renders the entity's title prominently, so any `#`/`##`/`###` inside
+ * the body should render as small emphasized inline text rather than
+ * compete with the card title. We layer these on top of
+ * `collapsedMarkdownComponents`.
+ */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+const searchPreviewComponents: Record<string, any> = {
+  ...collapsedMarkdownComponents,
+  h1: (props: any) => (
+    <div className="text-[13px] font-semibold text-stone-600 dark:text-stone-300 mt-1">
+      {props.children}
+    </div>
+  ),
+  h2: (props: any) => (
+    <div className="text-[13px] font-semibold text-stone-600 dark:text-stone-300 mt-1">
+      {props.children}
+    </div>
+  ),
+  h3: (props: any) => (
+    <div className="text-[13px] font-semibold text-stone-600 dark:text-stone-300 mt-1">
+      {props.children}
+    </div>
+  ),
+  h4: (props: any) => (
+    <div className="text-[13px] font-semibold text-stone-600 dark:text-stone-300 mt-1">
+      {props.children}
+    </div>
+  ),
+};
+/* eslint-enable @typescript-eslint/no-explicit-any */
+import { SourceTypeIcon } from "./source-type-icon";
+import { FallbackImage } from "./fallback-image";
+import { formatDate } from "@/lib/formatters";
 
 type SearchFilter = "all" | "orgs" | "products" | "releases";
 
@@ -50,6 +89,10 @@ function sourceHref(orgSlug: string | null, sourceSlug: string): string {
   return orgSlug ? `/${orgSlug}/${sourceSlug}` : `/source/${sourceSlug}`;
 }
 
+function releaseHref(hit: SearchReleaseHit): string {
+  return `/release/${hit.id}`;
+}
+
 function chunkDeepLink(hit: SearchChunkHit): string {
   // Heading-aware slicer on the server snaps the offset forward to the
   // nearest `##` heading, so this URL lands the user on the correct
@@ -64,9 +107,204 @@ function formatHeading(raw: string | null): string {
   return raw.replace(/^#+\s*/, "").trim() || "Changelog";
 }
 
-/** Collapse repeated whitespace so snippets read as one line in the card. */
-function compactSnippet(snippet: string): string {
-  return snippet.replace(/\s+/g, " ").trim();
+/**
+ * Clean the start of a chunk snippet for preview display.
+ *
+ * Chunks come from `chunkChangelog` in two flavors:
+ *   1. First chunk of a file — starts at offset 0 (content head).
+ *   2. Subsequent chunks — start at `heading_boundary - overlap_chars`,
+ *      i.e. the chunker intentionally backs up ~500 chars into the
+ *      previous chunk's tail to create retrieval overlap. That tail
+ *      routinely lands mid-word, mid-link, or mid-backtick.
+ *
+ * For preview, we want the snippet to look like the start of a section,
+ * not the back half of someone else's sentence. So:
+ *   - If the first line is a markdown heading, strip it (the card title
+ *     already shows the heading).
+ *   - Otherwise, drop the partial first line entirely and prefix `…` so
+ *     the reader knows more context exists above.
+ */
+function stripLeadingChunkHeading(snippet: string): string {
+  const firstNewline = snippet.indexOf("\n");
+  if (firstNewline === -1) return snippet;
+  const firstLine = snippet.slice(0, firstNewline).trimStart();
+  if (/^#{1,6}\s/.test(firstLine)) {
+    return snippet.slice(firstNewline + 1).replace(/^\s*\n+/, "");
+  }
+  // Partial-line overlap remnant — drop it and mark as truncated.
+  const rest = snippet.slice(firstNewline + 1).replace(/^\s*\n+/, "");
+  return rest ? `… ${rest}` : snippet;
+}
+
+/**
+ * Strip a leading markdown heading from release content when it merely
+ * duplicates the release title. Mirrors the same behavior
+ * `ReleaseListItem` uses in the feed so the card body isn't overshadowed
+ * by its own title.
+ */
+function stripLeadingTitle(content: string, title: string | null): string {
+  if (!title || !content) return content;
+  const firstNewline = content.indexOf("\n");
+  if (firstNewline === -1) return content;
+  const firstLine = content.slice(0, firstNewline).replace(/^#+\s+/, "").trim();
+  if (firstLine.toLowerCase() === title.toLowerCase()) {
+    return content.slice(firstNewline + 1).trimStart();
+  }
+  return content;
+}
+
+const resultMarkdownClasses =
+  "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed text-stone-500 dark:text-stone-400 [&_h1]:text-sm [&_h1]:font-semibold [&_h2]:text-sm [&_h2]:font-semibold [&_h3]:text-[13px] [&_h3]:font-semibold [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400";
+
+/**
+ * Shared card frame for search hits. Search is relevance-ranked, not
+ * chronological, so this layout deliberately avoids the timeline rail
+ * used by `<ReleaseListItem>`: no date gutter, no dot, no connecting
+ * line. The date (if present) rides along as a small right-aligned
+ * annotation in the byline so it doesn't imply ordering.
+ */
+function ResultCard({
+  kindLabel,
+  title,
+  titleHref,
+  externalUrl,
+  date,
+  sourceName,
+  sourceSlug,
+  orgSlug,
+  sourceType,
+  children,
+  thumbnail,
+}: {
+  kindLabel?: string;
+  title: string;
+  titleHref: string;
+  externalUrl?: string | null;
+  date?: string | null;
+  sourceName: string;
+  sourceSlug: string;
+  orgSlug: string | null;
+  sourceType?: string;
+  children: React.ReactNode;
+  thumbnail?: { src: string; alt: string } | null;
+}) {
+  return (
+    <div className="group/item border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4">
+      <div className="flex items-baseline gap-2 mb-1 min-w-0">
+        {kindLabel && (
+          <span className="text-[10px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 shrink-0">
+            {kindLabel}
+          </span>
+        )}
+        <Link
+          href={titleHref}
+          className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
+        >
+          {title}
+        </Link>
+        {externalUrl && (
+          <a
+            href={externalUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 text-xs shrink-0"
+          >
+            ↗
+          </a>
+        )}
+      </div>
+      <div className="text-[12px] text-stone-400 dark:text-stone-500 mb-2 flex items-center gap-1 flex-wrap">
+        <span>via</span>
+        {sourceType && <SourceTypeIcon type={sourceType} size={12} />}
+        {orgSlug ? (
+          <Link
+            href={`/${orgSlug}/${sourceSlug}`}
+            className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300"
+          >
+            {sourceName}
+          </Link>
+        ) : (
+          <span className="text-stone-500 dark:text-stone-400 font-medium">{sourceName}</span>
+        )}
+        {date && (
+          <>
+            <span className="text-stone-300 dark:text-stone-700">·</span>
+            <time className="tabular-nums">{date}</time>
+          </>
+        )}
+      </div>
+      <div className="flex gap-3">
+        <div className="flex-1 min-w-0 max-h-[4.5em] overflow-hidden">
+          {children}
+        </div>
+        {thumbnail && (
+          <FallbackImage
+            src={thumbnail.src}
+            alt={thumbnail.alt}
+            width={120}
+            height={72}
+            className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800 shrink-0"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function ReleaseResultCard({ hit }: { hit: SearchReleaseHit }) {
+  const body = useMemo(
+    () => stripLeadingTitle(hit.content ?? hit.summary, hit.title),
+    [hit.content, hit.summary, hit.title],
+  );
+  const thumbnail = useMemo(() => {
+    const item = hit.media?.find((m) => m.type === "image" || m.type === "gif");
+    if (!item) return null;
+    return { src: item.r2Url ?? item.url, alt: item.alt || "" };
+  }, [hit.media]);
+
+  // Prefer version as the card heading to match how feed items read;
+  // fall back to title when version is absent.
+  const heading = hit.version || hit.title;
+
+  return (
+    <ResultCard
+      title={heading}
+      titleHref={releaseHref(hit)}
+      date={formatDate(hit.publishedAt)}
+      sourceName={hit.sourceName}
+      sourceSlug={hit.sourceSlug}
+      orgSlug={hit.orgSlug}
+      sourceType={hit.sourceType}
+      thumbnail={thumbnail}
+    >
+      <div className={resultMarkdownClasses}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={searchPreviewComponents}>
+          {body}
+        </ReactMarkdown>
+      </div>
+    </ResultCard>
+  );
+}
+
+function ChunkResultCard({ hit }: { hit: SearchChunkHit }) {
+  const body = useMemo(() => stripLeadingChunkHeading(hit.snippet), [hit.snippet]);
+  return (
+    <ResultCard
+      kindLabel="Changelog"
+      title={formatHeading(hit.heading)}
+      titleHref={chunkDeepLink(hit)}
+      sourceName={hit.sourceName}
+      sourceSlug={hit.sourceSlug}
+      orgSlug={hit.orgSlug}
+      sourceType="github"
+    >
+      <div className={resultMarkdownClasses}>
+        <ReactMarkdown remarkPlugins={[remarkGfm]} components={searchPreviewComponents}>
+          {body}
+        </ReactMarkdown>
+      </div>
+    </ResultCard>
+  );
 }
 
 export function SearchResults({
@@ -185,85 +423,27 @@ export function SearchResults({
             </section>
           )}
 
-          {/* Releases + CHANGELOG chunks, interleaved by fusion score */}
+          {/* Releases + CHANGELOG chunks, interleaved by relevance score.
+              Search intentionally drops the feed's timeline rail because
+              hits are ranked, not chronological — a gutter of dates would
+              imply an order that doesn't exist. */}
           {showReleases && rankedHits.length > 0 && (
             <section>
               <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
                 Releases
               </h2>
-              <div className="space-y-4">
+              <div>
                 {rankedHits.map((entry, i) => {
-                  // Exhaustive discriminator — TS will error here if a new
-                  // hit kind is added without being handled.
                   if (entry.kind === "release") {
                     const r = entry.hit;
-                    const href = sourceHref(r.orgSlug, r.sourceSlug);
-                    return (
-                      <div
-                        key={`release:${r.id}:${i}`}
-                        className="border-b border-stone-200 dark:border-stone-800 pb-4"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
-                          <div className="flex items-baseline gap-2">
-                            {r.version && (
-                              <span className="text-sm font-semibold">{r.version}</span>
-                            )}
-                            <span className="text-sm text-stone-600 dark:text-stone-400">
-                              {r.title}
-                            </span>
-                          </div>
-                          {r.publishedAt && (
-                            <time className="text-xs text-stone-400 shrink-0">
-                              {new Date(r.publishedAt).toLocaleDateString("en-US", {
-                                month: "short",
-                                day: "numeric",
-                                year: "numeric",
-                                timeZone: "UTC",
-                              })}
-                            </time>
-                          )}
-                        </div>
-                        <p className="text-[13px] text-stone-500 mt-1 line-clamp-2">{r.summary}</p>
-                        <Link
-                          href={href}
-                          className="text-xs text-stone-400 hover:text-stone-600 mt-1 inline-block"
-                        >
-                          {r.sourceName}
-                        </Link>
-                      </div>
-                    );
+                    return <ReleaseResultCard key={`release:${r.id}:${i}`} hit={r} />;
                   }
-
-                  // Chunk hit — visually distinguished with a CHANGELOG
-                  // badge and a deep link into the source's changelog tab
-                  // at the chunk's byte offset.
                   const c = entry.hit;
-                  const href = chunkDeepLink(c);
                   return (
-                    <div
+                    <ChunkResultCard
                       key={`chunk:${c.sourceSlug}:${c.offset}:${i}`}
-                      className="border-b border-stone-200 dark:border-stone-800 pb-4"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-baseline gap-1">
-                        <div className="flex items-baseline gap-2 min-w-0">
-                          <span className="text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-400 shrink-0">
-                            Changelog
-                          </span>
-                          <span className="text-sm text-stone-600 dark:text-stone-400 truncate">
-                            {formatHeading(c.heading)}
-                          </span>
-                        </div>
-                      </div>
-                      <p className="text-[13px] text-stone-500 mt-1 line-clamp-2 font-mono">
-                        {compactSnippet(c.snippet)}
-                      </p>
-                      <Link
-                        href={href}
-                        className="text-xs text-stone-400 hover:text-stone-600 mt-1 inline-block"
-                      >
-                        {c.sourceName}
-                      </Link>
-                    </div>
+                      hit={c}
+                    />
                   );
                 })}
               </div>

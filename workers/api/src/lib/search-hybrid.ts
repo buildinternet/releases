@@ -74,7 +74,11 @@ export interface HybridReleaseHit {
     url: string | null;
     publishedAt: string | null;
     summary: string;
-    source: { id: string; slug: string; name: string };
+    /** Raw markdown body; media URLs still need MEDIA_ORIGIN rewriting. */
+    content: string;
+    /** JSON-encoded MediaItem[] or null — route parses + resolves r2Url. */
+    media: string | null;
+    source: { id: string; slug: string; name: string; type: string };
     orgSlug: string | null;
   };
 }
@@ -135,9 +139,12 @@ interface RawReleaseRow {
   url: string | null;
   publishedAt: string | null;
   summary: string;
+  content: string;
+  media: string | null;
   sourceId: string;
   sourceSlug: string;
   sourceName: string;
+  sourceType: string;
   orgSlug: string | null;
 }
 
@@ -153,9 +160,12 @@ async function hydrateReleases(
            r.url as url,
            r.published_at as publishedAt,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.content as content,
+           r.media as media,
            s.id as sourceId,
            s.slug as sourceSlug,
            s.name as sourceName,
+           s.type as sourceType,
            o.slug as orgSlug
     FROM releases r
     JOIN sources s ON s.id = r.source_id
@@ -421,7 +431,14 @@ async function buildReleaseHits(
         url: row.url,
         publishedAt: row.publishedAt,
         summary: row.summary,
-        source: { id: row.sourceId, slug: row.sourceSlug, name: row.sourceName },
+        content: row.content,
+        media: row.media,
+        source: {
+          id: row.sourceId,
+          slug: row.sourceSlug,
+          name: row.sourceName,
+          type: row.sourceType,
+        },
         orgSlug: row.orgSlug,
       },
     });
