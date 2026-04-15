@@ -400,11 +400,7 @@ function DetailChart() {
       const keep = stride === 1 || (stride >= 12 ? m === 0 : m % stride === 0);
       if (keep) {
         labels.push({
-          label: stride >= 6
-            ? `${mo.getFullYear()}`
-            : stride >= 3
-              ? `${fmtMonth(mo)} ${String(mo.getFullYear()).slice(2)}`
-              : fmtMonth(mo),
+          label: stride >= 6 ? `${mo.getFullYear()}` : fmtMonth(mo),
           pct: ((mo.getTime() - first.getTime()) / span) * 100,
         });
       }
