@@ -134,6 +134,8 @@ With no range params, the full file is returned (back-compat). Response body:
 
 `totalTokens` is cached per file and always returned. `tokens` (echoed budget) and `sliceTokens` (actual encoded count of the returned `content`) are only populated when the request used token mode.
 
+> **Note:** `totalTokens` is an exact cl100k_base count for files under 256KB. For files above that cap, the value is approximated as `ceil(totalChars / 4)` to keep the upsert path fast. `sliceTokens` is always exact because slices stay under the cap. If you need a precise total for a large file, sum `sliceTokens` across a full walk via `nextOffset`.
+
 Chain successive requests by passing the returned `nextOffset` back as the next `offset`. `nextOffset` is `null` when the slice reaches the end of the file. The canonical file is refreshed on a 24h TTL by the API worker cron for `github` sources.
 
 ---
