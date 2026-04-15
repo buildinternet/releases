@@ -1,11 +1,11 @@
 import type { Source } from "@releases/core/schema";
 import { updateSource } from "../db/queries.js";
-import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
+import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { logger } from "../lib/logger.js";
-import { getSourceMeta, type SourceMetadata } from "./source-meta.js";
+import { getSourceMeta, type SourceMetadata } from "@releases/adapters/source-meta";
 
 // Re-export for backwards compatibility — existing importers don't need to change.
-export { getSourceMeta, type SourceMetadata } from "./source-meta.js";
+export { getSourceMeta, type SourceMetadata } from "@releases/adapters/source-meta";
 
 // ── Feed types ──────────────────────────────────────────────────────
 

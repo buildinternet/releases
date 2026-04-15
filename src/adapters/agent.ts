@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Source, ReleaseType } from "@releases/core/schema";
-import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
+import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { checkContentHash } from "../db/queries.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";

@@ -1,6 +1,6 @@
 import { createHash } from "crypto";
-import type { Adapter, RawRelease } from "./types.js";
-import { github } from "./github.js";
+import type { Adapter, RawRelease } from "@releases/adapters/types";
+import { github } from "@releases/adapters/github";
 import { scrape } from "./scrape.js";
 import { feed } from "./feed.js";
 import { agent } from "./agent.js";
