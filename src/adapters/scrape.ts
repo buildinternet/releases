@@ -9,8 +9,8 @@ import { logger } from "@releases/lib/logger";
 import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed, getSourceMeta, updateSourceMeta } from "./feed.js";
-import { fetchCloudflareMarkdown, fetchCloudflareMarkdownFast } from "./cloudflare.js";
-import { startCrawl, pollCrawlResults } from "./crawl.js";
+import { fetchCloudflareMarkdown, fetchCloudflareMarkdownFast } from "@releases/adapters/cloudflare";
+import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { parseCrawlPages } from "../ai/parse-crawl.js";
 import { shouldUseFastFetch } from "../lib/render-hint.js";
 

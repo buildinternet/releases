@@ -4,7 +4,7 @@ import {
   parseWorkspaces,
   pickChangelogInDir,
   CHANGELOG_MAX_BYTES,
-} from "../../src/adapters/github.js";
+} from "@releases/adapters/github";
 import type { Source } from "@releases/core/schema";
 
 // Build a minimal Source that the adapter will accept.

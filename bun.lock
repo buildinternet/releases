@@ -65,6 +65,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@releases/core": "workspace:*",
+        "@releases/lib": "workspace:*",
       },
     },
     "packages/core": {

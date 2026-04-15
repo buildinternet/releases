@@ -5,7 +5,7 @@ import type { Source } from "@releases/core/schema";
 import { sourceNotFound } from "../suggest.js";
 import type { FetchOptions } from "@releases/adapters/types";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
-import { detectChangelogUrl, fetchChangelogFiles } from "../../adapters/github.js";
+import { detectChangelogUrl, fetchChangelogFiles } from "@releases/adapters/github";
 import { getAdapter } from "../../adapters/resolve.js";
 import { contentHash } from "@releases/adapters/content-hash";
 import {
