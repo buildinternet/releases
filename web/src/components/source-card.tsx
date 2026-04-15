@@ -42,37 +42,53 @@ const badgeStyles: Record<CadenceKey, string> = {
 
 function InlineSparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: string }) {
   const max = Math.max(...buckets.map((b) => b.count), 1);
+  const n = buckets.length;
+  const W = 100;
+  const H = 20;
+  const PAD_Y = 2;
+
+  const xFor = (i: number) => (n <= 1 ? W / 2 : (i / (n - 1)) * W);
+  const yFor = (count: number) => H - PAD_Y - (count / max) * (H - PAD_Y * 2);
+
+  const points = buckets.map((b, i) => `${xFor(i).toFixed(2)},${yFor(b.count).toFixed(2)}`).join(" ");
+
+  const tooltipLatest = buckets.length > 0 ? buckets[buckets.length - 1] : null;
+  const tooltipFirst = buckets[0];
+  const tooltipEnd = tooltipLatest ? new Date(tooltipLatest.weekStart.getTime() + 6 * DAY_MS) : null;
+  const total = buckets.reduce((sum, b) => sum + b.count, 0);
 
   return (
-    <div className="flex items-end gap-px h-6">
-      {buckets.map((bucket, i) => {
-        const h = bucket.count > 0 ? Math.max(2, (bucket.count / max) * 24) : 1;
-        const weekEnd = new Date(bucket.weekStart.getTime() + 6 * DAY_MS);
-
-        return (
-          <HoverCard.Root key={i}>
-            <HoverCard.Trigger
-              className={`flex-1 rounded-sm min-h-px ${bucket.count === 0 ? "bg-stone-100 dark:bg-stone-800" : ""}`}
-              style={{
-                height: `${h}px`,
-                backgroundColor: bucket.count > 0 ? color : undefined,
-                alignSelf: "flex-end",
-              }}
-            />
-            {bucket.count > 0 && (
-              <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
-                <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
-                  {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
-                </div>
-                <div className="text-sm font-semibold" style={{ color }}>
-                  {bucket.count} {bucket.count === 1 ? "release" : "releases"}
-                </div>
-              </HoverCard.Content>
-            )}
-          </HoverCard.Root>
-        );
-      })}
-    </div>
+    <HoverCard.Root>
+      <HoverCard.Trigger className="block w-16 h-4 shrink-0">
+        <svg
+          viewBox={`0 0 ${W} ${H}`}
+          preserveAspectRatio="none"
+          className="w-full h-full overflow-visible"
+          aria-hidden
+        >
+          <polyline
+            points={points}
+            fill="none"
+            stroke={color}
+            strokeOpacity={0.55}
+            strokeWidth={1.25}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            vectorEffect="non-scaling-stroke"
+          />
+        </svg>
+      </HoverCard.Trigger>
+      {tooltipLatest && tooltipFirst && tooltipEnd && (
+        <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[160px]">
+          <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
+            {fmtWeek(tooltipFirst.weekStart)} – {fmtWeek(tooltipEnd)}
+          </div>
+          <div className="text-sm font-semibold" style={{ color }}>
+            {total} {total === 1 ? "release" : "releases"}
+          </div>
+        </HoverCard.Content>
+      )}
+    </HoverCard.Root>
   );
 }
 
@@ -102,6 +118,9 @@ export function SourceCard({ source, orgSlug, cadence, showProductBadge = true }
           )}
         </div>
         <div className="flex items-center gap-3">
+          {cadence && color && cadence.weeklyBuckets.length > 0 && (
+            <InlineSparkline buckets={cadence.weeklyBuckets} color={color} />
+          )}
           {cadence && color && (
             <span className="text-sm font-bold font-mono" style={{ color }}>
               {cadence.releaseCount}{capped && "+"}
@@ -122,19 +141,16 @@ export function SourceCard({ source, orgSlug, cadence, showProductBadge = true }
           {source.releaseCount > 0 && <>{(source.latestVersion || source.latestDate) ? " · " : ""}{source.releaseCount >= FETCH_CAP ? `${FETCH_CAP}+` : source.releaseCount} releases</>}
         </div>
       )}
-      {cadence && cadence.weeklyBuckets.length > 0 && color && (
-        <div className="mt-3">
-          <InlineSparkline buckets={cadence.weeklyBuckets} color={color} />
-          <div className="flex justify-between mt-1.5 text-[11px] text-stone-500 dark:text-stone-400">
-            <span>{capped ? `${Math.round(cadence.avgReleasesPerWeek)}+` : Math.round(cadence.avgReleasesPerWeek)}/week avg</span>
-            <span className="truncate ml-2">
-              {cadence.earliestVersion && cadence.latestVersion && cadence.earliestVersion !== cadence.latestVersion
-                ? `${fmtVersion(cadence.earliestVersion)} → ${fmtVersion(cadence.latestVersion)}`
-                : cadence.latestVersion
-                  ? fmtVersion(cadence.latestVersion)
-                  : ""}
-            </span>
-          </div>
+      {cadence && cadence.weeklyBuckets.length > 0 && (
+        <div className="flex justify-between mt-2 text-[11px] text-stone-500 dark:text-stone-400">
+          <span>{capped ? `${Math.round(cadence.avgReleasesPerWeek)}+` : Math.round(cadence.avgReleasesPerWeek)}/week avg</span>
+          <span className="truncate ml-2">
+            {cadence.earliestVersion && cadence.latestVersion && cadence.earliestVersion !== cadence.latestVersion
+              ? `${fmtVersion(cadence.earliestVersion)} → ${fmtVersion(cadence.latestVersion)}`
+              : cadence.latestVersion
+                ? fmtVersion(cadence.latestVersion)
+                : ""}
+          </span>
         </div>
       )}
     </Link>
