@@ -87,7 +87,8 @@ Read-only tools available on the remote server with no authentication.
 
 | Tool | Description |
 | --- | --- |
-| `search_releases` | Full-text search across all indexed release notes. Supports filtering by product slug, organization, or release `type`. |
+| `search_releases` | Hybrid search across releases and heading-aligned CHANGELOG chunks. Accepts `mode: "lexical" \| "semantic" \| "hybrid"` (default `hybrid`) and filters by product slug, organization, or release `type`. Every hit carries a `kind: "release" \| "changelog_chunk"` discriminator; chunk hits include `chunkOffset` and `chunkLength` so you can chain into `get_source_changelog` for surrounding context. |
+| `search_registry` | Vector-backed search across orgs, products, and sources. Use this for entity lookup instead of `search_releases` when you want organization or product matches. |
 | `get_latest_releases` | Get the most recent releases, optionally filtered by product, organization, or release `type`. |
 | `get_release` | Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid. |
 | `list_sources` | List all indexed changelog sources, optionally filtered to one organization. |

@@ -152,13 +152,43 @@ Get full release details by ID, including content and media assets.
 
 ### `GET /v1/search`
 
-Full-text search across orgs, products, sources, and releases.
+Hybrid search across orgs, products, sources, releases, and CHANGELOG chunks. FTS5 and vector similarity are fused with Reciprocal Rank Fusion; hybrid is the default.
 
 | Param | Description |
 | --- | --- |
 | `q` | Search query (required) |
 | `limit` | Max results (default 20) |
 | `offset` | Pagination offset |
+| `mode` | `lexical`, `semantic`, or `hybrid` (default `hybrid`). `lexical` returns the legacy FTS-only shape. |
+
+Hybrid and semantic responses include a ranked `chunks` array interleaved with release hits, plus `mode`, `degraded`, and `degradedReason` fields. `degraded: true` means the request fell back to lexical because Vectorize or the embedding provider was unavailable — results are still returned.
+
+Each chunk hit carries `sourceSlug`, `orgSlug`, `filePath`, `offset`, `length`, `heading`, `snippet`, and `score` so clients can chain into `GET /v1/sources/:slug/changelog?offset=...` for surrounding context.
+
+### `GET /v1/related/releases`
+
+Semantically similar releases for an anchor release. Reuses the release's existing vector — no re-embedding.
+
+| Param | Description |
+| --- | --- |
+| `release` | Anchor release id (required) |
+| `scope` | `org` (same organization) or `global` (default `global`) |
+| `limit` | Max results (1-20, default 5) |
+
+Degrades to an empty `items` array with `degraded: true` when Vectorize bindings are unavailable. Anchor is excluded from its own results. Cached for 5 minutes.
+
+### `GET /v1/related/sources`
+
+Semantically similar sources for an anchor source. Uses the entity vector.
+
+| Param | Description |
+| --- | --- |
+| `source` | Anchor source slug or id (required) |
+| `scope` | `org` (siblings in the same organization) or `global` (default `global`) |
+| `excludeOrgSlug` | Optional org slug to exclude from global results (used to avoid overlap when rendering both scopes together) |
+| `limit` | Max results (1-20, default 5) |
+
+Same degradation and anchor-exclusion semantics as `/v1/related/releases`.
 
 ---
 
