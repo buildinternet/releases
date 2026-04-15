@@ -26,6 +26,8 @@ curl -fsSL https://releases.sh/install | bash
 
 The public CLI connects to the hosted API at `api.releases.sh` automatically. Reader commands (`search`, `latest`, `summary`, `list`, `show`, `stats`, `categories`) work without any configuration. Operator workflows live under `releases admin ...` and require an API key.
 
+Unauthenticated requests to the hosted API may be rate-limited per client — configuring an API key lifts the limit for your own tooling.
+
 ## Development Setup
 
 ```bash

@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { authMiddleware, publicReadAuthMiddleware } from "./middleware/auth.js";
+import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
@@ -52,6 +53,9 @@ export type Env = {
     EMBEDDING_PROVIDER?: string;
     VOYAGE_API_KEY?: SecretBinding;
     OPENAI_API_KEY?: SecretBinding;
+    // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
+    RATE_LIMIT_ENABLED?: string;
+    PUBLIC_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
   };
 };
 
@@ -87,8 +91,8 @@ const publicReadRoutes = [
   "related",
 ];
 for (const r of publicReadRoutes) {
-  v1.use(`/${r}`, publicReadAuthMiddleware, dbHealthCheck);
-  v1.use(`/${r}/*`, publicReadAuthMiddleware, dbHealthCheck);
+  v1.use(`/${r}`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
+  v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
 }
 
 // Admin-only routes: all methods require auth
