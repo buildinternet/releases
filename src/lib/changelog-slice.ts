@@ -1,26 +1,39 @@
 /**
- * Heading-aware slicing for CHANGELOG files. Slices start on a heading
- * (offset=0 preserved for preamble) and end at the last heading inside
- * the requested range, overshooting to the next heading only when a
- * single section is bigger than `limit`. Successive slices via
- * `nextOffset` reconstruct the file exactly.
+ * Heading-aware CHANGELOG slicer. Start/end always land on `##` headings
+ * (offset=0 preserved for preamble); single oversized sections overshoot
+ * rather than get cut mid-entry. Chaining `nextOffset` reconstructs the
+ * full file exactly. Budget by chars (`limit`) or tokens (`tokens`,
+ * cl100k_base) — `tokens` wins when both are passed.
  */
+
+import { countTokens, countTokensSafe } from "./tokens";
+import { DEFAULT_CHANGELOG_SLICE_LIMIT, parseRangeParam } from "./changelog-range";
+
+export { DEFAULT_CHANGELOG_SLICE_LIMIT, parseRangeParam };
 
 export interface ChangelogSliceOptions {
   offset?: number;
   limit?: number;
+  tokens?: number;
 }
 
 export interface ChangelogSliceResult {
   content: string;
   offset: number;
   limit: number;
+  /** Requested token budget, echoed when the caller used token mode. */
+  tokens?: number;
   nextOffset: number | null;
   totalChars: number;
+  /** Encoded token count of the returned `content`. Only set in token mode. */
+  sliceTokens?: number;
 }
 
-export const DEFAULT_CHANGELOG_SLICE_LIMIT = 40_000;
 const MAX_SLICE_LIMIT = 500_000;
+export const DEFAULT_CHANGELOG_SLICE_TOKENS = 10_000;
+const MAX_SLICE_TOKENS = 200_000;
+/** Values surfaced in CLI/MCP descriptions so agents default to predictable slices. */
+export const CHANGELOG_TOKEN_BRACKETS = [2_000, 5_000, 10_000, 20_000] as const;
 
 function isHeadingLine(text: string, lineStart: number, lineEnd: number): boolean {
   let i = lineStart;
@@ -60,12 +73,64 @@ function clampOffset(offset: number | undefined, total: number): number {
   return Math.floor(offset);
 }
 
+function clampTokens(tokens: number | undefined): number | undefined {
+  if (tokens === undefined) return undefined;
+  if (!Number.isFinite(tokens) || tokens <= 0) return DEFAULT_CHANGELOG_SLICE_TOKENS;
+  if (tokens > MAX_SLICE_TOKENS) return MAX_SLICE_TOKENS;
+  return Math.floor(tokens);
+}
+
+/**
+ * Walk forward heading-by-heading, encoding each section once and summing
+ * as we go. BPE merges rarely cross `\n##` boundaries, so the running sum
+ * is within ~1% of an exact re-encode — but O(M) total instead of the
+ * O(N·M) you get from re-encoding cumulative prefixes. The caller does
+ * one final exact `countTokens` on the chosen slice to populate
+ * `sliceTokens`, so the response value is always exact.
+ *
+ * Overshoots to the first heading boundary when a single section exceeds
+ * the budget, mirroring char-mode behavior so callers always make progress.
+ */
+function findTokenSliceEnd(
+  content: string,
+  snappedStart: number,
+  budget: number,
+  headings: number[],
+  totalChars: number,
+): number {
+  const candidates: number[] = [];
+  for (const h of headings) {
+    if (h > snappedStart) candidates.push(h);
+  }
+  if (candidates.length === 0 || candidates[candidates.length - 1] !== totalChars) {
+    candidates.push(totalChars);
+  }
+
+  let cursor = snappedStart;
+  let runningTokens = 0;
+  let lastFit = -1;
+  for (const end of candidates) {
+    const sectionTokens = countTokens(content.slice(cursor, end));
+    const nextTotal = runningTokens + sectionTokens;
+    if (nextTotal <= budget) {
+      lastFit = end;
+      runningTokens = nextTotal;
+      cursor = end;
+    } else {
+      break;
+    }
+  }
+
+  return lastFit !== -1 ? lastFit : candidates[0];
+}
+
 export function sliceChangelog(
   content: string,
   opts: ChangelogSliceOptions = {},
 ): ChangelogSliceResult {
   const totalChars = content.length;
   const offset = clampOffset(opts.offset, totalChars);
+  const tokenBudget = clampTokens(opts.tokens);
   const limit = clampLimit(opts.limit);
   const headings = findHeadings(content);
 
@@ -77,52 +142,86 @@ export function sliceChangelog(
     snappedStart = next !== undefined ? next : totalChars;
   }
 
-  const requestedEnd = snappedStart + limit;
   let snappedEnd: number;
-  if (requestedEnd >= totalChars) {
-    snappedEnd = totalChars;
+
+  if (tokenBudget !== undefined) {
+    snappedEnd = snappedStart >= totalChars
+      ? totalChars
+      : findTokenSliceEnd(content, snappedStart, tokenBudget, headings, totalChars);
   } else {
-    let lastInRange = -1;
-    for (let i = headings.length - 1; i >= 0; i--) {
-      const h = headings[i];
-      if (h > snappedStart && h <= requestedEnd) {
-        lastInRange = h;
-        break;
+    const requestedEnd = snappedStart + limit;
+    if (requestedEnd >= totalChars) {
+      snappedEnd = totalChars;
+    } else {
+      let lastInRange = -1;
+      for (let i = headings.length - 1; i >= 0; i--) {
+        const h = headings[i];
+        if (h > snappedStart && h <= requestedEnd) {
+          lastInRange = h;
+          break;
+        }
+      }
+      if (lastInRange !== -1) {
+        snappedEnd = lastInRange;
+      } else {
+        const overshoot = headings.find((h) => h > requestedEnd);
+        snappedEnd = overshoot !== undefined ? overshoot : requestedEnd;
       }
     }
-    if (lastInRange !== -1) {
-      snappedEnd = lastInRange;
-    } else {
-      const overshoot = headings.find((h) => h > requestedEnd);
-      snappedEnd = overshoot !== undefined ? overshoot : requestedEnd;
-    }
-  }
 
-  if (snappedEnd <= snappedStart) {
-    snappedEnd = Math.min(totalChars, snappedStart + Math.max(limit, 1));
+    if (snappedEnd <= snappedStart) {
+      snappedEnd = Math.min(totalChars, snappedStart + Math.max(limit, 1));
+    }
   }
 
   const slice = content.slice(snappedStart, snappedEnd);
   const nextOffset = snappedEnd < totalChars ? snappedEnd : null;
 
-  return {
+  const result: ChangelogSliceResult = {
     content: slice,
     offset: snappedStart,
     limit,
     nextOffset,
     totalChars,
   };
+  if (tokenBudget !== undefined) {
+    result.tokens = tokenBudget;
+    result.sliceTokens = countTokens(slice);
+  }
+  return result;
 }
 
-export function hasRangeParams(params: { offset?: string | null; limit?: string | null }): boolean {
-  return params.offset != null || params.limit != null;
+export function hasRangeParams(params: { offset?: string | null; limit?: string | null; tokens?: string | null }): boolean {
+  return params.offset != null || params.limit != null || params.tokens != null;
 }
 
-export function parseRangeParam(raw: string | null | undefined): number | undefined {
-  if (raw == null || raw === "") return undefined;
-  const n = Number(raw);
-  if (!Number.isFinite(n)) return undefined;
-  return n;
+/**
+ * Unify how CLI/MCP surfaces with numeric inputs produce the stringified
+ * `{offset,limit,tokens}` shape `buildChangelogResponse` consumes.
+ *
+ * Rule: `tokens` takes precedence. Otherwise, fall back to the default
+ * 40k-char slice when the caller passes an offset OR a limit without a
+ * value — matches Context7 behavior where any range hint implies "don't
+ * return the whole file".
+ */
+export function resolveChangelogRangeParams(input: {
+  offset?: number;
+  limit?: number;
+  tokens?: number;
+}): { offset: string | null; limit: string | null; tokens: string | null } {
+  const inTokenMode = input.tokens !== undefined;
+  const ranging = input.offset !== undefined || input.limit !== undefined || inTokenMode;
+  return {
+    offset: input.offset !== undefined ? String(input.offset) : null,
+    limit: inTokenMode
+      ? null
+      : input.limit !== undefined
+        ? String(input.limit)
+        : ranging
+          ? String(DEFAULT_CHANGELOG_SLICE_LIMIT)
+          : null,
+    tokens: inTokenMode ? String(input.tokens) : null,
+  };
 }
 
 interface ChangelogFileRow {
@@ -132,6 +231,8 @@ interface ChangelogFileRow {
   rawUrl: string;
   content: string;
   bytes: number;
+  /** Cached full-file token count. Null for rows written before the column existed. */
+  tokens?: number | null;
   fetchedAt: string;
 }
 
@@ -172,10 +273,30 @@ export function selectChangelogFile<T extends { path: string }>(
   return rows.find((r) => !r.path.includes("/")) ?? rows[0];
 }
 
-export interface ChangelogResponse extends ChangelogFileRow, ChangelogSliceResult {
-  truncated: boolean;
-  truncatedAt: number | null;
-  files: ChangelogFileSummaryLite[];
+export type ChangelogResponse = Omit<ChangelogFileRow, "tokens"> &
+  ChangelogSliceResult & {
+    truncated: boolean;
+    truncatedAt: number | null;
+    /** Full-file token count (cl100k_base). Always populated in responses. */
+    totalTokens: number;
+    files: ChangelogFileSummaryLite[];
+  };
+
+/**
+ * Format the "what did I just get" status line shared by the CLI footer
+ * and both MCP tool response headers. Shape varies with whether the
+ * caller requested a token budget and whether more content follows.
+ */
+export function formatChangelogSliceLine(
+  response: Pick<ChangelogResponse, "offset" | "content" | "totalChars" | "totalTokens" | "sliceTokens" | "nextOffset">,
+): string {
+  const end = response.offset + response.content.length;
+  const tail = response.nextOffset != null ? `next: offset=${response.nextOffset}` : "end of file";
+  const charPart = `chars ${response.offset}–${end} of ${response.totalChars}`;
+  const head = response.sliceTokens !== undefined
+    ? `${response.sliceTokens} tokens (${charPart} / ${response.totalTokens} total tokens)`
+    : `${charPart} (${response.totalTokens} total tokens)`;
+  return `Slice: ${head} — ${tail}`;
 }
 
 /**
@@ -186,11 +307,12 @@ export interface ChangelogResponse extends ChangelogFileRow, ChangelogSliceResul
  */
 export function buildChangelogResponse(
   row: ChangelogFileRow,
-  params: { offset?: string | null; limit?: string | null },
+  params: { offset?: string | null; limit?: string | null; tokens?: string | null },
   files: ChangelogFileSummaryLite[] = [],
 ): ChangelogResponse {
   const truncated = isTruncated(row.bytes);
   const truncatedAt = truncated ? row.bytes : null;
+  const totalTokens = row.tokens ?? countTokensSafe(row.content);
   const base = {
     path: row.path,
     filename: row.filename,
@@ -208,6 +330,7 @@ export function buildChangelogResponse(
       limit: totalChars,
       nextOffset: null,
       totalChars,
+      totalTokens,
       truncated,
       truncatedAt,
       files,
@@ -216,6 +339,7 @@ export function buildChangelogResponse(
   const slice = sliceChangelog(row.content, {
     offset: parseRangeParam(params.offset),
     limit: parseRangeParam(params.limit),
+    tokens: parseRangeParam(params.tokens),
   });
-  return { ...base, ...slice, truncated, truncatedAt, files };
+  return { ...base, ...slice, totalTokens, truncated, truncatedAt, files };
 }

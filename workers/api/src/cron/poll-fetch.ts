@@ -1,6 +1,7 @@
 import { eq, and, or, sql, isNull } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sources, releases, fetchLog, sourceChangelogFiles } from "@releases/db/schema.js";
+import { countTokensSafe } from "@releases/lib/tokens.js";
 import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@releases/db/schema.js";
 import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapters/feed.js";
@@ -599,13 +600,16 @@ async function refreshChangelogFile(
         content: file.content,
         contentHash: file.contentHashHex,
         bytes: file.bytes,
+        tokens: countTokensSafe(file.content),
         fetchedAt: now,
       });
       console.log(`[cron] Inserted ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
     } else if (prior.contentHash === file.contentHashHex) {
+      const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
+      if (prior.tokens === null) touch.tokens = countTokensSafe(prior.content);
       await db
         .update(sourceChangelogFiles)
-        .set({ fetchedAt: now })
+        .set(touch)
         .where(eq(sourceChangelogFiles.id, prior.id));
     } else {
       await db
@@ -617,6 +621,7 @@ async function refreshChangelogFile(
           content: file.content,
           contentHash: file.contentHashHex,
           bytes: file.bytes,
+          tokens: countTokensSafe(file.content),
           fetchedAt: now,
         })
         .where(eq(sourceChangelogFiles.id, prior.id));

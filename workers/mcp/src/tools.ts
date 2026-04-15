@@ -15,7 +15,7 @@ import {
 } from "@releases/db/schema.js";
 import { daysAgoIso } from "@releases/lib/dates.js";
 import { getEntityType, normalizeReleaseId } from "@releases/lib/id.js";
-import { buildChangelogResponse, selectChangelogFile } from "@releases/lib/changelog-slice.js";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@releases/lib/changelog-slice.js";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -425,7 +425,7 @@ export async function getOrganization(
 
 export async function getSourceChangelog(
   db: D1Db,
-  params: { source: string; path?: string; offset?: number; limit?: number },
+  params: { source: string; path?: string; offset?: number; limit?: number; tokens?: number },
 ): Promise<ToolResult> {
   const source = await resolveSource(db, params.source);
   if (!source) return text(`No source found matching "${params.source}"`);
@@ -455,17 +455,14 @@ export async function getSourceChangelog(
 
   const response = buildChangelogResponse(
     selected,
-    {
-      offset: params.offset !== undefined ? String(params.offset) : null,
-      limit: params.limit !== undefined ? String(params.limit) : (params.offset !== undefined ? "40000" : null),
-    },
+    resolveChangelogRangeParams({ offset: params.offset, limit: params.limit, tokens: params.tokens }),
     files,
   );
 
   const header: string[] = [
     `**${source.name}** — ${response.path}`,
     `Source: ${response.url}`,
-    `Slice: chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars}${response.nextOffset != null ? ` (next: offset=${response.nextOffset})` : " (end of file)"}`,
+    formatChangelogSliceLine(response),
   ];
   if (response.truncated) {
     header.push(`⚠ TRUNCATED: upstream file exceeds 1MB cap, content cut at byte ${response.truncatedAt}. Tail is missing.`);

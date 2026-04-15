@@ -34,7 +34,7 @@ If the query returns no results, try variations:
 - **Specific feature or keyword** → Use `search_releases` with a descriptive query and organization filter
 - **Single release by id** → Use `get_release` when you already have a `rel_` id (search results include ids)
 - **Source or product deep-dive** → Use `get_source`, `get_product`, or `get_organization` for metadata, tags, and linkage
-- **Canonical CHANGELOG.md from a GitHub repo** → Use `get_source_changelog` when the user wants the full maintained file, not just the tagged releases (it's refreshed on every fetch)
+- **Canonical CHANGELOG.md from a GitHub repo** → Use `get_source_changelog` when the user wants the full maintained file, not just the tagged releases (refreshed on every fetch). For large files, pass `tokens` (cl100k_base budget, e.g. 5000 or 10000) to get a heading-aligned slice that fits a known context window; chain via the returned `nextOffset`. Every response reports `totalTokens` so you can plan how many calls you need upfront.
 - **Compare two products** → Use `compare_products` with an array of two product slugs
 - **Summarize recent activity** → Use `summarize_changes` with the product slug
 

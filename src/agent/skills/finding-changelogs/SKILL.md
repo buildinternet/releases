@@ -32,7 +32,12 @@ For `github` sources, the fetch pipeline ingests tagged releases **and** the rep
 
 ### Reading a tracked CHANGELOG
 
-Once a github source is tracked, its CHANGELOG is readable via `GET /v1/sources/:slug/changelog` (REST), the `get_source_changelog` MCP tool, or `releases admin source changelog <slug>` (CLI). All three support heading-aligned range slicing via `offset` / `limit` — pass them for Context7-style partial reads, then chain successive calls via the returned `nextOffset` to page through big files (e.g. Apollo Client's 700KB CHANGELOG) without pulling the whole thing at once.
+Once a github source is tracked, its CHANGELOG is readable via `GET /v1/sources/:slug/changelog` (REST), the `get_source_changelog` MCP tool, or `releases admin source changelog <slug>` (CLI). All three support heading-aligned slicing in two modes:
+
+- **Token mode** (preferred for agent context budgeting) — pass `tokens` / `--tokens` with a cl100k_base budget. The response carries `sliceTokens` (actual count of the returned chunk) and `totalTokens` (whole file) so you can plan context precisely. Recommended brackets: 2000 / 5000 / 10000 / 20000.
+- **Char mode** — pass `limit` / `--limit` for character budgets. Same snap/overshoot rules.
+
+`tokens` wins when both are passed. Chain successive calls via the returned `nextOffset` to page through big files (e.g. Apollo Client's 700KB CHANGELOG) without pulling the whole thing at once. Every response includes `totalTokens` upfront, so you can budget the number of calls before you start reading.
 
 ## Well-Known Files & Link Relations
 

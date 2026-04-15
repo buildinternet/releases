@@ -5,7 +5,7 @@ import { eq, desc, inArray, and } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { runMigrations } from "../db/migrate.js";
 import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "../db/schema.js";
-import { buildChangelogResponse, selectChangelogFile } from "../lib/changelog-slice.js";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "../lib/changelog-slice.js";
 import { searchReleases } from "../db/fts.js";
 import {
   findSource, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
@@ -381,14 +381,15 @@ server.registerTool("get_organization", {
 
 // ── get_source_changelog ─────────────────────────────────────────────
 server.registerTool("get_source_changelog", {
-  description: "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root. Response lists every tracked file so siblings can be discovered in one round-trip. Supports heading-aligned slicing via offset/limit. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
+  description: "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root. Supports heading-aligned slicing by chars (`limit`) or tokens (`tokens`, cl100k_base). Every response includes `totalTokens`; token mode also returns `sliceTokens` for the returned chunk. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
   inputSchema: {
     source: z.string().describe("Source slug or ID (e.g. 'apollo-client' or 'src_...')"),
     path: z.string().optional().describe("Specific file path to read (e.g. 'packages/next/CHANGELOG.md'). Defaults to the root CHANGELOG."),
     offset: z.number().optional().describe("Character offset into the selected file. Snapped forward to the next heading unless 0."),
-    limit: z.number().optional().describe("Target slice size in characters. The slice ends at a heading boundary; defaults to 40000 when slicing."),
+    limit: z.number().optional().describe("Target slice size in characters. The slice ends at a heading boundary. Defaults to 40000 when slicing without a token budget."),
+    tokens: z.number().optional().describe("Target slice size in tokens (cl100k_base). Takes precedence over `limit`. Recommended brackets: 2000, 5000, 10000, 20000."),
   },
-}, async ({ source: identifier, path: requestedPath, offset, limit }) => {
+}, async ({ source: identifier, path: requestedPath, offset, limit, tokens }) => {
   const db = getDb();
   const source = await findSource(identifier);
   if (!source) return textResult(`No source found matching "${identifier}"`);
@@ -418,17 +419,14 @@ server.registerTool("get_source_changelog", {
 
   const response = buildChangelogResponse(
     selected,
-    {
-      offset: offset !== undefined ? String(offset) : null,
-      limit: limit !== undefined ? String(limit) : (offset !== undefined ? "40000" : null),
-    },
+    resolveChangelogRangeParams({ offset, limit, tokens }),
     files,
   );
 
   const lines: string[] = [
     `**${source.name}** — ${response.path}`,
     `Source: ${response.url}`,
-    `Slice: chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars}${response.nextOffset != null ? ` (next: offset=${response.nextOffset})` : " (end of file)"}`,
+    formatChangelogSliceLine(response),
   ];
   if (response.truncated) {
     lines.push(`⚠ TRUNCATED: upstream file exceeds 1MB cap, content cut at byte ${response.truncatedAt}. Tail is missing.`);

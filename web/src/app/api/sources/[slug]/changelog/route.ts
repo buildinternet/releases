@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { api } from "@/lib/api";
-import { parseRangeParam } from "@shared/changelog-slice";
+import { parseRangeParam } from "@shared/changelog-range";
 
 export async function GET(
   req: Request,

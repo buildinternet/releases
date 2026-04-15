@@ -232,6 +232,7 @@ export function handleSourceChangelog(
     {
       offset: searchParams?.get("offset") ?? null,
       limit: searchParams?.get("limit") ?? null,
+      tokens: searchParams?.get("tokens") ?? null,
     },
     files,
   );

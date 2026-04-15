@@ -466,7 +466,8 @@ describe("getSourceChangelog", () => {
     expect(txt).toContain("Acme CLI");
     expect(txt).toContain("CHANGELOG.md");
     expect(txt).toContain("Fixed parsing error");
-    expect(txt).toContain("(end of file)");
+    expect(txt).toContain("end of file");
+    expect(txt).toContain("total tokens");
   });
 
   it("returns not-found message when source has no changelog", async () => {
@@ -497,7 +498,7 @@ describe("getSourceChangelog", () => {
       limit: 20,
     });
     const txt = resultText(result);
-    expect(txt).toMatch(/Slice: chars 0–\d+ of \d+/);
+    expect(txt).toMatch(/Slice:.*chars 0–\d+ of \d+/);
     expect(txt).toContain("next: offset=");
   });
 });

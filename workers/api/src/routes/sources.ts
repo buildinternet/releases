@@ -498,6 +498,7 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
       {
         offset: c.req.query("offset") ?? null,
         limit: c.req.query("limit") ?? null,
+        tokens: c.req.query("tokens") ?? null,
       },
       files,
     ),

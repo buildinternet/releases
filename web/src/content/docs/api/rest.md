@@ -103,12 +103,13 @@ Releases after a cutoff date. Requires `?cutoff=ISO-date`.
 
 ### `GET /v1/sources/:slug/changelog`
 
-Read the canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) tracked for a GitHub source. Supports heading-aligned range slicing — useful for agent-friendly Context7-style access to large files (e.g. Apollo Client's 700KB CHANGELOG).
+Read the canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) tracked for a GitHub source. Supports heading-aligned range slicing by characters or by tokens (cl100k_base) — useful for agent-friendly Context7-style access to large files (e.g. Apollo Client's 700KB CHANGELOG).
 
 | Param | Description |
 | --- | --- |
 | `offset` | Character offset into the full file. Snapped forward to the next `##`/`###`/`#` heading unless 0. |
-| `limit` | Target slice size in characters. The slice ends at a heading boundary; overshoots to the next heading if a single section is bigger than `limit`. Default 40000 when either range param is present. |
+| `limit` | Target slice size in **characters**. The slice ends at a heading boundary; overshoots to the next heading if a single section is bigger than `limit`. Default 40000 when either range param is present and `tokens` is not set. |
+| `tokens` | Target slice size in **tokens** (cl100k_base). Walks sections forward under the budget with the same heading-snap and overshoot rules as `limit`. Takes precedence when both are passed. Recommended brackets: `2000` / `5000` / `10000` / `20000`. |
 
 With no range params, the full file is returned (back-compat). Response body:
 
@@ -123,10 +124,15 @@ With no range params, the full file is returned (back-compat). Response body:
   "content": "## 4.1.7\n\n...",
   "offset": 0,
   "limit": 40000,
-  "nextOffset": 40234,
-  "totalChars": 732571
+  "tokens": 5000,
+  "nextOffset": 18932,
+  "totalChars": 732571,
+  "sliceTokens": 4871,
+  "totalTokens": 182445
 }
 ```
+
+`totalTokens` is cached per file and always returned. `tokens` (echoed budget) and `sliceTokens` (actual encoded count of the returned `content`) are only populated when the request used token mode.
 
 Chain successive requests by passing the returned `nextOffset` back as the next `offset`. `nextOffset` is `null` when the slice reaches the end of the file. The canonical file is refreshed on a 24h TTL by the API worker cron for `github` sources.
 
