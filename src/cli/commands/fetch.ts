@@ -6,7 +6,8 @@ import { sourceNotFound } from "../suggest.js";
 import type { FetchOptions } from "@releases/adapters/types";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
 import { detectChangelogUrl, fetchChangelogFiles } from "../../adapters/github.js";
-import { getAdapter, contentHash } from "../../adapters/resolve.js";
+import { getAdapter } from "../../adapters/resolve.js";
+import { contentHash } from "@releases/adapters/content-hash";
 import {
   findSource, listAllSources, listFetchableSources, listSourcesWithChanges,
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,

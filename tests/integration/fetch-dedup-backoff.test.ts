@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { sources, releases, organizations } from "@releases/core/schema";
-import { contentHash } from "../../src/adapters/resolve.js";
+import { contentHash } from "@releases/adapters/content-hash";
 import type { RawRelease } from "../../src/adapters/types.js";
 
 let testDb: TestDatabase;

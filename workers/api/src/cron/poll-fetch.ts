@@ -6,7 +6,7 @@ import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@releases/core/schema";
 import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapters/feed.js";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
-import { contentHash } from "@releases/adapters/resolve.js";
+import { contentHash } from "@releases/adapters/content-hash";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { normalizeMediaUrl } from "@releases/lib/media-url.js";
 import { embedAndUpsertChangelogFile } from "@releases/lib/embed-changelog-pipeline.js";

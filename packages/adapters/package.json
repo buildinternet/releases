@@ -5,7 +5,8 @@
   "type": "module",
   "exports": {
     "./types": "./src/types.ts",
-    "./source-meta": "./src/source-meta.ts"
+    "./source-meta": "./src/source-meta.ts",
+    "./content-hash": "./src/content-hash.ts"
   },
   "dependencies": {
     "@releases/core": "workspace:*"
