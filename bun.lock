@@ -77,7 +77,9 @@
       "dependencies": {
         "@flags-sdk/vercel": "^1.2.1",
         "@releases/core": "workspace:*",
+        "@shikijs/langs": "^4.0.2",
         "@shikijs/rehype": "^4.0.2",
+        "@shikijs/themes": "^4.0.2",
         "@tailwindcss/typography": "^0.5.19",
         "flags": "^4.0.6",
         "gray-matter": "^4.0.3",
