@@ -1,6 +1,6 @@
 import type { MetadataRoute } from "next";
 import { api, ApiSetupError } from "@/lib/api";
-import { publicDocs, adminDocs, statusDashboard } from "@/flags";
+import { adminDocs, statusDashboard } from "@/flags";
 
 export const revalidate = 3600;
 
@@ -38,17 +38,11 @@ const STATUS_ROUTES: StaticRoute[] = [
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
-  const [docsEnabled, showAdmin, showStatus] = await Promise.all([
-    publicDocs(),
-    adminDocs(),
-    statusDashboard(),
-  ]);
-
   const staticRoutes: StaticRoute[] = [
     ...ALWAYS_PUBLIC,
-    ...(docsEnabled ? PUBLIC_DOCS_ROUTES : []),
-    ...(docsEnabled && showAdmin ? ADMIN_DOCS_ROUTES : []),
-    ...(showStatus ? STATUS_ROUTES : []),
+    ...PUBLIC_DOCS_ROUTES,
+    ...(adminDocs ? ADMIN_DOCS_ROUTES : []),
+    ...(statusDashboard ? STATUS_ROUTES : []),
   ];
 
   const staticEntries: MetadataRoute.Sitemap = staticRoutes.map((r) => ({
