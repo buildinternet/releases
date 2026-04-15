@@ -1,5 +1,5 @@
 import type { Adapter } from "@releases/adapters/types";
-import { github } from "./github.js";
+import { github } from "@releases/adapters/github";
 import { scrape } from "./scrape.js";
 import { feed } from "./feed.js";
 import { agent } from "./agent.js";

@@ -6,9 +6,14 @@
   "exports": {
     "./types": "./src/types.ts",
     "./source-meta": "./src/source-meta.ts",
-    "./content-hash": "./src/content-hash.ts"
+    "./content-hash": "./src/content-hash.ts",
+    "./github": "./src/github.ts",
+    "./cloudflare": "./src/cloudflare.ts",
+    "./crawl": "./src/crawl.ts",
+    "./feed": "./src/feed.ts"
   },
   "dependencies": {
-    "@releases/core": "workspace:*"
+    "@releases/core": "workspace:*",
+    "@releases/lib": "workspace:*"
   }
 }

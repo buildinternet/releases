@@ -1,7 +1,7 @@
 import { logger } from "@releases/lib/logger";
 import { config } from "@releases/lib/config";
-import { discoverFeed } from "../adapters/feed.js";
-import { parseNextLink } from "../adapters/github.js";
+import { discoverFeed } from "@releases/adapters/feed";
+import { parseNextLink } from "@releases/adapters/github";
 import { detectProvider, type DetectedProvider } from "./providers.js";
 import { getAnthropicClient } from "../ai/client.js";
 import { logUsage } from "./usage.js";

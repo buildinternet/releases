@@ -9,7 +9,7 @@ import { logger } from "@releases/lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired } from "../ai/shared.js";
-import { fetchCloudflareMarkdown } from "./cloudflare.js";
+import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
 
 // ── Tool schema for structured extraction ────────────────────────────
 // Claude calls this when it's done fetching/exploring and has extracted
