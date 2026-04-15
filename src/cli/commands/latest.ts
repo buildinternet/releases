@@ -67,7 +67,7 @@ Examples:
       for (const row of rows) {
         table.push([
           chalk.dim(row.id.slice(0, 12)),
-          stripAnsi(row.sourceName),
+          `${stripAnsi(row.sourceName)} ${chalk.dim(`(${row.sourceSlug})`)}`,
           stripAnsi(row.title),
           row.version ? stripAnsi(row.version) : "-",
           row.publishedAt ?? "-",
@@ -75,5 +75,6 @@ Examples:
       }
 
       console.log(table.toString());
+      console.log(chalk.dim(`\n  More: "releases show <rel_id>" for full content · "releases latest <source-slug>" to filter by source`));
     });
 }

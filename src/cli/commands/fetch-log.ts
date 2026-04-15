@@ -60,8 +60,11 @@ Examples:
           ? chalk.red(stripAnsi(log.error.length > 40 ? log.error.slice(0, 40) + "..." : log.error))
           : chalk.dim("—");
 
+        const sourceLabel = log.sourceName
+          ? `${stripAnsi(log.sourceName)} ${chalk.dim(`(${log.sourceSlug})`)}`
+          : log.sourceSlug || chalk.dim("—");
         table.push([
-          log.sourceName || log.sourceSlug || chalk.dim("—"),
+          sourceLabel,
           statusLabel,
           String(log.releasesFound),
           log.releasesInserted > 0 ? chalk.green(String(log.releasesInserted)) : chalk.dim("0"),
@@ -72,5 +75,9 @@ Examples:
       }
 
       console.log(table.toString());
+      const hint = slug
+        ? `  More: "releases show ${slug}" for source details · "releases admin source fetch ${slug}" to re-fetch`
+        : `  More: "releases admin source fetch-log <slug>" to filter by source · "releases show <slug>" for source details`;
+      console.log(chalk.dim(`\n${hint}`));
     });
 }

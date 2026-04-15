@@ -30,13 +30,13 @@ the nested commands: "list <src>", "org show <slug>", "product list <org>",
       }
       if (type === "source") return showSource(identifier, opts);
       if (type === "org") return showOrg(identifier, opts);
-      if (type === "product") return showProduct(identifier, opts);
+      if (type === "product") return await showProduct(identifier, opts);
 
       // Unknown prefix — treat as slug, try org → product → source in order.
       const org = await findOrg(identifier);
       if (org) return renderOrg(org, opts);
       const product = await findProduct(identifier);
-      if (product) return renderProduct(product, opts);
+      if (product) return await renderProduct(product, opts);
       const source = await findSource(identifier);
       if (source) return renderSource(source, opts);
 
@@ -106,7 +106,7 @@ async function showProduct(identifier: string, opts: { json?: boolean }) {
     console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. prod_abc123…) or a valid slug.`));
     process.exit(1);
   }
-  renderProduct(product, opts);
+  await renderProduct(product, opts);
 }
 
 function renderSource(source: { id: string; name: string; slug: string; type: string; url: string; orgId: string | null; productId: string | null }, opts: { json?: boolean }) {
@@ -153,11 +153,18 @@ async function renderOrg(
 
 function renderLatestReleasesTable(rows: LatestRelease[]): string {
   const table = new Table({
-    head: [chalk.cyan("Source"), chalk.cyan("Title"), chalk.cyan("Version"), chalk.cyan("Published")],
+    head: [
+      chalk.cyan("ID"),
+      chalk.cyan("Source"),
+      chalk.cyan("Title"),
+      chalk.cyan("Version"),
+      chalk.cyan("Published"),
+    ],
   });
   for (const row of rows) {
     table.push([
-      stripAnsi(row.sourceName),
+      chalk.dim(row.id.slice(0, 12)),
+      `${stripAnsi(row.sourceName)} ${chalk.dim(`(${row.sourceSlug})`)}`,
       truncate(stripAnsi(row.title), 50),
       row.version ? stripAnsi(row.version) : chalk.dim("—"),
       row.publishedAt?.slice(0, 10) ?? chalk.dim("—"),
@@ -170,17 +177,19 @@ function truncate(s: string, max: number): string {
   return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
-function renderProduct(product: { id: string; name: string; slug: string; orgId: string; url: string | null; category: string | null }, opts: { json?: boolean }) {
+async function renderProduct(product: { id: string; name: string; slug: string; orgId: string; url: string | null; category: string | null }, opts: { json?: boolean }) {
+  const org = await findOrg(product.orgId);
   if (opts.json) {
-    console.log(JSON.stringify(product, null, 2));
+    console.log(JSON.stringify({ ...product, orgSlug: org?.slug ?? null }, null, 2));
     return;
   }
   console.log(chalk.dim("Product"));
   console.log(chalk.bold(product.name));
   console.log(`  ID:        ${product.id}`);
   console.log(`  Slug:      ${product.slug}`);
-  console.log(`  Org:       ${product.orgId}`);
+  console.log(`  Org:       ${org ? `${org.name} (${org.slug})` : product.orgId}`);
   console.log(`  URL:       ${product.url ?? chalk.dim("—")}`);
   console.log(`  Category:  ${product.category ?? chalk.dim("—")}`);
-  console.log(chalk.dim(`\n  More: "releases latest --org <org-slug>" to see releases.`));
+  const orgHint = org ? `releases latest --org ${org.slug}` : `releases latest --org <org-slug>`;
+  console.log(chalk.dim(`\n  More: "${orgHint}" for recent releases · "releases list --product ${product.slug}" for sources`));
 }

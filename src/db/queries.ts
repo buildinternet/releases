@@ -643,6 +643,7 @@ export async function getLatestReleases(opts: {
       version: releases.version,
       publishedAt: releases.publishedAt,
       sourceName: sources.name,
+      sourceSlug: sources.slug,
     })
     .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
