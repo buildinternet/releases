@@ -1,5 +1,5 @@
 import { getSourceMeta } from "../adapters/feed.js";
-import type { Source, Organization } from "../db/schema.js";
+import type { Source, Organization } from "@releases/core/schema";
 import { getOrgById } from "../db/queries.js";
 
 interface OrgMetadata {

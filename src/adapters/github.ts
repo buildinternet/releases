@@ -1,9 +1,9 @@
-import type { Source } from "../db/schema.js";
+import type { Source } from "@releases/core/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
-import { sha256Hex } from "../lib/hash.js";
+import { sha256Hex } from "@releases/core/hash";
 
 function parseOwnerRepo(url: string): { owner: string; repo: string } {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);

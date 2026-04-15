@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { daysAgoIso, timeAgo } from "../../src/lib/dates.js";
+import { daysAgoIso, timeAgo } from "@releases/core/dates";
 
 describe("daysAgoIso", () => {
   it("returns an ISO string", () => {

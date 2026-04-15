@@ -5,7 +5,7 @@ import {
   parseRangeParam,
   DEFAULT_CHANGELOG_SLICE_LIMIT,
   buildChangelogResponse,
-} from "../../src/lib/changelog-slice.js";
+} from "@releases/core/changelog-slice";
 
 const sample = [
   "# CHANGELOG",

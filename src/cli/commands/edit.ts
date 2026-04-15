@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { findSource, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
 import { sourceNotFound } from "../suggest.js";
-import { toSlug } from "../../lib/slug.js";
+import { toSlug } from "@releases/core/slug";
 import { logger } from "../../lib/logger.js";
 import { updateSourceMeta } from "../../adapters/feed.js";
 

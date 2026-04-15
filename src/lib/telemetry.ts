@@ -3,7 +3,7 @@ import { join } from "path";
 import { randomUUID } from "crypto";
 import { getDataDir } from "./config.js";
 import { VERSION } from "../cli/version.js";
-import type { TelemetryClientKind, TelemetrySurface } from "../db/schema.js";
+import type { TelemetryClientKind, TelemetrySurface } from "@releases/core/schema";
 
 const ANON_ID_FILE = "telemetry-id";
 const DISABLE_FILE = "telemetry-disabled";

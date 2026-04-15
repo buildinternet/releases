@@ -1,7 +1,7 @@
 import { getAnthropicClient } from "./client.js";
 import { config } from "../lib/config.js";
 import { logUsage } from "../lib/usage.js";
-import type { Release } from "../db/schema.js";
+import type { Release } from "@releases/core/schema";
 import { logger } from "../lib/logger.js";
 
 const DEFAULT_WINDOW_DAYS = 90;

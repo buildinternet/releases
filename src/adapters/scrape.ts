@@ -1,10 +1,10 @@
-import type { Source } from "../db/schema.js";
+import type { Source } from "@releases/core/schema";
 import { checkContentHash, getKnownReleasesForSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
-import { sha256Hex } from "../lib/hash.js";
+import { sha256Hex } from "@releases/core/hash";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";

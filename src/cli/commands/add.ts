@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { findOrg, createOrg, createSource, isUrlExcluded, findProduct } from "../../db/queries.js";
-import { toSlug } from "../../lib/slug.js";
+import { toSlug } from "@releases/core/slug";
 import { logger } from "../../lib/logger.js";
 import { evaluateChangelog, buildMetadataFromEvaluation } from "../../ai/evaluate.js";
 import type { EvaluationResult } from "../../ai/evaluate.js";

@@ -2,10 +2,10 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync } from "fs";
 import { existsSync } from "fs";
-import { toSlug } from "../../lib/slug.js";
+import { toSlug } from "@releases/core/slug";
 import { logger } from "../../lib/logger.js";
 import { isGitHubUrl } from "./add.js";
-import { isValidCategory } from "../../lib/categories.js";
+import { isValidCategory } from "@releases/core/categories";
 import {
   findOrg,
   createOrg,

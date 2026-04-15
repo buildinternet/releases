@@ -9,9 +9,9 @@ import {
 } from "./schema.js";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "./release-upsert.js";
 import { isRemoteMode } from "../lib/mode.js";
-import { daysAgoIso } from "../lib/dates.js";
-import { toSlug } from "../lib/slug.js";
-import { countTokensSafe } from "../lib/tokens.js";
+import { daysAgoIso } from "@releases/core/dates";
+import { toSlug } from "@releases/core/slug";
+import { countTokensSafe } from "@releases/core/tokens";
 import * as apiClient from "../api/client.js";
 
 /** Reusable SQL condition: exclude disabled (hidden) sources. */

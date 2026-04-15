@@ -1,4 +1,4 @@
-import type { Source, ReleaseType } from "../db/schema.js";
+import type { Source, ReleaseType } from "@releases/core/schema";
 
 export interface RawRelease {
   version?: string;

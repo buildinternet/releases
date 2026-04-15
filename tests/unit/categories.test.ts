@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { CATEGORIES, isValidCategory } from "../../src/lib/categories.js";
+import { CATEGORIES, isValidCategory } from "@releases/core/categories";
 
 describe("CATEGORIES", () => {
   it("is a non-empty array", () => {

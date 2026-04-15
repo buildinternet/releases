@@ -1,6 +1,6 @@
 import { eq, desc, count, max, sql, and } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { organizations, orgAccounts, sources, releases } from "../../db/schema.js";
+import { organizations, orgAccounts, sources, releases } from "@releases/core/schema";
 import { getOrgMetrics } from "../metrics.js";
 
 export function handleOrgs() {

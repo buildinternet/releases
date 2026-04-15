@@ -3,7 +3,7 @@ import chalk from "chalk";
 import Table from "cli-table3";
 import { findSource, findOrg, findProduct, getRelease, getLatestReleases, type LatestRelease } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { getEntityType, normalizeReleaseId } from "../../lib/id.js";
+import { getEntityType, normalizeReleaseId } from "@releases/core/id";
 
 export function registerShowCommand(program: Command) {
   program

@@ -5,7 +5,7 @@ import {
   pickChangelogInDir,
   CHANGELOG_MAX_BYTES,
 } from "../../src/adapters/github.js";
-import type { Source } from "../../src/db/schema.js";
+import type { Source } from "@releases/core/schema";
 
 // Build a minimal Source that the adapter will accept.
 function mkSource(overrides: Partial<Source> = {}): Source {

@@ -1,4 +1,4 @@
-import type { Source } from "../db/schema.js";
+import type { Source } from "@releases/core/schema";
 import { updateSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
 import { logger } from "../lib/logger.js";

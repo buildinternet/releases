@@ -4,7 +4,7 @@
  * feed adapter (and transitively, bun:sqlite via queries.ts).
  */
 
-import type { Source } from "../db/schema.js";
+import type { Source } from "@releases/core/schema";
 
 type FeedType = "rss" | "atom" | "jsonfeed";
 

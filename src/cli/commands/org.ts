@@ -10,12 +10,12 @@ import {
 } from "../../db/queries.js";
 import { generateKnowledgePage } from "../../ai/knowledge.js";
 import { DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
-import { daysAgoIso } from "../../lib/dates.js";
+import { daysAgoIso } from "@releases/core/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { logger } from "../../lib/logger.js";
 import { orgNotFound } from "../suggest.js";
-import { toSlug } from "../../lib/slug.js";
-import { isValidCategory, CATEGORIES } from "../../lib/categories.js";
+import { toSlug } from "@releases/core/slug";
+import { isValidCategory, CATEGORIES } from "@releases/core/categories";
 
 export function registerOrgCommand(program: Command) {
   const org = program
