@@ -24,6 +24,14 @@ export interface EmbedEntityInput {
   category?: string | null;
   /** Best-effort: org.domain, source.url host, etc. */
   domain?: string | null;
+  /**
+   * Parent organization id, when known. Stored in vector metadata so the
+   * `/v1/related/sources` route can scope results to sibling sources of the
+   * same org via Vectorize `filter: { org_id }`. For `kind === "org"` this
+   * is typically the entity's own id, so the filter shape stays uniform
+   * across kinds.
+   */
+  orgId?: string | null;
 }
 
 export interface EmbedAndUpsertEntitiesOptions {
@@ -44,6 +52,7 @@ function buildEntityText(e: EmbedEntityInput): string {
 function buildEntityMetadata(e: EmbedEntityInput): Record<string, VectorMetadataValue> {
   const meta: Record<string, VectorMetadataValue> = { type: e.kind };
   if (e.category) meta.category = e.category;
+  if (e.orgId) meta.org_id = e.orgId;
   return meta;
 }
 

@@ -1114,6 +1114,7 @@ async function embedSourceSideEffect(
         description: null,
         category,
         domain,
+        orgId: src.orgId,
       }],
       // Cast required: workers-types `VectorizeIndex` declares a narrower
       // metadata value type than the runtime-agnostic interface in

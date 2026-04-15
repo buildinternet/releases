@@ -10,6 +10,8 @@ import { SourceTabs } from "@/components/source-tabs";
 import { SourceMainContent } from "@/components/source-main-content";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
+import { RelatedReleases } from "@/components/related-releases";
+import { RelatedSources } from "@/components/related-sources";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
@@ -117,6 +119,20 @@ export default async function IndependentSourcePage({
               hasChangelog={!!source.hasChangelogFile}
             />
             <SourceMainContent source={source} tab={tab} basePath={`/source/${slug}`} changelogPath={changelogPath} />
+            {/*
+              Independent sources (no parent org) only render global-scope
+              rails. Both components hide themselves on empty / degraded
+              responses, so older sources that haven't been re-embedded
+              yet simply won't show rails until the backfill runs.
+            */}
+            {source.releases[0]?.id && (
+              <RelatedReleases
+                releaseId={source.releases[0].id}
+                scope="global"
+                limit={5}
+              />
+            )}
+            <RelatedSources source={slug} scope="global" limit={4} />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/source/${slug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>

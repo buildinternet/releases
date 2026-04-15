@@ -51,6 +51,9 @@ function fakeVectorize(opts: { upsertThrows?: boolean } = {}) {
     async query() {
       return { matches: [] } as any;
     },
+    async getByIds() {
+      return [];
+    },
   } as VectorizeIndex;
   return { index, upserted, deleted };
 }

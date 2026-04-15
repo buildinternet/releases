@@ -10,6 +10,8 @@ import { SourceTabs } from "@/components/source-tabs";
 import { SourceMainContent } from "@/components/source-main-content";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
+import { RelatedReleases } from "@/components/related-releases";
+import { RelatedSources } from "@/components/related-sources";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
@@ -122,6 +124,30 @@ export default async function SourcePage({
               hasChangelog={!!source.hasChangelogFile}
             />
             <SourceMainContent source={source} tab={tab} basePath={`/${orgSlug}/${sourceSlug}`} changelogPath={changelogPath} />
+            {/*
+              Related rails. Both components hide themselves on empty /
+              degraded responses. Release anchor = the most recently
+              published release on the current page (the API response is
+              sorted newest-first) — falling back to skipping the rail if
+              the source has no releases yet.
+
+              Scope default: we render the org-scoped source rail first so
+              readers on multi-product orgs (Vercel → Next.js, Turborepo,
+              …) discover siblings, then a global-scoped similar-releases
+              rail for cross-org discovery. The RelatedSources component
+              hides itself on org=undefined and when fewer than one
+              sibling is returned, so single-product orgs don't render an
+              empty rail.
+            */}
+            {source.releases[0]?.id && (
+              <RelatedReleases
+                releaseId={source.releases[0].id}
+                scope="global"
+                limit={5}
+              />
+            )}
+            <RelatedSources source={sourceSlug} scope="org" limit={4} />
+            <RelatedSources source={sourceSlug} scope="global" limit={4} />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>

@@ -8,6 +8,7 @@ import { statsRoutes } from "./routes/stats.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { sourceRoutes } from "./routes/sources.js";
 import { searchRoutes } from "./routes/search.js";
+import { relatedRoutes } from "./routes/related.js";
 import { fetchLogRoutes } from "./routes/fetch-log.js";
 import { usageLogRoutes } from "./routes/usage-log.js";
 import { ignoreRoutes } from "./routes/ignore.js";
@@ -81,7 +82,7 @@ v1.route("/", mediaRoutes);
 
 // Public-read routes: GET is open, writes require auth
 const publicReadRoutes = [
-  "stats", "orgs", "sources", "search", "releases",
+  "stats", "orgs", "sources", "search", "related", "releases",
   "products", "summaries", "knowledge", "overview", "playbook", "tags",
 ];
 for (const r of publicReadRoutes) {
@@ -112,6 +113,8 @@ v1.use("/sources/fetchable", cacheControl(15));
 v1.use("/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use("/related/releases", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/related/sources", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/releases/:id", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }), varyOnAccept());
 v1.use("/status/fetch-log", cacheControl(15));
 v1.use("/status/usage", cacheControl(30));
@@ -125,6 +128,7 @@ v1.route("/", orgRoutes);
 v1.route("/", productRoutes);
 v1.route("/", sourceRoutes);
 v1.route("/", searchRoutes);
+v1.route("/", relatedRoutes);
 v1.route("/", fetchLogRoutes);
 v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);

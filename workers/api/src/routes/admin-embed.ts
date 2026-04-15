@@ -263,20 +263,20 @@ adminEmbedRoutes.post("/admin/embed/entities", async (c) => {
     if (kind === "org") {
       const rows = await db.select().from(organizations).where(sql`${organizations.embeddedAt} IS NULL`).limit(n);
       for (const r of rows) {
-        entities.push({ id: r.id, kind, name: r.name, description: r.description, category: r.category, domain: r.domain });
+        entities.push({ id: r.id, kind, name: r.name, description: r.description, category: r.category, domain: r.domain, orgId: r.id });
       }
       return;
     }
     if (kind === "product") {
       const rows = await db.select().from(products).where(sql`${products.embeddedAt} IS NULL`).limit(n);
       for (const r of rows) {
-        entities.push({ id: r.id, kind, name: r.name, description: r.description, category: r.category, domain: null });
+        entities.push({ id: r.id, kind, name: r.name, description: r.description, category: r.category, domain: null, orgId: r.orgId });
       }
       return;
     }
     const rows = await db.select().from(sources).where(sql`${sources.embeddedAt} IS NULL`).limit(n);
     for (const r of rows) {
-      entities.push({ id: r.id, kind, name: r.name, description: null, category: null, domain: urlHost(r.url) });
+      entities.push({ id: r.id, kind, name: r.name, description: null, category: null, domain: urlHost(r.url), orgId: r.orgId });
     }
   }
 

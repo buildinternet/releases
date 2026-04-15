@@ -36,6 +36,18 @@ export interface VectorizeIndex {
     vectors: Array<{ id: string; values: number[]; metadata?: Record<string, VectorMetadataValue> }>,
   ): Promise<{ mutationId: string }>;
   deleteByIds(ids: string[]): Promise<{ mutationId: string }>;
+  /**
+   * Fetch previously-upserted vectors by ID. Used by the "related" routes to
+   * pull an anchor vector out of Vectorize without re-embedding its source
+   * text. Missing IDs are silently absent from the returned array.
+   */
+  getByIds(ids: string[]): Promise<
+    Array<{
+      id: string;
+      values: number[];
+      metadata?: Record<string, VectorMetadataValue>;
+    }>
+  >;
 }
 
 export interface RankedEntry<T> {

@@ -42,6 +42,9 @@ function fakeVectorize(opts: {
     async query() {
       return { matches: [] } as any;
     },
+    async getByIds() {
+      return [];
+    },
   } as VectorizeIndex;
   return { index, upserted, deleted };
 }

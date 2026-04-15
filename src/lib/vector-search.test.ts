@@ -106,6 +106,9 @@ function fakeIndex(matches: Array<{ id: string; score: number }>): VectorizeInde
     async deleteByIds() {
       return { mutationId: "noop" };
     },
+    async getByIds() {
+      return [];
+    },
   };
 }
 

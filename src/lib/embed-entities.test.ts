@@ -33,6 +33,9 @@ function fakeVectorize(opts: { upsertThrows?: boolean } = {}) {
     async query() {
       return { matches: [] } as any;
     },
+    async getByIds() {
+      return [];
+    },
   } as VectorizeIndex;
   return { index, upserted };
 }
@@ -117,6 +120,30 @@ describe("embedAndUpsertEntities", () => {
     expect(vec.upserted[0].metadata).toEqual({ type: "org", category: "cloud" });
     expect(vec.upserted[1].metadata).toEqual({ type: "product" });
     expect(vec.upserted[2].metadata).toEqual({ type: "source", category: "ai" });
+  });
+
+  test("orgId is written to metadata as org_id for /related/sources filtering", async () => {
+    const { fetchImpl } = fakeVoyageFetch();
+    const vec = fakeVectorize();
+    const entities: EmbedEntityInput[] = [
+      // Orgs store their own id as org_id so the filter shape is uniform.
+      { id: "org_acme", kind: "org", name: "Acme", orgId: "org_acme" },
+      // Products carry their parent org id.
+      { id: "prod_widget", kind: "product", name: "Widget", orgId: "org_acme" },
+      // Sources carry their parent org id.
+      { id: "src_foo", kind: "source", name: "Foo", orgId: "org_acme" },
+      // Orphan source: no orgId → no org_id key (filter would not match).
+      { id: "src_bar", kind: "source", name: "Bar" },
+    ];
+    await embedAndUpsertEntities({
+      entities,
+      vectorIndex: vec.index,
+      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
+    });
+    expect(vec.upserted[0].metadata).toEqual({ type: "org", org_id: "org_acme" });
+    expect(vec.upserted[1].metadata).toEqual({ type: "product", org_id: "org_acme" });
+    expect(vec.upserted[2].metadata).toEqual({ type: "source", org_id: "org_acme" });
+    expect(vec.upserted[3].metadata).toEqual({ type: "source" });
   });
 
   test("onPersisted called with all entity ids on success", async () => {

@@ -15,15 +15,20 @@ import type {
   ProductDetail,
   SourceChangelogResponse,
   ChangelogFileSummary,
+  RelatedReleasesResponse,
+  RelatedSourcesResponse,
+  RelatedScope,
 } from "@shared/api/types";
 
 export type {
   ReleaseSummaryItem,
   ReleaseItem,
   SearchReleaseHit,
+  SearchChangelogChunkHit,
   SearchOrgHit,
   SearchProductHit,
   SearchSourceHit,
+  SearchMode,
   OrgReleaseItem,
   OverviewPageItem,
   KnowledgePageItem,
@@ -46,6 +51,9 @@ export type {
   ProductDetail,
   SourceChangelogResponse,
   ChangelogFileSummary,
+  RelatedReleasesResponse,
+  RelatedSourcesResponse,
+  RelatedScope,
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
@@ -139,5 +147,34 @@ export const api = {
     return fetchApi<SourceChangelogResponse>(
       `/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`,
     );
+  },
+  /**
+   * Semantically-similar releases for the given anchor. Backed by
+   * `GET /v1/related/releases`. Returns `degraded: true` with an empty
+   * `items` list when the anchor has not been embedded yet — render
+   * nothing in that case.
+   */
+  relatedReleases: (
+    releaseId: string,
+    opts: { scope?: RelatedScope; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams({ release: releaseId });
+    if (opts.scope) params.set("scope", opts.scope);
+    if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+    return fetchApi<RelatedReleasesResponse>(`/v1/related/releases?${params.toString()}`);
+  },
+  /**
+   * Semantically-similar sources for the given anchor (slug or id).
+   * Backed by `GET /v1/related/sources`. Same degraded contract as
+   * `relatedReleases`.
+   */
+  relatedSources: (
+    sourceSlugOrId: string,
+    opts: { scope?: RelatedScope; limit?: number } = {},
+  ) => {
+    const params = new URLSearchParams({ source: sourceSlugOrId });
+    if (opts.scope) params.set("scope", opts.scope);
+    if (opts.limit !== undefined) params.set("limit", String(opts.limit));
+    return fetchApi<RelatedSourcesResponse>(`/v1/related/sources?${params.toString()}`);
   },
 };

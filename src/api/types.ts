@@ -282,12 +282,44 @@ export interface SearchReleaseHit {
   publishedAt: string | null;
 }
 
+/** Hybrid search execution mode. */
+export type SearchMode = "lexical" | "semantic" | "hybrid";
+
+/**
+ * Heading-aware slice of a stored CHANGELOG.md file, returned by hybrid
+ * search alongside release hits. Clients can chain into
+ * `GET /v1/sources/:slug/changelog?offset=<offset>&limit=<length>` to read
+ * the surrounding context.
+ */
+export interface SearchChangelogChunkHit {
+  sourceSlug: string;
+  sourceName: string;
+  filePath: string;
+  offset: number;
+  length: number;
+  heading: string | null;
+  snippet: string;
+  score: number;
+}
+
 export interface UnifiedSearchResponse {
   query: string;
   orgs: SearchOrgHit[];
   products: SearchProductHit[];
   sources: SearchSourceHit[];
   releases: SearchReleaseHit[];
+  /**
+   * CHANGELOG.md chunk hits from hybrid/semantic search. Present when
+   * `mode` is `semantic` or `hybrid` (the default). Omitted or empty for
+   * legacy `lexical` responses.
+   */
+  chunks?: SearchChangelogChunkHit[];
+  /** Mode actually used to produce the response (set by semantic/hybrid paths). */
+  mode?: SearchMode;
+  /** True when a hybrid/semantic call silently fell back to lexical. */
+  degraded?: boolean;
+  /** Human-readable reason for the degradation. */
+  degradedReason?: string;
 }
 
 // ── Overview Pages ──
@@ -305,6 +337,57 @@ export interface OverviewPageItem {
 
 /** @deprecated Use OverviewPageItem */
 export type KnowledgePageItem = OverviewPageItem;
+
+// ── Related rails ──
+
+/** Scope filter for `/v1/related/*` routes. */
+export type RelatedScope = "org" | "global";
+
+export interface RelatedReleaseItem {
+  id: string;
+  title: string;
+  version: string | null;
+  url: string | null;
+  publishedAt: string | null;
+  summary: string;
+  /** Raw Vectorize similarity score — larger is more similar. */
+  score: number;
+  source: { id: string; slug: string; name: string };
+  orgSlug: string | null;
+}
+
+export interface RelatedSourceItem {
+  id: string;
+  slug: string;
+  name: string;
+  category: string | null;
+  score: number;
+  orgSlug: string | null;
+  orgName: string | null;
+  releaseCount: number;
+  latestDate: string | null;
+}
+
+export interface RelatedResponseBase {
+  anchor: { id: string };
+  scope: RelatedScope;
+  /**
+   * `true` when the route could not produce semantic results — e.g. the
+   * anchor has not yet been embedded, or the Vectorize binding is missing.
+   * Consumers should render nothing (or a neutral fallback) rather than
+   * surface an error state to users.
+   */
+  degraded: boolean;
+  degradedReason?: string;
+}
+
+export interface RelatedReleasesResponse extends RelatedResponseBase {
+  items: RelatedReleaseItem[];
+}
+
+export interface RelatedSourcesResponse extends RelatedResponseBase {
+  items: RelatedSourceItem[];
+}
 
 /** @deprecated Use UnifiedSearchResponse */
 export type SearchResult = SearchReleaseHit;

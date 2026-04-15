@@ -800,6 +800,9 @@ async function embedOrgSideEffect(
         description: org.description,
         category: org.category,
         domain: org.domain,
+        // Store own id as org_id so /v1/related/sources can filter by
+        // parent org with a single uniform metadata key.
+        orgId: org.id,
       }],
       // Cast: workers-types VectorizeIndex has a stricter metadata value
       // type than the shared runtime-agnostic interface. Assignable at
