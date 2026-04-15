@@ -14,6 +14,7 @@ import { OverviewView } from "@/components/overview-view";
 import { PlaybookView } from "@/components/playbook-view";
 import { OrgFetchLogView } from "@/components/org-fetch-log-view";
 import { SourceTable } from "@/components/source-table";
+import { CliCommand } from "@/components/cli-command";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
 
@@ -130,6 +131,7 @@ export default async function OrgPage({
         ) : (
           <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">{org.name}</h1>
         )}
+        <CliCommand identifier={org.slug} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
             <OrgTabs

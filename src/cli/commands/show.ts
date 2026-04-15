@@ -1,6 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findSource, findOrg, findProduct, getRelease } from "../../db/queries.js";
+import Table from "cli-table3";
+import { findSource, findOrg, findProduct, getRelease, getLatestReleases, type LatestRelease } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { getEntityType, normalizeReleaseId } from "../../lib/id.js";
 
@@ -71,7 +72,11 @@ async function showRelease(id: string, opts: { json?: boolean }) {
   if (rel.suppressed) {
     console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`);
   }
-  console.log(chalk.dim(`\n  Run "releases admin release show ${rel.id}" for full content.`));
+  if (rel.contentSummary) {
+    console.log("");
+    console.log(chalk.dim(stripAnsi(rel.contentSummary)));
+  }
+  console.log(chalk.dim(`\n  More: "releases show ${rel.id} --json" for full payload.`));
 }
 
 async function showSource(identifier: string, opts: { json?: boolean }) {
@@ -91,7 +96,7 @@ async function showOrg(identifier: string, opts: { json?: boolean }) {
     console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. org_abc123…) or a valid slug.`));
     process.exit(1);
   }
-  renderOrg(org, opts);
+  await renderOrg(org, opts);
 }
 
 async function showProduct(identifier: string, opts: { json?: boolean }) {
@@ -118,18 +123,51 @@ function renderSource(source: { id: string; name: string; slug: string; type: st
   console.log(chalk.dim(`\n  Run "releases list ${source.slug}" for full details.`));
 }
 
-function renderOrg(org: { id: string; name: string; slug: string; domain: string | null; category: string | null }, opts: { json?: boolean }) {
+async function renderOrg(
+  org: { id: string; name: string; slug: string; domain: string | null; category: string | null },
+  opts: { json?: boolean },
+) {
+  const releases = await getLatestReleases({ orgSlug: org.slug, count: 10 });
+
   if (opts.json) {
-    console.log(JSON.stringify(org, null, 2));
+    console.log(JSON.stringify({ ...org, releases }, null, 2));
     return;
   }
+
   console.log(chalk.dim("Organization"));
   console.log(chalk.bold(org.name));
-  console.log(`  ID:        ${org.id}`);
-  console.log(`  Slug:      ${org.slug}`);
-  console.log(`  Domain:    ${org.domain ?? chalk.dim("—")}`);
-  console.log(`  Category:  ${org.category ?? chalk.dim("—")}`);
-  console.log(chalk.dim(`\n  Run "releases admin org show ${org.slug}" for full details.`));
+  console.log(`  ID:      ${org.id}`);
+  console.log(`  Slug:    ${org.slug}`);
+  if (org.domain) console.log(`  Domain:  ${org.domain}`);
+  if (org.category) console.log(`  Category: ${org.category}`);
+
+  console.log("");
+  if (releases.length === 0) {
+    console.log(chalk.dim("  No releases yet."));
+  } else {
+    console.log(chalk.dim(`Latest ${releases.length} release${releases.length === 1 ? "" : "s"}:`));
+    console.log(renderLatestReleasesTable(releases));
+  }
+  console.log(chalk.dim(`\n  More: "releases latest --org ${org.slug}" · "releases search <query> --org ${org.slug}"`));
+}
+
+function renderLatestReleasesTable(rows: LatestRelease[]): string {
+  const table = new Table({
+    head: [chalk.cyan("Source"), chalk.cyan("Title"), chalk.cyan("Version"), chalk.cyan("Published")],
+  });
+  for (const row of rows) {
+    table.push([
+      stripAnsi(row.sourceName),
+      truncate(stripAnsi(row.title), 50),
+      row.version ? stripAnsi(row.version) : chalk.dim("—"),
+      row.publishedAt?.slice(0, 10) ?? chalk.dim("—"),
+    ]);
+  }
+  return table.toString();
+}
+
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
 }
 
 function renderProduct(product: { id: string; name: string; slug: string; orgId: string; url: string | null; category: string | null }, opts: { json?: boolean }) {
@@ -144,5 +182,5 @@ function renderProduct(product: { id: string; name: string; slug: string; orgId:
   console.log(`  Org:       ${product.orgId}`);
   console.log(`  URL:       ${product.url ?? chalk.dim("—")}`);
   console.log(`  Category:  ${product.category ?? chalk.dim("—")}`);
-  console.log(chalk.dim(`\n  Run "releases admin product list ${product.orgId}" to see siblings.`));
+  console.log(chalk.dim(`\n  More: "releases latest --org <org-slug>" to see releases.`));
 }
