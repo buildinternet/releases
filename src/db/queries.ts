@@ -6,8 +6,8 @@ import {
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product, type Tag, type DomainAlias,
   type KnowledgePage, type NewKnowledgePage, type ReleaseType, type SourceChangelogFile,
-} from "./schema.js";
-import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "./release-upsert.js";
+} from "@releases/core/schema";
+import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "@releases/core/dates";
 import { toSlug } from "@releases/core/slug";

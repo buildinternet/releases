@@ -10,8 +10,8 @@
  */
 
 import { createHash } from "node:crypto";
-import { sliceChangelog } from "./changelog-slice.js";
-import { countTokensSafe } from "./tokens.js";
+import { sliceChangelog } from "@releases/core/changelog-slice";
+import { countTokensSafe } from "@releases/core/tokens";
 
 /**
  * Token budget per chunk. Fits well under embedding model context windows
