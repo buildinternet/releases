@@ -26,7 +26,7 @@ import {
   findContentStart,
   type KnownRelease,
 } from "@releases/ai/shared.js";
-import { getSourceMeta } from "@releases/adapters/source-meta.js";
+import { getSourceMeta } from "@releases/adapters/source-meta";
 import type { ParsedRelease } from "@releases/ai/ingest.js";
 
 // ── Cloudflare Browser Rendering (inlined to avoid transitive logger/config imports) ──
