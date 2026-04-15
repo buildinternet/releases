@@ -6,7 +6,9 @@ import remarkGfm from "remark-gfm";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
+import Image from "next/image";
 import { FallbackImage } from "./fallback-image";
+import { isOptimizableImage } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
@@ -26,7 +28,15 @@ function stripLeadingTitle(content: string, title: string | null): string {
   return content;
 }
 
-function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content: string }) {
+function MediaGallery({
+  media,
+  content,
+  onPreview,
+}: {
+  media: ReleaseItem["media"];
+  content: string;
+  onPreview: (src: string, alt: string) => void;
+}) {
   if (!media || media.length === 0) return null;
 
   // Filter out items already rendered inline via markdown content.
@@ -40,18 +50,71 @@ function MediaGallery({ media, content }: { media: ReleaseItem["media"]; content
         if (item.type === "image" || item.type === "gif") {
           const src = item.r2Url ?? item.url;
           return (
-            <FallbackImage
+            <button
               key={i}
-              src={src}
-              alt={item.alt || ""}
-              width={400}
-              height={192}
-              className="rounded-md object-contain max-h-48 w-auto"
-            />
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onPreview(src, item.alt || ""); }}
+              className="cursor-zoom-in"
+              aria-label="Preview image"
+            >
+              <FallbackImage
+                src={src}
+                alt={item.alt || ""}
+                width={400}
+                height={192}
+                className="rounded-md object-contain max-h-48 w-auto"
+              />
+            </button>
           );
         }
         return null;
       })}
+    </div>
+  );
+}
+
+function Lightbox({ src, alt, onClose }: { src: string; alt: string; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      document.removeEventListener("keydown", onKey);
+      document.body.style.overflow = prev;
+    };
+  }, [onClose]);
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={alt || "Image preview"}
+      onClick={onClose}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 cursor-zoom-out"
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        className="relative w-full h-full flex items-center justify-center cursor-default"
+      >
+        <Image
+          src={src}
+          alt={alt}
+          fill
+          sizes="100vw"
+          quality={90}
+          unoptimized={!isOptimizableImage(src)}
+          className="object-contain rounded-md shadow-2xl"
+        />
+      </div>
+      <button
+        type="button"
+        aria-label="Close"
+        onClick={onClose}
+        className="absolute top-4 right-4 text-white/70 hover:text-white text-2xl leading-none w-8 h-8 flex items-center justify-center rounded-full bg-black/30 hover:bg-black/50"
+      >
+        ×
+      </button>
     </div>
   );
 }
@@ -63,6 +126,7 @@ const markdownClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none
 export function ReleaseListItem({ release, hideDate, sourceByline }: { release: ReleaseItem; hideDate?: boolean; sourceByline?: { name: string; slug: string; orgSlug?: string; type?: string } }) {
   const [expanded, setExpanded] = useState(false);
   const [isOverflowing, setIsOverflowing] = useState(false);
+  const [preview, setPreview] = useState<{ src: string; alt: string } | null>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const hasVersion = !!release.version;
   const titleMatchesVersion = release.title === release.version
@@ -72,6 +136,11 @@ export function ReleaseListItem({ release, hideDate, sourceByline }: { release: 
   const markdownContent = useMemo(
     () => stripLeadingTitle(release.content || release.summary, release.title),
     [release.content, release.summary, release.title]
+  );
+
+  const thumbnail = useMemo(
+    () => release.media?.find(m => m.type === "image" || m.type === "gif") ?? null,
+    [release.media]
   );
 
   // Primary heading: version if available, otherwise title
@@ -142,14 +211,39 @@ export function ReleaseListItem({ release, hideDate, sourceByline }: { release: 
           {expanded ? (
             <div className={markdownClasses}>
               <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]} components={markdownComponents}>{markdownContent}</ReactMarkdown>
-              <MediaGallery media={release.media} content={markdownContent} />
+              <MediaGallery
+                media={release.media}
+                content={markdownContent}
+                onPreview={(src, alt) => setPreview({ src, alt })}
+              />
             </div>
           ) : (
             <>
-              <div ref={contentRef} className="max-h-[4.5em] overflow-hidden">
-                <div className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
+              <div className="flex gap-3">
+                <div ref={contentRef} className="max-h-[4.5em] overflow-hidden flex-1 min-w-0">
+                  <div className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}>
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]} components={collapsedMarkdownComponents}>{markdownContent}</ReactMarkdown>
+                  </div>
                 </div>
+                {thumbnail && (
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPreview({ src: thumbnail.r2Url ?? thumbnail.url, alt: thumbnail.alt || "" });
+                    }}
+                    className="shrink-0 cursor-zoom-in"
+                    aria-label="Preview image"
+                  >
+                    <FallbackImage
+                      src={thumbnail.r2Url ?? thumbnail.url}
+                      alt={thumbnail.alt || ""}
+                      width={120}
+                      height={72}
+                      className="rounded-md object-cover w-[120px] h-[72px] border border-stone-200 dark:border-stone-800"
+                    />
+                  </button>
+                )}
               </div>
               {isOverflowing && (
                 <>
@@ -163,6 +257,7 @@ export function ReleaseListItem({ release, hideDate, sourceByline }: { release: 
           )}
         </div>
       </div>
+      {preview && <Lightbox src={preview.src} alt={preview.alt} onClose={() => setPreview(null)} />}
     </div>
   );
 }

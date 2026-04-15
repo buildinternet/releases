@@ -13,11 +13,13 @@ export function SourceTabs({ hasHighlights, hasChangelog = false }: SourceTabsPr
   const router = useRouter();
   const pathname = usePathname();
 
-  const activeTab = searchParams.get("tab") ?? (hasHighlights ? "highlights" : "releases");
+  // TODO: revisit default tab once Highlights has a regular publishing rhythm —
+  // for now, All Releases is the default even when Highlights exists.
+  const activeTab = searchParams.get("tab") ?? "releases";
 
   function setTab(tab: string) {
     const params = new URLSearchParams(searchParams.toString());
-    if (tab === "highlights") {
+    if (tab === "releases") {
       params.delete("tab");
       params.delete("page");
     } else {

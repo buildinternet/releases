@@ -3,14 +3,14 @@ import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
 import { InfoTooltip } from "./info-tooltip";
 import { LocalTimestamp } from "./local-timestamp";
+import { formatRelativeDate } from "@/lib/formatters";
 
-function stalenessColor(isoDate: string | null | undefined): string {
-  if (!isoDate) return "text-stone-400 dark:text-stone-500";
-  const ageMs = Date.now() - new Date(isoDate).getTime();
-  const ageDays = ageMs / (1000 * 60 * 60 * 24);
-  if (ageDays > 7) return "text-red-400 dark:text-red-500";
-  if (ageDays > 1) return "text-amber-500 dark:text-amber-400";
-  return "text-stone-400 dark:text-stone-500";
+const STALE_AFTER_DAYS = 14;
+
+function isStale(isoDate: string | null | undefined): boolean {
+  if (!isoDate) return false;
+  const ageDays = (Date.now() - new Date(isoDate).getTime()) / (1000 * 60 * 60 * 24);
+  return ageDays > STALE_AFTER_DAYS;
 }
 
 interface SidebarItem { label: string; value: ReactNode; large?: boolean; subtitle?: string; link?: string; externalLink?: string; tooltip?: string; }
@@ -60,8 +60,11 @@ export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitl
       {(footnote || formatPath) && (
         <div className="border-t border-stone-200 dark:border-stone-800 pt-4 mb-6">
           {footnoteTitle ? (
-            <div className={`text-[11px] mb-3 cursor-default ${stalenessColor(footnoteTitle)}`}>
+            <div className="text-[11px] mb-3 cursor-default text-stone-400 dark:text-stone-500 flex items-center gap-1">
               <LocalTimestamp iso={footnoteTitle} prefix="Last fetched " />
+              {isStale(footnoteTitle) && (
+                <InfoTooltip text={`Last fetched ${formatRelativeDate(footnoteTitle)} — this data may be out of date.`} />
+              )}
             </div>
           ) : footnote ? (
             <div className={`text-[11px] mb-3 cursor-default text-stone-400 dark:text-stone-500`}>{footnote}</div>

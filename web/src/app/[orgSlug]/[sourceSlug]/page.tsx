@@ -77,12 +77,6 @@ export default async function SourcePage({
   const sidebarSections = [
     {
       items: [
-        { label: "Last 30 Days", value: source.releasesLast30Days, large: true, subtitle: "releases", tooltip: "Total releases published in the last 30 days." },
-        { label: "Avg per Week", value: Math.round(source.avgReleasesPerWeek), large: true, subtitle: "releases", tooltip: "Average releases per week over the last 90 days, or since tracking began if shorter." },
-      ],
-    },
-    {
-      items: [
         { label: "Latest", value: source.latestVersion ?? formatDate(source.latestDate) },
         sourceUrlSidebarItem(source),
         ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),

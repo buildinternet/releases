@@ -120,9 +120,13 @@ function findEarliestRelease(heatmap: HeatmapData): string | null {
 interface ReleaseHeatmapProps {
   heatmap: HeatmapData;
   trackingSince?: string | null;
+  /** Highlight the trailing N days; cells outside this window are dimmed. Null/omitted = no dimming. */
+  highlightDays?: number | null;
+  /** Render without outer card chrome (border/bg/header) for nesting in a parent card. */
+  bare?: boolean;
 }
 
-export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) {
+export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, bare = false }: ReleaseHeatmapProps) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellSize, setCellSize] = useState(MIN_CELL_SIZE);
@@ -154,6 +158,18 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // ISO date of the earliest day still inside the highlight window.
+  const highlightStart = useMemo(() => {
+    if (!highlightDays) return null;
+    const endMs = Date.UTC(
+      parseInt(heatmap.range.to.slice(0, 4)),
+      parseInt(heatmap.range.to.slice(5, 7)) - 1,
+      parseInt(heatmap.range.to.slice(8, 10)),
+    );
+    const startMs = endMs - (highlightDays - 1) * 86400000;
+    return new Date(startMs).toISOString().slice(0, 10);
+  }, [highlightDays, heatmap.range.to]);
 
   const { cells, monthLabels } = useMemo(() => buildGrid(heatmap, visibleWeeks), [heatmap, visibleWeeks]);
 
@@ -195,7 +211,14 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
   const patternId = "heatmap-stripe";
 
   return (
-    <div ref={containerRef} className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
+    <div
+      ref={containerRef}
+      className={
+        bare
+          ? "mb-2"
+          : "bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5"
+      }
+    >
       {/* SVG defs for stripe pattern */}
       <svg width="0" height="0" className="absolute">
         <defs>
@@ -207,6 +230,7 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
       </svg>
 
       {/* Header */}
+      {!bare && (
       <div className="flex justify-between items-center mb-3">
         <span className="text-xs text-stone-500 dark:text-stone-400">
           <strong className="text-stone-900 dark:text-stone-100 font-semibold">{heatmap.total}</strong>
@@ -216,6 +240,7 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
           {heatmap.range.from} &mdash; {heatmap.range.to}
         </span>
       </div>
+      )}
 
       {/* Grid */}
       <div className="flex gap-2">
@@ -254,13 +279,15 @@ export function ReleaseHeatmap({ heatmap, trackingSince }: ReleaseHeatmapProps) 
                 {weekCells.map((cell) => {
                   const isPreTracking = trackingStart ? cell.date < trackingStart : false;
                   const isEarliestTracked = trackingStart ? cell.date === trackingStart : false;
+                  const outOfWindow = highlightStart ? cell.date < highlightStart : false;
 
                   return (
                     <svg
                       key={cell.date}
                       width={cellSize}
                       height={cellSize}
-                      className="rounded-[2px]"
+                      className="rounded-[2px] transition-opacity duration-300 ease-out"
+                      style={{ opacity: outOfWindow ? 0.2 : 1 }}
                       onMouseEnter={(e) => handleMouseEnter(e, cell, isPreTracking, isEarliestTracked)}
                       onMouseLeave={handleMouseLeave}
                     >
