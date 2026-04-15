@@ -39,7 +39,7 @@ create_index() {
         --metric="${METRIC}" 2>&1); then
     echo "${output}"
   else
-    if echo "${output}" | grep -qiE "already exists|vectorize_index_already_exists"; then
+    if echo "${output}" | grep -qiE "already exists|vectorize_index_already_exists|duplicate_name|code: 3002"; then
       echo "   (already exists — skipping)"
     else
       echo "${output}" >&2
@@ -66,7 +66,7 @@ create_metadata_index() {
         --type="${kind}" 2>&1); then
     echo "${output}"
   else
-    if echo "${output}" | grep -qiE "already exists|metadata_index_already_exists"; then
+    if echo "${output}" | grep -qiE "already exists|metadata_index_already_exists|duplicate_name|code: 3002"; then
       echo "   (already exists — skipping)"
     else
       echo "${output}" >&2
