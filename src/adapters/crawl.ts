@@ -2,7 +2,7 @@ import { config } from "../lib/config.js";
 import { AdapterError, CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
 import { logger } from "../lib/logger.js";
 import { parseChangelog } from "../ai/ingest.js";
-import type { RawRelease, FetchOptions } from "./types.js";
+import type { RawRelease, FetchOptions } from "@releases/adapters/types";
 /** Resource types to block when rendering (duplicated from cloudflare.ts to avoid circular import). */
 const REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
 

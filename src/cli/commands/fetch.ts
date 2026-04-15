@@ -3,7 +3,7 @@ import os from "node:os";
 import chalk from "chalk";
 import type { Source } from "@releases/core/schema";
 import { sourceNotFound } from "../suggest.js";
-import type { FetchOptions } from "../../adapters/types.js";
+import type { FetchOptions } from "@releases/adapters/types";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
 import { detectChangelogUrl, fetchChangelogFiles } from "../../adapters/github.js";
 import { getAdapter, contentHash } from "../../adapters/resolve.js";

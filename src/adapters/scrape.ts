@@ -1,6 +1,6 @@
 import type { Source } from "@releases/core/schema";
 import { checkContentHash, getKnownReleasesForSource } from "../db/queries.js";
-import type { Adapter, RawRelease, FetchOptions, FetchResult } from "./types.js";
+import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { config } from "../lib/config.js";
 import { AdapterError } from "../lib/errors.js";
 import { CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
