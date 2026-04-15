@@ -1,5 +1,5 @@
 import { drizzle } from "drizzle-orm/d1";
-import * as schema from "@releases/db/schema.js";
+import * as schema from "@releases/core/schema";
 
 export type D1Db = ReturnType<typeof createDb>;
 

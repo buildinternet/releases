@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { createDb } from "../db.js";
-import { telemetryEvents, TELEMETRY_CLIENT_KINDS, TELEMETRY_SURFACES } from "@releases/db/schema.js";
-import { newTelemetryEventId } from "@releases/lib/id.js";
+import { telemetryEvents, TELEMETRY_CLIENT_KINDS, TELEMETRY_SURFACES } from "@releases/core/schema";
+import { newTelemetryEventId } from "@releases/core/id";
 import type { Env } from "../index.js";
 
 export const telemetryRoutes = new Hono<Env>();

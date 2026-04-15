@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, and, or } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { ignoredUrls, blockedUrls, organizations } from "@releases/db/schema.js";
+import { ignoredUrls, blockedUrls, organizations } from "@releases/core/schema";
 import { orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 

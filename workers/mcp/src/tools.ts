@@ -12,10 +12,10 @@ import {
   domainAliases,
   sourceChangelogFiles,
   type ReleaseType,
-} from "@releases/db/schema.js";
-import { daysAgoIso } from "@releases/lib/dates.js";
-import { getEntityType, normalizeReleaseId } from "@releases/lib/id.js";
-import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@releases/lib/changelog-slice.js";
+} from "@releases/core/schema";
+import { daysAgoIso } from "@releases/core/dates";
+import { getEntityType, normalizeReleaseId } from "@releases/core/id";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@releases/core/changelog-slice";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 

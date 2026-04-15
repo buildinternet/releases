@@ -15,7 +15,7 @@
 
 import { Hono } from "hono";
 import { sql, inArray, eq } from "drizzle-orm";
-import { sources, organizations, releases } from "@releases/db/schema.js";
+import { sources, organizations, releases } from "@releases/core/schema";
 import { createDb } from "../db.js";
 import { sourceWhere } from "../utils.js";
 import type { Env } from "../index.js";
