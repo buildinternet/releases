@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@releases/core": "workspace:*",
     "@flags-sdk/vercel": "^1.2.1",
     "@shikijs/rehype": "^4.0.2",
     "@tailwindcss/typography": "^0.5.19",
