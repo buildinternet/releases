@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { findSource, upsertChangelogFile, deleteChangelogFilesNotIn, getChangelogFile, listChangelogFiles } from "../../db/queries.js";
-import { fetchChangelogFiles } from "@releases/adapters/github";
+import { fetchChangelogFiles } from "../../adapters/github.js";
 import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams } from "@releases/core/changelog-slice";
 import { sourceChangelog as sourceChangelogRemote } from "../../api/client.js";
 import { sourceNotFound } from "../suggest.js";
