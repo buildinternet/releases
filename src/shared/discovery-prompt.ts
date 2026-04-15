@@ -72,6 +72,10 @@ Some organizations ship multiple distinct products. When you discover sources th
 
 Prefer 3-5 high-signal sources per org over exhaustive coverage. Only index the org's own products, not ecosystem plugins. Add and pause low-value sources rather than omitting them entirely.
 
+## Naming
+
+Don't prefix source or product names with the org name — the org is already shown as context in every UI surface. For GitHub sources, use the bare repo name (\`dd-trace-py\`, not \`Datadog dd-trace-py\`). For website sources, strip the org prefix unless the combined name is the canonical product name (\`Claude Code\`, \`GitHub Actions\`) or the remainder would be meaningless on its own (\`Datadog Blog\` — "Blog" alone is ambiguous, keep the prefix). See the \`managing-sources\` skill for the full rule.
+
 ## Output
 
 Keep output concise — focus on actions and results.
