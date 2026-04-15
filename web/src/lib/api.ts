@@ -21,6 +21,7 @@ export type {
   ReleaseSummaryItem,
   ReleaseItem,
   SearchReleaseHit,
+  SearchChunkHit,
   SearchOrgHit,
   SearchProductHit,
   SearchSourceHit,

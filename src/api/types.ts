@@ -280,6 +280,29 @@ export interface SearchReleaseHit {
   title: string;
   summary: string;
   publishedAt: string | null;
+  /**
+   * Hybrid fusion score. Present on hybrid/semantic responses (including
+   * degraded fallbacks); absent on the legacy lexical path. Clients can
+   * use this to interleave release and chunk hits into a single ranked list.
+   */
+  score?: number;
+}
+
+/**
+ * A heading-aware CHANGELOG.md slice returned by hybrid / semantic search.
+ * Clients can deep-link to `/source/<sourceSlug>?tab=changelog&offset=<offset>`
+ * to read the surrounding file content.
+ */
+export interface SearchChunkHit {
+  sourceSlug: string;
+  sourceName: string;
+  orgSlug: string | null;
+  filePath: string;
+  offset: number;
+  length: number;
+  heading: string | null;
+  snippet: string;
+  score: number;
 }
 
 export interface UnifiedSearchResponse {
@@ -288,6 +311,8 @@ export interface UnifiedSearchResponse {
   products: SearchProductHit[];
   sources: SearchSourceHit[];
   releases: SearchReleaseHit[];
+  /** Present on hybrid/semantic responses; omitted on pure lexical. */
+  chunks?: SearchChunkHit[];
   /** Mode actually used by the server. Present for semantic/hybrid responses. */
   mode?: "lexical" | "semantic" | "hybrid";
   /** True when a hybrid/semantic request fell back to lexical. */

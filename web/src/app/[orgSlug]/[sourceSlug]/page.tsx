@@ -37,11 +37,18 @@ export default async function SourcePage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string; sourceSlug: string }>;
-  searchParams: Promise<{ page?: string; tab?: string; path?: string }>;
+  searchParams: Promise<{ page?: string; tab?: string; path?: string; offset?: string }>;
 }) {
   const { orgSlug, sourceSlug } = await params;
-  const { page: pageParam, tab, path: changelogPath } = await searchParams;
+  const { page: pageParam, tab, path: changelogPath, offset: offsetParam } = await searchParams;
   const page = parseInt(pageParam ?? "1", 10) || 1;
+  // `offset` arrives from search chunk deep-links — see the independent
+  // source page for the same parsing rationale.
+  const changelogOffset = (() => {
+    if (!offsetParam) return undefined;
+    const n = parseInt(offsetParam, 10);
+    return Number.isFinite(n) && n > 0 ? n : undefined;
+  })();
 
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
@@ -121,7 +128,13 @@ export default async function SourcePage({
               hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
               hasChangelog={!!source.hasChangelogFile}
             />
-            <SourceMainContent source={source} tab={tab} basePath={`/${orgSlug}/${sourceSlug}`} changelogPath={changelogPath} />
+            <SourceMainContent
+              source={source}
+              tab={tab}
+              basePath={`/${orgSlug}/${sourceSlug}`}
+              changelogPath={changelogPath}
+              changelogOffset={changelogOffset}
+            />
           </div>
           <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
         </div>

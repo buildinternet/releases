@@ -87,6 +87,10 @@ searchRoutes.get("/search", async (c) => {
       title: h.release.title,
       summary: h.release.summary,
       publishedAt: h.release.publishedAt,
+      // Emit the fusion score so clients can re-interleave release and
+      // chunk hits into a single ranked list (they're split into two
+      // arrays on the wire for back-compat with the legacy shape).
+      score: h.score,
     }));
 
   const chunks = hybrid.hits
@@ -94,6 +98,7 @@ searchRoutes.get("/search", async (c) => {
     .map((h) => ({
       sourceSlug: h.chunk.source.slug,
       sourceName: h.chunk.source.name,
+      orgSlug: h.chunk.orgSlug,
       filePath: h.chunk.file_path,
       offset: h.chunk.offset,
       length: h.chunk.length,

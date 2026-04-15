@@ -86,6 +86,8 @@ export interface HybridChunkHit {
     id: string;
     vectorId: string;
     source: { id: string; slug: string; name: string };
+    /** Parent org slug, if the source belongs to one. */
+    orgSlug: string | null;
     offset: number;
     length: number;
     snippet: string;
@@ -178,6 +180,7 @@ interface RawChunkRow {
   sourceId: string;
   sourceSlug: string;
   sourceName: string;
+  orgSlug: string | null;
 }
 
 /**
@@ -204,10 +207,12 @@ async function hydrateChunks(
            scf.path as filePath,
            s.id as sourceId,
            s.slug as sourceSlug,
-           s.name as sourceName
+           s.name as sourceName,
+           o.slug as orgSlug
     FROM source_changelog_chunks scc
     JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
     JOIN sources s ON s.id = scc.source_id
+    LEFT JOIN organizations o ON o.id = s.org_id
     WHERE scc.vector_id IN (${sql.join(vectorIds.map((id) => sql`${id}`), sql`, `)})
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
   `);
@@ -236,6 +241,7 @@ async function hydrateChunks(
       id: row.id,
       vectorId: row.vectorId,
       source: { id: row.sourceId, slug: row.sourceSlug, name: row.sourceName },
+      orgSlug: row.orgSlug,
       offset: row.offset,
       length: row.length,
       snippet,
