@@ -121,6 +121,12 @@ export interface SourceChangelogResponse {
   nextOffset: number | null;
   /** Total length of the full file in characters. */
   totalChars: number;
+  /** Requested token budget when in token mode (cl100k_base). */
+  tokens?: number;
+  /** Encoded token count of the returned `content`. Set in token mode. */
+  sliceTokens?: number;
+  /** Full-file token count (cl100k_base). Always populated. */
+  totalTokens: number;
   /** True when the upstream file exceeded the 1MB cap and content was sliced. */
   truncated: boolean;
   /** Byte offset where the file was truncated, or null when not truncated. */

@@ -43,12 +43,13 @@ export async function findSource(identifier: string): Promise<Source | null> {
 
 export async function sourceChangelog(
   slug: string,
-  range?: { path?: string; offset?: number; limit?: number },
+  range?: { path?: string; offset?: number; limit?: number; tokens?: number },
 ): Promise<SourceChangelogResponse | null> {
   const params = new URLSearchParams();
   if (range?.path !== undefined) params.set("path", range.path);
   if (range?.offset !== undefined) params.set("offset", String(range.offset));
   if (range?.limit !== undefined) params.set("limit", String(range.limit));
+  if (range?.tokens !== undefined) params.set("tokens", String(range.tokens));
   const qs = params.toString();
   return apiFetch<SourceChangelogResponse | null>(`/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`);
 }

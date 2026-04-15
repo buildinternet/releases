@@ -153,4 +153,48 @@ describe("source changelog route resolution", () => {
   it("returns not_found_source for empty row set", () => {
     expect(selectChangelog([], null)).toBe("not_found_source");
   });
+
+  it("falls back to live encoding when row.tokens is null", () => {
+    const rows = fetchAll();
+    const selected = selectChangelog(rows, "CHANGELOG.md");
+    if (typeof selected === "string") throw new Error("expected row");
+    const res = buildChangelogResponse(
+      { ...selected, tokens: null },
+      { offset: null, limit: null },
+      buildFiles(rows),
+    );
+    // A 13-char file encodes to a small but non-zero number of tokens.
+    expect(res.totalTokens).toBeGreaterThan(0);
+    expect(res.totalTokens).toBeLessThan(20);
+  });
+
+  it("honors the tokens range param end-to-end through buildChangelogResponse", () => {
+    const rows = fetchAll();
+    const selected = selectChangelog(rows, "CHANGELOG.md");
+    if (typeof selected === "string") throw new Error("expected row");
+    const res = buildChangelogResponse(
+      selected,
+      { offset: null, limit: null, tokens: "100" },
+      buildFiles(rows),
+    );
+    expect(res.tokens).toBe(100);
+    expect(res.sliceTokens).toBeDefined();
+    expect(res.sliceTokens!).toBeLessThanOrEqual(100);
+  });
+
+  it("uses countTokensSafe fallback for oversized rows without cached tokens", () => {
+    // If the 256KB cap in countTokensSafe weren't applied, encoding 1MB
+    // of repeated chars would hang js-tiktoken for minutes. The cap
+    // forces a chars/4 fallback, which equals length/4 for this fixture.
+    const rows = fetchAll();
+    const huge = rows.find((r) => r.path === "packages/huge/CHANGELOG.md");
+    if (!huge) throw new Error("expected huge fixture");
+    const res = buildChangelogResponse(
+      { ...huge, tokens: null },
+      { offset: null, limit: null },
+      buildFiles(rows),
+    );
+    expect(res.totalTokens).toBe(Math.ceil(huge.content.length / 4));
+    expect(res.truncated).toBe(true);
+  });
 });

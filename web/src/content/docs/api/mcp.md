@@ -92,7 +92,7 @@ Read-only tools available on the remote server with no authentication.
 | `get_release` | Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid. |
 | `list_sources` | List all indexed changelog sources, optionally filtered to one organization. |
 | `get_source` | Detail for a single source with org/product linkage, release count, last-fetched timestamp, and whether a CHANGELOG file is stored. |
-| `get_source_changelog` | Read the canonical `CHANGELOG.md` tracked for a GitHub source, refreshed on every fetch. Supports heading-aligned slicing via `offset` / `limit` — chain successive calls through the returned next offset to page through large files (e.g. Apollo Client's 700KB CHANGELOG) without blowing out the context window. |
+| `get_source_changelog` | Read the canonical `CHANGELOG.md` tracked for a GitHub source, refreshed on every fetch. Supports heading-aligned slicing by chars (`offset` + `limit`) or by tokens (`tokens`, cl100k_base). Every response includes `totalTokens` for budget planning; token-mode responses also include `sliceTokens` for the returned chunk. Chain successive calls via `nextOffset` to page through large files (e.g. Apollo Client's 700KB CHANGELOG) without blowing out the context window. Recommended token brackets: 2000/5000/10000/20000. |
 | `list_organizations` | List all organizations, searchable by name, slug, domain, or account handle. |
 | `get_organization` | Detailed view of a single organization including accounts, tags, sources, products, and domain aliases. |
 | `list_products` | List products, optionally scoped to one organization. |

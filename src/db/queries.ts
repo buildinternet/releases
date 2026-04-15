@@ -11,6 +11,7 @@ import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "./release-upsert.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "../lib/dates.js";
 import { toSlug } from "../lib/slug.js";
+import { countTokensSafe } from "../lib/tokens.js";
 import * as apiClient from "../api/client.js";
 
 /** Reusable SQL condition: exclude disabled (hidden) sources. */
@@ -1581,7 +1582,7 @@ export interface ChangelogFileInput {
   truncated?: boolean;
 }
 
-/** Local-mode only. The worker mirrors this in workers/api/src/cron/poll-fetch.ts. */
+/** Local-mode only. The worker mirrors this in workers/api/src/cron/poll-fetch.ts#refreshChangelogFile. */
 export async function upsertChangelogFile(sourceId: string, file: ChangelogFileInput): Promise<{ inserted: boolean; updated: boolean }> {
   const db = getDb();
   const now = new Date().toISOString();
@@ -1600,15 +1601,17 @@ export async function upsertChangelogFile(sourceId: string, file: ChangelogFileI
       content: file.content,
       contentHash: file.contentHash,
       bytes: file.bytes,
+      tokens: countTokensSafe(file.content),
       fetchedAt: now,
     });
     return { inserted: true, updated: false };
   }
 
   if (existing.contentHash === file.contentHash) {
-    // Touch fetchedAt only so TTL-based refresh logic resets
+    const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
+    if (existing.tokens === null) touch.tokens = countTokensSafe(existing.content);
     await db.update(sourceChangelogFiles)
-      .set({ fetchedAt: now })
+      .set(touch)
       .where(eq(sourceChangelogFiles.id, existing.id));
     return { inserted: false, updated: false };
   }
@@ -1620,6 +1623,7 @@ export async function upsertChangelogFile(sourceId: string, file: ChangelogFileI
     content: file.content,
     contentHash: file.contentHash,
     bytes: file.bytes,
+    tokens: countTokensSafe(file.content),
     fetchedAt: now,
   }).where(eq(sourceChangelogFiles.id, existing.id));
   return { inserted: false, updated: true };

@@ -33,7 +33,7 @@ List all indexed changelog sources, optionally scoped to one organization.
 Detail for a single source including org/product linkage, release count, last-fetched timestamp, and whether a CHANGELOG file is stored.
 
 ### get_source_changelog
-Return the canonical `CHANGELOG.md` (or `CHANGES`/`HISTORY`/`RELEASES`/`NEWS`) stored for a GitHub source. The file is refreshed on every fetch. Supports heading-aligned slicing via `offset` / `limit` — chain successive calls through the returned next offset to page through large files without blowing out the context window.
+Return the canonical `CHANGELOG.md` (or `CHANGES`/`HISTORY`/`RELEASES`/`NEWS`) stored for a GitHub source. The file is refreshed on every fetch. Supports heading-aligned slicing by chars (`offset` + `limit`) or tokens (`tokens`, cl100k_base). Every response includes `totalTokens` for budget planning; token-mode calls also return `sliceTokens`. Chain successive calls via the returned `nextOffset` to page through large files without blowing out the context window. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
 
 ### list_organizations
 List all indexed organizations, with optional search.

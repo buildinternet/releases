@@ -119,6 +119,103 @@ describe("parseRangeParam", () => {
   });
 });
 
+describe("sliceChangelog with token budget", () => {
+  // Build a larger fixture with multiple distinct sections so the slicer
+  // has something to bracket on.
+  const big = [
+    "# CHANGELOG",
+    "",
+    "Preamble about the project.",
+    "",
+    "## v2.0.0",
+    "",
+    "- Major rewrite of the indexer",
+    "- New MCP transport",
+    "- Breaking: removed legacy config keys",
+    "",
+    "## v1.9.0",
+    "",
+    "- Added token-based slicing",
+    "- Improved heading detection",
+    "",
+    "## v1.8.0",
+    "",
+    "- Various fixes",
+    "- Upgraded dependencies",
+    "",
+    "## v1.7.0",
+    "",
+    "- Initial public release",
+    "",
+  ].join("\n");
+
+  it("keeps the slice within the token budget when space allows", () => {
+    const budget = 50;
+    const r = sliceChangelog(big, { tokens: budget });
+    expect(r.tokens).toBe(budget);
+    expect(r.sliceTokens).toBeDefined();
+    expect(r.sliceTokens!).toBeLessThanOrEqual(budget);
+    // A 50-token budget should still return at least the first section.
+    expect(r.content.startsWith("# CHANGELOG")).toBe(true);
+  });
+
+  it("overshoots to the first section when even one section exceeds the budget", () => {
+    const r = sliceChangelog(big, { tokens: 1 });
+    // Can't fit anything under 1 token; overshoot to the first heading boundary.
+    expect(r.content.length).toBeGreaterThan(0);
+    expect(r.sliceTokens).toBeGreaterThan(1);
+  });
+
+  it("round-trips: successive token-bracket slices reconstruct the file", () => {
+    const slices: string[] = [];
+    let offset = 0;
+    let guard = 0;
+    while (guard < 20) {
+      const r = sliceChangelog(big, { offset, tokens: 30 });
+      slices.push(r.content);
+      if (r.nextOffset == null) break;
+      offset = r.nextOffset;
+      guard++;
+    }
+    expect(slices.join("")).toBe(big);
+  });
+
+  it("tokens takes precedence over limit when both are passed", () => {
+    const r = sliceChangelog(big, { tokens: 40, limit: 10 });
+    expect(r.tokens).toBe(40);
+    // Content length would be 10 chars in char mode — token mode should
+    // produce more than that.
+    expect(r.content.length).toBeGreaterThan(10);
+  });
+
+  it("round-trips across adjacent empty headings without losing characters", () => {
+    // Sections collapsed back-to-back (no content between headings) are
+    // the trickiest input for the forward walker — an off-by-one would
+    // either repeat a heading or drop one.
+    const adjacent = [
+      "# CHANGELOG",
+      "",
+      "## v3.0.0",
+      "## v2.0.0",
+      "## v1.0.0",
+      "",
+      "- final entry",
+      "",
+    ].join("\n");
+    const slices: string[] = [];
+    let offset = 0;
+    let guard = 0;
+    while (guard < 20) {
+      const r = sliceChangelog(adjacent, { offset, tokens: 5 });
+      slices.push(r.content);
+      if (r.nextOffset == null) break;
+      offset = r.nextOffset;
+      guard++;
+    }
+    expect(slices.join("")).toBe(adjacent);
+  });
+});
+
 describe("buildChangelogResponse truncation + files", () => {
   const row = {
     path: "CHANGELOG.md",

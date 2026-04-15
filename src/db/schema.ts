@@ -328,6 +328,7 @@ export const sourceChangelogFiles = sqliteTable(
     content: text("content").notNull(),
     contentHash: text("content_hash").notNull(),
     bytes: integer("bytes").notNull(),
+    tokens: integer("tokens"),
     fetchedAt: text("fetched_at").notNull().$defaultFn(() => new Date().toISOString()),
   },
   (table) => [

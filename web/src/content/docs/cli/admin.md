@@ -47,16 +47,22 @@ For `github` sources, the root-level `CHANGELOG.md` is tracked alongside tagged 
 # Print the full file to stdout
 releases admin source changelog apollo-client
 
-# Slice a range, snapped to heading boundaries (Context7-style)
+# Slice a character range, snapped to heading boundaries
 releases admin source changelog apollo-client --limit 10000
 releases admin source changelog apollo-client --offset 10000 --limit 10000
-releases admin source changelog apollo-client --limit 5000 --json  # with offset/nextOffset/totalChars
+
+# Slice a token budget (cl100k_base) — ideal for LLM context windows
+releases admin source changelog apollo-client --tokens 5000
+releases admin source changelog apollo-client --tokens 10000 --json
+
+# JSON output carries totalTokens + sliceTokens alongside offset/nextOffset/totalChars
+releases admin source changelog apollo-client --limit 5000 --json
 
 # Manually refresh the cached copy (local mode only — remote mode uses a worker cron on a 24h TTL)
 releases admin source refresh-changelog apollo-client
 ```
 
-Works in both local and remote mode. The slicer snaps boundaries to `##` headings so sections are never cut mid-entry. Chain successive calls by feeding `nextOffset` back as `--offset`.
+Works in both local and remote mode. The slicer snaps boundaries to `##` headings so sections are never cut mid-entry. `--tokens` and `--limit` both operate under the same rules; `--tokens` wins when both are passed. Chain successive calls by feeding `nextOffset` back as `--offset`. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
 
 ## Evaluate
 

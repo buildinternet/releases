@@ -245,7 +245,7 @@ releases admin mcp serve
 | `compare_products` | AI comparison between two products | Gated | Gated |
 | `list_sources` | List all tracked sources | Yes | Yes |
 | `get_source` | Detail for a single source with org/product linkage, release count, and whether a CHANGELOG file is stored | Yes | Yes |
-| `get_source_changelog` | Canonical `CHANGELOG.md` stored for a GitHub source, with heading-aligned `offset` / `limit` slicing for Context7-style paging through large files | Yes | Yes |
+| `get_source_changelog` | Canonical `CHANGELOG.md` stored for a GitHub source, with heading-aligned `offset` + `limit` (chars) or `tokens` (cl100k_base) slicing for Context7-style paging through large files | Yes | Yes |
 | `list_organizations` | List all organizations with their linked sources | Yes | Yes |
 | `get_organization` | Detailed view of a single org (accounts, tags, sources, products, aliases) | Yes | Yes |
 | `list_products` | List products, optionally scoped to one organization | Yes | Yes |
@@ -336,10 +336,11 @@ Read a tracked CHANGELOG directly, with optional heading-aligned slicing for lar
 ```bash
 releases admin source changelog apollo-client                         # full file to stdout
 releases admin source changelog apollo-client --limit 10000           # first 10k chars, ending at a heading
+releases admin source changelog apollo-client --tokens 5000           # first ~5k tokens (cl100k_base), ending at a heading
 releases admin source changelog apollo-client --offset 10000 --json   # next chunk as JSON
 ```
 
-The same slicing is exposed over the API and MCP: `GET /v1/sources/:slug/changelog?offset=&limit=` and the `get_source_changelog` MCP tool. Chain successive requests by feeding the returned `nextOffset` back as the next `offset`. The slicer snaps boundaries to `##` headings so sections are never cut mid-entry — useful for agent-friendly Context7-style access to large files (e.g. Apollo Client's 700KB CHANGELOG).
+The same slicing is exposed over the API and MCP: `GET /v1/sources/:slug/changelog?offset=&limit=&tokens=` and the `get_source_changelog` MCP tool. Char mode (`limit`) and token mode (`tokens`) are both heading-aware; `tokens` wins when both are passed. Every response reports `totalTokens` (cached per file) and, in token mode, `sliceTokens` for the returned chunk so agents can budget context windows precisely. Chain successive requests by feeding the returned `nextOffset` back as the next `offset`. Recommended brackets: 2000 / 5000 / 10000 / 20000 tokens. Useful for agent-friendly access to large files (e.g. Apollo Client's 700KB CHANGELOG).
 
 > **Remote mode:** bare `releases admin source fetch` (no slug or filter) is blocked to prevent expensive bulk operations. Use `--stale`, `--unfetched`, `--retry-errors`, or a source slug. Remote concurrency defaults to 3 (max 5). Duplicate source fetches are detected and blocked.
 

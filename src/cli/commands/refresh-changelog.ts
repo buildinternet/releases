@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { findSource, upsertChangelogFile, deleteChangelogFilesNotIn, getChangelogFile, listChangelogFiles } from "../../db/queries.js";
 import { fetchChangelogFiles } from "../../adapters/github.js";
-import { buildChangelogResponse } from "../../lib/changelog-slice.js";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams } from "../../lib/changelog-slice.js";
 import { sourceChangelog as sourceChangelogRemote } from "../../api/client.js";
 import { sourceNotFound } from "../suggest.js";
 import { logger } from "../../lib/logger.js";
@@ -71,24 +71,30 @@ export function registerRefreshChangelogCommand(program: Command) {
 export function registerChangelogCommand(program: Command) {
   program
     .command("changelog")
-    .description("Print the tracked CHANGELOG file for a source, optionally sliced by char range")
+    .description("Print the tracked CHANGELOG file for a source, optionally sliced by char range or token budget")
     .argument("<slug>", "Source ID or slug")
     .option("--path <path>", "Specific file path to read (e.g. packages/next/CHANGELOG.md)")
     .option("--offset <n>", "Character offset to start reading from", (v) => parseInt(v, 10))
     .option("--limit <n>", "Max characters to read (snapped to heading boundaries)", (v) => parseInt(v, 10))
-    .option("--json", "Output as JSON with offset, nextOffset, totalChars")
-    .action(async (slug: string, opts: { path?: string; offset?: number; limit?: number; json?: boolean }) => {
+    .option("--tokens <n>", "Target slice size in tokens (cl100k_base). Overrides --limit. Common brackets: 2000/5000/10000/20000", (v) => parseInt(v, 10))
+    .option("--json", "Output as JSON with offset, nextOffset, totalChars, totalTokens, sliceTokens")
+    .action(async (slug: string, opts: { path?: string; offset?: number; limit?: number; tokens?: number; json?: boolean }) => {
       const source = await findSource(slug);
       if (!source) return sourceNotFound(slug);
 
-      const ranging = opts.offset !== undefined || opts.limit !== undefined;
+      const rangeParams = resolveChangelogRangeParams({
+        offset: opts.offset,
+        limit: opts.limit,
+        tokens: opts.tokens,
+      });
 
       let response;
       if (isRemoteMode()) {
         const remote = await sourceChangelogRemote(source.slug, {
           path: opts.path,
           offset: opts.offset,
-          limit: opts.limit ?? (ranging ? 40_000 : undefined),
+          limit: rangeParams.limit !== null ? Number(rangeParams.limit) : undefined,
+          tokens: opts.tokens,
         });
         if (!remote) {
           logger.error(`No CHANGELOG file is tracked for ${source.slug}. Only GitHub sources expose this.`);
@@ -120,14 +126,7 @@ export function registerChangelogCommand(program: Command) {
           bytes: r.bytes,
           fetchedAt: r.fetchedAt,
         }));
-        response = buildChangelogResponse(
-          selected,
-          {
-            offset: opts.offset !== undefined ? String(opts.offset) : null,
-            limit: opts.limit !== undefined ? String(opts.limit) : (ranging ? "40000" : null),
-          },
-          files,
-        );
+        response = buildChangelogResponse(selected, rangeParams, files);
       }
 
       if (opts.json) {
@@ -137,9 +136,6 @@ export function registerChangelogCommand(program: Command) {
 
       process.stdout.write(response.content);
       if (!response.content.endsWith("\n")) process.stdout.write("\n");
-      const tail = response.nextOffset != null
-        ? `\n— chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars} (next offset: ${response.nextOffset}) —`
-        : `\n— chars ${response.offset}–${response.offset + response.content.length} of ${response.totalChars} (end of file) —`;
-      console.error(chalk.dim(tail));
+      console.error(chalk.dim(`\n— ${formatChangelogSliceLine(response)} —`));
     });
 }
