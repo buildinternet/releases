@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { config } from "../lib/config.js";
-import { AIError } from "../lib/errors.js";
+import { config } from "@releases/lib/config";
+import { AIError } from "@releases/lib/errors";
 
 let cachedClient: Anthropic | null = null;
 

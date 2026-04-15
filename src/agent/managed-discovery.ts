@@ -9,9 +9,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
-import { config, getDataDir } from "../lib/config.js";
+import { config, getDataDir } from "@releases/lib/config";
 import { sha256Hex } from "@releases/core/hash";
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { CATEGORIES } from "@releases/core/categories";
 import { buildDiscoveryPrompt } from "./released.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./released.js";

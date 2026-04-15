@@ -1,5 +1,5 @@
 import { getApiUrl, getApiKey, isAdminMode } from "../lib/mode.js";
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { daysAgoIso } from "@releases/core/dates";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,

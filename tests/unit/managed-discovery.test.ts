@@ -124,13 +124,13 @@ describe("CLI command resolution", () => {
 
   it("respects RELEASED_CLI_CMD env var", () => {
     process.env.RELEASED_CLI_CMD = "/custom/path/releases";
-    const { resolveCLICmd } = require("../../src/lib/config.js");
+    const { resolveCLICmd } = require("../../src/agent/cli-cmd.js");
     expect(resolveCLICmd()).toBe("/custom/path/releases");
   });
 
   it("returns a string when no env var is set", () => {
     delete process.env.RELEASED_CLI_CMD;
-    const { resolveCLICmd } = require("../../src/lib/config.js");
+    const { resolveCLICmd } = require("../../src/agent/cli-cmd.js");
     const cmd = resolveCLICmd();
     expect(typeof cmd).toBe("string");
     expect(cmd.length).toBeGreaterThan(0);

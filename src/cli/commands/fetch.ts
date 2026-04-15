@@ -20,10 +20,10 @@ import {
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { generateKnowledgePage } from "../../ai/knowledge.js";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { MEDIA_PREFIX } from "../../lib/media-url.js";
-import { config } from "../../lib/config.js";
+import { config } from "@releases/lib/config";
 import { elapsedFormatted, daysAgoIso } from "@releases/core/dates";
 import { isRemoteMode } from "../../lib/mode.js";
 import { newCorrelationId } from "@releases/core/id";

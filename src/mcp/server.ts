@@ -18,7 +18,7 @@ import {
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
 import { daysAgoIso } from "@releases/core/dates";
 import { toSlug } from "@releases/core/slug";
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { isAdminMode } from "../lib/mode.js";
 import { recordEvent } from "../lib/telemetry.js";
 import { getAdapter } from "../adapters/resolve.js";

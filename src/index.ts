@@ -2,7 +2,7 @@
 import { program } from "./cli/program.js";
 import { runMigrations } from "./db/migrate.js";
 import { isRemoteMode, validateRemoteMode } from "./lib/mode.js";
-import { logger } from "./lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { recordEvent, maybeShowFirstRunNotice } from "./lib/telemetry.js";
 
 const LEGACY_COMMAND_ALIASES: Record<string, string[]> = {

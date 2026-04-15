@@ -1,4 +1,4 @@
-import { logger } from "./logger.js";
+import { logger } from "@releases/lib/logger";
 
 const DEFAULT_API_URL = "https://api.releases.sh";
 

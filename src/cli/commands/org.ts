@@ -12,7 +12,7 @@ import { generateKnowledgePage } from "../../ai/knowledge.js";
 import { DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { daysAgoIso } from "@releases/core/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { orgNotFound } from "../suggest.js";
 import { toSlug } from "@releases/core/slug";
 import { isValidCategory, CATEGORIES } from "@releases/core/categories";

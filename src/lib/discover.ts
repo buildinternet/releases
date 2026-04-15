@@ -1,5 +1,5 @@
-import { logger } from "./logger.js";
-import { config } from "./config.js";
+import { logger } from "@releases/lib/logger";
+import { config } from "@releases/lib/config";
 import { discoverFeed } from "../adapters/feed.js";
 import { parseNextLink } from "../adapters/github.js";
 import { detectProvider, type DetectedProvider } from "./providers.js";

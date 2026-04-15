@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, chmodSync, unlinkSync } from "fs";
 import { join } from "path";
 import { randomUUID } from "crypto";
-import { getDataDir } from "./config.js";
+import { getDataDir } from "@releases/lib/config";
 import { VERSION } from "../cli/version.js";
 import type { TelemetryClientKind, TelemetrySurface } from "@releases/core/schema";
 

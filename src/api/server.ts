@@ -1,4 +1,4 @@
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { handleStats } from "./routes/stats.js";
 import { handleOrgs, handleOrgDetail } from "./routes/orgs.js";
 import { handleSources, handleSourceDetail, handleSourceActivity, handleSourceChangelog, CHANGELOG_PATH_NOT_FOUND } from "./routes/sources.js";

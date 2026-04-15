@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { findSourcesBySlugs, deleteSources, addIgnoredUrl } from "../../db/queries.js";
-import { logger } from "../../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 
 export function registerRemoveCommand(program: Command) {
   program

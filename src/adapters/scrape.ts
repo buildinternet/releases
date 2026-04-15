@@ -1,11 +1,11 @@
 import type { Source } from "@releases/core/schema";
 import { checkContentHash, getKnownReleasesForSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
-import { config } from "../lib/config.js";
-import { AdapterError } from "../lib/errors.js";
-import { CrawlTimeoutError, CrawlJobError } from "../lib/errors.js";
+import { config } from "@releases/lib/config";
+import { AdapterError } from "@releases/lib/errors";
+import { CrawlTimeoutError, CrawlJobError } from "@releases/lib/errors";
 import { sha256Hex } from "@releases/core/hash";
-import { logger } from "../lib/logger.js";
+import { logger } from "@releases/lib/logger";
 import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed, getSourceMeta, updateSourceMeta } from "./feed.js";
