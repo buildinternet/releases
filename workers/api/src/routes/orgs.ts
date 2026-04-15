@@ -11,6 +11,8 @@ import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatter
 import { assemblePlaybook } from "@releases/ai/playbook.js";
 import type { Env } from "../index.js";
 import { getOrgsWithStats, getOrgSparklines, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgSourceSparklines, getOrgReleasesFeed } from "../queries/orgs.js";
+import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
+import { buildEmbedConfig } from "../lib/embed-config.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -241,6 +243,7 @@ orgRoutes.post("/orgs", async (c) => {
       }
     }
 
+    c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
     return c.json(org, 201);
   } catch (err) {
     if (isConflictError(err)) {
@@ -277,6 +280,17 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
       const tag = await getOrCreateTagD1(db, tagName);
       await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
     }
+  }
+
+  // Re-embed if semantically meaningful fields changed (name/description/
+  // category/domain). Tag/slug churn alone doesn't warrant it.
+  const semanticChanged =
+    body.name !== undefined ||
+    body.description !== undefined ||
+    body.category !== undefined ||
+    body.domain !== undefined;
+  if (semanticChanged) {
+    c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
   }
 
   return c.json(updated);
@@ -765,3 +779,41 @@ orgRoutes.post("/orgs/:slug/accounts", async (c) => {
     throw err;
   }
 });
+
+// ── Embed side effect ──
+
+async function embedOrgSideEffect(
+  env: Env["Bindings"],
+  db: ReturnType<typeof createDb>,
+  orgId: string,
+): Promise<void> {
+  try {
+    const embedConfig = await buildEmbedConfig(env);
+    if (!embedConfig) return;
+    const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
+    if (!org) return;
+    await embedAndUpsertEntities({
+      entities: [{
+        id: org.id,
+        kind: "org" as EntityKind,
+        name: org.name,
+        description: org.description,
+        category: org.category,
+        domain: org.domain,
+      }],
+      // Cast: workers-types VectorizeIndex has a stricter metadata value
+      // type than the shared runtime-agnostic interface. Assignable at
+      // runtime; only diverges by type-system variance.
+      vectorIndex: env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+      embedConfig,
+      onPersisted: async () => {
+        await db
+          .update(organizations)
+          .set({ embeddedAt: new Date().toISOString() })
+          .where(eq(organizations.id, org.id));
+      },
+    });
+  } catch (err) {
+    console.warn(`[orgs] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}

@@ -31,6 +31,7 @@ import { registerPollCommand } from "./commands/poll.js";
 import { registerRefreshChangelogCommand, registerChangelogCommand } from "./commands/refresh-changelog.js";
 import { registerPlaybookCommand } from "./commands/playbook.js";
 import { registerShowCommand } from "./commands/show.js";
+import { registerEmbedCommand } from "./commands/admin/embed.js";
 import { CATEGORIES } from "../lib/categories.js";
 import { isAdminMode } from "../lib/mode.js";
 
@@ -125,8 +126,11 @@ export const program = new Command()
   })
   .configureHelp({
     formatHelp: (cmd, helper) => {
-      // Root command gets styled help; subcommands get standard Commander help
-      if (cmd.name() === "releases") return printStyledHelp() + "\n";
+      // Root command gets styled help; subcommands get standard Commander help.
+      // The root is the only command with no parent — guarding on name alone
+      // would wrongly format a subcommand literally named "releases" (e.g.
+      // `admin embed releases`) with the root's top-level help screen.
+      if (cmd.name() === "releases" && cmd.parent === null) return printStyledHelp() + "\n";
       return new Help().formatHelp(cmd, helper);
     },
   })
@@ -202,6 +206,8 @@ const statsAdmin = admin
   .command("stats")
   .description("Inspect operator metrics and usage");
 registerUsageCommand(statsAdmin);
+
+registerEmbedCommand(admin);
 
 const mcpAdmin = admin
   .command("mcp")

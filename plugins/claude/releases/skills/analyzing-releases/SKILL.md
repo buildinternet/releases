@@ -47,7 +47,13 @@ Get structured release data with dates for each source. Use a limit (e.g., 50) t
 
 ### 5. Search and cross-reference
 
-Search across all indexed releases to find specific features, breaking changes, or patterns.
+Search across all indexed releases to find specific features, breaking changes, or patterns. `search_releases` is hybrid (lexical + semantic) by default — natural-language queries like "auth refresh tokens" or "cold start improvements" work without exact keyword matches. Pass `mode: "lexical"` if you need strict keyword behavior.
+
+**Result shape:** every hit carries a `kind` discriminator:
+- `kind: "release"` — a normal release row, use as-is.
+- `kind: "changelog_chunk"` — a passage from a stored CHANGELOG.md file. The hit includes `sourceSlug`, `chunkOffset`, and `chunkLength`. Chain into `get_source_changelog({ slug: sourceSlug, offset: chunkOffset, limit: chunkLength * 3 })` to read the surrounding section before quoting it. Chunk hits often surface older or more granular notes than what's in the indexed release rows, so they're useful for "when did X first ship" questions.
+
+For org/product/source discovery (e.g. "find observability vendors with edge offerings"), use `search_registry` instead of `list_sources --query` — it's vector-backed and matches on description and category, not just slug substring.
 
 ### 6. Synthesize
 

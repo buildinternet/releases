@@ -23,6 +23,7 @@ import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
+import { adminEmbedRoutes } from "./routes/admin-embed.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -41,6 +42,14 @@ export type Env = {
     GITHUB_TOKEN?: SecretBinding;
     CRON_ENABLED?: string;
     DISCOVERY_WORKER?: Fetcher;
+    // Vectorize indexes for semantic search (provisioned out-of-band).
+    RELEASES_INDEX: VectorizeIndex;
+    ENTITIES_INDEX: VectorizeIndex;
+    CHANGELOG_CHUNKS_INDEX: VectorizeIndex;
+    // Embedding provider config (see src/lib/embeddings.ts).
+    EMBEDDING_PROVIDER?: string;
+    VOYAGE_API_KEY?: SecretBinding;
+    OPENAI_API_KEY?: SecretBinding;
   };
 };
 
@@ -83,6 +92,7 @@ for (const r of publicReadRoutes) {
 const adminRoutes = [
   "sessions", "fetch-log", "usage-log", "blocked-urls",
   "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
+  "admin/embed",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -125,6 +135,7 @@ v1.route("/knowledge", knowledge); // deprecated — alias for overview/playbook
 v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
+v1.route("/", adminEmbedRoutes);
 
 // Static endpoint — categories are defined in code, not DB
 v1.get("/categories", (c) => {
@@ -142,6 +153,15 @@ export default {
   fetch: app.fetch,
   async scheduled(_event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
     const githubToken = await env.GITHUB_TOKEN?.get();
-    ctx.waitUntil(pollAndFetch({ DB: env.DB, GITHUB_TOKEN: githubToken, CRON_ENABLED: env.CRON_ENABLED }));
+    ctx.waitUntil(pollAndFetch({
+      DB: env.DB,
+      GITHUB_TOKEN: githubToken,
+      CRON_ENABLED: env.CRON_ENABLED,
+      RELEASES_INDEX: env.RELEASES_INDEX,
+      CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
+      EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
+      VOYAGE_API_KEY: env.VOYAGE_API_KEY,
+      OPENAI_API_KEY: env.OPENAI_API_KEY,
+    }));
   },
 };

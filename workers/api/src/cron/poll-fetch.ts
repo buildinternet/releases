@@ -1,6 +1,6 @@
-import { eq, and, or, sql, isNull } from "drizzle-orm";
+import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { sources, releases, fetchLog, sourceChangelogFiles } from "@releases/db/schema.js";
+import { sources, releases, fetchLog, sourceChangelogFiles, sourceChangelogChunks } from "@releases/db/schema.js";
 import { countTokensSafe } from "@releases/lib/tokens.js";
 import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@releases/db/schema.js";
@@ -9,6 +9,10 @@ import type { SourceMetadata } from "@releases/adapters/feed.js";
 import { contentHash } from "@releases/adapters/resolve.js";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { normalizeMediaUrl } from "@releases/lib/media-url.js";
+import { embedAndUpsertChangelogFile } from "@releases/lib/embed-changelog-pipeline.js";
+import { buildEmbedConfig } from "../lib/embed-config.js";
+import type { VectorizeIndex } from "@releases/lib/vector-search.js";
+import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
 
 // ── Tier intervals (hours) ──
 
@@ -24,7 +28,7 @@ const FETCH_CONCURRENCY = 3;
 
 // ── Main entry point ──
 
-export async function pollAndFetch(env: { DB: D1Database; GITHUB_TOKEN?: string; CRON_ENABLED?: string }): Promise<void> {
+export async function pollAndFetch(env: FetchOneEnv & { DB: D1Database; CRON_ENABLED?: string }): Promise<void> {
   if (env.CRON_ENABLED === "false") {
     console.log("[cron] Disabled via CRON_ENABLED=false, skipping");
     return;
@@ -164,10 +168,26 @@ export interface FetchOneResult {
   error?: string;
 }
 
+export interface FetchOneEnv {
+  GITHUB_TOKEN?: string;
+  /**
+   * Optional Vectorize bindings for semantic-search side effects. Typed as
+   * `unknown` because the workers-types `VectorizeIndex` declares a stricter
+   * metadata value type than the runtime-agnostic interface in
+   * `@releases/lib/vector-search.js`. Identical at runtime but the variance
+   * prevents structural assignment; helpers below cast at the call site.
+   */
+  RELEASES_INDEX?: unknown;
+  CHANGELOG_CHUNKS_INDEX?: unknown;
+  EMBEDDING_PROVIDER?: string;
+  VOYAGE_API_KEY?: { get(): Promise<string> };
+  OPENAI_API_KEY?: { get(): Promise<string> };
+}
+
 export async function fetchOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
-  env: { GITHUB_TOKEN?: string },
+  env: FetchOneEnv,
   opts?: { sessionId?: string },
 ): Promise<FetchOneResult> {
   const start = Date.now();
@@ -259,12 +279,25 @@ export async function fetchOne(
     }));
 
     let inserted = 0;
+    const insertedIds: string[] = [];
     for (let i = 0; i < rows.length; i += 5) {
       const chunk = rows.slice(i, i + 5);
       const result = await db.insert(releases).values(chunk)
         .onConflictDoNothing()
         .returning({ id: releases.id });
       inserted += result.length;
+      for (const r of result) insertedIds.push(r.id);
+    }
+
+    // Embed newly-inserted releases as a best-effort side effect. Failure
+    // never aborts the fetch. Runs inline rather than in waitUntil because
+    // fetchOne is already inside cron / a waitUntil boundary at the callers.
+    if (insertedIds.length > 0 && env.RELEASES_INDEX) {
+      try {
+        await embedReleasesForSource(db, source, insertedIds, env);
+      } catch (err) {
+        console.warn(`[cron] release embed failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
 
     await Promise.all([
@@ -289,7 +322,7 @@ export async function fetchOne(
     // in src/cli/commands/fetch.ts). Never fail the outer fetch if this errors.
     if (source.type === "github") {
       try {
-        await refreshChangelogFile(db, source, env.GITHUB_TOKEN);
+        await refreshChangelogFile(db, source, env.GITHUB_TOKEN, env);
       } catch (err) {
         console.warn(`[cron] Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
       }
@@ -472,6 +505,7 @@ async function refreshChangelogFile(
   db: ReturnType<typeof drizzle>,
   source: Source,
   token: string | undefined,
+  env: FetchOneEnv,
 ): Promise<void> {
   const match = source.url.match(/github\.com\/([^/]+)\/([^/]+)/);
   if (!match) return;
@@ -588,10 +622,12 @@ async function refreshChangelogFile(
     .where(eq(sourceChangelogFiles.sourceId, source.id));
   const existingByPath = new Map(existing.map((e) => [e.path, e]));
 
+  // Track files whose content changed so we can embed them after DB writes.
+  const changed: Array<{ fileId: string; content: string; contentHash: string }> = [];
   for (const file of fetched) {
     const prior = existingByPath.get(file.path);
     if (!prior) {
-      await db.insert(sourceChangelogFiles).values({
+      const [row] = await db.insert(sourceChangelogFiles).values({
         sourceId: source.id,
         path: file.path,
         filename: file.filename,
@@ -602,9 +638,11 @@ async function refreshChangelogFile(
         bytes: file.bytes,
         tokens: countTokensSafe(file.content),
         fetchedAt: now,
-      });
+      }).returning({ id: sourceChangelogFiles.id });
+      if (row) changed.push({ fileId: row.id, content: file.content, contentHash: file.contentHashHex });
       console.log(`[cron] Inserted ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
     } else if (prior.contentHash === file.contentHashHex) {
+      // Hash unchanged — short-circuit, no embed needed. Backfill tokens if the prior row predates that column.
       const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
       if (prior.tokens === null) touch.tokens = countTokensSafe(prior.content);
       await db
@@ -625,7 +663,21 @@ async function refreshChangelogFile(
           fetchedAt: now,
         })
         .where(eq(sourceChangelogFiles.id, prior.id));
+      changed.push({ fileId: prior.id, content: file.content, contentHash: file.contentHashHex });
       console.log(`[cron] Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
+    }
+  }
+
+  // Embed changed changelog files into CHANGELOG_CHUNKS_INDEX. Runs inline
+  // (the caller already wraps this function in try/catch) so failures just
+  // log and move on. Skipped when the Vectorize binding is missing.
+  if (changed.length > 0 && env.CHANGELOG_CHUNKS_INDEX) {
+    for (const file of changed) {
+      try {
+        await embedChangelogFileForSource(db, source, file, env);
+      } catch (err) {
+        console.warn(`[cron] changelog embed failed for ${source.slug} (${file.fileId}): ${err instanceof Error ? err.message : String(err)}`);
+      }
     }
   }
 
@@ -695,4 +747,155 @@ async function runWithConcurrency<T, R>(
   });
   await Promise.all(workers);
   return results;
+}
+
+// ── Embedding side effects ──
+//
+// These helpers hydrate DB rows, build the embed config from Worker secrets,
+// push vectors to Vectorize, and mark the rows as embedded. All failures are
+// swallowed by the shared helpers in src/lib/embed-*.ts so the callers never
+// need to try/catch.
+
+async function embedReleasesForSource(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  releaseIds: string[],
+  env: FetchOneEnv,
+): Promise<void> {
+  const embedConfig = await buildEmbedConfig(env);
+  if (!embedConfig || !env.RELEASES_INDEX) return;
+
+  const rowsToEmbed = await db
+    .select({
+      id: releases.id,
+      title: releases.title,
+      content: releases.content,
+      contentSummary: releases.contentSummary,
+      version: releases.version,
+      publishedAt: releases.publishedAt,
+      sourceId: releases.sourceId,
+      type: releases.type,
+    })
+    .from(releases)
+    .where(inArray(releases.id, releaseIds));
+
+  // Load org category for metadata filtering.
+  let category: string | null = null;
+  if (source.orgId) {
+    const orgRow = await db.run(sql`SELECT category FROM organizations WHERE id = ${source.orgId} LIMIT 1`);
+    const first = (orgRow.results as Array<{ category: string | null }> | undefined)?.[0];
+    category = first?.category ?? null;
+  }
+
+  await embedAndUpsertReleases({
+    releases: rowsToEmbed.map((r) => ({
+      ...r,
+      orgId: source.orgId,
+      productId: source.productId,
+      category,
+    })),
+    // See FetchOneEnv note: shared interface differs from workers-types only
+    // in metadata variance. Cast is safe at runtime.
+    vectorIndex: env.RELEASES_INDEX as VectorizeIndex,
+    embedConfig,
+    onPersisted: async (ids) => {
+      if (ids.length === 0) return;
+      const now = new Date().toISOString();
+      for (let i = 0; i < ids.length; i += 100) {
+        const slice = ids.slice(i, i + 100);
+        await db.update(releases).set({ embeddedAt: now }).where(inArray(releases.id, slice));
+      }
+    },
+  });
+}
+
+async function embedChangelogFileForSource(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  file: { fileId: string; content: string; contentHash: string },
+  env: FetchOneEnv,
+): Promise<void> {
+  const embedConfig = await buildEmbedConfig(env);
+  if (!embedConfig || !env.CHANGELOG_CHUNKS_INDEX) return;
+
+  // Load existing chunks for this file so the diff can detect unchanged
+  // sections and avoid re-embedding them.
+  const existingRows = await db
+    .select({
+      id: sourceChangelogChunks.id,
+      offset: sourceChangelogChunks.offset,
+      contentHash: sourceChangelogChunks.contentHash,
+      vectorId: sourceChangelogChunks.vectorId,
+    })
+    .from(sourceChangelogChunks)
+    .where(eq(sourceChangelogChunks.sourceChangelogFileId, file.fileId));
+
+  await embedAndUpsertChangelogFile({
+    file: {
+      id: file.fileId,
+      sourceId: source.id,
+      content: file.content,
+      contentHash: file.contentHash,
+    },
+    existingChunks: existingRows.map((r) => ({
+      id: r.id,
+      offset: r.offset,
+      contentHash: r.contentHash,
+      vectorId: r.vectorId,
+    })),
+    vectorIndex: env.CHANGELOG_CHUNKS_INDEX as VectorizeIndex,
+    embedConfig,
+    onDiff: async ({ diff, embedded }) => {
+      const now = new Date().toISOString();
+
+      // 1. Delete stale rows.
+      if (diff.toDelete.length > 0) {
+        const ids = diff.toDelete.map((d) => d.id);
+        for (let i = 0; i < ids.length; i += 100) {
+          const slice = ids.slice(i, i + 100);
+          await db.delete(sourceChangelogChunks).where(inArray(sourceChangelogChunks.id, slice));
+        }
+      }
+
+      // 2. Update unchanged rows to reflect the new offset/heading/length.
+      //    One-at-a-time is fine — the diff is usually small.
+      for (const u of diff.unchanged) {
+        await db
+          .update(sourceChangelogChunks)
+          .set({
+            offset: u.chunk.offset,
+            length: u.chunk.length,
+            tokens: u.chunk.tokens,
+            heading: u.chunk.heading,
+          })
+          .where(eq(sourceChangelogChunks.id, u.id));
+      }
+
+      // 3. Insert new rows. Rows whose embed succeeded get vectorId +
+      //    embeddedAt; the rest land with vectorId = NULL so the backfill
+      //    job can embed them later.
+      const embeddedByHash = new Map(embedded.map((e) => [e.chunk.contentHash, e]));
+      if (diff.toInsert.length > 0) {
+        const values = diff.toInsert.map((chunk) => {
+          const match = embeddedByHash.get(chunk.contentHash);
+          return {
+            sourceChangelogFileId: file.fileId,
+            sourceId: source.id,
+            offset: chunk.offset,
+            length: chunk.length,
+            tokens: chunk.tokens,
+            contentHash: chunk.contentHash,
+            heading: chunk.heading,
+            vectorId: match?.vectorId ?? null,
+            embeddedAt: match ? now : null,
+          };
+        });
+        // D1 caps bound parameters per statement at ~100. This table has
+        // 11 columns, so 9 rows per batch keeps us under the limit.
+        for (let i = 0; i < values.length; i += 9) {
+          await db.insert(sourceChangelogChunks).values(values.slice(i, i + 9));
+        }
+      }
+    },
+  });
 }

@@ -14,7 +14,11 @@
   },
   "vars": {
     "CRON_ENABLED": "true",
-    "MEDIA_ORIGIN": "https://media.releases.sh"
+    "MEDIA_ORIGIN": "https://media.releases.sh",
+    // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
+    // requested at 512 dims via output_dimension to match the Vectorize indexes).
+    // Switch to "openai" or "workers-ai" requires updating the matching secret.
+    "EMBEDDING_PROVIDER": "voyage"
   },
   "d1_databases": [
     {
@@ -22,6 +26,13 @@
       "database_name": "released-db",
       "database_id": "73be1562-d900-4e25-a62b-650ab74488b7"
     }
+  ],
+  // Vectorize indexes for semantic search. Provision once via
+  // scripts/create-vectorize-indexes.sh before first deploy.
+  "vectorize": [
+    { "binding": "RELEASES_INDEX", "index_name": "releases-v1" },
+    { "binding": "ENTITIES_INDEX", "index_name": "entities-v1" },
+    { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" }
   ],
   "services": [
     { "binding": "DISCOVERY_WORKER", "service": "releases-discovery" }
@@ -46,8 +57,11 @@
   "triggers": {
     "crons": ["0 * * * *"]
   },
+  // Secrets are managed in Cloudflare's Secrets Store (dashboard → Workers → Secrets Store).
+  // To rotate or switch providers, update the secret there and redeploy.
   "secrets_store_secrets": [
     { "binding": "RELEASED_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "RELEASED_API_KEY" },
-    { "binding": "GITHUB_TOKEN", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "GITHUB_TOKEN" }
+    { "binding": "GITHUB_TOKEN", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "GITHUB_TOKEN" },
+    { "binding": "VOYAGE_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "VOYAGER_API_KEY" }
   ]
 }

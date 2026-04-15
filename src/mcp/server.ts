@@ -3,6 +3,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import * as z from "zod/v4";
 import { eq, desc, inArray, and } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
+import { unifiedSearchLocal } from "../db/fts.js";
 import { runMigrations } from "../db/migrate.js";
 import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "../db/schema.js";
 import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "../lib/changelog-slice.js";
@@ -31,17 +32,28 @@ const server = new McpServer({
   version: "0.10.0",
 });
 
+// ── search tools (local-mode note) ───────────────────────────────────
+// Local mode has no Vectorize binding, so semantic search is unavailable.
+// - `search_releases` accepts the `mode` input for API parity with the
+//   remote MCP worker but silently falls back to lexical FTS for any
+//   value. Callers cannot detect the degradation from the response.
+// - `search_registry` falls back to the existing LIKE-based
+//   `unifiedSearchLocal` helper.
+// If you add Vectorize support to local mode, update both tools to use
+// the shared hybrid helper and delete this note.
+
 // ── search_releases ──────────────────────────────────────────────────
 server.registerTool("search_releases", {
-  description: "Full-text search across all indexed release notes",
+  description: "Search indexed release notes. In local mode this is FTS-only; the `mode` parameter is accepted for compatibility but always degrades to lexical.",
   inputSchema: {
     query: z.string().describe("Search query"),
     product: z.string().optional().describe("Filter to a specific product slug"),
     organization: z.string().optional().describe("Filter to sources belonging to this organization"),
     type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
     limit: z.number().optional().describe("Max results to return (default 20)"),
+    mode: z.enum(["lexical", "semantic", "hybrid"]).optional().describe("Retrieval strategy. Accepted for parity with the remote MCP server; local mode always runs lexical FTS."),
   },
-}, async ({ query, product, organization, type: typeFilter, limit }) => {
+}, async ({ query, product, organization, type: typeFilter, limit, mode: _mode }) => {
   const maxResults = limit ?? 20;
 
   // Build a set of allowed source IDs when filtering by org
@@ -91,6 +103,48 @@ server.registerTool("search_releases", {
     .join("\n\n---\n\n");
 
   return textResult(text);
+});
+
+// ── search_registry ──────────────────────────────────────────────────
+server.registerTool("search_registry", {
+  description: "Search orgs, products, and sources in the registry. In local mode this is the LIKE-based unifiedSearch helper — there is no semantic path available without a Vectorize binding.",
+  inputSchema: {
+    query: z.string().describe("Search query"),
+    kind: z.enum(["org", "product", "source"]).optional().describe("Restrict to one entity kind. Omit for all."),
+    limit: z.number().optional().describe("Max results per kind (default 20)"),
+  },
+}, async ({ query, kind, limit }) => {
+  const lim = limit ?? 20;
+  const { orgs, products, sources: _s } = unifiedSearchLocal(query, lim, 0);
+  const lines: string[] = [];
+  const wantsKind = (k: "org" | "product" | "source") => !kind || kind === k;
+
+  if (wantsKind("org")) {
+    for (const o of orgs) {
+      const parts = [`[org] **${o.name}**`, `  slug: ${o.slug}`];
+      if (o.category) parts.push(`  category: ${o.category}`);
+      lines.push(parts.join("\n"));
+    }
+  }
+  if (wantsKind("product") || wantsKind("source")) {
+    for (const p of products) {
+      // The folded products list mixes products and source-as-product
+      // synthetic entries — we separate them back out for clarity.
+      if (p.kind === "source" && wantsKind("source")) {
+        const parts = [`[source] **${p.name}**`, `  slug: ${p.slug}`];
+        lines.push(parts.join("\n"));
+      } else if (p.kind !== "source" && wantsKind("product")) {
+        const parts = [`[product] **${p.name}**`, `  slug: ${p.slug}`];
+        if (p.category) parts.push(`  category: ${p.category}`);
+        lines.push(parts.join("\n"));
+      }
+    }
+  }
+
+  if (lines.length === 0) {
+    return textResult("No registry entries found.");
+  }
+  return textResult(lines.join("\n\n"));
 });
 
 // ── get_latest_releases ──────────────────────────────────────────────

@@ -12,7 +12,8 @@ You have two kinds of tools:
 
 ### MCP tools (reads)
 Connected via the Releases MCP server. Use for all read/search operations:
-- **search_releases** — Full-text search across releases
+- **search_releases** — Hybrid lexical + semantic search across releases and CHANGELOG chunks (default `mode: "hybrid"`); each hit carries a `kind: "release"|"changelog_chunk"` discriminator
+- **search_registry** — Vector-backed lookup across orgs, products, and sources by name/description/category
 - **get_latest_releases** — Recent releases for a product or organization
 - **list_sources** — List indexed changelog sources
 - **list_organizations** — Search/list organizations

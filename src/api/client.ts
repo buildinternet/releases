@@ -936,6 +936,68 @@ export async function cancelSession(sessionId: string): Promise<{ ok: boolean; e
 
 export type { SearchResult, Stats, SourceListItem } from "./types.js";
 
+// ── Semantic search backfill (admin-only) ──
+
+export interface EmbedBackfillResponse {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  remaining: number;
+  dryRun?: boolean;
+}
+
+export interface EmbedStatusResponse {
+  releases: { total: number; embedded: number; unembedded: number };
+  entities: {
+    total: number;
+    embedded: number;
+    unembedded: number;
+    breakdown: {
+      org: { total: number; embedded: number; unembedded: number };
+      product: { total: number; embedded: number; unembedded: number };
+      source: { total: number; embedded: number; unembedded: number };
+    };
+  };
+  chunks: { total: number; embedded: number; unembedded: number };
+}
+
+export async function embedReleases(body: {
+  since?: string;
+  limit?: number;
+  dryRun?: boolean;
+}): Promise<EmbedBackfillResponse> {
+  return apiFetch<EmbedBackfillResponse>("/v1/admin/embed/releases", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function embedEntities(body: {
+  kind?: "org" | "product" | "source";
+  limit?: number;
+  dryRun?: boolean;
+}): Promise<EmbedBackfillResponse> {
+  return apiFetch<EmbedBackfillResponse>("/v1/admin/embed/entities", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function embedChangelogs(body: {
+  sourceSlug?: string;
+  limit?: number;
+  dryRun?: boolean;
+}): Promise<EmbedBackfillResponse> {
+  return apiFetch<EmbedBackfillResponse>("/v1/admin/embed/changelogs", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export async function getEmbedStatus(): Promise<EmbedStatusResponse> {
+  return apiFetch<EmbedStatusResponse>("/v1/admin/embed/status");
+}
+
 // ── Domain Aliases ──
 
 export async function addDomainAlias(

@@ -50,6 +50,8 @@ Copy `.env.example` to `.env` and fill in:
 - `CLOUDFLARE_ACCOUNT_ID` / `CLOUDFLARE_API_TOKEN` — Required for scraping changelog pages (only used as a fallback when no feed is available)
 - `GITHUB_TOKEN` — Optional, increases GitHub API rate limits
 - `RELEASED_API_URL` / `RELEASED_API_KEY` — Remote mode: route CLI data operations through the API Worker. Compiled binaries default to `https://api.releases.sh` when unset
+- `VOYAGE_API_KEY` — Required on the API and MCP workers for semantic search ingest and queries. Provision the Vectorize indexes once with `./scripts/create-vectorize-indexes.sh`, then add `VOYAGE_API_KEY` to Cloudflare's Secrets Store and confirm both workers bind it in `workers/{api,mcp}/wrangler.jsonc` under `secrets_store_secrets`
+- `EMBEDDING_PROVIDER` — Optional, defaults to `voyage` (`voyage-4-lite`, requested at 512 dims). Set to `openai` or `workers-ai` in `workers/{api,mcp}/wrangler.jsonc` to switch; recreate the indexes if vector dimensionality changes
 
 ## Usage
 
@@ -60,6 +62,8 @@ releases search "authentication"
 releases search "vercel" --type releases --limit 5
 releases search "breaking change" --json
 ```
+
+Search is hybrid by default — FTS5 fused with vector similarity over both releases and chunked CHANGELOG files via Reciprocal Rank Fusion. The MCP `search_releases` tool and `GET /v1/search` endpoint accept `mode: "lexical"|"semantic"|"hybrid"` (default `hybrid`) and return a `kind` discriminator (`release` or `changelog_chunk`) on every hit; chunk hits include offset/length so agents can chain into `get_source_changelog` for surrounding context. Pass `mode: "lexical"` for the legacy FTS-only shape. A new `search_registry` MCP tool covers org/product/source lookup.
 
 ### Latest releases
 
@@ -238,7 +242,8 @@ releases admin mcp serve
 
 | Tool | Description | Remote | Local |
 |------|-------------|:------:|:-----:|
-| `search_releases` | Full-text search across all indexed releases (filter by product, org, or `type`) | Yes | Yes |
+| `search_releases` | Hybrid lexical + semantic search across releases and CHANGELOG chunks (filter by product, org, `type`, or `mode`); each hit carries a `kind` discriminator | Yes | Yes |
+| `search_registry` | Vector-backed search across orgs, products, and sources | Yes | Yes |
 | `get_latest_releases` | Most recent releases (filter by product, org, or `type`) | Yes | Yes |
 | `get_release` | Full content of a single release by id (accepts `rel_` prefix or bare nanoid) | Yes | Yes |
 | `summarize_changes` | AI summary of a product's recent changes | Gated | Gated |

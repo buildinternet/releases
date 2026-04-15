@@ -15,7 +15,10 @@
   },
   "vars": {
     "ENABLE_AI_TOOLS": "false",
-    "MEDIA_ORIGIN": "https://media.releases.sh"
+    "MEDIA_ORIGIN": "https://media.releases.sh",
+    // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
+    // requested at 512 dims via output_dimension to match the Vectorize indexes).
+    "EMBEDDING_PROVIDER": "voyage"
   },
   "d1_databases": [
     {
@@ -24,10 +27,20 @@
       "database_id": "73be1562-d900-4e25-a62b-650ab74488b7"
     }
   ],
+  // Vectorize indexes for semantic search. Same indexes as the API worker — MCP
+  // only reads from them. Provision via scripts/create-vectorize-indexes.sh.
+  "vectorize": [
+    { "binding": "RELEASES_INDEX", "index_name": "releases-v1" },
+    { "binding": "ENTITIES_INDEX", "index_name": "entities-v1" },
+    { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" }
+  ],
   "routes": [
     { "pattern": "mcp.releases.sh", "custom_domain": true }
   ],
+  // Secrets are managed in Cloudflare's Secrets Store. VOYAGE_API_KEY is
+  // required for semantic search — the embed path no-ops if it's missing.
   "secrets_store_secrets": [
-    { "binding": "ANTHROPIC_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "ANTHROPIC_API_KEY" }
+    { "binding": "ANTHROPIC_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "ANTHROPIC_API_KEY" },
+    { "binding": "VOYAGE_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "VOYAGER_API_KEY" }
   ]
 }
