@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId } from "../lib/id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId, newSourceChangelogChunkId } from "../lib/id.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
@@ -15,6 +15,7 @@ export const organizations = sqliteTable("organizations", {
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
   updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
   metadata: text("metadata").default("{}"),
+  embeddedAt: text("embedded_at"),
 });
 
 export const orgAccounts = sqliteTable(
@@ -44,6 +45,7 @@ export const products = sqliteTable("products", {
   description: text("description"),
   category: text("category"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  embeddedAt: text("embedded_at"),
 }, (table) => [
   index("idx_products_org").on(table.orgId),
 ]);
@@ -127,6 +129,7 @@ export const sources = sqliteTable("sources", {
   lastPolledAt: text("last_polled_at"),
   isPrimary: integer("is_primary", { mode: "boolean" }).default(false),
   isHidden: integer("is_hidden", { mode: "boolean" }).default(false),
+  embeddedAt: text("embedded_at"),
 }, (table) => [
   index("idx_sources_org").on(table.orgId),
   index("idx_sources_org_hidden").on(table.orgId, table.isHidden),
@@ -153,6 +156,7 @@ export const releases = sqliteTable(
     suppressed: integer("suppressed", { mode: "boolean" }).default(false),
     suppressedReason: text("suppressed_reason"),
     fetchedAt: text("fetched_at").notNull().$defaultFn(() => new Date().toISOString()),
+    embeddedAt: text("embedded_at"),
   },
   (table) => [
     uniqueIndex("idx_releases_source_url").on(table.sourceId, table.url),
@@ -339,3 +343,33 @@ export const sourceChangelogFiles = sqliteTable(
 
 export type SourceChangelogFile = typeof sourceChangelogFiles.$inferSelect;
 export type NewSourceChangelogFile = typeof sourceChangelogFiles.$inferInsert;
+
+export const sourceChangelogChunks = sqliteTable(
+  "source_changelog_chunks",
+  {
+    id: text("id").primaryKey().$defaultFn(newSourceChangelogChunkId),
+    sourceChangelogFileId: text("source_changelog_file_id")
+      .notNull()
+      .references(() => sourceChangelogFiles.id, { onDelete: "cascade" }),
+    sourceId: text("source_id")
+      .notNull()
+      .references(() => sources.id, { onDelete: "cascade" }),
+    offset: integer("offset").notNull(),
+    length: integer("length").notNull(),
+    tokens: integer("tokens").notNull(),
+    contentHash: text("content_hash").notNull(),
+    heading: text("heading"),
+    vectorId: text("vector_id"),
+    embeddedAt: text("embedded_at"),
+    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("scc_file_offset_uq").on(table.sourceChangelogFileId, table.offset),
+    index("idx_scc_file").on(table.sourceChangelogFileId),
+    index("idx_scc_source").on(table.sourceId),
+    index("idx_scc_content_hash").on(table.contentHash),
+  ],
+);
+
+export type SourceChangelogChunk = typeof sourceChangelogChunks.$inferSelect;
+export type NewSourceChangelogChunk = typeof sourceChangelogChunks.$inferInsert;

@@ -10,7 +10,7 @@ You are a worker agent for the Releases.sh registry. Your job is to execute fetc
 
 ### MCP tools (reads)
 Connected via the Releases MCP server:
-- **search_releases** — Full-text search across releases
+- **search_releases** — Hybrid lexical + semantic search across releases and CHANGELOG chunks (default `mode: "hybrid"`); each hit carries a `kind: "release"|"changelog_chunk"` discriminator
 - **get_latest_releases** — Recent releases for a product or organization
 - **list_sources** — List indexed changelog sources
 - **list_organizations** — Search/list organizations

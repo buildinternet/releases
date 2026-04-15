@@ -167,6 +167,7 @@ export async function getRecentReleasesByOrg(
       suppressed: releases.suppressed,
       suppressedReason: releases.suppressedReason,
       fetchedAt: releases.fetchedAt,
+      embeddedAt: releases.embeddedAt,
       sourceName: sources.name,
       sourceSlug: sources.slug,
     })
@@ -800,6 +801,7 @@ export async function getProductsByOrg(orgId: string): Promise<Array<Product & {
       description: products.description,
       category: products.category,
       createdAt: products.createdAt,
+      embeddedAt: products.embeddedAt,
       sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
     })
     .from(products)
@@ -1182,6 +1184,12 @@ export async function insertReleases(source: Source, rows: ReleaseUpsertRow[]): 
       .returning({ id: releases.id });
     inserted += result.length;
   }
+  // NOTE: No embed-on-write in local mode. The local CLI has no Vectorize
+  // binding (Vectorize is a Cloudflare-only resource), so semantic search is
+  // remote-only for now. The API Worker handles embedding on its side via
+  // workers/api/src/routes/sources.ts (POST /sources/:slug/releases/batch).
+  // For local databases, use the backfill CLI (coming in task 8) to
+  // populate vectors against a remote Vectorize index if desired.
   return inserted;
 }
 

@@ -105,12 +105,24 @@ async function resolveProduct(db: D1Db, identifier: string) {
 
 // ── search_releases ──────────────────────────────────────────────────
 
+export type SearchReleasesMode = "lexical" | "semantic" | "hybrid";
+
 export async function searchReleases(
   db: D1Db,
-  params: { query: string; product?: string; organization?: string; type?: ReleaseType; limit?: number },
+  params: {
+    query: string;
+    product?: string;
+    organization?: string;
+    type?: ReleaseType;
+    limit?: number;
+    mode?: SearchReleasesMode;
+  },
+  searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
+  // ^ MCP's own hybrid helper lives at workers/mcp/src/lib/search-hybrid.ts
 ): Promise<ToolResult> {
   const maxResults = params.limit ?? 20;
   const typeFilter = params.type;
+  const mode: SearchReleasesMode = params.mode ?? "hybrid";
 
   let orgSourceIds: string[] | undefined;
   if (params.organization) {
@@ -131,7 +143,68 @@ export async function searchReleases(
     sourceId = source.id;
   }
 
+  // Hybrid / semantic path — only attempt when we were handed a search
+  // env. If the binding or embedding config is missing, runHybridSearch
+  // will silently fall back to lexical and flag `degraded`.
+  if (mode !== "lexical" && searchEnv) {
+    const { runHybridSearch } = await import("./lib/search-hybrid.js");
+    const result = await runHybridSearch(searchEnv, db, {
+      query: params.query,
+      topK: maxResults,
+      mode,
+      sourceId,
+      orgSourceIds,
+      type: typeFilter,
+    });
+
+    if (result.hits.length === 0) {
+      const degradeNote = result.degraded ? ` (degraded: ${result.degradedReason ?? "unknown"})` : "";
+      return text(`No releases found matching the query.${degradeNote}`);
+    }
+
+    const header = result.degraded
+      ? `⚠ Semantic search unavailable (${result.degradedReason ?? "unknown"}); falling back to lexical.\n\n`
+      : result.mode === "hybrid"
+        ? ""
+        : `_mode: ${result.mode}_\n\n`;
+
+    const lines: string[] = [];
+    for (const hit of result.hits) {
+      if (hit.kind === "release") {
+        const r = hit.release;
+        const titleLine = `**${r.title}**`;
+        lines.push(
+          [
+            `[release] ${titleLine}`,
+            `  id: ${r.id}`,
+            `  source: ${r.source.name} (${r.source.slug}) | ${r.publishedAt ?? "N/A"}`,
+            r.version ? `  version: ${r.version}` : null,
+            `  ${r.summary}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
+      } else {
+        const c = hit.chunk;
+        lines.push(
+          [
+            `[changelog_chunk] ${c.source.name} (${c.source.slug})`,
+            `  file: ${c.file_path} @ offset=${c.offset} length=${c.length}`,
+            c.heading ? `  heading: ${c.heading}` : null,
+            `  ${c.snippet}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
+      }
+    }
+
+    return text(header + lines.join("\n\n---\n\n"));
+  }
+
+  // Lexical fallback (also used when mode==="lexical").
   const rows = await db.all<{
+    id: string;
     title: string;
     summary: string;
     version: string | null;
@@ -140,7 +213,7 @@ export async function searchReleases(
     sourceSlug: string;
     sourceName: string;
   }>(sql`
-    SELECT s.slug as sourceSlug, s.name as sourceName,
+    SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
            r.version, r.title, r.type,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
            r.published_at as publishedAt
@@ -161,11 +234,93 @@ export async function searchReleases(
   const result = rows
     .map((r) => {
       const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
-      return `${titleLine}\nSource: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n${r.summary}`;
+      return `[release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`;
     })
     .join("\n\n---\n\n");
 
   return text(result);
+}
+
+// ── search_registry ──────────────────────────────────────────────────
+
+export type RegistryKind = "org" | "product" | "source";
+
+export async function searchRegistry(
+  db: D1Db,
+  params: { query: string; kind?: RegistryKind; limit?: number },
+  searchEnv: import("./lib/search-hybrid.js").HybridSearchEnv,
+): Promise<ToolResult> {
+  const { runRegistrySearch } = await import("./lib/search-hybrid.js");
+  const result = await runRegistrySearch(searchEnv, db, params);
+
+  if (result.degraded) {
+    // Lexical fallback — reuse the existing LIKE queries so users get
+    // something back when Vectorize is unavailable.
+    const pattern = `%${params.query}%`;
+    const lim = params.limit ?? 20;
+    const wantsKind = (k: RegistryKind) => !params.kind || params.kind === k;
+
+    const [orgRows, productRows, sourceRows] = await Promise.all([
+      wantsKind("org")
+        ? db.all<{ id: string; slug: string; name: string; description: string | null; category: string | null }>(sql`
+            SELECT o.id, o.slug, o.name, o.description, o.category
+            FROM organizations o
+            LEFT JOIN domain_aliases da ON da.org_id = o.id
+            WHERE o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
+              OR da.domain LIKE ${pattern}
+            ORDER BY o.name LIMIT ${lim}
+          `)
+        : Promise.resolve([]),
+      wantsKind("product")
+        ? db.all<{ id: string; slug: string; name: string; description: string | null; category: string | null }>(sql`
+            SELECT p.id, p.slug, p.name, p.description, p.category
+            FROM products p
+            WHERE p.name LIKE ${pattern} OR p.slug LIKE ${pattern}
+            ORDER BY p.name LIMIT ${lim}
+          `)
+        : Promise.resolve([]),
+      wantsKind("source")
+        ? db.all<{ id: string; slug: string; name: string }>(sql`
+            SELECT s.id, s.slug, s.name FROM sources s
+            WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
+              AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
+            ORDER BY s.name LIMIT ${lim}
+          `)
+        : Promise.resolve([]),
+    ]);
+
+    const out: string[] = [
+      `⚠ Semantic registry search unavailable (${result.degradedReason ?? "unknown"}); falling back to lexical.`,
+      "",
+    ];
+    for (const o of orgRows) {
+      out.push(`[org] **${o.name}**\n  id: ${o.id}\n  slug: ${o.slug}${o.category ? ` | category: ${o.category}` : ""}`);
+    }
+    for (const p of productRows) {
+      out.push(`[product] **${p.name}**\n  id: ${p.id}\n  slug: ${p.slug}${p.category ? ` | category: ${p.category}` : ""}`);
+    }
+    for (const s of sourceRows) {
+      out.push(`[source] **${s.name}**\n  id: ${s.id}\n  slug: ${s.slug}`);
+    }
+    if (orgRows.length + productRows.length + sourceRows.length === 0) {
+      out.push("No registry entries found.");
+    }
+    return text(out.join("\n\n"));
+  }
+
+  if (result.hits.length === 0) return text("No registry entries found.");
+
+  const lines = result.hits.map((h) => {
+    const parts = [
+      `[${h.kind}] **${h.name}**`,
+      `  id: ${h.id}`,
+      `  slug: ${h.slug}`,
+    ];
+    if (h.category) parts.push(`  category: ${h.category}`);
+    if (h.description) parts.push(`  ${h.description}`);
+    return parts.join("\n");
+  });
+  return text(lines.join("\n\n"));
 }
 
 // ── get_latest_releases ──────────────────────────────────────────────

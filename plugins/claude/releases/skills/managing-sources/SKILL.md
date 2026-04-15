@@ -53,7 +53,11 @@ Required: **name** and **url**. Optional: **type** (github, scrape, feed, agent 
 
 ### Organization descriptions
 
-When creating an org, include a brief one-sentence product description. This grounds AI summaries for lesser-known products.
+When creating an org, include a brief one-sentence product description. This grounds AI summaries for lesser-known products, and it's also the primary signal for the entity vector index — `search_registry` and the registry side of hybrid search match on description + category, not just name. A good description noticeably improves recall.
+
+### Embedding side effects
+
+Adding or editing an org, product, or source triggers an entity embedding into the registry vector index in the background (fire-and-forget on the worker, never blocks the write). PATCHes are gated on the embed-relevant fields (name, description, category, domain, url) actually changing, so cosmetic edits and poll-driven metadata bumps don't re-embed. There's no manual step — if a write succeeds, treat the embedding as in-flight. If you ever need to verify or backfill, run `releases admin embed status` and then `releases admin embed entities` (remote mode only).
 
 ## Removing Sources
 

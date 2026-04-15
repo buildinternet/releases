@@ -14,6 +14,7 @@ export const newTagId = () => `tag_${nanoid()}`;
 export const newDomainAliasId = () => `da_${nanoid()}`;
 export const newKnowledgePageId = () => `kp_${nanoid()}`;
 export const newSourceChangelogFileId = () => `scf_${nanoid()}`;
+export const newSourceChangelogChunkId = () => `scc_${nanoid()}`;
 export const newCorrelationId = () => `cid_${nanoid()}`;
 
 export type EntityType = "release" | "source" | "org" | "product" | "unknown";

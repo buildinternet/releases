@@ -6,6 +6,8 @@ import { toSlug } from "@releases/lib/slug.js";
 import { isValidCategory } from "@releases/lib/categories.js";
 import { isConflictError, getOrCreateTagD1, productWhere, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
+import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
+import { buildEmbedConfig } from "../lib/embed-config.js";
 
 export const productRoutes = new Hono<Env>();
 
@@ -175,6 +177,7 @@ productRoutes.post("/products", async (c) => {
       }
     }
 
+    c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
     return c.json(created, 201);
   } catch (err) {
     if (isConflictError(err)) {
@@ -218,6 +221,15 @@ productRoutes.patch("/products/:slug", async (c) => {
       const tag = await getOrCreateTagD1(db, tagName);
       await db.insert(productTags).values({ productId: product.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
     }
+  }
+
+  const semanticChanged =
+    body.name !== undefined ||
+    body.description !== undefined ||
+    body.category !== undefined ||
+    body.url !== undefined;
+  if (semanticChanged) {
+    c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, product.id));
   }
 
   return c.json(updated);
@@ -280,3 +292,48 @@ productRoutes.delete("/products/:identifier", async (c) => {
   await db.delete(products).where(eq(products.id, product.id));
   return c.json({ deleted: true });
 });
+
+// ── Embed side effect ──
+
+async function embedProductSideEffect(
+  env: Env["Bindings"],
+  db: ReturnType<typeof createDb>,
+  productId: string,
+): Promise<void> {
+  try {
+    const embedConfig = await buildEmbedConfig(env);
+    if (!embedConfig) return;
+    const [product] = await db.select().from(products).where(eq(products.id, productId));
+    if (!product) return;
+    let domain: string | null = null;
+    if (product.url) {
+      try {
+        domain = new URL(product.url).hostname;
+      } catch {
+        domain = null;
+      }
+    }
+    await embedAndUpsertEntities({
+      entities: [{
+        id: product.id,
+        kind: "product" as EntityKind,
+        name: product.name,
+        description: product.description,
+        category: product.category,
+        domain,
+      }],
+      // Cast: workers-types VectorizeIndex has a stricter metadata value
+      // type than the shared runtime-agnostic interface.
+      vectorIndex: env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+      embedConfig,
+      onPersisted: async () => {
+        await db
+          .update(products)
+          .set({ embeddedAt: new Date().toISOString() })
+          .where(eq(products.id, product.id));
+      },
+    });
+  } catch (err) {
+    console.warn(`[products] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}

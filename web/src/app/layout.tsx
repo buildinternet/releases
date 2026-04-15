@@ -1,13 +1,8 @@
 import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
-import { SpeedInsights } from "@vercel/speed-insights/next";
 import { ThemeProvider } from "@/components/theme-provider";
 import "./globals.css";
-
-const speedInsightsEnabled =
-  process.env.NODE_ENV === "production" &&
-  process.env.NEXT_PUBLIC_SPEED_INSIGHTS_ENABLED !== "false";
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -58,7 +53,6 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeProvider>
           {children}
         </ThemeProvider>
-        {speedInsightsEnabled && <SpeedInsights />}
       </body>
     </html>
   );

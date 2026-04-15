@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { hydrateMediaUrls } from "@releases/lib/media-url.js";
 import {
   searchReleases,
+  searchRegistry,
   getLatestReleases,
   listSources,
   listOrganizations,
@@ -25,6 +26,14 @@ export interface Env {
   ANTHROPIC_API_KEY: SecretBinding;
   ENABLE_AI_TOOLS?: string;
   MEDIA_ORIGIN?: string;
+  // Vectorize indexes for semantic search (read-only usage from MCP).
+  RELEASES_INDEX: VectorizeIndex;
+  ENTITIES_INDEX: VectorizeIndex;
+  CHANGELOG_CHUNKS_INDEX: VectorizeIndex;
+  // Embedding provider config (see src/lib/embeddings.ts).
+  EMBEDDING_PROVIDER?: string;
+  VOYAGE_API_KEY?: SecretBinding;
+  OPENAI_API_KEY?: SecretBinding;
 }
 
 export function createServer(env: Env) {
@@ -59,15 +68,25 @@ export function createServer(env: Env) {
   }
 
   server.registerTool("search_releases", {
-    description: "Full-text search across all indexed release notes",
+    description: "Search indexed release notes. Defaults to hybrid retrieval (FTS5 + semantic vectors fused via RRF). Results carry a `kind` discriminator so agents can branch on `release` vs `changelog_chunk` hits. When Vectorize or the embedding provider is unavailable, the tool silently degrades to lexical FTS and flags the result.",
     inputSchema: {
       query: z.string().describe("Search query"),
       product: z.string().optional().describe("Filter to a specific product slug"),
       organization: z.string().optional().describe("Filter to sources belonging to this organization"),
       type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
       limit: z.number().optional().describe("Max results to return (default 20)"),
+      mode: z.enum(["lexical", "semantic", "hybrid"]).optional().describe("Retrieval strategy. 'hybrid' (default) fuses FTS + vector results. 'lexical' is legacy FTS only. 'semantic' is vectors only. Falls back to lexical if vector infra is unavailable."),
     },
-  }, withMedia(async (params) => searchReleases(db, params)));
+  }, withMedia(async (params) => searchReleases(db, params, env)));
+
+  server.registerTool("search_registry", {
+    description: "Semantic search across the registry — returns orgs, products, or sources that match the query by meaning, not just keyword. Useful when you know what kind of thing you're looking for ('observability vendor with open-source agent') but not its exact name. Falls back to LIKE-based lexical search when Vectorize is unavailable.",
+    inputSchema: {
+      query: z.string().describe("Natural-language search query"),
+      kind: z.enum(["org", "product", "source"]).optional().describe("Restrict results to one entity kind. Omit to include all three."),
+      limit: z.number().optional().describe("Max results to return (default 20)"),
+    },
+  }, async (params) => searchRegistry(db, params, env));
 
   server.registerTool("get_latest_releases", {
     description: "Get the most recent releases, optionally filtered by product or organization",

@@ -15,6 +15,9 @@ import type { Env } from "../index.js";
 import { getSourcesWithStats, getSourceReleasesPaginated, getSourceActivityBuckets, getSourceHeatmapData } from "../queries/sources.js";
 import { notDisabled } from "../queries/shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
+import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
+import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
+import { buildEmbedConfig } from "../lib/embed-config.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -202,7 +205,14 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
     // Feed and GitHub sources: fetch server-side
     const githubToken = await c.env.GITHUB_TOKEN?.get();
     const sessionId = c.req.query("sessionId") ?? undefined;
-    const result = await fetchOne(db, src, { GITHUB_TOKEN: githubToken }, { sessionId });
+    const result = await fetchOne(db, src, {
+      GITHUB_TOKEN: githubToken,
+      RELEASES_INDEX: c.env.RELEASES_INDEX,
+      CHANGELOG_CHUNKS_INDEX: c.env.CHANGELOG_CHUNKS_INDEX,
+      EMBEDDING_PROVIDER: c.env.EMBEDDING_PROVIDER,
+      VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
+      OPENAI_API_KEY: c.env.OPENAI_API_KEY,
+    }, { sessionId });
     responsePayload = { fetched: true, ...result };
   } else {
     // Scrape and agent sources: flag for CLI pickup
@@ -246,6 +256,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   try {
     // Batch insert in chunks — D1 limits query size to ~1MB
     let inserted = 0;
+    const insertedIds: string[] = [];
     for (let i = 0; i < body.releases.length; i += 5) {
       const chunk = body.releases.slice(i, i + 5).map((r) => ({
         sourceId: src.id,
@@ -262,9 +273,76 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
         .onConflictDoUpdate(RELEASE_URL_UPSERT)
         .returning({ id: releases.id });
       inserted += rows.length;
+      for (const r of rows) insertedIds.push(r.id);
     }
 
     const [{ n: total }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
+
+    // Fire-and-forget: embed the rows we just wrote. Uses waitUntil so the
+    // HTTP response returns immediately; embedding runs outside the request
+    // path. Never fails the write — embedAndUpsertReleases catches every
+    // error internally and logs to console.
+    if (insertedIds.length > 0) {
+      c.executionCtx.waitUntil(
+        (async () => {
+          try {
+            const embedConfig = await buildEmbedConfig(c.env);
+            if (!embedConfig) return;
+            // Load the rows back so we have full content, category, etc.
+            // We need the org/product category for metadata filtering.
+            const [orgRow] = src.orgId
+              ? await db.select({ category: organizations.category }).from(organizations).where(eq(organizations.id, src.orgId))
+              : [{ category: null as string | null }];
+            const rowsToEmbed = await db
+              .select({
+                id: releases.id,
+                title: releases.title,
+                content: releases.content,
+                contentSummary: releases.contentSummary,
+                version: releases.version,
+                publishedAt: releases.publishedAt,
+                sourceId: releases.sourceId,
+                type: releases.type,
+              })
+              .from(releases)
+              .where(inArray(releases.id, insertedIds));
+
+            const category = orgRow?.category ?? null;
+            await embedAndUpsertReleases({
+              releases: rowsToEmbed.map((r) => ({
+                ...r,
+                orgId: src.orgId,
+                productId: src.productId,
+                category,
+              })),
+              // See note in embedSourceSideEffect about the cast.
+              vectorIndex: c.env.RELEASES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+              embedConfig,
+              onPersisted: async (ids) => {
+                if (ids.length === 0) return;
+                // Mark the rows as embedded. One UPDATE per chunk — D1 is
+                // fine with a few hundred IDs in an IN clause.
+                const now = new Date().toISOString();
+                for (let i = 0; i < ids.length; i += 100) {
+                  const slice = ids.slice(i, i + 100);
+                  await db
+                    .update(releases)
+                    .set({ embeddedAt: now })
+                    .where(inArray(releases.id, slice));
+                }
+              },
+            });
+          } catch (err) {
+            console.warn(
+              `[/sources/:slug/releases/batch] embed side-effect failed: ${
+                err instanceof Error ? err.message : String(err)
+              }`,
+            );
+          }
+        })(),
+      );
+    }
+
     return c.json({ inserted, total });
   } catch (err) {
     console.error("[/sources/:slug/releases/batch] insert failed", {
@@ -784,6 +862,7 @@ sourceRoutes.post("/sources", async (c) => {
       })
       .returning();
     if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
+    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db,source.id));
     return c.json(source, 201);
   } catch (err) {
     if (isConflictError(err)) {
@@ -831,6 +910,14 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   if (src.orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, src.orgId));
+  // Only re-embed if semantically-relevant fields changed. Metadata churn
+  // (lastPolledAt, consecutiveErrors, etc.) would otherwise trigger a
+  // needless embedding API call on every poll.
+  const semanticChanged =
+    body.name !== undefined || body.url !== undefined;
+  if (semanticChanged) {
+    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db,src.id));
+  }
   return c.json(updated);
 });
 
@@ -989,3 +1076,59 @@ sourceRoutes.post("/releases/:id/unsuppress", async (c) => {
   if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
   return c.json({ unsuppressed: true });
 });
+
+// ── Embed side effect helpers ──
+//
+// These load the fresh row from D1 and push its vector to ENTITIES_INDEX.
+// Called via c.executionCtx.waitUntil so the HTTP response never blocks on
+// embedding. Embedding failure never fails the write.
+
+async function embedSourceSideEffect(
+  env: Env["Bindings"],
+  db: ReturnType<typeof createDb>,
+  sourceId: string,
+): Promise<void> {
+  try {
+    const embedConfig = await buildEmbedConfig(env);
+    if (!embedConfig) return;
+    const [src] = await db.select().from(sources).where(eq(sources.id, sourceId));
+    if (!src) return;
+    // Derive a best-effort domain from the URL.
+    let domain: string | null = null;
+    try {
+      domain = new URL(src.url).hostname;
+    } catch {
+      domain = null;
+    }
+    // Inherit category from the parent org for retrieval filtering.
+    let category: string | null = null;
+    if (src.orgId) {
+      const [org] = await db.select({ category: organizations.category }).from(organizations).where(eq(organizations.id, src.orgId));
+      category = org?.category ?? null;
+    }
+    await embedAndUpsertEntities({
+      entities: [{
+        id: src.id,
+        kind: "source" as EntityKind,
+        name: src.name,
+        description: null,
+        category,
+        domain,
+      }],
+      // Cast required: workers-types `VectorizeIndex` declares a narrower
+      // metadata value type than the runtime-agnostic interface in
+      // `src/lib/vector-search.ts`. Assignable at runtime, diverges by
+      // variance in the type system.
+      vectorIndex: env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+      embedConfig,
+      onPersisted: async () => {
+        await db
+          .update(sources)
+          .set({ embeddedAt: new Date().toISOString() })
+          .where(eq(sources.id, src.id));
+      },
+    });
+  } catch (err) {
+    console.warn(`[sources] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
