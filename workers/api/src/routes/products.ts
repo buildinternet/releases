@@ -4,7 +4,7 @@ import { createDb } from "../db.js";
 import { products, sources, organizations, orgAccounts, tags, productTags } from "@releases/core/schema";
 import { toSlug } from "@releases/core/slug";
 import { isValidCategory } from "@releases/core/categories";
-import { isConflictError, getOrCreateTagD1, productWhere, orgWhere } from "../utils.js";
+import { isConflictError, getOrCreateTagsD1, productWhere, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
@@ -169,12 +169,13 @@ productRoutes.post("/products", async (c) => {
       })
       .returning();
 
-    // Handle tags
     if (body.tags && body.tags.length > 0) {
-      for (const tagName of body.tags) {
-        const tag = await getOrCreateTagD1(db, tagName);
-        await db.insert(productTags).values({ productId: created.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
-      }
+      const tagRows = await getOrCreateTagsD1(db, body.tags);
+      const now = new Date().toISOString();
+      await db
+        .insert(productTags)
+        .values(tagRows.map((t) => ({ productId: created.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
     }
 
     c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
@@ -217,9 +218,13 @@ productRoutes.patch("/products/:slug", async (c) => {
 
   if (body.tags !== undefined) {
     await db.delete(productTags).where(eq(productTags.productId, product.id));
-    for (const tagName of body.tags) {
-      const tag = await getOrCreateTagD1(db, tagName);
-      await db.insert(productTags).values({ productId: product.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+    if (body.tags.length > 0) {
+      const tagRows = await getOrCreateTagsD1(db, body.tags);
+      const now = new Date().toISOString();
+      await db
+        .insert(productTags)
+        .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
     }
   }
 
@@ -257,9 +262,13 @@ productRoutes.put("/products/:identifier/tags", async (c) => {
   const [product] = await db.select().from(products).where(productWhere(identifier));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-  for (const tagName of body.tags) {
-    const tag = await getOrCreateTagD1(db, tagName);
-    await db.insert(productTags).values({ productId: product.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+  if (body.tags.length > 0) {
+    const tagRows = await getOrCreateTagsD1(db, body.tags);
+    const now = new Date().toISOString();
+    await db
+      .insert(productTags)
+      .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
+      .onConflictDoNothing();
   }
   return c.json({ ok: true });
 });
