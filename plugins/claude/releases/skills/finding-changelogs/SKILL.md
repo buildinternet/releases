@@ -184,8 +184,7 @@ Detected automatically in pre-checks. Listed for reference:
 | Headway | `/feed` | — | No | — |
 | Beamer | `/feed` | — | No | — |
 | LaunchNotes | `/rss` | — | No | — |
-| Notion | `/releases/rss.xml` | — | No | RSS feed exists but is title-only (no content); auto-detected as `summary-only`, falls through to scrape |
-| GitBook, Intercom, Zendesk, etc. | — | — | No | No feeds; use crawl or scrape |
+| GitBook, Notion, Intercom, Zendesk, etc. | — | — | No | No feeds; use crawl or scrape. Some may expose a title-only RSS feed (no content body) — these are auto-detected as `summary-only` and fall through to scrape |
 
 ## Rendering Optimization
 
