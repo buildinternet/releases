@@ -721,17 +721,7 @@ export async function getOrgAccountsBySlug(
   orgSlug: string,
   orgId: string,
 ): Promise<OrgAccount[]> {
-  if (isRemoteMode()) {
-    const accounts = await apiClient.getOrgAccountsBySlug(orgSlug);
-    // Map the simpler API shape to OrgAccount
-    return accounts.map((a) => ({
-      id: "",
-      orgId: "",
-      platform: a.platform,
-      handle: a.handle,
-      createdAt: "",
-    }));
-  }
+  if (isRemoteMode()) return apiClient.getOrgAccountsBySlug(orgSlug);
   const db = getDb();
   return db
     .select()
