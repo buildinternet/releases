@@ -1,5 +1,16 @@
 # @buildinternet/releases
 
+## 0.13.0
+
+### Minor Changes
+
+- c40d2ab: Add org update workflow commands and smarter overview generation. New `releases admin org refresh <slug>` fetches all active sources for an org and regenerates the overview in one step (flags: `--max`, `--concurrency`, `--window`, `--dry-run`, `--skip-overview`, `--json`). New `--org <slug>` filter on `releases admin source fetch` composes with `--stale`, `--changed`, and `--retry-errors` to scope fetches to a single org, and bypasses the remote-mode bulk-fetch block when used alone. Overview generation now caps per-source contributions by type (github: 10, scrape/feed/agent: 20) so high-frequency GitHub sources can't crowd out product changelogs, and `releases admin org show --regenerate` accepts `--window <days>` plus a confirmation log line reporting chars, release count, and window.
+
+### Patch Changes
+
+- 9ee7001: Fix the remaining N+1 patterns flagged in the `/v1/orgs/:slug` audit: `getOrgSourcesWithStats` now runs as a single `LEFT JOIN` against a grouped-releases derived table (was 5 correlated subqueries per source row), tag mutations on orgs and products bulk-upsert the tag and join rows in a constant number of roundtrips (was 2× per-tag sequential roundtrips), and the recent-release metrics query for `/v1/orgs/:slug` is folded into the main parallel D1 wave via a scoped subquery.
+- 8282fc0: Add `GET /v1/sitemap` bulk endpoint returning orgs + sources + products in a single response. The web sitemap now uses this to avoid a per-org fan-out that was timing out Vercel builds, and the route is rendered on-demand instead of at build time.
+
 ## 0.12.0
 
 ### Minor Changes
