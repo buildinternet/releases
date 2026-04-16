@@ -31,7 +31,7 @@ function textResult(text: string) {
 
 const server = new McpServer({
   name: "releases",
-  version: "0.11.1",
+  version: "0.12.0",
 });
 
 // ── search tools (local-mode note) ───────────────────────────────────

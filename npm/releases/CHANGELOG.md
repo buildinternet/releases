@@ -1,5 +1,32 @@
 # @buildinternet/releases
 
+## 0.12.0
+
+### Minor Changes
+
+- c34cc1e: feat: show update notification when CLI is outdated, indicate dev mode
+
+  - After each command, checks npm for a newer version (cached 24h) and prints a dim one-liner to stderr with the right upgrade command (npm or brew, auto-detected)
+  - Skipped for --version, --help, and telemetry commands; never blocks or throws
+  - Running from source (bun src/index.ts) shows version as "x.y.z-dev" and skips the check entirely
+
+### Patch Changes
+
+- 834e2e1: fix: harden CLI error handling, add compact/pagination flags, protect slug renames
+
+  - API PATCH `/sources/:slug` now supports slug renames with uniqueness checks and returns 400 (not 500) for unrecognized fields (#240)
+  - `releases admin source list` alias added for discoverability within admin workflows (#241)
+  - `releases list --json --compact` returns lightweight fields; `--limit`/`--page` for paginated output (#241)
+  - `releases admin source edit` accepts source IDs (`src_...`) alongside slugs
+  - Slug renames require `--confirm-slug-change` to prevent accidental web link breakage
+  - `--parse-instructions ""` treated as equivalent to `--no-parse-instructions`
+  - Commander's `showSuggestionAfterError` enabled with help hints on error output
+
+- 025c15d: fix: clean up orphaned Vectorize vectors on --force delete, detect title-only RSS feeds
+
+  - Delete release vectors from Vectorize when `--force` fetch deletes D1 rows, preventing orphaned entries from consuming topK slots in search (#235)
+  - Detect title-only RSS feeds (empty content) and mark as `summary-only` so the scrape adapter falls through to crawl/single-page extraction (#234)
+
 ## 0.11.1
 
 ### Patch Changes
