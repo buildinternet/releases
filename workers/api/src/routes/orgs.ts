@@ -235,13 +235,11 @@ orgRoutes.post("/orgs", async (c) => {
 
     if (body.tags && body.tags.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, body.tags);
-      if (tagRows.length > 0) {
-        const now = new Date().toISOString();
-        await db
-          .insert(orgTags)
-          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
-          .onConflictDoNothing();
-      }
+      const now = new Date().toISOString();
+      await db
+        .insert(orgTags)
+        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
     }
 
     c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
@@ -279,13 +277,11 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
     await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
     if (body.tags.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, body.tags);
-      if (tagRows.length > 0) {
-        const now = new Date().toISOString();
-        await db
-          .insert(orgTags)
-          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
-          .onConflictDoNothing();
-      }
+      const now = new Date().toISOString();
+      await db
+        .insert(orgTags)
+        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
     }
   }
 
@@ -393,13 +389,11 @@ orgRoutes.put("/orgs/:slug/tags", async (c) => {
 
   if (body.tags.length > 0) {
     const tagRows = await getOrCreateTagsD1(db, body.tags);
-    if (tagRows.length > 0) {
-      const now = new Date().toISOString();
-      await db
-        .insert(orgTags)
-        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
-        .onConflictDoNothing();
-    }
+    const now = new Date().toISOString();
+    await db
+      .insert(orgTags)
+      .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+      .onConflictDoNothing();
   }
   return c.json({ ok: true });
 });

@@ -169,16 +169,13 @@ productRoutes.post("/products", async (c) => {
       })
       .returning();
 
-    // Handle tags
     if (body.tags && body.tags.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, body.tags);
-      if (tagRows.length > 0) {
-        const now = new Date().toISOString();
-        await db
-          .insert(productTags)
-          .values(tagRows.map((t) => ({ productId: created.id, tagId: t.id, createdAt: now })))
-          .onConflictDoNothing();
-      }
+      const now = new Date().toISOString();
+      await db
+        .insert(productTags)
+        .values(tagRows.map((t) => ({ productId: created.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
     }
 
     c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
@@ -223,13 +220,11 @@ productRoutes.patch("/products/:slug", async (c) => {
     await db.delete(productTags).where(eq(productTags.productId, product.id));
     if (body.tags.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, body.tags);
-      if (tagRows.length > 0) {
-        const now = new Date().toISOString();
-        await db
-          .insert(productTags)
-          .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
-          .onConflictDoNothing();
-      }
+      const now = new Date().toISOString();
+      await db
+        .insert(productTags)
+        .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
     }
   }
 
@@ -269,13 +264,11 @@ productRoutes.put("/products/:identifier/tags", async (c) => {
 
   if (body.tags.length > 0) {
     const tagRows = await getOrCreateTagsD1(db, body.tags);
-    if (tagRows.length > 0) {
-      const now = new Date().toISOString();
-      await db
-        .insert(productTags)
-        .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
-        .onConflictDoNothing();
-    }
+    const now = new Date().toISOString();
+    await db
+      .insert(productTags)
+      .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
+      .onConflictDoNothing();
   }
   return c.json({ ok: true });
 });
