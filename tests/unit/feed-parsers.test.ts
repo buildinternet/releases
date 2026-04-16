@@ -90,6 +90,23 @@ describe("parseRss", () => {
     expect(releases[0].content).toContain("Rich content here");
   });
 
+  it("prefers content:encoded over description when both are present", () => {
+    // Mirrors the OpenAI Codex RSS shape: description is just the title
+    // while content:encoded carries the actual body.
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Codex app</title>
+    <description>Codex app</description>
+    <content:encoded><![CDATA[<h2>New Features</h2><ul><li>Added plugin marketplace support.</li></ul>]]></content:encoded>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(1);
+    expect(releases[0].content).toContain("plugin marketplace");
+    expect(releases[0].content).not.toBe("Codex app");
+  });
+
   it("extracts media from description", () => {
     const releases = parseRss(RSS_BASIC);
     expect(releases[0].media).toBeDefined();

@@ -80,6 +80,7 @@ export interface HybridReleaseHit {
     media: string | null;
     source: { id: string; slug: string; name: string; type: string };
     orgSlug: string | null;
+    orgName: string | null;
   };
 }
 
@@ -92,6 +93,7 @@ export interface HybridChunkHit {
     source: { id: string; slug: string; name: string };
     /** Parent org slug, if the source belongs to one. */
     orgSlug: string | null;
+    orgName: string | null;
     offset: number;
     length: number;
     snippet: string;
@@ -146,6 +148,7 @@ interface RawReleaseRow {
   sourceName: string;
   sourceType: string;
   orgSlug: string | null;
+  orgName: string | null;
 }
 
 async function hydrateReleases(
@@ -166,7 +169,8 @@ async function hydrateReleases(
            s.slug as sourceSlug,
            s.name as sourceName,
            s.type as sourceType,
-           o.slug as orgSlug
+           o.slug as orgSlug,
+           o.name as orgName
     FROM releases r
     JOIN sources s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
@@ -191,6 +195,7 @@ interface RawChunkRow {
   sourceSlug: string;
   sourceName: string;
   orgSlug: string | null;
+  orgName: string | null;
 }
 
 /**
@@ -218,7 +223,8 @@ async function hydrateChunks(
            s.id as sourceId,
            s.slug as sourceSlug,
            s.name as sourceName,
-           o.slug as orgSlug
+           o.slug as orgSlug,
+           o.name as orgName
     FROM source_changelog_chunks scc
     JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
     JOIN sources s ON s.id = scc.source_id
@@ -252,6 +258,7 @@ async function hydrateChunks(
       vectorId: row.vectorId,
       source: { id: row.sourceId, slug: row.sourceSlug, name: row.sourceName },
       orgSlug: row.orgSlug,
+      orgName: row.orgName,
       offset: row.offset,
       length: row.length,
       snippet,
@@ -440,6 +447,7 @@ async function buildReleaseHits(
           type: row.sourceType,
         },
         orgSlug: row.orgSlug,
+        orgName: row.orgName,
       },
     });
   }

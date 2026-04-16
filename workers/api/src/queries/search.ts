@@ -17,6 +17,7 @@ export interface RawSearchReleaseRow {
   sourceName: string;
   sourceType: string;
   orgSlug: string | null;
+  orgName: string | null;
   version: string | null;
   title: string;
   summary: string;
@@ -70,7 +71,7 @@ export async function searchReleasesFts(
 ): Promise<RawSearchReleaseRow[]> {
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
-           o.slug as orgSlug,
+           o.slug as orgSlug, o.name as orgName,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
            r.content as content,
@@ -100,7 +101,7 @@ export async function searchReleasesFromMatchedEntities(
 
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
-           o.slug as orgSlug,
+           o.slug as orgSlug, o.name as orgName,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
            r.content as content,

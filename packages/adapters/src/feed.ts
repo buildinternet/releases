@@ -280,18 +280,25 @@ export function parseRss(xml: string): RawRelease[] {
     const title = extractText(item, "title");
     if (!title) continue;
 
-    const description = extractText(item, "description") ?? extractText(item, "content:encoded") ?? "";
+    // Prefer <content:encoded> over <description>: RSS convention is that
+    // content:encoded carries the full post body while description is a
+    // short teaser. Several feeds (e.g. OpenAI Codex) put only the title in
+    // description and the real markdown/HTML body in content:encoded — using
+    // description meant we were storing stubs like "Codex app".
+    const contentEncoded = extractText(item, "content:encoded");
+    const description = extractText(item, "description");
+    const body = contentEncoded ?? description ?? "";
     const link = extractText(item, "link");
     const pubDate = extractText(item, "pubDate");
 
     releases.push({
       title,
-      content: htmlToMarkdown(decodeHtmlEntities(description)),
+      content: htmlToMarkdown(decodeHtmlEntities(body)),
       url: link ?? undefined,
       publishedAt: pubDate ? new Date(pubDate) : undefined,
       version: extractVersionFromTitle(title),
-      isBreaking: detectBreaking(title, description),
-      media: extractMedia(description),
+      isBreaking: detectBreaking(title, body),
+      media: extractMedia(body),
     });
   }
   return releases;
