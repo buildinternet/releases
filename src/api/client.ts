@@ -427,11 +427,28 @@ export async function getLatestReleases(opts: {
 
   if (opts.orgSlug) {
     const data = await apiFetch<{
-      sources: Array<{ slug: string; name: string }>;
-    }>(`/v1/orgs/${opts.orgSlug}`);
+      releases: Array<{
+        id: string;
+        version: string | null;
+        title: string;
+        summary: string | null;
+        publishedAt: string | null;
+        media: Array<{ type: string; url: string; alt?: string; r2Url?: string }>;
+        source: { slug: string; name: string; type: string };
+      }>;
+      pagination: { nextCursor: string | null; limit: number };
+    }>(`/v1/orgs/${opts.orgSlug}/releases?limit=${opts.count}`);
     if (!data) return [];
-    const all = await collectReleasesFromSources(data.sources.map((s) => s.slug), opts.count);
-    return all.sort(byPublishedAtDesc).slice(0, opts.count);
+    return data.releases.map((r) => ({
+      id: r.id,
+      title: r.title,
+      version: r.version,
+      publishedAt: r.publishedAt,
+      sourceName: r.source.name,
+      sourceSlug: r.source.slug,
+      contentSummary: r.summary ?? null,
+      media: toMediaItems(r.media),
+    }));
   }
 
   const sourcesData = await apiFetch<Array<{ slug: string; name: string }>>("/v1/sources");
