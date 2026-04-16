@@ -5,7 +5,9 @@
 //   - root package.json (displayed by `releases --version`)
 //   - src/cli/program.ts (compiled into the binary)
 //   - src/mcp/server.ts (MCP server identifier)
-//   - homebrew/releases.rb (formula version)
+// The Homebrew formula lives in the public tap repo
+// (buildinternet/homebrew-tap) and is regenerated on publish by CI —
+// not by this script.
 
 import { readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
@@ -45,6 +47,5 @@ updateJson("package.json", (j) => {
 
 replaceInFile("src/cli/program.ts", /VERSION = "[^"]+"/, `VERSION = "${newVersion}"`);
 replaceInFile("src/mcp/server.ts", /version: "[^"]+"/, `version: "${newVersion}"`);
-replaceInFile("homebrew/releases.rb", /version "[^"]+"/, `version "${newVersion}"`);
 
 console.log("Done.");
