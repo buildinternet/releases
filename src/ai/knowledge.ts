@@ -1,8 +1,107 @@
 import { getAnthropicClient } from "./client.js";
 import { config } from "@releases/lib/config";
 import { logUsage } from "../lib/usage.js";
-import type { Release, ReleaseSummary } from "@releases/core/schema";
+import type { Release, ReleaseSummary, Source, Organization } from "@releases/core/schema";
 import { logger } from "@releases/lib/logger";
+import { daysAgoIso } from "@releases/core/dates";
+import { getRecentReleases, getOrgOverview, upsertOverviewPage } from "../db/queries.js";
+
+export const OVERVIEW_WINDOW_DAYS = 90;
+export const OVERVIEW_RELEASE_LIMIT = 50;
+
+// GitHub sources ship many patch bumps that otherwise crowd out higher-signal
+// product changelogs (scrape/feed) within the same org.
+const PER_SOURCE_CAPS: Record<Source["type"], number> = {
+  github: 10,
+  scrape: 20,
+  feed: 20,
+  agent: 20,
+};
+
+/** Input arrays must each be sorted by publishedAt desc. */
+export function selectReleasesForOverview(
+  perSource: Array<{ type: Source["type"]; releases: Release[] }>,
+  limit: number,
+): { releases: Release[]; totalAvailable: number } {
+  const totalAvailable = perSource.reduce((n, s) => n + s.releases.length, 0);
+  const capped = perSource.flatMap(({ type, releases }) =>
+    releases.slice(0, PER_SOURCE_CAPS[type] ?? 20),
+  );
+  const sorted = capped.sort((a, b) =>
+    (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
+  );
+  return { releases: sorted.slice(0, limit), totalAvailable };
+}
+
+export type OverviewRegenStatus = "regenerated" | "no-releases" | "failed";
+
+export interface OverviewRegenResult {
+  status: OverviewRegenStatus;
+  windowDays: number;
+  selected: number;
+  totalAvailable: number;
+  chars: number;
+}
+
+/**
+ * Regenerate an org's AI overview from recent releases. Shared by
+ * `admin org show --regenerate`, `admin org refresh`, and the end-of-fetch
+ * auto-regen in `admin source fetch`.
+ */
+export async function regenerateOrgOverview(
+  org: Pick<Organization, "id" | "slug" | "name" | "description">,
+  sources: Array<Pick<Source, "id" | "slug" | "name" | "type">>,
+  opts: { windowDays?: number; limit?: number } = {},
+): Promise<OverviewRegenResult> {
+  const windowDays = opts.windowDays ?? OVERVIEW_WINDOW_DAYS;
+  const limit = opts.limit ?? OVERVIEW_RELEASE_LIMIT;
+  const cutoff = daysAgoIso(windowDays);
+
+  const [releaseArrays, existing] = await Promise.all([
+    Promise.all(sources.map((s) => getRecentReleases(s.id, cutoff, s.slug))),
+    getOrgOverview(org.id, org.slug).catch(() => null),
+  ]);
+  const perSource = sources.map((s, i) => ({ type: s.type, releases: releaseArrays[i] }));
+  const { releases: selected, totalAvailable } = selectReleasesForOverview(perSource, limit);
+
+  if (selected.length === 0) {
+    return { status: "no-releases", windowDays, selected: 0, totalAvailable, chars: 0 };
+  }
+
+  const result = await generateKnowledgePage({
+    name: org.name,
+    slug: org.slug,
+    description: org.description || undefined,
+    existingContent: existing?.content,
+    newReleases: selected,
+    totalReleaseCount: totalAvailable,
+    sourceNames: sources.map((s) => s.name),
+  });
+
+  if (!result) {
+    return { status: "failed", windowDays, selected: selected.length, totalAvailable, chars: 0 };
+  }
+
+  await upsertOverviewPage({
+    scope: "org",
+    orgId: org.id,
+    content: result.content,
+    releaseCount: result.releaseCount,
+    lastContributingReleaseAt: selected[0]?.publishedAt ?? null,
+  });
+
+  return {
+    status: "regenerated",
+    windowDays,
+    selected: selected.length,
+    totalAvailable,
+    chars: result.content.length,
+  };
+}
+
+export function isActiveSource<T extends Pick<Source, "isHidden" | "fetchPriority">>(s: T): boolean {
+  return !s.isHidden && s.fetchPriority !== "paused";
+}
 
 interface KnowledgeInput {
   /** Org or product name */

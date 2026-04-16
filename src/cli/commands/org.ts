@@ -6,16 +6,38 @@ import {
   getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
   getProductsByOrg, addTagsToOrg, removeTagsFromOrg, getTagsForOrg, updateOrg,
   listDomainAliases, addDomainAlias, removeDomainAlias,
-  getOrgOverview, getRecentReleases, upsertOverviewPage,
+  getOrgOverview,
 } from "../../db/queries.js";
-import { generateKnowledgePage } from "../../ai/knowledge.js";
-import { DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
-import { daysAgoIso } from "@releases/core/dates";
+import {
+  regenerateOrgOverview,
+  isActiveSource,
+  OVERVIEW_WINDOW_DAYS,
+} from "../../ai/knowledge.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { logger } from "@releases/lib/logger";
 import { orgNotFound } from "../suggest.js";
 import { toSlug } from "@releases/core/slug";
 import { isValidCategory, CATEGORIES } from "@releases/core/categories";
+import type { OverviewRegenResult } from "../../ai/knowledge.js";
+
+function parseWindowDays(raw: string | undefined): number {
+  if (!raw) return OVERVIEW_WINDOW_DAYS;
+  const n = parseInt(raw, 10);
+  if (!Number.isFinite(n) || n < 1) return OVERVIEW_WINDOW_DAYS;
+  return n;
+}
+
+function logRegenResult(result: OverviewRegenResult, orgName: string): void {
+  if (result.status === "regenerated") {
+    logger.info(
+      `Overview regenerated (${result.chars} chars from ${result.selected} of ${result.totalAvailable} releases, window: ${result.windowDays}d)`,
+    );
+  } else if (result.status === "no-releases") {
+    logger.warn(`No releases in the last ${result.windowDays} days for ${orgName} — overview not regenerated`);
+  } else {
+    logger.warn(`Overview regeneration failed for ${orgName}`);
+  }
+}
 
 export function registerOrgCommand(program: Command) {
   const org = program
@@ -130,13 +152,15 @@ full details including linked accounts, tags, sources, and products.`)
     .argument("<identifier>", "Org slug, domain, name, or account handle")
     .option("--json", "Output as JSON")
     .option("--regenerate", "Regenerate the AI overview from recent releases")
+    .option("--window <days>", "Window (days) for overview release selection", String(OVERVIEW_WINDOW_DAYS))
     .addHelpText("after", `
 Examples:
   releases admin org show acme
   releases admin org show acme.com
   releases admin org show acme --json
-  releases admin org show acme --regenerate`)
-    .action(async (identifier: string, opts: { json?: boolean; regenerate?: boolean }) => {
+  releases admin org show acme --regenerate
+  releases admin org show acme --regenerate --window 30`)
+    .action(async (identifier: string, opts: { json?: boolean; regenerate?: boolean; window?: string }) => {
       const found = await findOrg(identifier);
       if (!found) {
         return orgNotFound(identifier);
@@ -151,39 +175,14 @@ Examples:
         getOrgOverview(found.id, found.slug).catch(() => null),
       ]);
 
-      // Regenerate overview if requested
       if (opts.regenerate) {
-        const windowDays = DEFAULT_WINDOW_DAYS;
-        const cutoff = daysAgoIso(windowDays);
-        const releaseArrays = await Promise.all(
-          linkedSources.map((source) => getRecentReleases(source.id, cutoff, source.slug)),
-        );
-        const allReleases = releaseArrays.flat().sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
-        if (allReleases.length === 0) {
-          logger.warn(`No releases in the last ${windowDays} days for ${found.name} — cannot generate overview`);
-        } else {
-          logger.info(`Generating overview for ${found.name} (${allReleases.length} releases)...`);
-          const result = await generateKnowledgePage({
-            name: found.name,
-            slug: found.slug,
-            description: found.description || undefined,
-            existingContent: overview?.content,
-            newReleases: allReleases.slice(0, 50),
-            totalReleaseCount: allReleases.length,
-            sourceNames: linkedSources.map((s) => s.name),
-          });
-          if (result) {
-            await upsertOverviewPage({
-              scope: "org",
-              orgId: found.id,
-              content: result.content,
-              releaseCount: result.releaseCount,
-              lastContributingReleaseAt: allReleases[0]?.publishedAt ?? null,
-            });
-            // Re-read so the display below shows the new content
-            const updated = await getOrgOverview(found.id, found.slug);
-            if (updated) Object.assign(overview ?? {}, updated);
-          }
+        const windowDays = parseWindowDays(opts.window);
+        logger.info(`Regenerating overview for ${found.name} (window: ${windowDays}d)...`);
+        const result = await regenerateOrgOverview(found, linkedSources, { windowDays });
+        logRegenResult(result, found.name);
+        if (result.status === "regenerated") {
+          const updated = await getOrgOverview(found.id, found.slug);
+          if (updated) Object.assign(overview ?? {}, updated);
         }
       }
 
@@ -253,6 +252,138 @@ Examples:
       }
 
       console.log(chalk.dim(`\n  More: "releases latest --org ${found.slug}" for recent releases · "releases show <src-slug>" for a specific source`));
+    });
+
+  // ── org refresh ──
+  org
+    .command("refresh")
+    .description("Fetch all active sources for an org and regenerate the overview")
+    .argument("<identifier>", "Org slug, domain, or name")
+    .option("--max <n>", "Maximum releases per source (default: 20)", "20")
+    .option("--concurrency <n>", "Parallel fetches (default: 3)")
+    .option("--window <days>", "Window (days) for overview release selection", String(OVERVIEW_WINDOW_DAYS))
+    .option("--dry-run", "Show what would be fetched without doing it")
+    .option("--skip-overview", "Fetch only, don't regenerate the overview")
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  releases admin org refresh acme                 Fetch all sources, then regenerate overview
+  releases admin org refresh acme --max 50        Pull up to 50 releases per source
+  releases admin org refresh acme --dry-run       Preview without fetching
+  releases admin org refresh acme --skip-overview Fetch only, skip overview regen
+  releases admin org refresh acme --json          Machine-readable output`)
+    .action(async (identifier: string, opts: { max?: string; concurrency?: string; window?: string; dryRun?: boolean; skipOverview?: boolean; json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) return orgNotFound(identifier);
+
+      const orgSources = await getSourcesByOrg(found.id);
+      const activeSources = orgSources.filter(isActiveSource);
+
+      if (activeSources.length === 0) {
+        if (opts.json) {
+          console.log(JSON.stringify({ org: found.slug, sourcesFetched: 0, newReleases: 0, overview: "skipped", reason: "no active sources" }, null, 2));
+        } else {
+          logger.warn(`No active sources for ${found.name} — nothing to refresh`);
+        }
+        return;
+      }
+
+      if (!opts.json) {
+        logger.info(`Refreshing ${found.name}: ${activeSources.length} active source${activeSources.length === 1 ? "" : "s"}`);
+      }
+
+      // Subprocess `admin source fetch` rather than re-enter the command tree
+      // in-process. The in-process path would need either a ~900-line refactor
+      // of fetch.ts to expose its loop, or Commander re-entry which mutates
+      // shared hook state. Subprocess is the simpler boundary.
+      const fetchArgs = [
+        "admin", "source", "fetch",
+        "--org", found.slug,
+        "--skip-overview",
+        "--max", opts.max ?? "20",
+        "--json",
+      ];
+      if (opts.concurrency) fetchArgs.push("--concurrency", opts.concurrency);
+      if (opts.dryRun) fetchArgs.push("--dry-run");
+
+      const isScripted = !!process.argv[1] && /\.(ts|js|mjs|cjs)$/.test(process.argv[1]);
+      const baseCmd = isScripted ? [process.argv[0], process.argv[1]] : [process.argv[0]];
+      const proc = Bun.spawn([...baseCmd, ...fetchArgs], { stdout: "pipe", stderr: "inherit" });
+      const stdout = await new Response(proc.stdout).text();
+      const exitCode = await proc.exited;
+
+      if (exitCode !== 0) {
+        if (opts.json) {
+          console.log(JSON.stringify({ org: found.slug, error: `fetch exited ${exitCode}` }, null, 2));
+        } else {
+          logger.error(`Fetch subprocess failed with exit code ${exitCode}`);
+        }
+        process.exit(exitCode);
+      }
+
+      let fetchResults: Array<{ source: string; newReleases: number; error?: string }>;
+      try {
+        fetchResults = JSON.parse(stdout.trim() || "[]");
+      } catch (err) {
+        logger.error(`Could not parse fetch output: ${err instanceof Error ? err.message : String(err)}`);
+        if (opts.json) {
+          console.log(JSON.stringify({ org: found.slug, error: "fetch output parse failed" }, null, 2));
+        }
+        process.exit(1);
+      }
+
+      const totalInserted = fetchResults.reduce((n, r) => n + (r.newReleases || 0), 0);
+      const errors = fetchResults.filter((r) => r.error);
+
+      const windowDays = parseWindowDays(opts.window);
+      let regen: OverviewRegenResult | null = null;
+      if (!opts.skipOverview && !opts.dryRun) {
+        if (!opts.json) {
+          logger.info(`Regenerating overview for ${found.name} (window: ${windowDays}d)...`);
+        }
+        regen = await regenerateOrgOverview(found, activeSources, { windowDays });
+        if (!opts.json) logRegenResult(regen, found.name);
+      }
+
+      if (opts.json) {
+        const overviewKey = opts.skipOverview || opts.dryRun ? "skipped" : regen!.status;
+        console.log(JSON.stringify({
+          org: found.slug,
+          sourcesFetched: fetchResults.length,
+          newReleases: totalInserted,
+          errors: errors.map((e) => ({ source: e.source, error: e.error })),
+          overview: overviewKey,
+          overviewChars: regen?.status === "regenerated" ? regen.chars : undefined,
+          releasesConsidered: regen?.status === "regenerated"
+            ? { selected: regen.selected, total: regen.totalAvailable, windowDays }
+            : undefined,
+          dryRun: !!opts.dryRun,
+        }, null, 2));
+        return;
+      }
+
+      const headline = opts.dryRun
+        ? chalk.yellow(`[dry-run] Would fetch ${fetchResults.length} source(s) for ${found.name}`)
+        : chalk.bold(`Refresh complete: ${found.name}`);
+      console.log(`\n${headline}`);
+      console.log(`  ${chalk.green(`${fetchResults.length} source${fetchResults.length === 1 ? "" : "s"} fetched`)} · ${chalk.green(`${totalInserted} new release${totalInserted === 1 ? "" : "s"}`)}`);
+      if (errors.length > 0) {
+        console.log(`  ${chalk.red(`${errors.length} source${errors.length === 1 ? "" : "s"} failed`)}`);
+        for (const e of errors) {
+          console.log(`    ${chalk.dim("•")} ${e.source}: ${chalk.red(e.error ?? "unknown error")}`);
+        }
+      }
+      if (opts.skipOverview) {
+        console.log(`  ${chalk.dim("Overview: skipped (--skip-overview)")}`);
+      } else if (opts.dryRun) {
+        console.log(`  ${chalk.dim("Overview: skipped (--dry-run)")}`);
+      } else if (regen?.status === "regenerated") {
+        console.log(`  ${chalk.green("Overview regenerated")} ${chalk.dim(`(${regen.chars} chars, ${regen.selected}/${regen.totalAvailable} releases, ${regen.windowDays}d window)`)}`);
+      } else if (regen?.status === "no-releases") {
+        console.log(`  ${chalk.yellow(`Overview: no releases in ${regen.windowDays}d window`)}`);
+      } else if (regen?.status === "failed") {
+        console.log(`  ${chalk.red("Overview: regeneration failed")}`);
+      }
     });
 
   // ── org edit ──

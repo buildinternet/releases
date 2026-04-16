@@ -13,13 +13,14 @@ import {
   updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
   upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
   insertMediaAssets, clearChangeDetected,
-  getOrgOverview, upsertOverviewPage,
   upsertChangelogFile,
   deleteChangelogFilesNotIn,
+  findOrg,
 } from "../../db/queries.js";
+import { orgNotFound } from "../suggest.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
-import { generateKnowledgePage } from "../../ai/knowledge.js";
+import { regenerateOrgOverview, isActiveSource } from "../../ai/knowledge.js";
 import { logger } from "@releases/lib/logger";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { MEDIA_PREFIX } from "../../lib/media-url.js";
@@ -55,8 +56,10 @@ export function registerFetchCommand(program: Command) {
     .option("--changed", "Only fetch sources where poll detected upstream changes")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--no-summarize", "Skip summary generation after fetching")
+    .option("--skip-overview", "Skip end-of-fetch org overview regeneration (release summaries still run)")
     .option("--skip-changelog", "Skip CHANGELOG.md fetch for GitHub sources")
     .option("--managed-agents", "Delegate fetching to a remote managed agent session")
+    .option("--org <slug>", "Fetch all active sources for an organization (combinable with other filters)")
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
     .addHelpText("after", `
 Examples:
@@ -66,6 +69,8 @@ Examples:
   releases admin source fetch --unfetched              Fetch sources never fetched before
   releases admin source fetch --changed                Fetch sources where poll detected changes
   releases admin source fetch --retry-errors           Retry sources that errored last time
+  releases admin source fetch --org acme               Fetch all active sources for an org
+  releases admin source fetch --org acme --stale 6     Fetch stale sources within an org only
   releases admin source fetch src_abc123 --dry-run     Preview without writing to DB
   releases admin source fetch src_abc123 --force       Delete and re-fetch all releases
   releases admin source fetch --concurrency 5          Fetch 5 sources in parallel
@@ -75,10 +80,32 @@ Examples:
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
       unfetched?: boolean; stale?: string; changed?: boolean; retryErrors?: boolean; concurrency?: string;
-      summarize?: boolean; managedAgents?: boolean; skipChangelog?: boolean;
+      summarize?: boolean; managedAgents?: boolean; skipChangelog?: boolean; skipOverview?: boolean; org?: string;
     }) => {
       // Positional arg takes precedence over --source option
       const slug = slugArg ?? opts.source;
+
+      let orgFilter: { name: string; slug: string; id: string; activeSources: Source[]; activeSourceIds: Set<string> } | null = null;
+      if (opts.org) {
+        const org = await findOrg(opts.org);
+        if (!org) return orgNotFound(opts.org);
+        const activeSources = (await getSourcesByOrg(org.id)).filter(isActiveSource);
+        if (activeSources.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.yellow(`No active sources for ${org.name}.`));
+          }
+          return;
+        }
+        orgFilter = {
+          name: org.name,
+          slug: org.slug,
+          id: org.id,
+          activeSources,
+          activeSourceIds: new Set(activeSources.map((s) => s.id)),
+        };
+      }
 
       // ── Managed agents delegation ──
       if (opts.managedAgents) {
@@ -130,9 +157,22 @@ Examples:
           const sources = await listFetchableSources({ mode: "retry_errors" });
           sourceIdentifiers = sources.map(s => s.id);
           label = `${sourceIdentifiers.length} errored sources`;
+        } else if (orgFilter) {
+          sourceIdentifiers = Array.from(orgFilter.activeSourceIds);
+          orgId = orgFilter.id;
+          label = `all sources for ${orgFilter.slug} (${sourceIdentifiers.length})`;
         } else {
-          logger.error("--managed-agents requires a source slug or filter (--stale, --unfetched, --changed, --retry-errors)");
+          logger.error("--managed-agents requires a source slug or filter (--stale, --unfetched, --changed, --retry-errors, --org)");
           process.exit(1);
+        }
+
+        // When --org is combined with another filter, narrow results to the org
+        const otherFilterUsed = !!slug || opts.unfetched || !!opts.stale || opts.changed || opts.retryErrors;
+        if (orgFilter && otherFilterUsed && sourceIdentifiers.length > 0) {
+          const before = sourceIdentifiers.length;
+          sourceIdentifiers = sourceIdentifiers.filter((id) => orgFilter!.activeSourceIds.has(id));
+          orgId = orgFilter.id;
+          label = `${sourceIdentifiers.length} sources in ${orgFilter.slug} (narrowed from ${before})`;
         }
 
         if (sourceIdentifiers.length === 0) {
@@ -261,10 +301,16 @@ Examples:
         if (!opts.json) {
           console.log(chalk.bold(`Retrying ${targetSources.length} errored source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
         }
+      } else if (orgFilter) {
+        // Bare --org bypasses the remote bulk-fetch block since it's org-scoped.
+        targetSources = orgFilter.activeSources;
+        if (!opts.json) {
+          console.log(chalk.bold(`Fetching ${targetSources.length} source${targetSources.length > 1 ? "s" : ""} for ${orgFilter.name} (concurrency: ${effectiveConcurrency})\n`));
+        }
       } else {
         if (isRemoteMode()) {
           console.error(chalk.red("Remote fetch requires a filter to prevent expensive bulk operations."));
-          console.error(chalk.gray("Use one of: a source slug, --stale <hours>, --unfetched, --changed, or --retry-errors."));
+          console.error(chalk.gray("Use one of: a source slug, --stale <hours>, --unfetched, --changed, --retry-errors, or --org <slug>."));
           process.exit(1);
         }
         targetSources = await listAllSources();
@@ -273,6 +319,24 @@ Examples:
             console.log(JSON.stringify([], null, 2));
           } else {
             console.log(chalk.yellow("No sources configured. Use `releases admin source add` to add one."));
+          }
+          return;
+        }
+      }
+
+      // When --org is combined with another filter, narrow results to that org.
+      // The bare --org branch above already produced org-scoped sources.
+      if (orgFilter && (slug || opts.unfetched || opts.stale || opts.changed || opts.retryErrors)) {
+        const before = targetSources.length;
+        targetSources = targetSources.filter((s) => orgFilter!.activeSourceIds.has(s.id));
+        if (!opts.json && targetSources.length < before) {
+          console.log(chalk.dim(`Narrowed to ${targetSources.length} source${targetSources.length === 1 ? "" : "s"} in ${orgFilter.name} (from ${before}).`));
+        }
+        if (targetSources.length === 0) {
+          if (opts.json) {
+            console.log(JSON.stringify([], null, 2));
+          } else {
+            console.log(chalk.yellow(`No matching sources in ${orgFilter.name}.`));
           }
           return;
         }
@@ -795,7 +859,7 @@ Examples:
           }
 
           // Defer knowledge page regeneration until after all sources are processed
-          if (inserted > 0 && source.orgId && opts.summarize !== false) {
+          if (inserted > 0 && source.orgId && opts.summarize !== false && !opts.skipOverview) {
             orgsNeedingKnowledgeUpdate.add(source.orgId);
           }
 
@@ -901,42 +965,12 @@ Examples:
 
       process.removeListener("SIGINT", onSigint);
 
-      // Regenerate knowledge pages for orgs that had new releases
       for (const orgId of orgsNeedingKnowledgeUpdate) {
         try {
           const org = await getOrgById(orgId);
           if (!org) continue;
-          const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
           const orgSources = await getSourcesByOrg(org.id);
-          const [releaseArrays, existingPage] = await Promise.all([
-            Promise.all(orgSources.map((s) => getRecentReleases(s.id, cutoff, s.slug))),
-            getOrgOverview(org.id, org.slug),
-          ]);
-          const allOrgReleases = releaseArrays.flat()
-            .sort((a, b) => (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""));
-
-          if (allOrgReleases.length === 0) continue;
-
-          const result = await generateKnowledgePage({
-            name: org.name,
-            slug: org.slug,
-            description: org.description || undefined,
-            existingContent: existingPage?.content,
-            newReleases: allOrgReleases.slice(0, 30),
-            totalReleaseCount: allOrgReleases.length,
-            sourceNames: orgSources.map((s) => s.name),
-          });
-
-          if (result) {
-            const latestDate = allOrgReleases[0]?.publishedAt ?? null;
-            await upsertOverviewPage({
-              scope: "org",
-              orgId: org.id,
-              content: result.content,
-              releaseCount: result.releaseCount,
-              lastContributingReleaseAt: latestDate,
-            });
-          }
+          await regenerateOrgOverview(org, orgSources);
         } catch (err) {
           logger.warn(`Knowledge page update failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`);
         }
