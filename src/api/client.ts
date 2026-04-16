@@ -6,8 +6,18 @@ import type {
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
 } from "@releases/core/schema";
-import type { SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse } from "./types.js";
-export type { SourceWithOrg, SourcePatchInput } from "./types.js";
+import type {
+  SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse,
+  ReleaseWithSource, StatsSummary, FetchLogEntry, LatestRelease,
+  UsageBreakdownRow, UsageStatsResponse, Session,
+  EmbedBackfillResponse, EmbedStatusResponse,
+} from "./types.js";
+export type {
+  SourceWithOrg, SourcePatchInput, ReleaseWithSource, StatsSummary,
+  FetchLogEntry, LatestRelease, UsageBreakdownRow, UsageStatsResponse,
+  Session, EmbedBackfillResponse, EmbedStatusResponse,
+  SearchResult, Stats, SourceListItem,
+} from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${getApiUrl()}${path}`;
@@ -144,24 +154,6 @@ export async function removeBlockedUrl(pattern: string): Promise<void> {
 
 // ── Release CRUD ──
 
-export interface ReleaseWithSource {
-  id: string;
-  sourceId: string;
-  version: string | null;
-  title: string;
-  content: string;
-  contentSummary: string | null;
-  url: string | null;
-  contentHash: string | null;
-  metadata: string | null;
-  publishedAt: string | null;
-  suppressed: boolean;
-  suppressedReason: string | null;
-  fetchedAt: string;
-  sourceName: string | null;
-  sourceSlug: string | null;
-}
-
 export async function getRelease(id: string): Promise<ReleaseWithSource | null> {
   return apiFetch<ReleaseWithSource | null>(`/v1/releases/${id}`);
 }
@@ -242,42 +234,6 @@ export async function listSourcesWithOrg(opts?: {
 
 // ── Stats ──
 
-export interface StatsSummary {
-  period: { days: number; cutoff: string };
-  totals: {
-    organizations: number;
-    sources: number;
-    releases: number;
-    releasesInPeriod: number;
-  };
-  sourceHealth: {
-    upToDate: number;
-    stale: number;
-    neverFetched: number;
-  };
-  sources: Array<{
-    sourceName: string;
-    sourceSlug: string;
-    sourceType: string;
-    orgName: string | null;
-    lastFetchedAt: string | null;
-    totalReleases: number;
-    recentReleases: number;
-  }>;
-  recentActivity: Array<{
-    sourceName: string;
-    sourceSlug: string;
-    orgName: string | null;
-    releasesFound: number;
-    releasesInserted: number;
-    totalReleases: number;
-    status: string;
-    durationMs: number | null;
-    error: string | null;
-    createdAt: string;
-  }>;
-}
-
 export async function getStatsSummary(days: number): Promise<StatsSummary> {
   const cutoff = daysAgoIso(days);
 
@@ -333,20 +289,6 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
 
 // ── Usage log ──
 
-export interface UsageBreakdownRow {
-  label: string | null;
-  totalInput: number;
-  totalOutput: number;
-  count: number;
-}
-
-export interface UsageStatsResponse {
-  totals: { totalInput: number; totalOutput: number; count: number };
-  byOperation: UsageBreakdownRow[];
-  byModel: UsageBreakdownRow[];
-  bySource: UsageBreakdownRow[];
-}
-
 export async function getUsageStats(days: number): Promise<UsageStatsResponse> {
   return apiFetch<UsageStatsResponse>(`/v1/usage-log/stats?days=${days}`);
 }
@@ -385,18 +327,6 @@ export async function postFetchLog(entry: {
 
 // ── Fetch log read ──
 
-export interface FetchLogEntry {
-  id: string;
-  sourceName: string;
-  sourceSlug: string;
-  status: string;
-  releasesFound: number;
-  releasesInserted: number;
-  durationMs: number | null;
-  error: string | null;
-  createdAt: string;
-}
-
 export async function getFetchLogs(opts: {
   sourceSlug?: string;
   limit: number;
@@ -425,15 +355,6 @@ export async function getFetchLogs(opts: {
 }
 
 // ── Latest releases ──
-
-export interface LatestRelease {
-  id: string;
-  title: string;
-  version: string | null;
-  publishedAt: string | null;
-  sourceName: string;
-  sourceSlug: string;
-}
 
 type SourceReleaseResponse = {
   name: string;
@@ -855,24 +776,6 @@ export async function queryReleasesWithMedia(): Promise<{ id: string; sourceId: 
 
 // ── Sessions ──
 
-export interface Session {
-  sessionId: string;
-  company: string;
-  type: "onboard" | "update";
-  status: "running" | "complete" | "error" | "cancelled";
-  step?: string;
-  totalSources?: number;
-  sourcesFetched?: number;
-  releasesFound?: number;
-  releasesInserted?: number;
-  currentAction?: string;
-  startedAt: number;
-  lastUpdatedAt: number;
-  error?: string;
-  activeSources?: string[];
-  cancelRequested?: boolean;
-}
-
 export async function listSessions(): Promise<Session[]> {
   return apiFetch<Session[]>("/v1/sessions");
 }
@@ -891,32 +794,7 @@ export async function cancelSession(sessionId: string): Promise<{ ok: boolean; e
   });
 }
 
-export type { SearchResult, Stats, SourceListItem } from "./types.js";
-
 // ── Semantic search backfill (admin-only) ──
-
-export interface EmbedBackfillResponse {
-  processed: number;
-  succeeded: number;
-  failed: number;
-  remaining: number;
-  dryRun?: boolean;
-}
-
-export interface EmbedStatusResponse {
-  releases: { total: number; embedded: number; unembedded: number };
-  entities: {
-    total: number;
-    embedded: number;
-    unembedded: number;
-    breakdown: {
-      org: { total: number; embedded: number; unembedded: number };
-      product: { total: number; embedded: number; unembedded: number };
-      source: { total: number; embedded: number; unembedded: number };
-    };
-  };
-  chunks: { total: number; embedded: number; unembedded: number };
-}
 
 export async function embedReleases(body: {
   since?: string;

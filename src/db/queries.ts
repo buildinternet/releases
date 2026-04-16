@@ -13,8 +13,14 @@ import { daysAgoIso } from "@releases/core/dates";
 import { toSlug } from "@releases/core/slug";
 import { countTokensSafe } from "@releases/core/tokens";
 import * as apiClient from "../api/client.js";
-import type { SourceWithOrg, SourcePatchInput } from "../api/types.js";
-export type { SourceWithOrg, SourcePatchInput };
+import type {
+  SourceWithOrg, SourcePatchInput, ReleaseWithSource,
+  StatsSummary, FetchLogEntry, LatestRelease, UsageBreakdownRow, UsageStatsResponse,
+} from "../api/types.js";
+export type {
+  SourceWithOrg, SourcePatchInput, ReleaseWithSource,
+  StatsSummary, FetchLogEntry, LatestRelease, UsageBreakdownRow, UsageStatsResponse,
+};
 
 /** Reusable SQL condition: exclude disabled (hidden) sources. */
 const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
@@ -470,7 +476,6 @@ export async function listSourcesWithOrg(opts?: {
 
 // ── Stats summary (for `stats` command) ──
 
-export type StatsSummary = apiClient.StatsSummary;
 
 export async function getStatsSummary(days: number): Promise<StatsSummary> {
   if (isRemoteMode()) return apiClient.getStatsSummary(days);
@@ -559,7 +564,6 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
 
 // ── Fetch log (for `fetch-log` command) ──
 
-export type FetchLogEntry = apiClient.FetchLogEntry;
 
 export async function getFetchLogs(opts: {
   sourceSlug?: string;
@@ -596,7 +600,6 @@ export async function getFetchLogs(opts: {
 
 // ── Latest releases (for `latest` command) ──
 
-export type LatestRelease = apiClient.LatestRelease;
 
 export async function getLatestReleases(opts: {
   slug?: string;
@@ -1178,19 +1181,8 @@ export async function insertReleases(source: Source, rows: ReleaseUpsertRow[]): 
 
 // ── Release CRUD (for `release` command) ──
 
-export interface ReleaseWithSource {
-  release: Release;
-  sourceName: string | null;
-  sourceSlug: string | null;
-}
-
 export async function getRelease(id: string): Promise<ReleaseWithSource | null> {
-  if (isRemoteMode()) {
-    const result = await apiClient.getRelease(id);
-    if (!result) return null;
-    const { sourceName, sourceSlug, ...rel } = result;
-    return { release: rel as Release, sourceName, sourceSlug };
-  }
+  if (isRemoteMode()) return apiClient.getRelease(id);
   const db = getDb();
   const rows = await db
     .select({
@@ -1202,7 +1194,13 @@ export async function getRelease(id: string): Promise<ReleaseWithSource | null> 
     .leftJoin(sources, eq(releases.sourceId, sources.id))
     .where(eq(releases.id, id));
   if (rows.length === 0) return null;
-  return rows[0];
+  const { release: rel, sourceName, sourceSlug } = rows[0];
+  return {
+    ...rel,
+    suppressed: !!rel.suppressed,
+    sourceName,
+    sourceSlug,
+  };
 }
 
 export async function deleteRelease(id: string): Promise<boolean> {
@@ -1258,14 +1256,9 @@ export async function deleteReleasesByFilter(opts: {
 
 // ── Usage stats (for `usage` command) ──
 
-export type UsageBreakdownRow = apiClient.UsageBreakdownRow;
 
-export interface UsageStats {
-  totals: { totalInput: number; totalOutput: number; count: number };
-  byOperation: UsageBreakdownRow[];
-  byModel: UsageBreakdownRow[];
-  bySource: UsageBreakdownRow[];
-}
+/** @deprecated Use UsageStatsResponse */
+export type UsageStats = UsageStatsResponse;
 
 function usageByColumn(db: ReturnType<typeof getDb>, column: SQLiteColumn, since: string) {
   return db

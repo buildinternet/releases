@@ -514,3 +514,146 @@ export interface ProductAdoptResult {
   accountsMoved: number;
   sourceOrgDeleted: string;
 }
+
+// ── Releases (enriched) ──
+
+/** Flat release shape returned by GET /v1/releases/:id with source metadata. */
+export interface ReleaseWithSource {
+  id: string;
+  sourceId: string;
+  version: string | null;
+  title: string;
+  content: string;
+  contentSummary: string | null;
+  url: string | null;
+  contentHash: string | null;
+  metadata: string | null;
+  publishedAt: string | null;
+  suppressed: boolean;
+  suppressedReason: string | null;
+  fetchedAt: string;
+  sourceName: string | null;
+  sourceSlug: string | null;
+}
+
+export interface LatestRelease {
+  id: string;
+  title: string;
+  version: string | null;
+  publishedAt: string | null;
+  sourceName: string;
+  sourceSlug: string;
+}
+
+// ── Stats ──
+
+export interface StatsSummary {
+  period: { days: number; cutoff: string };
+  totals: {
+    organizations: number;
+    sources: number;
+    releases: number;
+    releasesInPeriod: number;
+  };
+  sourceHealth: {
+    upToDate: number;
+    stale: number;
+    neverFetched: number;
+  };
+  sources: Array<{
+    sourceName: string;
+    sourceSlug: string;
+    sourceType: string;
+    orgName: string | null;
+    lastFetchedAt: string | null;
+    totalReleases: number;
+    recentReleases: number;
+  }>;
+  recentActivity: Array<{
+    sourceName: string;
+    sourceSlug: string;
+    orgName: string | null;
+    releasesFound: number;
+    releasesInserted: number;
+    totalReleases: number;
+    status: string;
+    durationMs: number | null;
+    error: string | null;
+    createdAt: string;
+  }>;
+}
+
+// ── Fetch log ──
+
+export interface FetchLogEntry {
+  id: string;
+  sourceName: string;
+  sourceSlug: string;
+  status: string;
+  releasesFound: number;
+  releasesInserted: number;
+  durationMs: number | null;
+  error: string | null;
+  createdAt: string;
+}
+
+// ── Usage ──
+
+export interface UsageBreakdownRow {
+  label: string | null;
+  totalInput: number;
+  totalOutput: number;
+  count: number;
+}
+
+export interface UsageStatsResponse {
+  totals: { totalInput: number; totalOutput: number; count: number };
+  byOperation: UsageBreakdownRow[];
+  byModel: UsageBreakdownRow[];
+  bySource: UsageBreakdownRow[];
+}
+
+// ── Sessions ──
+
+export interface Session {
+  sessionId: string;
+  company: string;
+  type: "onboard" | "update";
+  status: "running" | "complete" | "error" | "cancelled";
+  step?: string;
+  totalSources?: number;
+  sourcesFetched?: number;
+  releasesFound?: number;
+  releasesInserted?: number;
+  currentAction?: string;
+  startedAt: number;
+  lastUpdatedAt: number;
+  error?: string;
+  activeSources?: string[];
+  cancelRequested?: boolean;
+}
+
+// ── Embed (admin) ──
+
+export interface EmbedBackfillResponse {
+  processed: number;
+  succeeded: number;
+  failed: number;
+  remaining: number;
+  dryRun?: boolean;
+}
+
+export interface EmbedStatusResponse {
+  releases: { total: number; embedded: number; unembedded: number };
+  entities: {
+    total: number;
+    embedded: number;
+    unembedded: number;
+    breakdown: {
+      org: { total: number; embedded: number; unembedded: number };
+      product: { total: number; embedded: number; unembedded: number };
+      source: { total: number; embedded: number; unembedded: number };
+    };
+  };
+  chunks: { total: number; embedded: number; unembedded: number };
+}
