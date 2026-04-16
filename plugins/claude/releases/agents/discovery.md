@@ -27,7 +27,7 @@ Run via Bash using `bun src/index.ts` (dev) or `released` (compiled binary). Use
 Key commands:
 - `releases admin discovery evaluate <url> --json` — Evaluate a changelog URL for best ingestion method
 - `releases admin source add <name> --url <url> --org <org> [--type <type>] [--feed-url <url>]` — Add a source
-- `releases admin source edit <slug> [--primary] [--priority <p>]` — Edit source config
+- `releases admin source edit <identifier> [--primary] [--priority <p>]` — Edit source config (accepts ID or slug)
 - `releases admin source remove <slug> [--ignore --reason "..."]` — Remove and optionally ignore a source
 - `releases admin source fetch <slug> [--dry-run] [--max <n>]` — Fetch releases from a source
 - `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` — Create org
@@ -59,7 +59,7 @@ Prefer 3-5 high-signal sources per org over exhaustive coverage. Only index the 
 
 ```bash
 releases admin source add "Low Priority Source" --url <url> --org <org> --type github
-releases admin source edit <slug> --priority paused
+releases admin source edit <identifier> --priority paused
 ```
 
 ## Multi-Product Organizations

@@ -80,9 +80,14 @@ Many files still live in `src/lib/` (media, media-url, formatters, embed-*, vect
 ```bash
 releases show <id|slug>         # Inspect any entity by ID (rel_/src_/org_/prod_) or slug
 releases list <slug> --json     # Inspect a single source
+releases list --json --compact  # Lightweight JSON (id, slug, name, type, org, date)
+releases list --json --limit 20 --page 2  # Paginated JSON output
 releases list --query <text>    # Filter sources by name, slug, or URL
 releases list --has-feed        # Sources with a discovered feed URL
 releases list --product nextjs  # Filter sources by product
+releases admin source list      # Alias for "releases list" (within admin source)
+releases admin source edit <identifier> --name "New Name"  # Edit by ID (src_...) or slug
+releases admin source edit <slug> --slug new-slug --confirm-slug-change  # Rename slug (breaks web links)
 releases admin source fetch <slug> --max 5   # Fetch limited releases for one source
 releases admin source fetch --changed        # Fetch only sources where poll detected changes
 releases admin source fetch-log <slug>       # Check recent fetch history for a source
@@ -105,6 +110,8 @@ releases admin source poll --json            # Machine-readable output
 ```
 
 - Commands accept entity IDs (`org_...`, `src_...`, `prod_...`, `rel_...`) or slugs. IDs are preferred for durability — slugs can change, IDs cannot. The top-level `show <id|slug>` command dispatches to the right entity based on the ID prefix, and falls back to a slug lookup (org → product → source) for bare strings.
+- The `edit` command accepts IDs or slugs as the first argument. Slug renames (`--slug`) require `--confirm-slug-change` because they break web links.
+- `releases list` is aliased as `releases admin source list` for discoverability within the admin source workflow.
 - Source slug is always a **positional argument** (e.g., `admin source fetch claude-code`), not a flag. The fetch command also accepts `--source <slug>` as an alias for convenience.
 - `releases admin org list` returns a summary view (counts, last activity) without accounts or tags. Use `releases admin org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
 

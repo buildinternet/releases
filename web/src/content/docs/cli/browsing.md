@@ -19,7 +19,12 @@ releases list --has-feed             # Only sources with a feed URL
 releases list --query "tailwind"     # Search by name, slug, or URL
 releases list --category ai          # Filter by category
 releases list --json                 # Machine-readable output
+releases list --json --compact       # Lightweight JSON (id, slug, name, type, org, date)
+releases list --json --limit 20      # First 20 results as JSON
+releases list --json --limit 20 --page 2  # Paginated JSON
 ```
+
+Also available as `releases admin source list` for discoverability within admin workflows.
 
 ### Filters
 
@@ -31,6 +36,9 @@ releases list --json                 # Machine-readable output
 | `--query <text>` | Substring match on name, slug, or URL |
 | `--category <cat>` | Filter by org or product category |
 | `--include-disabled` | Include disabled sources |
+| `--compact` | Lightweight fields only (with `--json`) |
+| `--limit <n>` | Limit results (with `--json`) |
+| `--page <n>` | Page number (with `--limit`) |
 
 ## Latest releases
 

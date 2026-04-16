@@ -13,9 +13,9 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 
 | Operation | CLI | Typed tool |
 |-----------|-----|------------|
-| List sources | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>]` | `list_sources` with query, organization, category, has_feed params |
+| List sources | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>] [--compact] [--limit <n>] [--page <n>]` | `list_sources` with query, organization, category, has_feed params |
 | Add source | `releases admin source add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]` | `add_source` with name, url, type, organization, feed_url params |
-| Edit source | `releases admin source edit <slug> [--primary] [--priority <p>]` | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
+| Edit source | `releases admin source edit <identifier> [--primary] [--priority <p>]` | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
 | Remove source | `releases admin source remove <slug> [--ignore --reason <reason>]` | `remove_source` with identifier (ID or slug) param |
 | Fetch releases | `releases admin source fetch <slug> [--dry-run] [--max <n>]` | `fetch_source` with identifier (ID or slug) param |
 | Get latest releases | `releases latest [slug] --json [--org <org>]` | `get_latest_releases` with source, organization, limit params |
@@ -162,8 +162,8 @@ Write notes during onboarding after you've fetched and validated sources. Update
 The scrape adapter can fetch pages with or without a headless browser. Static-site providers (Docusaurus, VitePress, WordPress, Ghost, Mintlify) are fetched without rendering by default — this is ~10-30x faster.
 
 To override the default for a specific source:
-- `releases admin source edit <slug> --no-render` — force fast fetch (no headless browser)
-- `releases admin source edit <slug> --render` — force headless browser rendering
+- `releases admin source edit <identifier> --no-render` — force fast fetch (no headless browser)
+- `releases admin source edit <identifier> --render` — force headless browser rendering
 
 Use `--render` when you know a source needs JavaScript execution. Use `--no-render` when you've verified the content is in the initial HTML for a provider not yet in the static list.
 

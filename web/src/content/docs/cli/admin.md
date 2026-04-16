@@ -26,12 +26,18 @@ releases admin source add "Claude Code" --url https://docs.anthropic.com/en/chan
 
 ## Edit sources
 
+The `edit` command accepts a source ID (`src_...`) or slug. IDs are preferred — slugs can change, IDs are immutable.
+
 ```bash
+releases admin source edit src_abc123 --name "New Name"    # by ID (preferred)
 releases admin source edit next-js --url https://github.com/vercel/next.js/releases
 releases admin source edit my-blog --org acme
 releases admin source edit my-blog --type feed
 releases admin source edit my-blog --primary
+releases admin source edit my-blog --slug new-slug --confirm-slug-change  # rename (breaks web links)
 ```
+
+Slug renames require `--confirm-slug-change` because they break existing web links.
 
 ## Remove sources
 
