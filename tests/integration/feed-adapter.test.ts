@@ -24,6 +24,13 @@ beforeAll(() => {
         body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Empty</title></channel></rss>`,
         contentType: "application/rss+xml",
       },
+      "/title-only.xml": {
+        body: `<?xml version="1.0"?><rss version="2.0"><channel><title>Title Only Feed</title>
+          <item><title>Release 1</title><link>https://example.com/r/1</link><pubDate>Mon, 14 Apr 2026 00:00:00 GMT</pubDate></item>
+          <item><title>Release 2</title><link>https://example.com/r/2</link><pubDate>Mon, 07 Apr 2026 00:00:00 GMT</pubDate></item>
+        </channel></rss>`,
+        contentType: "application/rss+xml",
+      },
       "/error": {
         body: "Internal Server Error",
         contentType: "text/plain",
@@ -94,5 +101,14 @@ describe("fetchAndParseFeed (HTTP integration)", () => {
     });
     expect(result.releases).toHaveLength(1);
     expect(result.releases[0].version).toBe("2.1.0");
+  });
+
+  it("returns items with empty content for title-only feeds (#234)", async () => {
+    const result = await fetchAndParseFeed(`${server.url}/title-only.xml`, "rss");
+    expect(result.releases).toHaveLength(2);
+    expect(result.releases[0].title).toBe("Release 1");
+    expect(result.releases[0].url).toBe("https://example.com/r/1");
+    expect(result.releases[0].content).toBe("");
+    expect(result.releases[1].content).toBe("");
   });
 });

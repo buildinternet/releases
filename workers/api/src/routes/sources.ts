@@ -365,6 +365,29 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const deleted = await db.delete(releases).where(eq(releases.sourceId, src.id)).returning();
+
+  // Clean up Vectorize vectors so they don't become orphans (#235).
+  // Fire-and-forget via waitUntil — a Vectorize failure must not block the delete.
+  const vectorIds = deleted.map((r) => r.id);
+  if (vectorIds.length > 0 && c.env.RELEASES_INDEX) {
+    c.executionCtx.waitUntil(
+      (async () => {
+        try {
+          const CHUNK = 500;
+          for (let i = 0; i < vectorIds.length; i += CHUNK) {
+            await c.env.RELEASES_INDEX.deleteByIds(vectorIds.slice(i, i + CHUNK));
+          }
+        } catch (err) {
+          console.warn(
+            `[sources] Vectorize delete failed for ${vectorIds.length} release vectors: ${
+              err instanceof Error ? err.message : String(err)
+            }`,
+          );
+        }
+      })(),
+    );
+  }
+
   return c.json({ deleted: deleted.length });
 });
 

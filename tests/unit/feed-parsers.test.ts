@@ -71,6 +71,29 @@ describe("parseRss", () => {
     expect(releases[0].title).toBe("Has Title");
   });
 
+  it("produces empty content for title-only items (#234)", () => {
+    const xml = `<?xml version="1.0"?>
+<rss><channel>
+  <item>
+    <title>Notion 3.4, part 2</title>
+    <link>https://www.notion.so/releases/2026-04-14</link>
+    <pubDate>Tue Apr 14 2026 00:00:00 GMT+0000</pubDate>
+    <guid>https://www.notion.so/releases/2026-04-14</guid>
+  </item>
+  <item>
+    <title>Notion 3.4</title>
+    <link>https://www.notion.so/releases/2026-04-07</link>
+    <pubDate>Tue Apr 07 2026 00:00:00 GMT+0000</pubDate>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(2);
+    expect(releases[0].title).toBe("Notion 3.4, part 2");
+    expect(releases[0].content).toBe("");
+    expect(releases[0].url).toBe("https://www.notion.so/releases/2026-04-14");
+    expect(releases[1].content).toBe("");
+  });
+
   it("converts HTML content to markdown", () => {
     const releases = parseRss(RSS_BASIC);
     expect(releases[0].content).not.toContain("<p>");

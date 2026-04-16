@@ -58,11 +58,13 @@ Enable with `--crawl` flag or by setting `metadata.crawlEnabled: true` on the so
 
 ## Feed Content Depth Assessment
 
-**This is a mandatory step during onboarding for every feed and scrape source.** Always spot-check individual release pages even if the feed content looks adequate. Many feeds provide decent text summaries but the actual pages have significantly richer content — product screenshots, video demos, detailed code examples, and inline media that the feed strips out.
+**Automatic detection:** The feed adapter now auto-detects title-only feeds — if every item has fewer than 20 characters of content, the feed is marked `feedContentDepth: "summary-only"` and `fetchViaFeed` returns null, causing the scrape adapter to fall through to crawl or single-page extraction. This handles the worst case (feeds like Notion, Apollo, LangChain, LaunchDarkly that carry only `<title>` + `<link>` with no `<description>` or `<content:encoded>`) without manual intervention. Once marked, the flag persists and subsequent fetches skip the feed entirely.
+
+**Manual assessment is still required for partial-content feeds.** Auto-detection only catches completely empty content. Many feeds provide decent text summaries but the actual pages have significantly richer content — product screenshots, video demos, detailed code examples, and inline media that the feed strips out.
 
 **The anti-pattern to avoid:** fetching the bare changelog index, seeing that content came back, and declaring success without ever checking whether each release has a dedicated article page with more detail. A paragraph of feed text is not evidence that the page is equally thin.
 
-**When to check:** After every feed fetch, regardless of content length. Do not skip this because feed entries have multiple sentences. The question is not "does the feed have some content?" but "does the actual page have substantially more?"
+**When to check:** After every feed fetch where `feedContentDepth` is not already set. Do not skip this because feed entries have multiple sentences. The question is not "does the feed have some content?" but "does the actual page have substantially more?"
 
 **How to check:** Dispatch a bulk-worker subagent to sample 2-3 release URLs. Prompt the subagent:
 

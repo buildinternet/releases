@@ -39,6 +39,7 @@ export async function fetchViaFeed(
   const metaUpdates: Partial<SourceMetadata> = {};
 
   if (meta.noFeedFound) return null;
+  if (meta.feedContentDepth === "summary-only") return null;
 
   let feedUrl = meta.feedUrl;
   let feedType = meta.feedType;
@@ -120,6 +121,22 @@ export async function fetchViaFeed(
     cleanMeta.noFeedFound = true;
     await updateSource(source, { metadata: JSON.stringify(cleanMeta) });
     return null;
+  }
+
+  // Guard: if every item has empty/trivial content (title-only feeds like Notion,
+  // Apollo, LangChain, LaunchDarkly), mark as summary-only and return null so the
+  // scrape adapter falls through to crawl/single-page (#234).
+  if (releases.length > 0) {
+    const MIN_CONTENT_LENGTH = 20;
+    const allEmpty = releases.every((r) => !r.content || r.content.trim().length < MIN_CONTENT_LENGTH);
+    if (allEmpty) {
+      logger.warn(
+        `Feed returned ${releases.length} items but all have empty/trivial content — marking as summary-only`,
+      );
+      metaUpdates.feedContentDepth = "summary-only";
+      await updateSourceMeta(source, metaUpdates);
+      return null;
+    }
   }
 
   if (etag) metaUpdates.feedEtag = etag;
