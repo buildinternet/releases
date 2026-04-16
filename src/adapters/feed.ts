@@ -20,7 +20,11 @@ export * from "@releases/adapters/feed";
 export async function updateSourceMeta(source: Source, meta: Partial<SourceMetadata>): Promise<void> {
   const existing = getSourceMeta(source);
   const merged = { ...existing, ...meta };
-  await updateSource(source, { metadata: JSON.stringify(merged) });
+  const serialized = JSON.stringify(merged);
+  await updateSource(source, { metadata: serialized });
+  // Keep the in-memory source in sync so subsequent reads within the same
+  // process see the updated metadata (fixes #238).
+  source.metadata = serialized;
 }
 
 // ── fetchViaFeed (DB-coupled orchestration) ─────────────────────────
