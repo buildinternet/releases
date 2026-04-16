@@ -87,7 +87,12 @@ releases list --query shadcn           # filter by name, slug, or URL
 releases list --has-feed               # sources with a discovered feed URL
 releases list --category ai            # filter by category
 releases list --json                   # machine-readable output
+releases list --json --compact         # lightweight JSON (id, slug, name, type, org, date)
+releases list --json --limit 20        # first 20 results as JSON
+releases list --json --limit 20 --page 2  # paginated JSON output
 ```
+
+Also available as `releases admin source list` for discoverability within admin workflows.
 
 Use the top-level `show` command to inspect any entity by ID or slug. It
 dispatches to the right entity based on the ID prefix (`rel_`, `src_`, `org_`,
@@ -329,7 +334,10 @@ releases admin discovery evaluate https://linear.app/changelog
 
 ### Edit sources
 
+The `edit` command accepts a source ID (`src_...`) or slug as its first argument. IDs are preferred — slugs can change, IDs are immutable.
+
 ```bash
+releases admin source edit src_abc123 --name "New Name"    # by ID (preferred)
 releases admin source edit next-js --url https://github.com/vercel/next.js/releases
 releases admin source edit linear --name "Linear Changelog" --feed-url https://linear.app/rss/changelog.json
 releases admin source edit my-blog --org acme               # set organization
@@ -341,7 +349,10 @@ releases admin source edit my-blog --fetch-method markdown # set recommended fet
 releases admin source edit my-blog --provider mintlify     # set detected provider
 releases admin source edit my-blog --primary               # mark as org's primary changelog
 releases admin source edit my-blog --no-primary            # unmark as primary
+releases admin source edit my-blog --slug new-slug --confirm-slug-change  # rename slug (breaks web links)
 ```
+
+Slug renames require `--confirm-slug-change` because they break existing web links and bookmarks at `releases.sh/<slug>`.
 
 ### Fetch releases
 

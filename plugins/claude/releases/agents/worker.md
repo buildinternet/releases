@@ -21,7 +21,7 @@ Run via Bash using `bun src/index.ts` (dev) or `released` (compiled binary). Use
 
 Key commands:
 - `releases admin source fetch <slug> [--max <n>]` — Fetch releases from a source
-- `releases admin source edit <slug> [--primary] [--priority <p>]` — Edit source config
+- `releases admin source edit <identifier> [--primary] [--priority <p>]` — Edit source config (accepts ID or slug)
 - `releases admin org edit <slug> [--category <c>]` — Edit org
 - `releases admin product add <name> --org <org>` — Create product
 - `releases admin content playbook <org>` — Read playbook

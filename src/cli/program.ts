@@ -136,6 +136,15 @@ export const program = new Command()
       return new Help().formatHelp(cmd, helper);
     },
   })
+  .configureOutput({
+    outputError: (str, write) => {
+      write(str);
+      // Append help hint to Commander error messages so users (and agents) know where to look
+      const hint = chalk.dim('\nRun "releases --help" for available commands, or "releases <command> --help" for details.');
+      write(hint + "\n");
+    },
+  })
+  .showSuggestionAfterError(true)
   .action(() => {
     console.log(printStyledHelp());
     process.exit(0);
@@ -154,6 +163,7 @@ registerTelemetryCommand(program);
 const admin = program
   .command("admin")
   .description("Operator workflows for onboarding, curation, ingestion, and local servers")
+  .showSuggestionAfterError(true)
   .hook("preAction", (_thisCommand, actionCommand) => {
     if (!isAdminMode() && actionCommand.name() !== "admin") {
       adminKeyError("admin");
@@ -165,7 +175,9 @@ const admin = program
 
 const sourceAdmin = admin
   .command("source")
-  .description("Manage sources and source ingestion");
+  .description("Manage sources and source ingestion")
+  .showSuggestionAfterError(true);
+registerListCommand(sourceAdmin);
 registerAddCommand(sourceAdmin);
 registerEditCommand(sourceAdmin);
 registerRemoveCommand(sourceAdmin);

@@ -19,11 +19,12 @@ export function registerEditCommand(program: Command) {
   program
     .command("edit")
     .description("Edit an existing changelog source")
-    .argument("<slug>", "Slug of the source to edit")
+    .argument("<identifier>", "Source ID (src_...) or slug")
     .option("--name <name>", "Update display name")
     .option("--url <url>", "Update source URL")
     .option("--type <type>", "Update source type (github, scrape, feed, agent)")
-    .option("--slug <newSlug>", "Update slug")
+    .option("--slug <newSlug>", "Update slug (requires --confirm-slug-change; breaks web links)")
+    .option("--confirm-slug-change", "Confirm slug rename (slug changes break existing web links)")
     .option("--org <org>", "Set organization (name or slug, creates if not found)")
     .option("--no-org", "Remove organization association")
     .option("--product <product>", "Set product (slug)")
@@ -45,6 +46,7 @@ export function registerEditCommand(program: Command) {
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
+  releases admin source edit src_abc123 --name "New Name"
   releases admin source edit my-source --name "New Name"
   releases admin source edit my-source --url https://example.com/new-changelog
   releases admin source edit my-source --org "Acme Corp"
@@ -55,9 +57,11 @@ Examples:
   releases admin source edit my-source --priority low
   releases admin source edit my-source --disable
   releases admin source edit my-source --enable
+  releases admin source edit my-source --slug new-slug --confirm-slug-change
   releases admin source edit my-source --no-org`)
-    .action(async (slug: string, opts: {
+    .action(async (identifier: string, opts: {
       name?: string; url?: string; type?: string; slug?: string;
+      confirmSlugChange?: boolean;
       org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
       parseInstructions?: string | boolean;
@@ -67,9 +71,9 @@ Examples:
       disable?: boolean;
       enable?: boolean;
     }) => {
-      const source = await findSource(slug);
+      const source = await findSource(identifier);
       if (!source) {
-        return sourceNotFound(slug);
+        return sourceNotFound(identifier);
       }
 
       if (opts.type && !(VALID_TYPES as readonly string[]).includes(opts.type)) {
@@ -80,6 +84,16 @@ Examples:
       const VALID_METHODS = ["feed", "markdown", "scrape", "crawl", "github"];
       if (opts.fetchMethod && !VALID_METHODS.includes(opts.fetchMethod)) {
         console.error(chalk.red(`Invalid fetch method "${opts.fetchMethod}". Must be one of: ${VALID_METHODS.join(", ")}`));
+        process.exit(1);
+      }
+
+      // Slug changes break web links — require explicit confirmation
+      if (opts.slug && !opts.confirmSlugChange) {
+        console.error(chalk.red("Slug changes break existing web links and bookmarks."));
+        console.error(chalk.yellow(`  Current: releases.sh/${source.slug}`));
+        console.error(chalk.yellow(`  New:     releases.sh/${opts.slug}`));
+        console.error("");
+        console.error(`Add ${chalk.bold("--confirm-slug-change")} to proceed.`);
         process.exit(1);
       }
 
@@ -194,7 +208,8 @@ Examples:
       }
 
       // Handle --parse-instructions / --no-parse-instructions
-      if (opts.parseInstructions === false) {
+      // Treat empty string the same as --no-parse-instructions
+      if (opts.parseInstructions === false || opts.parseInstructions === "") {
         metaUpdates.parseInstructions = undefined;
         changes.push("parse instructions removed");
       } else if (typeof opts.parseInstructions === "string") {
@@ -216,7 +231,13 @@ Examples:
       }
 
       if (Object.keys(updates).length > 0) {
-        await updateSource(source, updates);
+        const updated = await updateSource(source, updates);
+        // Verify slug actually changed — the API may reject or ignore it
+        if (opts.slug && updated.slug !== opts.slug) {
+          const idx = changes.findIndex((c) => c.startsWith("slug →"));
+          if (idx !== -1) changes.splice(idx, 1);
+          logger.warn(`Slug was not updated (API returned slug="${updated.slug}")`);
+        }
       }
 
       if (changes.length === 0) {
@@ -224,11 +245,11 @@ Examples:
         return;
       }
 
-      const displaySlug = opts.slug ?? slug;
+      const displaySlug = opts.slug ?? source.slug;
 
       if (opts.json) {
-        const updated = await findSource(displaySlug);
-        console.log(JSON.stringify(updated, null, 2));
+        const refreshed = await findSource(displaySlug);
+        console.log(JSON.stringify(refreshed, null, 2));
       } else {
         console.log(chalk.green(`Updated ${source.name} (${displaySlug}):`));
         for (const change of changes) {

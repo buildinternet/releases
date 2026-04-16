@@ -39,16 +39,22 @@ export function registerListCommand(program: Command) {
     .option("--query <text>", "Filter by name, slug, or URL (case-insensitive substring match)")
     .option("--category <category>", "Filter by organization or product category")
     .option("--include-disabled", "Include disabled sources in the list")
+    .option("--compact", "Return lightweight fields only (id, slug, name, type, org, latestVersion, lastFetchedAt)")
+    .option("--limit <n>", "Limit the number of results (applies to --json output)")
+    .option("--page <n>", "Page number for paginated results (applies with --limit)")
     .addHelpText("after", `
 Examples:
   releases list                       List all sources
   releases list claude-code           Show details for a single source
   releases list --json                List all sources as JSON
+  releases list --json --compact       Lightweight JSON (id, slug, name, type, org, version, date)
+  releases list --json --limit 20     First 20 sources as JSON
+  releases list --json --limit 20 --page 2  Page 2 of 20-per-page results
   releases list --has-feed            Sources with a discovered feed URL
   releases list --query shadcn        Filter sources by name, slug, or URL
   releases list --include-disabled        Include disabled sources
   releases list --has-feed --org sentry   Combine filters`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; query?: string; includeDisabled?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { json?: boolean; org?: string; product?: string; category?: string; hasFeed?: boolean; query?: string; includeDisabled?: boolean; compact?: boolean; limit?: string; page?: string }) => {
       // ── Single-source detail view ──
       if (slug) {
         const source = await findSource(slug);
@@ -103,11 +109,39 @@ Examples:
       }
 
       if (opts.json) {
-        const enriched = allSources.map((row) => ({
-          ...row,
-          method: getFetchMethod(row.type, row.metadata),
-        }));
-        console.log(JSON.stringify(enriched, null, 2));
+        let items: Record<string, unknown>[];
+        if (opts.compact) {
+          items = allSources.map((row) => ({
+            id: row.id,
+            slug: row.slug,
+            name: row.name,
+            type: row.type,
+            method: getFetchMethod(row.type, row.metadata),
+            orgName: row.orgName ?? null,
+            productName: row.productName ?? null,
+            releaseCount: row.releaseCount,
+            latestDate: row.latestDate ?? null,
+            lastFetchedAt: row.lastFetchedAt ?? null,
+          }));
+        } else {
+          items = allSources.map((row) => ({
+            ...row,
+            method: getFetchMethod(row.type, row.metadata),
+          }));
+        }
+        const limit = opts.limit ? parseInt(opts.limit, 10) : undefined;
+        if (limit && limit > 0) {
+          const page = opts.page ? parseInt(opts.page, 10) : 1;
+          const start = (page - 1) * limit;
+          const slice = items.slice(start, start + limit);
+          const totalPages = Math.ceil(items.length / limit);
+          console.log(JSON.stringify({
+            items: slice,
+            pagination: { page, pageSize: limit, totalPages, totalItems: items.length },
+          }, null, 2));
+        } else {
+          console.log(JSON.stringify(items, null, 2));
+        }
         return;
       }
 

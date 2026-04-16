@@ -899,7 +899,7 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
   const body = await c.req.json<{
-    name?: string; url?: string; type?: string; metadata?: string; orgId?: string | null;
+    name?: string; url?: string; type?: string; slug?: string; metadata?: string; orgId?: string | null;
     productId?: string | null;
     lastFetchedAt?: string | null; lastContentHash?: string | null;
     fetchPriority?: string; consecutiveNoChange?: number;
@@ -913,10 +913,18 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
+  const UPDATABLE_FIELDS = [
+    "name", "url", "type", "slug", "metadata", "orgId", "productId",
+    "lastFetchedAt", "lastContentHash", "fetchPriority", "consecutiveNoChange",
+    "consecutiveErrors", "nextFetchAfter", "isPrimary", "isHidden",
+    "changeDetectedAt", "lastPolledAt",
+  ] as const;
+
   const updates: Record<string, unknown> = {};
   if (body.name !== undefined) updates.name = body.name;
   if (body.url !== undefined) updates.url = body.url;
   if (body.type !== undefined) updates.type = body.type;
+  if (body.slug !== undefined) updates.slug = body.slug;
   if (body.metadata !== undefined) updates.metadata = body.metadata;
   if (body.orgId !== undefined) updates.orgId = body.orgId;
   if (body.productId !== undefined) updates.productId = body.productId;
@@ -930,6 +938,23 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.isHidden !== undefined) updates.isHidden = body.isHidden;
   if (body.changeDetectedAt !== undefined) updates.changeDetectedAt = body.changeDetectedAt;
   if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
+
+  if (Object.keys(updates).length === 0) {
+    const bodyKeys = Object.keys(body);
+    const unrecognized = bodyKeys.filter((k) => !(UPDATABLE_FIELDS as readonly string[]).includes(k));
+    const message = unrecognized.length > 0
+      ? `Unrecognized fields: ${unrecognized.join(", ")}. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`
+      : `No values to set. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`;
+    return c.json({ error: "bad_request", message }, 400);
+  }
+
+  // Check for slug uniqueness before attempting update
+  if (body.slug !== undefined && body.slug !== src.slug) {
+    const [existing] = await db.select().from(sources).where(eq(sources.slug, body.slug));
+    if (existing) {
+      return c.json({ error: "conflict", message: `Source with slug "${body.slug}" already exists` }, 409);
+    }
+  }
 
   const [updated] = await db.update(sources).set(updates).where(eq(sources.id, src.id)).returning();
   if (src.orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, src.orgId));
