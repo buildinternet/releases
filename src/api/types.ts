@@ -278,6 +278,8 @@ export interface SearchReleaseHit {
   /** Source type (github, scrape, feed, agent) — drives the byline icon. */
   sourceType?: string;
   orgSlug: string | null;
+  /** Owning organization's display name — byline disambiguation. */
+  orgName?: string | null;
   version: string | null;
   title: string;
   summary: string;
@@ -307,6 +309,8 @@ export interface SearchChunkHit {
   sourceSlug: string;
   sourceName: string;
   orgSlug: string | null;
+  /** Owning organization's display name — byline disambiguation. */
+  orgName?: string | null;
   filePath: string;
   offset: number;
   length: number;

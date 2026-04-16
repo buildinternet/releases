@@ -172,6 +172,7 @@ function ResultCard({
   sourceName,
   sourceSlug,
   orgSlug,
+  orgName,
   sourceType,
   children,
   thumbnail,
@@ -184,6 +185,7 @@ function ResultCard({
   sourceName: string;
   sourceSlug: string;
   orgSlug: string | null;
+  orgName?: string | null;
   sourceType?: string;
   children: React.ReactNode;
   thumbnail?: { src: string; alt: string } | null;
@@ -225,6 +227,22 @@ function ResultCard({
           </Link>
         ) : (
           <span className="text-stone-500 dark:text-stone-400 font-medium">{sourceName}</span>
+        )}
+        {/* Org name disambiguates sources with generic names like "Client SDK
+            JS" — shown only when we have both an orgName and an orgSlug, and
+            hidden when the source name already starts with the org name to
+            avoid repetition like "by Slack" on "@slack/web-api". */}
+        {orgName && orgSlug && !sourceName.toLowerCase().startsWith(orgName.toLowerCase()) && (
+          <>
+            <span className="text-stone-300 dark:text-stone-700">·</span>
+            <span>by</span>
+            <Link
+              href={`/${orgSlug}`}
+              className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300"
+            >
+              {orgName}
+            </Link>
+          </>
         )}
         {date && (
           <>
@@ -274,6 +292,7 @@ function ReleaseResultCard({ hit }: { hit: SearchReleaseHit }) {
       sourceName={hit.sourceName}
       sourceSlug={hit.sourceSlug}
       orgSlug={hit.orgSlug}
+      orgName={hit.orgName}
       sourceType={hit.sourceType}
       thumbnail={thumbnail}
     >
@@ -296,6 +315,7 @@ function ChunkResultCard({ hit }: { hit: SearchChunkHit }) {
       sourceName={hit.sourceName}
       sourceSlug={hit.sourceSlug}
       orgSlug={hit.orgSlug}
+      orgName={hit.orgName}
       sourceType="github"
     >
       <div className={resultMarkdownClasses}>

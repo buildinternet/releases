@@ -58,6 +58,7 @@ interface RawLocalReleaseRow {
   sourceName: string;
   sourceType: string;
   orgSlug: string | null;
+  orgName: string | null;
   version: string | null;
   title: string;
   summary: string;
@@ -85,6 +86,7 @@ function hydrateLocalRelease(row: RawLocalReleaseRow): SearchReleaseHit {
     sourceName: row.sourceName,
     sourceType: row.sourceType,
     orgSlug: row.orgSlug,
+    orgName: row.orgName,
     version: row.version,
     title: row.title,
     summary: row.summary,
@@ -136,7 +138,7 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
   try {
     rawReleases = db.all(sql`
       SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
-             o.slug as orgSlug,
+             o.slug as orgSlug, o.name as orgName,
              r.version, r.title,
              COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
              r.content as content,
