@@ -14,6 +14,7 @@ const publicSections: Section[] = [
     items: [
       { label: "Overview", href: "/docs" },
       { label: "Installation", href: "/docs/installation" },
+      { label: "Examples", href: "/docs/examples" },
     ],
   },
   {
