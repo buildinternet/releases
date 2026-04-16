@@ -77,7 +77,7 @@ jobs:
         run: |
           VERSION=$(jq -r .version npm/releases/package.json)
           gh release create "v${VERSION}" \
-            --repo buildinternet/releases \
+            --repo buildinternet/releases-cli \
             --title "v${VERSION}" \
             --notes "CLI v${VERSION}. Installed via \`brew install buildinternet/tap/releases\` or \`npm i -g @buildinternet/releases\`." \
             dist/release/releases-darwin-arm64.gz \
@@ -112,20 +112,20 @@ jobs:
 
             on_macos do
               if Hardware::CPU.arm?
-                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-darwin-arm64.gz"
+                url "https://github.com/buildinternet/releases-cli/releases/download/v#{version}/releases-darwin-arm64.gz"
                 sha256 "__DARWIN_ARM64__"
               else
-                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-darwin-x64.gz"
+                url "https://github.com/buildinternet/releases-cli/releases/download/v#{version}/releases-darwin-x64.gz"
                 sha256 "__DARWIN_X64__"
               end
             end
 
             on_linux do
               if Hardware::CPU.arm?
-                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-linux-arm64.gz"
+                url "https://github.com/buildinternet/releases-cli/releases/download/v#{version}/releases-linux-arm64.gz"
                 sha256 "__LINUX_ARM64__"
               else
-                url "https://github.com/buildinternet/releases/releases/download/v#{version}/releases-linux-x64.gz"
+                url "https://github.com/buildinternet/releases-cli/releases/download/v#{version}/releases-linux-x64.gz"
                 sha256 "__LINUX_X64__"
               end
             end
