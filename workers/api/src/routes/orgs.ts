@@ -5,7 +5,7 @@ import { organizations, orgAccounts, sources, releases, products, tags, orgTags,
 import { daysAgoIso } from "@releases/core/dates";
 import { isValidCategory } from "@releases/core/categories";
 import { toSlug } from "@releases/core/slug";
-import { isConflictError, computeAvgPerWeek, getOrCreateTagD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
+import { isConflictError, computeAvgPerWeek, getOrCreateTagsD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import { assemblePlaybook } from "@releases/ai/playbook.js";
@@ -76,7 +76,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   const cutoff = daysAgoIso(30);
   const cutoff90d = daysAgoIso(90);
 
-  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgePageRows] = await Promise.all([
+  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgePageRows, metricsRow] = await Promise.all([
     db
       .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts)
@@ -128,6 +128,20 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .select()
       .from(knowledgePages)
       .where(and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id))),
+
+    // Recent-release metrics — scoped via subquery so this joins the parallel
+    // wave instead of blocking on orgSources.
+    db
+      .select({
+        recent: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
+        recent90d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff90d} THEN 1 END)`,
+        oldest: min(releases.publishedAt),
+      })
+      .from(releases)
+      .where(and(
+        sql`${releases.sourceId} IN (SELECT id FROM sources WHERE org_id = ${org.id})`,
+        sql`${releases.publishedAt} IS NOT NULL`,
+      )),
   ]);
 
   const sourcesWithStats = orgSources.map((row) => ({
@@ -147,27 +161,10 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     productName: row.product_name ?? null,
   }));
 
-  const orgSourceIds = orgSources.map((s) => s.id);
-
-  let releasesLast30Days = 0;
-  let avgReleasesPerWeek = 0;
-  let oldestReleaseDate: string | null = null;
-
-  if (orgSourceIds.length > 0) {
-    const [metrics] = await db
-      .select({
-        total: count(),
-        recent: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
-        recent90d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff90d} THEN 1 END)`,
-        oldest: min(releases.publishedAt),
-      })
-      .from(releases)
-      .where(and(inArray(releases.sourceId, orgSourceIds), sql`${releases.publishedAt} IS NOT NULL`));
-
-    releasesLast30Days = metrics.recent;
-    avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
-    oldestReleaseDate = metrics.oldest;
-  }
+  const metrics = metricsRow[0];
+  const releasesLast30Days = metrics.recent;
+  const avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
+  const oldestReleaseDate = metrics.oldest;
 
   const totalReleases = totalReleaseRow[0];
   const latestFetch = latestFetchRow[0];
@@ -237,9 +234,13 @@ orgRoutes.post("/orgs", async (c) => {
       .returning();
 
     if (body.tags && body.tags.length > 0) {
-      for (const tagName of body.tags) {
-        const tag = await getOrCreateTagD1(db, tagName);
-        await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+      const tagRows = await getOrCreateTagsD1(db, body.tags);
+      if (tagRows.length > 0) {
+        const now = new Date().toISOString();
+        await db
+          .insert(orgTags)
+          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+          .onConflictDoNothing();
       }
     }
 
@@ -276,9 +277,15 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
 
   if (body.tags !== undefined) {
     await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
-    for (const tagName of body.tags) {
-      const tag = await getOrCreateTagD1(db, tagName);
-      await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+    if (body.tags.length > 0) {
+      const tagRows = await getOrCreateTagsD1(db, body.tags);
+      if (tagRows.length > 0) {
+        const now = new Date().toISOString();
+        await db
+          .insert(orgTags)
+          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+          .onConflictDoNothing();
+      }
     }
   }
 
@@ -384,9 +391,15 @@ orgRoutes.put("/orgs/:slug/tags", async (c) => {
   const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  for (const tagName of body.tags) {
-    const tag = await getOrCreateTagD1(db, tagName);
-    await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id, createdAt: new Date().toISOString() }).onConflictDoNothing();
+  if (body.tags.length > 0) {
+    const tagRows = await getOrCreateTagsD1(db, body.tags);
+    if (tagRows.length > 0) {
+      const now = new Date().toISOString();
+      await db
+        .insert(orgTags)
+        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+        .onConflictDoNothing();
+    }
   }
   return c.json({ ok: true });
 });

@@ -26,17 +26,39 @@ export async function getOrgSourcesWithStats(
   db: D1Db,
   orgId: string,
 ): Promise<SourceWithStats[]> {
+  // Version-by-X columns pack `sort_key || '|' || COALESCE(version, '')` so
+  // MAX() surfaces the version of the latest-sorted row; we then split on '|'
+  // and NULLIF back to null. Empty-string version becomes null, which matches
+  // the old `ORDER BY ... LIMIT 1` behavior when the top row had no version.
   return db.all<SourceWithStats>(sql`
     SELECT
       s.id, s.slug, s.name, s.type, s.url, s.is_primary, s.is_hidden, s.fetch_priority,
       p.slug AS product_slug, p.name AS product_name,
-      (SELECT COUNT(*) FROM releases r WHERE r.source_id = s.id AND (r.suppressed IS NULL OR r.suppressed = 0)) AS release_count,
-      (SELECT r2.version FROM releases r2 WHERE r2.source_id = s.id AND r2.published_at IS NOT NULL AND (r2.suppressed IS NULL OR r2.suppressed = 0) ORDER BY r2.published_at DESC LIMIT 1) AS latest_version_by_date,
-      (SELECT r3.published_at FROM releases r3 WHERE r3.source_id = s.id AND r3.published_at IS NOT NULL AND (r3.suppressed IS NULL OR r3.suppressed = 0) ORDER BY r3.published_at DESC LIMIT 1) AS latest_date,
-      (SELECT r4.version FROM releases r4 WHERE r4.source_id = s.id AND (r4.suppressed IS NULL OR r4.suppressed = 0) ORDER BY r4.fetched_at DESC LIMIT 1) AS latest_version_by_fetch,
-      (SELECT MAX(r5.fetched_at) FROM releases r5 WHERE r5.source_id = s.id AND (r5.suppressed IS NULL OR r5.suppressed = 0)) AS latest_added_at
+      COALESCE(stats.release_count, 0) AS release_count,
+      stats.latest_date AS latest_date,
+      stats.latest_added_at AS latest_added_at,
+      CASE WHEN stats.pack_by_date IS NOT NULL
+        THEN NULLIF(SUBSTR(stats.pack_by_date, INSTR(stats.pack_by_date, '|') + 1), '')
+      END AS latest_version_by_date,
+      CASE WHEN stats.pack_by_fetch IS NOT NULL
+        THEN NULLIF(SUBSTR(stats.pack_by_fetch, INSTR(stats.pack_by_fetch, '|') + 1), '')
+      END AS latest_version_by_fetch
     FROM sources s
     LEFT JOIN products p ON p.id = s.product_id
+    LEFT JOIN (
+      SELECT
+        r.source_id,
+        COUNT(*) AS release_count,
+        MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS latest_date,
+        MAX(r.fetched_at) AS latest_added_at,
+        MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END) AS pack_by_date,
+        MAX(CASE WHEN r.fetched_at IS NOT NULL THEN r.fetched_at || '|' || COALESCE(r.version, '') END) AS pack_by_fetch
+      FROM releases r
+      INNER JOIN sources s2 ON s2.id = r.source_id
+      WHERE s2.org_id = ${orgId}
+        AND (r.suppressed IS NULL OR r.suppressed = 0)
+      GROUP BY r.source_id
+    ) stats ON stats.source_id = s.id
     WHERE s.org_id = ${orgId}
     ORDER BY s.name
   `);

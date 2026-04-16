@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import { tags, sources, organizations, products } from "@releases/core/schema";
 import { toSlug } from "@releases/core/slug";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/lib/media-url.js";
@@ -51,6 +51,29 @@ export async function getOrCreateTagD1(
   if (existing) return existing;
   const [created] = await db.insert(tags).values({ name, slug, createdAt: new Date().toISOString() }).returning();
   return created;
+}
+
+/**
+ * Get-or-create a batch of tags by name in a constant number of roundtrips.
+ * Returns resolved tag rows for the given names (deduped by slug).
+ */
+export async function getOrCreateTagsD1(
+  db: ReturnType<typeof import("./db.js").createDb>,
+  names: string[],
+): Promise<{ id: string; name: string; slug: string }[]> {
+  if (names.length === 0) return [];
+  const bySlug = new Map<string, string>();
+  for (const name of names) {
+    const slug = toSlug(name);
+    if (!bySlug.has(slug)) bySlug.set(slug, name);
+  }
+  const now = new Date().toISOString();
+  const rows = Array.from(bySlug.entries()).map(([slug, name]) => ({ name, slug, createdAt: now }));
+  await db.insert(tags).values(rows).onConflictDoNothing();
+  return db
+    .select({ id: tags.id, name: tags.name, slug: tags.slug })
+    .from(tags)
+    .where(inArray(tags.slug, Array.from(bySlug.keys())));
 }
 
 const ROLLING_WINDOW_DAYS = 90;
