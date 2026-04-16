@@ -35,16 +35,16 @@ Examples:
 
       if (!result) releaseNotFound(id);
 
-      const { release: rel, sourceName, sourceSlug } = result;
+      const rel = result;
 
       if (opts.json) {
-        console.log(JSON.stringify({ ...rel, sourceName, sourceSlug }, null, 2));
+        console.log(JSON.stringify(rel, null, 2));
         return;
       }
 
       console.log(chalk.bold(stripAnsi(rel.title)));
       if (rel.version) console.log(`  Version:   ${stripAnsi(rel.version)}`);
-      console.log(`  Source:    ${sourceName ? stripAnsi(sourceName) : chalk.dim("—")} (${sourceSlug ?? chalk.dim("—")})`);
+      console.log(`  Source:    ${rel.sourceName ? stripAnsi(rel.sourceName) : chalk.dim("—")} (${rel.sourceSlug ?? chalk.dim("—")})`);
       if (rel.publishedAt) console.log(`  Published: ${rel.publishedAt}`);
       console.log(`  Fetched:   ${rel.fetchedAt}`);
       if (rel.suppressed) console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`);
@@ -110,10 +110,10 @@ Examples:
           const existing = await getRelease(id);
           if (!existing) releaseNotFound(id);
           if (opts.json) {
-            console.log(JSON.stringify({ wouldDelete: 1, releases: [{ id, title: existing.release.title }] }, null, 2));
+            console.log(JSON.stringify({ wouldDelete: 1, releases: [{ id, title: existing.title }] }, null, 2));
           } else {
             console.log(chalk.yellow(`[dry-run] Would delete 1 release(s)`));
-            console.log(`  ${id}  ${stripAnsi(existing.release.title)}`);
+            console.log(`  ${id}  ${stripAnsi(existing.title)}`);
           }
           return;
         }

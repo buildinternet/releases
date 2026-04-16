@@ -57,16 +57,16 @@ async function showRelease(id: string, opts: { json?: boolean }) {
     console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. rel_abc123…).`));
     process.exit(1);
   }
-  const { release: rel, sourceName, sourceSlug } = result;
+  const rel = result;
   if (opts.json) {
-    console.log(JSON.stringify({ ...rel, sourceName, sourceSlug }, null, 2));
+    console.log(JSON.stringify(rel, null, 2));
     return;
   }
   console.log(chalk.dim("Release"));
   console.log(chalk.bold(stripAnsi(rel.title)));
   console.log(`  ID:        ${rel.id}`);
   if (rel.version) console.log(`  Version:   ${stripAnsi(rel.version)}`);
-  console.log(`  Source:    ${sourceName ? stripAnsi(sourceName) : chalk.dim("—")} (${sourceSlug ?? chalk.dim("—")})`);
+  console.log(`  Source:    ${rel.sourceName ? stripAnsi(rel.sourceName) : chalk.dim("—")} (${rel.sourceSlug ?? chalk.dim("—")})`);
   if (rel.publishedAt) console.log(`  Published: ${rel.publishedAt}`);
   if (rel.url) console.log(`  URL:       ${rel.url}`);
   if (rel.suppressed) {
