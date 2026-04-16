@@ -22,31 +22,41 @@ export function TerminalCompare({ panes }: { panes: TerminalPane[] }) {
 
   return (
     <div className="not-prose my-8">
-      <div className="flex border-b border-stone-200 dark:border-stone-700">
+      <div className="flex items-center gap-2 mb-3">
         {panes.map((pane, i) => (
           <button
             key={pane.label}
             onClick={() => setActive(i)}
-            className={`px-4 py-2 text-[13px] font-mono font-medium transition-colors ${
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-mono font-medium border transition-colors ${
               active === i
-                ? "text-stone-900 dark:text-stone-100 border-b-2 border-stone-900 dark:border-stone-100 -mb-px"
-                : "text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
+                ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 border-stone-300 dark:border-stone-600"
+                : "bg-transparent text-stone-400 dark:text-stone-500 border-stone-200 dark:border-stone-700 hover:text-stone-600 dark:hover:text-stone-300 hover:border-stone-300 dark:hover:border-stone-600"
             }`}
           >
             {pane.label}
-            {pane.badge && (
-              <span className="ml-2 text-[11px] text-stone-400 dark:text-stone-500">
-                {pane.badge}
-              </span>
-            )}
           </button>
         ))}
+        {panes[active].badge && (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[11px] font-mono text-stone-400 dark:text-stone-500 border border-stone-200 dark:border-stone-700">
+            {panes[active].badge}
+          </span>
+        )}
       </div>
-      <div className="group relative rounded-b-lg bg-stone-950 border border-t-0 border-stone-800 max-h-[400px] flex flex-col overflow-hidden">
-        <div className="flex items-center gap-1.5 px-3.5 py-2.5 border-b border-stone-800 shrink-0">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+      <div className="group relative rounded-lg bg-stone-950 border border-stone-800 max-h-[400px] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-3.5 py-2.5 border-b border-stone-800 shrink-0">
+          <div className="flex items-center gap-1.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
+            <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+          </div>
+          <button
+            type="button"
+            onClick={() => copy(fullText)}
+            aria-label={copied ? "Copied" : "Copy to clipboard"}
+            className="p-1 rounded-md text-stone-500 opacity-0 group-hover:opacity-100 hover:text-stone-300 hover:bg-stone-800 transition-opacity"
+          >
+            <CopyIcon copied={copied} size={14} />
+          </button>
         </div>
         <div className="p-4 overflow-auto min-h-0">
           <pre className="text-[13px] leading-relaxed font-mono">
@@ -60,14 +70,6 @@ export function TerminalCompare({ panes }: { panes: TerminalPane[] }) {
             <span className="text-stone-400">{current.output}</span>
           </pre>
         </div>
-        <button
-          type="button"
-          onClick={() => copy(fullText)}
-          aria-label={copied ? "Copied" : "Copy to clipboard"}
-          className="absolute top-10 right-2 p-1.5 rounded-md text-stone-400 dark:text-stone-500 opacity-0 group-hover:opacity-100 hover:text-stone-300 hover:bg-stone-800 transition-opacity"
-        >
-          <CopyIcon copied={copied} size={14} />
-        </button>
       </div>
     </div>
   );
