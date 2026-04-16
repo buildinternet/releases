@@ -96,6 +96,56 @@ export interface SourceListItem {
   productSlug?: string | null;
 }
 
+/**
+ * Canonical shape returned by GET /v1/sources (list) and used by both
+ * local-mode queries and the remote API client. Superset of SourceListItem
+ * with required fields (id, orgName, orgSlug) that the CLI `list` command needs.
+ */
+export interface SourceWithOrg {
+  id: string;
+  name: string;
+  slug: string;
+  type: string;
+  url: string;
+  orgName: string | null;
+  orgSlug: string | null;
+  productName: string | null;
+  productSlug: string | null;
+  isPrimary: boolean;
+  isHidden: boolean | null;
+  metadata: string | null;
+  releaseCount: number;
+  latestVersion: string | null;
+  latestDate: string | null;
+  lastFetchedAt: string | null;
+  fetchPriority: string | null;
+  changeDetectedAt: string | null;
+  consecutiveNoChange: number | null;
+  consecutiveErrors: number | null;
+  nextFetchAfter: string | null;
+}
+
+/** Fields accepted by PATCH /v1/sources/:slug. */
+export interface SourcePatchInput {
+  name?: string;
+  url?: string;
+  type?: string;
+  slug?: string;
+  metadata?: string;
+  orgId?: string | null;
+  productId?: string | null;
+  lastFetchedAt?: string | null;
+  lastContentHash?: string | null;
+  fetchPriority?: string;
+  consecutiveNoChange?: number;
+  consecutiveErrors?: number;
+  nextFetchAfter?: string | null;
+  isPrimary?: boolean;
+  isHidden?: boolean;
+  changeDetectedAt?: string | null;
+  lastPolledAt?: string | null;
+}
+
 /** Lightweight summary of a changelog file — used for the file index. */
 export interface ChangelogFileSummary {
   path: string;

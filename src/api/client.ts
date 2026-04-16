@@ -6,7 +6,8 @@ import type {
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
 } from "@releases/core/schema";
-import type { SourceListItem, Stats, UnifiedSearchResponse, SourceChangelogResponse } from "./types.js";
+import type { SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse } from "./types.js";
+export type { SourceWithOrg, SourcePatchInput } from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${getApiUrl()}${path}`;
@@ -219,28 +220,6 @@ export async function unifiedSearch(
 
 // ── List sources with org ──
 
-export interface SourceWithOrg {
-  id: string;
-  name: string;
-  slug: string;
-  type: string;
-  url: string;
-  lastFetchedAt: string | null;
-  fetchPriority: string | null;
-  changeDetectedAt: string | null;
-  latestDate: string | null;
-  releaseCount: number;
-  consecutiveNoChange: number | null;
-  consecutiveErrors: number | null;
-  nextFetchAfter: string | null;
-  orgName: string | null;
-  productName: string | null;
-  productSlug: string | null;
-  metadata: string | null;
-  isPrimary: boolean;
-  isHidden?: boolean;
-}
-
 export async function listSourcesWithOrg(opts?: {
   orgSlug?: string;
   productSlug?: string;
@@ -258,30 +237,7 @@ export async function listSourcesWithOrg(opts?: {
   if (opts?.category) params.set("category", opts.category);
   const qs = params.toString();
 
-  // The API GET /v1/sources returns enriched source data — map to the shape the CLI needs
-  const rows = await apiFetch<Array<SourceListItem & { isHidden?: boolean }>>(`/v1/sources${qs ? `?${qs}` : ""}`);
-
-  return rows.map((r) => ({
-    id: "",
-    name: r.name,
-    slug: r.slug,
-    type: r.type,
-    url: r.url ?? "",
-    lastFetchedAt: r.lastFetchedAt ?? null,
-    fetchPriority: r.fetchPriority ?? null,
-    changeDetectedAt: r.changeDetectedAt ?? null,
-    latestDate: r.latestDate ?? null,
-    releaseCount: r.releaseCount ?? 0,
-    consecutiveNoChange: r.consecutiveNoChange ?? null,
-    consecutiveErrors: r.consecutiveErrors ?? null,
-    nextFetchAfter: r.nextFetchAfter ?? null,
-    orgName: r.orgSlug ?? null,
-    productName: r.productName ?? null,
-    productSlug: r.productSlug ?? null,
-    metadata: r.metadata ?? null,
-    isPrimary: r.isPrimary ?? false,
-    isHidden: r.isHidden ?? false,
-  }));
+  return apiFetch<SourceWithOrg[]>(`/v1/sources${qs ? `?${qs}` : ""}`);
 }
 
 // ── Stats ──

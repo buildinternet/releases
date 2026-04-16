@@ -6,6 +6,7 @@ import { RELEASE_URL_UPSERT } from "@releases/core/release-upsert";
 import { daysAgoIso } from "@releases/core/dates";
 import { toSlug } from "@releases/core/slug";
 import { buildChangelogResponse, selectChangelogFile } from "@releases/core/changelog-slice";
+import type { SourceWithOrg, SourcePatchInput } from "@releases/api/types.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { authMiddleware } from "../middleware/auth.js";
@@ -101,13 +102,16 @@ sourceRoutes.get("/sources", async (c) => {
 
   const rows = await getSourcesWithStats(db, whereClause);
 
-  const result = rows.map((src) => ({
+  const result: SourceWithOrg[] = rows.map((src) => ({
     id: src.id,
     slug: src.slug,
     name: src.name,
     type: src.type,
     url: src.url,
     orgSlug: src.org_slug,
+    orgName: src.org_name,
+    productName: src.product_name,
+    productSlug: src.product_slug,
     isPrimary: src.is_primary ? true : false,
     isHidden: src.is_hidden ? true : false,
     metadata: src.metadata ?? null,
@@ -898,17 +902,7 @@ sourceRoutes.post("/sources", async (c) => {
 sourceRoutes.patch("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{
-    name?: string; url?: string; type?: string; slug?: string; metadata?: string; orgId?: string | null;
-    productId?: string | null;
-    lastFetchedAt?: string | null; lastContentHash?: string | null;
-    fetchPriority?: string; consecutiveNoChange?: number;
-    consecutiveErrors?: number; nextFetchAfter?: string | null;
-    isPrimary?: boolean;
-    isHidden?: boolean;
-    changeDetectedAt?: string | null;
-    lastPolledAt?: string | null;
-  }>();
+  const body = await c.req.json<SourcePatchInput>();
 
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);

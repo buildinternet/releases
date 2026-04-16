@@ -19,6 +19,9 @@ export type SourceListRow = {
   consecutive_errors: number | null;
   next_fetch_after: string | null;
   org_slug: string | null;
+  org_name: string | null;
+  product_slug: string | null;
+  product_name: string | null;
   release_count: number;
   latest_version: string | null;
   latest_date: string | null;
@@ -32,11 +35,15 @@ export async function getSourcesWithStats(
     SELECT
       sources.*,
       organizations.slug AS org_slug,
+      organizations.name AS org_name,
+      products.slug AS product_slug,
+      products.name AS product_name,
       COALESCE(rs.release_count, 0) AS release_count,
       rs.latest_version AS latest_version,
       rs.latest_date AS latest_date
     FROM sources
     LEFT JOIN organizations ON organizations.id = sources.org_id
+    LEFT JOIN products ON products.id = sources.product_id
     LEFT JOIN (
       SELECT
         r.source_id,
