@@ -15,6 +15,7 @@ import type {
   ProductDetail,
   SourceChangelogResponse,
   ChangelogFileSummary,
+  SitemapPayload,
 } from "@shared/api/types";
 
 export type {
@@ -47,6 +48,7 @@ export type {
   ProductDetail,
   SourceChangelogResponse,
   ChangelogFileSummary,
+  SitemapPayload,
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
@@ -96,6 +98,7 @@ async function fetchApi<T>(path: string, init?: { cache?: RequestCache; next?: {
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
   orgs: () => fetchApi<OrgListItem[]>("/v1/orgs"),
+  sitemap: () => fetchApi<SitemapPayload>("/v1/sitemap"),
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
   sources: (independent?: boolean) => fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),
   sourceDetail: (slug: string, page = 1, pageSize = 20) =>

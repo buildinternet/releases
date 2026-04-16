@@ -1,6 +1,6 @@
 import { logger } from "@releases/lib/logger";
 import { handleStats } from "./routes/stats.js";
-import { handleOrgs, handleOrgDetail } from "./routes/orgs.js";
+import { handleOrgs, handleOrgDetail, handleSitemap } from "./routes/orgs.js";
 import { handleSources, handleSourceDetail, handleSourceActivity, handleSourceChangelog, CHANGELOG_PATH_NOT_FOUND } from "./routes/sources.js";
 import { handleSearch } from "./routes/search.js";
 
@@ -46,6 +46,11 @@ export function startApiServer(port: number) {
         // GET /v1/orgs
         if (pathname === "/v1/orgs") {
           return jsonResponse(handleOrgs());
+        }
+
+        // GET /v1/sitemap
+        if (pathname === "/v1/sitemap") {
+          return jsonResponse(handleSitemap());
         }
 
         // GET /v1/orgs/:slug

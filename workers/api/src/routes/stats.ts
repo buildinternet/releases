@@ -8,9 +8,11 @@ export const statsRoutes = new Hono<Env>();
 
 statsRoutes.get("/stats", async (c) => {
   const db = createDb(c.env.DB);
-  const [orgCount] = await db.select({ n: count() }).from(organizations);
-  const [sourceCount] = await db.select({ n: count() }).from(sources);
-  const [releaseCount] = await db.select({ n: count() }).from(releases);
-  const [productCount] = await db.select({ n: count() }).from(products);
+  const [[orgCount], [sourceCount], [releaseCount], [productCount]] = await Promise.all([
+    db.select({ n: count() }).from(organizations),
+    db.select({ n: count() }).from(sources),
+    db.select({ n: count() }).from(releases),
+    db.select({ n: count() }).from(products),
+  ]);
   return c.json({ orgs: orgCount.n, sources: sourceCount.n, releases: releaseCount.n, products: productCount.n });
 });

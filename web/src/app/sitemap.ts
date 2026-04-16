@@ -2,6 +2,10 @@ import type { MetadataRoute } from "next";
 import { api, ApiSetupError } from "@/lib/api";
 import { adminDocs, statusDashboard } from "@/flags";
 
+// Render on-demand (not during `next build`) so a cold worker / slow D1 can't
+// time out the Vercel export. The API response already carries Cache-Control,
+// so crawlers hitting this route repeatedly still land on a CDN-cached body.
+export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
 const BASE_URL = process.env.RELEASED_BASE_URL?.replace(/\/$/, "") ?? "https://releases.sh";
@@ -55,43 +59,28 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   let dynamicEntries: MetadataRoute.Sitemap = [];
 
   try {
-    const orgs = await api.orgs();
+    const data = await api.sitemap();
 
-    const orgEntries: MetadataRoute.Sitemap = orgs.map((org) => ({
+    const orgEntries: MetadataRoute.Sitemap = data.orgs.map((org) => ({
       url: `${BASE_URL}/${org.slug}`,
       lastModified: org.lastActivity ? new Date(org.lastActivity) : now,
       changeFrequency: "daily",
       priority: 0.8,
     }));
 
-    const detailResults = await Promise.allSettled(orgs.map((org) => api.orgDetail(org.slug)));
+    const productEntries: MetadataRoute.Sitemap = data.products.map((p) => ({
+      url: `${BASE_URL}/${p.orgSlug}/product/${p.slug}`,
+      lastModified: now,
+      changeFrequency: "daily",
+      priority: 0.7,
+    }));
 
-    const sourceEntries: MetadataRoute.Sitemap = [];
-    const productEntries: MetadataRoute.Sitemap = [];
-
-    for (const result of detailResults) {
-      if (result.status !== "fulfilled") continue;
-      const detail = result.value;
-
-      for (const source of detail.sources) {
-        if (source.isHidden) continue;
-        sourceEntries.push({
-          url: `${BASE_URL}/${detail.slug}/${source.slug}`,
-          lastModified: source.latestDate ? new Date(source.latestDate) : now,
-          changeFrequency: "daily",
-          priority: 0.7,
-        });
-      }
-
-      for (const product of detail.products ?? []) {
-        productEntries.push({
-          url: `${BASE_URL}/${detail.slug}/product/${product.slug}`,
-          lastModified: now,
-          changeFrequency: "daily",
-          priority: 0.7,
-        });
-      }
-    }
+    const sourceEntries: MetadataRoute.Sitemap = data.sources.map((s) => ({
+      url: `${BASE_URL}/${s.orgSlug}/${s.slug}`,
+      lastModified: s.latestDate ? new Date(s.latestDate) : now,
+      changeFrequency: "daily",
+      priority: 0.7,
+    }));
 
     dynamicEntries = [...orgEntries, ...productEntries, ...sourceEntries];
   } catch (err) {
