@@ -23,6 +23,14 @@ export interface Stats {
   products: number;
 }
 
+// ── Sitemap (bulk URL emission) ──
+
+export interface SitemapPayload {
+  orgs: Array<{ slug: string; lastActivity: string | null }>;
+  sources: Array<{ orgSlug: string; slug: string; latestDate: string | null }>;
+  products: Array<{ orgSlug: string; slug: string }>;
+}
+
 // ── Organizations ──
 
 export interface OrgListItem {

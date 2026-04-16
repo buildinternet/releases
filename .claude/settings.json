@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx tsc:*)",
+      "Bash(bun test)",
+      "Bash(releases list:*)",
+      "Bash(releases latest:*)",
+      "Bash(releases show:*)",
+      "Bash(releases admin source list:*)",
+      "mcp__claude-in-chrome__read_page",
+      "mcp__claude-in-chrome__tabs_context_mcp",
+      "mcp__claude-in-chrome__find"
+    ]
+  }
+}

@@ -688,22 +688,49 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
-  let org: { slug: string; name: string } | null = null;
-  if (src.orgId) {
-    const [orgRow] = await db
-      .select({ slug: organizations.slug, name: organizations.name })
-      .from(organizations)
-      .where(eq(organizations.id, src.orgId));
-    org = orgRow ?? null;
-  }
-
-  const [relCount] = await db
-    .select({ n: count() })
-    .from(releases)
-    .where(and(eq(releases.sourceId, src.id), eq(releases.suppressed, false)));
-
   const offset = (page - 1) * pageSize;
-  const releaseRows = await getSourceReleasesPaginated(db, src.id, pageSize, offset);
+  const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
+  const cutoff = daysAgoIso(30);
+  const cutoff90d = daysAgoIso(90);
+  const dateCol = sql`COALESCE(${releases.publishedAt}, ${releases.fetchedAt})`;
+
+  // Fire all independent reads in parallel — one D1 roundtrip wave instead of ~7 sequential ones.
+  const orgQuery = src.orgId
+    ? db.select({ slug: organizations.slug, name: organizations.name })
+        .from(organizations)
+        .where(eq(organizations.id, src.orgId))
+    : Promise.resolve([]);
+
+  // On page > 1 we can't derive latestVersion/latestDate from the paginated rows, so issue it in the same wave.
+  const latestByDateQuery = page === 1
+    ? Promise.resolve([])
+    : db.select({ version: releases.version, publishedAt: releases.publishedAt })
+        .from(releases)
+        .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`))
+        .orderBy(desc(releases.publishedAt))
+        .limit(1);
+
+  const [releaseRows, orgRows, metricsRows, earliestRows, summaryRows, changelogExistsRows, latestByDateRows] = await Promise.all([
+    getSourceReleasesPaginated(db, src.id, pageSize, offset),
+    orgQuery,
+    db.select({
+      total: count(),
+      oldest: min(dateCol),
+      recent: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff} THEN 1 END)`,
+      recent90d: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff90d} THEN 1 END)`,
+    }).from(releases).where(and(eq(releases.sourceId, src.id), notSuppressed)),
+    db.select({ date: min(releases.publishedAt) })
+      .from(releases)
+      .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`)),
+    db.select().from(releaseSummaries).where(eq(releaseSummaries.sourceId, src.id)).orderBy(desc(releaseSummaries.generatedAt)),
+    db.select({ one: sql<number>`1` }).from(sourceChangelogFiles).where(eq(sourceChangelogFiles.sourceId, src.id)).limit(1),
+    latestByDateQuery,
+  ]);
+
+  const org = (orgRows[0] as { slug: string; name: string } | undefined) ?? null;
+  const metrics = metricsRows[0];
+  const earliest = earliestRows[0];
+  const hasChangelogFile = changelogExistsRows.length > 0;
 
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
   const releasesFormatted = releaseRows.map((r) => ({
@@ -722,35 +749,21 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     })),
   }));
 
-  const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
-
-  // Derive latestVersion from already-fetched releases when on first page
+  // Derive latest{Version,Date}. Page 1 uses already-fetched rows; page > 1 uses the parallel query above.
+  // The legacy fallback (latest by fetched_at when no version-bearing published row exists) runs only if needed.
   let latestVersion: string | null = null;
   let latestDate: string | null = null;
 
   if (page === 1 && releaseRows.length > 0) {
-    // releaseRows are sorted: published_at DESC (nulls last), then fetched_at DESC
-    // First row with published_at is the latest by date
-    const latestByDate = releaseRows.find(r => r.published_at !== null);
-    if (latestByDate?.version) {
-      latestVersion = latestByDate.version;
-      latestDate = latestByDate.published_at;
+    const latestPublished = releaseRows.find((r) => r.published_at !== null);
+    if (latestPublished?.version) {
+      latestVersion = latestPublished.version;
+      latestDate = latestPublished.published_at;
     }
-    // Fallback: first row's version (sorted by fetched_at for null published_at rows)
-    if (!latestVersion) {
-      latestVersion = releaseRows[0].version ?? null;
-    }
-    if (!latestDate && latestByDate) {
-      latestDate = latestByDate.published_at;
-    }
-  } else {
-    // For page > 1, we still need the separate queries
-    const [latest] = await db
-      .select({ version: releases.version, publishedAt: releases.publishedAt })
-      .from(releases)
-      .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`))
-      .orderBy(desc(releases.publishedAt))
-      .limit(1);
+    if (!latestVersion) latestVersion = releaseRows[0].version ?? null;
+    if (!latestDate && latestPublished) latestDate = latestPublished.published_at;
+  } else if (page > 1) {
+    const latest = (latestByDateRows as Array<{ version: string | null; publishedAt: string | null }>)[0];
     latestVersion = latest?.version ?? null;
     latestDate = latest?.publishedAt ?? null;
     if (!latestVersion) {
@@ -764,49 +777,15 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     }
   }
 
-  // Compute source metrics inline — use fetchedAt as fallback when publishedAt is NULL
-  const cutoff = daysAgoIso(30);
-  const cutoff90d = daysAgoIso(90);
-  const dateCol = sql`COALESCE(${releases.publishedAt}, ${releases.fetchedAt})`;
-
-  const [metrics] = await db
-    .select({
-      total: count(),
-      oldest: min(dateCol),
-      recent: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff} THEN 1 END)`,
-      recent90d: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff90d} THEN 1 END)`,
-    })
-    .from(releases)
-    .where(and(eq(releases.sourceId, src.id), notSuppressed));
-
   const releasesLast30Days = metrics.recent;
   const avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
-  const totalPages = Math.ceil(relCount.n / pageSize);
-
-  // Earliest published_at across all releases — ignores fetched_at so we reflect actual release history
-  const [earliest] = await db
-    .select({ date: min(releases.publishedAt) })
-    .from(releases)
-    .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`));
-
-  // Fetch summaries for this source
-  const summaryRows = await db
-    .select()
-    .from(releaseSummaries)
-    .where(eq(releaseSummaries.sourceId, src.id))
-    .orderBy(desc(releaseSummaries.generatedAt));
+  const totalItems = metrics.total;
+  const totalPages = Math.ceil(totalItems / pageSize);
 
   const rollingSummaryRow = summaryRows.find((s) => s.type === "rolling");
   const monthlySummaryRows = summaryRows.filter((s) => s.type === "monthly");
 
   const parsedMeta = JSON.parse(src.metadata || "{}");
-
-  const changelogExistsRows = await db
-    .select({ one: sql<number>`1` })
-    .from(sourceChangelogFiles)
-    .where(eq(sourceChangelogFiles.sourceId, src.id))
-    .limit(1);
-  const hasChangelogFile = changelogExistsRows.length > 0;
 
   const result = {
     id: src.id,
@@ -818,7 +797,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     org,
     isPrimary: src.isPrimary ?? false,
     metadata: src.metadata ?? "{}",
-    releaseCount: relCount.n,
+    releaseCount: totalItems,
     releasesLast30Days,
     avgReleasesPerWeek,
     latestVersion,
@@ -828,7 +807,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     lastFetchedAt: src.lastFetchedAt,
     trackingSince: earliest?.date ?? metrics.oldest ?? src.createdAt,
     releases: releasesFormatted,
-    pagination: { page, pageSize, totalPages, totalItems: relCount.n },
+    pagination: { page, pageSize, totalPages, totalItems },
     summaries: {
       rolling: rollingSummaryRow
         ? { windowDays: rollingSummaryRow.windowDays, summary: rollingSummaryRow.summary, releaseCount: rollingSummaryRow.releaseCount, generatedAt: rollingSummaryRow.generatedAt }

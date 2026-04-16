@@ -1,7 +1,8 @@
-import { eq, desc, count, max, sql, and } from "drizzle-orm";
+import { eq, desc, count, max, sql, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { organizations, orgAccounts, sources, releases } from "@releases/core/schema";
+import { organizations, orgAccounts, sources, releases, products } from "@releases/core/schema";
 import { getOrgMetrics } from "../metrics.js";
+import type { SitemapPayload } from "../types.js";
 
 export function handleOrgs() {
   const db = getDb();
@@ -47,6 +48,71 @@ export function handleOrgs() {
       lastActivity: latest.maxDate ?? null,
     };
   });
+}
+
+export function handleSitemap(): SitemapPayload {
+  const db = getDb();
+
+  const orgRows = db
+    .select({
+      id: organizations.id,
+      slug: organizations.slug,
+      lastActivity: max(sources.lastFetchedAt),
+    })
+    .from(organizations)
+    .leftJoin(sources, eq(sources.orgId, organizations.id))
+    .groupBy(organizations.id)
+    .all();
+
+  if (orgRows.length === 0) return { orgs: [], sources: [], products: [] };
+
+  const orgIds = orgRows.map((o) => o.id);
+
+  const sourceRows = db
+    .select({
+      orgId: sources.orgId,
+      slug: sources.slug,
+      id: sources.id,
+      isHidden: sources.isHidden,
+    })
+    .from(sources)
+    .where(inArray(sources.orgId, orgIds))
+    .all();
+
+  const productRows = db
+    .select({ orgId: products.orgId, slug: products.slug })
+    .from(products)
+    .where(inArray(products.orgId, orgIds))
+    .all();
+
+  const latestReleaseRows = db
+    .select({ sourceId: releases.sourceId, latestDate: max(releases.publishedAt) })
+    .from(releases)
+    .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .where(and(inArray(sources.orgId, orgIds), sql`${releases.publishedAt} IS NOT NULL`))
+    .groupBy(releases.sourceId)
+    .all();
+
+  const latestBySource = new Map<string, string>();
+  for (const row of latestReleaseRows) {
+    if (row.latestDate) latestBySource.set(row.sourceId, row.latestDate);
+  }
+
+  const orgIdToSlug = new Map(orgRows.map((o) => [o.id, o.slug] as const));
+
+  return {
+    orgs: orgRows.map((o) => ({ slug: o.slug, lastActivity: o.lastActivity ?? null })),
+    sources: sourceRows
+      .filter((s) => !s.isHidden && s.orgId && orgIdToSlug.has(s.orgId))
+      .map((s) => ({
+        orgSlug: orgIdToSlug.get(s.orgId!)!,
+        slug: s.slug,
+        latestDate: latestBySource.get(s.id) ?? null,
+      })),
+    products: productRows
+      .filter((p) => p.orgId && orgIdToSlug.has(p.orgId))
+      .map((p) => ({ orgSlug: orgIdToSlug.get(p.orgId!)!, slug: p.slug })),
+  };
 }
 
 export function handleOrgDetail(slug: string) {

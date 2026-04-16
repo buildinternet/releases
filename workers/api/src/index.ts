@@ -7,6 +7,7 @@ import { cacheControl } from "./middleware/cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { statsRoutes } from "./routes/stats.js";
 import { orgRoutes } from "./routes/orgs.js";
+import { sitemapRoutes } from "./routes/sitemap.js";
 import { sourceRoutes } from "./routes/sources.js";
 import { searchRoutes } from "./routes/search.js";
 import { relatedRoutes } from "./routes/related.js";
@@ -88,7 +89,7 @@ v1.route("/", mediaRoutes);
 const publicReadRoutes = [
   "stats", "orgs", "sources", "search", "releases",
   "products", "summaries", "knowledge", "overview", "playbook", "tags",
-  "related",
+  "related", "sitemap",
 ];
 for (const r of publicReadRoutes) {
   v1.use(`/${r}`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
@@ -124,11 +125,13 @@ v1.use("/status/fetch-log", cacheControl(15));
 v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true }));
 
 // Route modules
 v1.route("/", sessionRoutes);
 v1.route("/", statsRoutes);
 v1.route("/", orgRoutes);
+v1.route("/", sitemapRoutes);
 v1.route("/", productRoutes);
 v1.route("/", sourceRoutes);
 v1.route("/", searchRoutes);
