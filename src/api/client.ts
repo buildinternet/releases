@@ -1,6 +1,5 @@
 import { getApiUrl, getApiKey, isAdminMode } from "../lib/mode.js";
 import { logger } from "@releases/lib/logger";
-import { daysAgoIso } from "@releases/core/dates";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
@@ -235,56 +234,7 @@ export async function listSourcesWithOrg(opts?: {
 // ── Stats ──
 
 export async function getStatsSummary(days: number): Promise<StatsSummary> {
-  const cutoff = daysAgoIso(days);
-
-  // Compose from existing endpoints
-  const [statsData, fetchLogData, sourcesData] = await Promise.all([
-    apiFetch<Stats>("/v1/stats"),
-    apiFetch<Array<{
-      id: string; sourceId: string; releasesFound: number; releasesInserted: number;
-      durationMs: number | null; status: string; error: string | null; createdAt: string;
-    }>>("/v1/fetch-log?limit=20"),
-    apiFetch<Array<{
-      slug: string; name: string; type: string; url: string;
-      orgSlug: string | null; releaseCount: number;
-    }>>("/v1/sources"),
-  ]);
-
-  return {
-    period: { days, cutoff },
-    totals: {
-      organizations: statsData.orgs,
-      sources: statsData.sources,
-      releases: statsData.releases,
-      releasesInPeriod: 0, // Not available from basic stats endpoint
-    },
-    sourceHealth: {
-      upToDate: 0,
-      stale: 0,
-      neverFetched: 0,
-    },
-    sources: sourcesData.map((s) => ({
-      sourceName: s.name,
-      sourceSlug: s.slug,
-      sourceType: s.type,
-      orgName: s.orgSlug,
-      lastFetchedAt: null,
-      totalReleases: s.releaseCount,
-      recentReleases: 0,
-    })),
-    recentActivity: fetchLogData.map((f) => ({
-      sourceName: "",
-      sourceSlug: "",
-      orgName: null,
-      releasesFound: f.releasesFound,
-      releasesInserted: f.releasesInserted,
-      totalReleases: 0,
-      status: f.status,
-      durationMs: f.durationMs,
-      error: f.error,
-      createdAt: f.createdAt,
-    })),
-  };
+  return apiFetch<StatsSummary>(`/v1/stats?days=${days}`);
 }
 
 // ── Usage log ──
