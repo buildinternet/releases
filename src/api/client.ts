@@ -488,9 +488,12 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
   url?: string | null; contentHash?: string | null; publishedAt?: string | null;
   type?: ReleaseType;
 }>): Promise<{ inserted: number; total: number }> {
+  // D1 supports up to 100 rows per INSERT statement; send 100 per POST to
+  // cut round-trips from 20x to 1x for a typical 100-release fetch.
+  const REMOTE_CHUNK_SIZE = 100;
   const chunks: typeof releaseRows[] = [];
-  for (let i = 0; i < releaseRows.length; i += 5) {
-    chunks.push(releaseRows.slice(i, i + 5));
+  for (let i = 0; i < releaseRows.length; i += REMOTE_CHUNK_SIZE) {
+    chunks.push(releaseRows.slice(i, i + REMOTE_CHUNK_SIZE));
   }
   const settled = await Promise.allSettled(
     chunks.map((chunk) =>

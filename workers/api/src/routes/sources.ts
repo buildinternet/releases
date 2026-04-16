@@ -258,11 +258,14 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   }> }>();
 
   try {
-    // Batch insert in chunks — D1 limits query size to ~1MB
+    // D1 caps bulk INSERT at 100 rows per statement (query-size limit ~1MB).
+    // The client already chunks at 100, but we loop here defensively so
+    // a single POST never exceeds the D1 row limit.
+    const D1_CHUNK_SIZE = 100;
     let inserted = 0;
     const insertedIds: string[] = [];
-    for (let i = 0; i < body.releases.length; i += 5) {
-      const chunk = body.releases.slice(i, i + 5).map((r) => ({
+    for (let i = 0; i < body.releases.length; i += D1_CHUNK_SIZE) {
+      const chunk = body.releases.slice(i, i + D1_CHUNK_SIZE).map((r) => ({
         sourceId: src.id,
         version: r.version ?? null,
         type: r.type ?? "feature",
