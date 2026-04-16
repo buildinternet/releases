@@ -5,6 +5,10 @@ import { findOrg, findSource, getLatestReleases } from "../../db/queries.js";
 import { orgNotFound, sourceNotFound } from "../suggest.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 
+function truncate(s: string, max: number): string {
+  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+}
+
 export function registerLatestCommand(program: Command) {
   program
     .command("latest")
@@ -65,10 +69,13 @@ Examples:
       });
 
       for (const row of rows) {
+        const preview = row.contentSummary
+          ? `\n${chalk.dim(truncate(row.contentSummary, 120))}`
+          : "";
         table.push([
           chalk.dim(row.id.slice(0, 12)),
           `${stripAnsi(row.sourceName)} ${chalk.dim(`(${row.sourceSlug})`)}`,
-          stripAnsi(row.title),
+          stripAnsi(row.title) + preview,
           row.version ? stripAnsi(row.version) : "-",
           row.publishedAt ?? "-",
         ]);

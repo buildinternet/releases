@@ -632,6 +632,8 @@ export async function getLatestReleases(opts: {
       publishedAt: releases.publishedAt,
       sourceName: sources.name,
       sourceSlug: sources.slug,
+      contentSummary: releases.contentSummary,
+      media: releases.media,
     })
     .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
@@ -646,7 +648,11 @@ export async function getLatestReleases(opts: {
     query = query.where(and(eq(releases.suppressed, false), notDisabled)) as typeof query;
   }
 
-  return query;
+  const rows = await query;
+  return rows.map((r) => ({
+    ...r,
+    media: (() => { try { return JSON.parse(r.media || "[]"); } catch { return []; } })(),
+  }));
 }
 
 // ── Known releases for incremental parsing ──

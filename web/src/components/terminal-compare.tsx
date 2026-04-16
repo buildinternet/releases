@@ -1,63 +1,82 @@
 "use client";
 
+import { useState } from "react";
 import { CopyIcon } from "@/components/copy-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 type TerminalPane = {
   label: string;
-  badge?: string;
   command: string;
   output: string;
+  tokens?: number;
 };
 
-function Pane({ pane }: { pane: TerminalPane }) {
+function formatTokens(n: number): string {
+  if (n < 1000) return `${n}`;
+  return `${(n / 1000).toFixed(1).replace(/\.0$/, "")}k`;
+}
+
+export function TerminalCompare({ panes }: { panes: TerminalPane[] }) {
+  const [active, setActive] = useState(0);
   const { copied, copy } = useCopyToClipboard();
-  const fullText = `$ ${pane.command}\n${pane.output}`;
+
+  const current = panes[active];
+  const fullText = current.command
+    ? `$ ${current.command}\n${current.output}`
+    : current.output;
 
   return (
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-mono font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300">
-          {pane.label}
-        </span>
-        {pane.badge && (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-mono text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800">
-            {pane.badge}
+    <div className="not-prose my-8">
+      <div className="mb-3 flex items-center gap-2">
+        <div
+          role="tablist"
+          aria-label="Output format"
+          className="inline-flex items-center gap-1 rounded-full border border-stone-200 bg-stone-100 p-0.5 dark:border-stone-800 dark:bg-stone-900"
+        >
+          {panes.map((pane, i) => (
+            <button
+              key={pane.label}
+              role="tab"
+              aria-selected={active === i}
+              onClick={() => setActive(i)}
+              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-mono text-[12px] transition-colors ${
+                active === i
+                  ? "bg-white text-stone-900 shadow-sm dark:bg-stone-800 dark:text-stone-100"
+                  : "text-stone-500 hover:text-stone-800 dark:text-stone-400 dark:hover:text-stone-200"
+              }`}
+            >
+              {pane.label}
+            </button>
+          ))}
+        </div>
+        {current.tokens !== undefined && (
+          <span className="inline-flex items-center rounded-full border border-stone-200 px-2 py-1 font-mono text-[11px] text-stone-500 dark:border-stone-800 dark:text-stone-400">
+            ~{formatTokens(current.tokens)} tokens
           </span>
         )}
       </div>
-      <div className="group relative rounded-lg bg-stone-950 border border-stone-800 max-h-[320px] flex flex-col overflow-hidden">
-        <div className="flex items-center gap-1.5 px-3.5 py-2.5 border-b border-stone-800 shrink-0">
-          <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
-          <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
-        </div>
-        <div className="p-4 overflow-auto min-h-0">
-          <pre className="text-[13px] leading-relaxed font-mono">
-            <span className="text-stone-500">$ </span>
-            <span className="text-stone-300">{pane.command}</span>
-            {"\n"}
-            <span className="text-stone-400">{pane.output}</span>
-          </pre>
-        </div>
+      <div className="group relative overflow-hidden rounded-md border border-stone-200 bg-stone-100 dark:border-stone-800 dark:bg-[oklch(0.268_0.007_286.3)]">
         <button
           type="button"
           onClick={() => copy(fullText)}
           aria-label={copied ? "Copied" : "Copy to clipboard"}
-          className="absolute top-10 right-2 p-1.5 rounded-md text-stone-400 dark:text-stone-500 opacity-0 group-hover:opacity-100 hover:text-stone-300 hover:bg-stone-800 transition-opacity"
+          className="absolute top-2 right-2 rounded-md p-1.5 text-stone-400 opacity-0 transition-opacity hover:bg-stone-200 hover:text-stone-700 group-hover:opacity-100 dark:text-stone-500 dark:hover:bg-stone-800 dark:hover:text-stone-200"
         >
           <CopyIcon copied={copied} size={14} />
         </button>
+        <div className="overflow-x-auto">
+          <pre className="m-0 !border-0 !bg-transparent p-4 pr-12 font-mono text-[13px] leading-relaxed">
+            {current.command && (
+              <>
+                <span className="select-none text-stone-400 dark:text-stone-600">$ </span>
+                <span className="text-stone-800 dark:text-stone-200">{current.command}</span>
+                {"\n"}
+              </>
+            )}
+            <span className="text-stone-600 dark:text-stone-400">{current.output}</span>
+          </pre>
+        </div>
       </div>
-    </div>
-  );
-}
-
-export function TerminalCompare({ panes }: { panes: [TerminalPane, TerminalPane] }) {
-  return (
-    <div className="not-prose grid grid-cols-1 md:grid-cols-2 items-start gap-4 my-8">
-      <Pane pane={panes[0]} />
-      <Pane pane={panes[1]} />
     </div>
   );
 }
