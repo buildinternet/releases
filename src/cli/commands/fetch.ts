@@ -911,11 +911,30 @@ Examples:
       // ── Source-level duplicate detection (remote mode) ──
       if (isRemoteMode() && targetSources.length > 0) {
         try {
-          const { slugs: activeSlugs, sessionMap } = await apiClient.getActiveSources();
+          const { slugs: rawActiveSlugs, sessionMap: rawSessionMap } = await apiClient.getActiveSources();
+
+          // Normalize any src_… IDs in the active-sources list to slugs so that
+          // sessions registered with IDs (e.g. via --managed-agents) are still
+          // caught by the overlap check. Build a parallel slug→sessionId map
+          // keyed by the resolved slug.
+          const resolvedSlugMap: Record<string, string> = {};
+          const normalizedActiveSlugs: string[] = [];
+          await Promise.all(rawActiveSlugs.map(async (entry) => {
+            if (entry.startsWith("src_")) {
+              const src = await apiClient.findSource(entry).catch(() => null);
+              const resolvedSlug = src?.slug ?? entry;
+              normalizedActiveSlugs.push(resolvedSlug);
+              if (rawSessionMap[entry]) resolvedSlugMap[resolvedSlug] = rawSessionMap[entry];
+            } else {
+              normalizedActiveSlugs.push(entry);
+              if (rawSessionMap[entry]) resolvedSlugMap[entry] = rawSessionMap[entry];
+            }
+          }));
+
           const targetSlugs = targetSources.map((s) => s.slug);
-          const overlapping = targetSlugs.filter((s) => activeSlugs.includes(s));
+          const overlapping = targetSlugs.filter((s) => normalizedActiveSlugs.includes(s));
           if (overlapping.length > 0) {
-            const overlapSessionId = sessionMap[overlapping[0]];
+            const overlapSessionId = resolvedSlugMap[overlapping[0]];
             const sourceList = overlapping.length <= 3
               ? overlapping.map((s) => `"${s}"`).join(", ")
               : `${overlapping.length} sources`;
