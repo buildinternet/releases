@@ -39,6 +39,9 @@ import { VERSION } from "./version.js";
 
 export { VERSION };
 
+const IS_DEV = !!process.argv[1]?.endsWith(".ts");
+const VERSION_DISPLAY = IS_DEV ? `${VERSION}-dev` : VERSION;
+
 function adminKeyError(name = "admin"): never {
   console.error(
     chalk.red(`"${name}" requires an API key.`) +
@@ -77,7 +80,7 @@ function printStyledHelp(): string {
   const lines: string[] = [];
 
   lines.push("");
-  lines.push(`${chalk.bold("releases")} ${chalk.dim(`v${VERSION}`)}`);
+  lines.push(`${chalk.bold("releases")} ${chalk.dim(`v${VERSION_DISPLAY}`)}`);
   lines.push(chalk.dim("Changelog indexer and registry for AI agents and developers"));
   lines.push("");
 
@@ -120,7 +123,7 @@ function printStyledHelp(): string {
 export const program = new Command()
   .name("releases")
   .description("Changelog indexer and registry for AI agents and developers")
-  .version(VERSION, "-v, --version")
+  .version(VERSION_DISPLAY, "-v, --version")
   .hook("preAction", (_thisCommand, actionCommand) => {
     if (actionCommand.name() !== "admin" && isWithinAdminCommand(actionCommand) && !isAdminMode()) {
       adminKeyError("admin");

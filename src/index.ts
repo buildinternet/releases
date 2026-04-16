@@ -4,6 +4,7 @@ import { runMigrations } from "./db/migrate.js";
 import { isRemoteMode, validateRemoteMode } from "./lib/mode.js";
 import { logger } from "@releases/lib/logger";
 import { recordEvent, maybeShowFirstRunNotice } from "./lib/telemetry.js";
+import { checkForUpdate } from "./lib/update-check.js";
 
 const LEGACY_COMMAND_ALIASES: Record<string, string[]> = {
   add: ["admin", "source", "add"],
@@ -92,9 +93,23 @@ async function flushTelemetry(exitCode: number): Promise<void> {
   });
 }
 
+// Start the update check early so it runs in parallel with command execution.
+// Skip for --version / --help / telemetry subcommands to keep those instant.
+const skipUpdateCheck =
+  skipTelemetry ||
+  argv.includes("--version") ||
+  argv.includes("-v") ||
+  argv.includes("--help") ||
+  argv.includes("-h");
+const updateCheckPromise = skipUpdateCheck ? null : checkForUpdate();
+
 try {
   await program.parseAsync(argv);
-  await flushTelemetry(typeof process.exitCode === "number" ? process.exitCode : 0);
+  const [, updateMessage] = await Promise.all([
+    flushTelemetry(typeof process.exitCode === "number" ? process.exitCode : 0),
+    updateCheckPromise,
+  ]);
+  if (updateMessage) process.stderr.write(updateMessage + "\n");
 } catch (err) {
   await flushTelemetry(1);
   throw err;
