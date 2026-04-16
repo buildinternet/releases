@@ -19,9 +19,10 @@ export const orgRoutes = new Hono<Env>();
 orgRoutes.get("/orgs", async (c) => {
   const db = createDb(c.env.DB);
   const cutoff30d = daysAgoIso(30);
+  const qParam = c.req.query("q");
 
   const [rows, sparklineRows] = await Promise.all([
-    getOrgsWithStats(db, cutoff30d),
+    getOrgsWithStats(db, cutoff30d, qParam ?? undefined),
     getOrgSparklines(db, cutoff30d),
   ]);
 

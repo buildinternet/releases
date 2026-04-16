@@ -5,7 +5,11 @@ import type { OrgListRow, SourceWithStats } from "./shared.js";
 export async function getOrgsWithStats(
   db: D1Db,
   cutoff30d: string,
+  q?: string,
 ): Promise<OrgListRow[]> {
+  const whereClause = q
+    ? sql`WHERE (lower(o.name) LIKE ${`%${q.toLowerCase()}%`} OR lower(o.slug) LIKE ${`%${q.toLowerCase()}%`})`
+    : sql``;
   return db.all<OrgListRow>(sql`
     SELECT
       o.id, o.slug, o.name, o.domain, o.description, o.category,
@@ -17,6 +21,7 @@ export async function getOrgsWithStats(
     FROM organizations o
     LEFT JOIN sources s ON s.org_id = o.id
     LEFT JOIN releases r ON r.source_id = s.id
+    ${whereClause}
     GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category
     ORDER BY o.name
   `);

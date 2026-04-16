@@ -384,6 +384,8 @@ export async function listSourcesWithOrg(opts?: {
   query?: string;
   includeHidden?: boolean;
   category?: string;
+  limit?: number;
+  offset?: number;
 }): Promise<SourceWithOrg[]> {
   if (isRemoteMode()) return apiClient.listSourcesWithOrg(opts);
   const db = getDb();
@@ -462,9 +464,18 @@ export async function listSourcesWithOrg(opts?: {
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .leftJoin(products, eq(sources.productId, products.id));
 
-  const rows = conditions.length > 0
-    ? await query.where(and(...conditions))
-    : await query;
+  let baseQuery = conditions.length > 0
+    ? query.where(and(...conditions))
+    : query;
+
+  if (opts?.limit != null) {
+    baseQuery = (baseQuery as typeof baseQuery).limit(opts.limit) as typeof baseQuery;
+  }
+  if (opts?.offset != null && opts.offset > 0) {
+    baseQuery = (baseQuery as typeof baseQuery).offset(opts.offset) as typeof baseQuery;
+  }
+
+  const rows = await baseQuery;
 
   return rows.map((r) => ({
     ...r,

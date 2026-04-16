@@ -82,11 +82,8 @@ async function suggestEntities(
   term: string,
   limit: number,
 ): Promise<Array<{ slug: string; name: string }>> {
-  const all = await apiFetch<Array<{ slug: string; name: string }>>(`${endpoint}?limit=200`) ?? [];
-  const lower = term.toLowerCase();
-  return all
-    .filter((e) => e.slug.includes(lower) || e.name.toLowerCase().includes(lower))
-    .slice(0, limit);
+  const params = new URLSearchParams({ q: term, limit: String(limit) });
+  return apiFetch<Array<{ slug: string; name: string }>>(`${endpoint}?${params}`) ?? [];
 }
 
 export const suggestOrgs = (term: string, limit: number) => suggestEntities("/v1/orgs", term, limit);
@@ -219,6 +216,8 @@ export async function listSourcesWithOrg(opts?: {
   query?: string;
   includeHidden?: boolean;
   category?: string;
+  limit?: number;
+  offset?: number;
 }): Promise<SourceWithOrg[]> {
   const params = new URLSearchParams();
   if (opts?.orgSlug) params.set("orgSlug", opts.orgSlug);
@@ -227,6 +226,8 @@ export async function listSourcesWithOrg(opts?: {
   if (opts?.query) params.set("query", opts.query);
   if (opts?.includeHidden) params.set("include_hidden", "true");
   if (opts?.category) params.set("category", opts.category);
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.offset != null) params.set("offset", String(opts.offset));
   const qs = params.toString();
 
   return apiFetch<SourceWithOrg[]>(`/v1/sources${qs ? `?${qs}` : ""}`);
