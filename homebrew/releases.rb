@@ -17,20 +17,20 @@ class Releases < Formula
   on_macos do
     if Hardware::CPU.arm?
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-darwin-arm64.gz"
-      sha256 "78d3e594b5d25519525a065b80f5b10a68b5a98c6f75b21241b3f57443601c04"
+      sha256 "f79f31af76fe3a42c2749288037a6c93b025f0c194eb2a4072410e2eb334e457"
     else
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-darwin-x64.gz"
-      sha256 "e9e046c39dc9113fca39a10a6bc8814a28c954d1e2e7afa17100f6ba433d0a89"
+      sha256 "cfef96e6f30fb31ed08816baa1f87f81a44453265e1b367afcab66145750d406"
     end
   end
 
   on_linux do
     if Hardware::CPU.arm?
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-linux-arm64.gz"
-      sha256 "1cbf6e7562dc273d9f28ca2b4ee24290ccbd9283e88f6c0500e070e9321d7745"
+      sha256 "9912d0625c12e8ab5427effec2e68da44b3d9838f220a2b940e0fc2127e70028"
     else
       url "https://github.com/zachdunn/releases/releases/download/v#{version}/releases-linux-x64.gz"
-      sha256 "ca7346519be8e283928a0d5557fab00df8b50ed2ec4af0f8082c3f33846abc3e"
+      sha256 "17077a8d20cce5381d769ba5e9b85189070de447607ae6f2a7e6aede3dbbe899"
     end
   end
 
