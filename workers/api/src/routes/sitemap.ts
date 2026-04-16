@@ -60,26 +60,24 @@ sitemapRoutes.get("/sitemap", async (c) => {
     if (row.latestDate) latestBySource.set(row.sourceId, row.latestDate);
   }
 
-  const orgIdToSlug = new Map(orgRows.map((o) => [o.id, o.slug] as const));
+  const orgIdToSlug = new Map(orgRows.map((o) => [o.id, o.slug]));
 
   const orgs = orgRows.map((o) => ({
     slug: o.slug,
     lastActivity: o.lastActivity ?? null,
   }));
 
-  const sourcesOut = sourceRows
-    .filter((s) => !s.isHidden)
-    .map((s) => ({
-      orgSlug: orgIdToSlug.get(s.orgId!) ?? null,
-      slug: s.slug,
-      latestDate: latestBySource.get(s.id) ?? null,
-    }))
-    .filter((s) => s.orgSlug !== null);
+  // Every row here was fetched via inArray(orgId, orgIds) so orgIdToSlug.get
+  // is guaranteed to resolve — flatMap lets us skip hidden rows in one pass.
+  const sourcesOut = sourceRows.flatMap((s) =>
+    s.isHidden || !s.orgId
+      ? []
+      : [{ orgSlug: orgIdToSlug.get(s.orgId)!, slug: s.slug, latestDate: latestBySource.get(s.id) ?? null }],
+  );
 
-  const productsOut = productRows.map((p) => ({
-    orgSlug: orgIdToSlug.get(p.orgId) ?? null,
-    slug: p.slug,
-  })).filter((p) => p.orgSlug !== null);
+  const productsOut = productRows.flatMap((p) =>
+    !p.orgId ? [] : [{ orgSlug: orgIdToSlug.get(p.orgId)!, slug: p.slug }],
+  );
 
   return c.json({ orgs, sources: sourcesOut, products: productsOut });
 });

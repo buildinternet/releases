@@ -9,20 +9,8 @@
  */
 
 import { describe, test, expect, beforeEach, afterAll, beforeAll, mock } from "bun:test";
-import { createTestDb, type TestDatabase } from "../db-helper.js";
-import {
-  organizations,
-  sources,
-  products,
-  releases,
-  orgAccounts,
-  orgTags,
-  productTags,
-  tags,
-  ignoredUrls,
-  blockedUrls,
-  domainAliases,
-} from "@releases/core/schema";
+import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { organizations, sources, products, releases } from "@releases/core/schema";
 
 let testDatabase: TestDatabase;
 
@@ -39,18 +27,7 @@ afterAll(() => {
 });
 
 beforeEach(() => {
-  const db = testDatabase.db;
-  db.delete(releases).run();
-  db.delete(orgTags).run();
-  db.delete(productTags).run();
-  db.delete(tags).run();
-  db.delete(domainAliases).run();
-  db.delete(orgAccounts).run();
-  db.delete(products).run();
-  db.delete(sources).run();
-  db.delete(ignoredUrls).run();
-  db.delete(blockedUrls).run();
-  db.delete(organizations).run();
+  clearAllTables(testDatabase.db);
 });
 
 // Dynamic import so the mock.module above applies before the handler binds to getDb().

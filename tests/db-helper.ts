@@ -42,3 +42,21 @@ export function createTestDb(): TestDatabase {
     },
   };
 }
+
+/**
+ * Delete all rows from every table in FK-safe order. Use inside beforeEach
+ * so each test sees an empty DB without having to reason about dependencies.
+ */
+export function clearAllTables(db: TestDb): void {
+  db.delete(schema.orgTags).run();
+  db.delete(schema.productTags).run();
+  db.delete(schema.releases).run();
+  db.delete(schema.sources).run();
+  db.delete(schema.orgAccounts).run();
+  db.delete(schema.products).run();
+  db.delete(schema.ignoredUrls).run();
+  db.delete(schema.tags).run();
+  db.delete(schema.domainAliases).run();
+  db.delete(schema.organizations).run();
+  db.delete(schema.blockedUrls).run();
+}
