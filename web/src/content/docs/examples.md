@@ -8,18 +8,12 @@ Every command outputs a human-readable table by default. Add `--json` for struct
 
 ## Stay up to date
 
-See what shipped recently across the registry, or filter to a single source or org.
+See what shipped recently for a source, product, or organization.
 
 <!-- slot:latest-compare -->
 
 ## Find what you need
 
-Full-text search across organizations, sources, and releases. Each result includes a content preview so you can find the right release without opening it.
+Hybrid search across organizations, sources, and releases — fuses full-text and semantic (vector) matching, so you can search by meaning as well as keyword. Each result includes a content preview so you can find the right release without opening it.
 
 <!-- slot:search-compare -->
-
-## Pipe into your workflow
-
-JSON output makes it easy to feed release data into CI pipelines, agent tools, dashboards, or scripts.
-
-<!-- slot:pipe-compare -->
