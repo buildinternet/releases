@@ -10,7 +10,7 @@ import type {
   SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse,
   ReleaseWithSource, StatsSummary, FetchLogEntry, LatestRelease,
   UsageBreakdownRow, UsageStatsResponse, Session,
-  EmbedBackfillResponse, EmbedStatusResponse,
+  EmbedBackfillResponse, EmbedStatusResponse, MediaItem,
 } from "./types.js";
 export type {
   SourceWithOrg, SourcePatchInput, ReleaseWithSource, StatsSummary,
@@ -358,8 +358,19 @@ export async function getFetchLogs(opts: {
 
 type SourceReleaseResponse = {
   name: string;
-  releases: Array<{ id: string; version: string | null; title: string; publishedAt: string | null }>;
+  releases: Array<{
+    id: string;
+    version: string | null;
+    title: string;
+    summary?: string;
+    media?: Array<{ type: string; url: string; alt?: string; r2Url?: string }>;
+    publishedAt: string | null;
+  }>;
 };
+
+function toMediaItems(raw: Array<{ type: string; url: string; alt?: string; r2Url?: string }> | undefined): MediaItem[] {
+  return (raw ?? []).map((m) => ({ type: m.type as MediaItem["type"], url: m.url, alt: m.alt, r2Url: m.r2Url }));
+}
 
 function byPublishedAtDesc(a: LatestRelease, b: LatestRelease): number {
   if (!a.publishedAt && !b.publishedAt) return 0;
@@ -386,6 +397,8 @@ async function collectReleasesFromSources(
         publishedAt: r.publishedAt,
         sourceName: srcData.name,
         sourceSlug: slug,
+        contentSummary: r.summary ?? null,
+        media: toMediaItems(r.media),
       });
     }
   }
@@ -407,6 +420,8 @@ export async function getLatestReleases(opts: {
       publishedAt: r.publishedAt,
       sourceName: data.name,
       sourceSlug: opts.slug!,
+      contentSummary: r.summary ?? null,
+      media: toMediaItems(r.media),
     }));
   }
 

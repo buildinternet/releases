@@ -543,6 +543,8 @@ export interface LatestRelease {
   publishedAt: string | null;
   sourceName: string;
   sourceSlug: string;
+  contentSummary: string | null;
+  media: MediaItem[];
 }
 
 // ── Stats ──

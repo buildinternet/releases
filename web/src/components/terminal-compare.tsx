@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { CopyIcon } from "@/components/copy-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
@@ -10,23 +11,38 @@ type TerminalPane = {
   output: string;
 };
 
-function Pane({ pane }: { pane: TerminalPane }) {
+export function TerminalCompare({ panes }: { panes: TerminalPane[] }) {
+  const [active, setActive] = useState(0);
   const { copied, copy } = useCopyToClipboard();
-  const fullText = `$ ${pane.command}\n${pane.output}`;
+
+  const current = panes[active];
+  const fullText = current.command
+    ? `$ ${current.command}\n${current.output}`
+    : current.output;
 
   return (
-    <div className="flex-1 min-w-0">
-      <div className="flex items-center gap-2 mb-2">
-        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-mono font-medium bg-stone-100 dark:bg-stone-800 text-stone-600 dark:text-stone-300">
-          {pane.label}
-        </span>
-        {pane.badge && (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-[12px] font-mono text-stone-400 dark:text-stone-500 bg-stone-100 dark:bg-stone-800">
-            {pane.badge}
-          </span>
-        )}
+    <div className="not-prose my-8">
+      <div className="flex border-b border-stone-200 dark:border-stone-700">
+        {panes.map((pane, i) => (
+          <button
+            key={pane.label}
+            onClick={() => setActive(i)}
+            className={`px-4 py-2 text-[13px] font-mono font-medium transition-colors ${
+              active === i
+                ? "text-stone-900 dark:text-stone-100 border-b-2 border-stone-900 dark:border-stone-100 -mb-px"
+                : "text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
+            }`}
+          >
+            {pane.label}
+            {pane.badge && (
+              <span className="ml-2 text-[11px] text-stone-400 dark:text-stone-500">
+                {pane.badge}
+              </span>
+            )}
+          </button>
+        ))}
       </div>
-      <div className="group relative rounded-lg bg-stone-950 border border-stone-800 max-h-[320px] flex flex-col overflow-hidden">
+      <div className="group relative rounded-b-lg bg-stone-950 border border-t-0 border-stone-800 max-h-[400px] flex flex-col overflow-hidden">
         <div className="flex items-center gap-1.5 px-3.5 py-2.5 border-b border-stone-800 shrink-0">
           <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
           <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
@@ -34,10 +50,14 @@ function Pane({ pane }: { pane: TerminalPane }) {
         </div>
         <div className="p-4 overflow-auto min-h-0">
           <pre className="text-[13px] leading-relaxed font-mono">
-            <span className="text-stone-500">$ </span>
-            <span className="text-stone-300">{pane.command}</span>
-            {"\n"}
-            <span className="text-stone-400">{pane.output}</span>
+            {current.command && (
+              <>
+                <span className="text-stone-500">$ </span>
+                <span className="text-stone-300">{current.command}</span>
+                {"\n"}
+              </>
+            )}
+            <span className="text-stone-400">{current.output}</span>
           </pre>
         </div>
         <button
@@ -49,15 +69,6 @@ function Pane({ pane }: { pane: TerminalPane }) {
           <CopyIcon copied={copied} size={14} />
         </button>
       </div>
-    </div>
-  );
-}
-
-export function TerminalCompare({ panes }: { panes: [TerminalPane, TerminalPane] }) {
-  return (
-    <div className="not-prose grid grid-cols-1 md:grid-cols-2 items-start gap-4 my-8">
-      <Pane pane={panes[0]} />
-      <Pane pane={panes[1]} />
     </div>
   );
 }
