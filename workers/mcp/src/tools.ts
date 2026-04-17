@@ -11,11 +11,13 @@ import {
   productTags,
   domainAliases,
   sourceChangelogFiles,
+  knowledgePages,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
+import { OVERVIEW_STALE_DAYS, isOverviewStale, overviewPreview } from "@buildinternet/releases-core/overview";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -509,7 +511,7 @@ export async function getOrganization(
   const org = await findOrg(db, params.identifier);
   if (!org) return text(`No organization found matching "${params.identifier}"`);
 
-  const [accounts, tagRows, orgSources, orgProducts, aliases] = await Promise.all([
+  const [accounts, tagRows, orgSources, orgProducts, aliases, overviewRow] = await Promise.all([
     db.select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts).where(eq(orgAccounts.orgId, org.id)),
     db.select({ name: tags.name }).from(orgTags)
@@ -520,6 +522,14 @@ export async function getOrganization(
       .from(products).where(eq(products.orgId, org.id)),
     db.select({ domain: domainAliases.domain })
       .from(domainAliases).where(eq(domainAliases.orgId, org.id)),
+    db.select({
+        content: knowledgePages.content,
+        generatedAt: knowledgePages.generatedAt,
+        releaseCount: knowledgePages.releaseCount,
+      })
+      .from(knowledgePages)
+      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
+      .limit(1),
   ]);
 
   const lines: string[] = [];
@@ -529,6 +539,19 @@ export async function getOrganization(
     `Slug: ${org.slug} | Domain: ${org.domain ?? "N/A"} | Category: ${org.category ?? "N/A"}`,
   );
   if (org.description) lines.push(`Description: ${org.description}`);
+
+  const overview = overviewRow[0];
+  if (overview?.content) {
+    const stale = isOverviewStale(overview.generatedAt);
+    const ageLabel = timeAgo(overview.generatedAt) ?? "unknown";
+    lines.push("");
+    lines.push(`**Overview** (generated ${ageLabel}, ${overview.releaseCount} releases)`);
+    if (stale) {
+      lines.push(`⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`);
+    }
+    lines.push(overviewPreview(overview.content));
+    lines.push(`_Use \`get_organization_overview\` with identifier "${org.slug}" to read the full overview._`);
+  }
 
   lines.push("");
 
@@ -574,6 +597,47 @@ export async function getOrganization(
   }
 
   return text(lines.join("\n"));
+}
+
+// ── get_organization_overview ────────────────────────────────────────
+
+export async function getOrganizationOverview(
+  db: D1Db,
+  params: { identifier: string },
+): Promise<ToolResult> {
+  const org = await findOrg(db, params.identifier);
+  if (!org) return text(`No organization found matching "${params.identifier}"`);
+
+  const [overview] = await db
+    .select({
+      content: knowledgePages.content,
+      generatedAt: knowledgePages.generatedAt,
+      updatedAt: knowledgePages.updatedAt,
+      releaseCount: knowledgePages.releaseCount,
+      lastContributingReleaseAt: knowledgePages.lastContributingReleaseAt,
+    })
+    .from(knowledgePages)
+    .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
+    .limit(1);
+
+  if (!overview?.content) {
+    return text(`No overview available for ${org.name} (${org.slug}).`);
+  }
+
+  const stale = isOverviewStale(overview.generatedAt);
+  const ageLabel = timeAgo(overview.generatedAt) ?? "unknown";
+
+  const header: string[] = [
+    `**${org.name} — overview**`,
+    `Generated ${ageLabel} · ${overview.releaseCount} releases`,
+  ];
+  if (stale) {
+    header.push(`⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`);
+  }
+  header.push("");
+  header.push(overview.content);
+
+  return text(header.join("\n"));
 }
 
 // ── get_source_changelog ─────────────────────────────────────────────

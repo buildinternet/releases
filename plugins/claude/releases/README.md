@@ -49,7 +49,10 @@ Return the canonical `CHANGELOG.md` (or `CHANGES`/`HISTORY`/`RELEASES`/`NEWS`) s
 List all indexed organizations, with optional search.
 
 ### get_organization
-Get detailed information about a single organization.
+Get detailed information about a single organization. Includes a short preview of the AI-generated overview when one exists, with a stale warning if it's older than 30 days.
+
+### get_organization_overview
+Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections.
 
 ### list_products
 List products, optionally scoped to one organization.

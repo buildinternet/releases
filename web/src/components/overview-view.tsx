@@ -10,6 +10,15 @@ interface OverviewViewProps {
 
 const proseClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13.5px] leading-relaxed [&_p]:my-2 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
 
+/**
+ * The overview already lives inside an org page with a header — the AI
+ * generator occasionally adds an `# Org Name` line anyway. Strip a leading
+ * h1 so we don't render a redundant title.
+ */
+function stripLeadingH1(content: string): string {
+  return content.replace(/^\s*#\s+[^\n]+\n+/, "");
+}
+
 export function OverviewView({ page }: OverviewViewProps) {
   const updatedDate = new Date(page.updatedAt).toLocaleDateString("en-US", {
     month: "short",
@@ -31,7 +40,7 @@ export function OverviewView({ page }: OverviewViewProps) {
         </div>
         <div className={proseClasses}>
           <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]} components={markdownComponents}>
-            {page.content}
+            {stripLeadingH1(page.content)}
           </ReactMarkdown>
         </div>
       </div>
