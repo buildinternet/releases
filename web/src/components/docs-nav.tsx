@@ -45,14 +45,11 @@ const adminSections: Section[] = [
   },
 ];
 
-export function DocsNav({ showAdmin = false }: { showAdmin?: boolean }) {
-  const pathname = usePathname();
-  const sections = showAdmin ? [...publicSections, ...adminSections] : publicSections;
-
+function SectionList({ sections, pathname }: { sections: Section[]; pathname: string }) {
   return (
-    <nav className="hidden md:block w-[180px] shrink-0 sticky top-6 self-start">
+    <>
       {sections.map((section) => (
-        <div key={section.title} className="mb-6">
+        <div key={section.title} className="mb-6 last:mb-0">
           <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-2">
             {section.title}
           </div>
@@ -77,6 +74,41 @@ export function DocsNav({ showAdmin = false }: { showAdmin?: boolean }) {
           </ul>
         </div>
       ))}
-    </nav>
+    </>
+  );
+}
+
+export function DocsNav({ showAdmin = false }: { showAdmin?: boolean }) {
+  const pathname = usePathname();
+  const sections = showAdmin ? [...publicSections, ...adminSections] : publicSections;
+  const currentLabel =
+    sections.flatMap((s) => s.items).find((item) => item.href === pathname)?.label ?? "Docs";
+
+  return (
+    <>
+      <details className="md:hidden group border border-stone-200 dark:border-stone-800 rounded-md">
+        <summary className="flex items-center justify-between px-4 py-2.5 text-sm font-medium cursor-pointer list-none [&::-webkit-details-marker]:hidden">
+          <span>{currentLabel}</span>
+          <svg
+            className="w-4 h-4 text-stone-500 transition-transform group-open:rotate-180"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden
+          >
+            <path
+              fillRule="evenodd"
+              d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.39a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z"
+              clipRule="evenodd"
+            />
+          </svg>
+        </summary>
+        <nav className="px-4 pb-4 pt-2 border-t border-stone-200 dark:border-stone-800">
+          <SectionList sections={sections} pathname={pathname} />
+        </nav>
+      </details>
+      <nav className="hidden md:block w-[180px] shrink-0 sticky top-6 self-start">
+        <SectionList sections={sections} pathname={pathname} />
+      </nav>
+    </>
   );
 }
