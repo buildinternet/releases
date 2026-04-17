@@ -38,6 +38,14 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));
     const message = (body as { message?: string }).message ?? res.statusText;
+    // 401 from a remote endpoint usually means the API key is missing or rotated.
+    // Surface that hint directly so users don't have to decode an HTTP code.
+    if (res.status === 401) {
+      const hint = isAdminMode()
+        ? "RELEASED_API_KEY may be invalid or rotated."
+        : "This endpoint requires admin access — set RELEASED_API_KEY.";
+      throw new Error(`Unauthorized on ${opts?.method ?? "GET"} ${path}: ${hint}`);
+    }
     throw new Error(`API error (${res.status}) on ${opts?.method ?? "GET"} ${path}: ${message}`);
   }
 

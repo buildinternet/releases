@@ -88,7 +88,7 @@ v1.route("/", mediaRoutes);
 // Public-read routes: GET is open, writes require auth
 const publicReadRoutes = [
   "stats", "orgs", "sources", "search", "releases",
-  "products", "summaries", "knowledge", "overview", "playbook", "tags",
+  "products", "summaries", "knowledge", "overview", "tags",
   "related", "sitemap",
 ];
 for (const r of publicReadRoutes) {
@@ -96,11 +96,13 @@ for (const r of publicReadRoutes) {
   v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
 }
 
-// Admin-only routes: all methods require auth
+// Admin-only routes: all methods require auth.
+// Playbook content (auto-generated header + agent notes) is internal —
+// only authenticated CLI/agent callers should be able to read it.
 const adminRoutes = [
   "sessions", "fetch-log", "usage-log", "blocked-urls",
   "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
-  "admin/embed",
+  "admin/embed", "playbook",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);

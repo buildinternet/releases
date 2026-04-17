@@ -4,6 +4,7 @@ import { createDb } from "../db.js";
 import { knowledgePages, organizations, products, sources } from "@buildinternet/releases-core/schema";
 import { generatePlaybookHeader } from "@releases/ai/playbook.js";
 import { newKnowledgePageId, orgWhere, productWhere } from "../utils.js";
+import { isValidBearerAuth } from "../middleware/auth.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
@@ -20,8 +21,14 @@ app.get("/", async (c) => {
     return c.json({ error: "scope and slug required" }, 400);
   }
 
-  // Both "org" and "playbook" scopes resolve by org slug
+  // Both "org" and "playbook" scopes resolve by org slug.
+  // Playbook content is internal — gate that scope behind auth even though
+  // this route is otherwise public.
   if (scope === "org" || scope === "playbook") {
+    if (scope === "playbook" && !(await isValidBearerAuth(c))) {
+      return c.json({ error: "unauthorized", message: "Invalid or missing API key" }, 401);
+    }
+
     const [org] = await db
       .select({ id: organizations.id })
       .from(organizations)

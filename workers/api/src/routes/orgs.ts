@@ -7,6 +7,7 @@ import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isConflictError, computeAvgPerWeek, getOrCreateTagsD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
+import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
 import { assemblePlaybook } from "@releases/ai/playbook.js";
 import type { Env } from "../index.js";
@@ -170,7 +171,12 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   const totalReleases = totalReleaseRow[0];
   const latestFetch = latestFetchRow[0];
   const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
-  const playbookRow = knowledgePageRows.find((r) => r.scope === "playbook") ?? null;
+  // Playbook content (header + agent notes) is internal — only return it to
+  // authenticated callers so we don't leak it via the public-cached JSON.
+  const isAuthed = await isValidBearerAuth(c);
+  const playbookRow = isAuthed
+    ? (knowledgePageRows.find((r) => r.scope === "playbook") ?? null)
+    : null;
 
   const overviewData = knowledgeRow ? {
     scope: knowledgeRow.scope as "org",
@@ -211,6 +217,13 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   if (wantsMarkdown(c)) {
     return markdownResponse(c, orgToMarkdown(result as any));
   }
+
+  // Authed responses include the playbook — opt out of the shared CDN cache
+  // and signal Vary so any honoring intermediary keys on Authorization.
+  if (isAuthed) {
+    c.header("Cache-Control", "private, no-store");
+  }
+  c.header("Vary", "Authorization", { append: true });
 
   return c.json(result);
 });
