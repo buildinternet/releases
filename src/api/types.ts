@@ -570,7 +570,7 @@ export interface StatsSummary {
     stale: number;
     neverFetched: number;
   };
-  sources: Array<{
+  sourceActivity: Array<{
     sourceName: string;
     sourceSlug: string;
     sourceType: string;

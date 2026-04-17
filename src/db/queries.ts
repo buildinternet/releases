@@ -568,7 +568,7 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
       stale: staleCount,
       neverFetched: neverFetched.n,
     },
-    sources: perSource,
+    sourceActivity: perSource,
     recentActivity: recentFetches,
   };
 }

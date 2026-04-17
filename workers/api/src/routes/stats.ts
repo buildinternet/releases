@@ -106,7 +106,7 @@ statsRoutes.get("/stats", async (c) => {
       stale: staleCount,
       neverFetched: neverFetched.n,
     },
-    sources: perSource,
+    sourceActivity: perSource,
     recentActivity,
   });
 });
