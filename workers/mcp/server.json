@@ -1,0 +1,17 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "sh.releases/mcp",
+  "title": "Releases",
+  "description": "Changelog registry — search releases, compare products, and get AI summaries across hundreds of tracked companies.",
+  "repository": {
+    "url": "https://github.com/buildinternet/releases",
+    "source": "github"
+  },
+  "version": "0.10.0",
+  "remotes": [
+    {
+      "type": "streamable-http",
+      "url": "https://mcp.releases.sh/mcp"
+    }
+  ]
+}
