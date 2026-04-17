@@ -15,6 +15,16 @@ Search changelogs, track releases, and manage changelog sources with the [Releas
 claude plugin add /path/to/released/plugins/claude/releases
 ```
 
+### Skills only (no plugin)
+
+To use just the auto-triggering skills in another agent (Claude Code, Codex, Cursor, OpenCode), install the standalone skills package via the [`skills`](https://github.com/vercel-labs/skills) CLI:
+
+```bash
+npx skills add buildinternet/releases-cli
+```
+
+This skips the MCP connection, agents, and `/releases` command that the full plugin registers.
+
 ## Available MCP Tools
 
 ### search_releases

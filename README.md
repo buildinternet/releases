@@ -1,5 +1,8 @@
 # Releases (monorepo)
 
+[![CI](https://github.com/buildinternet/releases/actions/workflows/ci.yml/badge.svg)](https://github.com/buildinternet/releases/actions/workflows/ci.yml)
+[![npm (CLI)](https://img.shields.io/npm/v/@buildinternet/releases?color=cb3837&label=%40buildinternet%2Freleases&logo=npm)](https://www.npmjs.com/package/@buildinternet/releases)
+
 Private monorepo for the backend, workers, web frontend, and agent tooling behind [releases.sh](https://releases.sh).
 
 The public CLI (`@buildinternet/releases`) lives in [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) — that repo owns npm publishing, the Homebrew tap, and the user-facing install docs at [releases.sh/docs/installation](https://releases.sh/docs/installation). This monorepo still carries a full copy of the CLI source under `src/cli/` for local dev + admin workflows (see below); user-facing CLI changes should land in the OSS repo first.
@@ -163,6 +166,16 @@ The plugin includes:
 - **Commands** — `/releases <product> [query]` for quick lookups
 
 See [`plugins/claude/releases/README.md`](plugins/claude/releases/README.md) for full details.
+
+### Standalone Skills (any agent)
+
+The skills bundled with the plugin are also available as a standalone package. Install them into any Claude Code / Codex / Cursor / OpenCode workspace using the [`skills`](https://github.com/vercel-labs/skills) CLI, which reads from the OSS [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) repo (source of truth for `@buildinternet/releases-skills`):
+
+```bash
+npx skills add buildinternet/releases-cli
+```
+
+Use this when you want skill auto-triggering (on questions about releases or the `releases` CLI) without registering the hosted MCP connection, agents, and `/releases` command that the full plugin provides.
 
 ### MCP Server
 
