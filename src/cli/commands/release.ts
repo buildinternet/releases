@@ -7,11 +7,18 @@ import {
   getReleaseCoverage, linkReleaseCoverage, unlinkReleaseCoverage,
   findOrg, getRecentReleasesByOrg,
 } from "../../db/queries.js";
+import { DECIDED_BY_CLI, decidedByAgent } from "../../db/schema-coverage.js";
 import { groupReleases, type GroupingCandidate } from "../../ai/grouping.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { normalizeReleaseId } from "@buildinternet/releases-core/id";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { isRemoteMode } from "../../lib/mode.js";
+
+function assertLocalCoverageMode(verb: string): void {
+  if (!isRemoteMode()) return;
+  console.error(chalk.red(`release ${verb} is not yet supported in remote mode. Unset RELEASED_API_URL to run locally.`));
+  process.exit(1);
+}
 
 function releaseNotFound(id: string): never {
   console.error(chalk.red(`Release not found: ${id}`));
@@ -341,10 +348,7 @@ Examples:
   releases admin release link rel_canonical rel_coverage_a rel_coverage_b
   releases admin release link rel_canonical rel_coverage_a --reason "marketing post for launch"`)
     .action(async (rawCanonical: string, rawCoverage: string[], opts: { reason?: string; json?: boolean }) => {
-      if (isRemoteMode()) {
-        console.error(chalk.red("release link is not yet supported in remote mode. Unset RELEASED_API_URL to run locally."));
-        process.exit(1);
-      }
+      assertLocalCoverageMode("link");
       const canonicalId = normalizeReleaseId(rawCanonical);
       const canonical = await getRelease(canonicalId);
       if (!canonical) releaseNotFound(canonicalId);
@@ -357,7 +361,7 @@ Examples:
           canonicalId,
           coverageId: cid,
           reason: opts.reason,
-          decidedBy: "human:cli",
+          decidedBy: DECIDED_BY_CLI,
         });
       }
 
@@ -375,10 +379,7 @@ Examples:
     .argument("<id>", "Release ID to unlink")
     .option("--json", "Output as JSON")
     .action(async (rawId: string, opts: { json?: boolean }) => {
-      if (isRemoteMode()) {
-        console.error(chalk.red("release unlink is not yet supported in remote mode. Unset RELEASED_API_URL to run locally."));
-        process.exit(1);
-      }
+      assertLocalCoverageMode("unlink");
       const id = normalizeReleaseId(rawId);
       const removed = await unlinkReleaseCoverage(id);
       if (!removed) {
@@ -407,10 +408,7 @@ Examples:
   releases admin release cluster anthropic --window 7 --dry-run
   releases admin release cluster anthropic --model claude-sonnet-4-6`)
     .action(async (orgIdent: string, opts: { window?: string; model?: string; dryRun?: boolean; json?: boolean }) => {
-      if (isRemoteMode()) {
-        console.error(chalk.red("release cluster is not yet supported in remote mode. Unset RELEASED_API_URL to run locally."));
-        process.exit(1);
-      }
+      assertLocalCoverageMode("cluster");
       const org = await findOrg(orgIdent);
       if (!org) {
         console.error(chalk.red(`Organization not found: ${orgIdent}`));
@@ -462,7 +460,8 @@ Examples:
         console.log(chalk.bold(`${result.clusters.length} clusters — ${groupedClusters.length} grouped, ${singletons.length} singleton(s) — ${coverageCount} coverage link(s)`));
         console.log(chalk.dim(`Model: ${result.model}${opts.dryRun ? " (dry run — nothing written)" : ""}`));
         console.log();
-        const titleFor = (id: string) => candidates.find((c) => c.id === id)?.title ?? id;
+        const titleById = new Map(candidates.map((c) => [c.id, c.title]));
+        const titleFor = (id: string) => titleById.get(id) ?? id;
         for (const c of groupedClusters) {
           console.log(chalk.bold(`◆ ${titleFor(c.canonicalId)}`));
           console.log(chalk.dim(`  ${c.canonicalId} — ${c.reason}`));
@@ -474,7 +473,7 @@ Examples:
 
       if (opts.dryRun) return;
 
-      const decidedBy = `agent:${result.model}`;
+      const decidedBy = decidedByAgent(result.model);
       let written = 0;
       for (const cluster of groupedClusters) {
         for (const coverageId of cluster.coverageIds) {

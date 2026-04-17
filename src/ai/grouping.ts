@@ -1,6 +1,6 @@
-import { readFileSync } from "fs";
-import { fileURLToPath } from "url";
-import { dirname, join } from "path";
+import { readFileSync, existsSync } from "fs";
+import { resolve } from "path";
+import { homedir } from "os";
 import { getAnthropicClient } from "./client.js";
 import { config } from "@releases/lib/config";
 import { logUsage } from "../lib/usage.js";
@@ -27,16 +27,24 @@ export interface GroupingResult {
   rawResponse: string;
 }
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
 let cachedSkill: string | null = null;
 
 function loadSkill(): string {
   if (cachedSkill !== null) return cachedSkill;
-  // Skill content is the same file the managed agents consume; loading it here
-  // keeps one copy as the source of truth for both the CLI path and any future
-  // agent-tool path that invokes grouping.
-  const skillPath = join(__dirname, "..", "agent", "skills", "grouping-releases", "SKILL.md");
-  cachedSkill = readFileSync(skillPath, "utf8");
+
+  const envDir = process.env.RELEASED_SKILLS_DIR;
+  const candidates = [
+    envDir && resolve(envDir, "grouping-releases/SKILL.md"),
+    "/usr/share/releases/skills/grouping-releases/SKILL.md",
+    resolve(homedir(), ".releases/skills/grouping-releases/SKILL.md"),
+    resolve(import.meta.dir, "../agent/skills/grouping-releases/SKILL.md"),
+  ].filter((p): p is string => !!p);
+
+  const path = candidates.find((p) => existsSync(p));
+  if (!path) {
+    throw new Error("grouping-releases SKILL.md not found on any conventional path");
+  }
+  cachedSkill = readFileSync(path, "utf8");
   return cachedSkill;
 }
 
@@ -135,7 +143,11 @@ export async function groupReleases(
   return { clusters, model, rawResponse };
 }
 
-function validateClusters(clusters: GroupingCluster[], candidates: GroupingCandidate[]): void {
+/**
+ * Exported for tests. Enforces the grouping-releases skill's "every ID appears in exactly
+ * one cluster" contract and rejects hallucinated IDs so callers don't write bad data.
+ */
+export function validateClusters(clusters: GroupingCluster[], candidates: GroupingCandidate[]): void {
   const inputIds = new Set(candidates.map((c) => c.id));
   const seen = new Map<string, "canonical" | "coverage">();
 

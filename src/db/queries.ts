@@ -1065,9 +1065,9 @@ export async function getReleaseCoverage(releaseId: string): Promise<{
   const [asCoverage] = await db.select().from(releaseCoverage)
     .where(eq(releaseCoverage.coverageId, releaseId))
     .limit(1);
+  if (asCoverage) return { role: "coverage", canonical: asCoverage, covers: [] };
   const covers = await db.select().from(releaseCoverage)
     .where(eq(releaseCoverage.canonicalId, releaseId));
-  if (asCoverage) return { role: "coverage", canonical: asCoverage, covers: [] };
   if (covers.length > 0) return { role: "canonical", canonical: null, covers };
   return { role: "standalone", canonical: null, covers: [] };
 }
