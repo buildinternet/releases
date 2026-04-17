@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { api } from "@/lib/api";
 import { sourceToMarkdown } from "@/lib/formatters";
+import { ATOM_DEFAULT_MAX_ENTRIES } from "@/lib/atom";
+import { sourceAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { getFormat } from "@/lib/request";
 
@@ -15,7 +17,8 @@ export async function GET(
 
   let source;
   try {
-    source = await api.sourceDetail(slug, page, pageSize);
+    const effectivePageSize = format === "atom" ? ATOM_DEFAULT_MAX_ENTRIES : pageSize;
+    source = await api.sourceDetail(slug, format === "atom" ? 1 : page, effectivePageSize);
   } catch {
     return NextResponse.json({ error: "not_found", message: "Source not found" }, { status: 404 });
   }
@@ -32,6 +35,10 @@ export async function GET(
     return new NextResponse(sourceToMarkdown(source, { baseUrl }), {
       headers: { "Content-Type": "text/markdown; charset=utf-8" },
     });
+  }
+
+  if (format === "atom") {
+    return sourceAtomResponse(request, source);
   }
 
   return NextResponse.json(source);

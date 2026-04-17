@@ -10,6 +10,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * Org/source data (existing behavior):
  *   /inngest.json                    → /api/format/inngest   (format: json)
  *   /inngest.md                      → /api/format/inngest   (format: md)
+ *   /inngest.atom                    → /api/format/inngest   (format: atom)
  *   /inngest/inngest-changelog.json  → /api/format/inngest/inngest-changelog
  *   /source/my-source.md             → /api/format/source/my-source
  */
@@ -28,7 +29,7 @@ export function proxy(request: NextRequest) {
     return NextResponse.rewrite(url);
   }
 
-  const match = pathname.match(/^(\/[^.]+)\.(json|md)$/);
+  const match = pathname.match(/^(\/[^.]+)\.(json|md|atom)$/);
   if (!match) return NextResponse.next();
 
   const basePath = match[1];
