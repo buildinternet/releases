@@ -29,9 +29,21 @@ sourceRoutes.get("/sources", async (c) => {
   const orgSlug = c.req.query("orgSlug");
   const filterByUrls = c.req.query("filterByUrls") === "true";
   const hasFeed = c.req.query("has_feed") === "true";
-  const queryText = c.req.query("query");
+  // Accept both ?q= (server-side search alias) and legacy ?query=
+  const queryText = c.req.query("q") ?? c.req.query("query");
   const includeHidden = c.req.query("include_hidden") === "true";
   const categoryFilter = c.req.query("category");
+
+  // Pagination: default limit 100, hard cap 500
+  const limitParam = c.req.query("limit");
+  const offsetParam = c.req.query("offset");
+  const pageParam = c.req.query("page");
+  const rawLimit = limitParam ? parseInt(limitParam, 10) : 100;
+  const limit = isNaN(rawLimit) || rawLimit < 1 ? 100 : Math.min(rawLimit, 500);
+  const rawPage = pageParam ? parseInt(pageParam, 10) : 1;
+  const page = isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
+  const rawOffset = offsetParam ? parseInt(offsetParam, 10) : (page - 1) * limit;
+  const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
 
   // Filter by URLs — return raw source rows matching the provided url params
   if (filterByUrls) {
@@ -100,7 +112,7 @@ sourceRoutes.get("/sources", async (c) => {
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-  const rows = await getSourcesWithStats(db, whereClause);
+  const rows = await getSourcesWithStats(db, whereClause, { limit, offset });
 
   const result: SourceWithOrg[] = rows.map((src) => ({
     id: src.id,

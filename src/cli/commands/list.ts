@@ -90,6 +90,10 @@ Examples:
       }
 
       // ── Full list view ──
+      const limitOpt = opts.limit ? parseInt(opts.limit, 10) : undefined;
+      const pageOpt = opts.page ? parseInt(opts.page, 10) : 1;
+      const offsetOpt = limitOpt && limitOpt > 0 ? (pageOpt - 1) * limitOpt : undefined;
+
       const allSources = await listSourcesWithOrg({
         orgSlug: opts.org,
         productSlug: opts.product,
@@ -97,11 +101,17 @@ Examples:
         hasFeed: opts.hasFeed,
         query: opts.query,
         includeHidden: opts.includeDisabled,
+        limit: limitOpt && limitOpt > 0 ? limitOpt : undefined,
+        offset: offsetOpt,
       });
 
       if (allSources.length === 0) {
         if (opts.json) {
-          console.log(JSON.stringify([], null, 2));
+          if (limitOpt && limitOpt > 0) {
+            console.log(JSON.stringify({ items: [], pagination: { page: pageOpt, pageSize: limitOpt } }, null, 2));
+          } else {
+            console.log(JSON.stringify([], null, 2));
+          }
         } else {
           console.log("No sources configured.");
         }
@@ -129,15 +139,10 @@ Examples:
             method: getFetchMethod(row.type, row.metadata),
           }));
         }
-        const limit = opts.limit ? parseInt(opts.limit, 10) : undefined;
-        if (limit && limit > 0) {
-          const page = opts.page ? parseInt(opts.page, 10) : 1;
-          const start = (page - 1) * limit;
-          const slice = items.slice(start, start + limit);
-          const totalPages = Math.ceil(items.length / limit);
+        if (limitOpt && limitOpt > 0) {
           console.log(JSON.stringify({
-            items: slice,
-            pagination: { page, pageSize: limit, totalPages, totalItems: items.length },
+            items,
+            pagination: { page: pageOpt, pageSize: limitOpt },
           }, null, 2));
         } else {
           console.log(JSON.stringify(items, null, 2));

@@ -30,7 +30,10 @@ export type SourceListRow = {
 export async function getSourcesWithStats(
   db: D1Db,
   whereClause?: SQL,
+  opts?: { limit?: number; offset?: number },
 ): Promise<SourceListRow[]> {
+  const limitClause = opts?.limit != null ? sql`LIMIT ${opts.limit}` : sql``;
+  const offsetClause = opts?.offset != null && opts.offset > 0 ? sql`OFFSET ${opts.offset}` : sql``;
   return db.all<SourceListRow>(sql`
     SELECT
       sources.*,
@@ -62,6 +65,7 @@ export async function getSourcesWithStats(
     ) rs ON rs.source_id = sources.id
     ${whereClause ? sql`WHERE ${whereClause}` : sql``}
     ORDER BY sources.name
+    ${limitClause} ${offsetClause}
   `);
 }
 
