@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, releaseSummaries, products, sourceChangelogFiles, type ReleaseType } from "@releases/core/schema";
+import { sources, releases, organizations, releaseSummaries, products, sourceChangelogFiles, type ReleaseType } from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core/release-upsert";
-import { daysAgoIso } from "@releases/core/dates";
-import { toSlug } from "@releases/core/slug";
-import { buildChangelogResponse, selectChangelogFile } from "@releases/core/changelog-slice";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { buildChangelogResponse, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@releases/api/types.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";

@@ -1,12 +1,12 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { getDb } from "../../db/connection.js";
-import { releases } from "@releases/core/schema";
+import { releases } from "@buildinternet/releases-core/schema";
 import { insertMediaAssets, type MediaAssetInput } from "../../db/queries.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";
 import { sql, and, isNotNull } from "drizzle-orm";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { extractFilename, type MediaRef } from "../../lib/media.js";
 
 // Reverse mapping: file extension → content type

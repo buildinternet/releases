@@ -6,11 +6,11 @@ import {
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type Product, type Tag, type DomainAlias,
   type KnowledgePage, type SourceChangelogFile,
-} from "@releases/core/schema";
+} from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
-import { daysAgoIso } from "@releases/core/dates";
-import { toSlug } from "@releases/core/slug";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { toSlug } from "@buildinternet/releases-core/slug";
 import { countTokensSafe } from "@releases/core/tokens";
 import * as apiClient from "../api/client.js";
 import type {

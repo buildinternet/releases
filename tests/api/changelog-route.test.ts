@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { buildChangelogResponse } from "@releases/core/changelog-slice";
+import { buildChangelogResponse } from "@buildinternet/releases-core/changelog-slice";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { eq } from "drizzle-orm";
-import { organizations, sources, sourceChangelogFiles, type SourceChangelogFile } from "@releases/core/schema";
+import { organizations, sources, sourceChangelogFiles, type SourceChangelogFile } from "@buildinternet/releases-core/schema";
 
 // This test mirrors the server-side logic of `handleSourceChangelog`
 // (src/api/routes/sources.ts) and `GET /v1/sources/:slug/changelog` in

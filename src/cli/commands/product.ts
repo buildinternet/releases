@@ -8,8 +8,8 @@ import {
   addTagsToProduct, removeTagsFromProduct, getTagsForProduct,
   listDomainAliases, addDomainAlias, removeDomainAlias,
 } from "../../db/queries.js";
-import { toSlug } from "@releases/core/slug";
-import { isValidCategory, CATEGORIES } from "@releases/core/categories";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { isValidCategory, CATEGORIES } from "@buildinternet/releases-core/categories";
 
 export function registerProductCommand(program: Command) {
   const product = program

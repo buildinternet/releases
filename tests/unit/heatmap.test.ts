@@ -5,7 +5,7 @@ import {
   organizations,
   sources,
   releases,
-} from "@releases/core/schema";
+} from "@buildinternet/releases-core/schema";
 
 let testDatabase: TestDatabase;
 testDatabase = createTestDb();

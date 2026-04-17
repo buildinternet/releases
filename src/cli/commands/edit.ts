@@ -2,8 +2,8 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { findSource, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
 import { sourceNotFound } from "../suggest.js";
-import { toSlug } from "@releases/core/slug";
-import { logger } from "@releases/lib/logger";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { updateSourceMeta } from "../../adapters/feed.js";
 
 const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;

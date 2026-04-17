@@ -1,11 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { Source, ReleaseType } from "@releases/core/schema";
+import type { Source, ReleaseType } from "@buildinternet/releases-core/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { checkContentHash } from "../db/queries.js";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
 import { sha256Hex } from "@releases/core/hash";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired } from "../ai/shared.js";

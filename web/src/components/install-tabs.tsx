@@ -8,6 +8,11 @@ type TabId = (typeof tabs)[number]["id"];
 
 const tabs = [
   {
+    id: "homebrew",
+    label: "Homebrew",
+    command: "brew install buildinternet/tap/releases",
+  },
+  {
     id: "npm",
     label: "npm",
     command: "npm install -g @buildinternet/releases",
@@ -25,7 +30,7 @@ const tabs = [
 ] as const;
 
 export function InstallTabs() {
-  const [active, setActive] = useState<TabId>("npm");
+  const [active, setActive] = useState<TabId>("homebrew");
   const { copied, copy } = useCopyToClipboard();
 
   const current = tabs.find((t) => t.id === active)!;

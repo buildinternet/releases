@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { timeAgo } from "@releases/core/dates";
+import { timeAgo } from "@buildinternet/releases-core/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { getStatsSummary } from "../../db/queries.js";
 

@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { findSource, getRecentReleases } from "../../db/queries.js";
 import { compareProducts, toReleaseInput } from "../../ai/query.js";
-import { daysAgoIso } from "@releases/core/dates";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
 
 export function registerCompareCommand(program: Command) {

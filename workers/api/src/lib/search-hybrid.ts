@@ -18,7 +18,7 @@ import {
   organizations,
   products,
   sourceChangelogFiles,
-} from "@releases/core/schema";
+} from "@buildinternet/releases-core/schema";
 // sources/orgs/products are used for entity hydration (runRegistrySearch);
 // sourceChangelogFiles is used for batched chunk content reads.
 import {

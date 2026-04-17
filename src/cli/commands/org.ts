@@ -14,10 +14,10 @@ import {
   OVERVIEW_WINDOW_DAYS,
 } from "../../ai/knowledge.js";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { orgNotFound } from "../suggest.js";
-import { toSlug } from "@releases/core/slug";
-import { isValidCategory, CATEGORIES } from "@releases/core/categories";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { isValidCategory, CATEGORIES } from "@buildinternet/releases-core/categories";
 import type { OverviewRegenResult } from "../../ai/knowledge.js";
 
 function parseWindowDays(raw: string | undefined): number {

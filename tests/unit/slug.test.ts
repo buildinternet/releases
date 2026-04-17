@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { toSlug } from "@releases/core/slug";
+import { toSlug } from "@buildinternet/releases-core/slug";
 
 describe("toSlug", () => {
   it("lowercases and replaces spaces with hyphens", () => {

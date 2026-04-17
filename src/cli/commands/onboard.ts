@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { runDiscovery, type DiscoveryState, type DiscoveryOptions } from "../../agent/released.js";
 import { isRemoteMode } from "../../lib/mode.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { registerOnboardApplyCommand } from "./onboard-apply.js";
 import { runManagedDiscovery } from "../../agent/managed-discovery.js";
 

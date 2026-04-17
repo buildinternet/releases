@@ -1,4 +1,4 @@
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { config } from "@releases/lib/config";
 import { discoverFeed } from "@releases/adapters/feed";
 import { parseNextLink } from "@releases/adapters/github";

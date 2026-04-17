@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { listBlockedUrls, addBlockedUrl, removeBlockedUrl } from "../../db/queries.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 export function registerBlockCommand(program: Command) {
   const block = program

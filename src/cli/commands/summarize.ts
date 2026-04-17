@@ -4,9 +4,9 @@ import { findSource, getRecentReleases, upsertSummary, getOrgById } from "../../
 import { sourceNotFound } from "../suggest.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
-import { daysAgoIso } from "@releases/core/dates";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 export function registerSummarizeCommand(
   program: Command,

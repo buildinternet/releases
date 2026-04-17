@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { daysAgoIso, timeAgo } from "@releases/core/dates";
+import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
 
 describe("daysAgoIso", () => {
   it("returns an ISO string", () => {

@@ -1,5 +1,5 @@
 import { getDb } from "../db/connection.js";
-import { usageLog } from "@releases/core/schema";
+import { usageLog } from "@buildinternet/releases-core/schema";
 import { isRemoteMode } from "./mode.js";
 import * as apiClient from "../api/client.js";
 

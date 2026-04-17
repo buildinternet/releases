@@ -1,6 +1,6 @@
 import { config } from "@releases/lib/config";
 import { AdapterError, CrawlTimeoutError, CrawlJobError } from "@releases/lib/errors";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import type { CrawlPage } from "@releases/adapters/types";
 /** Resource types to block when rendering (duplicated from cloudflare.ts to avoid circular import). */
 const REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;

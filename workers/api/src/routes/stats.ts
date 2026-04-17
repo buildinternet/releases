@@ -2,8 +2,8 @@ import { Hono } from "hono";
 import { count, gte, desc, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, sources, releases, products, fetchLog } from "@releases/core/schema";
-import { daysAgoIso } from "@releases/core/dates";
+import { organizations, sources, releases, products, fetchLog } from "@buildinternet/releases-core/schema";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type { Env } from "../index.js";
 
 export const statsRoutes = new Hono<Env>();

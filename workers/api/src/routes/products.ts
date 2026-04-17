@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { products, sources, organizations, orgAccounts, tags, productTags } from "@releases/core/schema";
-import { toSlug } from "@releases/core/slug";
-import { isValidCategory } from "@releases/core/categories";
+import { products, sources, organizations, orgAccounts, tags, productTags } from "@buildinternet/releases-core/schema";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { isConflictError, getOrCreateTagsD1, productWhere, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
