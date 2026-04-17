@@ -1,0 +1,142 @@
+name: Deploy Workers
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      worker:
+        description: Which worker to deploy (manual run)
+        type: choice
+        options: [all, api, mcp, discovery]
+        default: all
+
+concurrency:
+  group: deploy-workers-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BUN_VERSION: "1.3.11"
+
+jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.filter.outputs.api }}
+      mcp: ${{ steps.filter.outputs.mcp }}
+      discovery: ${{ steps.filter.outputs.discovery }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            _shared: &shared
+              - 'packages/**'
+              - 'src/lib/**'
+              - 'src/db/**'
+              - 'package.json'
+              - 'bun.lock'
+              - '.github/workflows/deploy-workers.yml'
+            api:
+              - *shared
+              - 'workers/api/**'
+            mcp:
+              - *shared
+              - 'workers/mcp/**'
+            discovery:
+              - *shared
+              - 'workers/discovery/**'
+              - 'src/**'
+
+  deploy-api:
+    name: Deploy API worker
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.api == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'api'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler deploy --config workers/api/wrangler.jsonc
+
+  deploy-mcp:
+    name: Deploy MCP worker
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.mcp == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'mcp'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'workers/mcp/bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      # workers/mcp is intentionally excluded from root workspaces (cloudflare:workers
+      # imports break Bun's eager workspace resolution). Install its deps locally.
+      - name: Install MCP worker deps
+        working-directory: workers/mcp
+        run: bun install --frozen-lockfile
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler deploy --config workers/mcp/wrangler.jsonc
+
+  deploy-discovery:
+    name: Deploy discovery worker
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.discovery == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'discovery'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'workers/discovery/bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      - name: Install discovery worker deps
+        working-directory: workers/discovery
+        run: bun install --frozen-lockfile
+      # Dockerfile COPYs dist/releases and dist/releases-mcp-browser into the
+      # sandbox container image, so the binaries must exist before wrangler packs
+      # the image. Fail loudly if cross-compilation silently skips either target.
+      - name: Build CLI binaries for Linux sandbox
+        run: |
+          set -euo pipefail
+          bun run build:all:linux
+          test -x dist/releases
+          test -x dist/releases-mcp-browser
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler deploy --config workers/discovery/wrangler.jsonc

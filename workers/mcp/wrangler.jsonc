@@ -1,7 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "releases-mcp",
-  "account_id": "b082600d280d44fd5da3501bc1bffe2f",
   "main": "src/index.ts",
   "alias": {
     "@releases": "../../src",
