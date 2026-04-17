@@ -35,6 +35,15 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
+  async rewrites() {
+    return {
+      beforeFiles: [
+        { source: "/.well-known/mcp-registry-auth", destination: "/mcp-registry-auth.txt" },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
   async headers() {
     return [
       {
