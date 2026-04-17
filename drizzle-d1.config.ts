@@ -25,7 +25,7 @@ try {
 
 export default defineConfig({
   dialect: "sqlite",
-  schema: "./src/db/schema.ts",
+  schema: "./packages/core/src/schema.ts",
   dbCredentials: {
     url: dbPath,
   },
