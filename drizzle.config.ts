@@ -6,7 +6,7 @@ const dataDir = process.env.RELEASED_DATA_DIR || join(homedir(), ".releases");
 
 export default defineConfig({
   dialect: "sqlite",
-  schema: "./packages/core/src/schema.ts",
+  schema: ["./packages/core/src/schema.ts", "./src/db/schema-coverage.ts"],
   out: "./src/db/migrations",
   migrations: {
     prefix: "timestamp",

@@ -4,9 +4,21 @@ import chalk from "chalk";
 import {
   findSource, suppressRelease, unsuppressRelease,
   getRelease, deleteRelease, updateRelease, deleteReleasesByFilter, deleteReleasesForSource,
+  getReleaseCoverage, linkReleaseCoverage, unlinkReleaseCoverage,
+  findOrg, getRecentReleasesByOrg,
 } from "../../db/queries.js";
+import { DECIDED_BY_CLI, decidedByAgent } from "../../db/schema-coverage.js";
+import { groupReleases, type GroupingCandidate } from "../../ai/grouping.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { normalizeReleaseId } from "@buildinternet/releases-core/id";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { isRemoteMode } from "../../lib/mode.js";
+
+function assertLocalCoverageMode(verb: string): void {
+  if (!isRemoteMode()) return;
+  console.error(chalk.red(`release ${verb} is not yet supported in remote mode. Unset RELEASED_API_URL to run locally.`));
+  process.exit(1);
+}
 
 function releaseNotFound(id: string): never {
   console.error(chalk.red(`Release not found: ${id}`));
@@ -64,6 +76,25 @@ Examples:
         console.log(chalk.dim(`\n... truncated (${sanitizedContent.length} chars total)`));
       } else {
         console.log(sanitizedContent);
+      }
+
+      if (!isRemoteMode()) {
+        const coverage = await getReleaseCoverage(id);
+        if (coverage.role !== "standalone") {
+          console.log();
+          console.log(chalk.bold("Coverage:"));
+          if (coverage.role === "canonical") {
+            console.log(chalk.dim(`  Canonical of ${coverage.covers.length} other release(s):`));
+            for (const row of coverage.covers) {
+              const reason = row.reason ? ` — ${stripAnsi(row.reason)}` : "";
+              console.log(`  ${row.coverageId}${chalk.dim(reason)}`);
+            }
+          } else if (coverage.role === "coverage" && coverage.canonical) {
+            const reason = coverage.canonical.reason ? ` — ${stripAnsi(coverage.canonical.reason)}` : "";
+            console.log(`  Coverage of ${coverage.canonical.canonicalId}${chalk.dim(reason)}`);
+            console.log(chalk.dim(`  Decided by ${coverage.canonical.decidedBy} at ${coverage.canonical.decidedAt}`));
+          }
+        }
       }
     });
 
@@ -301,6 +332,164 @@ Examples:
         console.log(JSON.stringify({ id, suppressed: false }));
       } else {
         console.log(chalk.green(`Unsuppressed release ${id}`));
+      }
+    });
+
+  // ── release link ──
+  release
+    .command("link")
+    .description("Mark one or more releases as coverage of a canonical release")
+    .argument("<canonical>", "Canonical release ID")
+    .argument("<coverage...>", "One or more coverage release IDs")
+    .option("--reason <reason>", "One-line reason recorded with the link")
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  releases admin release link rel_canonical rel_coverage_a rel_coverage_b
+  releases admin release link rel_canonical rel_coverage_a --reason "marketing post for launch"`)
+    .action(async (rawCanonical: string, rawCoverage: string[], opts: { reason?: string; json?: boolean }) => {
+      assertLocalCoverageMode("link");
+      const canonicalId = normalizeReleaseId(rawCanonical);
+      const canonical = await getRelease(canonicalId);
+      if (!canonical) releaseNotFound(canonicalId);
+
+      const coverageIds = rawCoverage.map(normalizeReleaseId);
+      for (const cid of coverageIds) {
+        const cov = await getRelease(cid);
+        if (!cov) releaseNotFound(cid);
+        await linkReleaseCoverage({
+          canonicalId,
+          coverageId: cid,
+          reason: opts.reason,
+          decidedBy: DECIDED_BY_CLI,
+        });
+      }
+
+      if (opts.json) {
+        console.log(JSON.stringify({ canonicalId, coverageIds, reason: opts.reason ?? null }, null, 2));
+      } else {
+        console.log(chalk.green(`Linked ${coverageIds.length} release(s) as coverage of ${canonicalId}.`));
+      }
+    });
+
+  // ── release unlink ──
+  release
+    .command("unlink")
+    .description("Remove a release from its coverage cluster (becomes standalone)")
+    .argument("<id>", "Release ID to unlink")
+    .option("--json", "Output as JSON")
+    .action(async (rawId: string, opts: { json?: boolean }) => {
+      assertLocalCoverageMode("unlink");
+      const id = normalizeReleaseId(rawId);
+      const removed = await unlinkReleaseCoverage(id);
+      if (!removed) {
+        console.error(chalk.yellow(`${id} is not part of any coverage cluster.`));
+        process.exit(1);
+      }
+      if (opts.json) {
+        console.log(JSON.stringify({ id, unlinked: true }));
+      } else {
+        console.log(chalk.green(`Unlinked ${id}.`));
+      }
+    });
+
+  // ── release cluster ──
+  release
+    .command("cluster")
+    .description("Reconcile release coverage for an org using the grouping-releases skill")
+    .argument("<org>", "Organization slug or ID")
+    .option("--window <days>", "Lookback window in days", "30")
+    .option("--model <model>", "Override the grouping model (e.g. claude-sonnet-4-6)")
+    .option("--dry-run", "Print the proposed clusters without writing")
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  releases admin release cluster anthropic
+  releases admin release cluster anthropic --window 7 --dry-run
+  releases admin release cluster anthropic --model claude-sonnet-4-6`)
+    .action(async (orgIdent: string, opts: { window?: string; model?: string; dryRun?: boolean; json?: boolean }) => {
+      assertLocalCoverageMode("cluster");
+      const org = await findOrg(orgIdent);
+      if (!org) {
+        console.error(chalk.red(`Organization not found: ${orgIdent}`));
+        process.exit(1);
+      }
+
+      const windowDays = Number.parseInt(opts.window ?? "30", 10) || 30;
+      const cutoff = daysAgoIso(windowDays);
+      const rows = await getRecentReleasesByOrg(org.id, cutoff);
+
+      if (rows.length === 0) {
+        console.log(chalk.yellow(`No releases for ${org.slug} in the last ${windowDays} days.`));
+        return;
+      }
+
+      const candidates: GroupingCandidate[] = rows.map((r) => ({
+        id: r.id,
+        title: r.title,
+        version: r.version,
+        publishedAt: r.publishedAt,
+        sourceSlug: r.sourceSlug,
+        content: r.contentSummary || r.content,
+      }));
+
+      if (!opts.json) {
+        console.log(chalk.dim(`Grouping ${candidates.length} release(s) for ${org.slug} (window: ${windowDays}d)...`));
+      }
+
+      const result = await groupReleases(candidates, {
+        model: opts.model,
+        context: `Organization: ${org.name} (${org.slug}). Window: last ${windowDays} days.`,
+      });
+
+      const groupedClusters = result.clusters.filter((c) => c.coverageIds.length > 0);
+      const singletons = result.clusters.filter((c) => c.coverageIds.length === 0);
+      const coverageCount = groupedClusters.reduce((acc, c) => acc + c.coverageIds.length, 0);
+
+      if (opts.json) {
+        console.log(JSON.stringify({
+          org: org.slug,
+          windowDays,
+          model: result.model,
+          dryRun: !!opts.dryRun,
+          candidateCount: candidates.length,
+          clusters: result.clusters,
+        }, null, 2));
+      } else {
+        console.log();
+        console.log(chalk.bold(`${result.clusters.length} clusters — ${groupedClusters.length} grouped, ${singletons.length} singleton(s) — ${coverageCount} coverage link(s)`));
+        console.log(chalk.dim(`Model: ${result.model}${opts.dryRun ? " (dry run — nothing written)" : ""}`));
+        console.log();
+        const titleById = new Map(candidates.map((c) => [c.id, c.title]));
+        const titleFor = (id: string) => titleById.get(id) ?? id;
+        for (const c of groupedClusters) {
+          console.log(chalk.bold(`◆ ${titleFor(c.canonicalId)}`));
+          console.log(chalk.dim(`  ${c.canonicalId} — ${c.reason}`));
+          for (const cid of c.coverageIds) {
+            console.log(`    ${chalk.dim("↳")} ${titleFor(cid)} ${chalk.dim(`(${cid})`)}`);
+          }
+        }
+      }
+
+      if (opts.dryRun) return;
+
+      const decidedBy = decidedByAgent(result.model);
+      let written = 0;
+      for (const cluster of groupedClusters) {
+        for (const coverageId of cluster.coverageIds) {
+          await linkReleaseCoverage({
+            canonicalId: cluster.canonicalId,
+            coverageId,
+            reason: cluster.reason,
+            decidedBy,
+          });
+          written++;
+        }
+      }
+
+      if (!opts.json && written > 0) {
+        console.log();
+        console.log(chalk.green(`Wrote ${written} coverage link(s).`));
       }
     });
 }
