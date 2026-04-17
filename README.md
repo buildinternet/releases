@@ -561,7 +561,9 @@ Data is stored in `~/.releases/releases.db` (configurable via `RELEASED_DATA_DIR
 
 ## Deployment
 
-All workers can be deployed from the project root:
+Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt. The workflow also exposes `workflow_dispatch` so any worker (or all three) can be redeployed manually from the Actions tab. Managed agents, skills, and D1 migrations stay manual (they change AI behavior or schema and need human review).
+
+To deploy manually from the project root, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env` (Bun autoloads it) and run:
 
 ```bash
 bun run deploy               # deploy all workers (API + Discovery + MCP)
