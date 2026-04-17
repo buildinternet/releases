@@ -34,3 +34,5 @@ Each source has a `slug` that uniquely identifies it and is used as the primary 
 | **REST API** | Programmatic access, web integrations |
 | **MCP Server** | AI agent tool use (Claude, Cursor, etc.) |
 | **Web UI** | Browsing the catalog at [releases.sh](https://releases.sh) |
+
+The CLI is open source — see [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli).
