@@ -43,11 +43,11 @@ The script detects your platform, downloads the correct binary from npm, and ins
 
 ## From source (development)
 
-Requires [Bun](https://bun.sh) v1.1+.
+The CLI source lives at [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli). Requires [Bun](https://bun.sh) v1.1+.
 
 ```bash
-git clone https://github.com/buildinternet/released.git
-cd released
+git clone https://github.com/buildinternet/releases-cli.git
+cd releases-cli
 bun install
 bun src/index.ts --help
 ```
