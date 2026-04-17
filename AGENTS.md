@@ -177,6 +177,8 @@ The worker binds to the same D1 database as the API and discovery workers. AI to
 
 Deploy: `bun run deploy:mcp`. Dev: `bun run dev:mcp`. Connect from Claude Desktop: `npx mcp-remote https://mcp.releases.sh/mcp`.
 
+**MCP Registry listing:** The server is registered as `sh.releases/mcp` in the official MCP Registry via HTTP-domain auth against `releases.sh` (proof file lives at `web/public/.well-known/mcp-registry-auth`). Metadata is in `workers/mcp/server.json` — bump `version` when you want to publish an update. The `Deploy Workers` GitHub Action runs `mcp-publisher publish` automatically on merges that touch `server.json` (gated on the `MCP_REGISTRY_PRIVATE_KEY_PEM` repo secret). Manual publish: `bun run publish:mcp-registry` after `mcp-publisher login http --domain releases.sh --private-key <hex>`.
+
 ## Agent Architecture
 
 Two Anthropic managed agents handle changelog work, sharing the same tools (`AGENT_TOOLS`) and skills:

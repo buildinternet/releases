@@ -188,7 +188,7 @@ Released is available as an MCP server for AI agent integration. There are two w
 
 #### Remote server (recommended)
 
-Connect to the hosted MCP server at `https://mcp.releases.sh/mcp` — no installation or API keys required for read-only tools.
+Connect to the hosted MCP server at `https://mcp.releases.sh/mcp` — no installation or API keys required for read-only tools. The server is also listed in the [official MCP Registry](https://registry.modelcontextprotocol.io/v0.1/servers?search=sh.releases/mcp) as `sh.releases/mcp` (HTTP-domain auth against `releases.sh`). Metadata lives in `workers/mcp/server.json`; bump its `version` field when you want to publish an update — the `Deploy Workers` GitHub Action re-publishes automatically on merges that touch that file (gated on the `MCP_REGISTRY_PRIVATE_KEY_PEM` secret).
 
 **General endpoint**
 

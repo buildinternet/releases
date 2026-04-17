@@ -25,6 +25,7 @@ jobs:
     outputs:
       api: ${{ steps.filter.outputs.api }}
       mcp: ${{ steps.filter.outputs.mcp }}
+      mcp_registry: ${{ steps.filter.outputs.mcp_registry }}
       discovery: ${{ steps.filter.outputs.discovery }}
     steps:
       - uses: actions/checkout@v4
@@ -47,6 +48,9 @@ jobs:
             mcp:
               - *shared
               - 'workers/mcp/**'
+            mcp_registry:
+              - 'workers/mcp/server.json'
+              - '.github/workflows/deploy-workers.yml'
             discovery:
               - *shared
               - 'workers/discovery/**'
@@ -140,3 +144,46 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bunx wrangler deploy --config workers/discovery/wrangler.jsonc
+
+  publish-mcp-registry:
+    name: Publish MCP registry metadata
+    needs: [changes, deploy-mcp]
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.mcp_registry == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'mcp'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          curl -fsSL "https://github.com/modelcontextprotocol/registry/releases/latest/download/mcp-publisher_linux_amd64.tar.gz" -o /tmp/mcp-publisher.tar.gz
+          tar -xzf /tmp/mcp-publisher.tar.gz -C /tmp mcp-publisher
+          sudo mv /tmp/mcp-publisher /usr/local/bin/mcp-publisher
+      - name: Login and publish
+        working-directory: workers/mcp
+        env:
+          PRIVATE_KEY_PEM: ${{ secrets.MCP_REGISTRY_PRIVATE_KEY_PEM }}
+        run: |
+          set -euo pipefail
+          if [ -z "${PRIVATE_KEY_PEM:-}" ]; then
+            echo "MCP_REGISTRY_PRIVATE_KEY_PEM secret is not set" >&2
+            exit 1
+          fi
+          KEY_FILE="$(mktemp)"
+          trap 'rm -f "$KEY_FILE"' EXIT
+          printf '%s\n' "$PRIVATE_KEY_PEM" > "$KEY_FILE"
+          PRIVATE_KEY="$(openssl pkey -in "$KEY_FILE" -noout -text | grep -A3 'priv:' | tail -n +2 | tr -d ' :\n')"
+          mcp-publisher login http --domain releases.sh --private-key "$PRIVATE_KEY"
+          # Registry rejects re-publishing an existing version; treat that as a no-op
+          # so workflow-dispatch reruns and workflow-only edits don't fail the deploy.
+          if mcp-publisher publish > /tmp/publish.log 2>&1; then
+            cat /tmp/publish.log
+          else
+            cat /tmp/publish.log
+            if grep -q 'already exists' /tmp/publish.log; then
+              echo "Version already published — skipping."
+              exit 0
+            fi
+            exit 1
+          fi
