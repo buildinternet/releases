@@ -181,7 +181,7 @@ jobs:
             cat /tmp/publish.log
           else
             cat /tmp/publish.log
-            if grep -q 'already exists' /tmp/publish.log; then
+            if grep -qE 'already exists|duplicate version' /tmp/publish.log; then
               echo "Version already published — skipping."
               exit 0
             fi
