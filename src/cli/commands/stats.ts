@@ -26,7 +26,7 @@ Examples:
           period: data.period,
           totals: data.totals,
           sourceHealth: data.sourceHealth,
-          sources: data.sources.map((s) => ({
+          sourceActivity: data.sourceActivity.map((s) => ({
             name: s.sourceName,
             slug: s.sourceSlug,
             type: s.sourceType,
@@ -57,7 +57,7 @@ Examples:
       }
 
       // Top sources table
-      const activeSources = data.sources.filter((s) => s.totalReleases > 0 || s.recentReleases > 0);
+      const activeSources = data.sourceActivity.filter((s) => s.totalReleases > 0 || s.recentReleases > 0);
       if (activeSources.length > 0) {
         console.log(chalk.bold("\nSources by Activity\n"));
         const sourceTable = new Table({
