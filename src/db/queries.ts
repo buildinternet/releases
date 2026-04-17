@@ -157,7 +157,7 @@ export async function getRecentReleasesByOrg(
   orgId: string,
   cutoffIso: string,
 ): Promise<Array<Release & { sourceName: string; sourceSlug: string }>> {
-  // TODO: add remote mode support (used only by AI summary/compare; not yet implemented in API)
+  if (isRemoteMode()) return apiClient.getRecentReleasesByOrg(orgId, cutoffIso);
   const db = getDb();
   const rows = await db
     .select({
@@ -1007,15 +1007,7 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
   return !!updated;
 }
 
-// ── Release coverage (local only) ──
-// Remote API routes for coverage are a follow-up; remote mode throws so callers
-// see the limitation rather than a silent no-op.
-
-function remoteCoverageUnsupported(): never {
-  throw new Error(
-    "release coverage mutations are not yet wired for remote mode — run locally (unset RELEASED_API_URL) to link / cluster",
-  );
-}
+// ── Release coverage ──
 
 export async function linkReleaseCoverage(row: {
   canonicalId: string;
@@ -1023,10 +1015,10 @@ export async function linkReleaseCoverage(row: {
   reason?: string | null;
   decidedBy: string;
 }): Promise<void> {
-  if (isRemoteMode()) remoteCoverageUnsupported();
   if (row.canonicalId === row.coverageId) {
     throw new Error("a release cannot be coverage of itself");
   }
+  if (isRemoteMode()) return apiClient.linkReleaseCoverage(row);
   const db = getDb();
   await db.insert(releaseCoverage).values({
     canonicalId: row.canonicalId,
@@ -1045,7 +1037,7 @@ export async function linkReleaseCoverage(row: {
 }
 
 export async function unlinkReleaseCoverage(releaseId: string): Promise<boolean> {
-  if (isRemoteMode()) remoteCoverageUnsupported();
+  if (isRemoteMode()) return apiClient.unlinkReleaseCoverage(releaseId);
   const db = getDb();
   const deleted = await db.delete(releaseCoverage)
     .where(eq(releaseCoverage.coverageId, releaseId))
@@ -1058,9 +1050,7 @@ export async function getReleaseCoverage(releaseId: string): Promise<{
   canonical: ReleaseCoverage | null;
   covers: ReleaseCoverage[];
 }> {
-  if (isRemoteMode()) {
-    return { role: "standalone", canonical: null, covers: [] };
-  }
+  if (isRemoteMode()) return apiClient.getReleaseCoverage(releaseId);
   const db = getDb();
   const [asCoverage] = await db.select().from(releaseCoverage)
     .where(eq(releaseCoverage.coverageId, releaseId))

@@ -152,3 +152,72 @@ describe("listSourcesWithOrg", () => {
     expect(capturedUrl).toContain("category=ai");
   });
 });
+
+// ---------------------------------------------------------------------------
+// Release coverage shims — path + body shape + 404 mapping
+// ---------------------------------------------------------------------------
+
+describe("release coverage shims", () => {
+  let originalFetch: typeof globalThis.fetch;
+
+  beforeEach(() => {
+    originalFetch = globalThis.fetch;
+  });
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  function captureFetch(status: number, body: unknown = {}) {
+    const calls: Array<{ url: string; init?: RequestInit }> = [];
+    globalThis.fetch = (async (url: string, init?: RequestInit) => {
+      calls.push({ url, init });
+      return new Response(JSON.stringify(body), {
+        status,
+        headers: { "Content-Type": "application/json" },
+      });
+    }) as any;
+    return calls;
+  }
+
+  it("linkReleaseCoverage POSTs a single-element coverageIds array to the canonical id", async () => {
+    const calls = captureFetch(201, { linked: 1 });
+    await client.linkReleaseCoverage({
+      canonicalId: "rel_canon",
+      coverageId: "rel_cover",
+      reason: "marketing post for launch",
+      decidedBy: "human:cli",
+    });
+    expect(calls).toHaveLength(1);
+    expect(calls[0].url).toContain("/v1/releases/rel_canon/coverage");
+    expect(calls[0].init?.method).toBe("POST");
+    const body = JSON.parse(calls[0].init?.body as string);
+    expect(body).toEqual({
+      coverageIds: ["rel_cover"],
+      reason: "marketing post for launch",
+      decidedBy: "human:cli",
+    });
+  });
+
+  it("unlinkReleaseCoverage returns { unlinked } from the idempotent DELETE response", async () => {
+    captureFetch(200, { unlinked: false });
+    expect(await client.unlinkReleaseCoverage("rel_notlinked")).toBe(false);
+
+    captureFetch(200, { unlinked: true });
+    expect(await client.unlinkReleaseCoverage("rel_cover")).toBe(true);
+  });
+
+  it("getReleaseCoverage falls back to standalone when the API returns 404", async () => {
+    captureFetch(404);
+    const result = await client.getReleaseCoverage("rel_missing");
+    expect(result).toEqual({ role: "standalone", canonical: null, covers: [] });
+  });
+
+  it("getRecentReleasesByOrg passes since + limit as query params", async () => {
+    const calls = captureFetch(200, []);
+    await client.getRecentReleasesByOrg("org_123", "2026-03-17T00:00:00.000Z");
+    expect(calls[0].url).toContain("/v1/orgs/org_123/recent-releases");
+    expect(calls[0].url).toContain("since=2026-03-17T00%3A00%3A00.000Z");
+    expect(calls[0].url).toContain("limit=2000");
+  });
+});
