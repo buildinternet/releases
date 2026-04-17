@@ -26,6 +26,13 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       title: source.name,
       description: `Release notes and changelog for ${source.name}`,
       openGraph: { type: "website" },
+      alternates: {
+        types: {
+          "application/atom+xml": [
+            { url: `/source/${slug}.atom`, title: `${source.name} — Atom feed` },
+          ],
+        },
+      },
     };
   } catch {
     return { title: slug };

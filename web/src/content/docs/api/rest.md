@@ -204,3 +204,26 @@ Get cached AI summaries for a source.
 | `type` | `rolling` or `monthly` |
 | `year` | Filter by year (for monthly summaries) |
 | `month` | Filter by month |
+
+---
+
+## Web URL formats
+
+Every org and source page on `releases.sh` has three machine-readable URL suffixes alongside the HTML:
+
+| Suffix | Content-Type | Use case |
+| --- | --- | --- |
+| `.json` | `application/json` | Programmatic / agent consumption |
+| `.md` | `text/markdown` | LLM context, prompt-friendly output |
+| `.atom` | `application/atom+xml` | Feed readers (Feedly, Inoreader, NetNewsWire), webhook bots |
+
+```
+https://releases.sh/anthropic          # HTML
+https://releases.sh/anthropic.json     # JSON
+https://releases.sh/anthropic.md       # Markdown
+https://releases.sh/anthropic.atom     # Atom 1.0 feed
+```
+
+The same suffixes work on source pages (`/{org}/{source}.atom`) and standalone sources (`/source/{slug}.atom`).
+
+Atom feeds include the 50 most recent entries with stable `<id>`s, RFC 3339 timestamps, and HTML-typed content. They respond to `If-None-Match` / `If-Modified-Since` with `304 Not Modified` when unchanged — drop in to any feed reader or polling tool without a custom adapter. The feed is also advertised from each HTML page via `<link rel="alternate" type="application/atom+xml">` for browser auto-discovery.

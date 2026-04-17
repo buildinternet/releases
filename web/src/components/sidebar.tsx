@@ -74,6 +74,8 @@ export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitl
               <a href={`${formatPath}.json`} className="hover:text-stone-600 dark:hover:text-stone-300">.json</a>
               <span>·</span>
               <a href={`${formatPath}.md`} className="hover:text-stone-600 dark:hover:text-stone-300">.md</a>
+              <span>·</span>
+              <a href={`${formatPath}.atom`} className="hover:text-stone-600 dark:hover:text-stone-300">.atom</a>
             </div>
           )}
         </div>
