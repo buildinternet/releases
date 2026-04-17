@@ -13,10 +13,11 @@ import {
   getOrgAccountsBySlug, getTagsForOrg, getProductsByOrg, listDomainAliases,
   isUrlExcluded, listIgnoredUrls, addIgnoredUrl, removeIgnoredUrl,
   listBlockedUrls, addBlockedUrl, removeBlockedUrl,
-  suppressRelease, unsuppressRelease, createOrg,
+  suppressRelease, unsuppressRelease, createOrg, getOrgOverview,
 } from "../db/queries.js";
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
+import { OVERVIEW_STALE_DAYS, isOverviewStale, overviewPreview } from "@releases/core/overview";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { isAdminMode } from "../lib/mode.js";
@@ -400,7 +401,7 @@ server.registerTool("list_organizations", {
 
 // ── get_organization ─────────────────────────────────────────────────
 server.registerTool("get_organization", {
-  description: "Get detailed information about a single organization including accounts, tags, sources, products, and aliases",
+  description: "Get detailed information about a single organization including accounts, tags, sources, products, aliases, and a short preview of its AI-generated overview when one exists. Use `get_organization_overview` to read the full overview text.",
   inputSchema: {
     identifier: z.string().describe("Organization slug, domain, name, or account handle"),
   },
@@ -410,12 +411,13 @@ server.registerTool("get_organization", {
     return textResult(`No organization found matching "${identifier}"`);
   }
 
-  const [accounts, tagRows, orgSources, orgProducts, aliases] = await Promise.all([
+  const [accounts, tagRows, orgSources, orgProducts, aliases, overview] = await Promise.all([
     getOrgAccountsBySlug(org.slug, org.id),
     getTagsForOrg(org.id),
     getSourcesByOrg(org.id),
     getProductsByOrg(org.id),
     listDomainAliases({ orgId: org.id }),
+    getOrgOverview(org.id, org.slug).catch(() => null),
   ]);
 
   const lines: string[] = [];
@@ -424,6 +426,19 @@ server.registerTool("get_organization", {
     `Slug: ${org.slug} | Domain: ${org.domain ?? "N/A"} | Category: ${org.category ?? "N/A"}`,
   );
   if (org.description) lines.push(`Description: ${org.description}`);
+
+  if (overview?.content) {
+    const stale = isOverviewStale(overview.generatedAt);
+    const ageLabel = timeAgo(overview.generatedAt) ?? "unknown";
+    lines.push("");
+    lines.push(`**Overview** (generated ${ageLabel}, ${overview.releaseCount} releases)`);
+    if (stale) {
+      lines.push(`⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`);
+    }
+    lines.push(overviewPreview(overview.content));
+    lines.push(`_Use \`get_organization_overview\` with identifier "${org.slug}" to read the full overview._`);
+  }
+
   lines.push("");
   lines.push(
     accounts.length > 0
@@ -461,6 +476,36 @@ server.registerTool("get_organization", {
   }
 
   return textResult(lines.join("\n"));
+});
+
+// ── get_organization_overview ────────────────────────────────────────
+server.registerTool("get_organization_overview", {
+  description: "Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections. Returned with a generated-at timestamp and a stale warning if the overview is older than 30 days.",
+  inputSchema: {
+    identifier: z.string().describe("Organization slug, domain, name, or account handle"),
+  },
+}, async ({ identifier }) => {
+  const org = await findOrg(identifier);
+  if (!org) return textResult(`No organization found matching "${identifier}"`);
+
+  const overview = await getOrgOverview(org.id, org.slug).catch(() => null);
+  if (!overview?.content) {
+    return textResult(`No overview available for ${org.name} (${org.slug}).`);
+  }
+
+  const stale = isOverviewStale(overview.generatedAt);
+  const ageLabel = timeAgo(overview.generatedAt) ?? "unknown";
+  const header: string[] = [
+    `**${org.name} — overview**`,
+    `Generated ${ageLabel} · ${overview.releaseCount} releases`,
+  ];
+  if (stale) {
+    header.push(`⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`);
+  }
+  header.push("");
+  header.push(overview.content);
+
+  return textResult(header.join("\n"));
 });
 
 // ── get_source_changelog ─────────────────────────────────────────────

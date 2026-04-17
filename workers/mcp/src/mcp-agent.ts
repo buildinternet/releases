@@ -10,6 +10,7 @@ import {
   listSources,
   listOrganizations,
   getOrganization,
+  getOrganizationOverview,
   getSourceChangelog,
   getRelease,
   getSource,
@@ -114,11 +115,18 @@ export function createServer(env: Env) {
   }, async (params) => listOrganizations(db, params));
 
   server.registerTool("get_organization", {
-    description: "Get detailed information about a single organization including accounts, tags, sources, products, and aliases",
+    description: "Get detailed information about a single organization including accounts, tags, sources, products, aliases, and a short preview of its AI-generated overview when one exists. Use `get_organization_overview` to read the full overview text.",
     inputSchema: {
       identifier: z.string().describe("Organization slug, domain, name, or account handle"),
     },
   }, async (params) => getOrganization(db, params));
+
+  server.registerTool("get_organization_overview", {
+    description: "Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections. Returned with a generated-at timestamp and a stale warning if the overview is older than 30 days. Use this when the user wants the narrative summary for an org, not the raw release list.",
+    inputSchema: {
+      identifier: z.string().describe("Organization slug, domain, name, or account handle"),
+    },
+  }, async (params) => getOrganizationOverview(db, params));
 
   server.registerTool("get_source", {
     description: "Detail for a single indexed source: organization, optional product linkage, release count (excluding suppressed), last-fetched timestamp, and whether a tracked CHANGELOG file is available for get_source_changelog. Use this after list_sources or search_releases when the user wants to understand one source in depth (e.g. 'tell me about the apollo-client source').",

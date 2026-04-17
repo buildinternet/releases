@@ -6,7 +6,7 @@
     "strict": true,
     "skipLibCheck": true,
     "lib": ["ESNext"],
-    "types": ["@cloudflare/workers-types"],
+    "types": ["@cloudflare/workers-types", "bun"],
     "paths": {
       "@buildinternet/releases-core/*": ["../../packages/core/src/*"],
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],

@@ -18,6 +18,13 @@ import { logger } from "@buildinternet/releases-lib/logger";
 import { orgNotFound } from "../suggest.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isValidCategory, CATEGORIES } from "@buildinternet/releases-core/categories";
+import { timeAgo } from "@buildinternet/releases-core/dates";
+import {
+  OVERVIEW_STALE_DAYS,
+  isOverviewStale,
+  overviewAgeDays,
+  overviewPreview,
+} from "@releases/core/overview";
 import type { OverviewRegenResult } from "../../ai/knowledge.js";
 
 function parseWindowDays(raw: string | undefined): number {
@@ -246,12 +253,81 @@ Examples:
       }
 
       if (overview?.content) {
+        const preview = overviewPreview(stripAnsi(overview.content));
+        const stale = overview.generatedAt ? isOverviewStale(overview.generatedAt) : false;
+        const generatedHint = overview.generatedAt
+          ? chalk.dim(`generated ${timeAgo(overview.generatedAt) ?? "?"}`)
+          : "";
+
         console.log();
-        console.log(chalk.bold("Overview:"));
-        console.log(stripAnsi(overview.content));
+        console.log(`${chalk.bold("Overview")}  ${generatedHint}`);
+        if (stale) {
+          console.log(chalk.yellow(`  ⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`));
+        }
+        console.log(preview);
       }
 
-      console.log(chalk.dim(`\n  More: "releases latest --org ${found.slug}" for recent releases · "releases show <src-slug>" for a specific source`));
+      const moreHints = [
+        `"releases org overview ${found.slug}" for the full overview`,
+        `"releases latest --org ${found.slug}" for recent releases`,
+        `"releases show <src-slug>" for a specific source`,
+      ];
+      console.log(chalk.dim(`\n  More: ${moreHints.join(" · ")}`));
+    });
+
+  // ── org overview ──
+  org
+    .command("overview")
+    .description("Print the full AI-generated overview for an organization")
+    .argument("<identifier>", "Org slug, domain, name, or account handle")
+    .option("--json", "Output as JSON")
+    .addHelpText("after", `
+Examples:
+  releases org overview acme
+  releases org overview acme --json`)
+    .action(async (identifier: string, opts: { json?: boolean }) => {
+      const found = await findOrg(identifier);
+      if (!found) return orgNotFound(identifier);
+
+      const overview = await getOrgOverview(found.id, found.slug).catch(() => null);
+
+      if (!overview?.content) {
+        if (opts.json) {
+          console.log(JSON.stringify({ org: found.slug, overview: null }, null, 2));
+        } else {
+          console.log(chalk.yellow(`No overview available for ${found.name}.`));
+          console.log(chalk.dim(`  Generate one with: releases admin org show ${found.slug} --regenerate`));
+        }
+        return;
+      }
+
+      const stale = overview.generatedAt ? isOverviewStale(overview.generatedAt) : false;
+      const ageDays = overview.generatedAt ? overviewAgeDays(overview.generatedAt) : null;
+
+      if (opts.json) {
+        console.log(JSON.stringify({
+          org: found.slug,
+          name: found.name,
+          generatedAt: overview.generatedAt,
+          updatedAt: overview.updatedAt,
+          lastContributingReleaseAt: overview.lastContributingReleaseAt,
+          releaseCount: overview.releaseCount,
+          stale,
+          ageDays,
+          content: overview.content,
+        }, null, 2));
+        return;
+      }
+
+      console.log(chalk.bold(`${found.name} — overview`));
+      if (overview.generatedAt) {
+        console.log(chalk.dim(`  generated ${timeAgo(overview.generatedAt) ?? "?"} · ${overview.releaseCount} releases`));
+      }
+      if (stale) {
+        console.log(chalk.yellow(`  ⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`));
+      }
+      console.log();
+      console.log(stripAnsi(overview.content));
     });
 
   // ── org refresh ──

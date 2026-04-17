@@ -98,6 +98,11 @@ releases show vercel                        # slug fallthrough (org → product 
 For deeper operator views, use the admin commands (`admin org show <slug>`,
 `admin product list <org>`, `admin release show <id>`).
 
+`releases org overview <slug>` prints the full AI-generated overview for an
+organization (`org show` shows just a preview). The output includes a
+"generated X days ago" line and a stale warning when the overview is more
+than 30 days old.
+
 ### Summaries
 
 Generate a natural-language summary of recent releases for a source or organization:
