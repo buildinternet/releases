@@ -115,19 +115,13 @@ releases admin source poll --json            # Machine-readable output
 - Source slug is always a **positional argument** (e.g., `admin source fetch claude-code`), not a flag. The fetch command also accepts `--source <slug>` as an alias for convenience.
 - `releases admin org list` returns a summary view (counts, last activity) without accounts or tags. Use `releases admin org show <slug>` to see full details including linked platform accounts, tags, sources, and products.
 
-## npm Distribution
+## CLI Distribution
 
-The CLI is published as `@buildinternet/releases` on npm with platform-specific binary packages (`darwin-arm64`, `darwin-x64`, `linux-x64`, `linux-arm64`). Package scaffolding is in `npm/`, and all five packages are bun workspaces so Changesets can see them.
+The CLI is published from the public OSS repo at [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) — not from this monorepo. That repo owns `@buildinternet/releases{,-darwin-*,-linux-*}` on npm, the GitHub Release binaries, and the Homebrew tap (`buildinternet/homebrew-tap`).
 
-**Release flow (Changesets):** every PR that changes user-visible behavior (CLI commands, MCP tools, REST routes, deployment requirements) must ship with a `bun run changeset` entry — commit the generated `.changeset/*.md` file alongside your code changes.
+This monorepo consumes the published packages (`@buildinternet/releases-core`, `-lib`, `-skills`) like any other npm dependency. It does not carry `npm/*` scaffolds, Changesets config, or a `Release CLI` workflow anymore — if you see those in an old PR, don't restore them.
 
-1. **In your PR**: run `bun run changeset` and pick a bump (`patch`/`minor`/`major`) + short summary. This writes a `.changeset/*.md` file that you commit with the PR. The five `@buildinternet/releases*` packages are in a `fixed` group so they always bump together (`.changeset/config.json`).
-2. **On merge to main**: the `Release CLI` workflow (`.github/workflows/release.yml`) runs `changesets/action@v1`. If there are pending changesets, it opens (or updates) a `chore: version packages` PR that runs `bun run changeset:version` — that calls `changeset version` to bump `npm/*/package.json` + write `CHANGELOG.md`, then `scripts/sync-version.ts` mirrors the new version back to root `package.json`, `src/cli/program.ts`, and `src/mcp/server.ts`, then `bun install` refreshes the lockfile.
-3. **Merging the version PR** triggers the workflow again, changesets/action detects there are no pending changesets and runs `bun run changeset:publish` to publish all five packages to npm. Subsequent steps gzip the binaries, publish them as a GitHub Release on the public mirror (`buildinternet/releases`, tagged `v<version>`), and regenerate `Formula/releases.rb` in the public tap (`buildinternet/homebrew-tap`) with the new version + SHAs. Both cross-repo writes use the `TAP_PUBLISH_TOKEN` secret (a fine-grained PAT with write access to both).
-
-**Homebrew distribution:** the source of truth for the formula is the public tap repo — the monorepo does not carry a copy. Hand-edits to the formula (e.g., `depends_on`, `livecheck`) should be made in the tap heredoc inside `.github/workflows/release.yml`, since CI overwrites the tap copy on every publish. The binaries it points at live as GitHub Release assets on `buildinternet/releases` (a public binaries-only mirror — no source), which keeps this monorepo private while still letting Homebrew do anonymous downloads.
-
-Root `package.json` is `private: true` so it's excluded from changesets — the source of truth for version is `npm/releases/package.json`, and `sync-version.ts` keeps everything else in step. Never hand-edit versions in `src/cli/program.ts`, `src/mcp/server.ts`, or root `package.json` — run `bun run changeset` instead. `NPM_PUBLISHING_TOKEN` is a repo secret used by the workflow (granular token with "Bypass 2FA" — npm still demands OTP for passkey accounts otherwise).
+**If a CLI change needs to ship:** land it in `buildinternet/releases-cli`, run `bun run changeset` there, and merge. The OSS repo's own workflow handles the version PR + publish. Shared code used by workers (e.g. `packages/core`, `packages/lib`) can still be edited here, but the published copies live in the OSS repo — monorepo edits to those packages are dev-only until mirrored.
 
 ## Remote Mode (D1)
 
