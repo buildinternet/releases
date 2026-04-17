@@ -198,7 +198,9 @@ export function sourceToAtom(source: SourceDetail, opts: AtomFeedOptions): strin
     {
       scope: "source",
       slug: source.slug,
-      title: orgName ? `${source.name} — ${orgName}` : source.name,
+      title: orgName
+        ? `${source.name} release notes — ${orgName}`
+        : `${source.name} release notes`,
       subtitle: `Release notes and changelog for ${source.name}`,
       selfUrl: `${sourcePath}.atom`,
       alternateUrl: sourcePath,
@@ -232,7 +234,7 @@ export function orgReleasesToAtom(
     {
       scope: "org",
       slug: params.orgSlug,
-      title: params.orgName,
+      title: `${params.orgName} release notes`,
       subtitle: `${params.orgName} release notes and changelog`,
       selfUrl: `${orgPath}.atom`,
       alternateUrl: orgPath,

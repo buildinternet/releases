@@ -29,7 +29,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
       alternates: {
         types: {
           "application/atom+xml": [
-            { url: `/source/${slug}.atom`, title: `${source.name} — Atom feed` },
+            { url: `/source/${slug}.atom`, title: `${source.name} release notes` },
           ],
         },
       },

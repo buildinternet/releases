@@ -49,7 +49,7 @@ describe("sourceToAtom", () => {
 
     expect(xml).toStartWith('<?xml version="1.0" encoding="utf-8"?>');
     expect(xml).toInclude('<feed xmlns="http://www.w3.org/2005/Atom"');
-    expect(xml).toInclude("<title>Next.js — Vercel</title>");
+    expect(xml).toInclude("<title>Next.js release notes — Vercel</title>");
     expect(xml).toInclude(
       '<link rel="self" type="application/atom+xml" href="https://releases.sh/vercel/next-releases.atom" />',
     );
@@ -113,7 +113,7 @@ describe("orgReleasesToAtom", () => {
       { baseUrl: BASE },
     );
 
-    expect(xml).toInclude("<title>Acme Inc</title>");
+    expect(xml).toInclude("<title>Acme Inc release notes</title>");
     expect(xml).toInclude(
       '<link rel="self" type="application/atom+xml" href="https://releases.sh/acme.atom" />',
     );
@@ -130,7 +130,7 @@ describe("orgReleasesToAtom", () => {
     );
 
     expect(xml).toStartWith('<?xml version="1.0" encoding="utf-8"?>');
-    expect(xml).toInclude("<title>Empty Org</title>");
+    expect(xml).toInclude("<title>Empty Org release notes</title>");
     expect(xml).not.toInclude("<entry>");
   });
 
