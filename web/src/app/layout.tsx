@@ -21,9 +21,10 @@ export const metadata: Metadata = {
     type: "website",
     siteName: "releases.sh",
     locale: "en_US",
+    url: "https://releases.sh",
   },
   twitter: {
-    card: "summary",
+    card: "summary_large_image",
   },
 };
 
