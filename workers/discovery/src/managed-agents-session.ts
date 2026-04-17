@@ -150,6 +150,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         agent: useWorker ? "haiku" : "sonnet",
         anthropicSessionId: session.id,
         ...(params.correlationId ? { correlationId: params.correlationId } : {}),
+        // Register source identifiers so the CLI overlap check can detect
+        // in-flight managed-agent sessions. These may be IDs (src_…) or slugs;
+        // fetch.ts normalises them to slugs before comparing.
+        ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
+          ? { activeSources: params.sourceIdentifiers }
+          : {}),
       }, releasedApiKey);
 
       let prompt: string;
