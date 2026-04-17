@@ -10,7 +10,7 @@
  */
 
 import { createHash } from "node:crypto";
-import { sliceChangelog } from "@releases/core/changelog-slice";
+import { sliceChangelog } from "@buildinternet/releases-core/changelog-slice";
 import { countTokensSafe } from "@releases/core/tokens";
 
 /**

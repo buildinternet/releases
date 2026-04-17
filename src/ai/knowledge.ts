@@ -1,9 +1,9 @@
 import { getAnthropicClient } from "./client.js";
 import { config } from "@releases/lib/config";
 import { logUsage } from "../lib/usage.js";
-import type { Release, ReleaseSummary, Source, Organization } from "@releases/core/schema";
-import { logger } from "@releases/lib/logger";
-import { daysAgoIso } from "@releases/core/dates";
+import type { Release, ReleaseSummary, Source, Organization } from "@buildinternet/releases-core/schema";
+import { logger } from "@buildinternet/releases-lib/logger";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { getRecentReleases, getOrgOverview, upsertOverviewPage } from "../db/queries.js";
 
 export const OVERVIEW_WINDOW_DAYS = 90;

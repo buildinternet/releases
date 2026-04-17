@@ -3,7 +3,7 @@ import chalk from "chalk";
 import { unifiedSearch } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { isRemoteMode } from "../../lib/mode.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import type { UnifiedSearchResponse } from "../../api/types.js";
 
 const SEARCH_MODES = ["lexical", "semantic", "hybrid"] as const;

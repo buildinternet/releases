@@ -1,6 +1,6 @@
 /** Shared utilities for release extraction across AI parsers and adapters. */
 
-import { RELEASE_TYPES } from "@releases/core/schema";
+import { RELEASE_TYPES } from "@buildinternet/releases-core/schema";
 
 /** Matches placeholder version strings the model sometimes returns instead of omitting the field. */
 export const PLACEHOLDER_RE = /^<?(unknown|none|n\/a|null|undefined)>?$/i;

@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { releaseSummaries, sources } from "@releases/core/schema";
+import { releaseSummaries, sources } from "@buildinternet/releases-core/schema";
 import { sourceWhere } from "../utils.js";
 import type { Env } from "../index.js";
 

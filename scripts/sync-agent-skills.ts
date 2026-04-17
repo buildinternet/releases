@@ -24,7 +24,7 @@ import { createHash } from "crypto";
 import { buildDiscoverySystemPrompt } from "../src/shared/discovery-prompt.js";
 import { buildWorkerSystemPrompt } from "../src/shared/worker-prompt.js";
 import { AGENT_TOOLS } from "../src/shared/agent-tools.js";
-import { CATEGORIES } from "@releases/core/categories";
+import { CATEGORIES } from "@buildinternet/releases-core/categories";
 
 // ── Config ───────────────────────────────────────────────────────
 

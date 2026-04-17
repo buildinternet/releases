@@ -1,8 +1,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { findOrg, createOrg, createSource, isUrlExcluded, findProduct } from "../../db/queries.js";
-import { toSlug } from "@releases/core/slug";
-import { logger } from "@releases/lib/logger";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { evaluateChangelog, buildMetadataFromEvaluation } from "../../ai/evaluate.js";
 import type { EvaluationResult } from "../../ai/evaluate.js";
 import { readFileSync } from "fs";

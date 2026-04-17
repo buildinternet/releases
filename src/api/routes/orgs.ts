@@ -1,6 +1,6 @@
 import { eq, desc, count, max, sql, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { organizations, orgAccounts, sources, releases, products } from "@releases/core/schema";
+import { organizations, orgAccounts, sources, releases, products } from "@buildinternet/releases-core/schema";
 import { getOrgMetrics } from "../metrics.js";
 import type { SitemapPayload } from "../types.js";
 

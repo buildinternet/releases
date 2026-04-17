@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { sources, releases } from "@releases/core/schema";
+import { sources, releases } from "@buildinternet/releases-core/schema";
 
 /** Exclude hidden sources: (is_hidden = 0 OR is_hidden IS NULL) */
 export const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;

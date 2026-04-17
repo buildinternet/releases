@@ -9,6 +9,14 @@ Get the Releases CLI up and running.
 
 <!-- slot:install-tabs -->
 
+## Homebrew
+
+On macOS and Linux with [Homebrew](https://brew.sh):
+
+```bash
+brew install buildinternet/tap/releases
+```
+
 ## npm
 
 Install globally via npm — prebuilt binaries for macOS and Linux are included:

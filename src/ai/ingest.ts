@@ -1,10 +1,10 @@
 import { config } from "@releases/lib/config";
 import { AIError } from "@releases/lib/errors";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired, withParseInstructions } from "./shared.js";
-import type { ReleaseType } from "@releases/core/schema";
+import type { ReleaseType } from "@buildinternet/releases-core/schema";
 
 export interface ParsedRelease {
   version?: string;

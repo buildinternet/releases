@@ -11,7 +11,7 @@ import {
   products,
   productTags,
   sourceChangelogFiles,
-} from "@releases/core/schema";
+} from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 
 // The MCP tools accept a drizzle DB instance. The bun-sqlite drizzle

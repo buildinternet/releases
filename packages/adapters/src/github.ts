@@ -1,8 +1,8 @@
-import type { Source } from "@releases/core/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { sha256Hex } from "@releases/core/hash";
 
 function parseOwnerRepo(url: string): { owner: string; repo: string } {

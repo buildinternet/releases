@@ -1,12 +1,12 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import { resolve } from "path";
-import { homedir } from "os";
 import { existsSync, mkdirSync, symlinkSync } from "fs";
 import { config } from "@releases/lib/config";
 import { resolveCLICmd } from "./cli-cmd.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
+import { skillsDir as npmSkillsDir } from "@buildinternet/releases-skills";
 import type { Confidence } from "../lib/discover.js";
-import { CATEGORIES } from "@releases/core/categories";
+import { CATEGORIES } from "@buildinternet/releases-core/categories";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -159,19 +159,22 @@ IMPORTANT: At the end of discovery tasks, write a JSON state file to ${DISCOVERY
 
 /** Resolve the skills source directory using conventional paths with env override. */
 function resolveSkillsDir(): string | null {
-  // 1. Explicit override
+  // 1. Explicit override — highest priority, useful in dev and custom deployments
   const envDir = process.env.RELEASED_SKILLS_DIR;
   if (envDir && existsSync(envDir)) return envDir;
 
-  // 2. Container convention
-  const containerDir = "/usr/share/releases/skills";
-  if (existsSync(containerDir)) return containerDir;
+  // 2. npm package — resolves to the bundled skills/ directory inside
+  //    @buildinternet/releases-skills when installed from npm, or the
+  //    repo-root skills/ directory during local OSS development.
+  try {
+    const pkgDir = npmSkillsDir();
+    if (existsSync(pkgDir)) return pkgDir;
+  } catch {
+    // package not installed — fall through
+  }
 
-  // 3. Local user convention
-  const localDir = resolve(homedir(), ".releases/skills");
-  if (existsSync(localDir)) return localDir;
-
-  // 4. Dev fallback — source tree (for running via bun src/index.ts)
+  // 3. Dev fallback — source tree skills directory (for bun src/index.ts in
+  //    the monorepo when the npm package isn't installed yet)
   const devDir = resolve(import.meta.dir, "skills");
   if (existsSync(devDir)) return devDir;
 

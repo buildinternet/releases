@@ -1,5 +1,5 @@
 import type { RawRelease, FetchOptions } from "@releases/adapters/types";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 // Re-export source-meta helpers so consumers can pull everything feed-related
 // from a single path.

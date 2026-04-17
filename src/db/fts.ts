@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import { isRemoteMode } from "../lib/mode.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import type { SearchOrgHit, SearchProductHit, SearchSourceHit, SearchReleaseHit, RawSourceHit, MediaItem } from "../api/types.js";
 import { foldSourcesIntoProducts } from "../api/types.js";
 import { hydrateMediaUrls, resolveR2Url } from "../lib/media-url.js";

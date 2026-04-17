@@ -2,7 +2,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { getDbPath } from "@releases/lib/config";
 import { isRemoteMode } from "../lib/mode.js";
-import * as schema from "@releases/core/schema";
+import * as schema from "@buildinternet/releases-core/schema";
 
 let _db: ReturnType<typeof drizzle<typeof schema>> | null = null;
 

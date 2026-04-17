@@ -5,8 +5,8 @@ import { eq, desc, inArray, and } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { unifiedSearchLocal } from "../db/fts.js";
 import { runMigrations } from "../db/migrate.js";
-import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "@releases/core/schema";
-import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@releases/core/changelog-slice";
+import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "@buildinternet/releases-core/schema";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
 import { searchReleases } from "../db/fts.js";
 import {
   findSource, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
@@ -16,9 +16,9 @@ import {
   suppressRelease, unsuppressRelease, createOrg,
 } from "../db/queries.js";
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
-import { daysAgoIso } from "@releases/core/dates";
-import { toSlug } from "@releases/core/slug";
-import { logger } from "@releases/lib/logger";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { isAdminMode } from "../lib/mode.js";
 import { recordEvent } from "../lib/telemetry.js";
 import { getAdapter } from "../adapters/resolve.js";

@@ -1,4 +1,4 @@
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { parseChangelog } from "./ingest.js";
 import type { CrawlPage, RawRelease, FetchOptions } from "@releases/adapters/types";
 

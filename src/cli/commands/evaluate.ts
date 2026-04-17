@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { evaluateChangelog, applyEvaluation, type EvaluationResult } from "../../ai/evaluate.js";
 import { findSource } from "../../db/queries.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 function formatResult(result: EvaluationResult, url: string): string {
   const lines: string[] = [];

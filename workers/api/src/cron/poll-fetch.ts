@@ -1,9 +1,9 @@
 import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { sources, releases, fetchLog, sourceChangelogFiles, sourceChangelogChunks } from "@releases/core/schema";
+import { sources, releases, fetchLog, sourceChangelogFiles, sourceChangelogChunks } from "@buildinternet/releases-core/schema";
 import { countTokensSafe } from "@releases/core/tokens";
 import { notDisabled } from "../queries/shared.js";
-import type { Source } from "@releases/core/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapters/feed.js";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
 import { contentHash } from "@releases/adapters/content-hash";

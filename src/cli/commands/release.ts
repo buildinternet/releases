@@ -6,7 +6,7 @@ import {
   getRelease, deleteRelease, updateRelease, deleteReleasesByFilter, deleteReleasesForSource,
 } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { normalizeReleaseId } from "@releases/core/id";
+import { normalizeReleaseId } from "@buildinternet/releases-core/id";
 
 function releaseNotFound(id: string): never {
   console.error(chalk.red(`Release not found: ${id}`));

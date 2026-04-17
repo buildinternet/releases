@@ -5,7 +5,7 @@ import {
   pickChangelogInDir,
   CHANGELOG_MAX_BYTES,
 } from "@releases/adapters/github";
-import type { Source } from "@releases/core/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 
 // Build a minimal Source that the adapter will accept.
 function mkSource(overrides: Partial<Source> = {}): Source {

@@ -2,7 +2,7 @@
 import { program } from "./cli/program.js";
 import { runMigrations } from "./db/migrate.js";
 import { isRemoteMode, validateRemoteMode } from "./lib/mode.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { recordEvent, maybeShowFirstRunNotice } from "./lib/telemetry.js";
 import { checkForUpdate } from "./lib/update-check.js";
 

@@ -1,10 +1,10 @@
 import { getApiUrl, getApiKey, isAdminMode } from "../lib/mode.js";
-import { logger } from "@releases/lib/logger";
+import { logger } from "@buildinternet/releases-lib/logger";
 import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
-} from "@releases/core/schema";
+} from "@buildinternet/releases-core/schema";
 import type {
   SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse,
   ReleaseWithSource, StatsSummary, FetchLogEntry, LatestRelease,
