@@ -563,11 +563,8 @@ export async function updateOrg(slug: string, data: Record<string, unknown>): Pr
 
 export async function getOrgAccountsBySlug(
   orgSlug: string,
-): Promise<Array<{ platform: string; handle: string }>> {
-  const data = await apiFetch<{
-    accounts: Array<{ platform: string; handle: string }>;
-  }>(`/v1/orgs/${orgSlug}`);
-  return data?.accounts ?? [];
+): Promise<OrgAccount[]> {
+  return apiFetch<OrgAccount[]>(`/v1/orgs/${orgSlug}/accounts`);
 }
 
 export async function linkOrgAccount(
