@@ -12,14 +12,6 @@ import { groupReleases, type GroupingCandidate } from "../../ai/grouping.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { normalizeReleaseId } from "@buildinternet/releases-core/id";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { isRemoteMode } from "../../lib/mode.js";
-
-function assertLocalCoverageMode(verb: string): void {
-  if (!isRemoteMode()) return;
-  console.error(chalk.red(`release ${verb} is not yet supported in remote mode. Unset RELEASED_API_URL to run locally.`));
-  process.exit(1);
-}
-
 function releaseNotFound(id: string): never {
   console.error(chalk.red(`Release not found: ${id}`));
   console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. rel_abc123…).`));
@@ -78,22 +70,20 @@ Examples:
         console.log(sanitizedContent);
       }
 
-      if (!isRemoteMode()) {
-        const coverage = await getReleaseCoverage(id);
-        if (coverage.role !== "standalone") {
-          console.log();
-          console.log(chalk.bold("Coverage:"));
-          if (coverage.role === "canonical") {
-            console.log(chalk.dim(`  Canonical of ${coverage.covers.length} other release(s):`));
-            for (const row of coverage.covers) {
-              const reason = row.reason ? ` — ${stripAnsi(row.reason)}` : "";
-              console.log(`  ${row.coverageId}${chalk.dim(reason)}`);
-            }
-          } else if (coverage.role === "coverage" && coverage.canonical) {
-            const reason = coverage.canonical.reason ? ` — ${stripAnsi(coverage.canonical.reason)}` : "";
-            console.log(`  Coverage of ${coverage.canonical.canonicalId}${chalk.dim(reason)}`);
-            console.log(chalk.dim(`  Decided by ${coverage.canonical.decidedBy} at ${coverage.canonical.decidedAt}`));
+      const coverage = await getReleaseCoverage(id);
+      if (coverage.role !== "standalone") {
+        console.log();
+        console.log(chalk.bold("Coverage:"));
+        if (coverage.role === "canonical") {
+          console.log(chalk.dim(`  Canonical of ${coverage.covers.length} other release(s):`));
+          for (const row of coverage.covers) {
+            const reason = row.reason ? ` — ${stripAnsi(row.reason)}` : "";
+            console.log(`  ${row.coverageId}${chalk.dim(reason)}`);
           }
+        } else if (coverage.role === "coverage" && coverage.canonical) {
+          const reason = coverage.canonical.reason ? ` — ${stripAnsi(coverage.canonical.reason)}` : "";
+          console.log(`  Coverage of ${coverage.canonical.canonicalId}${chalk.dim(reason)}`);
+          console.log(chalk.dim(`  Decided by ${coverage.canonical.decidedBy} at ${coverage.canonical.decidedAt}`));
         }
       }
     });
@@ -348,7 +338,6 @@ Examples:
   releases admin release link rel_canonical rel_coverage_a rel_coverage_b
   releases admin release link rel_canonical rel_coverage_a --reason "marketing post for launch"`)
     .action(async (rawCanonical: string, rawCoverage: string[], opts: { reason?: string; json?: boolean }) => {
-      assertLocalCoverageMode("link");
       const canonicalId = normalizeReleaseId(rawCanonical);
       const canonical = await getRelease(canonicalId);
       if (!canonical) releaseNotFound(canonicalId);
@@ -379,7 +368,6 @@ Examples:
     .argument("<id>", "Release ID to unlink")
     .option("--json", "Output as JSON")
     .action(async (rawId: string, opts: { json?: boolean }) => {
-      assertLocalCoverageMode("unlink");
       const id = normalizeReleaseId(rawId);
       const removed = await unlinkReleaseCoverage(id);
       if (!removed) {
@@ -408,7 +396,6 @@ Examples:
   releases admin release cluster anthropic --window 7 --dry-run
   releases admin release cluster anthropic --model claude-sonnet-4-6`)
     .action(async (orgIdent: string, opts: { window?: string; model?: string; dryRun?: boolean; json?: boolean }) => {
-      assertLocalCoverageMode("cluster");
       const org = await findOrg(orgIdent);
       if (!org) {
         console.error(chalk.red(`Organization not found: ${orgIdent}`));

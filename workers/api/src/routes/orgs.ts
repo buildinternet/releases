@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, count, max, min, and, sql, inArray } from "drizzle-orm";
+import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases, knowledgePages } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
@@ -12,6 +12,7 @@ import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatter
 import { assemblePlaybook } from "@releases/ai/playbook.js";
 import type { Env } from "../index.js";
 import { getOrgsWithStats, getOrgSparklines, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgSourceSparklines, getOrgReleasesFeed } from "../queries/orgs.js";
+import { notDisabled } from "../queries/shared.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 
@@ -773,6 +774,63 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
   }
 
   return c.json({ releases: releasesFormatted, pagination });
+});
+
+// ---------------------------------------------------------------------------
+// GET /orgs/:slug/recent-releases?since=<iso>&limit=<n>
+//
+// Returns releases for grouping / summarization — same shape as the local
+// getRecentReleasesByOrg query (full Release row + sourceName/sourceSlug),
+// filtered to `publishedAt >= since` and skipping suppressed + disabled.
+// ---------------------------------------------------------------------------
+
+orgRoutes.get("/orgs/:slug/recent-releases", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const since = c.req.query("since");
+  const limitParam = parseInt(c.req.query("limit") ?? "500", 10);
+  const limit = isNaN(limitParam) || limitParam < 1 ? 500 : Math.min(limitParam, 2000);
+
+  if (!since) {
+    return c.json({ error: "bad_request", message: "Missing required query param: since (ISO date)" }, 400);
+  }
+
+  const [org] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(slug));
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  const rows = await db
+    .select({
+      id: releases.id,
+      sourceId: releases.sourceId,
+      version: releases.version,
+      type: releases.type,
+      title: releases.title,
+      content: releases.content,
+      contentSummary: releases.contentSummary,
+      url: releases.url,
+      contentHash: releases.contentHash,
+      metadata: releases.metadata,
+      media: releases.media,
+      publishedAt: releases.publishedAt,
+      suppressed: releases.suppressed,
+      suppressedReason: releases.suppressedReason,
+      fetchedAt: releases.fetchedAt,
+      embeddedAt: releases.embeddedAt,
+      sourceName: sources.name,
+      sourceSlug: sources.slug,
+    })
+    .from(releases)
+    .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .where(and(
+      eq(sources.orgId, org.id),
+      gte(releases.publishedAt, since),
+      eq(releases.suppressed, false),
+      notDisabled,
+    ))
+    .orderBy(desc(releases.publishedAt))
+    .limit(limit);
+
+  return c.json(rows);
 });
 
 orgRoutes.post("/orgs/:slug/accounts", async (c) => {

@@ -5,6 +5,7 @@ import type {
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
 } from "@buildinternet/releases-core/schema";
+import type { ReleaseCoverage } from "../db/schema-coverage.js";
 import type {
   SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse,
   ReleaseWithSource, StatsSummary, FetchLogEntry, LatestRelease,
@@ -189,6 +190,55 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
     method: "POST",
   });
   return result?.unsuppressed ?? false;
+}
+
+// ── Release coverage ──
+
+export async function getReleaseCoverage(releaseId: string): Promise<{
+  role: "canonical" | "coverage" | "standalone";
+  canonical: ReleaseCoverage | null;
+  covers: ReleaseCoverage[];
+}> {
+  const result = await apiFetch<{
+    role: "canonical" | "coverage" | "standalone";
+    canonical: ReleaseCoverage | null;
+    covers: ReleaseCoverage[];
+  } | null>(`/v1/releases/${releaseId}/coverage`);
+  return result ?? { role: "standalone", canonical: null, covers: [] };
+}
+
+export async function linkReleaseCoverage(row: {
+  canonicalId: string;
+  coverageId: string;
+  reason?: string | null;
+  decidedBy: string;
+}): Promise<void> {
+  await apiFetch(`/v1/releases/${row.canonicalId}/coverage`, {
+    method: "POST",
+    body: JSON.stringify({
+      coverageIds: [row.coverageId],
+      reason: row.reason ?? null,
+      decidedBy: row.decidedBy,
+    }),
+  });
+}
+
+export async function unlinkReleaseCoverage(coverageId: string): Promise<boolean> {
+  const result = await apiFetch<{ unlinked: boolean }>(`/v1/releases/${coverageId}/coverage`, {
+    method: "DELETE",
+  });
+  return result?.unlinked ?? false;
+}
+
+export async function getRecentReleasesByOrg(
+  orgId: string,
+  cutoffIso: string,
+): Promise<Array<Release & { sourceName: string; sourceSlug: string }>> {
+  const params = new URLSearchParams({ since: cutoffIso, limit: "2000" });
+  const rows = await apiFetch<Array<Release & { sourceName: string; sourceSlug: string }> | null>(
+    `/v1/orgs/${orgId}/recent-releases?${params}`,
+  );
+  return rows ?? [];
 }
 
 // ── Content hash ──
