@@ -8,10 +8,10 @@
     "db:migrate:remote": "wrangler d1 migrations apply released-db --remote"
   },
   "dependencies": {
-    "hono": "^4.12.9"
+    "hono": "^4.12.14"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260411.1",
-    "wrangler": "^4.81.1"
+    "@cloudflare/workers-types": "^4.20260417.1",
+    "wrangler": "^4.83.0"
   }
 }

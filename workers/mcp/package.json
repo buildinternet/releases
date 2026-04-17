@@ -10,12 +10,12 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.88.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "agents": "^0.10.1",
+    "agents": "^0.10.2",
     "zod": "^4.1.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260411.1",
-    "wrangler": "^4.81.1",
-    "typescript": "^6.0.2"
+    "@cloudflare/workers-types": "^4.20260417.1",
+    "wrangler": "^4.83.0",
+    "typescript": "^6.0.3"
   }
 }

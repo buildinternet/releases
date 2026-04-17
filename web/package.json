@@ -15,7 +15,7 @@
     "@shikijs/themes": "^4.0.2",
     "@tailwindcss/typography": "^0.5.19",
     "gray-matter": "^4.0.3",
-    "next": "^16.2.3",
+    "next": "^16.2.4",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "react-markdown": "^10.1.0",
@@ -24,11 +24,11 @@
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.2",
-    "@types/node": "^25.5.0",
+    "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "tailwindcss": "^4.2.2",
-    "typescript": "^6.0.0",
+    "typescript": "^6.0.3",
     "vercel": "^50.44.0"
   }
 }
