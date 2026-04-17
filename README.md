@@ -1,32 +1,18 @@
-# Releases
+# Releases (monorepo)
 
-Changelog indexer and registry for AI agents and developers. Fetches, normalizes, and indexes release notes from GitHub releases, RSS/Atom/JSON feeds, and product changelog pages, then exposes them via an MCP server or CLI.
+Private monorepo for the backend, workers, web frontend, and agent tooling behind [releases.sh](https://releases.sh).
 
-Website: [releases.sh](https://releases.sh)
+The public CLI (`@buildinternet/releases`) lives in [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) — that repo owns npm publishing, the Homebrew tap, and the user-facing install docs at [releases.sh/docs/installation](https://releases.sh/docs/installation). This monorepo still carries a full copy of the CLI source under `src/cli/` for local dev + admin workflows (see below); user-facing CLI changes should land in the OSS repo first.
 
-## Install
+## What's in this repo
 
-### npm
-
-```bash
-npm install -g @buildinternet/releases
-```
-
-Or run without installing:
-
-```bash
-npx @buildinternet/releases search "react"
-```
-
-### Shell
-
-```bash
-curl -fsSL https://releases.sh/install | bash
-```
-
-The public CLI connects to the hosted API at `api.releases.sh` automatically. Reader commands (`search`, `latest`, `summary`, `list`, `show`, `stats`, `categories`) work without any configuration. Operator workflows live under `releases admin ...` and require an API key.
-
-Unauthenticated requests to the hosted API may be rate-limited per client — configuring an API key lifts the limit for your own tooling.
+- `src/` — Local CLI source (runs via `bun src/index.ts` or `bun link`), shared adapters, AI pipelines, and the local MCP server.
+- `workers/api/` — Hono API backed by Cloudflare D1.
+- `workers/discovery/` — Durable-Object-backed agent session orchestrator.
+- `workers/mcp/` — Remote MCP server at `mcp.releases.sh`.
+- `web/` — Next.js frontend for releases.sh.
+- `packages/` — In-tree shared code (core, lib, adapters). The public subset is mirrored to the OSS repo and published as `@buildinternet/releases-*`.
+- `plugins/claude/releases/` — Claude Code plugin (committed copy; skill source of truth is OSS `@buildinternet/releases-skills`).
 
 ## Development Setup
 
@@ -542,7 +528,7 @@ releases admin discovery task cancel <sessionId>
 
 ## Architecture
 
-- **CLI** — TypeScript, single package, compiles to a self-contained binary. Distributed as `@buildinternet/releases` on npm with platform-specific packages (macOS arm64/x64, Linux x64/arm64)
+- **CLI** — TypeScript, compiles to a self-contained binary. Source here is kept in sync with [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli), which publishes `@buildinternet/releases` on npm with platform-specific packages (macOS arm64/x64, Linux x64/arm64) plus the Homebrew tap
 - **Storage** — Local SQLite with full-text search; remote mode backed by a hosted database via the API worker
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, and headless-browser scraping for pages without feeds
 - **AI Layer** — changelog parsing (ingestion) and summarization (query) via AI provider SDK calls
@@ -572,16 +558,9 @@ bun run deploy:agents --dry-run  # preview agent changes without pushing
 bun run db:migrate:remote    # apply D1 migrations to production
 ```
 
-### Publishing the CLI to npm
+### Publishing the CLI
 
-The CLI is distributed as `@buildinternet/releases` with platform-specific binary packages:
-
-```bash
-bun run publish:npm            # dry run — builds all platforms, shows what would publish
-bun run publish:npm --publish  # build and publish to npm
-```
-
-Requires `NPM_PUBLISHING_TOKEN` in `.env` (a granular access token with "Bypass 2FA" enabled). Version is read from the root `package.json` and synced to all npm packages automatically.
+npm publishing, GitHub Release binaries, and the Homebrew tap all happen from [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli) via Changesets. There are no publish scripts in this repo — user-facing CLI changes go to the OSS repo first.
 
 Local development:
 
