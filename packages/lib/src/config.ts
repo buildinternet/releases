@@ -31,6 +31,7 @@ export const config = {
   agentModel: () => process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6",
   queryModel: () => process.env.RELEASED_QUERY_MODEL || "claude-sonnet-4-6",
   summaryModel: () => process.env.RELEASED_SUMMARY_MODEL || "claude-haiku-4-5-20251001",
+  groupingModel: () => process.env.RELEASED_GROUPING_MODEL || "claude-haiku-4-5-20251001",
   apiUrl: () => process.env.RELEASED_API_URL || "",
   apiKey: () => process.env.RELEASED_API_KEY || "",
 } as const;

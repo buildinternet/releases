@@ -7,6 +7,7 @@ import {
   type ReleaseSummary, type NewReleaseSummary, type Product, type Tag, type DomainAlias,
   type KnowledgePage, type SourceChangelogFile,
 } from "@buildinternet/releases-core/schema";
+import { releaseCoverage, type ReleaseCoverage } from "./schema-coverage.js";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
@@ -1004,6 +1005,80 @@ export async function unsuppressRelease(releaseId: string): Promise<boolean> {
     suppressedReason: null,
   }).where(eq(releases.id, releaseId)).returning({ id: releases.id });
   return !!updated;
+}
+
+// ── Release coverage (local only) ──
+// Remote API routes for coverage are a follow-up; remote mode throws so callers
+// see the limitation rather than a silent no-op.
+
+function remoteCoverageUnsupported(): never {
+  throw new Error(
+    "release coverage mutations are not yet wired for remote mode — run locally (unset RELEASED_API_URL) to link / cluster",
+  );
+}
+
+export async function linkReleaseCoverage(row: {
+  canonicalId: string;
+  coverageId: string;
+  reason?: string | null;
+  decidedBy: string;
+}): Promise<void> {
+  if (isRemoteMode()) remoteCoverageUnsupported();
+  if (row.canonicalId === row.coverageId) {
+    throw new Error("a release cannot be coverage of itself");
+  }
+  const db = getDb();
+  await db.insert(releaseCoverage).values({
+    canonicalId: row.canonicalId,
+    coverageId: row.coverageId,
+    reason: row.reason ?? null,
+    decidedBy: row.decidedBy,
+  }).onConflictDoUpdate({
+    target: releaseCoverage.coverageId,
+    set: {
+      canonicalId: row.canonicalId,
+      reason: row.reason ?? null,
+      decidedBy: row.decidedBy,
+      decidedAt: new Date().toISOString(),
+    },
+  });
+}
+
+export async function unlinkReleaseCoverage(releaseId: string): Promise<boolean> {
+  if (isRemoteMode()) remoteCoverageUnsupported();
+  const db = getDb();
+  const deleted = await db.delete(releaseCoverage)
+    .where(eq(releaseCoverage.coverageId, releaseId))
+    .returning({ id: releaseCoverage.coverageId });
+  return deleted.length > 0;
+}
+
+export async function getReleaseCoverage(releaseId: string): Promise<{
+  role: "canonical" | "coverage" | "standalone";
+  canonical: ReleaseCoverage | null;
+  covers: ReleaseCoverage[];
+}> {
+  if (isRemoteMode()) {
+    return { role: "standalone", canonical: null, covers: [] };
+  }
+  const db = getDb();
+  const [asCoverage] = await db.select().from(releaseCoverage)
+    .where(eq(releaseCoverage.coverageId, releaseId))
+    .limit(1);
+  const covers = await db.select().from(releaseCoverage)
+    .where(eq(releaseCoverage.canonicalId, releaseId));
+  if (asCoverage) return { role: "coverage", canonical: asCoverage, covers: [] };
+  if (covers.length > 0) return { role: "canonical", canonical: null, covers };
+  return { role: "standalone", canonical: null, covers: [] };
+}
+
+export async function getCoverageForReleaseIds(
+  releaseIds: string[],
+): Promise<ReleaseCoverage[]> {
+  if (isRemoteMode() || releaseIds.length === 0) return [];
+  const db = getDb();
+  return db.select().from(releaseCoverage)
+    .where(inArray(releaseCoverage.coverageId, releaseIds));
 }
 
 // ── Search ──
