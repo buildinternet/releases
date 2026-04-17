@@ -139,7 +139,9 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 async function runLocal(args: ParsedArgs): Promise<BackfillRow[]> {
   const { getDb } = await import("../src/db/connection.js");
-  const { sourceChangelogFiles, sources } = await import("../src/db/schema.js");
+  const { sourceChangelogFiles, sources } = await import(
+    "@buildinternet/releases-core/schema"
+  );
   const db = getDb();
 
   const baseWhere = sql`length(${sourceChangelogFiles.content}) > ${LIVE_ENCODE_MAX_CHARS}`;
