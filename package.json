@@ -25,6 +25,7 @@
     "predeploy:discovery": "bun run build:all:linux",
     "deploy:discovery": "wrangler deploy --config workers/discovery/wrangler.jsonc",
     "deploy:mcp": "wrangler deploy --config workers/mcp/wrangler.jsonc",
+    "publish:mcp-registry": "cd workers/mcp && mcp-publisher publish",
     "deploy:agents": "bun scripts/sync-agent-skills.ts",
     "deploy:agents:discovery": "bun scripts/sync-agent-skills.ts --discovery",
     "deploy:agents:worker": "bun scripts/sync-agent-skills.ts --worker",
