@@ -10,9 +10,13 @@
     "./github": "./src/github.ts",
     "./cloudflare": "./src/cloudflare.ts",
     "./crawl": "./src/crawl.ts",
-    "./feed": "./src/feed.ts"
+    "./feed": "./src/feed.ts",
+    "./extract": "./src/extract/index.ts",
+    "./extract/shared": "./src/extract/shared.ts",
+    "./extract/types": "./src/extract/types.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
     "@releases/core": "workspace:*",
     "@releases/lib": "workspace:*"
   }

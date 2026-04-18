@@ -37,6 +37,7 @@
       "name": "@releases/adapters",
       "version": "0.0.0",
       "dependencies": {
+        "@anthropic-ai/sdk": "^0.88.0",
         "@releases/core": "workspace:*",
         "@releases/lib": "workspace:*",
       },

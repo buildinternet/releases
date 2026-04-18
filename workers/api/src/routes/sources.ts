@@ -494,6 +494,62 @@ sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
   return c.json({ unchanged: false });
 });
 
+/**
+ * Shallow-merge `patch` into `existing` (parsed from its stored JSON string).
+ * Keys whose patch value is `null` are deleted. Invalid/non-object stored
+ * metadata is treated as an empty object.
+ */
+export function mergeSourceMetadata(
+  existing: string | null,
+  patch: Record<string, unknown>,
+): Record<string, unknown> {
+  let base: Record<string, unknown>;
+  try {
+    const parsed = JSON.parse(existing ?? "{}");
+    base = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : {};
+  } catch {
+    base = {};
+  }
+
+  const merged: Record<string, unknown> = { ...base };
+  for (const [k, v] of Object.entries(patch)) {
+    if (v === null) delete merged[k];
+    else merged[k] = v;
+  }
+  return merged;
+}
+
+// Atomic JSON-merge of the source metadata blob. Writers like the agent
+// adapter need to update fields like `fetchEtag`/`fetchLastModified` without
+// racing the cron poll (which also rewrites metadata via direct D1 access).
+// Keys whose value is `null` are deleted from the stored metadata.
+sourceRoutes.patch("/sources/:slug/metadata", async (c) => {
+  const slug = c.req.param("slug");
+  const db = createDb(c.env.DB);
+
+  let patch: Record<string, unknown>;
+  try {
+    patch = await c.req.json<Record<string, unknown>>();
+  } catch {
+    return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+  }
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
+    return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+  }
+
+  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  const merged = mergeSourceMetadata(src.metadata, patch);
+  const serialized = JSON.stringify(merged);
+  if (serialized !== (src.metadata ?? "{}")) {
+    await db.update(sources).set({ metadata: serialized }).where(eq(sources.id, src.id));
+  }
+  return c.json({ metadata: merged });
+});
+
 // ── Recent releases (for summary generation) ──
 
 sourceRoutes.get("/sources/:slug/recent-releases", async (c) => {
