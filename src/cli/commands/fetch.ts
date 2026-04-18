@@ -27,6 +27,7 @@ import { MEDIA_PREFIX } from "../../lib/media-url.js";
 import { config } from "@releases/lib/config";
 import { elapsedFormatted, daysAgoIso } from "@buildinternet/releases-core/dates";
 import { isRemoteMode } from "../../lib/mode.js";
+import { runIngestTimeGrouping } from "../../lib/ingest-grouping.js";
 import { newCorrelationId } from "@buildinternet/releases-core/id";
 import { stripAnsi } from "../../lib/sanitize.js";
 import * as apiClient from "../../api/client.js";
@@ -56,6 +57,7 @@ export function registerFetchCommand(program: Command) {
     .option("--changed", "Only fetch sources where poll detected upstream changes")
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--no-summarize", "Skip summary generation after fetching")
+    .option("--no-grouping", "Skip ingest-time release_coverage grouping")
     .option("--skip-overview", "Skip end-of-fetch org overview regeneration (release summaries still run)")
     .option("--skip-changelog", "Skip CHANGELOG.md fetch for GitHub sources")
     .option("--managed-agents", "Delegate fetching to a remote managed agent session")
@@ -80,7 +82,7 @@ Examples:
       source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
       crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
       unfetched?: boolean; stale?: string; changed?: boolean; retryErrors?: boolean; concurrency?: string;
-      summarize?: boolean; managedAgents?: boolean; skipChangelog?: boolean; skipOverview?: boolean; org?: string;
+      summarize?: boolean; grouping?: boolean; managedAgents?: boolean; skipChangelog?: boolean; skipOverview?: boolean; org?: string;
     }) => {
       // Positional arg takes precedence over --source option
       const slug = slugArg ?? opts.source;
@@ -855,6 +857,19 @@ Examples:
             } catch (err) {
               // Summary generation is non-critical — log and continue
               logger.warn(`Summary generation failed for ${source.name}: ${err}`);
+            }
+          }
+
+          // Ingest-time release_coverage grouping. Always fail-open — the
+          // helper swallows its own errors and returns a `skipped` reason
+          // rather than throwing, so a flaky agent can never block ingest.
+          if (inserted > 0 && source.orgId && !opts.dryRun && opts.grouping !== false) {
+            const grouping = await runIngestTimeGrouping(
+              source.orgId,
+              `Ingest-time grouping after ${source.slug} fetch`,
+            );
+            if (grouping.written > 0) {
+              progressSession(`${source.name}: linked ${grouping.written} coverage row(s)`);
             }
           }
 

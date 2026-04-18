@@ -74,6 +74,35 @@ function extractJson(text: string): unknown {
 }
 
 /**
+ * Parse a grouping agent response into clusters. Exported for tests.
+ *
+ * Treats `stop_reason === "max_tokens"` as a hard error — partial output can't
+ * be trusted because the JSON array may be truncated mid-cluster (which surfaces
+ * as a misleading `JSON Parse error: Expected ']'`). Callers should retry with
+ * a higher max_tokens budget or chunk the candidate set.
+ */
+export function extractClustersFromResponse(
+  rawResponse: string,
+  stopReason: string | null | undefined,
+): GroupingCluster[] {
+  if (stopReason === "max_tokens") {
+    throw new Error(
+      "grouping: response truncated (stop_reason=max_tokens). Increase max_tokens or split the candidate set.",
+    );
+  }
+  const parsed = extractJson(rawResponse) as { clusters?: Array<{ canonical_id?: string; coverage_ids?: string[]; reason?: string }> };
+  const rawClusters = parsed.clusters;
+  if (!Array.isArray(rawClusters)) {
+    throw new Error(`model response missing "clusters" array: ${rawResponse.slice(0, 200)}`);
+  }
+  return rawClusters.map((c) => ({
+    canonicalId: String(c.canonical_id || ""),
+    coverageIds: Array.isArray(c.coverage_ids) ? c.coverage_ids.map(String) : [],
+    reason: String(c.reason || "").trim(),
+  }));
+}
+
+/**
  * Ask the model to cluster a set of candidate releases per the grouping-releases skill.
  * Validates that (1) every returned ID appears in the input, (2) every input ID appears
  * in exactly one cluster. Throws on violations so callers can retry or escalate to Sonnet.
@@ -109,7 +138,10 @@ export async function groupReleases(
 
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    // 8192 is Haiku 4.5's per-response ceiling. Larger candidate sets that need
+    // even more output budget should be split via the chunking caller, not by
+    // pushing this number up against provider limits.
+    max_tokens: 8192,
     system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: userMessage }],
   });
@@ -125,18 +157,7 @@ export async function groupReleases(
     releaseCount: candidates.length,
   });
 
-  const parsed = extractJson(rawResponse) as { clusters?: Array<{ canonical_id?: string; coverage_ids?: string[]; reason?: string }> };
-  const rawClusters = parsed.clusters;
-  if (!Array.isArray(rawClusters)) {
-    throw new Error(`model response missing "clusters" array: ${rawResponse.slice(0, 200)}`);
-  }
-
-  const clusters: GroupingCluster[] = rawClusters.map((c) => ({
-    canonicalId: String(c.canonical_id || ""),
-    coverageIds: Array.isArray(c.coverage_ids) ? c.coverage_ids.map(String) : [],
-    reason: String(c.reason || "").trim(),
-  }));
-
+  const clusters = extractClustersFromResponse(rawResponse, response.stop_reason);
   validateClusters(clusters, candidates);
 
   logger.info(`grouping-releases: ${candidates.length} candidates → ${clusters.length} clusters via ${model}`);
