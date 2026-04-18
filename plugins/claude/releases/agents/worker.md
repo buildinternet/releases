@@ -26,7 +26,7 @@ Key commands:
 - `releases admin product add <name> --org <org>` — Create product
 - `releases admin content playbook <org>` — Read playbook
 - `releases admin content playbook <org> --notes "..."` — Update playbook notes
-- `releases latest [slug] --json [--org <org>]` — Get latest releases
+- `releases tail [slug] --json [--org <org>]` — Get latest releases
 - `releases list [slug] --json` — List sources
 
 ## Fetch Operations

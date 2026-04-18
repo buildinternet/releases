@@ -41,14 +41,14 @@ Key commands:
 - `releases admin policy ignore add --org <org> <url>` — Ignore URL (org-scoped)
 - `releases admin policy block add <url>` — Block URL globally
 - `releases list [slug] --json [--org <org>] [--query <text>]` — List/search sources
-- `releases latest [slug] --json [--org <org>]` — Get latest releases
+- `releases tail [slug] --json [--org <org>]` — Get latest releases
 
 ## Onboarding Workflow
 
 1. **Pre-check** — Use `list_organizations` and `list_sources` MCP tools to check if the company already exists with sources. If it does, report the existing state and stop — do not re-discover or add duplicate sources.
 2. **Discover** — Use `releases admin discovery evaluate <url> --json`, web search, and `list_sources` to find changelog URLs, feeds, and GitHub repos.
 3. **Add** — Add sources with `releases admin source add` using appropriate types. When creating an org, always include `--description` with a brief one-sentence product description.
-4. **Validate** — Fetch each source with `releases admin source fetch <slug> --dry-run` first, then real fetch. Check results with `releases latest <slug> --json`.
+4. **Validate** — Fetch each source with `releases admin source fetch <slug> --dry-run` first, then real fetch. Check results with `releases tail <slug> --json`.
 5. **Assess content depth** — For feed sources, check if pages have richer content than feed summaries.
 6. **Write the playbook** — After validating sources, run `releases admin content playbook <org>` to read current state, then update notes with `releases admin content playbook <org> --notes "..."`. Cover extraction patterns, known quirks, and source coverage.
 7. **Report** — Summarize what was found, including how many releases were persisted.

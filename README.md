@@ -31,7 +31,7 @@ If `releases` isn't on your PATH after linking, add `$HOME/.bun/bin` to your she
 export PATH="$HOME/.bun/bin:$PATH"
 ```
 
-The linked binary runs `src/index.ts` via Bun, so edits are picked up immediately — no rebuild step. The `.env` at the repo root is auto-loaded, so `releases latest` routes to remote mode out of the box.
+The linked binary runs `src/index.ts` via Bun, so edits are picked up immediately — no rebuild step. The `.env` at the repo root is auto-loaded, so `releases tail` routes to remote mode out of the box.
 
 ### Environment Variables
 
@@ -61,10 +61,17 @@ Source pages on the web (`releases.sh/<org>/<source>`) surface related releases 
 ### Latest releases
 
 ```bash
-releases latest                          # across all sources
-releases latest next-js                  # from one source
-releases latest --org vercel --count 20  # latest 20 from an org
+releases tail                            # across all sources
+releases tail next-js                    # from one source
+releases tail --org vercel --count 20    # latest 20 from an org
+releases tail -f                         # follow new releases (polls every 60s)
+releases tail -f --interval 30           # follow with a 30s poll interval
+releases tail --once --json              # single poll, JSON output (for scripts)
 ```
+
+`tail` is the canonical command; `latest` is a retained alias for the one-shot
+listing. The endpoint is KV-cached (60s TTL) so follow-mode pollers and the
+public homepage feed share the same cached response.
 
 ### Inspect sources
 

@@ -1,18 +1,12 @@
 import { Hono } from "hono";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { releases } from "@buildinternet/releases-core/schema";
+import { releases, organizations, sources } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
-
-type Env = {
-  Bindings: {
-    DB: D1Database;
-    RELEASED_API_KEY: string;
-    STATUS_HUB: DurableObjectNamespace;
-    MEDIA: R2Bucket;
-    MEDIA_ORIGIN?: string;
-  };
-};
+import type { Env } from "../index.js";
+import { orgWhere, sourceWhere, parseBoolParam, resolveR2Url } from "../utils.js";
+import { getLatestReleasesAcross } from "../queries/releases.js";
+import { buildLatestCacheKey, withLatestCache } from "../lib/latest-cache.js";
 
 export const releaseRoutes = new Hono<Env>();
 
@@ -45,6 +39,87 @@ releaseRoutes.get("/releases", async (c) => {
   }
 
   return c.json({ error: "unsupported query — use ?hasMedia=true" }, 400);
+});
+
+// Cacheable "latest releases" feed. Shape documented in
+// docs/architecture/remote-mode.md.
+releaseRoutes.get("/releases/latest", async (c) => {
+  const rawCount = parseInt(c.req.query("count") ?? "10", 10);
+  const count = isNaN(rawCount) || rawCount < 1 ? 10 : Math.min(rawCount, 100);
+  const sourceParam = c.req.query("source");
+  const orgParam = c.req.query("org");
+  const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+
+  if (sourceParam && orgParam) {
+    return c.json(
+      { error: "bad_request", message: "`source` and `org` are mutually exclusive" },
+      400,
+    );
+  }
+
+  const db = createDb(c.env.DB);
+
+  let sourceId: string | undefined;
+  let orgId: string | undefined;
+
+  if (sourceParam) {
+    const src = await db.select({ id: sources.id }).from(sources)
+      .where(sourceWhere(sourceParam)).get();
+    if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+    sourceId = src.id;
+  } else if (orgParam) {
+    const org = await db.select({ id: organizations.id }).from(organizations)
+      .where(orgWhere(orgParam)).get();
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    orgId = org.id;
+  }
+
+  const cacheKey = buildLatestCacheKey({
+    count: String(count),
+    source: sourceId,
+    org: orgId,
+    include_coverage: includeCoverage ? "true" : undefined,
+  });
+
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+  const waitUntil = c.executionCtx?.waitUntil.bind(c.executionCtx);
+
+  const { data, hit } = await withLatestCache(
+    c.env.LATEST_CACHE,
+    cacheKey,
+    waitUntil,
+    async () => {
+      const rows = await getLatestReleasesAcross(c.env.DB, {
+        sourceId,
+        orgId,
+        includeCoverage,
+        limit: count,
+      });
+      return rows.map((r) => ({
+        id: r.id,
+        version: r.version,
+        type: r.type,
+        title: r.title,
+        summary: r.content_summary,
+        publishedAt: r.published_at,
+        url: r.url,
+        media: (() => {
+          try { return JSON.parse(r.media ?? "[]"); } catch { return []; }
+        })().map((m: any) => ({
+          ...m,
+          r2Url: resolveR2Url(m.r2Key, mediaOrigin),
+        })),
+        source: {
+          slug: r.source_slug,
+          name: r.source_name,
+          type: r.source_type,
+        },
+      }));
+    },
+  );
+
+  c.header("X-Cache", hit ? "HIT" : "MISS");
+  return c.json({ releases: data });
 });
 
 // ---------------------------------------------------------------------------

@@ -35,7 +35,7 @@ Key CLI flags (not available via typed tool — the typed tool always does a ful
 
 ### Checking results
 
-After fetching, verify releases were persisted. CLI: `releases latest <slug> --json` or `releases admin source fetch-log <slug>`. Typed tool: `get_latest_releases` with source param. Use `get_organization` (or `releases admin org show <slug> --json`) to see the full picture of an org's sources.
+After fetching, verify releases were persisted. CLI: `releases tail <slug> --json` or `releases admin source fetch-log <slug>`. Typed tool: `get_latest_releases` with source param. Use `get_organization` (or `releases admin org show <slug> --json`) to see the full picture of an org's sources.
 
 ## Incremental vs Bulk Parsing
 
@@ -77,7 +77,7 @@ Do NOT fetch release URLs in the parent agent — always delegate to a subagent 
 If pages are richer than feed content (more text, images, videos, or code examples):
 1. Record the assessment and enable crawl mode. CLI: `releases admin source edit <identifier> --metadata '{"feedContentDepth":"summary-only","crawlEnabled":true}'`. Typed tool: `edit_source` with the same metadata. Subsequent fetches will follow links to per-release pages and extract full content in one pass.
 2. Re-fetch the source once to backfill. CLI: `releases admin source fetch <slug> --full`. Typed tool: `fetch_source`.
-3. Verify results. CLI: `releases list <slug> --json` or `releases latest <slug>`. Typed tool: `get_latest_releases` — check content is richer after the re-fetch.
+3. Verify results. CLI: `releases list <slug> --json` or `releases tail <slug>`. Typed tool: `get_latest_releases` — check content is richer after the re-fetch.
 
 If feed already provides full content with no meaningful additions on the page:
 1. Record `feedContentDepth: "full"` so future sessions skip the sampling step.
@@ -178,6 +178,6 @@ When you encounter a new rollup source during discovery or fetch, update the pla
 When adding a new source, always validate before committing:
 
 1. **Fetch** — CLI: `releases admin source fetch <slug> --dry-run` then `releases admin source fetch <slug>`. Typed tool: `fetch_source` with identifier (ID or slug).
-2. **Verify** — CLI: `releases latest <slug> --json` or `releases admin source fetch-log <slug>`. Typed tool: `get_latest_releases` with source identifier.
+2. **Verify** — CLI: `releases tail <slug> --json` or `releases admin source fetch-log <slug>`. Typed tool: `get_latest_releases` with source identifier.
 3. **If poor results** — try a different URL or type. CLI: `releases admin source edit <identifier> --type feed`. Typed tool: `edit_source` with identifier.
 4. **If no usable releases** — remove the source. CLI: `releases admin source remove <slug> --ignore --reason "..."`. Typed tool: `remove_source` with identifier, then `exclude_url`.

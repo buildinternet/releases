@@ -41,14 +41,19 @@
     { "binding": "ENTITIES_INDEX", "index_name": "entities-v1" },
     { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" }
   ],
-  // Optional KV cache for one-shot query embeddings on the hybrid/semantic search path.
-  // Shared with the MCP worker — same key shape (embed:v1:{provider}:{model}:{dim}:{sha256}),
-  // so a hit from either worker warms the other. Keys auto-invalidate on config change.
+  // KV namespaces. LATEST_CACHE fronts GET /v1/releases/latest with a
+  // 60s TTL (keys: latest:v1:<sorted-qs>). Optional — `withLatestCache`
+  // degrades to pass-through when the binding is absent.
   "kv_namespaces": [
     {
       "binding": "EMBED_CACHE",
       "id": "93b87ae5e253445cabbaaa7a71264915",
       "preview_id": "7737ccafd37a43fc9d2365c9a2d7ebca"
+    },
+    {
+      "binding": "LATEST_CACHE",
+      "id": "178c70f9abd940478d5b5a053bf123bb",
+      "preview_id": "832712867aff4c91bc11bb3cecd7da9e"
     }
   ],
   "services": [
