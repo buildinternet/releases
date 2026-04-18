@@ -207,6 +207,8 @@ export interface FetchOneEnv {
   VOYAGE_API_KEY?: { get(): Promise<string> };
   OPENAI_API_KEY?: { get(): Promise<string> };
   RELEASE_HUB?: DurableObjectNamespace;
+  WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
+  DB?: D1Database;
 }
 
 export async function fetchOne(
@@ -326,9 +328,10 @@ export async function fetchOne(
 
     if (publishRows.length > 0 && env.RELEASE_HUB) {
       // Fire-and-forget — publish errors are swallowed inside publishReleaseEvents.
+      // Cast because RELEASE_HUB is optional in FetchOneEnv but the guard above ensures it is set.
       await publishReleaseEvents(
-        { RELEASE_HUB: env.RELEASE_HUB },
-        { src: { name: source.name, slug: source.slug }, inserted: publishRows },
+        env as Parameters<typeof publishReleaseEvents>[0],
+        { src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id }, inserted: publishRows },
       );
     }
 

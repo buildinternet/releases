@@ -8,7 +8,8 @@ export interface ExpandAndEnqueueArgs {
   /** Maps release.id to its (orgId, sourceId). Built by the caller from the inserted rows. */
   eventOwners: Map<string, { orgId: string; sourceId: string }>;
   loadSubscriptions: (orgIds: string[]) => Promise<WebhookSubscription[]>;
-  queue: { sendBatch: (messages: { body: DeliveryMessage }[]) => Promise<void> };
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  queue: { sendBatch: (messages: { body: DeliveryMessage }[]) => Promise<any> };
 }
 
 const QUEUE_BATCH_LIMIT = 100;
