@@ -19,7 +19,6 @@ const LOOKBACK_DAYS = 180;
 const MIN_RELEASES_FOR_SIGNAL = 3;
 
 type FetchPriority = "normal" | "low" | "paused";
-type AutoTier = Exclude<FetchPriority, "paused">;
 
 export async function retierSources(
   env: { DB: D1Database; CRON_ENABLED?: string },
@@ -43,9 +42,9 @@ export async function retierSources(
   const datesBySource = new Map<string, string[]>();
   for (const r of recent) {
     if (!r.publishedAt) continue;
-    const arr = datesBySource.get(r.sourceId);
-    if (arr) arr.push(r.publishedAt);
-    else datesBySource.set(r.sourceId, [r.publishedAt]);
+    const arr = datesBySource.get(r.sourceId) ?? [];
+    arr.push(r.publishedAt);
+    datesBySource.set(r.sourceId, arr);
   }
 
   // Pull every source, including paused ones — we persist cadence for all
@@ -61,7 +60,12 @@ export async function retierSources(
 
   let retiered = 0;
   let withSignal = 0;
-  for (const src of allSources) {
+  // Build one UPDATE per source and dispatch concurrently. Each statement
+  // binds at most 4 values (id, medianGapDays, lastRetieredAt, optional
+  // fetchPriority), well under D1's 100-bind per-statement cap — and
+  // Promise.all lets the round-trips pipeline instead of blocking the
+  // cron on ~200 × D1 RTTs.
+  const writes = allSources.map((src) => {
     const dates = datesBySource.get(src.id) ?? [];
     const medianGap = dates.length >= MIN_RELEASES_FOR_SIGNAL
       ? computeMedianGapDays(dates)
@@ -73,7 +77,7 @@ export async function retierSources(
       ? classifyTier(medianGap, current)
       : current;
 
-    const updates: { fetchPriority?: AutoTier | FetchPriority; medianGapDays: number | null; lastRetieredAt: string } = {
+    const updates: { fetchPriority?: FetchPriority; medianGapDays: number | null; lastRetieredAt: string } = {
       medianGapDays: medianGap,
       lastRetieredAt: now,
     };
@@ -85,8 +89,9 @@ export async function retierSources(
       retiered++;
     }
 
-    await db.update(sources).set(updates).where(eq(sources.id, src.id));
-  }
+    return db.update(sources).set(updates).where(eq(sources.id, src.id));
+  });
+  await Promise.all(writes);
   console.log(
     `[retier] done: ${allSources.length} evaluated, ${retiered} retiered, ${withSignal} with cadence signal`,
   );
@@ -114,7 +119,7 @@ export function computeMedianGapDays(isoDates: string[]): number {
 export function classifyTier(
   medianGapDays: number,
   current: FetchPriority,
-): AutoTier | FetchPriority {
+): FetchPriority {
   if (medianGapDays <= NORMAL_MAX_DAYS) return "normal";
   if (medianGapDays <= LOW_MAX_DAYS) return "low";
   // Above LOW_MAX: preserve current tier. Don't auto-pause (see module

@@ -17,22 +17,19 @@ export function describeCadence(
     };
   }
   const primary = `${formatGap(medianGapDays)} median`;
-  const implied = medianGapDays <= CADENCE_NORMAL_MAX
-    ? "normal"
-    : medianGapDays <= CADENCE_LOW_MAX
-      ? "low"
-      : null;
+  let implied: "normal" | "low" | null = null;
+  if (medianGapDays <= CADENCE_NORMAL_MAX) implied = "normal";
+  else if (medianGapDays <= CADENCE_LOW_MAX) implied = "low";
   // Mismatch if cadence implies a tier that differs from the current
   // fetchPriority. Most informative case: source paused but still shipping.
-  const tone: "normal" | "warn" = implied && fetchPriority && implied !== fetchPriority
-    ? "warn"
-    : "normal";
+  const mismatched = implied && fetchPriority && implied !== fetchPriority;
+  const tone: "normal" | "warn" = mismatched ? "warn" : "normal";
   const secondary = lastRetieredAt
     ? `retiered ${formatAgeAgo(new Date(lastRetieredAt), now)}`
     : "never retiered";
-  const tooltip = tone === "warn"
+  const tooltip = mismatched
     ? `Cadence implies ${implied} tier but source is ${fetchPriority}. Retier next run may adjust.`
-    : `Median gap over last 180d of published releases.`;
+    : "Median gap over last 180d of published releases.";
   return { primary, secondary, tone, tooltip };
 }
 
