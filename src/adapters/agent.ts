@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Source, ReleaseType } from "@buildinternet/releases-core/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
-import { checkContentHash, findOrg, getPlaybookForOrg } from "../db/queries.js";
+import { checkContentHash, recordContentHash, findOrg, getPlaybookForOrg } from "../db/queries.js";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
 import { sha256Hex } from "@releases/core/hash";
+import { countTokensSafe } from "@releases/core/tokens";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";
@@ -144,7 +145,7 @@ async function runWebFetchLoop(
     // finalMessage() collects the complete response.
     const stream = client.messages.stream({
       model,
-      max_tokens: 16384,
+      max_tokens: DEFAULT_MAX_OUTPUT_TOKENS,
       system: systemPrompt,
       tools,
       messages,
@@ -251,9 +252,38 @@ interface ExtractFromBodyOpts {
   guidance?: ExtractionGuidance;
 }
 
+interface ExtractFromBodyResult {
+  entries: ExtractedEntry[];
+  totalInput: number;
+  totalOutput: number;
+  /** True when the model stopped because output budget was exhausted — caller
+   *  should NOT persist the content hash so a retry can run on the same body. */
+  hitMaxTokens: boolean;
+}
+
+/**
+ * Token thresholds for body-size guardrails. Claude Sonnet's context window
+ * is 200K input tokens and the default output budget here is 16K — so a body
+ * approaching either edge needs the model to be more concise than usual or
+ * it'll exhaust output mid-extraction.
+ *
+ * - LARGE: warn the AI to budget concisely (most-recent entries only)
+ * - HUGE: also raise output budget toward the model cap, since even with
+ *   concision a legitimately huge body needs more room to land all entries
+ */
+export const LARGE_BODY_TOKEN_THRESHOLD = 50_000;
+export const HUGE_BODY_TOKEN_THRESHOLD = 100_000;
+export const DEFAULT_MAX_OUTPUT_TOKENS = 16_384;
+export const HUGE_BODY_MAX_OUTPUT_TOKENS = 32_000;
+
+export function buildBodyGuardrail(approxTokens: number): string {
+  const rounded = Math.round(approxTokens / 1000) * 1000;
+  return `Response body is approximately ${rounded.toLocaleString()} tokens — large enough that you cannot emit a full detail body for every historical entry within the output budget. Focus ONLY on the most recent entries (the top of the changelog or items with the latest dates). Older entries are likely already stored. Be aggressively concise: short content bodies, no quoted descriptions, summarize bullet lists into 1-2 sentences. If the source uses weekly/monthly rollups, prefer ONE entry per recent rollup over many per-item entries.`;
+}
+
 async function extractFromBody(
   opts: ExtractFromBodyOpts,
-): Promise<{ entries: ExtractedEntry[]; totalInput: number; totalOutput: number }> {
+): Promise<ExtractFromBodyResult> {
   const client = getAnthropicClient();
   const model = config.agentModel();
 
@@ -262,16 +292,29 @@ async function extractFromBody(
     ? opts.body.slice(0, maxChars) + "\n\n[Content truncated]"
     : opts.body;
 
+  const approxTokens = countTokensSafe(content);
+  const isHuge = approxTokens >= HUGE_BODY_TOKEN_THRESHOLD;
+  const isLarge = approxTokens >= LARGE_BODY_TOKEN_THRESHOLD;
+  if (isLarge) {
+    logger.info(`Body is ~${approxTokens.toLocaleString()} tokens — applying ${isHuge ? "huge" : "large"}-body guardrails`);
+  }
+
+  const systemBlocks: Anthropic.TextBlockParam[] = [
+    {
+      type: "text",
+      text: withGuidance(opts.systemPrompt, opts.guidance),
+      cache_control: { type: "ephemeral" },
+    },
+  ];
+  if (isLarge) {
+    // Uncached: body size is per-fetch, doesn't benefit from caching.
+    systemBlocks.push({ type: "text", text: buildBodyGuardrail(approxTokens) });
+  }
+
   const response = await client.messages.create({
     model,
-    max_tokens: 16384,
-    system: [
-      {
-        type: "text",
-        text: withGuidance(opts.systemPrompt, opts.guidance),
-        cache_control: { type: "ephemeral" },
-      },
-    ],
+    max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
+    system: systemBlocks,
     tools: [extractReleasesTool],
     tool_choice: { type: "tool", name: "extract_releases" },
     messages: [
@@ -281,22 +324,23 @@ async function extractFromBody(
 
   const totalInput = response.usage.input_tokens;
   const totalOutput = response.usage.output_tokens;
+  const hitMaxTokens = response.stop_reason === "max_tokens";
 
-  if (response.stop_reason === "max_tokens") {
-    logger.warn("AI extraction hit max_tokens — some entries may be lost");
+  if (hitMaxTokens) {
+    logger.warn("AI extraction hit max_tokens — some entries may be lost; content hash will not be persisted so retry can run on the same body");
   }
 
   const toolBlock = response.content.find((block) => block.type === "tool_use");
   if (!toolBlock || toolBlock.type !== "tool_use") {
-    return { entries: [], totalInput, totalOutput };
+    return { entries: [], totalInput, totalOutput, hitMaxTokens };
   }
 
   const input = toolBlock.input as Record<string, unknown>;
   if (!input || !Array.isArray(input.releases)) {
-    return { entries: [], totalInput, totalOutput };
+    return { entries: [], totalInput, totalOutput, hitMaxTokens };
   }
 
-  return { entries: input.releases as ExtractedEntry[], totalInput, totalOutput };
+  return { entries: input.releases as ExtractedEntry[], totalInput, totalOutput, hitMaxTokens };
 }
 
 // ── Map extracted entries to RawRelease[] ─────────────────────────────
@@ -413,7 +457,7 @@ async function fetchViaDirectFetch(
   // re-renders that produce identical content (common with SSG rebuilds —
   // new etag, same payload).
   const contentHash = sha256Hex(body);
-  if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
+  if (await checkContentHash(source, contentHash)) {
     logger.info("No changes detected (content hash unchanged)");
     return { releases: [] };
   }
@@ -435,6 +479,14 @@ async function fetchViaDirectFetch(
   });
 
   logger.info(`Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`);
+
+  // Persist the content hash only when extraction completed cleanly. On
+  // max_tokens exhaustion we leave it unset so a fixed prompt can re-attempt
+  // the same body — otherwise the next fetch would short-circuit on the hash
+  // and lock us out of recovery until upstream changes.
+  if (!result.hitMaxTokens && !options?.dryRun) {
+    await recordContentHash(source, contentHash);
+  }
 
   let releases = mapEntries(result.entries, source.url);
   if (options?.since) {
@@ -519,7 +571,10 @@ export const agent: Adapter = {
       return fetchViaDirectFetch(source, meta, options, guidance);
     }
 
-    let result: { entries: ExtractedEntry[]; totalInput: number; totalOutput: number };
+    let result: { entries: ExtractedEntry[]; totalInput: number; totalOutput: number; hitMaxTokens: boolean };
+    // Tracks the content hash from any Cloudflare-rendered body, recorded
+    // after extraction so a failed run doesn't lock out retries.
+    let pendingContentHash: string | null = null;
     const jsRendered = await isJsRenderedPage(source.url);
 
     if (jsRendered) {
@@ -528,7 +583,7 @@ export const agent: Adapter = {
         logger.info(`Cloudflare returned ${markdown.length.toLocaleString()} chars of markdown`);
 
         const contentHash = sha256Hex(markdown);
-        if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
+        if (await checkContentHash(source, contentHash)) {
           logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
           return { releases: [] };
         }
@@ -539,6 +594,7 @@ export const agent: Adapter = {
           userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
           guidance,
         });
+        pendingContentHash = contentHash;
       } else {
         throw new AdapterError(
           "agent",
@@ -547,7 +603,8 @@ export const agent: Adapter = {
       }
     } else {
       try {
-        result = await runWebFetchLoop(source.url, guidance);
+        const webResult = await runWebFetchLoop(source.url, guidance);
+        result = { ...webResult, hitMaxTokens: false };
       } catch (err) {
         throw new AdapterError(
           "agent",
@@ -564,7 +621,7 @@ export const agent: Adapter = {
           logger.info(`Cloudflare returned ${markdown.length.toLocaleString()} chars of markdown`);
 
           const contentHash = sha256Hex(markdown);
-          if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
+          if (await checkContentHash(source, contentHash)) {
             logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
             return { releases: [] };
           }
@@ -582,13 +639,22 @@ export const agent: Adapter = {
                 entries: cfResult.entries,
                 totalInput: result.totalInput + cfResult.totalInput,
                 totalOutput: result.totalOutput + cfResult.totalOutput,
+                hitMaxTokens: cfResult.hitMaxTokens,
               };
+              pendingContentHash = contentHash;
             }
+            // If web_fetch beat Cloudflare we deliberately leave pendingContentHash
+            // unset — recording would tie the hash to a body whose result we're
+            // discarding, which would block re-extraction once web_fetch improves.
           } catch (err) {
             logger.warn(`Cloudflare extraction failed: ${err instanceof Error ? err.message : String(err)}`);
           }
         }
       }
+    }
+
+    if (pendingContentHash !== null && !result.hitMaxTokens && !options?.dryRun) {
+      await recordContentHash(source, pendingContentHash);
     }
 
     await logUsage({

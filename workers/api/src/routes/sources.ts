@@ -455,16 +455,18 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
 sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
   const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
+  const peek = c.req.query("peek") === "true";
   const body = await c.req.json<{ contentHash: string }>();
 
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
-  if (src.lastContentHash === body.contentHash) {
-    return c.json({ unchanged: true });
-  }
+  const unchanged = src.lastContentHash === body.contentHash;
+  if (unchanged) return c.json({ unchanged: true });
 
-  await db.update(sources).set({ lastContentHash: body.contentHash }).where(eq(sources.id, src.id));
+  if (!peek) {
+    await db.update(sources).set({ lastContentHash: body.contentHash }).where(eq(sources.id, src.id));
+  }
   return c.json({ unchanged: false });
 });
 
