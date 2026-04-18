@@ -93,7 +93,7 @@ flowchart LR
 **Three Workers, two Queues, one DO extension.**
 
 - **`workers/api` (existing)** — gains a queue-producer binding and a new `expandAndEnqueue()` call alongside the existing `ReleaseHub.publish()`. Both fire-and-forget via `ctx.waitUntil`. Also gains `GET /v1/webhooks/events?since=<seq>` (the replay endpoint, proxies to `ReleaseHub.getEventsSince`).
-- **`ReleaseHub` (existing DO in workers/api)** — gains a 7-day ring buffer in DO storage plus `getEventsSince(seq)` method. WebSocket fan-out unchanged. TTL maintained by a recurring DO alarm: each `alarm()` invocation deletes `event:` keys older than 7 days, then calls `storage.setAlarm(now + 1h)` to reschedule itself.
+- **`ReleaseHub` (existing DO in workers/api)** — gains a new HTTP endpoint that exposes the existing `replayEvents()` helper over JSON for the public replay route. The ring buffer + `appendEvent`/`replayEvents`/`currentSeq`/`oldestSeq` already exist (shipped in #341 to back WebSocket `?since=` resume); this work just exposes them via a new path. `EVENT_BUFFER_SIZE` bumps from 1000 → 7000 to cover ~7 days at current volume (~700 events/day). WebSocket fan-out unchanged.
 - **`workers/webhooks` (NEW)** — Queue consumer Worker. Bindings: D1 (`webhook_subscriptions`), Secrets Store (`WEBHOOK_HMAC_MASTER`), Analytics Engine (`webhook_deliveries` dataset), `webhook-delivery` queue (consumer), `webhook-dlq` queue (producer + consumer), Cloudflare Rate Limiting binding scoped per `subscriptionId`.
 - **`webhook-delivery` queue** — single Cloudflare Queue, one message per (event × subscription). Built-in retry handles transient failures; DLQ on `max_retries`.
 - **`webhook-dlq` queue** — terminal failures land here; consumer logs + writes a final AE entry tagged `dlq`. No retry.
@@ -149,16 +149,21 @@ doubles: [http_status, latency_ms, attempt_number]
 
 `outcome` ∈ `success | retry | perm_fail | skipped | dlq | auto_disabled`. Cost-bounded: at phase A scale (~100 events/day × 10 subs × 1.1 attempts) we're ~33k points/month, well inside free tier. Workers Paid bumps included quota to 25M/month. **Caveat:** AE retains queryable data for ~90 days on default sampling; longer retention requires a separate export job (D1 wouldn't help here either — we'd be purging at the same horizon).
 
-### ReleaseHub DO storage extension
+### ReleaseHub DO storage (existing — extended)
 
-New keyspace inside the existing DO. `seq` is already monotonic across the DO (added in #341). 7-day TTL maintained by a DO alarm that runs hourly and deletes keys older than the cutoff.
+The DO already maintains a count-based ring buffer (shipped in #341) using these keys:
 
 ```
-event:<seq>  → JSON ReleaseEventPayload    (TTL: 7 days)
-seq:latest   → number                       (current high-water mark)
+evt:<padSeq(seq)>  → JSON ReleaseEvent    (zero-padded for lex-order list())
+seq                → number               (current head)
+oldest-seq         → number               (oldest retained, for snapshot_gap)
 ```
 
-The replay endpoint `GET /v1/webhooks/events?since=<seq>` calls `ReleaseHub.getEventsSince(seq, limit=500)`, which scans `event:` keys with `seq > since` and returns them in order. Capped at 500 per call; pagination via `since=<last_returned_seq>` continuation.
+Eviction is on-append in `appendEvent()`: when `seq > EVENT_BUFFER_SIZE`, the oldest `evt:` key is deleted and `oldest-seq` advances. **No DO alarm needed** — count-based eviction is automatic.
+
+This work makes one change to the buffer: `EVENT_BUFFER_SIZE` bumps from 1000 → 7000 to cover ~7 days of replay at current volume (~700 events/day, headroom for 2× growth).
+
+The new public endpoint `GET /v1/webhooks/events?since=<seq>` adds a new HTTP path on the DO (`/replay?since=`) that wraps the existing `replayEvents()` helper, returning JSON. Capped at 500 events per response; pagination via `since=<last_returned_seq>` continuation. If `since < oldest-seq - 1`, the response includes a `gap: { oldestSeq }` marker so subscribers know to backfill via `/v1/releases/latest`.
 
 ## Publisher path
 
