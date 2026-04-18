@@ -144,7 +144,7 @@ Chain successive requests by passing the returned `nextOffset` back as the next 
 
 ### `GET /v1/releases/latest`
 
-Unified feed of the most recent releases. Backs the CLI's `tail`/`latest` command and the public homepage activity feed. Responses are cached in KV for 5 minutes; `X-Cache: HIT|MISS` is set for observability.
+Unified feed of the most recent releases. Backs the CLI's `tail`/`latest` command and the public homepage activity feed. The default unfiltered request is cached in KV for 5 minutes (`X-Cache: HIT|MISS`); any request that applies `source`, `org`, a non-default `count`, or `include_coverage=true` bypasses the cache (`X-Cache: BYPASS`) and is served directly from the database.
 
 | Param | Description |
 | --- | --- |

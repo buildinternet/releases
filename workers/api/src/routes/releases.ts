@@ -6,7 +6,12 @@ import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceWhere, parseBoolParam, resolveR2Url } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
-import { buildLatestCacheKey, withLatestCache } from "../lib/latest-cache.js";
+import {
+  buildLatestCacheKey,
+  isCacheableLatestRequest,
+  withLatestCache,
+  DEFAULT_LATEST_COUNT,
+} from "../lib/latest-cache.js";
 
 export const releaseRoutes = new Hono<Env>();
 
@@ -44,8 +49,10 @@ releaseRoutes.get("/releases", async (c) => {
 // Cacheable "latest releases" feed. Shape documented in
 // docs/architecture/remote-mode.md.
 releaseRoutes.get("/releases/latest", async (c) => {
-  const rawCount = parseInt(c.req.query("count") ?? "10", 10);
-  const count = isNaN(rawCount) || rawCount < 1 ? 10 : Math.min(rawCount, 100);
+  const rawCount = parseInt(c.req.query("count") ?? String(DEFAULT_LATEST_COUNT), 10);
+  const count = isNaN(rawCount) || rawCount < 1
+    ? DEFAULT_LATEST_COUNT
+    : Math.min(rawCount, 100);
   const sourceParam = c.req.query("source");
   const orgParam = c.req.query("org");
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
@@ -84,38 +91,56 @@ releaseRoutes.get("/releases/latest", async (c) => {
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
   const waitUntil = c.executionCtx?.waitUntil.bind(c.executionCtx);
 
+  const compute = async () => {
+    const rows = await getLatestReleasesAcross(c.env.DB, {
+      sourceId,
+      orgId,
+      includeCoverage,
+      limit: count,
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      version: r.version,
+      type: r.type,
+      title: r.title,
+      summary: r.content_summary,
+      publishedAt: r.published_at,
+      url: r.url,
+      media: (() => {
+        try { return JSON.parse(r.media ?? "[]"); } catch { return []; }
+      })().map((m: any) => ({
+        ...m,
+        r2Url: resolveR2Url(m.r2Key, mediaOrigin),
+      })),
+      source: {
+        slug: r.source_slug,
+        name: r.source_name,
+        type: r.source_type,
+      },
+    }));
+  };
+
+  // Only the unfiltered homepage/CLI shape (and any explicitly allowlisted
+  // high-value filtered shapes) goes through KV. Everything else falls
+  // through to D1 so filtered `tail -f` workloads can't inflate cardinality.
+  const cacheable = isCacheableLatestRequest(cacheKey, {
+    count,
+    sourceId,
+    orgId,
+    includeCoverage,
+  });
+
+  if (!cacheable) {
+    const data = await compute();
+    c.header("X-Cache", "BYPASS");
+    return c.json({ releases: data });
+  }
+
   const { data, hit } = await withLatestCache(
     c.env.LATEST_CACHE,
     cacheKey,
     waitUntil,
-    async () => {
-      const rows = await getLatestReleasesAcross(c.env.DB, {
-        sourceId,
-        orgId,
-        includeCoverage,
-        limit: count,
-      });
-      return rows.map((r) => ({
-        id: r.id,
-        version: r.version,
-        type: r.type,
-        title: r.title,
-        summary: r.content_summary,
-        publishedAt: r.published_at,
-        url: r.url,
-        media: (() => {
-          try { return JSON.parse(r.media ?? "[]"); } catch { return []; }
-        })().map((m: any) => ({
-          ...m,
-          r2Url: resolveR2Url(m.r2Key, mediaOrigin),
-        })),
-        source: {
-          slug: r.source_slug,
-          name: r.source_name,
-          type: r.source_type,
-        },
-      }));
-    },
+    compute,
   );
 
   c.header("X-Cache", hit ? "HIT" : "MISS");

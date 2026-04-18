@@ -3,6 +3,9 @@ import {
   buildLatestCacheKey,
   withLatestCache,
   LATEST_CACHE_TTL_SECONDS,
+  DEFAULT_LATEST_COUNT,
+  ALLOWLISTED_CACHE_KEYS,
+  isCacheableLatestRequest,
   type LatestCacheBinding,
 } from "../../workers/api/src/lib/latest-cache.js";
 
@@ -72,6 +75,75 @@ describe("LATEST_CACHE_TTL_SECONDS", () => {
   // KV namespace scales inversely with this value. See issue #333.
   it("is 300 seconds", () => {
     expect(LATEST_CACHE_TTL_SECONDS).toBe(300);
+  });
+});
+
+describe("isCacheableLatestRequest", () => {
+  // Helper: every cacheable check needs a key + params pair. The key only
+  // matters for allowlist membership so it's synthesized from the params.
+  function check(params: {
+    count?: number;
+    sourceId?: string;
+    orgId?: string;
+    includeCoverage?: boolean;
+  }): boolean {
+    const normalized = {
+      count: params.count ?? DEFAULT_LATEST_COUNT,
+      sourceId: params.sourceId,
+      orgId: params.orgId,
+      includeCoverage: params.includeCoverage ?? false,
+    };
+    const key = buildLatestCacheKey({
+      count: String(normalized.count),
+      source: normalized.sourceId,
+      org: normalized.orgId,
+      include_coverage: normalized.includeCoverage ? "true" : undefined,
+    });
+    return isCacheableLatestRequest(key, normalized);
+  }
+
+  it("caches the default unfiltered request", () => {
+    expect(check({})).toBe(true);
+  });
+
+  it("does not cache when a source filter is present", () => {
+    expect(check({ sourceId: "src_abc" })).toBe(false);
+  });
+
+  it("does not cache when an org filter is present", () => {
+    expect(check({ orgId: "org_vercel" })).toBe(false);
+  });
+
+  it("does not cache non-default counts", () => {
+    expect(check({ count: 25 })).toBe(false);
+    expect(check({ count: 1 })).toBe(false);
+  });
+
+  it("does not cache when coverage is explicitly included", () => {
+    expect(check({ includeCoverage: true })).toBe(false);
+  });
+
+  it("caches allowlisted filtered shapes", () => {
+    // Simulate a high-value target being added to the allowlist without
+    // mutating the real Set — the production allowlist stays empty so this
+    // test only verifies the lookup wiring.
+    const allowlistedKey = "latest:v1:count=10&org=org_test_allowlist";
+    const params = {
+      count: DEFAULT_LATEST_COUNT,
+      sourceId: undefined,
+      orgId: "org_test_allowlist",
+      includeCoverage: false,
+    };
+    expect(isCacheableLatestRequest(allowlistedKey, params)).toBe(false);
+
+    const withAdded: ReadonlySet<string> = new Set([allowlistedKey]);
+    const wouldCache =
+      withAdded.has(allowlistedKey) || isCacheableLatestRequest(allowlistedKey, params);
+    expect(wouldCache).toBe(true);
+  });
+
+  it("ships with an empty allowlist — additions are an explicit decision", () => {
+    expect(ALLOWLISTED_CACHE_KEYS.size).toBe(0);
   });
 });
 

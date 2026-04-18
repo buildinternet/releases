@@ -18,16 +18,23 @@ default 10), `source` (slug or id), `org` (slug or id, mutually exclusive
 with `source`), and `include_coverage` (default false, hides coverage-side
 rows).
 
-Responses are read-through-cached in the `LATEST_CACHE` KV namespace
-(`workers/api/src/lib/latest-cache.ts`) for 300 seconds. Cache keys are built
-from the sorted filter params under prefix `latest:v1:`, keyed on resolved
-source/org IDs so two callers for the same entity (slug vs id) collapse onto
-the same entry. A cache miss runs the D1 query
-(`workers/api/src/queries/releases.ts`) and the write-back is fire-and-forget
-via `ctx.waitUntil`. The handler sets `X-Cache: HIT|MISS` for observability.
-TTL-only invalidation — stale-up-to-5-minutes is acceptable for a feed whose
-upstream publishers push at most a few times per day. The TTL is sized to
-bound KV write volume under sustained `tail -f` polling (see issue #333).
+Only the **default unfiltered shape** (no `source`, no `org`, default `count`,
+`include_coverage=false`) is KV-cached — that's the homepage feed and the
+`tail -f` hot path, and it collapses to a single key. Filtered variants fall
+through to D1 directly (which handles the cardinality comfortably — see
+issue #333 comments for the cost model). The handler sets
+`X-Cache: HIT|MISS` on cached responses and `X-Cache: BYPASS` on
+fall-through. Cache entries live in the `LATEST_CACHE` KV namespace
+(`workers/api/src/lib/latest-cache.ts`) for 300 seconds; write-back on miss
+is fire-and-forget via `ctx.waitUntil`. Stale-up-to-5-minutes is acceptable
+for a feed whose upstream publishers push a few times per day at most.
+
+Cache keys are built from the sorted filter params under prefix `latest:v1:`,
+keyed on resolved source/org IDs so two callers for the same entity (slug
+vs id) collapse onto the same entry. `ALLOWLISTED_CACHE_KEYS` in the cache
+module is the hook for promoting specific filtered shapes (e.g., a hot org
+page) into the cached set — empty by default; additions are an explicit
+decision backed by analytics.
 
 `tail --follow` polls this same cached endpoint with no extra params so every
 follow-poller collapses onto the shared cache entry. Novelty detection lives
