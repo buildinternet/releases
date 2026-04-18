@@ -8,11 +8,66 @@ import { updateSourceMeta } from "../../adapters/feed.js";
 
 const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;
 
-function inferFeedTypeFromUrl(url: string): "rss" | "atom" | "jsonfeed" {
+export const VALID_FEED_TYPES = ["rss", "atom", "jsonfeed"] as const;
+export type FeedType = (typeof VALID_FEED_TYPES)[number];
+
+export function inferFeedTypeFromUrl(url: string): FeedType {
   const lower = url.toLowerCase();
   if (lower.endsWith(".json") || lower.includes("feed.json")) return "jsonfeed";
   if (lower.includes("atom")) return "atom";
   return "rss"; // safe default — RSS parser handles most XML feeds
+}
+
+export type ResolveFeedUpdateInput = {
+  feedUrl?: string | boolean;
+  feedType?: string;
+};
+
+export type ResolveFeedUpdateResult =
+  | { ok: true; action: "none" }
+  | { ok: true; action: "remove" }
+  | { ok: true; action: "set"; feedUrl: string; feedType: FeedType }
+  | { ok: false; error: string };
+
+/**
+ * Decide how to update a source's feed metadata from the flags on
+ * `releases admin source edit`. Pure helper — no DB or I/O — so it can be
+ * unit-tested directly.
+ *
+ * Rules:
+ * - `--feed-type` without `--feed-url` is meaningless (nothing to update).
+ * - `--feed-type` must be one of `VALID_FEED_TYPES`.
+ * - When both are passed, the explicit type wins over URL inference.
+ * - `--no-feed-url` (feedUrl === false) removes the stored feed.
+ */
+export function resolveFeedUpdate(input: ResolveFeedUpdateInput): ResolveFeedUpdateResult {
+  const { feedUrl, feedType } = input;
+
+  if (feedType !== undefined) {
+    if (!(VALID_FEED_TYPES as readonly string[]).includes(feedType)) {
+      return {
+        ok: false,
+        error: `Invalid feed type "${feedType}". Must be one of: ${VALID_FEED_TYPES.join(", ")}`,
+      };
+    }
+    if (typeof feedUrl !== "string") {
+      return {
+        ok: false,
+        error: "--feed-type requires --feed-url. Pass both together to set or update the feed.",
+      };
+    }
+    return { ok: true, action: "set", feedUrl, feedType: feedType as FeedType };
+  }
+
+  if (feedUrl === false) {
+    return { ok: true, action: "remove" };
+  }
+
+  if (typeof feedUrl === "string") {
+    return { ok: true, action: "set", feedUrl, feedType: inferFeedTypeFromUrl(feedUrl) };
+  }
+
+  return { ok: true, action: "none" };
 }
 
 export function registerEditCommand(program: Command) {
@@ -31,6 +86,7 @@ export function registerEditCommand(program: Command) {
     .option("--no-product", "Remove product association")
     .option("--feed-url <feedUrl>", "Set or update the feed URL")
     .option("--no-feed-url", "Remove stored feed URL")
+    .option("--feed-type <feedType>", `Override inferred feed type (one of: ${VALID_FEED_TYPES.join(", ")}). Requires --feed-url.`)
     .option("--markdown-url <markdownUrl>", "Set the raw markdown URL for this source")
     .option("--parse-instructions <text>", "Set AI parsing instructions for this source")
     .option("--no-parse-instructions", "Remove AI parsing instructions")
@@ -52,6 +108,7 @@ Examples:
   releases admin source edit my-source --org "Acme Corp"
   releases admin source edit my-source --primary
   releases admin source edit my-source --feed-url https://example.com/feed.xml
+  releases admin source edit my-source --feed-url https://example.com/changelog/rss --feed-type rss
   releases admin source edit my-source --markdown-url https://example.com/changelog.md
   releases admin source edit my-source --fetch-method markdown
   releases admin source edit my-source --priority low
@@ -62,7 +119,7 @@ Examples:
     .action(async (identifier: string, opts: {
       name?: string; url?: string; type?: string; slug?: string;
       confirmSlugChange?: boolean;
-      org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; json?: boolean;
+      org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; feedType?: string; json?: boolean;
       markdownUrl?: string; provider?: string; fetchMethod?: string;
       parseInstructions?: string | boolean;
       render?: boolean;
@@ -177,14 +234,23 @@ Examples:
       // Accumulate metadata updates for a single write
       const metaUpdates: Record<string, unknown> = {};
 
-      // Handle --feed-url / --no-feed-url
-      if (opts.feedUrl === false) {
+      // Handle --feed-url / --no-feed-url / --feed-type
+      const feedResolution = resolveFeedUpdate({ feedUrl: opts.feedUrl, feedType: opts.feedType });
+      if (!feedResolution.ok) {
+        console.error(chalk.red(feedResolution.error));
+        process.exit(1);
+      }
+      if (feedResolution.action === "remove") {
         Object.assign(metaUpdates, { feedUrl: undefined, feedType: undefined, feedDiscoveredAt: undefined, noFeedFound: true });
         changes.push("feed URL removed (feed discovery disabled)");
-      } else if (typeof opts.feedUrl === "string") {
-        const feedType = inferFeedTypeFromUrl(opts.feedUrl);
-        Object.assign(metaUpdates, { feedUrl: opts.feedUrl, feedType, feedDiscoveredAt: new Date().toISOString(), noFeedFound: false });
-        changes.push(`feed URL → ${opts.feedUrl} (${feedType})`);
+      } else if (feedResolution.action === "set") {
+        Object.assign(metaUpdates, {
+          feedUrl: feedResolution.feedUrl,
+          feedType: feedResolution.feedType,
+          feedDiscoveredAt: new Date().toISOString(),
+          noFeedFound: false,
+        });
+        changes.push(`feed URL → ${feedResolution.feedUrl} (${feedResolution.feedType})`);
       }
 
       // Handle --markdown-url
