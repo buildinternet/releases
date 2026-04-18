@@ -122,6 +122,7 @@ export async function searchReleases(
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   // ^ MCP's own hybrid helper lives at workers/mcp/src/lib/search-hybrid.ts
+  ctx?: ExecutionContext,
 ): Promise<ToolResult> {
   const maxResults = params.limit ?? 20;
   const typeFilter = params.type;
@@ -152,15 +153,20 @@ export async function searchReleases(
   // will silently fall back to lexical and flag `degraded`.
   if (mode !== "lexical" && searchEnv) {
     const { runHybridSearch } = await import("./lib/search-hybrid.js");
-    const result = await runHybridSearch(searchEnv, db, {
-      query: params.query,
-      topK: maxResults,
-      mode,
-      sourceId,
-      orgSourceIds,
-      type: typeFilter,
-      includeCoverage,
-    });
+    const result = await runHybridSearch(
+      searchEnv,
+      db,
+      {
+        query: params.query,
+        topK: maxResults,
+        mode,
+        sourceId,
+        orgSourceIds,
+        type: typeFilter,
+        includeCoverage,
+      },
+      ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {},
+    );
 
     if (result.hits.length === 0) {
       const degradeNote = result.degraded ? ` (degraded: ${result.degradedReason ?? "unknown"})` : "";
@@ -255,9 +261,15 @@ export async function searchRegistry(
   db: D1Db,
   params: { query: string; kind?: RegistryKind; limit?: number },
   searchEnv: import("./lib/search-hybrid.js").HybridSearchEnv,
+  ctx?: ExecutionContext,
 ): Promise<ToolResult> {
   const { runRegistrySearch } = await import("./lib/search-hybrid.js");
-  const result = await runRegistrySearch(searchEnv, db, params);
+  const result = await runRegistrySearch(
+    searchEnv,
+    db,
+    params,
+    ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {},
+  );
 
   if (result.degraded) {
     // Lexical fallback — reuse the existing LIKE queries so users get

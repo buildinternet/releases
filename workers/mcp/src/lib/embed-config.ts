@@ -12,6 +12,7 @@
 type EmbeddingProvider = "voyage" | "openai" | "workers-ai";
 interface EmbeddingConfig {
   provider: EmbeddingProvider;
+  model?: string;
   apiKey?: string;
 }
 

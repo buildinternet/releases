@@ -119,12 +119,17 @@ searchRoutes.get("/search", async (c) => {
   // Semantic / hybrid modes — run the shared helper and flatten release
   // hits into the legacy `releases` field so existing consumers keep
   // working. Chunk hits ride along on a new `chunks` field.
-  const hybrid = await runHybridSearch(c.env, db, {
-    query: q,
-    topK: limit,
-    mode,
-    includeCoverage,
-  });
+  const hybrid = await runHybridSearch(
+    c.env,
+    db,
+    {
+      query: q,
+      topK: limit,
+      mode,
+      includeCoverage,
+    },
+    { waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx) },
+  );
 
   const releases: SearchReleaseHit[] = hybrid.hits
     .filter((h): h is Extract<typeof h, { kind: "release" }> => h.kind === "release")

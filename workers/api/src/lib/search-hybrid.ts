@@ -26,11 +26,22 @@ import {
   type VectorizeIndex as HybridVectorizeIndex,
 } from "@releases/lib/vector-search.js";
 import { embedBatch } from "@releases/lib/embeddings.js";
+import {
+  withEmbedCache,
+  type EmbedCacheBinding,
+} from "@releases/lib/embedding-cache.js";
 import { searchReleasesFts } from "../queries/search.js";
 import { buildEmbedConfig } from "./embed-config.js";
 import type { D1Db } from "../db.js";
 
 type SecretBinding = { get(): Promise<string> };
+
+/**
+ * Vectorize indexes are provisioned at 512 dims (see scripts/create-vectorize-indexes.sh).
+ * We include this in the embedding-cache key so switching index dimensionality
+ * automatically invalidates the cached query vectors.
+ */
+const EMBED_DIM = 512;
 
 /**
  * Loose index type — we only care about `.query()` in the hybrid path.
@@ -60,6 +71,16 @@ export interface HybridSearchEnv {
   EMBEDDING_PROVIDER?: string;
   VOYAGE_API_KEY?: SecretBinding;
   OPENAI_API_KEY?: SecretBinding;
+  /** Optional KV binding caching one-shot query embeddings. Absent → no-op. */
+  EMBED_CACHE?: EmbedCacheBinding;
+}
+
+/**
+ * Optional per-call plumbing. `waitUntil` — when provided — lets the
+ * embedding cache fire KV writes without blocking the response.
+ */
+export interface HybridSearchOpts {
+  waitUntil?: (p: Promise<unknown>) => void;
 }
 
 export type HybridMode = "lexical" | "semantic" | "hybrid";
@@ -121,15 +142,22 @@ export interface HybridSearchResponse {
  */
 async function buildEmbedder(
   env: HybridSearchEnv,
+  waitUntil?: (p: Promise<unknown>) => void,
 ): Promise<((text: string) => Promise<number[]>) | null> {
   const cfg = await buildEmbedConfig(env);
-  if (!cfg) return null;
-  return async (text: string) => {
+  if (!cfg || !cfg.provider) return null;
+  const raw = async (text: string) => {
     const result = await embedBatch([text], cfg);
     const v = result.vectors[0];
     if (!v) throw new Error("embedBatch returned no vectors");
     return v;
   };
+  return withEmbedCache(
+    raw,
+    env.EMBED_CACHE,
+    { provider: cfg.provider, model: cfg.model ?? "", dim: EMBED_DIM },
+    waitUntil,
+  );
 }
 
 // ── Hydration ─────────────────────────────────────────────────────────
@@ -299,6 +327,7 @@ export async function runHybridSearch(
   env: HybridSearchEnv,
   db: D1Db,
   params: RunHybridSearchParams,
+  opts: HybridSearchOpts = {},
 ): Promise<HybridSearchResponse> {
   const topK = params.topK ?? 20;
   const requestedMode: HybridMode = params.mode ?? "hybrid";
@@ -326,7 +355,7 @@ export async function runHybridSearch(
 
   if (requestedMode === "lexical") return lexicalResponse();
 
-  const embedder = await buildEmbedder(env);
+  const embedder = await buildEmbedder(env, opts.waitUntil);
   const hasVectorize =
     !!env.RELEASES_INDEX && !!env.CHANGELOG_CHUNKS_INDEX && !!embedder;
 
@@ -491,10 +520,11 @@ export async function runRegistrySearch(
   env: HybridSearchEnv,
   db: D1Db,
   params: { query: string; kind?: EntityKind; limit?: number },
+  opts: HybridSearchOpts = {},
 ): Promise<RegistrySearchResponse> {
   const limit = params.limit ?? 20;
 
-  const embedder = await buildEmbedder(env);
+  const embedder = await buildEmbedder(env, opts.waitUntil);
   if (!env.ENTITIES_INDEX || !embedder) {
     return {
       degraded: true,

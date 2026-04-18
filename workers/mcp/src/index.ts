@@ -18,7 +18,7 @@ export default {
       );
     }
 
-    const server = createServer(env);
+    const server = createServer(env, ctx);
     return createMcpHandler(server)(request, env, ctx);
   },
 } satisfies ExportedHandler<Env>;

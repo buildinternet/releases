@@ -35,9 +35,11 @@ export interface Env {
   EMBEDDING_PROVIDER?: string;
   VOYAGE_API_KEY?: SecretBinding;
   OPENAI_API_KEY?: SecretBinding;
+  /** Optional KV namespace caching single-query embeddings. */
+  EMBED_CACHE?: KVNamespace;
 }
 
-export function createServer(env: Env) {
+export function createServer(env: Env, ctx?: ExecutionContext) {
   const server = new McpServer({
     name: "releases",
     version: "0.10.0",
@@ -79,7 +81,7 @@ export function createServer(env: Env) {
       mode: z.enum(["lexical", "semantic", "hybrid"]).optional().describe("Retrieval strategy. 'hybrid' (default) fuses FTS + vector results. 'lexical' is legacy FTS only. 'semantic' is vectors only. Falls back to lexical if vector infra is unavailable."),
       include_coverage: z.boolean().optional().describe("Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false so each underlying launch appears once."),
     },
-  }, withMedia(async (params) => searchReleases(db, params, env)));
+  }, withMedia(async (params) => searchReleases(db, params, env, ctx)));
 
   server.registerTool("search_registry", {
     description: "Semantic search across the registry — returns orgs, products, or sources that match the query by meaning, not just keyword. Useful when you know what kind of thing you're looking for ('observability vendor with open-source agent') but not its exact name. Falls back to LIKE-based lexical search when Vectorize is unavailable.",
@@ -88,7 +90,7 @@ export function createServer(env: Env) {
       kind: z.enum(["org", "product", "source"]).optional().describe("Restrict results to one entity kind. Omit to include all three."),
       limit: z.number().optional().describe("Max results to return (default 20)"),
     },
-  }, async (params) => searchRegistry(db, params, env));
+  }, async (params) => searchRegistry(db, params, env, ctx));
 
   server.registerTool("get_latest_releases", {
     description: "Get the most recent releases, optionally filtered by product or organization",
