@@ -129,6 +129,7 @@ Deep dives live in `docs/architecture/`:
 - [agents.md](docs/architecture/agents.md) — managed agents (discovery + worker), skills, Claude Code plugin.
 - [coverage.md](docs/architecture/coverage.md) — release coverage + ingest-time grouping, cron observability.
 - [web.md](docs/architecture/web.md) — changelog range/slicing API, GitHub CHANGELOG ingestion, Open Graph images, org overviews, media pipeline.
+- [events.md](docs/architecture/events.md) — release event bus: `ReleaseHub` Durable Object, `GET /v1/releases/stream` WebSocket, fire-and-forget publish from batch + cron ingest.
 - [cli-distribution.md](docs/architecture/cli-distribution.md) — OSS repo, npm, Homebrew tap.
 
 ## Environment

@@ -41,6 +41,10 @@ export function getStatusHub(env: { STATUS_HUB: DurableObjectNamespace }) {
   return env.STATUS_HUB.get(env.STATUS_HUB.idFromName("global"));
 }
 
+export function getReleaseHub(env: { RELEASE_HUB: DurableObjectNamespace }) {
+  return env.RELEASE_HUB.get(env.RELEASE_HUB.idFromName("global"));
+}
+
 /** Get-or-create a tag by name. Shared across org and product routes. */
 export async function getOrCreateTagD1(
   db: ReturnType<typeof import("./db.js").createDb>,

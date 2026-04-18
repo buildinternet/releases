@@ -14,6 +14,8 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/lib/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
+import { publishReleaseEvents } from "../events/publish.js";
+import type { InsertedReleaseRow } from "../events/build-event.js";
 
 // ── Tier intervals (hours) ──
 
@@ -197,6 +199,7 @@ export interface FetchOneEnv {
   EMBEDDING_PROVIDER?: string;
   VOYAGE_API_KEY?: { get(): Promise<string> };
   OPENAI_API_KEY?: { get(): Promise<string> };
+  RELEASE_HUB?: DurableObjectNamespace;
 }
 
 export async function fetchOne(
@@ -294,14 +297,32 @@ export async function fetchOne(
     }));
 
     let inserted = 0;
-    const insertedIds: string[] = [];
+    const publishRows: InsertedReleaseRow[] = [];
     for (let i = 0; i < rows.length; i += 5) {
       const chunk = rows.slice(i, i + 5);
+      // Build publish rows from the RETURNING set (not zipped against
+      // `chunk`) because onConflictDoNothing skips conflicting rows and
+      // RETURNING omits them, so index alignment would drift.
       const result = await db.insert(releases).values(chunk)
         .onConflictDoNothing()
-        .returning({ id: releases.id });
+        .returning({
+          id: releases.id,
+          title: releases.title,
+          version: releases.version,
+          publishedAt: releases.publishedAt,
+          media: releases.media,
+        });
       inserted += result.length;
-      for (const r of result) insertedIds.push(r.id);
+      for (const r of result) publishRows.push(r);
+    }
+    const insertedIds = publishRows.map((r) => r.id);
+
+    if (publishRows.length > 0 && env.RELEASE_HUB) {
+      // Fire-and-forget — publish errors are swallowed inside publishReleaseEvents.
+      await publishReleaseEvents(
+        { RELEASE_HUB: env.RELEASE_HUB },
+        { src: { name: source.name, slug: source.slug }, inserted: publishRows },
+      );
     }
 
     // Embed newly-inserted releases as a best-effort side effect. Failure

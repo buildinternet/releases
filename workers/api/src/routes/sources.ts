@@ -18,6 +18,8 @@ import { notDisabled } from "../queries/shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
+import { publishReleaseEvents } from "../events/publish.js";
+import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 
@@ -276,7 +278,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
     // D1 caps prepared statements at 100 bound parameters — see
     // `../lib/d1-limits.ts` for the math behind the chunk size.
     let inserted = 0;
-    const insertedIds: string[] = [];
+    const publishRows: InsertedReleaseRow[] = [];
     for (let i = 0; i < body.releases.length; i += RELEASES_BATCH_CHUNK_SIZE) {
       const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r) => ({
         sourceId: src.id,
@@ -289,14 +291,35 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
         publishedAt: r.publishedAt ?? null,
         media: r.media ?? "[]",
       }));
+      // RETURNING is built here — not zipped against `chunk` — because
+      // RELEASE_URL_UPSERT has a conditional WHERE clause that causes the
+      // database to omit rows where the update didn't apply. The returned
+      // rows are the authoritative set of affected ids + content.
       const rows = await db.insert(releases).values(chunk)
         .onConflictDoUpdate(RELEASE_URL_UPSERT)
-        .returning({ id: releases.id });
+        .returning({
+          id: releases.id,
+          title: releases.title,
+          version: releases.version,
+          publishedAt: releases.publishedAt,
+          media: releases.media,
+        });
       inserted += rows.length;
-      for (const r of rows) insertedIds.push(r.id);
+      for (const r of rows) publishRows.push(r);
     }
+    const insertedIds = publishRows.map((r) => r.id);
 
     const [{ n: total }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
+
+    // Fire-and-forget publish to the ReleaseHub DO so subscribers (CLI
+    // `tail -f`, the upcoming web live view, webhook delivery) see new
+    // releases in real time.
+    if (publishRows.length > 0) {
+      c.executionCtx.waitUntil(publishReleaseEvents(c.env, {
+        src: { name: src.name, slug: src.slug },
+        inserted: publishRows,
+      }));
+    }
 
     // Fire-and-forget: embed the rows we just wrote. Uses waitUntil so the
     // HTTP response returns immediately; embedding runs outside the request
