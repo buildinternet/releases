@@ -207,6 +207,8 @@ export interface FetchOneEnv {
   VOYAGE_API_KEY?: { get(): Promise<string> };
   OPENAI_API_KEY?: { get(): Promise<string> };
   RELEASE_HUB?: DurableObjectNamespace;
+  WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
+  DB?: D1Database;
 }
 
 export async function fetchOne(
@@ -325,10 +327,9 @@ export async function fetchOne(
     const insertedIds = publishRows.map((r) => r.id);
 
     if (publishRows.length > 0 && env.RELEASE_HUB) {
-      // Fire-and-forget — publish errors are swallowed inside publishReleaseEvents.
       await publishReleaseEvents(
-        { RELEASE_HUB: env.RELEASE_HUB },
-        { src: { name: source.name, slug: source.slug }, inserted: publishRows },
+        { RELEASE_HUB: env.RELEASE_HUB, WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE, DB: env.DB },
+        { src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id }, inserted: publishRows },
       );
     }
 

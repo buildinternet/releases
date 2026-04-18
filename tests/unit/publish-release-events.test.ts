@@ -24,7 +24,7 @@ describe("publishReleaseEvents", () => {
     await publishReleaseEvents(
       { RELEASE_HUB: namespace as any },
       {
-        src: { name: "Claude Code", slug: "claude-code" },
+        src: { name: "Claude Code", slug: "claude-code", orgId: "org_a", sourceId: "src_a" },
         inserted: [{ id: "rel_a", title: "t", version: null, publishedAt: null, media: null }],
       },
     );
@@ -40,7 +40,7 @@ describe("publishReleaseEvents", () => {
     const { namespace, calls } = makeHub();
     await publishReleaseEvents(
       { RELEASE_HUB: namespace as any },
-      { src: { name: "x", slug: "x" }, inserted: [] },
+      { src: { name: "x", slug: "x", orgId: "org_a", sourceId: "src_a" }, inserted: [] },
     );
     expect(calls).toHaveLength(0);
   });
@@ -53,7 +53,7 @@ describe("publishReleaseEvents", () => {
     const result = await publishReleaseEvents(
       { RELEASE_HUB: namespace as any },
       {
-        src: { name: "x", slug: "x" },
+        src: { name: "x", slug: "x", orgId: "org_a", sourceId: "src_a" },
         inserted: [{ id: "r", title: "t", version: null, publishedAt: null, media: null }],
       },
     );

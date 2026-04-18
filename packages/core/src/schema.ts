@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
-import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId, newSourceChangelogChunkId, newTelemetryEventId } from "./id.js";
+import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId, newSourceChangelogChunkId, newTelemetryEventId, newWebhookSubscriptionId } from "./id.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
@@ -424,3 +424,27 @@ export const sourceChangelogChunks = sqliteTable(
 
 export type SourceChangelogChunk = typeof sourceChangelogChunks.$inferSelect;
 export type NewSourceChangelogChunk = typeof sourceChangelogChunks.$inferInsert;
+
+export const webhookSubscriptions = sqliteTable("webhook_subscriptions", {
+  id: text("id").primaryKey().$defaultFn(newWebhookSubscriptionId),
+  orgId: text("org_id")
+    .notNull()
+    .references(() => organizations.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  description: text("description"),
+  secretVersion: integer("secret_version").notNull().default(1),
+  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  lastSuccessAt: text("last_success_at"),
+  lastErrorAt: text("last_error_at"),
+  lastErrorMsg: text("last_error_msg"),
+  consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+  disabledReason: text("disabled_reason"),
+}, (table) => [
+  index("idx_webhook_subs_org_enabled").on(table.orgId, table.enabled),
+  index("idx_webhook_subs_org_source").on(table.orgId, table.sourceId),
+]);
+
+export type WebhookSubscription = typeof webhookSubscriptions.$inferSelect;
+export type NewWebhookSubscription = typeof webhookSubscriptions.$inferInsert;

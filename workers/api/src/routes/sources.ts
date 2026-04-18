@@ -340,7 +340,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
     // releases in real time.
     if (publishRows.length > 0) {
       c.executionCtx.waitUntil(publishReleaseEvents(c.env, {
-        src: { name: src.name, slug: src.slug },
+        src: { name: src.name, slug: src.slug, orgId: src.orgId, sourceId: src.id },
         inserted: publishRows,
       }));
     }

@@ -18,6 +18,7 @@ import { statusRoutes } from "./routes/status.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { streamRoutes } from "./routes/stream.js";
+import { mountWebhooksReplay } from "./routes/webhooks-replay.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import knowledge from "./routes/knowledge.js";
@@ -46,6 +47,7 @@ export type Env = {
     RELEASED_API_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
     RELEASE_HUB: DurableObjectNamespace;
+    WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
     CACHE_DISABLED?: string;
@@ -97,10 +99,11 @@ app.use("*", async (c, next) => {
 
 const v1 = new Hono<Env>();
 
-// No-auth routes (status WebSocket, public media GET)
+// No-auth routes (status WebSocket, public media GET, public webhook replay)
 v1.route("/", statusRoutes);
 v1.route("/", mediaRoutes);
 v1.route("/", streamRoutes);
+mountWebhooksReplay(v1, (c) => c.env);
 
 // Public-read routes: GET is open, writes require auth
 const publicReadRoutes = [

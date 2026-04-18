@@ -14,7 +14,8 @@
     "./overview": "./src/overview.ts",
     "./id": "./src/id.ts",
     "./slug": "./src/slug.ts",
-    "./hash": "./src/hash.ts"
+    "./hash": "./src/hash.ts",
+    "./webhook-sign": "./src/webhook-sign.ts"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",
