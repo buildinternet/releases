@@ -58,11 +58,33 @@ export const releaseItemProperties = {
 
 export const releaseItemRequired = ["title", "content", "isBreaking"] as const;
 
-/** Append per-source AI instructions to a base system prompt. */
+export interface ExtractionGuidance {
+  /** Per-source freeform instructions stored on `metadata.parseInstructions`. */
+  parseInstructions?: string;
+  /** Per-org playbook notes — applies to every source under that org. */
+  playbookContext?: string;
+}
+
+/**
+ * Append per-source and per-org guidance to a base system prompt.
+ *
+ * Org playbooks are loaded as cross-source guidance for every source under the
+ * org; per-source `parseInstructions` come last so they can override.
+ */
+export function withGuidance(basePrompt: string, guidance: ExtractionGuidance = {}): string {
+  let prompt = basePrompt;
+  if (guidance.playbookContext) {
+    prompt += `\n\nOrganization playbook (cross-source guidance for this organization — applies to all of its sources):\n${guidance.playbookContext}`;
+  }
+  if (guidance.parseInstructions) {
+    prompt += `\n\nSource-specific instructions:\n${guidance.parseInstructions}`;
+  }
+  return prompt;
+}
+
+/** Back-compat shim — prefer `withGuidance({ parseInstructions })` for new callers. */
 export function withParseInstructions(basePrompt: string, parseInstructions?: string): string {
-  return parseInstructions
-    ? `${basePrompt}\n\nAdditional source-specific instructions:\n${parseInstructions}`
-    : basePrompt;
+  return withGuidance(basePrompt, { parseInstructions });
 }
 
 // ── Shared incremental parsing utilities ───────────────────────────
