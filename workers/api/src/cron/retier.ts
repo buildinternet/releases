@@ -1,0 +1,113 @@
+import { drizzle } from "drizzle-orm/d1";
+import { eq, sql } from "drizzle-orm";
+import { sources, releases } from "@buildinternet/releases-core/schema";
+
+// Median gap thresholds in days. Sources with a median gap at or below
+// NORMAL_MAX are retiered to "normal" (polled every 4h), between NORMAL_MAX
+// and LOW_MAX to "low" (polled every 24h). Above LOW_MAX, current tier is
+// preserved — this pass never auto-pauses, because manual and automatic
+// pauses are indistinguishable on the current schema.
+const NORMAL_MAX_DAYS = 14;
+const LOW_MAX_DAYS = 90;
+
+// Window of history used to measure cadence.
+const LOOKBACK_DAYS = 180;
+
+// Minimum releases in the lookback to retier at all. Brand-new sources
+// without enough signal keep whatever tier they were added with.
+const MIN_RELEASES_FOR_SIGNAL = 3;
+
+type FetchPriority = "normal" | "low" | "paused";
+type AutoTier = Exclude<FetchPriority, "paused">;
+
+export async function retierSources(
+  env: { DB: D1Database; CRON_ENABLED?: string },
+): Promise<void> {
+  if (env.CRON_ENABLED === "false") {
+    console.log("[retier] Disabled via CRON_ENABLED=false, skipping");
+    return;
+  }
+
+  const db = drizzle(env.DB);
+  const cutoff = new Date(Date.now() - LOOKBACK_DAYS * 86400_000).toISOString();
+
+  const recent = await db
+    .select({ sourceId: releases.sourceId, publishedAt: releases.publishedAt })
+    .from(releases)
+    .where(
+      sql`${releases.publishedAt} IS NOT NULL AND ${releases.publishedAt} >= ${cutoff} AND ${releases.suppressed} = 0`,
+    );
+
+  const datesBySource = new Map<string, string[]>();
+  for (const r of recent) {
+    if (!r.publishedAt) continue;
+    const arr = datesBySource.get(r.sourceId);
+    if (arr) arr.push(r.publishedAt);
+    else datesBySource.set(r.sourceId, [r.publishedAt]);
+  }
+
+  const candidates = await db
+    .select({
+      id: sources.id,
+      slug: sources.slug,
+      fetchPriority: sources.fetchPriority,
+    })
+    .from(sources)
+    .where(sql`${sources.fetchPriority} != 'paused'`);
+
+  let changed = 0;
+  let skipped = 0;
+  for (const src of candidates) {
+    const dates = datesBySource.get(src.id) ?? [];
+    if (dates.length < MIN_RELEASES_FOR_SIGNAL) {
+      skipped++;
+      continue;
+    }
+    const medianGap = computeMedianGapDays(dates);
+    const target = classifyTier(medianGap, src.fetchPriority as FetchPriority);
+    if (target !== src.fetchPriority) {
+      await db
+        .update(sources)
+        .set({ fetchPriority: target })
+        .where(eq(sources.id, src.id));
+      console.log(
+        `[retier] ${src.slug}: ${src.fetchPriority} → ${target} (median gap ${medianGap.toFixed(1)}d, ${dates.length} releases)`,
+      );
+      changed++;
+    }
+  }
+  console.log(
+    `[retier] done: ${candidates.length} evaluated, ${changed} retiered, ${skipped} below-signal-threshold`,
+  );
+}
+
+// Pure helpers exported for unit tests.
+
+export function computeMedianGapDays(isoDates: string[]): number {
+  const timestamps = isoDates
+    .map((d) => new Date(d).getTime())
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (timestamps.length < 2) return Number.POSITIVE_INFINITY;
+  const gaps: number[] = [];
+  for (let i = 1; i < timestamps.length; i++) {
+    gaps.push((timestamps[i] - timestamps[i - 1]) / 86400_000);
+  }
+  gaps.sort((a, b) => a - b);
+  const mid = Math.floor(gaps.length / 2);
+  return gaps.length % 2 === 0
+    ? (gaps[mid - 1] + gaps[mid]) / 2
+    : gaps[mid];
+}
+
+export function classifyTier(
+  medianGapDays: number,
+  current: FetchPriority,
+): AutoTier | FetchPriority {
+  if (medianGapDays <= NORMAL_MAX_DAYS) return "normal";
+  if (medianGapDays <= LOW_MAX_DAYS) return "low";
+  // Above LOW_MAX: preserve current tier. Don't auto-pause (see module
+  // header) and don't demote below `low` — a very quiet source polled
+  // once a day costs nothing.
+  return current;
+}

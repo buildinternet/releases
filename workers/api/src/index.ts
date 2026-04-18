@@ -29,6 +29,7 @@ import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedRoutes } from "./routes/admin-embed.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
+import { retierSources } from "./cron/retier.js";
 
 export { StatusHub } from "./status-hub.js";
 
@@ -166,7 +167,15 @@ app.route("/v1", v1);
 
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
+  async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
+    // Daily retier job runs at 03:00 UTC; poll-and-fetch runs every other hour.
+    if (event.cron === "0 3 * * *") {
+      ctx.waitUntil(retierSources({
+        DB: env.DB,
+        CRON_ENABLED: env.CRON_ENABLED,
+      }));
+      return;
+    }
     const githubToken = await env.GITHUB_TOKEN?.get();
     ctx.waitUntil(pollAndFetch({
       DB: env.DB,
