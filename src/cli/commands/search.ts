@@ -28,6 +28,7 @@ export function registerSearchCommand(program: Command) {
       "--mode <mode>",
       `Search mode: ${SEARCH_MODES.join(" | ")} (default: server picks hybrid)`,
     )
+    .option("--include-coverage", "Include releases that are coverage of another (hidden by default)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
@@ -36,7 +37,7 @@ Examples:
   releases search "authentication" --limit 5 --json
   releases search "rate limiting" --mode semantic
   releases search "v2" --mode lexical`)
-    .action(async (query: string, opts: { limit: string; type?: string; mode?: string; json?: boolean }) => {
+    .action(async (query: string, opts: { limit: string; type?: string; mode?: string; includeCoverage?: boolean; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
 
       let mode: SearchMode | undefined;
@@ -58,11 +59,10 @@ Examples:
         effectiveMode = "lexical";
       }
 
-      const response = await unifiedSearch(
-        query,
-        limit,
-        effectiveMode ? { mode: effectiveMode } : undefined,
-      );
+      const searchOpts: { mode?: SearchMode; includeCoverage?: boolean } = {};
+      if (effectiveMode) searchOpts.mode = effectiveMode;
+      if (opts.includeCoverage) searchOpts.includeCoverage = true;
+      const response = await unifiedSearch(query, limit, searchOpts);
 
       // Filter to specific type if requested
       const types = opts.type

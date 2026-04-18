@@ -63,11 +63,19 @@ export async function searchSources(db: D1Db, pattern: string, limit: number): P
   `);
 }
 
+/**
+ * Local to this file: raw SQL aliases releases as `r`, so we can't reuse
+ * `shared.notCoverageFilterSql` (which references `releases.id` unaliased).
+ */
+const coverageCondition = (includeCoverage?: boolean) =>
+  includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
+
 export async function searchReleasesFts(
   db: D1Db,
   query: string,
   limit: number,
   offset: number,
+  opts: { includeCoverage?: boolean } = {},
 ): Promise<RawSearchReleaseRow[]> {
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
@@ -84,6 +92,7 @@ export async function searchReleasesFts(
     WHERE releases_fts MATCH ${query}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      ${coverageCondition(opts.includeCoverage)}
     ORDER BY rank LIMIT ${limit} OFFSET ${offset}
   `);
 }
@@ -93,6 +102,7 @@ export async function searchReleasesFromMatchedEntities(
   orgSlugs: string[],
   productSlugs: string[],
   limit: number,
+  opts: { includeCoverage?: boolean } = {},
 ): Promise<RawSearchReleaseRow[]> {
   const conditions = [];
   if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
@@ -113,6 +123,7 @@ export async function searchReleasesFromMatchedEntities(
     LEFT JOIN products p ON p.id = s.product_id
     WHERE (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      ${coverageCondition(opts.includeCoverage)}
       AND (${sql.join(conditions, sql` OR `)})
     ORDER BY r.published_at DESC LIMIT ${limit}
   `);

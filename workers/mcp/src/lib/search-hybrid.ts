@@ -96,10 +96,18 @@ export interface HybridSearchResponse {
 
 // ── Local FTS query ──────────────────────────────────────────────────
 
+/**
+ * Raw SQL in this file aliases releases as `r`, so the coverage NOT EXISTS
+ * references `r.id` rather than `releases.id`.
+ */
+const coverageCondition = (includeCoverage?: boolean) =>
+  includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
+
 async function ftsReleaseIds(
   db: D1Db,
   query: string,
   limit: number,
+  opts: { includeCoverage?: boolean } = {},
 ): Promise<string[]> {
   try {
     const rows = await db.all<{ id: string }>(sql`
@@ -110,6 +118,7 @@ async function ftsReleaseIds(
       WHERE releases_fts MATCH ${query}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+        ${coverageCondition(opts.includeCoverage)}
       ORDER BY rank LIMIT ${limit}
     `);
     return rows.map((r) => r.id);
@@ -151,6 +160,7 @@ interface RawReleaseRow {
 async function hydrateReleases(
   db: D1Db,
   ids: string[],
+  opts: { includeCoverage?: boolean } = {},
 ): Promise<Map<string, RawReleaseRow>> {
   if (ids.length === 0) return new Map();
   const rows = await db.all<RawReleaseRow>(sql`
@@ -170,6 +180,7 @@ async function hydrateReleases(
     WHERE r.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      ${coverageCondition(opts.includeCoverage)}
   `);
   const map = new Map<string, RawReleaseRow>();
   for (const row of rows) map.set(row.id, row);
@@ -255,6 +266,7 @@ export interface RunHybridSearchParams {
   sourceId?: string;
   orgSourceIds?: string[];
   type?: "feature" | "rollup";
+  includeCoverage?: boolean;
 }
 
 export async function runHybridSearch(
@@ -268,7 +280,7 @@ export async function runHybridSearch(
   async function lexicalResponse(
     degradedReason?: string,
   ): Promise<HybridSearchResponse> {
-    const ids = await ftsReleaseIds(db, params.query, topK * 3);
+    const ids = await ftsReleaseIds(db, params.query, topK * 3, { includeCoverage: params.includeCoverage });
     const hits = await buildReleaseHits(
       db,
       ids.map((id, i) => ({ id, score: 1 / (i + 1) })),
@@ -313,7 +325,7 @@ export async function runHybridSearch(
     requestedMode === "semantic"
       ? async () => [] as { id: string }[]
       : async (q: string, limit: number) => {
-          const ids = await ftsReleaseIds(db, q, limit);
+          const ids = await ftsReleaseIds(db, q, limit, { includeCoverage: params.includeCoverage });
           return ids.map((id) => ({ id }));
         };
 
@@ -370,7 +382,7 @@ async function buildReleaseHits(
   params: RunHybridSearchParams,
 ): Promise<HybridReleaseHit[]> {
   if (entries.length === 0) return [];
-  const map = await hydrateReleases(db, entries.map((e) => e.id));
+  const map = await hydrateReleases(db, entries.map((e) => e.id), { includeCoverage: params.includeCoverage });
   const out: HybridReleaseHit[] = [];
   for (const entry of entries) {
     const row = map.get(entry.id);

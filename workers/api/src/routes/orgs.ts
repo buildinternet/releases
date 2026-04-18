@@ -5,7 +5,7 @@ import { organizations, orgAccounts, sources, releases, products, tags, orgTags,
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { toSlug } from "@buildinternet/releases-core/slug";
-import { isConflictError, computeAvgPerWeek, getOrCreateTagsD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
+import { isConflictError, computeAvgPerWeek, getOrCreateTagsD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
@@ -698,6 +698,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
   const cursorParam = c.req.query("cursor") ?? null;
   const parsedLimit = parseInt(c.req.query("limit") ?? "20", 10);
   const limit = isNaN(parsedLimit) || parsedLimit < 1 ? 20 : Math.min(parsedLimit, 100);
+  const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
 
   const db = createDb(c.env.DB);
 
@@ -730,7 +731,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     }
   }
 
-  const results = await getOrgReleasesFeed(c.env.DB, org.id, { cursorWhere, cursorBindings }, limit + 1);
+  const results = await getOrgReleasesFeed(c.env.DB, org.id, { cursorWhere, cursorBindings }, limit + 1, { includeCoverage });
 
   const hasMore = results.length > limit;
   const pageRows = hasMore ? results.slice(0, limit) : results;

@@ -154,8 +154,12 @@ interface RawReleaseRow {
 async function hydrateReleases(
   db: D1Db,
   ids: string[],
+  opts: { includeCoverage?: boolean } = {},
 ): Promise<Map<string, RawReleaseRow>> {
   if (ids.length === 0) return new Map();
+  const coverageFilter = opts.includeCoverage
+    ? sql``
+    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
   const rows = await db.all<RawReleaseRow>(sql`
     SELECT r.id as id,
            r.title as title,
@@ -177,6 +181,7 @@ async function hydrateReleases(
     WHERE r.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      ${coverageFilter}
   `);
   const map = new Map<string, RawReleaseRow>();
   for (const row of rows) map.set(row.id, row);
@@ -278,6 +283,7 @@ export interface RunHybridSearchParams {
   sourceId?: string;
   orgSourceIds?: string[];
   type?: "feature" | "rollup";
+  includeCoverage?: boolean;
 }
 
 /**
@@ -302,7 +308,7 @@ export async function runHybridSearch(
   async function lexicalResponse(
     degradedReason?: string,
   ): Promise<HybridSearchResponse> {
-    const rows = await searchReleasesFts(db, params.query, topK * 3, 0).catch(
+    const rows = await searchReleasesFts(db, params.query, topK * 3, 0, { includeCoverage: params.includeCoverage }).catch(
       () => [],
     );
     const hits = await buildReleaseHits(
@@ -355,7 +361,7 @@ export async function runHybridSearch(
       ? async () => [] as { id: string }[]
       : async (q: string, limit: number) => {
           try {
-            const rows = await searchReleasesFts(db, q, limit, 0);
+            const rows = await searchReleasesFts(db, q, limit, 0, { includeCoverage: params.includeCoverage });
             return rows.map((r) => ({ id: r.id }));
           } catch {
             return [];
@@ -420,6 +426,7 @@ async function buildReleaseHits(
   const map = await hydrateReleases(
     db,
     entries.map((e) => e.id),
+    { includeCoverage: params.includeCoverage },
   );
   const out: HybridReleaseHit[] = [];
   for (const entry of entries) {

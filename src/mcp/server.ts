@@ -1,7 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";
-import { eq, desc, inArray, and } from "drizzle-orm";
+import { eq, desc, inArray, and, sql } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { unifiedSearchLocal } from "../db/fts.js";
 import { runMigrations } from "../db/migrate.js";
@@ -83,8 +83,9 @@ server.registerTool("search_releases", {
     type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
     limit: z.number().optional().describe("Max results to return (default 20)"),
     mode: z.enum(["lexical", "semantic", "hybrid"]).optional().describe("Retrieval strategy. Accepted for parity with the remote MCP server; local mode always runs lexical FTS."),
+    include_coverage: z.boolean().optional().describe("Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false."),
   },
-}, async ({ query, product, organization, type: typeFilter, limit, mode: _mode }) => {
+}, async ({ query, product, organization, type: typeFilter, limit, mode: _mode, include_coverage }) => {
   const maxResults = limit ?? 20;
 
   // Build a set of allowed source IDs when filtering by org
@@ -100,7 +101,7 @@ server.registerTool("search_releases", {
 
   // Fetch more than needed when filtering, since FTS limit applies globally
   const needsPostFilter = product || orgSourceIds || typeFilter;
-  let results = searchReleases(query, needsPostFilter ? maxResults * 5 : maxResults);
+  let results = searchReleases(query, needsPostFilter ? maxResults * 5 : maxResults, { includeCoverage: include_coverage === true });
 
   let productSourceId: string | undefined;
   if (product) {
@@ -186,10 +187,12 @@ server.registerTool("get_latest_releases", {
     organization: z.string().optional().describe("Filter to sources belonging to this organization"),
     type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
     count: z.number().optional().describe("Number of releases to return (default 10)"),
+    include_coverage: z.boolean().optional().describe("Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false."),
   },
-}, async ({ product, organization, type: typeFilter, count }) => {
+}, async ({ product, organization, type: typeFilter, count, include_coverage }) => {
   const db = getDb();
   const maxCount = count ?? 10;
+  const includeCoverage = include_coverage === true;
 
   let sourceFilter: string | undefined;
   if (product) {
@@ -211,21 +214,15 @@ server.registerTool("get_latest_releases", {
     orgSourceIds = new Set(orgSources.map((s) => s.id));
   }
 
-  const query = db
-    .select({
-      id: releases.id,
-      title: releases.title,
-      version: releases.version,
-      type: releases.type,
-      content: releases.content,
-      contentSummary: releases.contentSummary,
-      publishedAt: releases.publishedAt,
-      sourceId: releases.sourceId,
-    })
-    .from(releases);
-
-  // Apply source-level filters
-  const conditions: ReturnType<typeof eq>[] = [];
+  // Default filters match the CLI/API read paths — suppressed rows, hidden
+  // sources, and coverage rows are hidden unless explicitly requested.
+  const conditions = [
+    eq(releases.suppressed, false),
+    sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
+  ];
+  if (!includeCoverage) {
+    conditions.push(sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`);
+  }
   if (sourceFilter !== undefined) {
     conditions.push(eq(releases.sourceId, sourceFilter));
   }
@@ -240,11 +237,21 @@ server.registerTool("get_latest_releases", {
     conditions.push(eq(releases.type, typeFilter));
   }
 
-  const filtered = conditions.length > 0
-    ? query.where(and(...conditions))
-    : query;
-
-  const rows = await filtered
+  const rows = await db
+    .select({
+      id: releases.id,
+      title: releases.title,
+      version: releases.version,
+      type: releases.type,
+      content: releases.content,
+      contentSummary: releases.contentSummary,
+      publishedAt: releases.publishedAt,
+      sourceId: releases.sourceId,
+      sourceName: sources.name,
+    })
+    .from(releases)
+    .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .where(and(...conditions))
     .orderBy(desc(releases.publishedAt))
     .limit(maxCount);
 
@@ -252,18 +259,12 @@ server.registerTool("get_latest_releases", {
     return textResult("No releases found.");
   }
 
-  // Fetch only the sources referenced in results
-  const uniqueSourceIds = [...new Set(rows.map((r) => r.sourceId))];
-  const sourceRows = await db.select().from(sources).where(inArray(sources.id, uniqueSourceIds));
-  const sourceMap = new Map(sourceRows.map((s) => [s.id, s.name]));
-
   const text = rows
     .map((r) => {
-      const sourceName = sourceMap.get(r.sourceId) ?? "Unknown";
       const preview = (r.contentSummary || r.content).slice(0, 500);
       return [
         `**${r.title}**`,
-        `Source: ${sourceName} | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
+        `Source: ${r.sourceName} | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
         preview,
       ].join("\n");
     })

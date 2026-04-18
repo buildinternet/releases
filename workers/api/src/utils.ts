@@ -97,6 +97,11 @@ export function newKnowledgePageId(): string {
 }
 
 /** Compute the 52-week date range used for heatmap endpoints. */
+/** Parse a `?flag=true` query param. Any other value (including "1", missing) is false. */
+export function parseBoolParam(raw: string | undefined): boolean {
+  return raw === "true";
+}
+
 export function heatmapDateRange(): { from: string; to: string; toExclusive: string } {
   const today = new Date();
   const to = today.toISOString().slice(0, 10);

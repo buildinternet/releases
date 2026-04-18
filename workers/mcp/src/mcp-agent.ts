@@ -77,6 +77,7 @@ export function createServer(env: Env) {
       type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
       limit: z.number().optional().describe("Max results to return (default 20)"),
       mode: z.enum(["lexical", "semantic", "hybrid"]).optional().describe("Retrieval strategy. 'hybrid' (default) fuses FTS + vector results. 'lexical' is legacy FTS only. 'semantic' is vectors only. Falls back to lexical if vector infra is unavailable."),
+      include_coverage: z.boolean().optional().describe("Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false so each underlying launch appears once."),
     },
   }, withMedia(async (params) => searchReleases(db, params, env)));
 
@@ -96,6 +97,7 @@ export function createServer(env: Env) {
       organization: z.string().optional().describe("Filter to sources belonging to this organization"),
       type: z.enum(["feature", "rollup"]).optional().describe("Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both."),
       count: z.number().optional().describe("Number of releases to return (default 10)"),
+      include_coverage: z.boolean().optional().describe("Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false so each underlying launch appears once."),
     },
   }, withMedia(async (params) => getLatestReleases(db, params)));
 

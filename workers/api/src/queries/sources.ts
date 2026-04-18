@@ -85,10 +85,15 @@ export async function getSourceReleasesPaginated(
   sourceId: string,
   pageSize: number,
   offset: number,
+  opts: { includeCoverage?: boolean } = {},
 ): Promise<SourceReleaseRow[]> {
+  const coverageFilter = opts.includeCoverage
+    ? sql``
+    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = releases.id)`;
   return db.all<SourceReleaseRow>(sql`
     SELECT id, version, title, content_summary, content, published_at, url, media
     FROM releases WHERE source_id = ${sourceId} AND (suppressed IS NULL OR suppressed = 0)
+      ${coverageFilter}
     ORDER BY
       CASE WHEN published_at IS NOT NULL THEN 0 ELSE 1 END,
       published_at DESC, fetched_at DESC

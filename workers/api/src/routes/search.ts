@@ -14,7 +14,7 @@ import {
   type RawSearchReleaseRow,
 } from "../queries/search.js";
 import { runHybridSearch, type HybridMode } from "../lib/search-hybrid.js";
-import { hydrateMediaUrls, resolveR2Url } from "../utils.js";
+import { hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
 
 /**
  * Lift a raw SQL row to the wire shape. JSON-parses media, rewrites any
@@ -78,6 +78,7 @@ searchRoutes.get("/search", async (c) => {
   const limit = parseInt(c.req.query("limit") ?? "20", 10);
   const offset = parseInt(c.req.query("offset") ?? "0", 10);
   const mode = parseMode(c.req.query("mode"));
+  const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
   const db = createDb(c.env.DB);
   const pattern = `%${q}%`;
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -96,7 +97,7 @@ searchRoutes.get("/search", async (c) => {
   // the cascading enrichment from matched entities) to preserve the cache
   // key semantics for the existing web UI.
   if (mode === "lexical") {
-    const ftsRows = await searchReleasesFts(db, q, limit, offset).catch(
+    const ftsRows = await searchReleasesFts(db, q, limit, offset, { includeCoverage }).catch(
       () => [] as RawSearchReleaseRow[],
     );
     let rawReleases = ftsRows;
@@ -106,6 +107,7 @@ searchRoutes.get("/search", async (c) => {
         orgs.map((o) => o.slug),
         products.filter((p) => p.kind !== "source").map((p) => p.slug),
         limit,
+        { includeCoverage },
       );
     }
     const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
@@ -121,6 +123,7 @@ searchRoutes.get("/search", async (c) => {
     query: q,
     topK: limit,
     mode,
+    includeCoverage,
   });
 
   const releases: SearchReleaseHit[] = hybrid.hits

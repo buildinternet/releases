@@ -291,7 +291,11 @@ export async function getOrgReleasesFeed(
   orgId: string,
   cursor: { cursorWhere: string; cursorBindings: string[] },
   limit: number,
+  opts: { includeCoverage?: boolean } = {},
 ): Promise<OrgReleaseRow[]> {
+  const coverageFilter = opts.includeCoverage
+    ? ""
+    : "AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)";
   const stmt = d1.prepare(`
     SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
            r.published_at, r.fetched_at, r.url, r.media,
@@ -300,6 +304,7 @@ export async function getOrgReleasesFeed(
     INNER JOIN sources s ON s.id = r.source_id
     WHERE s.org_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${coverageFilter}
       ${cursor.cursorWhere}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
