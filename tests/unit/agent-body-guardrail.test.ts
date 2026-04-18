@@ -5,7 +5,7 @@ import {
   HUGE_BODY_TOKEN_THRESHOLD,
   DEFAULT_MAX_OUTPUT_TOKENS,
   HUGE_BODY_MAX_OUTPUT_TOKENS,
-} from "../../src/adapters/agent.js";
+} from "@releases/adapters/extract/shared";
 
 describe("buildBodyGuardrail", () => {
   it("includes the rounded approximate token count", () => {

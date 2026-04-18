@@ -1,61 +1,36 @@
 /**
- * Lightweight scrape fetch for the discovery worker.
+ * Extraction entry point for the discovery worker.
  *
- * When the managed agent calls fetch_source for a scrape source, the API
- * returns "flagged" because it can't do the rendering/parsing. This module
- * does the actual work using the discovery worker's Cloudflare and Anthropic
- * secrets, then inserts results via the API worker service binding.
+ * Routes on `source.type`:
+ *   - `scrape`   → markdown URL (if set) OR Cloudflare Browser Rendering →
+ *                  incremental Haiku parse.
+ *   - `agent`    → direct-fetch strategy (if `metadata.fetchUrl` is set) OR
+ *                  full agent extraction (web_fetch + Cloudflare fallback).
  *
- * Supports two content acquisition paths:
- * 1. Markdown URL — direct fetch when source has `markdownUrl` in metadata
- *    (skips Cloudflare rendering entirely)
- * 2. Cloudflare Browser Rendering — single-page render for all other sources
+ * All strategy logic lives in `@releases/adapters/extract`; this module
+ * handles source resolution, content acquisition for the scrape path, and
+ * persistence (release insert, fetch log, source-after-fetch updates) via
+ * the API worker.
  *
- * Both paths feed into the same incremental AI parse → API insert pipeline.
- * No crawl support — that requires the full CLI adapter.
+ * The export is still named `scrapeFetch` for back-compat with
+ * `managed-agents-session.ts`, even though it now covers agent-type sources.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
-import {
-  releaseItemProperties,
-  releaseItemRequired,
-  sanitizeVersion,
-  withParseInstructions,
-  INCREMENTAL_SYSTEM,
-  formatKnownReleases,
-  findContentStart,
-  type KnownRelease,
-} from "@releases/ai/shared.js";
+import type { Source } from "@buildinternet/releases-core/schema";
+import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
 import { getSourceMeta } from "@releases/adapters/source-meta";
-import type { ParsedRelease } from "@releases/ai/ingest.js";
-
-// ── Cloudflare Browser Rendering (inlined to avoid transitive logger/config imports) ──
-
-const CF_REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
-
-async function renderToMarkdown(
-  url: string,
-  accountId: string,
-  apiToken: string,
-): Promise<string | null> {
-  const endpoint = `https://api.cloudflare.com/client/v4/accounts/${accountId}/browser-rendering/markdown`;
-  const res = await fetch(endpoint, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${apiToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify({
-      url,
-      rejectResourceTypes: [...CF_REJECT_RESOURCE_TYPES],
-      gotoOptions: { waitUntil: "networkidle2" },
-    }),
-  });
-  if (!res.ok) return null;
-  const data = await res.json() as { success: boolean; result: string };
-  return (data.success && data.result?.trim()) ? data.result : null;
-}
+import {
+  runDirectFetchExtraction,
+  runAgentExtraction,
+  runIncrementalExtraction,
+  type KnownRelease,
+  type MappedEntry,
+} from "@releases/adapters/extract";
+import { buildWorkerExtractDeps } from "./extract-deps-worker.js";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-interface ScrapeEnv {
+export interface ScrapeEnv {
   cloudflareAccountId: string;
   cloudflareApiToken: string;
   anthropicApiKey: string;
@@ -65,88 +40,15 @@ interface ScrapeEnv {
   sessionId?: string;
 }
 
-
-// ── Incremental parse (uses shared utilities from @releases/ai/shared) ───────
-
-const extractReleasesTool: Anthropic.Tool = {
-  name: "extract_releases",
-  description: "Extract the NEW release entries you found. Only include releases not in the known list. Return an empty array if there are no new releases.",
-  input_schema: {
-    type: "object" as const,
-    properties: {
-      releases: {
-        type: "array" as const,
-        items: {
-          type: "object" as const,
-          properties: { ...releaseItemProperties },
-          required: [...releaseItemRequired],
-        },
-      },
-      needsMoreContext: {
-        type: "boolean" as const,
-        description: "Set to true ONLY if the provided lines don't contain any changelog content.",
-      },
-    },
-    required: ["releases", "needsMoreContext"],
-  },
-};
-
-async function incrementalParse(
-  client: Anthropic,
-  markdown: string,
-  knownReleases: KnownRelease[],
-  parseInstructions?: string,
-): Promise<ParsedRelease[]> {
-  if (knownReleases.length === 0) return [];
-
-  const lines = markdown.split("\n");
-  const contentStart = findContentStart(lines);
-  const previewCount = Math.min(200, lines.length - contentStart);
-  const previewSlice = lines.slice(contentStart, contentStart + previewCount);
-  const preview = previewSlice.map((l, i) => `${contentStart + i + 1}: ${l}`).join("\n");
-
-  const response = await client.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 8192,
-    system: [
-      {
-        type: "text",
-        text: withParseInstructions(INCREMENTAL_SYSTEM, parseInstructions),
-        cache_control: { type: "ephemeral" },
-      },
-    ],
-    tools: [extractReleasesTool],
-    tool_choice: { type: "tool", name: "extract_releases" },
-    messages: [
-      {
-        role: "user",
-        content: `<known_releases>\n${formatKnownReleases(knownReleases)}\n</known_releases>\n\n## Changelog (lines ${contentStart + 1}–${contentStart + previewCount} of ${lines.length} total)\n\n<changelog>\n${preview}\n</changelog>`,
-      },
-    ],
-  });
-
-  const toolBlock = response.content.find(
-    (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "extract_releases",
-  );
-
-  const input = toolBlock?.input as { releases?: ParsedRelease[]; needsMoreContext?: boolean } | undefined;
-  const rawReleases = Array.isArray(input?.releases) ? input.releases : [];
-
-  return rawReleases.map((r) => ({ ...r, version: sanitizeVersion(r.version) }));
-}
-
 // ── API helpers ────────────────────────────────────────────────────
 
-async function fetchSourceInfo(env: ScrapeEnv, identifier: string) {
+async function fetchSourceInfo(env: ScrapeEnv, identifier: string): Promise<Source | null> {
   const res = await env.apiFetcher.fetch(
     `https://api/v1/sources/${encodeURIComponent(identifier)}`,
     { headers: { Authorization: `Bearer ${env.apiKey}` } },
   );
   if (!res.ok) return null;
-  return res.json() as Promise<{
-    id: string; slug: string; url: string; type: string;
-    metadata: string | null; orgId: string | null;
-  }>;
+  return res.json() as Promise<Source>;
 }
 
 async function fetchKnownReleases(env: ScrapeEnv, sourceSlug: string): Promise<KnownRelease[]> {
@@ -155,14 +57,13 @@ async function fetchKnownReleases(env: ScrapeEnv, sourceSlug: string): Promise<K
     { headers: { Authorization: `Bearer ${env.apiKey}` } },
   );
   if (!res.ok) return [];
-  const data = await res.json() as Array<{ version: string | null; title: string; publishedAt: string | null }>;
-  return data;
+  return (await res.json()) as KnownRelease[];
 }
 
 async function insertReleases(
   env: ScrapeEnv,
   sourceSlug: string,
-  releases: ParsedRelease[],
+  releases: MappedEntry[],
 ): Promise<number> {
   if (releases.length === 0) return 0;
 
@@ -178,8 +79,9 @@ async function insertReleases(
         releases: releases.map((r) => ({
           title: r.title,
           content: r.content,
+          url: r.url ?? null,
           version: r.version ?? null,
-          publishedAt: r.publishedAt ?? null,
+          publishedAt: r.publishedAt?.toISOString() ?? null,
           media: JSON.stringify(r.media ?? []),
         })),
       }),
@@ -191,14 +93,11 @@ async function insertReleases(
     throw new Error(`Release insert failed (${res.status}): ${body}`);
   }
 
-  const result = await res.json() as { inserted: number };
+  const result = (await res.json()) as { inserted: number };
   return result.inserted;
 }
 
-async function updateSourceAfterFetch(
-  env: ScrapeEnv,
-  sourceId: string,
-): Promise<void> {
+async function updateSourceAfterFetch(env: ScrapeEnv, sourceId: string): Promise<void> {
   await env.apiFetcher.fetch(
     `https://api/v1/sources/${encodeURIComponent(sourceId)}`,
     {
@@ -240,7 +139,7 @@ async function writeFetchLog(
   }).catch(() => {}); // best-effort
 }
 
-// ── Markdown URL fetch (direct, no Cloudflare needed) ────────────
+// ── Content acquisition for scrape path ───────────────────────────
 
 async function fetchMarkdownUrl(url: string): Promise<string | null> {
   try {
@@ -259,41 +158,92 @@ async function fetchMarkdownUrl(url: string): Promise<string | null> {
 
 // ── Main entry point ──────────────────────────────────────────────
 
-export async function scrapeFetch(
-  env: ScrapeEnv,
-  sourceIdentifier: string,
-): Promise<string> {
+export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Promise<string> {
   const start = Date.now();
 
-  // 1. Get source info
   const source = await fetchSourceInfo(env, sourceIdentifier);
   if (!source) return `Error: source ${sourceIdentifier} not found`;
-  if (source.type !== "scrape") return `Error: source ${source.slug} is type "${source.type}", not scrape`;
 
-  const meta = getSourceMeta({ metadata: source.metadata } as any);
+  if (source.type !== "scrape" && source.type !== "agent") {
+    return `Error: source ${source.slug} is type "${source.type}", not scrape/agent`;
+  }
 
-  // 2. Get content — prefer markdown URL (cheap) over Cloudflare render (expensive)
+  const deps = buildWorkerExtractDeps({
+    anthropicApiKey: env.anthropicApiKey,
+    cloudflareAccountId: env.cloudflareAccountId,
+    cloudflareApiToken: env.cloudflareApiToken,
+    apiFetcher: env.apiFetcher,
+    apiKey: env.apiKey,
+    sessionId: env.sessionId,
+  });
+
+  const meta = getSourceMeta(source);
+  const playbookContext = (await deps.repo.getOrgPlaybook(source.orgId)) ?? undefined;
+  const guidance = { parseInstructions: meta.parseInstructions, playbookContext };
+
+  try {
+    if (source.type === "agent") {
+      return await runAgentPath(env, source, meta, guidance, deps, start);
+    }
+    return await runScrapePath(env, source, meta, guidance, deps, start);
+  } catch (err) {
+    const durationMs = Date.now() - start;
+    const message = err instanceof Error ? err.message : String(err);
+    await writeFetchLog(env, source.id, {
+      releasesFound: 0, releasesInserted: 0, durationMs,
+      status: "error", error: message,
+    });
+    return `Error: ${message}`;
+  }
+}
+
+// ── Agent path (handles type=agent sources) ──────────────────────
+
+async function runAgentPath(
+  env: ScrapeEnv,
+  source: Source,
+  meta: ReturnType<typeof getSourceMeta>,
+  guidance: { parseInstructions?: string; playbookContext?: string },
+  deps: ReturnType<typeof buildWorkerExtractDeps>,
+  start: number,
+): Promise<string> {
+  if (meta.fetchUrl) {
+    const result = await runDirectFetchExtraction(
+      source,
+      {
+        fetchUrl: meta.fetchUrl,
+        fetchEtag: meta.fetchEtag,
+        fetchLastModified: meta.fetchLastModified,
+        guidance,
+      },
+      deps,
+    );
+    return finalize(env, source, result.releases, result.unchanged, start);
+  }
+
+  const result = await runAgentExtraction(source, { guidance }, deps);
+  return finalize(env, source, result.releases, result.unchanged, start);
+}
+
+// ── Scrape path (handles type=scrape sources) ────────────────────
+
+async function runScrapePath(
+  env: ScrapeEnv,
+  source: Source,
+  meta: ReturnType<typeof getSourceMeta>,
+  guidance: { parseInstructions?: string; playbookContext?: string },
+  deps: ReturnType<typeof buildWorkerExtractDeps>,
+  start: number,
+): Promise<string> {
   const knownReleasesPromise = fetchKnownReleases(env, source.slug);
 
   let markdown: string | null = null;
-
   if (meta.markdownUrl) {
-    const [md, known] = await Promise.all([
-      fetchMarkdownUrl(meta.markdownUrl),
-      knownReleasesPromise,
-    ]);
-    markdown = md;
-    if (markdown) {
-      return runParseAndInsert(env, source, meta, markdown, known, start);
-    }
-    // Fall through to Cloudflare if markdown URL failed
+    markdown = await fetchMarkdownUrl(meta.markdownUrl);
   }
-
-  const [rendered, knownReleases] = await Promise.all([
-    renderToMarkdown(source.url, env.cloudflareAccountId, env.cloudflareApiToken),
-    knownReleasesPromise,
-  ]);
-  markdown = rendered;
+  if (!markdown) {
+    markdown = await fetchCloudflareMarkdown(source.url, env.cloudflareAccountId, env.cloudflareApiToken);
+  }
 
   if (!markdown) {
     const durationMs = Date.now() - start;
@@ -304,28 +254,34 @@ export async function scrapeFetch(
     return `Error: Cloudflare Browser Rendering returned no content for ${source.url}`;
   }
 
-  return runParseAndInsert(env, source, meta, markdown, knownReleases, start);
+  const knownReleases = await knownReleasesPromise;
+  const result = await runIncrementalExtraction(
+    source,
+    { markdown, knownReleases, guidance },
+    deps,
+  );
+
+  return finalize(env, source, result.releases, result.releases.length === 0, start);
 }
 
-// ── Shared parse + insert pipeline ───────────────────────────────
-
-async function runParseAndInsert(
+async function finalize(
   env: ScrapeEnv,
-  source: { id: string; slug: string; url: string },
-  meta: ReturnType<typeof getSourceMeta>,
-  markdown: string,
-  knownReleases: KnownRelease[],
+  source: Source,
+  releases: MappedEntry[],
+  unchangedFallback: boolean,
   start: number,
 ): Promise<string> {
-  const client = new Anthropic({ apiKey: env.anthropicApiKey });
-  const releases = await incrementalParse(client, markdown, knownReleases, meta.parseInstructions);
-
   const durationMs = Date.now() - start;
 
   if (releases.length === 0) {
     await Promise.all([
       updateSourceAfterFetch(env, source.id),
-      writeFetchLog(env, source.id, { releasesFound: 0, releasesInserted: 0, durationMs, status: "no_change" }),
+      writeFetchLog(env, source.id, {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs,
+        status: unchangedFallback ? "no_change" : "no_change",
+      }),
     ]);
     return JSON.stringify({
       fetched: true,
@@ -337,7 +293,6 @@ async function runParseAndInsert(
   }
 
   const inserted = await insertReleases(env, source.slug, releases);
-
   const finalDuration = Date.now() - start;
   await Promise.all([
     updateSourceAfterFetch(env, source.id),
