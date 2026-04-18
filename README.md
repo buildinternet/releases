@@ -75,6 +75,8 @@ the public homepage feed share the same cached response. The default 60s poll
 interval still works — most polls will be fast cache hits; new releases
 surface on the next TTL refresh.
 
+In remote mode, `tail -f` connects to the live WebSocket stream (`GET /v1/releases/stream`) and falls back to polling `/v1/releases/latest` on transport failure or replay gap.
+
 ### Inspect sources
 
 ```bash

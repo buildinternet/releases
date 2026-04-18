@@ -70,3 +70,11 @@ A second daily cron at 03:00 UTC (`workers/api/src/cron/retier.ts`) recomputes `
 ## Discovery guardrails
 
 The discovery worker checks `GET /api/sessions?status=running&type=onboard` before spawning a new session. Returns 409 if the same company (case-insensitive) is already being discovered, 429 if 5+ onboard sessions are running. Uses a service binding (`API_WORKER`) for Worker-to-Worker communication. The `GET /sessions` endpoint supports `?status=` and `?type=` query param filtering.
+
+## Realtime streaming
+
+`GET /v1/releases/stream` is a public WebSocket that emits `release.created`
+events as they land in D1. Backed by the global `ReleaseHub` Durable Object
+with hibernation. The CLI's `tail -f` uses this stream in remote mode and
+falls back to polling `/v1/releases/latest` on transport failure or
+`snapshot_gap`. See [events.md](./events.md).

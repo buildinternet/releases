@@ -67,11 +67,13 @@
   ],
   "durable_objects": {
     "bindings": [
-      { "class_name": "StatusHub", "name": "STATUS_HUB" }
+      { "class_name": "StatusHub", "name": "STATUS_HUB" },
+      { "class_name": "ReleaseHub", "name": "RELEASE_HUB" }
     ]
   },
   "migrations": [
-    { "new_classes": ["StatusHub"], "tag": "v1" }
+    { "new_classes": ["StatusHub"], "tag": "v1" },
+    { "new_classes": ["ReleaseHub"], "tag": "v2" }
   ],
   "routes": [
     { "pattern": "api.releases.sh", "custom_domain": true }

@@ -17,6 +17,7 @@ import { ignoreRoutes } from "./routes/ignore.js";
 import { statusRoutes } from "./routes/status.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { mediaRoutes } from "./routes/media.js";
+import { streamRoutes } from "./routes/stream.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import knowledge from "./routes/knowledge.js";
@@ -34,6 +35,7 @@ import { retierSources } from "./cron/retier.js";
 import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 
 export { StatusHub } from "./status-hub.js";
+export { ReleaseHub } from "./release-hub.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -43,6 +45,7 @@ export type Env = {
     DB: D1Database;
     RELEASED_API_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
+    RELEASE_HUB: DurableObjectNamespace;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
     CACHE_DISABLED?: string;
@@ -97,6 +100,7 @@ const v1 = new Hono<Env>();
 // No-auth routes (status WebSocket, public media GET)
 v1.route("/", statusRoutes);
 v1.route("/", mediaRoutes);
+v1.route("/", streamRoutes);
 
 // Public-read routes: GET is open, writes require auth
 const publicReadRoutes = [
@@ -223,6 +227,7 @@ export default {
       EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
       VOYAGE_API_KEY: env.VOYAGE_API_KEY,
       OPENAI_API_KEY: env.OPENAI_API_KEY,
+      RELEASE_HUB: env.RELEASE_HUB,
     }));
   },
 };
