@@ -13,9 +13,9 @@ async function importHmacKey(rawHex: string): Promise<CryptoKey> {
   );
 }
 
-function hexToBytes(hex: string): Uint8Array {
+function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {
   if (hex.length % 2 !== 0) throw new Error("invalid hex length");
-  const out = new Uint8Array(hex.length / 2);
+  const out = new Uint8Array(new ArrayBuffer(hex.length / 2));
   for (let i = 0; i < out.length; i++) {
     out[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
   }
