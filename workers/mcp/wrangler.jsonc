@@ -33,6 +33,14 @@
     { "binding": "ENTITIES_INDEX", "index_name": "entities-v1" },
     { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" }
   ],
+  // Shared with the API worker — identical key shape so hits from either warm the other.
+  "kv_namespaces": [
+    {
+      "binding": "EMBED_CACHE",
+      "id": "93b87ae5e253445cabbaaa7a71264915",
+      "preview_id": "7737ccafd37a43fc9d2365c9a2d7ebca"
+    }
+  ],
   "routes": [
     { "pattern": "mcp.releases.sh", "custom_domain": true }
   ],
