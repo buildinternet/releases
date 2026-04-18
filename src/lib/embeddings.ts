@@ -42,7 +42,7 @@ export interface EmbeddingResult {
   inputTokens?: number;
 }
 
-const DEFAULT_MODELS: Record<EmbeddingProvider, string> = {
+export const DEFAULT_MODELS: Record<EmbeddingProvider, string> = {
   voyage: "voyage-4-lite",
   openai: "text-embedding-3-small",
   "workers-ai": "@cf/baai/bge-base-en-v1.5",
@@ -51,7 +51,7 @@ const DEFAULT_MODELS: Record<EmbeddingProvider, string> = {
 // Our Vectorize indexes are provisioned at 512 dims. voyage-4-* default to
 // 1024 but support Matryoshka-style `output_dimension` to return a shorter
 // vector, so we request 512 explicitly to match the indexes.
-const VOYAGE_OUTPUT_DIMENSION = 512;
+export const VOYAGE_OUTPUT_DIMENSION = 512;
 
 const DEFAULT_BATCH_SIZES: Record<EmbeddingProvider, number> = {
   voyage: 128,

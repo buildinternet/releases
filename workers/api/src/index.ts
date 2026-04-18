@@ -58,6 +58,10 @@ export type Env = {
     // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
+    // Optional KV namespace caching single-query embeddings on the search
+    // path (see src/lib/embedding-cache.ts). Absent → every cold search
+    // re-calls the embedding provider, matching pre-cache behavior.
+    EMBED_CACHE?: KVNamespace;
   };
 };
 
