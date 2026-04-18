@@ -1,3 +1,7 @@
+// Parity note: a read-only subset of these tools is also exposed in-browser via
+// WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
+// changing the signature of a read-only tool here, update that provider in the
+// same PR so the remote, local-stdio, and browser surfaces don't drift.
 import { eq, desc, inArray, and, or, isNull, sql } from "drizzle-orm";
 import {
   sources,

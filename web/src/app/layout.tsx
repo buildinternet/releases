@@ -2,7 +2,10 @@ import type { Metadata } from "next";
 import { JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { ThemeProvider } from "@/components/theme-provider";
+import { WebMcpProvider } from "@/components/webmcp-provider";
 import "./globals.css";
+
+const PUBLIC_API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
 
 const jetbrainsMono = JetBrains_Mono({
   subsets: ["latin"],
@@ -54,6 +57,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ThemeProvider>
           {children}
         </ThemeProvider>
+        <WebMcpProvider apiBaseUrl={PUBLIC_API_URL} />
       </body>
     </html>
   );
