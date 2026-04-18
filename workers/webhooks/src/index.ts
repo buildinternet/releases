@@ -22,7 +22,7 @@ export default {
     if (batch.queue === "webhook-dlq") {
       for (const msg of batch.messages) {
         console.warn(
-          `[webhook-dlq] sub=${msg.body.subscriptionId} event=${msg.body.event.release.id} attempts=${msg.attempts}`,
+          `[webhook-dlq] sub=${msg.body.subscriptionId} release=${msg.body.event.release.id} attempts=${msg.attempts}`,
         );
         writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, {
           subscriptionId: msg.body.subscriptionId,
