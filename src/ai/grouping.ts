@@ -1,10 +1,16 @@
 import { readFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { homedir } from "os";
+import type Anthropic from "@anthropic-ai/sdk";
 import { getAnthropicClient } from "./client.js";
 import { config } from "@releases/lib/config";
 import { logUsage } from "../lib/usage.js";
 import { logger } from "@buildinternet/releases-lib/logger";
+import { linkReleaseCoverage } from "../db/queries.js";
+
+/** Haiku 4.5's per-response output ceiling. Larger candidate sets should be
+ *  split by the caller rather than pushed against provider limits. */
+export const GROUPING_MAX_TOKENS = 8192;
 
 export interface GroupingCandidate {
   id: string;
@@ -74,6 +80,35 @@ function extractJson(text: string): unknown {
 }
 
 /**
+ * Parse a grouping agent response into clusters. Exported for tests.
+ *
+ * Treats `stop_reason === "max_tokens"` as a hard error — partial output can't
+ * be trusted because the JSON array may be truncated mid-cluster (which surfaces
+ * as a misleading `JSON Parse error: Expected ']'`). Callers should retry with
+ * a higher max_tokens budget or chunk the candidate set.
+ */
+export function extractClustersFromResponse(
+  rawResponse: string,
+  stopReason: Anthropic.Messages.StopReason | null | undefined,
+): GroupingCluster[] {
+  if (stopReason === "max_tokens") {
+    throw new Error(
+      "grouping: response truncated (stop_reason=max_tokens). Increase max_tokens or split the candidate set.",
+    );
+  }
+  const parsed = extractJson(rawResponse) as { clusters?: Array<{ canonical_id?: string; coverage_ids?: string[]; reason?: string }> };
+  const rawClusters = parsed.clusters;
+  if (!Array.isArray(rawClusters)) {
+    throw new Error(`model response missing "clusters" array: ${rawResponse.slice(0, 200)}`);
+  }
+  return rawClusters.map((c) => ({
+    canonicalId: String(c.canonical_id || ""),
+    coverageIds: Array.isArray(c.coverage_ids) ? c.coverage_ids.map(String) : [],
+    reason: String(c.reason || "").trim(),
+  }));
+}
+
+/**
  * Ask the model to cluster a set of candidate releases per the grouping-releases skill.
  * Validates that (1) every returned ID appears in the input, (2) every input ID appears
  * in exactly one cluster. Throws on violations so callers can retry or escalate to Sonnet.
@@ -109,7 +144,7 @@ export async function groupReleases(
 
   const response = await client.messages.create({
     model,
-    max_tokens: 4096,
+    max_tokens: GROUPING_MAX_TOKENS,
     system: [{ type: "text", text: systemPrompt, cache_control: { type: "ephemeral" } }],
     messages: [{ role: "user", content: userMessage }],
   });
@@ -125,18 +160,7 @@ export async function groupReleases(
     releaseCount: candidates.length,
   });
 
-  const parsed = extractJson(rawResponse) as { clusters?: Array<{ canonical_id?: string; coverage_ids?: string[]; reason?: string }> };
-  const rawClusters = parsed.clusters;
-  if (!Array.isArray(rawClusters)) {
-    throw new Error(`model response missing "clusters" array: ${rawResponse.slice(0, 200)}`);
-  }
-
-  const clusters: GroupingCluster[] = rawClusters.map((c) => ({
-    canonicalId: String(c.canonical_id || ""),
-    coverageIds: Array.isArray(c.coverage_ids) ? c.coverage_ids.map(String) : [],
-    reason: String(c.reason || "").trim(),
-  }));
-
+  const clusters = extractClustersFromResponse(rawResponse, response.stop_reason);
   validateClusters(clusters, candidates);
 
   logger.info(`grouping-releases: ${candidates.length} candidates → ${clusters.length} clusters via ${model}`);
@@ -181,4 +205,52 @@ export function validateClusters(clusters: GroupingCluster[], candidates: Groupi
   if (missing.length > 0) {
     throw new Error(`grouping: input IDs missing from output (${missing.length}): ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "..." : ""}`);
   }
+}
+
+/** Shape shared by release-listing queries like `getRecentReleasesByOrg`. */
+export interface GroupingInputRow {
+  id: string;
+  title: string;
+  version: string | null;
+  publishedAt: string | null;
+  sourceSlug: string;
+  content: string;
+  contentSummary: string | null;
+}
+
+export function rowsToCandidates(rows: GroupingInputRow[]): GroupingCandidate[] {
+  return rows.map((r) => ({
+    id: r.id,
+    title: r.title,
+    version: r.version,
+    publishedAt: r.publishedAt,
+    sourceSlug: r.sourceSlug,
+    content: r.contentSummary || r.content,
+  }));
+}
+
+/**
+ * Persist the coverage rows for each non-singleton cluster. Returns the number
+ * of rows written. The caller owns retry/logging semantics; this helper just
+ * fans out to `linkReleaseCoverage` (or an injected replacement for tests).
+ */
+export async function writeCoverageClusters(
+  clusters: GroupingCluster[],
+  decidedBy: string,
+  link: typeof linkReleaseCoverage = linkReleaseCoverage,
+): Promise<number> {
+  let written = 0;
+  for (const cluster of clusters) {
+    if (cluster.coverageIds.length === 0) continue;
+    for (const coverageId of cluster.coverageIds) {
+      await link({
+        canonicalId: cluster.canonicalId,
+        coverageId,
+        reason: cluster.reason,
+        decidedBy,
+      });
+      written++;
+    }
+  }
+  return written;
 }
