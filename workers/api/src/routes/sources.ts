@@ -19,6 +19,7 @@ import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
+import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -270,16 +271,12 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   }> }>();
 
   try {
-    // D1 caps prepared statements at 100 bound parameters. Drizzle emits 13
-    // placeholders per release row for this insert (id, source_id, version,
-    // type, title, content, url, content_hash, metadata, media, published_at,
-    // suppressed, fetched_at), so the largest safe chunk is floor(100/13)=7.
-    // 7 * 13 = 91 bindings; any larger batch gets rejected with a 500.
-    const D1_CHUNK_SIZE = 7;
+    // D1 caps prepared statements at 100 bound parameters — see
+    // `../lib/d1-limits.ts` for the math behind the chunk size.
     let inserted = 0;
     const insertedIds: string[] = [];
-    for (let i = 0; i < body.releases.length; i += D1_CHUNK_SIZE) {
-      const chunk = body.releases.slice(i, i + D1_CHUNK_SIZE).map((r) => ({
+    for (let i = 0; i < body.releases.length; i += RELEASES_BATCH_CHUNK_SIZE) {
+      const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r) => ({
         sourceId: src.id,
         version: r.version ?? null,
         type: r.type ?? "feature",
@@ -314,9 +311,9 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
             const [orgRow] = src.orgId
               ? await db.select({ category: organizations.category }).from(organizations).where(eq(organizations.id, src.orgId))
               : [{ category: null as string | null }];
-            // D1 bind-param cap is 100; chunk the IN clause at 90 so we
-            // stay well clear of the limit even if the caller posts a large
-            // batch.
+            // D1 bind-param cap is 100; chunk the IN clause so we stay
+            // well clear of the limit even if the caller posts a large
+            // batch. See `../lib/d1-limits.ts`.
             const rowsToEmbed: Array<{
               id: string;
               title: string;
@@ -327,8 +324,8 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
               sourceId: string;
               type: ReleaseType;
             }> = [];
-            for (let i = 0; i < insertedIds.length; i += 90) {
-              const slice = insertedIds.slice(i, i + 90);
+            for (let i = 0; i < insertedIds.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+              const slice = insertedIds.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
               const rows = await db
                 .select({
                   id: releases.id,
@@ -360,10 +357,10 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
                 if (ids.length === 0) return;
                 // Mark the rows as embedded. D1's 100 bind-param cap means
                 // the embeddedAt SET + N IN-clause ids must total ≤100, so
-                // we chunk IDs at 90.
+                // we chunk IDs — see `../lib/d1-limits.ts`.
                 const now = new Date().toISOString();
-                for (let i = 0; i < ids.length; i += 90) {
-                  const slice = ids.slice(i, i + 90);
+                for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+                  const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
                   await db
                     .update(releases)
                     .set({ embeddedAt: now })
