@@ -1,5 +1,8 @@
 import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from "drizzle-orm";
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
+import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
+export type AnyDb = BunSQLiteDatabase<any> | DrizzleD1Database<any>;
 import { getDb } from "./connection.js";
 import {
   sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages, sourceChangelogFiles,
@@ -1779,7 +1782,7 @@ export async function deleteChangelogFilesNotIn(
 // ---------------------------------------------------------------------------
 
 export async function insertWebhookSubscription(
-  db: any,
+  db: AnyDb,
   input: { orgId: string; url: string; sourceId: string | null; description: string | null },
 ): Promise<WebhookSubscription> {
   const [row] = await db.insert(webhookSubscriptions).values(input).returning();
@@ -1787,7 +1790,7 @@ export async function insertWebhookSubscription(
 }
 
 export async function getWebhookSubscriptionById(
-  db: any,
+  db: AnyDb,
   id: string,
 ): Promise<WebhookSubscription | null> {
   const rows = await db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).limit(1);
@@ -1795,7 +1798,7 @@ export async function getWebhookSubscriptionById(
 }
 
 export async function listWebhookSubscriptionsByOrg(
-  db: any,
+  db: AnyDb,
   orgId: string,
   opts?: { enabledOnly?: boolean },
 ): Promise<WebhookSubscription[]> {
@@ -1812,7 +1815,7 @@ export async function listWebhookSubscriptionsByOrg(
  * memory using sourceId.
  */
 export async function matchWebhookSubscriptions(
-  db: any,
+  db: AnyDb,
   orgIds: string[],
 ): Promise<WebhookSubscription[]> {
   if (orgIds.length === 0) return [];
@@ -1828,7 +1831,7 @@ export type SummaryUpdate =
   | { kind: "error"; at: string; message: string };
 
 export async function updateWebhookSubscriptionSummary(
-  db: any,
+  db: AnyDb,
   id: string,
   update: SummaryUpdate,
 ): Promise<void> {
@@ -1851,7 +1854,7 @@ export async function updateWebhookSubscriptionSummary(
 }
 
 export async function setWebhookSubscriptionEnabled(
-  db: any,
+  db: AnyDb,
   id: string,
   enabled: boolean,
   reason: string | null,
@@ -1861,11 +1864,11 @@ export async function setWebhookSubscriptionEnabled(
     .where(eq(webhookSubscriptions.id, id));
 }
 
-export async function deleteWebhookSubscription(db: any, id: string): Promise<void> {
+export async function deleteWebhookSubscription(db: AnyDb, id: string): Promise<void> {
   await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
 }
 
-export async function bumpWebhookSecretVersion(db: any, id: string): Promise<number> {
+export async function bumpWebhookSecretVersion(db: AnyDb, id: string): Promise<number> {
   const cur = await getWebhookSubscriptionById(db, id);
   if (!cur) throw new Error(`subscription not found: ${id}`);
   const newVersion = cur.secretVersion + 1;
