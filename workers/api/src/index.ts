@@ -27,9 +27,11 @@ import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedRoutes } from "./routes/admin-embed.js";
+import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 import { retierSources } from "./cron/retier.js";
+import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 
 export { StatusHub } from "./status-hub.js";
 
@@ -46,7 +48,10 @@ export type Env = {
     CACHE_DISABLED?: string;
     GITHUB_TOKEN?: SecretBinding;
     CRON_ENABLED?: string;
+    SCRAPE_AGENT_CRON_ENABLED?: string;
+    SCRAPE_AGENT_MAX_SESSIONS?: string;
     DISCOVERY_WORKER?: Fetcher;
+    ANTHROPIC_API_KEY?: SecretBinding;
     // Vectorize indexes for semantic search (provisioned out-of-band).
     RELEASES_INDEX: VectorizeIndex;
     ENTITIES_INDEX: VectorizeIndex;
@@ -107,7 +112,7 @@ for (const r of publicReadRoutes) {
 const adminRoutes = [
   "sessions", "fetch-log", "usage-log", "blocked-urls",
   "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
-  "admin/embed", "playbook",
+  "admin/embed", "admin/cron-runs", "playbook",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -155,6 +160,7 @@ v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedRoutes);
+v1.route("/", adminCronRunsRoutes);
 v1.route("/", telemetryRoutes);
 
 // Static endpoint — categories are defined in code, not DB
@@ -172,11 +178,33 @@ app.route("/v1", v1);
 export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
-    // Daily retier job runs at 03:00 UTC; poll-and-fetch runs every other hour.
+    // Daily retier job runs at 03:00 UTC; scrape-no-feed agent sweep at 01:00 UTC;
+    // poll-and-fetch runs every other hour.
     if (event.cron === "0 3 * * *") {
       ctx.waitUntil(retierSources({
         DB: env.DB,
         CRON_ENABLED: env.CRON_ENABLED,
+      }));
+      return;
+    }
+    if (event.cron === "0 1 * * *") {
+      if (!env.DISCOVERY_WORKER) {
+        console.warn("[scrape-agent-cron] DISCOVERY_WORKER binding missing; skipping");
+        return;
+      }
+      const releasedApiKey = await env.RELEASED_API_KEY?.get();
+      if (!releasedApiKey) {
+        console.warn("[scrape-agent-cron] RELEASED_API_KEY secret missing; skipping");
+        return;
+      }
+      ctx.waitUntil(scrapeAgentSweep({
+        DB: env.DB,
+        CRON_ENABLED: env.CRON_ENABLED,
+        SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
+        SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
+        DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+        RELEASED_API_KEY: releasedApiKey,
+        ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
       }));
       return;
     }

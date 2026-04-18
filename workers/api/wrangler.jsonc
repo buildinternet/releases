@@ -13,6 +13,12 @@
   },
   "vars": {
     "CRON_ENABLED": "true",
+    // Per-cron toggle for the daily scrape-no-feed agent sweep. Both
+    // CRON_ENABLED and SCRAPE_AGENT_CRON_ENABLED must be truthy to fire.
+    "SCRAPE_AGENT_CRON_ENABLED": "true",
+    // Max managed-agent sessions dispatched per sweep. Default 20 once live;
+    // first deploy ships at 5 for bounded blast radius (~$1/sweep worst case).
+    "SCRAPE_AGENT_MAX_SESSIONS": "5",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -68,7 +74,8 @@
   "triggers": {
     // Hourly: poll feed sources and fetch changed ones.
     // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
-    "crons": ["0 * * * *", "0 3 * * *"]
+    // Daily at 01:00 UTC: drain scrape-no-feed sources via managed-agents.
+    "crons": ["0 * * * *", "0 3 * * *", "0 1 * * *"]
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
   "unsafe": {
@@ -86,6 +93,7 @@
   "secrets_store_secrets": [
     { "binding": "RELEASED_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "RELEASED_API_KEY" },
     { "binding": "GITHUB_TOKEN", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "GITHUB_TOKEN" },
-    { "binding": "VOYAGE_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "VOYAGER_API_KEY" }
+    { "binding": "VOYAGE_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "VOYAGER_API_KEY" },
+    { "binding": "ANTHROPIC_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "ANTHROPIC_API_KEY" }
   ]
 }

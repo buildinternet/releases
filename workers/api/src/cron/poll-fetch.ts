@@ -11,6 +11,7 @@ import type { RawRelease } from "@releases/adapters/types.js";
 import { normalizeMediaUrl } from "@releases/lib/media-url.js";
 import { embedAndUpsertChangelogFile } from "@releases/lib/embed-changelog-pipeline.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
+import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/lib/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
 
@@ -742,25 +743,6 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
     url: rel.html_url,
     publishedAt: rel.published_at ? new Date(rel.published_at) : undefined,
   }));
-}
-
-// ── Concurrency helper ──
-
-async function runWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  fn: (item: T) => Promise<R>,
-): Promise<R[]> {
-  const results: R[] = [];
-  const queue = [...items];
-  const workers = Array.from({ length: Math.min(limit, queue.length) }, async () => {
-    while (queue.length > 0) {
-      const item = queue.shift()!;
-      results.push(await fn(item));
-    }
-  });
-  await Promise.all(workers);
-  return results;
 }
 
 // ── Embedding side effects ──
