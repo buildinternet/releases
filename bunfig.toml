@@ -3,3 +3,7 @@
 # as separate packages and won't resolve their Cloudflare-only imports
 # when running the CLI (bun src/index.ts).
 
+[test]
+# Stub cloudflare:workers so worker tests under workers/*/test/ can import DOs
+# from any CWD. The mock is a no-op for tests that don't import it.
+preload = ["./workers/api/test/setup.ts"]
