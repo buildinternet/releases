@@ -25,7 +25,7 @@ import {
   hybridSearch,
   type VectorizeIndex as HybridVectorizeIndex,
 } from "@releases/lib/vector-search.js";
-import { embedBatch } from "@releases/lib/embeddings.js";
+import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/lib/embeddings.js";
 import {
   withEmbedCache,
   type EmbedCacheBinding,
@@ -35,13 +35,6 @@ import { buildEmbedConfig } from "./embed-config.js";
 import type { D1Db } from "../db.js";
 
 type SecretBinding = { get(): Promise<string> };
-
-/**
- * Vectorize indexes are provisioned at 512 dims (see scripts/create-vectorize-indexes.sh).
- * We include this in the embedding-cache key so switching index dimensionality
- * automatically invalidates the cached query vectors.
- */
-const EMBED_DIM = 512;
 
 /**
  * Loose index type — we only care about `.query()` in the hybrid path.
@@ -145,7 +138,7 @@ async function buildEmbedder(
   waitUntil?: (p: Promise<unknown>) => void,
 ): Promise<((text: string) => Promise<number[]>) | null> {
   const cfg = await buildEmbedConfig(env);
-  if (!cfg || !cfg.provider) return null;
+  if (!cfg) return null;
   const raw = async (text: string) => {
     const result = await embedBatch([text], cfg);
     const v = result.vectors[0];
@@ -155,7 +148,7 @@ async function buildEmbedder(
   return withEmbedCache(
     raw,
     env.EMBED_CACHE,
-    { provider: cfg.provider, model: cfg.model ?? "", dim: EMBED_DIM },
+    { provider: cfg.provider, model: cfg.model, dim: VOYAGE_OUTPUT_DIMENSION },
     waitUntil,
   );
 }

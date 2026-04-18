@@ -24,8 +24,10 @@ export interface EmbedCacheBinding {
   ): Promise<void>;
 }
 
+import type { EmbeddingProvider } from "./embeddings.js";
+
 export interface EmbedCacheKeyParts {
-  provider: string;
+  provider: EmbeddingProvider;
   model: string;
   dim: number;
 }

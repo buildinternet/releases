@@ -16,6 +16,19 @@ interface EmbeddingConfig {
   apiKey?: string;
 }
 
+/** Kept in sync with DEFAULT_MODELS in src/lib/embeddings.ts. */
+const DEFAULT_MODELS: Record<EmbeddingProvider, string> = {
+  voyage: "voyage-4-lite",
+  openai: "text-embedding-3-small",
+  "workers-ai": "@cf/baai/bge-base-en-v1.5",
+};
+
+/** Shape returned by {@link buildEmbedConfig} — `provider` and `model` are always resolved. */
+export type ResolvedEmbedConfig = EmbeddingConfig & {
+  provider: EmbeddingProvider;
+  model: string;
+};
+
 type SecretBinding = { get(): Promise<string> };
 
 interface EmbedEnv {
@@ -26,7 +39,7 @@ interface EmbedEnv {
 
 export async function buildEmbedConfig(
   env: EmbedEnv,
-): Promise<Partial<EmbeddingConfig> | null> {
+): Promise<ResolvedEmbedConfig | null> {
   const rawProvider = (env.EMBEDDING_PROVIDER ?? "voyage").toLowerCase();
   if (
     rawProvider !== "voyage" &&
@@ -69,5 +82,5 @@ export async function buildEmbedConfig(
     return null;
   }
 
-  return { provider, apiKey };
+  return { provider, model: DEFAULT_MODELS[provider], apiKey };
 }

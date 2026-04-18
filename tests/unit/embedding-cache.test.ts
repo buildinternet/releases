@@ -44,7 +44,7 @@ function vector(n: number, seed = 0): number[] {
   return Array.from({ length: n }, (_, i) => (i + seed) / n);
 }
 
-const VOYAGE = { provider: "voyage", model: "voyage-4-lite", dim: 8 };
+const VOYAGE = { provider: "voyage", model: "voyage-4-lite", dim: 8 } as const;
 
 describe("withEmbedCache", () => {
   it("returns the unwrapped embedder when kv is undefined", async () => {
@@ -102,7 +102,7 @@ describe("withEmbedCache", () => {
       provider: "openai",
       model: "text-embedding-3-small",
       dim: 8,
-    });
+    } as const);
 
     await voyageWrapped("next.js");
     await openaiWrapped("next.js");
