@@ -79,6 +79,36 @@ export class ReleaseHub extends DurableObject {
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
+    // GET /replay?since=<n>&limit=<n> — JSON replay for the public webhooks endpoint.
+    if (request.method === "GET" && url.pathname === "/replay") {
+      const since = parseSince(url.searchParams.get("since")) ?? 0;
+      const limitRaw = parseInt(url.searchParams.get("limit") ?? "500", 10);
+      const limit = Math.max(1, Math.min(500, Number.isFinite(limitRaw) ? limitRaw : 500));
+
+      const store = storageAsEventStore(this.ctx.storage);
+      const head = await currentSeq(store);
+      const oldest = await oldestSeq(store);
+
+      const body: { events: ReleaseEvent[]; head: number; gap?: { oldestSeq: number } } = {
+        events: [],
+        head,
+      };
+
+      if (oldest > 0 && since < oldest - 1) {
+        body.gap = { oldestSeq: oldest };
+        // Continue and return whatever events exist; client sees both gap + events.
+      }
+
+      if (since < head) {
+        const events = await replayEvents(store, since);
+        body.events = events.slice(0, limit);
+      }
+
+      return new Response(JSON.stringify(body), {
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+
     // GET /seq — debugging / test harness aid.
     if (request.method === "GET" && url.pathname === "/seq") {
       const store = storageAsEventStore(this.ctx.storage);

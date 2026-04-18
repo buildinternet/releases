@@ -1,7 +1,7 @@
 import type { MediaItem } from "@releases/api/types.js";
 
-/** Max events retained per DO. Ring buffer — oldest trimmed when exceeded. */
-export const EVENT_BUFFER_SIZE = 1000;
+/** Max events retained per DO. Ring buffer — oldest trimmed when exceeded. ~7 days at current ~700 events/day. */
+export const EVENT_BUFFER_SIZE = 7000;
 
 /** Zero-padding width for seq-based storage keys so lexicographic list() returns chronological order. */
 export const SEQ_PAD_WIDTH = 16;
