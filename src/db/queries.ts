@@ -7,6 +7,10 @@ import {
   type ReleaseSummary, type NewReleaseSummary, type Product, type Tag, type DomainAlias,
   type KnowledgePage, type SourceChangelogFile,
 } from "@buildinternet/releases-core/schema";
+import {
+  webhookSubscriptions,
+  type WebhookSubscription,
+} from "@releases/core/schema";
 import { releaseCoverage, type ReleaseCoverage } from "./schema-coverage.js";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
@@ -1768,4 +1772,105 @@ export async function deleteChangelogFilesNotIn(
     await db.delete(sourceChangelogFiles).where(eq(sourceChangelogFiles.id, row.id));
   }
   return toDelete.length;
+}
+
+// ---------------------------------------------------------------------------
+// Webhook subscriptions
+// ---------------------------------------------------------------------------
+
+export async function insertWebhookSubscription(
+  db: any,
+  input: { orgId: string; url: string; sourceId: string | null; description: string | null },
+): Promise<WebhookSubscription> {
+  const [row] = await db.insert(webhookSubscriptions).values(input).returning();
+  return row;
+}
+
+export async function getWebhookSubscriptionById(
+  db: any,
+  id: string,
+): Promise<WebhookSubscription | null> {
+  const rows = await db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).limit(1);
+  return rows[0] ?? null;
+}
+
+export async function listWebhookSubscriptionsByOrg(
+  db: any,
+  orgId: string,
+  opts?: { enabledOnly?: boolean },
+): Promise<WebhookSubscription[]> {
+  if (opts?.enabledOnly) {
+    return db.select().from(webhookSubscriptions)
+      .where(and(eq(webhookSubscriptions.orgId, orgId), eq(webhookSubscriptions.enabled, true)));
+  }
+  return db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.orgId, orgId));
+}
+
+/**
+ * Hot-path query for the publisher: returns enabled subscriptions for any of
+ * the given orgIds. The publisher then matches each event against these in
+ * memory using sourceId.
+ */
+export async function matchWebhookSubscriptions(
+  db: any,
+  orgIds: string[],
+): Promise<WebhookSubscription[]> {
+  if (orgIds.length === 0) return [];
+  return db.select().from(webhookSubscriptions)
+    .where(and(
+      eq(webhookSubscriptions.enabled, true),
+      inArray(webhookSubscriptions.orgId, orgIds),
+    ));
+}
+
+export type SummaryUpdate =
+  | { kind: "success"; at: string }
+  | { kind: "error"; at: string; message: string };
+
+export async function updateWebhookSubscriptionSummary(
+  db: any,
+  id: string,
+  update: SummaryUpdate,
+): Promise<void> {
+  if (update.kind === "success") {
+    await db.update(webhookSubscriptions)
+      .set({ lastSuccessAt: update.at, consecutiveFailures: 0 })
+      .where(eq(webhookSubscriptions.id, id));
+  } else {
+    // Read current value, increment, write back. Two queries; acceptable at v1 volume.
+    const cur = await getWebhookSubscriptionById(db, id);
+    if (!cur) return;
+    await db.update(webhookSubscriptions)
+      .set({
+        lastErrorAt: update.at,
+        lastErrorMsg: update.message,
+        consecutiveFailures: cur.consecutiveFailures + 1,
+      })
+      .where(eq(webhookSubscriptions.id, id));
+  }
+}
+
+export async function setWebhookSubscriptionEnabled(
+  db: any,
+  id: string,
+  enabled: boolean,
+  reason: string | null,
+): Promise<void> {
+  await db.update(webhookSubscriptions)
+    .set({ enabled, disabledReason: enabled ? null : reason })
+    .where(eq(webhookSubscriptions.id, id));
+}
+
+export async function deleteWebhookSubscription(db: any, id: string): Promise<void> {
+  await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
+}
+
+export async function bumpWebhookSecretVersion(db: any, id: string): Promise<number> {
+  const cur = await getWebhookSubscriptionById(db, id);
+  if (!cur) throw new Error(`subscription not found: ${id}`);
+  const newVersion = cur.secretVersion + 1;
+  await db.update(webhookSubscriptions)
+    .set({ secretVersion: newVersion })
+    .where(eq(webhookSubscriptions.id, id));
+  return newVersion;
 }
