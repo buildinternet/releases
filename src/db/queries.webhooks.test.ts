@@ -3,11 +3,9 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { webhookSubscriptions } from "@releases/core/schema";
 import {
   insertWebhookSubscription,
   getWebhookSubscriptionById,
-  listWebhookSubscriptionsByOrg,
   matchWebhookSubscriptions,
   updateWebhookSubscriptionSummary,
   setWebhookSubscriptionEnabled,
