@@ -424,7 +424,7 @@ releases admin source poll next-js          # check a single source
 releases admin source poll --changed        # only show sources with detected changes
 ```
 
-In remote mode, the API worker polls on an hourly cron and directly fetches sources with a usable feed path; scrape sources without a feed are flagged and drained daily at 01:00 UTC via a managed-agent sweep (runbook in `AGENTS.md`). `releases admin source fetch --changed` is still available to drain the backlog manually.
+In remote mode, the API worker polls on an hourly cron and directly fetches sources with a usable feed path; scrape sources without a feed are flagged and drained daily at 01:00 UTC via a managed-agent sweep (runbook in [`docs/architecture/coverage.md`](docs/architecture/coverage.md#cron-observability)). `releases admin source fetch --changed` is still available to drain the backlog manually.
 
 ### Organizations
 
