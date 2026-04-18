@@ -520,8 +520,9 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
   url?: string | null; contentHash?: string | null; publishedAt?: string | null;
   type?: ReleaseType;
 }>): Promise<{ inserted: number; total: number }> {
-  // D1 supports up to 100 rows per INSERT statement; send 100 per POST to
-  // cut round-trips from 20x to 1x for a typical 100-release fetch.
+  // HTTP-level batching: send up to 100 rows per POST to keep round-trip
+  // counts low for typical fetches. The worker chunks further internally
+  // to stay under D1's 100 bound-parameter cap per statement.
   const REMOTE_CHUNK_SIZE = 100;
   const chunks: typeof releaseRows[] = [];
   for (let i = 0; i < releaseRows.length; i += REMOTE_CHUNK_SIZE) {
