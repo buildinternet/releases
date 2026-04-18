@@ -4,7 +4,7 @@ export interface Env {
   DB: D1Database;
   WEBHOOK_DELIVERIES_AE: AnalyticsEngineDataset;
   WEBHOOK_HMAC_MASTER: string;
-  PER_SUB_RATE_LIMITER: { limit: (opts: { key: string }) => Promise<{ success: boolean }> };
+  PER_SUB_RATE_LIMITER: RateLimit;
   DELIVERY_TIMEOUT_MS: string;
   AUTO_DISABLE_THRESHOLD: string;
 }
@@ -18,7 +18,6 @@ export default {
       }
       return;
     }
-    // Real delivery handler — implemented in Tasks 14-16.
     for (const msg of batch.messages) {
       msg.ack();
     }
