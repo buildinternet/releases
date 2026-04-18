@@ -137,6 +137,8 @@ sourceRoutes.get("/sources", async (c) => {
     consecutiveNoChange: src.consecutive_no_change ?? 0,
     consecutiveErrors: src.consecutive_errors ?? 0,
     nextFetchAfter: src.next_fetch_after ?? null,
+    medianGapDays: src.median_gap_days ?? null,
+    lastRetieredAt: src.last_retiered_at ?? null,
   }));
 
   return c.json(result);

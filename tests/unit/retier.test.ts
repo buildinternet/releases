@@ -12,7 +12,7 @@ describe("computeMedianGapDays", () => {
     expect(computeMedianGapDays(dates)).toBe(7);
   });
 
-  it("returns middle gap for an odd number of gaps", () => {
+  it("averages the two middle gaps for an even number of gaps", () => {
     // 3 dates → 2 gaps; median = average of the two (even gap count)
     const dates = [
       "2026-04-01T00:00:00Z",

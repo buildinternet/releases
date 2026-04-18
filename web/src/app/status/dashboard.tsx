@@ -10,6 +10,7 @@ import {
   formatFetchDuration,
   FETCH_LOG_FILTER_BUTTONS,
 } from "@/components/fetch-log-shared";
+import { describeCadence } from "./cadence-helpers";
 
 interface SessionState {
   sessionId: string;
@@ -65,6 +66,8 @@ interface SourceEntry {
   lastFetchedAt?: string | null;
   fetchPriority?: string | null;
   changeDetectedAt?: string | null;
+  medianGapDays?: number | null;
+  lastRetieredAt?: string | null;
 }
 
 interface FetchTriggerResult {
@@ -966,19 +969,21 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
       </div>
 
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
-        <div className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
+        <div className="grid grid-cols-[2fr_1fr_1fr_1.4fr_0.9fr_1.2fr_auto] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
           <div>Name</div>
           <div>Org</div>
           <div>Type</div>
           <div>Last Fetched</div>
           <div>Priority</div>
+          <div>Cadence</div>
           <div></div>
         </div>
         {paginated.map((src) => {
           const result = results[src.slug];
           const isFetching = fetching.has(src.slug);
+          const cadence = describeCadence(src.medianGapDays, src.fetchPriority, src.lastRetieredAt);
           return (
-            <div key={src.id} className="grid grid-cols-[2fr_1fr_1fr_1.5fr_1fr_auto] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center">
+            <div key={src.id} className="grid grid-cols-[2fr_1fr_1fr_1.4fr_0.9fr_1.2fr_auto] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center">
               <div className="text-stone-900 dark:text-stone-100 truncate" title={src.slug}>
                 {src.name}
               </div>
@@ -990,6 +995,12 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
                 {src.lastFetchedAt ? formatTime(new Date(src.lastFetchedAt).getTime()) : <span className="text-stone-400">never</span>}
               </div>
               <div className="text-stone-500 capitalize">{src.fetchPriority ?? "normal"}</div>
+              <div title={cadence.tooltip}>
+                <div className={cadence.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-stone-500"}>
+                  {cadence.primary}
+                </div>
+                <div className="text-stone-400 text-[10px]">{cadence.secondary}</div>
+              </div>
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => triggerFetch(src.slug)}

@@ -99,6 +99,8 @@ export interface SourceListItem {
   consecutiveNoChange?: number | null;
   consecutiveErrors?: number | null;
   nextFetchAfter?: string | null;
+  medianGapDays?: number | null;
+  lastRetieredAt?: string | null;
   metadata?: string | null;
   productName?: string | null;
   productSlug?: string | null;
@@ -131,6 +133,8 @@ export interface SourceWithOrg {
   consecutiveNoChange: number | null;
   consecutiveErrors: number | null;
   nextFetchAfter: string | null;
+  medianGapDays: number | null;
+  lastRetieredAt: string | null;
 }
 
 /** Fields accepted by PATCH /v1/sources/:slug. */

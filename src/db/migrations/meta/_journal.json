@@ -106,6 +106,13 @@
       "when": 1776463816014,
       "tag": "20260417221016_nostalgic_santa_claus",
       "breakpoints": true
+    },
+    {
+      "idx": 15,
+      "version": "6",
+      "when": 1776519692752,
+      "tag": "20260418134132_careful_chameleon",
+      "breakpoints": true
     }
   ]
 }

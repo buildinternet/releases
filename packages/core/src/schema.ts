@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 import { newSourceId, newReleaseId, newOrgId, newOrgAccountId, newFetchLogId, newIgnoredUrlId, newBlockedUrlId, newSummaryId, newMediaAssetId, newProductId, newTagId, newDomainAliasId, newKnowledgePageId, newSourceChangelogFileId, newSourceChangelogChunkId, newTelemetryEventId } from "./id.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
@@ -127,6 +127,13 @@ export const sources = sqliteTable("sources", {
   nextFetchAfter: text("next_fetch_after"),
   changeDetectedAt: text("change_detected_at"),
   lastPolledAt: text("last_polled_at"),
+  // Cadence observability — written by the daily retier job. `medianGapDays`
+  // is the median gap (in days) between consecutive publishedAt values over
+  // the last 180 days of non-suppressed releases; null when <3 releases of
+  // signal. `lastRetieredAt` is the last time the retier evaluated this
+  // source (null if the retier has never seen it yet).
+  medianGapDays: real("median_gap_days"),
+  lastRetieredAt: text("last_retiered_at"),
   isPrimary: integer("is_primary", { mode: "boolean" }).default(false),
   isHidden: integer("is_hidden", { mode: "boolean" }).default(false),
   embeddedAt: text("embedded_at"),
