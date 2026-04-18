@@ -1,6 +1,5 @@
 import { describe, it, expect } from "bun:test";
 import { ReleaseHub } from "../src/release-hub.js";
-import { EVENT_BUFFER_SIZE } from "../src/events/types.js";
 
 // Minimal harness: build a fake DurableObjectState with an in-memory storage map.
 function makeHub() {
