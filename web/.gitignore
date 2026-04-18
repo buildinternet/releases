@@ -2,3 +2,5 @@
 .vercel
 .env*.local
 public/install
+public/.well-known/agent-skills/
+public/.well-known/mcp/

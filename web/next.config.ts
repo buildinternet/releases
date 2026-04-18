@@ -54,6 +54,20 @@ const nextConfig: NextConfig = {
           },
         ],
       },
+      {
+        source: "/((?!_next/).*)",
+        headers: [{ key: "Vary", value: "Accept" }],
+      },
+      {
+        source: "/",
+        headers: [
+          {
+            key: "Link",
+            value:
+              '</.well-known/api-catalog>; rel="api-catalog"; type="application/linkset+json", </docs/api>; rel="service-doc"; type="text/html"',
+          },
+        ],
+      },
     ];
   },
 };
