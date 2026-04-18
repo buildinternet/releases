@@ -250,6 +250,19 @@ export interface ReleaseDetail {
   org: { slug: string; name: string } | null;
 }
 
+export interface ReleaseCoverageRow {
+  coverageId: string;
+  canonicalId: string;
+  reason: string | null;
+  decidedBy: string;
+  decidedAt: string;
+}
+
+export type ReleaseCoverageResponse =
+  | { role: "standalone"; canonical: null; covers: [] }
+  | { role: "coverage"; canonical: ReleaseCoverageRow; covers: [] }
+  | { role: "canonical"; canonical: null; covers: ReleaseCoverageRow[] };
+
 export interface ReleaseSummaryItem {
   year?: number | null;
   month?: number | null;
