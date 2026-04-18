@@ -16,6 +16,8 @@ import type {
   SourceChangelogResponse,
   ChangelogFileSummary,
   SitemapPayload,
+  ReleaseCoverageRow,
+  ReleaseCoverageResponse,
 } from "@shared/api/types";
 
 export type {
@@ -49,6 +51,8 @@ export type {
   SourceChangelogResponse,
   ChangelogFileSummary,
   SitemapPayload,
+  ReleaseCoverageRow,
+  ReleaseCoverageResponse,
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
@@ -147,6 +151,10 @@ export const api = {
   relatedReleases: (releaseId: string, scope: "org" | "global" = "global", limit = 8) =>
     fetchApi<RelatedReleasesResponse>(
       `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}`,
+    ),
+  coverage: (releaseId: string) =>
+    fetchApi<ReleaseCoverageResponse>(
+      `/v1/releases/${encodeURIComponent(releaseId)}/coverage`,
     ),
   relatedSources: (sourceIdOrSlug: string, scope: "org" | "global" = "global", limit = 6) =>
     fetchApi<RelatedSourcesResponse>(

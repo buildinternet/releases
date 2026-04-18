@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { Suspense } from "react";
 import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { CliCommand } from "@/components/cli-command";
+import { AlsoCoveredBy } from "@/components/also-covered-by";
 import { ReleaseContent } from "./release-content";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
@@ -162,6 +164,9 @@ export default async function ReleaseDetailPage({
             title={release.title}
             media={media}
           />
+          <Suspense fallback={null}>
+            <AlsoCoveredBy anchorReleaseId={release.id} />
+          </Suspense>
           {release.fetchedAt && (
             <p className="text-xs text-stone-400 dark:text-stone-500 mt-8" title={release.fetchedAt}>
               Fetched {formatDate(release.fetchedAt)}
