@@ -11,6 +11,7 @@ import {
   FETCH_LOG_FILTER_BUTTONS,
 } from "@/components/fetch-log-shared";
 import { describeCadence } from "./cadence-helpers";
+import { CronRunsTab } from "./cron-runs-tab";
 
 interface SessionState {
   sessionId: string;
@@ -81,7 +82,7 @@ interface FetchTriggerResult {
   type?: string;
 }
 
-type Tab = "sessions" | "fetch-log" | "sources";
+type Tab = "sessions" | "fetch-log" | "sources" | "cron";
 type DateRange = "today" | "week" | "month" | "all";
 
 function getDateRangeAfter(range: DateRange): string | null {
@@ -439,6 +440,16 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           >
             Sources
           </button>
+          <button
+            onClick={() => setTab("cron")}
+            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+              tab === "cron"
+                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
+                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+            }`}
+          >
+            Cron
+          </button>
         </div>
         <div className="flex gap-1 mb-px">
           {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
@@ -482,6 +493,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
       )}
       {tab === "fetch-log" && <FetchLogTable logs={fetchLogs} page={fetchLogPage} perPage={pageSize} onPageChange={setFetchLogPage} />}
       {tab === "sources" && <SourcesTable sources={allSources} apiUrl={apiUrl} apiKey={apiKey} />}
+      {tab === "cron" && <CronRunsTab apiUrl={apiUrl} apiKey={apiKey} />}
     </div>
   );
 }

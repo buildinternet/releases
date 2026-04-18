@@ -16,6 +16,7 @@ export const newKnowledgePageId = () => `kp_${nanoid()}`;
 export const newSourceChangelogFileId = () => `scf_${nanoid()}`;
 export const newSourceChangelogChunkId = () => `scc_${nanoid()}`;
 export const newCorrelationId = () => `cid_${nanoid()}`;
+export const newCronRunId = () => `crun_${nanoid()}`;
 export const newTelemetryEventId = () => `tel_${nanoid()}`;
 
 export type EntityType = "release" | "source" | "org" | "product" | "unknown";

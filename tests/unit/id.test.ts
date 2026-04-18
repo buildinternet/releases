@@ -1,5 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { newSourceId, newReleaseId, newOrgId, newProductId, newTagId } from "@buildinternet/releases-core/id";
+import { newCronRunId } from "@releases/core/id";
 
 describe("ID generators", () => {
   it("newSourceId has correct prefix", () => {
@@ -24,6 +25,15 @@ describe("ID generators", () => {
 
   it("generates unique IDs", () => {
     const ids = new Set(Array.from({ length: 100 }, () => newSourceId()));
+    expect(ids.size).toBe(100);
+  });
+
+  it("newCronRunId has correct prefix", () => {
+    expect(newCronRunId()).toMatch(/^crun_/);
+  });
+
+  it("newCronRunId generates unique IDs", () => {
+    const ids = new Set(Array.from({ length: 100 }, () => newCronRunId()));
     expect(ids.size).toBe(100);
   });
 });
