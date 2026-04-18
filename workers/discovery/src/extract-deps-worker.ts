@@ -77,24 +77,16 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
 
     async getOrgPlaybook(orgId: string | null): Promise<string | null> {
       if (!orgId) return null;
-      // Resolve org slug (playbook endpoint is slug-keyed).
-      const orgRes = await env.apiFetcher.fetch(
-        `https://api/v1/orgs/${encodeURIComponent(orgId)}`,
-        { headers: headers() },
-      );
-      if (!orgRes.ok) return null;
-      const org = await orgRes.json() as { slug?: string } | null;
-      if (!org?.slug) return null;
-
+      // The playbook endpoint's `slug` param accepts both slugs and `org_…` IDs
+      // via `orgWhere` in the worker, so we can skip the org→slug lookup.
       const res = await env.apiFetcher.fetch(
-        `https://api/v1/playbook?slug=${encodeURIComponent(org.slug)}`,
+        `https://api/v1/playbook?slug=${encodeURIComponent(orgId)}`,
         { headers: headers() },
       );
       if (!res.ok) return null;
       const page = await res.json() as { notes?: string | null; content?: string | null } | null;
       const notes = page?.notes?.trim();
       if (notes) return notes;
-      // Legacy shape: playbook stored as a single `content` string. Return as-is.
       return page?.content?.trim() ?? null;
     },
 

@@ -218,11 +218,11 @@ async function runAgentPath(
       },
       deps,
     );
-    return finalize(env, source, result.releases, result.unchanged, start);
+    return finalize(env, source, result.releases, start);
   }
 
   const result = await runAgentExtraction(source, { guidance }, deps);
-  return finalize(env, source, result.releases, result.unchanged, start);
+  return finalize(env, source, result.releases, start);
 }
 
 // ── Scrape path (handles type=scrape sources) ────────────────────
@@ -261,14 +261,13 @@ async function runScrapePath(
     deps,
   );
 
-  return finalize(env, source, result.releases, result.releases.length === 0, start);
+  return finalize(env, source, result.releases, start);
 }
 
 async function finalize(
   env: ScrapeEnv,
   source: Source,
   releases: MappedEntry[],
-  unchangedFallback: boolean,
   start: number,
 ): Promise<string> {
   const durationMs = Date.now() - start;
@@ -280,7 +279,7 @@ async function finalize(
         releasesFound: 0,
         releasesInserted: 0,
         durationMs,
-        status: unchangedFallback ? "no_change" : "no_change",
+        status: "no_change",
       }),
     ]);
     return JSON.stringify({

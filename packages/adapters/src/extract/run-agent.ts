@@ -223,9 +223,8 @@ async function runWebFetchLoop(
       cache_control: { type: "ephemeral" },
     },
   ];
-  const guidanceText = withGuidance("", guidance);
-  if (guidanceText) {
-    systemPrompt.push({ type: "text", text: guidanceText });
+  if (guidance?.parseInstructions || guidance?.playbookContext) {
+    systemPrompt.push({ type: "text", text: withGuidance("", guidance) });
   }
 
   const messages: Anthropic.MessageParam[] = [

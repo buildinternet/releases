@@ -63,7 +63,6 @@ export async function extractFromBody(
     },
   ];
   if (isLarge) {
-    // Uncached: body size is per-fetch, doesn't benefit from caching.
     systemBlocks.push({ type: "text", text: buildBodyGuardrail(approxTokens) });
   }
 

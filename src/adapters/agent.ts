@@ -5,10 +5,10 @@
  * Anthropic `web_fetch` loop + Cloudflare rendering path.
  */
 
-import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
+import type { Adapter, FetchOptions, FetchResult } from "@releases/adapters/types";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta";
-import { runDirectFetchExtraction, runAgentExtraction, type MappedEntry } from "@releases/adapters/extract";
+import { runDirectFetchExtraction, runAgentExtraction } from "@releases/adapters/extract";
 import { buildLocalExtractDeps, loadGuidance } from "./extract-deps-local.js";
 import { logger } from "@buildinternet/releases-lib/logger";
 
@@ -38,7 +38,7 @@ export const agent: Adapter = {
         },
         deps,
       );
-      return { releases: toRawReleases(result.releases) };
+      return { releases: result.releases };
     }
 
     const result = await runAgentExtraction(
@@ -51,19 +51,6 @@ export const agent: Adapter = {
       },
       deps,
     );
-    return { releases: toRawReleases(result.releases) };
+    return { releases: result.releases };
   },
 };
-
-function toRawReleases(entries: MappedEntry[]): RawRelease[] {
-  return entries.map((e) => ({
-    title: e.title,
-    content: e.content,
-    url: e.url,
-    version: e.version,
-    publishedAt: e.publishedAt,
-    isBreaking: e.isBreaking,
-    type: e.type,
-    media: e.media,
-  }));
-}

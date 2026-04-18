@@ -543,7 +543,10 @@ sourceRoutes.patch("/sources/:slug/metadata", async (c) => {
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const merged = mergeSourceMetadata(src.metadata, patch);
-  await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, src.id));
+  const serialized = JSON.stringify(merged);
+  if (serialized !== (src.metadata ?? "{}")) {
+    await db.update(sources).set({ metadata: serialized }).where(eq(sources.id, src.id));
+  }
   return c.json({ metadata: merged });
 });
 
