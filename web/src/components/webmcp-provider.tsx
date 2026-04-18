@@ -1,0 +1,178 @@
+"use client";
+
+import { useEffect } from "react";
+
+interface ModelContextTool {
+  name: string;
+  title?: string;
+  description: string;
+  inputSchema?: Record<string, unknown>;
+  execute: (input: Record<string, unknown>, client?: unknown) => unknown | Promise<unknown>;
+  annotations?: { readOnlyHint?: boolean };
+}
+
+interface ModelContext {
+  registerTool: (tool: ModelContextTool, options?: { signal?: AbortSignal }) => void | Promise<void>;
+}
+
+declare global {
+  interface Navigator {
+    modelContext?: ModelContext;
+  }
+}
+
+export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.modelContext) return;
+
+    const ctrl = new AbortController();
+    const { signal } = ctrl;
+    const mc = navigator.modelContext;
+    const base = apiBaseUrl.replace(/\/$/, "");
+
+    async function apiFetch(path: string): Promise<unknown> {
+      const res = await fetch(`${base}${path}`, { signal });
+      if (!res.ok) throw new Error(`releases.sh API error: ${res.status} ${res.statusText}`);
+      return res.json();
+    }
+
+    mc.registerTool(
+      {
+        name: "search_releases",
+        title: "Search releases",
+        description:
+          "Search product releases, organizations, products, and sources indexed by releases.sh. Use this to find recent changes, features, or breaking changes across tracked companies.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: {
+              type: "string",
+              description: "Free-text search query (product name, feature, keyword).",
+            },
+            limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
+          },
+          required: ["query"],
+        },
+        annotations: { readOnlyHint: true },
+        execute: async (input) => {
+          const query = String(input.query ?? "").trim();
+          const limit = Number(input.limit ?? 20);
+          if (!query) throw new Error("`query` is required");
+          return apiFetch(`/v1/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+        },
+      },
+      { signal },
+    );
+
+    mc.registerTool(
+      {
+        name: "list_organizations",
+        title: "List organizations",
+        description: "List all organizations tracked in the releases.sh registry, with release counts and activity.",
+        inputSchema: { type: "object", properties: {} },
+        annotations: { readOnlyHint: true },
+        execute: () => apiFetch("/v1/orgs"),
+      },
+      { signal },
+    );
+
+    mc.registerTool(
+      {
+        name: "get_organization",
+        title: "Get organization",
+        description:
+          "Fetch detailed information about an organization by slug (e.g. 'vercel', 'anthropic'), including its sources, products, and AI-generated overview.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            slug: { type: "string", description: "Organization slug." },
+          },
+          required: ["slug"],
+        },
+        annotations: { readOnlyHint: true },
+        execute: async (input) => {
+          const slug = String(input.slug ?? "").trim();
+          if (!slug) throw new Error("`slug` is required");
+          return apiFetch(`/v1/orgs/${encodeURIComponent(slug)}`);
+        },
+      },
+      { signal },
+    );
+
+    mc.registerTool(
+      {
+        name: "get_source",
+        title: "Get changelog source",
+        description:
+          "Fetch a changelog source by slug, including its most recent releases. Use after `search_releases` or `list_organizations` to drill into a specific product.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            slug: { type: "string", description: "Source slug." },
+            page: { type: "integer", minimum: 1, default: 1 },
+            pageSize: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+          },
+          required: ["slug"],
+        },
+        annotations: { readOnlyHint: true },
+        execute: async (input) => {
+          const slug = String(input.slug ?? "").trim();
+          const page = Number(input.page ?? 1);
+          const pageSize = Number(input.pageSize ?? 20);
+          if (!slug) throw new Error("`slug` is required");
+          return apiFetch(`/v1/sources/${encodeURIComponent(slug)}?page=${page}&pageSize=${pageSize}`);
+        },
+      },
+      { signal },
+    );
+
+    mc.registerTool(
+      {
+        name: "get_release",
+        title: "Get release",
+        description: "Fetch a single release by ID (prefix 'rel_'), including its full content and metadata.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Release ID, e.g. 'rel_abc123'." },
+          },
+          required: ["id"],
+        },
+        annotations: { readOnlyHint: true },
+        execute: async (input) => {
+          const id = String(input.id ?? "").trim();
+          if (!id) throw new Error("`id` is required");
+          return apiFetch(`/v1/releases/${encodeURIComponent(id)}`);
+        },
+      },
+      { signal },
+    );
+
+    mc.registerTool(
+      {
+        name: "open_search_page",
+        title: "Open search page",
+        description:
+          "Navigate the current browser tab to the releases.sh search results page for a query. Use when the user wants to browse results visually on the site.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query." },
+          },
+          required: ["query"],
+        },
+        execute: async (input) => {
+          const query = String(input.query ?? "").trim();
+          if (!query) throw new Error("`query` is required");
+          window.location.assign(`/search?q=${encodeURIComponent(query)}`);
+          return { navigated: true, url: `/search?q=${encodeURIComponent(query)}` };
+        },
+      },
+      { signal },
+    );
+
+    return () => ctrl.abort();
+  }, [apiBaseUrl]);
+
+  return null;
+}
