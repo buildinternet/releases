@@ -70,8 +70,10 @@ releases tail --once --json              # single poll, JSON output (for scripts
 ```
 
 `tail` is the canonical command; `latest` is a retained alias for the one-shot
-listing. The endpoint is KV-cached (60s TTL) so follow-mode pollers and the
-public homepage feed share the same cached response.
+listing. The endpoint is KV-cached (5-minute TTL) so follow-mode pollers and
+the public homepage feed share the same cached response. The default 60s poll
+interval still works — most polls will be fast cache hits; new releases
+surface on the next TTL refresh.
 
 ### Inspect sources
 
