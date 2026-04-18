@@ -48,11 +48,18 @@ export async function pollAndFetch(env: FetchOneEnv & { DB: D1Database; CRON_ENA
     return pollOne(db, source, now);
   });
 
-  // Fetch phase: fetch changed feed/github sources
+  // Fetch phase: fetch changed feed/github sources, plus scrape sources
+  // that have a discovered feed (their fetchOne path prefers that feed over
+  // crawl+AI, so cost is identical to a native feed source).
   const fetchable = pollResults
     .filter((r) => r.changed)
     .map((r) => r.source)
-    .filter((s) => s.type === "feed" || s.type === "github");
+    .filter(
+      (s) =>
+        s.type === "feed" ||
+        s.type === "github" ||
+        (s.type === "scrape" && getSourceMeta(s).feedUrl != null),
+    );
 
   if (fetchable.length > 0) {
     console.log(`[cron] Fetching ${fetchable.length} changed source(s)`);
@@ -61,7 +68,14 @@ export async function pollAndFetch(env: FetchOneEnv & { DB: D1Database; CRON_ENA
     });
   }
 
-  const changedScrape = pollResults.filter((r) => r.changed).map((r) => r.source).filter((s) => s.type === "scrape" || s.type === "agent");
+  const changedScrape = pollResults
+    .filter((r) => r.changed)
+    .map((r) => r.source)
+    .filter(
+      (s) =>
+        s.type === "agent" ||
+        (s.type === "scrape" && getSourceMeta(s).feedUrl == null),
+    );
   if (changedScrape.length > 0) {
     console.log(`[cron] ${changedScrape.length} scrape/agent source(s) flagged for pickup`);
   }
