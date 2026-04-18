@@ -1,3 +1,7 @@
+// Parity note: a read-only subset of these tools is also exposed in-browser via
+// WebMCP in `web/src/components/webmcp-provider.tsx`, and over the remote MCP
+// server in `workers/mcp/src/tools.ts`. Keep all three surfaces in sync when
+// changing read-only tool names or signatures.
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import * as z from "zod/v4";

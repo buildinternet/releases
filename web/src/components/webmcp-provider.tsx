@@ -1,5 +1,16 @@
 "use client";
 
+// In-browser WebMCP provider. Registers a read-only subset of the Releases MCP
+// tools via `navigator.modelContext.registerTool()` so browser-side AI agents
+// can query the registry without setting up a remote connection.
+//
+// Parity note: the same tools are also exposed over the remote MCP server
+// (`workers/mcp/src/tools.ts`) and the local stdio MCP server (`src/mcp/server.ts`).
+// When you add, rename, or change the signature of a read-only MCP tool in
+// either of those, update this provider in the same PR so the three surfaces
+// don't drift. Write/admin tools intentionally stay remote-only — the browser
+// can't hold an API key safely.
+
 import { useEffect } from "react";
 
 interface ModelContextTool {

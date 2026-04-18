@@ -280,6 +280,12 @@ releases admin mcp serve
 
 **Gated** = requires `ENABLE_AI_TOOLS=true`. These tools make Anthropic API calls and are disabled by default. Set the env var in the worker config or local environment to enable them.
 
+#### In-browser (WebMCP)
+
+When a visitor loads `releases.sh` in a browser that implements the emerging [WebMCP](https://webmachinelearning.github.io/webmcp/) API (Chrome's Early Preview Program today), the web app registers a read-only subset of the MCP tools on `navigator.modelContext` so browser-side AI agents can query the registry without setting up a remote MCP connection. Currently exposed: `search_releases`, `list_organizations`, `get_organization`, `get_source`, `get_release`, plus an `open_search_page` navigation helper. Implementation: `web/src/components/webmcp-provider.tsx`.
+
+**Keep them in parity.** If you add, rename, or change a read-only tool in `workers/mcp/src/tools.ts` or the local stdio server in `src/mcp/`, update the WebMCP provider in the same PR. Write/admin tools stay remote-only — the browser can't hold an API key safely.
+
 ---
 
 ## Telemetry
