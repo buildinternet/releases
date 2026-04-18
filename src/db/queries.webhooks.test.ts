@@ -2,6 +2,8 @@ import { describe, it, expect, beforeAll } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import {
   insertWebhookSubscription,
@@ -12,10 +14,12 @@ import {
   deleteWebhookSubscription,
 } from "./queries.js";
 
+const migrationsFolder = join(dirname(fileURLToPath(import.meta.url)), "migrations");
+
 function makeDb() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite, { logger: false });
-  migrate(db, { migrationsFolder: "src/db/migrations" });
+  migrate(db, { migrationsFolder });
   return { sqlite, db };
 }
 
