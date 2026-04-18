@@ -18,6 +18,9 @@ export const newSourceChangelogChunkId = () => `scc_${nanoid()}`;
 export const newCorrelationId = () => `cid_${nanoid()}`;
 export const newCronRunId = () => `crun_${nanoid()}`;
 export const newTelemetryEventId = () => `tel_${nanoid()}`;
+export function newWebhookSubscriptionId(): string {
+  return `whk_${nanoid(16)}`;
+}
 
 export type EntityType = "release" | "source" | "org" | "product" | "unknown";
 
