@@ -86,8 +86,7 @@ export class ReleaseHub extends DurableObject {
       const limit = Math.max(1, Math.min(500, Number.isFinite(limitRaw) ? limitRaw : 500));
 
       const store = storageAsEventStore(this.ctx.storage);
-      const head = await currentSeq(store);
-      const oldest = await oldestSeq(store);
+      const [head, oldest] = await Promise.all([currentSeq(store), oldestSeq(store)]);
 
       const body: { events: ReleaseEvent[]; head: number; gap?: { oldestSeq: number } } = {
         events: [],

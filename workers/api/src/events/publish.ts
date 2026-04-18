@@ -3,6 +3,7 @@ import { buildReleaseEventPayloads, type InsertedReleaseRow } from "./build-even
 import { expandAndEnqueue } from "../webhooks/expand-and-enqueue.js";
 import { matchWebhookSubscriptions } from "../webhooks/queries.js";
 import { createDb } from "../db.js";
+import { newLocalEventId } from "@buildinternet/releases-core/id";
 import type { ReleaseEvent } from "./types.js";
 
 export interface PublishContext {
@@ -36,42 +37,40 @@ export async function publishReleaseEvents(
     }
   }
 
-  // (1) Hub publish.
-  let hubEvents: ReleaseEvent[] = [];
-  try {
-    const payloads = buildReleaseEventPayloads(ctx);
-    const res = await getReleaseHub(env).fetch(new Request("https://do/publish", {
-      method: "POST",
-      body: JSON.stringify({ events: payloads }),
-      headers: { "Content-Type": "application/json" },
-    }));
-    if (!res.ok) {
-      console.warn(`[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`);
-    } else {
-      // v1: build ReleaseEvent shape locally with placeholder seq/id.
-      // Consumer keys idempotency on release.id (X-Released-Event-Id), not on seq.
-      // If future cursor-resume needs DO-assigned seq, extend /publish to return events.
-      hubEvents = payloads.map((p, i) => ({
-        id: `local_${Date.now()}_${i}`,
-        seq: 0,
-        ts: Date.now(),
-        type: "release.created" as const,
-        release: p,
-      }));
-    }
-  } catch (err) {
-    console.warn(`[events] hub publish failed: ${err instanceof Error ? err.message : String(err)}`);
-  }
+  const payloads = buildReleaseEventPayloads(ctx);
+  // Consumer keys idempotency on release.id (X-Released-Event-Id), not on seq.
+  const ts = Date.now();
+  const events: ReleaseEvent[] = payloads.map((p) => ({
+    id: newLocalEventId(),
+    seq: 0,
+    ts,
+    type: "release.created" as const,
+    release: p,
+  }));
 
-  // (2) Webhook fan-out. Independent of hub publish success.
-  // Only runs when both bindings are present (production cron / batch path).
-  if (env.WEBHOOK_DELIVERY_QUEUE && env.DB) {
-    const db = createDb(env.DB);
-    await expandAndEnqueue({
-      events: hubEvents,
-      eventOwners,
-      loadSubscriptions: (orgIds) => matchWebhookSubscriptions(db, orgIds),
-      queue: env.WEBHOOK_DELIVERY_QUEUE,
-    });
-  }
+  const hubPublish = (async () => {
+    try {
+      const res = await getReleaseHub(env).fetch(new Request("https://do/publish", {
+        method: "POST",
+        body: JSON.stringify({ events: payloads }),
+        headers: { "Content-Type": "application/json" },
+      }));
+      if (!res.ok) {
+        console.warn(`[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`);
+      }
+    } catch (err) {
+      console.warn(`[events] hub publish failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  })();
+
+  const webhookFanout = env.WEBHOOK_DELIVERY_QUEUE && env.DB
+    ? expandAndEnqueue({
+        events,
+        eventOwners,
+        loadSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
+        queue: env.WEBHOOK_DELIVERY_QUEUE,
+      })
+    : Promise.resolve();
+
+  await Promise.all([hubPublish, webhookFanout]);
 }

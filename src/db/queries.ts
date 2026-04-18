@@ -2,7 +2,6 @@ import { eq, desc, gte, lt, and, or, sql, like, inArray, count, isNotNull } from
 import type { SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
-export type AnyDb = BunSQLiteDatabase<any> | DrizzleD1Database<any>;
 import { getDb } from "./connection.js";
 import {
   sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages, sourceChangelogFiles,
@@ -29,6 +28,8 @@ export type {
   SourceWithOrg, SourcePatchInput, ReleaseWithSource,
   StatsSummary, FetchLogEntry, LatestRelease, UsageBreakdownRow, UsageStatsResponse,
 };
+
+export type AnyDb = BunSQLiteDatabase<any> | DrizzleD1Database<any>;
 
 /** Reusable SQL condition: exclude disabled (hidden) sources. */
 const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
@@ -1840,7 +1841,7 @@ export async function updateWebhookSubscriptionSummary(
       .set({ lastSuccessAt: update.at, consecutiveFailures: 0 })
       .where(eq(webhookSubscriptions.id, id));
   } else {
-    // Read current value, increment, write back. Two queries; acceptable at v1 volume.
+    // Read-modify-write: not atomic. Concurrent retries may double-increment.
     const cur = await getWebhookSubscriptionById(db, id);
     if (!cur) return;
     await db.update(webhookSubscriptions)

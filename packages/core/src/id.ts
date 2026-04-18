@@ -21,6 +21,7 @@ export const newTelemetryEventId = () => `tel_${nanoid()}`;
 export function newWebhookSubscriptionId(): string {
   return `whk_${nanoid(16)}`;
 }
+export const newLocalEventId = () => `levt_${nanoid()}`;
 
 export type EntityType = "release" | "source" | "org" | "product" | "unknown";
 

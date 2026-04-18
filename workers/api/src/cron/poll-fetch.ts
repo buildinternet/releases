@@ -327,10 +327,8 @@ export async function fetchOne(
     const insertedIds = publishRows.map((r) => r.id);
 
     if (publishRows.length > 0 && env.RELEASE_HUB) {
-      // Fire-and-forget — publish errors are swallowed inside publishReleaseEvents.
-      // Cast because RELEASE_HUB is optional in FetchOneEnv but the guard above ensures it is set.
       await publishReleaseEvents(
-        env as Parameters<typeof publishReleaseEvents>[0],
+        { RELEASE_HUB: env.RELEASE_HUB, WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE, DB: env.DB },
         { src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id }, inserted: publishRows },
       );
     }
