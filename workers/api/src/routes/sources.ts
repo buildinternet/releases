@@ -13,7 +13,7 @@ import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
-import { getSourcesWithStats, getSourceReleasesPaginated, getSourceActivityBuckets, getSourceHeatmapData } from "../queries/sources.js";
+import { getSourcesWithStats, countSourcesForList, getSourceReleasesPaginated, getSourceActivityBuckets, getSourceHeatmapData } from "../queries/sources.js";
 import { notDisabled } from "../queries/shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
@@ -114,8 +114,16 @@ sourceRoutes.get("/sources", async (c) => {
   }
 
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+  const wantsEnvelope = c.req.query("envelope") === "true";
 
-  const rows = await getSourcesWithStats(db, whereClause, { limit, offset });
+  const [rows, totalItems] = await Promise.all([
+    getSourcesWithStats(db, whereClause, { limit, offset }),
+    wantsEnvelope ? countSourcesForList(db, whereClause) : Promise.resolve(null),
+  ]);
+
+  // Derive page from offset when caller pre-computed it — keeps the envelope's
+  // page/hasMore accurate for `?offset=...` callers that skip `?page=...`.
+  const effectivePage = offsetParam ? Math.floor(offset / limit) + 1 : page;
 
   const result: SourceWithOrg[] = rows.map((src) => ({
     id: src.id,
@@ -142,6 +150,22 @@ sourceRoutes.get("/sources", async (c) => {
     medianGapDays: src.median_gap_days ?? null,
     lastRetieredAt: src.last_retiered_at ?? null,
   }));
+
+  // TODO: share with `@buildinternet/releases-core/cli-contracts` once
+  // `cli-contracts.ts` is carved into the monorepo's `packages/core/`.
+  if (wantsEnvelope && totalItems != null) {
+    return c.json({
+      items: result,
+      pagination: {
+        page: effectivePage,
+        pageSize: limit,
+        returned: result.length,
+        totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
+        hasMore: effectivePage * limit < totalItems,
+      },
+    });
+  }
 
   return c.json(result);
 });

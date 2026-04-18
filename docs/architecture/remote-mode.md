@@ -69,6 +69,10 @@ Self-healing: a `feedUrl` that returns 4xx is tracked via `metadata.feed4xxStrea
 
 A second daily cron at 03:00 UTC (`workers/api/src/cron/retier.ts`) recomputes `fetchPriority` from the median `publishedAt` gap in the last 180 days: ≤14d → normal, 14-90d → low, >90d preserves the current tier. Never auto-pauses (manual vs automatic overrides aren't tracked yet), never touches sources that are already `paused`, and skips tier changes for sources with <3 releases of signal. The retier persists its signal on every source it evaluates via `sources.medianGapDays` (REAL; null when <3 releases of signal) and `sources.lastRetieredAt` (ISO timestamp); the API returns both on `GET /v1/sources`, and the dev-gated status dashboard (`web/src/app/status/`) renders them as a Cadence column that flags mismatches between cadence and tier (e.g. a paused source still shipping on a 5-day median). The `lastPolledAt` column tracks when each source was last polled by the cron.
 
+## List endpoints
+
+`GET /v1/sources` supports `?limit=<n>` (default 100, hard cap 500) and either `?offset=<n>` or `?page=<n>` (1-indexed). Returns a bare `SourceWithOrg[]` by default for backward compatibility. Pass `?envelope=true` to get a paginated shape: `{ items, pagination: { page, pageSize, returned, totalItems, totalPages, hasMore } }`. The envelope path runs one extra COUNT query against the same `whereClause`, so it's cheap but not free — callers that only need one page's data can stick with the bare array. The CLI's shared `@buildinternet/releases-core/cli-contracts` types (`ListResponse<T>`, `Pagination`) match this shape.
+
 ## Discovery guardrails
 
 The discovery worker checks `GET /api/sessions?status=running&type=onboard` before spawning a new session. Returns 409 if the same company (case-insensitive) is already being discovered, 429 if 5+ onboard sessions are running. Uses a service binding (`API_WORKER`) for Worker-to-Worker communication. The `GET /sessions` endpoint supports `?status=` and `?type=` query param filtering.
