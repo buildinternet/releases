@@ -1,15 +1,24 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Source, ReleaseType } from "@buildinternet/releases-core/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
-import { checkContentHash } from "../db/queries.js";
+import { checkContentHash, findOrg, getPlaybookForOrg } from "../db/queries.js";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
 import { sha256Hex } from "@releases/core/hash";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "../ai/client.js";
-import { sanitizeVersion, releaseItemProperties, releaseItemRequired } from "../ai/shared.js";
+import {
+  sanitizeVersion,
+  releaseItemProperties,
+  releaseItemRequired,
+  withGuidance,
+  type ExtractionGuidance,
+} from "../ai/shared.js";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
+import { getSourceMeta } from "@releases/adapters/source-meta";
+import { updateSourceMeta } from "./feed.js";
+import { extractNotesFromLegacyPlaybook } from "../ai/playbook.js";
 
 // ── Tool schema for structured extraction ────────────────────────────
 // Claude calls this when it's done fetching/exploring and has extracted
@@ -81,6 +90,7 @@ interface ExtractedEntry {
 
 async function runWebFetchLoop(
   sourceUrl: string,
+  guidance: ExtractionGuidance,
 ): Promise<{ entries: ExtractedEntry[]; totalInput: number; totalOutput: number }> {
   const client = getAnthropicClient();
   const model = config.agentModel();
@@ -97,6 +107,9 @@ async function runWebFetchLoop(
     extractReleasesTool,
   ];
 
+  // Static base prompt is cached; per-org/per-source guidance follows in a
+  // second uncached block so changing it doesn't bust the prompt cache for
+  // the whole org.
   const systemPrompt: Anthropic.TextBlockParam[] = [
     {
       type: "text",
@@ -104,6 +117,10 @@ async function runWebFetchLoop(
       cache_control: { type: "ephemeral" },
     },
   ];
+  const guidanceText = withGuidance("", guidance);
+  if (guidanceText) {
+    systemPrompt.push({ type: "text", text: guidanceText });
+  }
 
   const messages: Anthropic.MessageParam[] = [
     {
@@ -226,18 +243,24 @@ async function fetchViaCloudflare(url: string): Promise<string | null> {
   return fetchCloudflareMarkdown(url, accountId, apiToken);
 }
 
-async function extractFromMarkdown(
-  markdown: string,
-  sourceUrl: string,
+interface ExtractFromBodyOpts {
+  body: string;
+  systemPrompt: string;
+  /** Will be appended with `\n\n${truncated body}` — no need for a trailing newline. */
+  userMessage: string;
+  guidance?: ExtractionGuidance;
+}
+
+async function extractFromBody(
+  opts: ExtractFromBodyOpts,
 ): Promise<{ entries: ExtractedEntry[]; totalInput: number; totalOutput: number }> {
   const client = getAnthropicClient();
   const model = config.agentModel();
 
-  // Truncate very large pages to stay within context limits
   const maxChars = 400_000;
-  const content = markdown.length > maxChars
-    ? markdown.slice(0, maxChars) + "\n\n[Content truncated]"
-    : markdown;
+  const content = opts.body.length > maxChars
+    ? opts.body.slice(0, maxChars) + "\n\n[Content truncated]"
+    : opts.body;
 
   const response = await client.messages.create({
     model,
@@ -245,17 +268,14 @@ async function extractFromMarkdown(
     system: [
       {
         type: "text",
-        text: CLOUDFLARE_SYSTEM_PROMPT,
+        text: withGuidance(opts.systemPrompt, opts.guidance),
         cache_control: { type: "ephemeral" },
       },
     ],
     tools: [extractReleasesTool],
     tool_choice: { type: "tool", name: "extract_releases" },
     messages: [
-      {
-        role: "user",
-        content: `Extract all changelog/release entries from this page (source URL: ${sourceUrl}):\n\n${content}`,
-      },
+      { role: "user", content: `${opts.userMessage}\n\n${content}` },
     ],
   });
 
@@ -310,6 +330,122 @@ function mapEntries(entries: ExtractedEntry[], sourceUrl: string): RawRelease[] 
         type: e.type,
       };
     });
+}
+
+/**
+ * Best-effort load of an org's playbook notes for use as extra agent context.
+ * Returns null if the source has no org, no playbook, or the lookup fails.
+ */
+async function loadPlaybookContext(source: Source): Promise<string | null> {
+  if (!source.orgId) return null;
+  try {
+    const org = await findOrg(source.orgId);
+    if (!org) return null;
+    const playbook = await getPlaybookForOrg(org.id, org.slug);
+    if (!playbook) return null;
+    const notes = playbook.notes ?? extractNotesFromLegacyPlaybook(playbook.content);
+    return notes && notes.trim().length > 0 ? notes : null;
+  } catch (err) {
+    logger.debug(`Playbook load failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+    return null;
+  }
+}
+
+const DIRECT_FETCH_SYSTEM_PROMPT = `You are a changelog parser. The user message contains the raw body of a URL — it may be JSON, HTML, markdown, or another structured format. Extract individual release entries using the extract_releases tool.
+
+Identify the format from the content itself, then extract release entries. For JSON, navigate the structure to find the array of release/changelog items. For HTML, extract from the rendered content. For markdown, parse section headings.
+
+${EXTRACTION_RULES}`;
+
+async function fetchViaDirectFetch(
+  source: Source,
+  meta: ReturnType<typeof getSourceMeta>,
+  options: FetchOptions | undefined,
+  guidance: ExtractionGuidance,
+): Promise<FetchResult> {
+  const fetchUrl = meta.fetchUrl!;
+  const headers: Record<string, string> = {
+    "User-Agent": "releases/0.1 (+https://releases.sh)",
+    "Accept": "*/*",
+  };
+  if (!options?.full) {
+    if (meta.fetchEtag) headers["If-None-Match"] = meta.fetchEtag;
+    if (meta.fetchLastModified) headers["If-Modified-Since"] = meta.fetchLastModified;
+  }
+
+  logger.info(`Direct-fetch: GET ${fetchUrl}`);
+  const res = await fetch(fetchUrl, {
+    headers,
+    redirect: "follow",
+    signal: AbortSignal.timeout(30_000),
+  });
+
+  if (res.status === 304) {
+    logger.info("Direct-fetch: 304 Not Modified");
+    return { releases: [] };
+  }
+  if (!res.ok) {
+    throw new AdapterError("agent", `Direct-fetch returned ${res.status} ${res.statusText} for ${fetchUrl}`);
+  }
+
+  const body = await res.text();
+  if (!body.trim()) {
+    logger.warn("Direct-fetch returned empty body");
+    return { releases: [] };
+  }
+
+  logger.info(`Direct-fetch returned ${body.length.toLocaleString()} chars`);
+
+  // Persist new conditional-fetch headers BEFORE the content-hash short-circuit:
+  // a 200 response means the upstream's etag/last-modified changed (otherwise
+  // we'd have hit 304), so storing them lets the next request re-attempt 304
+  // instead of pulling the body again.
+  const newEtag = res.headers.get("etag") ?? undefined;
+  const newLastModified = res.headers.get("last-modified") ?? undefined;
+  const headerUpdates: { fetchEtag?: string; fetchLastModified?: string } = {};
+  if (newEtag) headerUpdates.fetchEtag = newEtag;
+  if (newLastModified) headerUpdates.fetchLastModified = newLastModified;
+  if (Object.keys(headerUpdates).length > 0) {
+    await updateSourceMeta(source, headerUpdates);
+  }
+
+  // Both checks are load-bearing: conditional headers don't catch upstream
+  // re-renders that produce identical content (common with SSG rebuilds —
+  // new etag, same payload).
+  const contentHash = sha256Hex(body);
+  if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
+    logger.info("No changes detected (content hash unchanged)");
+    return { releases: [] };
+  }
+
+  const result = await extractFromBody({
+    body,
+    systemPrompt: DIRECT_FETCH_SYSTEM_PROMPT,
+    userMessage: `Extract all changelog/release entries from this content (canonical source URL: ${source.url}, fetched from: ${fetchUrl}):`,
+    guidance,
+  });
+
+  await logUsage({
+    operation: "agent-ingest",
+    model: config.agentModel(),
+    inputTokens: result.totalInput,
+    outputTokens: result.totalOutput,
+    sourceSlug: source.slug,
+    releaseCount: result.entries.length,
+  });
+
+  logger.info(`Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`);
+
+  let releases = mapEntries(result.entries, source.url);
+  if (options?.since) {
+    releases = releases.filter((r) => !r.publishedAt || r.publishedAt >= options.since!);
+  }
+  if (options?.maxEntries) {
+    releases = releases.slice(0, options.maxEntries);
+  }
+
+  logger.info(`Extracted ${releases.length} release(s) via direct-fetch`);
+  return { releases };
 }
 
 // ── Pre-flight: detect JS-rendered SPAs ──────────────────────────────
@@ -369,14 +505,24 @@ export const agent: Adapter = {
 
     logger.info(`Running agent extraction for ${source.url} (model: ${config.agentModel()})...`);
 
-    let result: { entries: ExtractedEntry[]; totalInput: number; totalOutput: number };
+    const meta = getSourceMeta(source);
+    const playbookContext = await loadPlaybookContext(source);
+    if (playbookContext) {
+      logger.info(`Loaded org playbook (${playbookContext.length.toLocaleString()} chars) for agent context`);
+    }
+    const guidance: ExtractionGuidance = {
+      parseInstructions: meta.parseInstructions,
+      playbookContext: playbookContext ?? undefined,
+    };
 
-    // ── Route: JS SPA → Cloudflare, otherwise → web_fetch ─────
+    if (meta.fetchUrl) {
+      return fetchViaDirectFetch(source, meta, options, guidance);
+    }
+
+    let result: { entries: ExtractedEntry[]; totalInput: number; totalOutput: number };
     const jsRendered = await isJsRenderedPage(source.url);
 
     if (jsRendered) {
-      // Skip web_fetch entirely for JS SPAs — it can't render JS and
-      // the server-side dynamic filtering loop will waste minutes.
       const markdown = await fetchViaCloudflare(source.url);
       if (markdown) {
         logger.info(`Cloudflare returned ${markdown.length.toLocaleString()} chars of markdown`);
@@ -387,7 +533,12 @@ export const agent: Adapter = {
           return { releases: [] };
         }
 
-        result = await extractFromMarkdown(markdown, source.url);
+        result = await extractFromBody({
+          body: markdown,
+          systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
+          userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
+          guidance,
+        });
       } else {
         throw new AdapterError(
           "agent",
@@ -395,9 +546,8 @@ export const agent: Adapter = {
         );
       }
     } else {
-      // Static/SSR page — use server-side web_fetch with dynamic filtering
       try {
-        result = await runWebFetchLoop(source.url);
+        result = await runWebFetchLoop(source.url, guidance);
       } catch (err) {
         throw new AdapterError(
           "agent",
@@ -407,7 +557,6 @@ export const agent: Adapter = {
 
       logger.info(`web_fetch found ${result.entries.length} entries (${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens)`);
 
-      // If web_fetch got very few results, try Cloudflare as fallback
       if (result.entries.length < MIN_EXPECTED_ENTRIES) {
         logger.info(`Only ${result.entries.length} entries — trying Cloudflare fallback...`);
         const markdown = await fetchViaCloudflare(source.url);
@@ -421,7 +570,12 @@ export const agent: Adapter = {
           }
 
           try {
-            const cfResult = await extractFromMarkdown(markdown, source.url);
+            const cfResult = await extractFromBody({
+              body: markdown,
+              systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
+              userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
+              guidance,
+            });
             if (cfResult.entries.length > result.entries.length) {
               logger.info(`Cloudflare found ${cfResult.entries.length} entries (vs ${result.entries.length}) — using Cloudflare results`);
               result = {

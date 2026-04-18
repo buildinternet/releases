@@ -70,6 +70,27 @@ export function resolveFeedUpdate(input: ResolveFeedUpdateInput): ResolveFeedUpd
   return { ok: true, action: "none" };
 }
 
+export type ResolveFetchUrlInput = { fetchUrl?: string | boolean };
+export type ResolveFetchUrlResult =
+  | { action: "none" }
+  | { action: "remove" }
+  | { action: "set"; fetchUrl: string };
+
+/**
+ * Decide how to update a source's direct-fetch URL from `--fetch-url` /
+ * `--no-fetch-url`. Pure helper — no DB or I/O.
+ *
+ * Both set and remove also clear the conditional-fetch headers
+ * (`fetchEtag`, `fetchLastModified`) — the caller is expected to apply that
+ * cleanup. Stale headers tied to a different URL would otherwise produce
+ * misleading 304s on the next fetch.
+ */
+export function resolveFetchUrlUpdate(input: ResolveFetchUrlInput): ResolveFetchUrlResult {
+  if (input.fetchUrl === false) return { action: "remove" };
+  if (typeof input.fetchUrl === "string") return { action: "set", fetchUrl: input.fetchUrl };
+  return { action: "none" };
+}
+
 export function registerEditCommand(program: Command) {
   program
     .command("edit")
@@ -88,6 +109,8 @@ export function registerEditCommand(program: Command) {
     .option("--no-feed-url", "Remove stored feed URL")
     .option("--feed-type <feedType>", `Override inferred feed type (one of: ${VALID_FEED_TYPES.join(", ")}). Requires --feed-url.`)
     .option("--markdown-url <markdownUrl>", "Set the raw markdown URL for this source")
+    .option("--fetch-url <fetchUrl>", "Set a direct-fetch URL for the agent adapter (JSON, markdown, HTML — body is handed to the AI)")
+    .option("--no-fetch-url", "Remove the direct-fetch URL")
     .option("--parse-instructions <text>", "Set AI parsing instructions for this source")
     .option("--no-parse-instructions", "Remove AI parsing instructions")
     .option("--render", "Force headless browser rendering for this source")
@@ -120,7 +143,7 @@ Examples:
       name?: string; url?: string; type?: string; slug?: string;
       confirmSlugChange?: boolean;
       org?: string | boolean; product?: string | boolean; feedUrl?: string | boolean; feedType?: string; json?: boolean;
-      markdownUrl?: string; provider?: string; fetchMethod?: string;
+      markdownUrl?: string; fetchUrl?: string | boolean; provider?: string; fetchMethod?: string;
       parseInstructions?: string | boolean;
       render?: boolean;
       primary?: boolean;
@@ -257,6 +280,16 @@ Examples:
       if (opts.markdownUrl) {
         metaUpdates.markdownUrl = opts.markdownUrl;
         changes.push(`markdown URL → ${opts.markdownUrl}`);
+      }
+
+      // Handle --fetch-url / --no-fetch-url
+      const fetchResolution = resolveFetchUrlUpdate({ fetchUrl: opts.fetchUrl });
+      if (fetchResolution.action === "remove") {
+        Object.assign(metaUpdates, { fetchUrl: undefined, fetchEtag: undefined, fetchLastModified: undefined });
+        changes.push("fetch URL removed");
+      } else if (fetchResolution.action === "set") {
+        Object.assign(metaUpdates, { fetchUrl: fetchResolution.fetchUrl, fetchEtag: undefined, fetchLastModified: undefined });
+        changes.push(`fetch URL → ${fetchResolution.fetchUrl}`);
       }
 
       // Handle --provider

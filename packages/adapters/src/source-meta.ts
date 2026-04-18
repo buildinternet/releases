@@ -60,6 +60,12 @@ export interface SourceMetadata {
   headCheckUseless?: boolean;      // server never returns useful headers
   headCheckSkips?: number;         // times HEAD said unchanged and content hash agreed
   headCheckFalseNegatives?: number; // times HEAD said unchanged but content hash differed
+
+  // Direct-fetch fields (agent adapter): conditional GET this URL and hand
+  // the body to the AI, bypassing web_fetch / Cloudflare rendering.
+  fetchUrl?: string;
+  fetchEtag?: string;
+  fetchLastModified?: string;
 }
 
 /** Parse the JSON metadata blob from a source row. */
