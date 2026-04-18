@@ -67,6 +67,14 @@ describe("buildLatestCacheKey", () => {
   });
 });
 
+describe("LATEST_CACHE_TTL_SECONDS", () => {
+  // Pins the TTL so an accidental regression is caught — write volume on the
+  // KV namespace scales inversely with this value. See issue #333.
+  it("is 300 seconds", () => {
+    expect(LATEST_CACHE_TTL_SECONDS).toBe(300);
+  });
+});
+
 describe("withLatestCache", () => {
   it("is pass-through when kv is undefined", async () => {
     let calls = 0;

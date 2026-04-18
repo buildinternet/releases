@@ -14,7 +14,10 @@ export interface LatestCacheBinding {
   ): Promise<void>;
 }
 
-export const LATEST_CACHE_TTL_SECONDS = 60;
+// Sized to keep KV write volume bounded under sustained `tail -f` polling —
+// each unique cache key costs ~1 write per TTL window under steady traffic.
+// See issue #333 for the cost model.
+export const LATEST_CACHE_TTL_SECONDS = 300;
 
 const KEY_PREFIX = "latest:v1";
 

@@ -144,7 +144,7 @@ Chain successive requests by passing the returned `nextOffset` back as the next 
 
 ### `GET /v1/releases/latest`
 
-Unified feed of the most recent releases. Backs the CLI's `tail`/`latest` command and the public homepage activity feed. Responses are cached in KV for 60 seconds; `X-Cache: HIT|MISS` is set for observability.
+Unified feed of the most recent releases. Backs the CLI's `tail`/`latest` command and the public homepage activity feed. Responses are cached in KV for 5 minutes; `X-Cache: HIT|MISS` is set for observability.
 
 | Param | Description |
 | --- | --- |

@@ -19,13 +19,15 @@ with `source`), and `include_coverage` (default false, hides coverage-side
 rows).
 
 Responses are read-through-cached in the `LATEST_CACHE` KV namespace
-(`workers/api/src/lib/latest-cache.ts`) for 60 seconds. Cache keys are built
+(`workers/api/src/lib/latest-cache.ts`) for 300 seconds. Cache keys are built
 from the sorted filter params under prefix `latest:v1:`, keyed on resolved
 source/org IDs so two callers for the same entity (slug vs id) collapse onto
 the same entry. A cache miss runs the D1 query
 (`workers/api/src/queries/releases.ts`) and the write-back is fire-and-forget
 via `ctx.waitUntil`. The handler sets `X-Cache: HIT|MISS` for observability.
-TTL-only invalidation — stale-up-to-60s is acceptable for a feed.
+TTL-only invalidation — stale-up-to-5-minutes is acceptable for a feed whose
+upstream publishers push at most a few times per day. The TTL is sized to
+bound KV write volume under sustained `tail -f` polling (see issue #333).
 
 `tail --follow` polls this same cached endpoint with no extra params so every
 follow-poller collapses onto the shared cache entry. Novelty detection lives
