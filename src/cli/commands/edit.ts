@@ -4,7 +4,7 @@ import { findSource, findOrg, createOrg, updateSource, findProduct } from "../..
 import { sourceNotFound } from "../suggest.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { logger } from "@buildinternet/releases-lib/logger";
-import { updateSourceMeta } from "../../adapters/feed.js";
+import { updateSourceMeta, CLEARED_FEED_FIELDS } from "../../adapters/feed.js";
 
 const VALID_TYPES = ["github", "scrape", "feed", "agent"] as const;
 
@@ -264,10 +264,10 @@ Examples:
         process.exit(1);
       }
       if (feedResolution.action === "remove") {
-        Object.assign(metaUpdates, { feedUrl: undefined, feedType: undefined, feedDiscoveredAt: undefined, noFeedFound: true });
+        Object.assign(metaUpdates, CLEARED_FEED_FIELDS, { noFeedFound: true });
         changes.push("feed URL removed (feed discovery disabled)");
       } else if (feedResolution.action === "set") {
-        Object.assign(metaUpdates, {
+        Object.assign(metaUpdates, CLEARED_FEED_FIELDS, {
           feedUrl: feedResolution.feedUrl,
           feedType: feedResolution.feedType,
           feedDiscoveredAt: new Date().toISOString(),

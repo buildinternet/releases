@@ -8,7 +8,10 @@ import {
   headCheckFeed,
   getSourceMeta,
   type SourceMetadata,
+  FEED_4XX_INVALIDATE_THRESHOLD,
+  CLEARED_FEED_FIELDS,
 } from "@releases/adapters/feed";
+import { FeedHttpError } from "@releases/lib/errors";
 
 // Re-export the pure feed surface so existing `src/adapters/feed.js` consumers
 // keep working without reaching into @releases/adapters/feed directly.
@@ -104,12 +107,32 @@ export async function fetchViaFeed(
   }
 
   logger.info(`Fetching ${feedType} feed: ${feedUrl}`);
-  const { releases, etag, lastModified, contentLength } = await fetchAndParseFeed(
-    feedUrl,
-    feedType!,
-    options,
-    Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
-  );
+  let fetchResult;
+  try {
+    fetchResult = await fetchAndParseFeed(
+      feedUrl,
+      feedType!,
+      options,
+      Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
+    );
+  } catch (err) {
+    if (err instanceof FeedHttpError) {
+      const streak = (meta.feed4xxStreak ?? 0) + 1;
+      if (streak >= FEED_4XX_INVALIDATE_THRESHOLD) {
+        logger.warn(
+          `Feed URL invalidated after ${streak} consecutive 4xx (${err.status}) — clearing for rediscovery: ${feedUrl}`,
+        );
+        await updateSourceMeta(source, { ...CLEARED_FEED_FIELDS, noFeedFound: false });
+      } else {
+        logger.warn(
+          `Feed returned ${err.status} (${streak}/${FEED_4XX_INVALIDATE_THRESHOLD} before invalidation): ${feedUrl}`,
+        );
+        await updateSourceMeta(source, { feed4xxStreak: streak });
+      }
+    }
+    throw err;
+  }
+  const { releases, etag, lastModified, contentLength } = fetchResult;
 
   // Guard: if this is the first real fetch (no prior ETag) and we got 0 releases,
   // the feed URL is likely a non-standard format we can't parse. Clear it so the
@@ -146,6 +169,8 @@ export async function fetchViaFeed(
   if (etag) metaUpdates.feedEtag = etag;
   if (lastModified) metaUpdates.feedLastModified = lastModified;
   if (contentLength) metaUpdates.feedContentLength = contentLength;
+  // Reset 4xx streak on any successful (non-throwing) fetch.
+  if (meta.feed4xxStreak) metaUpdates.feed4xxStreak = undefined;
 
   if (Object.keys(metaUpdates).length > 0) {
     await updateSourceMeta(source, metaUpdates);

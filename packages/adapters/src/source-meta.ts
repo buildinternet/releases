@@ -17,6 +17,14 @@ export interface SourceMetadata {
   feedLastModified?: string;
   feedContentLength?: string;
   noFeedFound?: boolean;
+  /**
+   * Count of consecutive 4xx responses on the stored feedUrl. Reset on any
+   * non-4xx feed response (success or 5xx). When the streak hits the
+   * invalidation threshold, callers clear the feed metadata so rediscovery
+   * can run on the next fetch. 4xx is evidence the URL is gone (renamed,
+   * removed); 5xx is transient and ignored.
+   */
+  feed4xxStreak?: number;
 
   // Crawl fields
   crawlEnabled?: boolean;

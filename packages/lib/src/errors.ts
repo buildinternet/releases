@@ -39,3 +39,20 @@ export class CrawlJobError extends Error {
     this.name = "CrawlJobError";
   }
 }
+
+/**
+ * Thrown when a feed URL returns a 4xx response. Distinct from generic
+ * `Error` so callers can react: 4xx is evidence the URL is gone (renamed,
+ * removed) and warrants invalidating the stored feedUrl after a streak;
+ * 5xx is transient and should not.
+ */
+export class FeedHttpError extends Error {
+  constructor(
+    public status: number,
+    public feedUrl: string,
+    statusText: string,
+  ) {
+    super(`Feed fetch failed: ${status} ${statusText} (${feedUrl})`);
+    this.name = "FeedHttpError";
+  }
+}

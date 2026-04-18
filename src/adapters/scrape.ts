@@ -122,9 +122,14 @@ async function fetchViaCrawl(
     crawlPages.map((p) => `<!-- URL: ${p.url} -->\n${p.markdown}`).join("\n\n---\n\n");
 
   if (pages.length === 0 && allPages.length > 0) {
-    // Only got the index page — fall back to parsing it (better than nothing)
+    // Only got the index page — fall back to parsing it (better than nothing).
+    // Rewrite per-release URLs to per-version anchors so the UNIQUE(source_id, url)
+    // constraint doesn't collapse N parsed releases into 1. parseCrawlPages
+    // assigns the page URL to every release (correct for true multi-page crawls,
+    // wrong for single-page fallback).
     logger.info(`Crawl only returned the index page, parsing it directly`);
-    const releases = await parseCrawlPages(allPages, source.slug, options, meta.parseInstructions);
+    const parsed = await parseCrawlPages(allPages, source.slug, options, meta.parseInstructions);
+    const releases = parsed.map((r) => ({ ...r, url: toFragmentUrl(source.url, r.version, r.title) }));
     await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
     return { releases, rawContent: buildRawContent(allPages) };
   }
