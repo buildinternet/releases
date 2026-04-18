@@ -1,5 +1,5 @@
 import type { Source } from "@buildinternet/releases-core/schema";
-import { checkContentHash, getKnownReleasesForSource } from "../db/queries.js";
+import { checkContentHash, recordContentHash, getKnownReleasesForSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
@@ -176,7 +176,7 @@ async function fetchViaMarkdown(
   logger.info(`Got ${markdown.length.toLocaleString()} chars of markdown (no Cloudflare needed)`);
 
   const contentHash = sha256Hex(markdown);
-  if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
+  if (await checkContentHash(source, contentHash)) {
     logger.info("No changes detected (content hash unchanged)");
     return { releases: [] };
   }
@@ -186,6 +186,7 @@ async function fetchViaMarkdown(
   if (knownReleases.length > 0 && !options?.full) {
     const incremental = await parseIncremental(markdown, source.id, source.slug, knownReleases, meta.parseInstructions);
     if (incremental.boundaryFound) {
+      if (!options?.dryRun) await recordContentHash(source, contentHash);
       return {
         releases: incremental.releases.map((r) => ({
           title: r.title,
@@ -205,6 +206,7 @@ async function fetchViaMarkdown(
     onChunkComplete: options?.onParseProgress,
     parseInstructions: meta.parseInstructions,
   });
+  if (!options?.dryRun) await recordContentHash(source, contentHash);
   return {
     releases: parsed.map((r) => ({
       title: r.title,
@@ -258,7 +260,7 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
   logger.info(`Received ${markdown.length.toLocaleString()} chars of markdown`);
 
   const contentHash = sha256Hex(markdown);
-  if (await checkContentHash(source, contentHash, { dryRun: options?.dryRun })) {
+  if (await checkContentHash(source, contentHash)) {
     logger.info(`No changes detected for ${source.url} (content hash unchanged)`);
     // Only meaningful when poll has stored HEAD headers — tracks how many renders could be avoided
     if (meta.pageEtag || meta.pageLastModified) {
@@ -311,9 +313,13 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
       logger.warn(
         `AI parsing failed for ${source.url}: ${error instanceof Error ? error.message : String(error)}`,
       );
+      // Don't record content hash on parse failure — leaves the door open for
+      // a retry on the same body.
       return { releases: [], rawContent: markdown };
     }
   }
+
+  if (!options?.dryRun) await recordContentHash(source, contentHash);
 
   logger.info(`Parsed ${parsed.length} releases from ${source.url}`);
 

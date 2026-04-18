@@ -363,19 +363,33 @@ export async function isUrlExcluded(url: string, orgId?: string): Promise<{ excl
   return { excluded: false };
 }
 
-/** Returns true if content is unchanged (hash matches). Persists the new hash on change unless dryRun is set. */
+/**
+ * Returns true if the new content hash matches what's stored — i.e. the body
+ * is unchanged and downstream extraction can be skipped. Read-only: callers
+ * MUST call {@link recordContentHash} after a successful extraction so the
+ * next fetch can short-circuit. Splitting peek from commit means a failed
+ * extraction (e.g. AI hit max_tokens) leaves the hash unset, allowing a
+ * retry on the same body once the prompt is fixed.
+ */
 export async function checkContentHash(
   source: Source,
   contentHash: string,
-  options?: { dryRun?: boolean },
 ): Promise<boolean> {
   if (isRemoteMode()) return apiClient.checkContentHash(source, contentHash);
-  if (source.lastContentHash === contentHash) return true;
-  if (!options?.dryRun) {
-    const db = getDb();
-    await db.update(sources).set({ lastContentHash: contentHash }).where(eq(sources.id, source.id));
+  return source.lastContentHash === contentHash;
+}
+
+/** Persist the content hash so a subsequent fetch with the same body can
+ *  short-circuit via {@link checkContentHash}. Call ONLY after a successful
+ *  extraction — never on partial/failed runs (see {@link checkContentHash}
+ *  for why). */
+export async function recordContentHash(source: Source, contentHash: string): Promise<void> {
+  if (isRemoteMode()) {
+    await apiClient.recordContentHash(source, contentHash);
+    return;
   }
-  return false;
+  const db = getDb();
+  await db.update(sources).set({ lastContentHash: contentHash }).where(eq(sources.id, source.id));
 }
 
 // ── List sources with org name (for `list` command) ──

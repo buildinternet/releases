@@ -244,11 +244,18 @@ export async function getRecentReleasesByOrg(
 // ── Content hash ──
 
 export async function checkContentHash(source: Source, contentHash: string): Promise<boolean> {
-  const result = await apiFetch<{ unchanged: boolean } | null>(`/v1/sources/${source.slug}/content-hash`, {
+  const result = await apiFetch<{ unchanged: boolean } | null>(`/v1/sources/${source.slug}/content-hash?peek=true`, {
     method: "POST",
     body: JSON.stringify({ contentHash }),
   });
   return result?.unchanged ?? false;
+}
+
+export async function recordContentHash(source: Source, contentHash: string): Promise<void> {
+  await apiFetch(`/v1/sources/${source.slug}/content-hash`, {
+    method: "POST",
+    body: JSON.stringify({ contentHash }),
+  });
 }
 
 // ── Search ──
