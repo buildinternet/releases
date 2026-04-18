@@ -56,7 +56,9 @@
     { "pattern": "api.releases.sh", "custom_domain": true }
   ],
   "triggers": {
-    "crons": ["0 * * * *"]
+    // Hourly: poll feed sources and fetch changed ones.
+    // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
+    "crons": ["0 * * * *", "0 3 * * *"]
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
   "unsafe": {
