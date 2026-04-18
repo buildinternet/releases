@@ -18,7 +18,7 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Edit source | `releases admin source edit <identifier> [--primary] [--priority <p>]` | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
 | Remove source | `releases admin source remove <slug> [--ignore --reason <reason>]` | `remove_source` with identifier (ID or slug) param |
 | Fetch releases | `releases admin source fetch <slug> [--dry-run] [--max <n>]` | `fetch_source` with identifier (ID or slug) param |
-| Get latest releases | `releases latest [slug] --json [--org <org>]` | `get_latest_releases` with source, organization, limit params |
+| Get latest releases | `releases tail [slug] --json [--org <org>]` | `get_latest_releases` with source, organization, limit params |
 | Search releases | `releases search <query> --json` | `search_releases` with query, limit params |
 | Evaluate URL | `releases admin discovery evaluate <url> --json` | `evaluate_url` with url param |
 | Add org | `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` | `manage_org` action "add" with name, domain, description, category, tags |

@@ -67,6 +67,9 @@ export type Env = {
     // path (see src/lib/embedding-cache.ts). Absent → every cold search
     // re-calls the embedding provider, matching pre-cache behavior.
     EMBED_CACHE?: KVNamespace;
+    // Optional KV namespace caching the GET /v1/releases/latest response
+    // (see src/lib/latest-cache.ts). Absent → every request hits D1.
+    LATEST_CACHE?: KVNamespace;
   };
 };
 
@@ -139,19 +142,21 @@ v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true 
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true }));
 
-// Route modules
+// Route modules — releaseRoutes is mounted before sourceRoutes so the static
+// `/releases/latest` handler (in releases.ts) wins over the parametric
+// `/releases/:id` handler (in sources.ts) regardless of router internals.
 v1.route("/", sessionRoutes);
 v1.route("/", statsRoutes);
 v1.route("/", orgRoutes);
 v1.route("/", sitemapRoutes);
 v1.route("/", productRoutes);
+v1.route("/", releaseRoutes);
 v1.route("/", sourceRoutes);
 v1.route("/", searchRoutes);
 v1.route("/", relatedRoutes);
 v1.route("/", fetchLogRoutes);
 v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
-v1.route("/", releaseRoutes);
 v1.route("/summaries", summaries);
 v1.route("/overview", overview);
 v1.route("/playbook", playbook);

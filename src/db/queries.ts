@@ -645,7 +645,18 @@ export async function getLatestReleases(opts: {
     if (orgSourceIds.length === 0) return [];
   }
 
-  let query = db
+  const coverageFilter = opts.includeCoverage ? undefined : notCoverage;
+  const baseWhere = and(eq(releases.suppressed, false), notDisabled, coverageFilter);
+  let whereClause;
+  if (opts.slug) {
+    whereClause = and(eq(sources.slug, opts.slug), baseWhere);
+  } else if (orgSourceIds) {
+    whereClause = and(inArray(releases.sourceId, orgSourceIds), baseWhere);
+  } else {
+    whereClause = baseWhere;
+  }
+
+  const rows = await db
     .select({
       id: releases.id,
       title: releases.title,
@@ -658,20 +669,10 @@ export async function getLatestReleases(opts: {
     })
     .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .where(whereClause)
     .orderBy(desc(releases.publishedAt))
     .limit(opts.count);
 
-  const coverageFilter = opts.includeCoverage ? undefined : notCoverage;
-
-  if (opts.slug) {
-    query = query.where(and(eq(sources.slug, opts.slug), eq(releases.suppressed, false), coverageFilter)) as typeof query;
-  } else if (orgSourceIds) {
-    query = query.where(and(inArray(releases.sourceId, orgSourceIds), eq(releases.suppressed, false), coverageFilter)) as typeof query;
-  } else {
-    query = query.where(and(eq(releases.suppressed, false), notDisabled, coverageFilter)) as typeof query;
-  }
-
-  const rows = await query;
   return rows.map((r) => ({
     ...r,
     media: (() => { try { return JSON.parse(r.media || "[]"); } catch { return []; } })(),

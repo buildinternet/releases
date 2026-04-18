@@ -22,7 +22,7 @@ Turn changelog data into competitive intelligence by analyzing release patterns 
 |-----------|-----|------------|
 | Check existing sources | `releases list --query <company> --json` | `list_sources` with query param |
 | Fetch releases | `releases admin source fetch <slug> --max 50` | `fetch_source` with identifier (ID or slug) |
-| Get latest releases | `releases latest <slug> --json` | `get_latest_releases` with source/org and limit |
+| Get latest releases | `releases tail <slug> --json` | `get_latest_releases` with source/org and limit |
 | Search releases | `releases search <query> --json` | `search_releases` with query |
 | Summarize | `releases summary <slug> --json` | (not available as typed tool) |
 | Compare | `releases compare <slugA> <slugB> --json` | (not available as typed tool) |
@@ -73,5 +73,5 @@ Ask the user where to save the analysis, or use your best judgment based on the 
 
 - Focus on what companies shipped. If a source has noisy data (blog posts mixed in, missing dates), work around it silently. Don't include source quality commentary in the report unless a company had to be substantially excluded.
 - Fill data gaps with web fetches. List sources to get release URLs, then WebFetch to spot-check pages for missing dates, versions, or feature details.
-- For velocity counting, get the latest releases with dates — CLI: `releases latest <slug> --json`, typed tool: `get_latest_releases`.
+- For velocity counting, get the latest releases with dates — CLI: `releases tail <slug> --json`, typed tool: `get_latest_releases`.
 - AI-powered summarize and compare are only available via CLI (`releases summary`, `releases compare`). When using typed tools, synthesize manually from raw release data.

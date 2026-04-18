@@ -10,6 +10,28 @@ When `RELEASED_API_URL` is set, the CLI routes data operations through the API W
 
 GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE) require a Bearer token. The `publicReadAuthMiddleware` in `workers/api/src/middleware/auth.ts` handles this split. Admin-only routes (sessions, fetch-log, usage-log, discover, blocked-urls, aliases) require auth for all methods.
 
+## Cached latest-releases endpoint
+
+`GET /v1/releases/latest` is the unified feed endpoint behind CLI `tail`/`latest`
+and (eventually) the public homepage activity feed. Params: `count` (1..100,
+default 10), `source` (slug or id), `org` (slug or id, mutually exclusive
+with `source`), and `include_coverage` (default false, hides coverage-side
+rows).
+
+Responses are read-through-cached in the `LATEST_CACHE` KV namespace
+(`workers/api/src/lib/latest-cache.ts`) for 60 seconds. Cache keys are built
+from the sorted filter params under prefix `latest:v1:`, keyed on resolved
+source/org IDs so two callers for the same entity (slug vs id) collapse onto
+the same entry. A cache miss runs the D1 query
+(`workers/api/src/queries/releases.ts`) and the write-back is fire-and-forget
+via `ctx.waitUntil`. The handler sets `X-Cache: HIT|MISS` for observability.
+TTL-only invalidation — stale-up-to-60s is acceptable for a feed.
+
+`tail --follow` polls this same cached endpoint with no extra params so every
+follow-poller collapses onto the shared cache entry. Novelty detection lives
+client-side via an in-memory seen-id set, not a server-side `since` filter —
+a per-client `since` would fork the cache key and defeat the point.
+
 ## Rate limiting
 
 Unauthenticated public reads can be throttled per-IP via `publicRateLimitMiddleware` (`workers/api/src/middleware/rate-limit.ts`). It's a Cloudflare Workers Rate Limiting binding (`PUBLIC_RATE_LIMITER`) gated by the `RATE_LIMIT_ENABLED` var — off by default so initial deploys change nothing. Flip the var to `"true"` in `workers/api/wrangler.jsonc` and redeploy to activate. Authenticated callers (valid Bearer token) bypass entirely, so the CLI and MCP server in remote mode are never throttled. Limit values live on the binding in `wrangler.jsonc` — keep them out of user-facing docs. State is per-colo (CF constraint), not global. Wired only onto the public-read route group in `workers/api/src/index.ts`; admin routes are already key-gated.

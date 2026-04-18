@@ -1,8 +1,8 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import Table from "cli-table3";
-import { findSource, findOrg, findProduct, getRelease, getLatestReleases, type LatestRelease } from "../../db/queries.js";
+import { findSource, findOrg, findProduct, getRelease, getLatestReleases } from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
+import { renderLatestReleasesTable } from "../render/releases-table.js";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 
 export function registerShowCommand(program: Command) {
@@ -148,33 +148,7 @@ async function renderOrg(
     console.log(chalk.dim(`Latest ${releases.length} release${releases.length === 1 ? "" : "s"}:`));
     console.log(renderLatestReleasesTable(releases));
   }
-  console.log(chalk.dim(`\n  More: "releases latest --org ${org.slug}" · "releases search <query> --org ${org.slug}"`));
-}
-
-function renderLatestReleasesTable(rows: LatestRelease[]): string {
-  const table = new Table({
-    head: [
-      chalk.cyan("ID"),
-      chalk.cyan("Source"),
-      chalk.cyan("Title"),
-      chalk.cyan("Version"),
-      chalk.cyan("Published"),
-    ],
-  });
-  for (const row of rows) {
-    table.push([
-      chalk.dim(row.id.slice(0, 12)),
-      `${stripAnsi(row.sourceName)} ${chalk.dim(`(${row.sourceSlug})`)}`,
-      truncate(stripAnsi(row.title), 50),
-      row.version ? stripAnsi(row.version) : chalk.dim("—"),
-      row.publishedAt?.slice(0, 10) ?? chalk.dim("—"),
-    ]);
-  }
-  return table.toString();
-}
-
-function truncate(s: string, max: number): string {
-  return s.length > max ? s.slice(0, max - 1) + "…" : s;
+  console.log(chalk.dim(`\n  More: "releases tail --org ${org.slug}" · "releases search <query> --org ${org.slug}"`));
 }
 
 async function renderProduct(product: { id: string; name: string; slug: string; orgId: string; url: string | null; category: string | null }, opts: { json?: boolean }) {
@@ -190,6 +164,6 @@ async function renderProduct(product: { id: string; name: string; slug: string; 
   console.log(`  Org:       ${org ? `${org.name} (${org.slug})` : product.orgId}`);
   console.log(`  URL:       ${product.url ?? chalk.dim("—")}`);
   console.log(`  Category:  ${product.category ?? chalk.dim("—")}`);
-  const orgHint = org ? `releases latest --org ${org.slug}` : `releases latest --org <org-slug>`;
+  const orgHint = org ? `releases tail --org ${org.slug}` : `releases tail --org <org-slug>`;
   console.log(chalk.dim(`\n  More: "${orgHint}" for recent releases · "releases list --product ${product.slug}" for sources`));
 }

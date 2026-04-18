@@ -89,15 +89,15 @@ export default function ExamplesPage() {
             panes={[
               {
                 label: "default",
-                command: "releases latest claude-code --count 2",
+                command: "releases tail claude-code --count 2",
                 output: latestDefault,
-                tokens: paneTokens("releases latest claude-code --count 2", latestDefault),
+                tokens: paneTokens("releases tail claude-code --count 2", latestDefault),
               },
               {
                 label: "JSON",
-                command: "releases latest claude-code --count 2 --json",
+                command: "releases tail claude-code --count 2 --json",
                 output: latestJson,
-                tokens: paneTokens("releases latest claude-code --count 2 --json", latestJson),
+                tokens: paneTokens("releases tail claude-code --count 2 --json", latestJson),
               },
             ]}
           />

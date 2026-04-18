@@ -84,7 +84,7 @@ Examples:
         console.log(label("Status", source.isHidden ? "disabled" : "active"));
         console.log(label("Fetch Priority", source.fetchPriority));
         console.log("");
-        console.log(chalk.dim(`  More: "releases latest ${source.slug}" for recent releases · "releases admin source fetch-log ${source.slug}" for fetch history`));
+        console.log(chalk.dim(`  More: "releases tail ${source.slug}" for recent releases · "releases admin source fetch-log ${source.slug}" for fetch history`));
         console.log("");
         return;
       }
@@ -170,6 +170,6 @@ Examples:
       }
 
       console.log(table.toString());
-      console.log(chalk.dim(`\n  More: "releases show <slug>" for source details · "releases latest <slug>" for recent releases`));
+      console.log(chalk.dim(`\n  More: "releases show <slug>" for source details · "releases tail <slug>" for recent releases`));
     });
 }

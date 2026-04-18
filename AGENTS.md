@@ -78,6 +78,11 @@ Worker tsconfigs map `@releases/lib/*` to `../../src/lib/*` for files not yet ca
 
 ```bash
 releases show <id|slug>         # Inspect any entity by ID (rel_/src_/org_/prod_) or slug
+releases tail                   # Latest releases across all sources (alias: latest)
+releases tail <slug> --count 5  # Latest releases from one source
+releases tail -f                # Follow new releases as they arrive (polls every 60s)
+releases tail -f --interval 30  # Same, with a 30s interval
+releases tail --once --json     # Single poll, JSON output (for scripts/cron)
 releases list <slug> --json     # Inspect a single source
 releases list --json --compact  # Lightweight JSON (id, slug, name, type, org, date)
 releases list --json --limit 20 --page 2  # Paginated JSON output

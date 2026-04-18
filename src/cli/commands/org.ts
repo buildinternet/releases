@@ -269,7 +269,7 @@ Examples:
 
       const moreHints = [
         `"releases org overview ${found.slug}" for the full overview`,
-        `"releases latest --org ${found.slug}" for recent releases`,
+        `"releases tail --org ${found.slug}" for recent releases`,
         `"releases show <src-slug>" for a specific source`,
       ];
       console.log(chalk.dim(`\n  More: ${moreHints.join(" · ")}`));

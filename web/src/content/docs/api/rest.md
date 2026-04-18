@@ -142,6 +142,19 @@ Chain successive requests by passing the returned `nextOffset` back as the next 
 
 ## Releases
 
+### `GET /v1/releases/latest`
+
+Unified feed of the most recent releases. Backs the CLI's `tail`/`latest` command and the public homepage activity feed. Responses are cached in KV for 60 seconds; `X-Cache: HIT|MISS` is set for observability.
+
+| Param | Description |
+| --- | --- |
+| `count` | Max releases to return (1-100, default 10) |
+| `source` | Source slug or id to filter by (mutually exclusive with `org`) |
+| `org` | Org slug or id to filter by (mutually exclusive with `source`) |
+| `include_coverage` | Include coverage-side rows (default `false` — hides duplicate-launch coverage items) |
+
+Coverage-side releases are hidden by default so the feed shows one entry per launch. `source` and `org` both accept either a slug or an id (`src_…`, `org_…`).
+
 ### `GET /v1/releases/:id`
 
 Get full release details by ID, including content and media assets.

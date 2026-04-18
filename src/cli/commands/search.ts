@@ -130,7 +130,7 @@ Examples:
         console.log(chalk.yellow("No results found."));
       } else {
         console.log(chalk.dim(`${totalResults} result(s) found.`));
-        console.log(chalk.dim(`  More: "releases show <id|slug>" to drill into any result · "releases latest --org <slug>" for an org's releases`));
+        console.log(chalk.dim(`  More: "releases show <id|slug>" to drill into any result · "releases tail --org <slug>" for an org's releases`));
       }
     });
 }

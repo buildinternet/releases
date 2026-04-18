@@ -42,13 +42,15 @@ Also available as `releases admin source list` for discoverability within admin 
 
 ## Latest releases
 
-The `latest` command shows the most recent releases, optionally filtered by source or org.
+The `tail` command shows the most recent releases and can optionally poll for new ones as they arrive. `latest` is retained as an alias for the one-shot listing.
 
 ```bash
-releases latest                          # Across all sources
-releases latest claude-code              # From one source
-releases latest --org vercel --count 20  # Latest 20 from an org
-releases latest --json                   # JSON output
+releases tail                            # Across all sources
+releases tail claude-code                # From one source
+releases tail --org vercel --count 20    # Latest 20 from an org
+releases tail -f                         # Follow new releases (polls every 60s)
+releases tail -f --interval 30           # Follow with a 30s poll interval
+releases tail --json                     # JSON output
 ```
 
 ## Search

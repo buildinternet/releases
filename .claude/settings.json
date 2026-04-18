@@ -4,6 +4,7 @@
       "Bash(npx tsc:*)",
       "Bash(bun test)",
       "Bash(releases list:*)",
+      "Bash(releases tail:*)",
       "Bash(releases latest:*)",
       "Bash(releases show:*)",
       "Bash(releases admin source list:*)",
