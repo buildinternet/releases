@@ -7,7 +7,7 @@ import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { buildChangelogResponse, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@releases/api/types.js";
-import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url } from "../utils.js";
+import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
@@ -698,6 +698,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const page = parseInt(c.req.query("page") ?? "1", 10);
   const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
+  const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
   const db = createDb(c.env.DB);
 
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
@@ -726,7 +727,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
         .limit(1);
 
   const [releaseRows, orgRows, metricsRows, earliestRows, summaryRows, changelogExistsRows, latestByDateRows] = await Promise.all([
-    getSourceReleasesPaginated(db, src.id, pageSize, offset),
+    getSourceReleasesPaginated(db, src.id, pageSize, offset, { includeCoverage }),
     orgQuery,
     db.select({
       total: count(),

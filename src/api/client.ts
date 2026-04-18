@@ -256,11 +256,12 @@ export async function checkContentHash(source: Source, contentHash: string): Pro
 export async function unifiedSearch(
   query: string,
   limit: number,
-  opts?: { org?: string; mode?: "lexical" | "semantic" | "hybrid" },
+  opts?: { org?: string; mode?: "lexical" | "semantic" | "hybrid"; includeCoverage?: boolean },
 ): Promise<UnifiedSearchResponse> {
   const params = new URLSearchParams({ q: query, limit: String(limit) });
   if (opts?.org) params.set("org", opts.org);
   if (opts?.mode) params.set("mode", opts.mode);
+  if (opts?.includeCoverage) params.set("include_coverage", "true");
   return apiFetch<UnifiedSearchResponse>(`/v1/search?${params}`);
 }
 
@@ -391,9 +392,11 @@ function byPublishedAtDesc(a: LatestRelease, b: LatestRelease): number {
 async function collectReleasesFromSources(
   slugs: string[],
   pageSize: number,
+  includeCoverage = false,
 ): Promise<LatestRelease[]> {
+  const coverageParam = includeCoverage ? "&include_coverage=true" : "";
   const results = await Promise.all(
-    slugs.map(async (slug) => ({ slug, data: await apiFetch<SourceReleaseResponse>(`/v1/sources/${slug}?pageSize=${pageSize}`) })),
+    slugs.map(async (slug) => ({ slug, data: await apiFetch<SourceReleaseResponse>(`/v1/sources/${slug}?pageSize=${pageSize}${coverageParam}`) })),
   );
   const all: LatestRelease[] = [];
   for (const { slug, data: srcData } of results) {
@@ -418,9 +421,12 @@ export async function getLatestReleases(opts: {
   slug?: string;
   orgSlug?: string;
   count: number;
+  includeCoverage?: boolean;
 }): Promise<LatestRelease[]> {
+  const coverageParam = opts.includeCoverage ? "&include_coverage=true" : "";
+
   if (opts.slug) {
-    const data = await apiFetch<SourceReleaseResponse>(`/v1/sources/${opts.slug}?pageSize=${opts.count}`);
+    const data = await apiFetch<SourceReleaseResponse>(`/v1/sources/${opts.slug}?pageSize=${opts.count}${coverageParam}`);
     if (!data) return [];
     return data.releases.map((r) => ({
       id: r.id,
@@ -446,7 +452,7 @@ export async function getLatestReleases(opts: {
         source: { slug: string; name: string; type: string };
       }>;
       pagination: { nextCursor: string | null; limit: number };
-    }>(`/v1/orgs/${opts.orgSlug}/releases?limit=${opts.count}`);
+    }>(`/v1/orgs/${opts.orgSlug}/releases?limit=${opts.count}${coverageParam}`);
     if (!data) return [];
     return data.releases.map((r) => ({
       id: r.id,
@@ -461,7 +467,7 @@ export async function getLatestReleases(opts: {
   }
 
   const sourcesData = await apiFetch<Array<{ slug: string; name: string }>>("/v1/sources");
-  const all = await collectReleasesFromSources(sourcesData.slice(0, 10).map((s) => s.slug), opts.count);
+  const all = await collectReleasesFromSources(sourcesData.slice(0, 10).map((s) => s.slug), opts.count, opts.includeCoverage);
   return all.sort(byPublishedAtDesc).slice(0, opts.count);
 }
 

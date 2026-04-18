@@ -26,6 +26,8 @@ export type {
 /** Reusable SQL condition: exclude disabled (hidden) sources. */
 const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
 
+const notCoverage = sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`;
+
 export async function findSource(identifier: string): Promise<Source | null> {
   if (identifier.startsWith("src_")) {
     if (isRemoteMode()) return apiClient.findSource(identifier);
@@ -617,6 +619,7 @@ export async function getLatestReleases(opts: {
   slug?: string;
   orgSlug?: string;
   count: number;
+  includeCoverage?: boolean;
 }): Promise<LatestRelease[]> {
   if (isRemoteMode()) return apiClient.getLatestReleases(opts);
 
@@ -652,12 +655,14 @@ export async function getLatestReleases(opts: {
     .orderBy(desc(releases.publishedAt))
     .limit(opts.count);
 
+  const coverageFilter = opts.includeCoverage ? undefined : notCoverage;
+
   if (opts.slug) {
-    query = query.where(and(eq(sources.slug, opts.slug), eq(releases.suppressed, false))) as typeof query;
+    query = query.where(and(eq(sources.slug, opts.slug), eq(releases.suppressed, false), coverageFilter)) as typeof query;
   } else if (orgSourceIds) {
-    query = query.where(and(inArray(releases.sourceId, orgSourceIds), eq(releases.suppressed, false))) as typeof query;
+    query = query.where(and(inArray(releases.sourceId, orgSourceIds), eq(releases.suppressed, false), coverageFilter)) as typeof query;
   } else {
-    query = query.where(and(eq(releases.suppressed, false), notDisabled)) as typeof query;
+    query = query.where(and(eq(releases.suppressed, false), notDisabled, coverageFilter)) as typeof query;
   }
 
   const rows = await query;
@@ -1076,13 +1081,13 @@ export async function getCoverageForReleaseIds(
 export async function unifiedSearch(
   query: string,
   limit: number,
-  opts?: { org?: string; mode?: "lexical" | "semantic" | "hybrid" },
+  opts?: { org?: string; mode?: "lexical" | "semantic" | "hybrid"; includeCoverage?: boolean },
 ): Promise<import("../api/types.js").UnifiedSearchResponse> {
   if (isRemoteMode()) {
     return apiClient.unifiedSearch(query, limit, opts);
   }
   const { unifiedSearchLocal } = await import("./fts.js");
-  return { query, ...unifiedSearchLocal(query, limit, 0) };
+  return { query, ...unifiedSearchLocal(query, limit, 0, { includeCoverage: opts?.includeCoverage }) };
 }
 
 // ── Source CRUD helpers ──

@@ -118,6 +118,7 @@ export async function searchReleases(
     type?: ReleaseType;
     limit?: number;
     mode?: SearchReleasesMode;
+    include_coverage?: boolean;
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   // ^ MCP's own hybrid helper lives at workers/mcp/src/lib/search-hybrid.ts
@@ -125,6 +126,7 @@ export async function searchReleases(
   const maxResults = params.limit ?? 20;
   const typeFilter = params.type;
   const mode: SearchReleasesMode = params.mode ?? "hybrid";
+  const includeCoverage = params.include_coverage === true;
 
   let orgSourceIds: string[] | undefined;
   if (params.organization) {
@@ -157,6 +159,7 @@ export async function searchReleases(
       sourceId,
       orgSourceIds,
       type: typeFilter,
+      includeCoverage,
     });
 
     if (result.hits.length === 0) {
@@ -225,6 +228,7 @@ export async function searchReleases(
     WHERE releases_fts MATCH ${params.query}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      ${includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`}
       ${sourceId ? sql`AND r.source_id = ${sourceId}` : sql``}
       ${orgSourceIds ? sql`AND r.source_id IN (${sql.join(orgSourceIds.map((id) => sql`${id}`), sql`, `)})` : sql``}
       ${typeFilter ? sql`AND r.type = ${typeFilter}` : sql``}
@@ -329,9 +333,10 @@ export async function searchRegistry(
 
 export async function getLatestReleases(
   db: D1Db,
-  params: { product?: string; organization?: string; type?: ReleaseType; count?: number },
+  params: { product?: string; organization?: string; type?: ReleaseType; count?: number; include_coverage?: boolean },
 ): Promise<ToolResult> {
   const maxCount = params.count ?? 10;
+  const includeCoverage = params.include_coverage === true;
 
   let sourceFilter: string | undefined;
   if (params.product) {
@@ -352,12 +357,19 @@ export async function getLatestReleases(
     if (orgSourceIds.length === 0) return text("No sources found for this organization.");
   }
 
-  const conditions: ReturnType<typeof eq>[] = [];
+  // Default filters match the web/API read paths so MCP readers see the same canonical-only feed.
+  const conditions = [
+    eq(releases.suppressed, false),
+    sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
+  ];
+  if (!includeCoverage) {
+    conditions.push(sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`);
+  }
   if (sourceFilter) conditions.push(eq(releases.sourceId, sourceFilter));
   if (orgSourceIds) conditions.push(inArray(releases.sourceId, orgSourceIds));
   if (params.type) conditions.push(eq(releases.type, params.type));
 
-  const query = db
+  const rows = await db
     .select({
       id: releases.id,
       title: releases.title,
@@ -366,30 +378,23 @@ export async function getLatestReleases(
       content: releases.content,
       contentSummary: releases.contentSummary,
       publishedAt: releases.publishedAt,
-      sourceId: releases.sourceId,
+      sourceName: sources.name,
     })
-    .from(releases);
-
-  const filtered = conditions.length > 0 ? query.where(and(...conditions)) : query;
-  const rows = await filtered.orderBy(desc(releases.publishedAt)).limit(maxCount);
+    .from(releases)
+    .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .where(and(...conditions))
+    .orderBy(desc(releases.publishedAt))
+    .limit(maxCount);
 
   if (rows.length === 0) return text("No releases found.");
 
-  const uniqueSourceIds = [...new Set(rows.map((r) => r.sourceId))];
-  const sourceRows = await db
-    .select({ id: sources.id, name: sources.name })
-    .from(sources)
-    .where(inArray(sources.id, uniqueSourceIds));
-  const sourceMap = new Map(sourceRows.map((s) => [s.id, s.name]));
-
   const result = rows
     .map((r) => {
-      const sourceName = sourceMap.get(r.sourceId) ?? "Unknown";
       const preview = (r.contentSummary || r.content).slice(0, 500);
       const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
       return [
         titleLine,
-        `Source: ${sourceName} | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
+        `Source: ${r.sourceName} | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
         preview,
       ].join("\n");
     })

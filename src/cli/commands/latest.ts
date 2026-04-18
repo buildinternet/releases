@@ -16,14 +16,16 @@ export function registerLatestCommand(program: Command) {
     .argument("[slug]", "Source slug to filter by")
     .option("-c, --count <n>", "Number of releases to show", "10")
     .option("--org <identifier>", "Filter to an organization")
+    .option("--include-coverage", "Include releases that are coverage of another (hidden by default)")
     .option("--json", "Output as JSON")
     .addHelpText("after", `
 Examples:
   releases latest                         Latest releases across all sources
   releases latest my-source               Latest releases from one source
   releases latest --org acme --count 20   Latest 20 releases from an org
+  releases latest --include-coverage      Include duplicate-launch coverage entries
   releases latest --json                  Output as JSON`)
-    .action(async (slug: string | undefined, opts: { count: string; org?: string; json?: boolean }) => {
+    .action(async (slug: string | undefined, opts: { count: string; org?: string; includeCoverage?: boolean; json?: boolean }) => {
       const count = parseInt(opts.count, 10);
 
       if (slug) {
@@ -42,7 +44,7 @@ Examples:
         orgSlug = org.slug;
       }
 
-      const rows = await getLatestReleases({ slug, orgSlug, count });
+      const rows = await getLatestReleases({ slug, orgSlug, count, includeCoverage: opts.includeCoverage });
 
       if (rows.length === 0) {
         if (opts.json) {

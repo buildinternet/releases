@@ -16,11 +16,18 @@ export interface FtsResult {
   rank: number;
 }
 
-export function searchReleases(query: string, limit = 20): FtsResult[] {
+export function searchReleases(
+  query: string,
+  limit = 20,
+  opts: { includeCoverage?: boolean } = {},
+): FtsResult[] {
   if (isRemoteMode()) {
     throw new Error("searchReleases() is not available in remote mode — use searchReleasesRemote() from queries.ts instead");
   }
   const db = getDb();
+  const coverageFilter = opts.includeCoverage
+    ? sql``
+    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
   try {
     const results = db.all<FtsResult>(sql`
       SELECT
@@ -35,6 +42,7 @@ export function searchReleases(query: string, limit = 20): FtsResult[] {
       JOIN releases r ON r.rowid = releases_fts.rowid
       WHERE releases_fts MATCH ${query}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
+        ${coverageFilter}
       ORDER BY rank
       LIMIT ${limit}
     `);
@@ -96,12 +104,20 @@ function hydrateLocalRelease(row: RawLocalReleaseRow): SearchReleaseHit {
   };
 }
 
-export function unifiedSearchLocal(query: string, limit: number, offset: number): UnifiedSearchLocalResult {
+export function unifiedSearchLocal(
+  query: string,
+  limit: number,
+  offset: number,
+  opts: { includeCoverage?: boolean } = {},
+): UnifiedSearchLocalResult {
   if (isRemoteMode()) {
     throw new Error("unifiedSearchLocal() is not available in remote mode");
   }
   const db = getDb();
   const pattern = `%${query}%`;
+  const coverageFilter = opts.includeCoverage
+    ? sql``
+    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
 
   const orgs = db.all(sql`
     SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
@@ -151,6 +167,7 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
       WHERE releases_fts MATCH ${query}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+        ${coverageFilter}
       ORDER BY rank LIMIT ${limit} OFFSET ${offset}
     `) as RawLocalReleaseRow[];
   } catch (err) {
@@ -179,6 +196,7 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
         LEFT JOIN products p ON p.id = s.product_id
         WHERE (r.suppressed IS NULL OR r.suppressed = 0)
           AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+          ${coverageFilter}
           AND (${sql.join(conditions, sql` OR `)})
         ORDER BY r.published_at DESC LIMIT ${limit}
       `) as RawLocalReleaseRow[];
