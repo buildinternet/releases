@@ -8,7 +8,7 @@ import {
   findOrg, getRecentReleasesByOrg,
 } from "../../db/queries.js";
 import { DECIDED_BY_CLI, decidedByAgent } from "../../db/schema-coverage.js";
-import { groupReleases, type GroupingCandidate } from "../../ai/grouping.js";
+import { groupReleases, rowsToCandidates, writeCoverageClusters } from "../../ai/grouping.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { normalizeReleaseId } from "@buildinternet/releases-core/id";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
@@ -411,14 +411,7 @@ Examples:
         return;
       }
 
-      const candidates: GroupingCandidate[] = rows.map((r) => ({
-        id: r.id,
-        title: r.title,
-        version: r.version,
-        publishedAt: r.publishedAt,
-        sourceSlug: r.sourceSlug,
-        content: r.contentSummary || r.content,
-      }));
+      const candidates = rowsToCandidates(rows);
 
       if (!opts.json) {
         console.log(chalk.dim(`Grouping ${candidates.length} release(s) for ${org.slug} (window: ${windowDays}d)...`));
@@ -460,19 +453,7 @@ Examples:
 
       if (opts.dryRun) return;
 
-      const decidedBy = decidedByAgent(result.model);
-      let written = 0;
-      for (const cluster of groupedClusters) {
-        for (const coverageId of cluster.coverageIds) {
-          await linkReleaseCoverage({
-            canonicalId: cluster.canonicalId,
-            coverageId,
-            reason: cluster.reason,
-            decidedBy,
-          });
-          written++;
-        }
-      }
+      const written = await writeCoverageClusters(result.clusters, decidedByAgent(result.model));
 
       if (!opts.json && written > 0) {
         console.log();

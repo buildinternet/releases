@@ -447,6 +447,7 @@ Examples:
       const total = targetSources.length;
       const fetchStartTime = performance.now();
       const orgsNeedingKnowledgeUpdate = new Set<string>();
+      const orgsNeedingGrouping = new Set<string>();
       const showProgress = !opts.json && total > 1 && effectiveConcurrency > 1;
       const showSummary = !opts.json && total > 1;
 
@@ -860,22 +861,16 @@ Examples:
             }
           }
 
-          // Ingest-time release_coverage grouping. Always fail-open — the
-          // helper swallows its own errors and returns a `skipped` reason
-          // rather than throwing, so a flaky agent can never block ingest.
-          if (inserted > 0 && source.orgId && !opts.dryRun && opts.grouping !== false) {
-            const grouping = await runIngestTimeGrouping(
-              source.orgId,
-              `Ingest-time grouping after ${source.slug} fetch`,
-            );
-            if (grouping.written > 0) {
-              progressSession(`${source.name}: linked ${grouping.written} coverage row(s)`);
-            }
-          }
-
           // Defer knowledge page regeneration until after all sources are processed
           if (inserted > 0 && source.orgId && opts.summarize !== false && !opts.skipOverview) {
             orgsNeedingKnowledgeUpdate.add(source.orgId);
+          }
+
+          // Defer ingest-time release_coverage grouping so multiple fetches
+          // against the same org collapse into one agent call on a single
+          // candidate set, rather than N racing calls on overlapping sets.
+          if (inserted > 0 && source.orgId && !opts.dryRun && opts.grouping !== false) {
+            orgsNeedingGrouping.add(source.orgId);
           }
 
           if (!opts.json && !showProgress) {
@@ -1007,6 +1002,18 @@ Examples:
           await regenerateOrgOverview(org, orgSources);
         } catch (err) {
           logger.warn(`Knowledge page update failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
+
+      for (const orgId of orgsNeedingGrouping) {
+        try {
+          const written = await runIngestTimeGrouping(
+            orgId,
+            `Ingest-time grouping after ${orgId} fetch wave`,
+          );
+          if (written > 0) progressSession(`Linked ${written} coverage row(s) for org ${orgId}`);
+        } catch (err) {
+          logger.warn(`Ingest-time grouping failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`);
         }
       }
 

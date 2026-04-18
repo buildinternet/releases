@@ -1,94 +1,42 @@
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { logger } from "@buildinternet/releases-lib/logger";
 import { getRecentReleasesByOrg, linkReleaseCoverage } from "../db/queries.js";
-import { groupReleases, type GroupingCandidate } from "../ai/grouping.js";
+import {
+  groupReleases,
+  rowsToCandidates,
+  writeCoverageClusters,
+} from "../ai/grouping.js";
 import { decidedByAgent } from "../db/schema-coverage.js";
 
-export interface IngestGroupingDeps {
-  /** Override the candidate fetcher (defaults to {@link getRecentReleasesByOrg}). */
-  fetchCandidates?: typeof getRecentReleasesByOrg;
-  /** Override the grouping agent (defaults to {@link groupReleases}). */
-  groupReleases?: typeof groupReleases;
-  /** Override the coverage writer (defaults to {@link linkReleaseCoverage}). */
-  linkCoverage?: typeof linkReleaseCoverage;
-  /** Lookback window for the same-org candidate set. Defaults to 7 days. */
-  windowDays?: number;
-}
+/** Same-org lookback for ingest-time candidate selection. */
+const INGEST_GROUPING_WINDOW_DAYS = 7;
 
-export interface IngestGroupingResult {
-  /** Number of release_coverage rows successfully written. */
-  written: number;
-  /** Reason ingest grouping was skipped or failed. Absent on full success. */
-  skipped?: string;
+export interface IngestGroupingDeps {
+  fetchCandidates?: typeof getRecentReleasesByOrg;
+  groupReleases?: typeof groupReleases;
+  linkCoverage?: typeof linkReleaseCoverage;
 }
 
 /**
- * Run release_coverage grouping immediately after a fetch's inserts.
+ * Cluster an org's recent releases and write any non-singleton coverage rows.
  *
- * Pulls the org's recent ±N-day window as the candidate set, asks the grouping
- * agent to cluster them, and writes one `release_coverage` row per non-singleton
- * coverage_id. Always fail-open: any error is logged and returned via `skipped`.
- * Ingest must never block on grouping.
+ * Intended for post-fetch calls — the caller owns the try/catch so a flaky
+ * agent can't block ingest. Returns the number of `release_coverage` rows
+ * persisted. Throws on any underlying error (candidate fetch, agent call, or
+ * link write).
  */
 export async function runIngestTimeGrouping(
   orgId: string,
   context: string,
   deps: IngestGroupingDeps = {},
-): Promise<IngestGroupingResult> {
+): Promise<number> {
   const fetchCandidates = deps.fetchCandidates ?? getRecentReleasesByOrg;
   const grouping = deps.groupReleases ?? groupReleases;
   const link = deps.linkCoverage ?? linkReleaseCoverage;
-  const windowDays = deps.windowDays ?? 7;
 
-  let rows: Awaited<ReturnType<typeof getRecentReleasesByOrg>>;
-  try {
-    rows = await fetchCandidates(orgId, daysAgoIso(windowDays));
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.warn(`ingest-grouping: candidate fetch failed for ${orgId}: ${msg}`);
-    return { written: 0, skipped: msg };
-  }
+  const rows = await fetchCandidates(orgId, daysAgoIso(INGEST_GROUPING_WINDOW_DAYS));
+  if (rows.length < 2) return 0;
 
-  if (rows.length < 2) return { written: 0, skipped: "candidates < 2" };
-
-  const candidates: GroupingCandidate[] = rows.map((r) => ({
-    id: r.id,
-    title: r.title,
-    version: r.version,
-    publishedAt: r.publishedAt,
-    sourceSlug: r.sourceSlug,
-    content: r.contentSummary || r.content,
-  }));
-
-  let result: Awaited<ReturnType<typeof groupReleases>>;
-  try {
-    result = await grouping(candidates, { context });
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.warn(`ingest-grouping: agent call failed for ${orgId}: ${msg}`);
-    return { written: 0, skipped: msg };
-  }
-
-  const decidedBy = decidedByAgent(result.model);
-  let written = 0;
-  for (const cluster of result.clusters) {
-    if (cluster.coverageIds.length === 0) continue;
-    for (const coverageId of cluster.coverageIds) {
-      try {
-        await link({
-          canonicalId: cluster.canonicalId,
-          coverageId,
-          reason: cluster.reason,
-          decidedBy,
-        });
-        written++;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        logger.warn(`ingest-grouping: link failed (${cluster.canonicalId} ← ${coverageId}): ${msg}`);
-        return { written, skipped: msg };
-      }
-    }
-  }
-
-  return { written };
+  const candidates = rowsToCandidates(rows);
+  const result = await grouping(candidates, { context });
+  return writeCoverageClusters(result.clusters, decidedByAgent(result.model), link);
 }
