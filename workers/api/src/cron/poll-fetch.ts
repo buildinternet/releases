@@ -4,8 +4,15 @@ import { sources, releases, fetchLog, sourceChangelogFiles, sourceChangelogChunk
 import { countTokensSafe } from "@releases/core/tokens";
 import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@buildinternet/releases-core/schema";
-import { headCheckFeed, fetchAndParseFeed, getSourceMeta } from "@releases/adapters/feed.js";
+import {
+  headCheckFeed,
+  fetchAndParseFeed,
+  getSourceMeta,
+  FEED_4XX_INVALIDATE_THRESHOLD,
+  CLEARED_FEED_FIELDS,
+} from "@releases/adapters/feed.js";
 import type { SourceMetadata } from "@releases/adapters/feed.js";
+import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { normalizeMediaUrl } from "@releases/lib/media-url.js";
@@ -244,11 +251,11 @@ export async function fetchOne(
       );
       rawReleases = result.releases;
 
-      // Update feed headers in metadata
       const metaUpdates: Partial<SourceMetadata> = {};
       if (result.etag) metaUpdates.feedEtag = result.etag;
       if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
       if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
+      if (meta.feed4xxStreak) metaUpdates.feed4xxStreak = undefined;
       if (Object.keys(metaUpdates).length > 0) {
         const merged = { ...meta, ...metaUpdates };
         await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id));
@@ -379,6 +386,27 @@ export async function fetchOne(
       status: "error",
       error: err instanceof Error ? err.message : String(err),
     }).catch(() => {});
+
+    // 4xx on the stored feedUrl: track it via feed4xxStreak rather than the
+    // generic consecutiveErrors backoff. Backoff would push the next retry
+    // out by hours and slow self-healing — we'd rather keep the normal cron
+    // cadence until the streak hits the invalidation threshold.
+    if (err instanceof FeedHttpError) {
+      const streak = (meta.feed4xxStreak ?? 0) + 1;
+      if (streak >= FEED_4XX_INVALIDATE_THRESHOLD) {
+        console.warn(`[cron] Feed URL invalidated for ${source.slug} after ${streak} consecutive 4xx (${err.status}) — clearing for rediscovery`);
+        const cleared = { ...meta, ...CLEARED_FEED_FIELDS, noFeedFound: false };
+        await db.update(sources).set({
+          metadata: JSON.stringify(cleared),
+          consecutiveErrors: 0,
+          nextFetchAfter: null,
+        }).where(eq(sources.id, source.id)).catch(() => {});
+      } else {
+        const merged = { ...meta, feed4xxStreak: streak };
+        await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id)).catch(() => {});
+      }
+      return { releasesFound: 0, releasesInserted: 0, durationMs: Date.now() - start, status: "error" as const, error: err.message };
+    }
 
     const newErrors = (source.consecutiveErrors ?? 0) + 1;
     const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);

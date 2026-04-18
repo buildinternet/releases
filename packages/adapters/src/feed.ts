@@ -1,9 +1,36 @@
 import type { RawRelease, FetchOptions } from "@releases/adapters/types";
 import { logger } from "@buildinternet/releases-lib/logger";
+import { FeedHttpError } from "@releases/lib/errors";
 
 // Re-export source-meta helpers so consumers can pull everything feed-related
 // from a single path.
 export { getSourceMeta, type SourceMetadata } from "@releases/adapters/source-meta";
+import type { SourceMetadata } from "@releases/adapters/source-meta";
+
+/**
+ * Count of consecutive 4xx responses on a stored feedUrl after which we
+ * invalidate it. Picked conservatively: at the cron's 4-hour normal tier,
+ * 5 strikes ≈ 20 hours — enough that a brief misconfiguration won't flush
+ * the URL, but short enough that a renamed/removed feed self-heals well
+ * before someone notices manually.
+ */
+export const FEED_4XX_INVALIDATE_THRESHOLD = 5;
+
+/**
+ * The metadata fields cleared together when feed state is reset — either
+ * after persistent 4xx invalidation or via `--no-feed-url`. Centralized so
+ * adding a new feed-tracking field doesn't silently leak past cleanup and
+ * produce stale 304s on the next discovered feed.
+ */
+export const CLEARED_FEED_FIELDS: Partial<SourceMetadata> = {
+  feedUrl: undefined,
+  feedType: undefined,
+  feedDiscoveredAt: undefined,
+  feedEtag: undefined,
+  feedLastModified: undefined,
+  feedContentLength: undefined,
+  feed4xxStreak: undefined,
+};
 
 // ── Feed types ──────────────────────────────────────────────────────
 
@@ -53,6 +80,17 @@ export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | nu
   return null;
 }
 
+/**
+ * Cap on bytes we read while looking for `</head>`. Modern static-site
+ * generators (Gatsby, Next, Astro) inline preload directives, font-face
+ * declarations, JSON-LD blobs, and critical CSS into `<head>` — pushing
+ * past 100 KB on rich SEO setups is routine. PostHog's Gatsby-built
+ * changelog page sits at 619 KB before `</head>`. The previous 32 KB cap
+ * silently dropped the alternate-link tag and forced fallback to
+ * well-known-path probing, which mis-discovered a 404 route as the feed.
+ */
+const HEAD_DISCOVERY_BYTE_CAP = 512_000;
+
 async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null> {
   try {
     const res = await fetch(pageUrl, {
@@ -68,7 +106,7 @@ async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null>
       const { done, value } = await reader.read();
       if (done) break;
       html += decoder.decode(value, { stream: true });
-      if (html.includes("</head>") || html.length > 32_000) {
+      if (html.includes("</head>") || html.length > HEAD_DISCOVERY_BYTE_CAP) {
         reader.cancel();
         break;
       }
@@ -170,6 +208,9 @@ export async function fetchAndParseFeed(
   if (res.status === 304) return { releases: [] };
 
   if (!res.ok) {
+    if (res.status >= 400 && res.status < 500) {
+      throw new FeedHttpError(res.status, feedUrl, res.statusText);
+    }
     throw new Error(`Feed fetch failed: ${res.status} ${res.statusText}`);
   }
 
