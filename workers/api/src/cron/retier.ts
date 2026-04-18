@@ -13,8 +13,9 @@ const LOW_MAX_DAYS = 90;
 // Window of history used to measure cadence.
 const LOOKBACK_DAYS = 180;
 
-// Minimum releases in the lookback to retier at all. Brand-new sources
-// without enough signal keep whatever tier they were added with.
+// Minimum releases in the lookback to produce a cadence signal. Sources
+// below the threshold persist `medianGapDays = null` and are never
+// retiered — brand-new sources keep whatever tier they were added with.
 const MIN_RELEASES_FOR_SIGNAL = 3;
 
 type FetchPriority = "normal" | "low" | "paused";
@@ -29,6 +30,7 @@ export async function retierSources(
   }
 
   const db = drizzle(env.DB);
+  const now = new Date().toISOString();
   const cutoff = new Date(Date.now() - LOOKBACK_DAYS * 86400_000).toISOString();
 
   const recent = await db
@@ -46,38 +48,47 @@ export async function retierSources(
     else datesBySource.set(r.sourceId, [r.publishedAt]);
   }
 
-  const candidates = await db
+  // Pull every source, including paused ones — we persist cadence for all
+  // so the dashboard can flag "this paused source still has a heartbeat."
+  // Only non-paused sources are considered for tier changes below.
+  const allSources = await db
     .select({
       id: sources.id,
       slug: sources.slug,
       fetchPriority: sources.fetchPriority,
     })
-    .from(sources)
-    .where(sql`${sources.fetchPriority} != 'paused'`);
+    .from(sources);
 
-  let changed = 0;
-  let skipped = 0;
-  for (const src of candidates) {
+  let retiered = 0;
+  let withSignal = 0;
+  for (const src of allSources) {
     const dates = datesBySource.get(src.id) ?? [];
-    if (dates.length < MIN_RELEASES_FOR_SIGNAL) {
-      skipped++;
-      continue;
-    }
-    const medianGap = computeMedianGapDays(dates);
-    const target = classifyTier(medianGap, src.fetchPriority as FetchPriority);
-    if (target !== src.fetchPriority) {
-      await db
-        .update(sources)
-        .set({ fetchPriority: target })
-        .where(eq(sources.id, src.id));
+    const medianGap = dates.length >= MIN_RELEASES_FOR_SIGNAL
+      ? computeMedianGapDays(dates)
+      : null;
+    if (medianGap != null) withSignal++;
+
+    const current = src.fetchPriority as FetchPriority;
+    const target = medianGap != null && current !== "paused"
+      ? classifyTier(medianGap, current)
+      : current;
+
+    const updates: { fetchPriority?: AutoTier | FetchPriority; medianGapDays: number | null; lastRetieredAt: string } = {
+      medianGapDays: medianGap,
+      lastRetieredAt: now,
+    };
+    if (target !== current) {
+      updates.fetchPriority = target;
       console.log(
-        `[retier] ${src.slug}: ${src.fetchPriority} → ${target} (median gap ${medianGap.toFixed(1)}d, ${dates.length} releases)`,
+        `[retier] ${src.slug}: ${current} → ${target} (median gap ${medianGap!.toFixed(1)}d, ${dates.length} releases)`,
       );
-      changed++;
+      retiered++;
     }
+
+    await db.update(sources).set(updates).where(eq(sources.id, src.id));
   }
   console.log(
-    `[retier] done: ${candidates.length} evaluated, ${changed} retiered, ${skipped} below-signal-threshold`,
+    `[retier] done: ${allSources.length} evaluated, ${retiered} retiered, ${withSignal} with cadence signal`,
   );
 }
 

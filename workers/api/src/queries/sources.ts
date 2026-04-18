@@ -18,6 +18,8 @@ export type SourceListRow = {
   consecutive_no_change: number | null;
   consecutive_errors: number | null;
   next_fetch_after: string | null;
+  median_gap_days: number | null;
+  last_retiered_at: string | null;
   org_slug: string | null;
   org_name: string | null;
   product_slug: string | null;
