@@ -23,7 +23,7 @@
  * All progress/logs go to stderr. Only --json output goes to stdout.
  */
 
-import { discoverFeed, fetchAndParseFeed } from "../packages/adapters/src/feed.js";
+import { type DiscoveredFeed, discoverFeed, fetchAndParseFeed } from "../packages/adapters/src/feed.js";
 
 type SourceRow = {
   slug: string;
@@ -32,6 +32,8 @@ type SourceRow = {
   url: string;
   metadata?: string | null;
 };
+
+type Candidate = SourceRow & { parsedMetadata: Record<string, unknown> };
 
 type Verdict = {
   slug: string;
@@ -59,17 +61,27 @@ function log(msg: string): void {
   process.stderr.write(`${msg}\n`);
 }
 
-async function listCandidates(): Promise<SourceRow[]> {
+function parseMetadata(raw: string | null | undefined): Record<string, unknown> {
+  try {
+    return JSON.parse(raw ?? "{}");
+  } catch {
+    return {};
+  }
+}
+
+async function listCandidates(): Promise<Candidate[]> {
   const res = await fetch(`${API_URL}/v1/sources?limit=500`);
   if (!res.ok) throw new Error(`list failed: ${res.status}`);
   const rows = (await res.json()) as SourceRow[];
-  return rows.filter((r) => {
-    if (r.type !== "scrape") return false;
-    if (slugFilter && r.slug !== slugFilter) return false;
-    let meta: Record<string, unknown> = {};
-    try { meta = JSON.parse(r.metadata ?? "{}"); } catch { /* ignore */ }
-    return meta.feedUrl == null;
-  });
+  const candidates: Candidate[] = [];
+  for (const r of rows) {
+    if (r.type !== "scrape") continue;
+    if (slugFilter && r.slug !== slugFilter) continue;
+    const parsedMetadata = parseMetadata(r.metadata);
+    if (parsedMetadata.feedUrl != null) continue;
+    candidates.push({ ...r, parsedMetadata });
+  }
+  return candidates;
 }
 
 async function verifyFeed(
@@ -79,7 +91,7 @@ async function verifyFeed(
   try {
     const { releases } = await fetchAndParseFeed(feedUrl, feedType, { maxEntries: 5 });
     if (releases.length === 0) return { ok: false, reason: "feed parsed but returned 0 entries" };
-    const titles = releases.slice(0, 3).map((r) => r.title).filter(Boolean) as string[];
+    const titles = releases.slice(0, 3).map((r) => r.title);
     return { ok: true, titles };
   } catch (err) {
     return { ok: false, reason: err instanceof Error ? err.message : String(err) };
@@ -102,9 +114,10 @@ async function patchSource(slug: string, patchedMetadata: Record<string, unknown
   }
 }
 
-async function processOne(row: SourceRow): Promise<Verdict> {
+async function processOne(row: Candidate): Promise<Verdict> {
   const base: Verdict = { slug: row.slug, name: row.name, pageUrl: row.url, status: "no-feed" };
-  let discovered;
+
+  let discovered: DiscoveredFeed | null;
   try {
     discovered = await discoverFeed(row.url);
   } catch (err) {
@@ -132,10 +145,8 @@ async function processOne(row: SourceRow): Promise<Verdict> {
   };
 
   if (apply) {
-    let meta: Record<string, unknown> = {};
-    try { meta = JSON.parse(row.metadata ?? "{}"); } catch { /* ignore */ }
     const patched = {
-      ...meta,
+      ...row.parsedMetadata,
       feedUrl: discovered.url,
       feedType: discovered.type,
       feedDiscoveredAt: new Date().toISOString(),
@@ -159,7 +170,8 @@ async function main(): Promise<void> {
   for (const row of candidates) {
     log(`  ${row.slug} ← ${row.url}`);
     const v = await processOne(row);
-    const statusLabel = v.status === "promoted" ? (apply ? "promoted" : "would promote") : v.status;
+    let statusLabel: string = v.status;
+    if (v.status === "promoted") statusLabel = apply ? "promoted" : "would promote";
     log(`    → ${statusLabel}${v.feedUrl ? `: ${v.feedUrl} (${v.feedType})` : ""}${v.error ? ` — ${v.error}` : ""}`);
     if (v.sampleTitles?.length) {
       for (const t of v.sampleTitles) log(`      • ${t}`);
@@ -167,18 +179,20 @@ async function main(): Promise<void> {
     verdicts.push(v);
   }
 
-  const promoted = verdicts.filter((v) => v.status === "promoted");
-  const empty = verdicts.filter((v) => v.status === "empty-feed");
-  const errors = verdicts.filter((v) => v.status === "error");
+  const promoted = verdicts.filter((v) => v.status === "promoted").length;
+  const empty = verdicts.filter((v) => v.status === "empty-feed").length;
+  const errors = verdicts.filter((v) => v.status === "error").length;
+  const noFeed = verdicts.filter((v) => v.status === "no-feed").length;
 
   log("");
-  log(`${promoted.length} would promote · ${empty.length} empty-feed · ${errors.length} errors · ${verdicts.length - promoted.length - empty.length - errors.length} no feed`);
-  if (!apply && promoted.length > 0) {
+  log(`${promoted} would promote · ${empty} empty-feed · ${errors} errors · ${noFeed} no feed`);
+  if (!apply && promoted > 0) {
     log("Re-run with --apply to write metadata.");
   }
 
   if (jsonOut) {
-    process.stdout.write(JSON.stringify({ verdicts, summary: { total: verdicts.length, promoted: promoted.length, empty: empty.length, errors: errors.length } }, null, 2) + "\n");
+    const summary = { total: verdicts.length, promoted, empty, errors };
+    process.stdout.write(`${JSON.stringify({ verdicts, summary }, null, 2)}\n`);
   }
 }
 
