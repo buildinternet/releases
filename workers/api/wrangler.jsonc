@@ -65,6 +65,11 @@
       "bucket_name": "released-media"
     }
   ],
+  "queues": {
+    "producers": [
+      { "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }
+    ]
+  },
   "durable_objects": {
     "bindings": [
       { "class_name": "StatusHub", "name": "STATUS_HUB" },

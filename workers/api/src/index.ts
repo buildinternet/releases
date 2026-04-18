@@ -47,6 +47,7 @@ export type Env = {
     RELEASED_API_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
     RELEASE_HUB: DurableObjectNamespace;
+    WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;
     MEDIA: R2Bucket;
     MEDIA_ORIGIN?: string;
     CACHE_DISABLED?: string;
