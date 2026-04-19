@@ -67,6 +67,10 @@ export type Env = {
     VOYAGE_API_KEY?: SecretBinding;
     OPENAI_API_KEY?: SecretBinding;
     WEBHOOK_HMAC_MASTER?: SecretBinding;
+    // Cloudflare credentials for querying Analytics Engine (webhook deliveries endpoint).
+    // Absent → GET /v1/admin/webhooks/:id/deliveries returns 501.
+    CF_API_TOKEN?: SecretBinding;
+    CF_ACCOUNT_ID?: string;
     // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };

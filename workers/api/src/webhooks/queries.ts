@@ -2,6 +2,14 @@ import { eq, and, inArray } from "drizzle-orm";
 import { webhookSubscriptions, type WebhookSubscription } from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../db.js";
 
+export type WebhookSubscriptionUpdates = Partial<{
+  url: string;
+  description: string | null;
+  enabled: boolean;
+  disabledReason: string | null;
+  consecutiveFailures: number;
+}>;
+
 /**
  * Worker-local copy of `matchWebhookSubscriptions` from src/db/queries.ts.
  * Cannot import from src/db/queries.ts because that module pulls in bun:sqlite
@@ -63,4 +71,41 @@ export async function listWebhookSubscriptionsByOrg(
       .where(and(eq(webhookSubscriptions.orgId, orgId), eq(webhookSubscriptions.enabled, true)));
   }
   return db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.orgId, orgId));
+}
+
+/**
+ * Worker-local partial update for a webhook subscription.
+ * Returns the updated subscription row, or null if id not found before update.
+ */
+export async function updateWebhookSubscription(
+  db: D1Db,
+  id: string,
+  updates: WebhookSubscriptionUpdates,
+): Promise<WebhookSubscription | null> {
+  const existing = await getWebhookSubscriptionById(db, id);
+  if (!existing) return null;
+  await db.update(webhookSubscriptions).set(updates).where(eq(webhookSubscriptions.id, id));
+  // Re-fetch fresh to return the updated state.
+  return getWebhookSubscriptionById(db, id);
+}
+
+/**
+ * Worker-local delete for a webhook subscription. Idempotent — no error if id missing.
+ */
+export async function deleteWebhookSubscription(db: D1Db, id: string): Promise<void> {
+  await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
+}
+
+/**
+ * Worker-local bump of secret_version. Throws if subscription not found.
+ * Returns the new version number.
+ */
+export async function bumpWebhookSecretVersion(db: D1Db, id: string): Promise<number> {
+  const cur = await getWebhookSubscriptionById(db, id);
+  if (!cur) throw new Error(`subscription not found: ${id}`);
+  const newVersion = cur.secretVersion + 1;
+  await db.update(webhookSubscriptions)
+    .set({ secretVersion: newVersion })
+    .where(eq(webhookSubscriptions.id, id));
+  return newVersion;
 }
