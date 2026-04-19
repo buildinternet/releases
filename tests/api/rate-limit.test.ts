@@ -1,11 +1,10 @@
 import { describe, it, expect } from "bun:test";
 import { Hono, type MiddlewareHandler } from "hono";
 
-const { publicRateLimitMiddleware } = (await import(
-  "../../workers/api/src/middleware/rate-limit.js"
-)) as unknown as {
-  publicRateLimitMiddleware: MiddlewareHandler;
-};
+const { publicRateLimitMiddleware } =
+  (await import("../../workers/api/src/middleware/rate-limit.js")) as unknown as {
+    publicRateLimitMiddleware: MiddlewareHandler;
+  };
 
 type LimitResult = { success: boolean };
 type RateLimiter = { limit(options: { key: string }): Promise<LimitResult> };

@@ -232,53 +232,51 @@ function renderOgImageText(props: OgTemplateProps): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
 
   return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "space-between",
-          backgroundColor: BG_BASE,
-          color: "#f5f5f4",
-          padding: "72px",
-          fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
-          backgroundImage: BG_RADIAL,
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        flexDirection: "column",
+        justifyContent: "space-between",
+        backgroundColor: BG_BASE,
+        color: "#f5f5f4",
+        padding: "72px",
+        fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+        backgroundImage: BG_RADIAL,
+      }}
+    >
+      <BrandBar avatarUrl={props.avatarUrl} />
+      <Headline
+        eyebrow={props.eyebrow}
+        title={title}
+        subtitle={subtitle}
+        description={description}
+        maxTitleSize={titleFontSize(title.length, false)}
+        colors={{
+          eyebrow: "#a8a29e",
+          title: "#fafaf9",
+          subtitle: "#d6d3d1",
+          description: "#a8a29e",
         }}
-      >
-        <BrandBar avatarUrl={props.avatarUrl} />
-        <Headline
-          eyebrow={props.eyebrow}
-          title={title}
-          subtitle={subtitle}
-          description={description}
-          maxTitleSize={titleFontSize(title.length, false)}
-          colors={{
-            eyebrow: "#a8a29e",
-            title: "#fafaf9",
-            subtitle: "#d6d3d1",
-            description: "#a8a29e",
+      />
+      {metrics.length > 0 ? (
+        <MetricRow metrics={metrics} />
+      ) : (
+        <div
+          style={{
+            display: "flex",
+            borderTop: "1px solid #292524",
+            paddingTop: "28px",
+            fontSize: "18px",
+            color: "#78716c",
+            letterSpacing: "0.02em",
           }}
-        />
-        {metrics.length > 0 ? (
-          <MetricRow metrics={metrics} />
-        ) : (
-          <div
-            style={{
-              display: "flex",
-              borderTop: "1px solid #292524",
-              paddingTop: "28px",
-              fontSize: "18px",
-              color: "#78716c",
-              letterSpacing: "0.02em",
-            }}
-          >
-            An agent-friendly API for product changelogs
-          </div>
-        )}
-      </div>
-    ),
+        >
+          An agent-friendly API for product changelogs
+        </div>
+      )}
+    </div>,
     { ...OG_SIZE },
   );
 }
@@ -287,77 +285,75 @@ function renderOgImageBleed(props: OgTemplateProps): ImageResponse {
   const { title, subtitle, description, metrics } = clampProps(props);
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        position: "relative",
+        backgroundColor: BG_BASE,
+        color: "#f5f5f4",
+        fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      }}
+    >
+      <img
+        src={props.heroImage!}
+        style={{
+          position: "absolute",
+          width: "100%",
+          height: "100%",
+          top: 0,
+          left: 0,
+          objectFit: "cover",
+          opacity: 0.55,
+          filter: "blur(22px) saturate(1.1)",
+          transform: "scale(1.1)",
+        }}
+      />
       <div
         style={{
+          position: "absolute",
+          width: "100%",
+          height: "100%",
+          top: 0,
+          left: 0,
+          backgroundImage:
+            "linear-gradient(135deg, rgba(12,10,9,0.88) 0%, rgba(12,10,9,0.6) 60%, rgba(12,10,9,0.4) 100%)",
+          display: "flex",
+        }}
+      />
+      <div
+        style={{
+          position: "relative",
           width: "100%",
           height: "100%",
           display: "flex",
-          position: "relative",
-          backgroundColor: BG_BASE,
-          color: "#f5f5f4",
-          fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          padding: "72px",
         }}
       >
-        <img
-          src={props.heroImage!}
-          style={{
-            position: "absolute",
-            width: "100%",
-            height: "100%",
-            top: 0,
-            left: 0,
-            objectFit: "cover",
-            opacity: 0.55,
-            filter: "blur(22px) saturate(1.1)",
-            transform: "scale(1.1)",
+        <BrandBar avatarUrl={props.avatarUrl} bleed />
+        <Headline
+          eyebrow={props.eyebrow}
+          title={title}
+          subtitle={subtitle}
+          description={description}
+          maxTitleSize={titleFontSize(title.length, false)}
+          colors={{
+            eyebrow: "#d6d3d1",
+            title: "#fafaf9",
+            subtitle: "#e7e5e4",
+            description: "#d6d3d1",
           }}
         />
-        <div
-          style={{
-            position: "absolute",
-            width: "100%",
-            height: "100%",
-            top: 0,
-            left: 0,
-            backgroundImage:
-              "linear-gradient(135deg, rgba(12,10,9,0.88) 0%, rgba(12,10,9,0.6) 60%, rgba(12,10,9,0.4) 100%)",
-            display: "flex",
-          }}
-        />
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            height: "100%",
-            display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            padding: "72px",
-          }}
-        >
-          <BrandBar avatarUrl={props.avatarUrl} bleed />
-          <Headline
-            eyebrow={props.eyebrow}
-            title={title}
-            subtitle={subtitle}
-            description={description}
-            maxTitleSize={titleFontSize(title.length, false)}
-            colors={{
-              eyebrow: "#d6d3d1",
-              title: "#fafaf9",
-              subtitle: "#e7e5e4",
-              description: "#d6d3d1",
-            }}
-          />
-          {metrics.length > 0 ? (
-            <MetricRow metrics={metrics} bleed />
-          ) : (
-            <div style={{ display: "flex" }} />
-          )}
-        </div>
+        {metrics.length > 0 ? (
+          <MetricRow metrics={metrics} bleed />
+        ) : (
+          <div style={{ display: "flex" }} />
+        )}
       </div>
-    ),
+    </div>,
     { ...OG_SIZE },
   );
 }
@@ -372,61 +368,55 @@ export function renderOgImageSplit(props: OgTemplateProps): ImageResponse {
   const hero = props.heroImage;
 
   return new ImageResponse(
-    (
+    <div
+      style={{
+        width: "100%",
+        height: "100%",
+        display: "flex",
+        backgroundColor: BG_BASE,
+        color: "#f5f5f4",
+        fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+      }}
+    >
       <div
         style={{
-          width: "100%",
-          height: "100%",
           display: "flex",
-          backgroundColor: BG_BASE,
-          color: "#f5f5f4",
-          fontFamily: "ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+          flexDirection: "column",
+          justifyContent: "space-between",
+          width: hero ? "60%" : "100%",
+          padding: "72px",
+          backgroundImage: BG_RADIAL,
         }}
       >
+        <BrandBar avatarUrl={props.avatarUrl} />
+        <Headline
+          eyebrow={props.eyebrow}
+          title={title}
+          subtitle={subtitle}
+          description={description}
+          maxTitleSize={titleFontSize(title.length, true)}
+          colors={{
+            eyebrow: "#a8a29e",
+            title: "#fafaf9",
+            subtitle: "#d6d3d1",
+            description: "#a8a29e",
+          }}
+        />
+        {metrics.length > 0 ? <MetricRow metrics={metrics} /> : <div style={{ display: "flex" }} />}
+      </div>
+      {hero ? (
         <div
           style={{
             display: "flex",
-            flexDirection: "column",
-            justifyContent: "space-between",
-            width: hero ? "60%" : "100%",
-            padding: "72px",
-            backgroundImage: BG_RADIAL,
+            width: "40%",
+            height: "100%",
+            backgroundColor: "#1c1917",
           }}
         >
-          <BrandBar avatarUrl={props.avatarUrl} />
-          <Headline
-            eyebrow={props.eyebrow}
-            title={title}
-            subtitle={subtitle}
-            description={description}
-            maxTitleSize={titleFontSize(title.length, true)}
-            colors={{
-              eyebrow: "#a8a29e",
-              title: "#fafaf9",
-              subtitle: "#d6d3d1",
-              description: "#a8a29e",
-            }}
-          />
-          {metrics.length > 0 ? (
-            <MetricRow metrics={metrics} />
-          ) : (
-            <div style={{ display: "flex" }} />
-          )}
+          <img src={hero} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
         </div>
-        {hero ? (
-          <div
-            style={{
-              display: "flex",
-              width: "40%",
-              height: "100%",
-              backgroundColor: "#1c1917",
-            }}
-          >
-            <img src={hero} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-          </div>
-        ) : null}
-      </div>
-    ),
+      ) : null}
+    </div>,
     { ...OG_SIZE },
   );
 }

@@ -1561,7 +1561,6 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
   **Note on ReleaseEvent.seq parity:** the local `seq: 0` placeholder is acceptable for v1 because the consumer doesn't use `seq` from the queue message — it uses `release.id` for idempotency (`X-Released-Event-Id` header) and `event.id` (assigned locally here). If a future requirement needs the DO-assigned `seq` in the webhook payload (for resume cursor handoff), extend the DO `/publish` response to return assigned events and use those.
 
 - [ ] **Step 11.3: Update the `PublishContext` shape at all call sites**
-
   - In `workers/api/src/routes/sources.ts:318`, the `publishReleaseEvents` call needs `ctx.src.orgId` and `ctx.src.sourceId`. Read the surrounding lines to confirm `source.orgId` and `source.id` are in scope; pass them.
   - In `workers/api/src/cron/poll-fetch.ts:329`, same. The `source` row should have these.
   - Also: ensure both call sites' `env` includes `WEBHOOK_DELIVERY_QUEUE` and `DB`. The Hono context's `c.env` should already match the Worker's env (which now has the binding from Task 9).
@@ -1694,7 +1693,6 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
   ```
 
   Notes:
-
   - Same `database_id` as `workers/api` so both Workers see the same D1.
   - Same `store_id` as `workers/api` for Secrets Store.
   - `namespace_id: 1002` for the rate limiter (any unique number; workers/api uses 1001).
