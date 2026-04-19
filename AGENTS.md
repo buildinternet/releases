@@ -111,6 +111,8 @@ releases list --category ai     # Filter sources by category
 releases admin source poll                   # Check all feed sources for upstream changes
 releases admin source poll --changed         # Show only sources with detected changes
 releases admin source poll --json            # Machine-readable output
+releases admin notify test                   # Fire a sample cron-report email to EMAIL_NOTIFY_TO
+releases admin notify test --status dispatch_failed  # Preview a "failed" subject/body
 ```
 
 - Commands accept entity IDs (`org_...`, `src_...`, `prod_...`, `rel_...`) or slugs. IDs are preferred — slugs can change, IDs cannot. The top-level `show <id|slug>` dispatches by ID prefix, falling back to a slug lookup (org → product → source) for bare strings.

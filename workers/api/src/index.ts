@@ -31,6 +31,7 @@ import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedRoutes } from "./routes/admin-embed.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
+import { adminNotificationsRoutes } from "./routes/admin-notifications.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 import { retierSources } from "./cron/retier.js";
@@ -81,6 +82,13 @@ export type Env = {
     // Optional KV namespace caching the GET /v1/releases/latest response
     // (see src/lib/latest-cache.ts). Absent → every request hits D1.
     LATEST_CACHE?: KVNamespace;
+    // Email notifications (see src/lib/email.ts). SEND_EMAIL is the Cloudflare
+    // Email Routing send binding; absent → email notifications no-op.
+    SEND_EMAIL?: { send(message: unknown): Promise<void> };
+    EMAIL_NOTIFY_ENABLED?: string;
+    EMAIL_NOTIFY_TO?: string;
+    EMAIL_FROM?: string;
+    ADMIN_BASE_URL?: string;
   };
 };
 
@@ -128,7 +136,7 @@ for (const r of publicReadRoutes) {
 const adminRoutes = [
   "sessions", "fetch-log", "usage-log", "blocked-urls",
   "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
-  "admin/embed", "admin/cron-runs", "admin/webhooks", "playbook",
+  "admin/embed", "admin/cron-runs", "admin/webhooks", "admin/notifications", "playbook",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -180,6 +188,7 @@ v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedRoutes);
 v1.route("/", adminCronRunsRoutes);
 v1.route("/", adminWebhooksRoutes);
+v1.route("/", adminNotificationsRoutes);
 v1.route("/", telemetryRoutes);
 
 // Static endpoint — categories are defined in code, not DB
@@ -224,6 +233,11 @@ export default {
         DISCOVERY_WORKER: env.DISCOVERY_WORKER,
         RELEASED_API_KEY: releasedApiKey,
         ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
+        SEND_EMAIL: env.SEND_EMAIL,
+        EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
+        EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
+        EMAIL_FROM: env.EMAIL_FROM,
+        ADMIN_BASE_URL: env.ADMIN_BASE_URL,
       }));
       return;
     }

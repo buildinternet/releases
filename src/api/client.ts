@@ -805,6 +805,30 @@ export async function testWebhookSubscription(id: string): Promise<{ enqueued: b
   });
 }
 
+export type TestNotificationInput = {
+  to?: string;
+  status?: "done" | "degraded" | "dispatch_failed" | "aborted";
+  cronName?: string;
+  plain?: boolean;
+  subject?: string;
+  body?: string;
+};
+
+export type TestNotificationResult = {
+  ok: boolean;
+  result: { sent: true } | { sent: false; reason: string; error?: string };
+  report?: Record<string, unknown>;
+};
+
+export async function sendTestNotification(
+  input: TestNotificationInput = {},
+): Promise<TestNotificationResult> {
+  return apiFetch<TestNotificationResult>(`/v1/admin/notifications/test`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function rotateWebhookSecret(id: string): Promise<{ secretVersion: number; signingKey: string }> {
   return apiFetch<{ secretVersion: number; signingKey: string }>(`/v1/admin/webhooks/${id}/rotate-secret`, {
     method: "POST",

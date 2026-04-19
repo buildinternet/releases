@@ -9,6 +9,9 @@ import { drizzle } from "drizzle-orm/d1";
 import { sources, organizations } from "@releases/core-internal/schema";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import { insertRunningRow, finalizeRunRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
+import { sendCronReport } from "../lib/notifications.js";
+import type { EmailEnv } from "../lib/email.js";
+import type { CronReport } from "../lib/cron-report.js";
 
 export type PreflightAction =
   | { action: "proceed" }
@@ -183,7 +186,7 @@ const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000;
 const DEFAULT_MAX_SESSIONS = 20;
 const CONCURRENCY = 3;
 
-type SweepEnv = {
+type SweepEnv = EmailEnv & {
   DB: D1Database;
   CRON_ENABLED?: string;
   SCRAPE_AGENT_CRON_ENABLED?: string;
@@ -191,6 +194,8 @@ type SweepEnv = {
   DISCOVERY_WORKER: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   RELEASED_API_KEY: string;
   ANTHROPIC_API_KEY?: string;
+  /** Base URL included in the email body as a detail link (no trailing slash). */
+  ADMIN_BASE_URL?: string;
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   _drizzleOverride?: any;
 };
@@ -224,8 +229,11 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   }
 
   if (aborted) {
+    const endedAtMs = Date.now();
+    const endedAt = new Date(endedAtMs).toISOString();
+    const notes = `preflight aborted: ${aborted.abortReason}`;
     await finalizeRunRow(db, runId, {
-      endedAt: new Date().toISOString(),
+      endedAt,
       status: "aborted",
       abortReason: aborted.abortReason,
       candidates: 0,
@@ -234,8 +242,21 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
       dispatchErrors: 0,
       sessionsStarted: [],
       dispatchErrorDetail: [],
-      notes: `preflight aborted: ${aborted.abortReason}`,
+      notes,
     });
+    await sendCronReport(env, buildReport(env, {
+      runId,
+      startedAt: now.toISOString(),
+      endedAt,
+      durationMs: endedAtMs - now.getTime(),
+      status: "aborted",
+      abortReason: aborted.abortReason,
+      candidates: 0,
+      dispatched: 0,
+      skippedOverCap: 0,
+      dispatchErrors: 0,
+      notes,
+    }));
     return;
   }
 
@@ -252,8 +273,10 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   const sessionsStarted = dispatchResults.flatMap((r) => r.ok ? [r.sessionId] : []);
   const dispatchErrors = dispatchResults.flatMap((r) => !r.ok ? [{ orgSlug: r.orgSlug, error: r.error }] : []);
 
+  const endedAtMs = Date.now();
+  const endedAt = new Date(endedAtMs).toISOString();
   await finalizeRunRow(db, runId, {
-    endedAt: new Date().toISOString(),
+    endedAt,
     status: derived.status,
     abortReason: derived.abortReason,
     candidates: rows.length,
@@ -266,6 +289,28 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   });
 
   console.log(`[scrape-agent-cron] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`);
+
+  await sendCronReport(env, buildReport(env, {
+    runId,
+    startedAt: now.toISOString(),
+    endedAt,
+    durationMs: endedAtMs - now.getTime(),
+    status: derived.status,
+    abortReason: derived.abortReason,
+    candidates: rows.length,
+    dispatched: sessionsStarted.length,
+    skippedOverCap,
+    dispatchErrors: dispatchErrors.length,
+    notes: derived.notes ?? null,
+    sessionsStarted,
+    dispatchErrorDetail: dispatchErrors,
+  }));
+}
+
+type ReportBody = Omit<CronReport, "cronName" | "adminBaseUrl">;
+
+function buildReport(env: SweepEnv, body: ReportBody): CronReport {
+  return { cronName: CRON_NAME, adminBaseUrl: env.ADMIN_BASE_URL, ...body };
 }
 
 function parseMaxSessions(raw: string | undefined): number {

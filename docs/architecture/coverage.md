@@ -38,3 +38,18 @@ Escalation signals:
 - Stale-running rows (reconciled by the next sweep with `abort_reason='stale_running'`) are informational.
 
 Admin API: `GET /v1/admin/cron-runs{,/:id}`. The scrape-no-feed sweep fires daily at 01:00 UTC; worst-case sessions per sweep capped by `SCRAPE_AGENT_MAX_SESSIONS` (initial deploy ships at 5, steady state 20).
+
+### Email notifications
+
+After each run finalizes, the sweep sends a summary email via Cloudflare Email Routing (`send_email` binding) — one report per run, regardless of status. The subject prefixes `[degraded]` / `[failed]` / `[aborted]` so inbox filters can surface failures without parsing the body. Implementation is generic (`workers/api/src/lib/{email,cron-report,notifications}.ts`); future crons can call `sendCronReport(env, report)` after their own `finalizeRunRow` with zero new plumbing.
+
+Configuration (all in `workers/api/wrangler.jsonc` under `vars`):
+
+- `EMAIL_NOTIFY_ENABLED` — `"false"` disables sending without removing the binding.
+- `EMAIL_NOTIFY_TO` — recipient; must be verified in Cloudflare Email Routing.
+- `EMAIL_FROM` — sender; domain must have Email Routing enabled.
+- `ADMIN_BASE_URL` — base URL used in the body to link `/v1/admin/cron-runs/:id`.
+
+If the `SEND_EMAIL` binding is absent (e.g. local dev, tests) the helper logs `[notifications] skipped … no_binding` and returns — the cron itself never fails on a notification error.
+
+Ad-hoc test send (admin-auth, deployed env): `POST /v1/admin/notifications/test` fabricates a sample `CronReport` and sends it without waiting for the cron to fire. Body fields: `{ to?, status?, cronName?, plain?, subject?, body? }`. CLI wrapper: `releases admin notify test [--status …] [--to …] [--plain]`.
