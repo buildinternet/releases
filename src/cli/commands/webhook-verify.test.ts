@@ -21,4 +21,12 @@ describe("webhook verify CLI helper", () => {
     });
     expect(result.ok).toBe(false);
   });
+
+  it("returns ok=false when the body is tampered after signing", async () => {
+    const key = "deadbeef".repeat(8);
+    const ts = 1729281234;
+    const sig = await signPayload(key, ts, '{"hello":"world"}');
+    const result = await verifySignatureCli({ secret: key, timestamp: ts, signature: sig, body: '{"hello":"evil"}' });
+    expect(result.ok).toBe(false);
+  });
 });

@@ -25,11 +25,22 @@ export function registerWebhookCommand(program: Command) {
     .requiredOption("--signature <header>", "Value of the X-Released-Signature header (e.g. sha256=...)")
     .requiredOption("--timestamp <unix>", "Value of the X-Released-Timestamp header (unix seconds)")
     .requiredOption("--body-file <path>", "Path to the raw request body")
-    .action(async (opts) => {
-      const body = readFileSync(opts.bodyFile, "utf8");
+    .action(async (opts: { secret: string; signature: string; timestamp: string; bodyFile: string }) => {
+      const ts = parseInt(opts.timestamp, 10);
+      if (isNaN(ts)) {
+        console.error(chalk.red(`Invalid --timestamp: ${opts.timestamp} (expected unix seconds)`));
+        process.exit(1);
+      }
+      let body: string;
+      try {
+        body = readFileSync(opts.bodyFile, "utf8");
+      } catch {
+        console.error(chalk.red(`Cannot read --body-file: ${opts.bodyFile}`));
+        process.exit(1);
+      }
       const result = await verifySignatureCli({
         secret: opts.secret,
-        timestamp: parseInt(opts.timestamp, 10),
+        timestamp: ts,
         signature: opts.signature,
         body,
       });
