@@ -26,7 +26,7 @@ function fakeEnv(overrides: any = {}) {
   return {
     DB: {} as any,
     WEBHOOK_DELIVERIES_AE: { writeDataPoint: () => {} } as any,
-    WEBHOOK_HMAC_MASTER: "deadbeef".repeat(8),
+    WEBHOOK_HMAC_MASTER: { get: async () => "deadbeef".repeat(8) },
     PER_SUB_RATE_LIMITER: { limit: async () => ({ success: true }) },
     DELIVERY_TIMEOUT_MS: "100",
     AUTO_DISABLE_THRESHOLD: "50",
