@@ -4,12 +4,10 @@ import { useEffect, useRef, useState, useCallback, type ReactNode } from "react"
 import {
   type FetchLogEntry,
   type FetchLogStatusFilter,
-  FetchStatusBadge,
-  FetchLogResultCell,
-  FetchLogDetail,
   formatFetchDuration,
-  FETCH_LOG_FILTER_BUTTONS,
 } from "@/components/fetch-log-shared";
+import { FetchLogList } from "@/components/fetch-log-list";
+import { useFetchLog } from "@/components/use-fetch-log";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
 
@@ -139,7 +137,6 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const [tab, setTab] = useState<Tab>("sessions");
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
-  const [fetchLogs, setFetchLogs] = useState<FetchLogEntry[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
@@ -147,8 +144,8 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const [sessionStdout, setSessionStdout] = useState<Record<string, string[]>>({});
   const [allSources, setAllSources] = useState<SourceEntry[]>([]);
   const [sessionPage, setSessionPage] = useState(0);
-  const [fetchLogPage, setFetchLogPage] = useState(0);
   const pageSize = 25;
+  const fetchLogPrependRef = useRef<((entry: FetchLogEntry) => void) | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const reconnectDelay = useRef(1000);
@@ -169,20 +166,15 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const safeFetch = (url: string) => fetch(url, { headers }).then((r) => r.ok ? r.json() : null);
-    const fetchLogUrl = after
-      ? `${apiUrl}/v1/status/fetch-log?after=${encodeURIComponent(after)}`
-      : `${apiUrl}/v1/status/fetch-log`;
     return Promise.all([
       safeFetch(`${apiUrl}/v1/sessions`),
-      safeFetch(fetchLogUrl),
       safeFetch(`${apiUrl}/v1/status/usage`),
-    ]).then(([s, f, u]) => {
+    ]).then(([s, u]) => {
       if (s) setSessions(s as SessionState[]);
-      if (f) setFetchLogs(f as FetchLogEntry[]);
       if (u) setUsage(u as UsageEntry[]);
       return s as SessionState[] | null;
     }).catch(() => null);
-  }, [apiUrl, after, apiKey]);
+  }, [apiUrl, apiKey]);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -269,7 +261,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
     } else if (msg.type === "session:dismissed") {
       setSessions((prev) => prev.filter((s) => s.sessionId !== (msg.sessionId as string)));
     } else if (msg.type === "fetch:complete") {
-      setFetchLogs((prev) => [{
+      fetchLogPrependRef.current?.({
         id: msg.id as string,
         sourceId: msg.sourceId as string,
         sessionId: msg.sessionId as string | undefined,
@@ -281,7 +273,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
         status: msg.status as FetchLogEntry["status"],
         error: msg.error as string | undefined,
         createdAt: msg.createdAt as string,
-      }, ...prev]);
+      });
     }
   }, []);
 
@@ -455,7 +447,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
             <button
               key={range}
-              onClick={() => { setDateRange(range); setSessionPage(0); setFetchLogPage(0); }}
+              onClick={() => { setDateRange(range); setSessionPage(0); }}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 dateRange === range
                   ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
@@ -491,7 +483,14 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         />
       )}
-      {tab === "fetch-log" && <FetchLogTable logs={fetchLogs} page={fetchLogPage} perPage={pageSize} onPageChange={setFetchLogPage} />}
+      {tab === "fetch-log" && (
+        <FetchLogTable
+          apiUrl={apiUrl}
+          apiKey={apiKey}
+          after={after}
+          prependRef={fetchLogPrependRef}
+        />
+      )}
       {tab === "sources" && <SourcesTable sources={allSources} apiUrl={apiUrl} apiKey={apiKey} />}
       {tab === "cron" && <CronRunsTab apiUrl={apiUrl} apiKey={apiKey} />}
     </div>
@@ -778,117 +777,50 @@ function SessionLogPanel({ sessionId, correlationId, anthropicSessionId, logs, s
   );
 }
 
-function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEntry[]; page: number; perPage: number; onPageChange: (p: number) => void }) {
+function FetchLogTable({
+  apiUrl,
+  apiKey,
+  after,
+  prependRef,
+}: {
+  apiUrl: string;
+  apiKey?: string;
+  after: string | null;
+  prependRef: React.RefObject<((entry: FetchLogEntry) => void) | null>;
+}) {
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore, prepend } = useFetchLog({
+    apiUrl, apiKey, after, status: filter,
+  });
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.status === filter);
+  useEffect(() => {
+    prependRef.current = prepend;
+    return () => { prependRef.current = null; };
+  }, [prepend, prependRef]);
 
-  if (logs.length === 0) {
+  if (loading && entries.length === 0) {
+    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">Loading fetch log…</div>;
+  }
+  if (error && entries.length === 0) {
+    return <div className="text-sm text-red-500 py-8 text-center">Failed to load fetch log: {error}</div>;
+  }
+  if (!loading && totalCount === 0) {
     return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No fetch log entries yet.</div>;
   }
 
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
-
   return (
-    <div>
-      <div className="flex gap-1 mb-3">
-        {FETCH_LOG_FILTER_BUTTONS.map((f) => {
-          const count = f.value === "all" ? logs.length : logs.filter((l) => l.status === f.value).length;
-          if (count === 0 && f.value !== "all") return null;
-          return (
-            <button
-              key={f.value}
-              onClick={() => { setFilter(f.value); onPageChange(0); }}
-              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-                filter === f.value
-                  ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
-                  : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
-              }`}
-            >
-              {f.label} <span className="ml-0.5 opacity-60">{count}</span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
-        <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
-          <div>Source</div>
-          <div>Time</div>
-          <div>Status</div>
-          <div>Result</div>
-          <div className="text-right">Duration</div>
-        </div>
-        {paginated.map((log) => {
-          const isExpanded = expandedIds.has(log.id);
-          return (
-            <div key={log.id}>
-              <button
-                onClick={() => setExpandedIds((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(log.id)) next.delete(log.id);
-                  else next.add(log.id);
-                  return next;
-                })}
-                className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
-              >
-                <div className="flex items-start gap-1.5">
-                  <span className="text-stone-300 dark:text-stone-600 shrink-0">{isExpanded ? "▾" : "▸"}</span>
-                  <div>
-                    <div className="text-stone-900 dark:text-stone-100">
-                      {log.sourceSlug ? (
-                        <a href={`/source/${log.sourceSlug}`} className="hover:underline" onClick={(e) => e.stopPropagation()}>
-                          {log.sourceName ?? log.sourceSlug}
-                        </a>
-                      ) : (
-                        <span className="text-stone-500">{log.sourceName ?? log.sourceId}</span>
-                      )}
-                    </div>
-                    {log.orgName && (
-                      <div className="text-stone-400">{log.orgName}</div>
-                    )}
-                    {log.sessionId && (
-                      <span className="text-[10px] font-sans text-indigo-400 dark:text-indigo-500">agent</span>
-                    )}
-                  </div>
-                </div>
-                <div className="text-stone-500">
-                  {formatTime(new Date(log.createdAt).getTime())}
-                </div>
-                <div><FetchStatusBadge status={log.status} /></div>
-                <div className="text-stone-500"><FetchLogResultCell log={log} /></div>
-                <div className="text-stone-400 text-right">{formatFetchDuration(log.durationMs)}</div>
-              </button>
-              {isExpanded && <FetchLogDetail log={log} />}
-            </div>
-          );
-        })}
-      </div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
-          <span>{filtered.length} entries</span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 0}
-              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
-            >
-              Prev
-            </button>
-            <span>{page + 1} / {totalPages}</span>
-            <button
-              onClick={() => onPageChange(page + 1)}
-              disabled={page >= totalPages - 1}
-              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
-    </div>
+    <FetchLogList
+      entries={entries}
+      totalCount={totalCount}
+      statusCounts={statusCounts}
+      hasMore={hasMore}
+      loading={loading}
+      filter={filter}
+      onFilterChange={setFilter}
+      onLoadMore={loadMore}
+      formatTime={(iso) => formatTime(new Date(iso).getTime())}
+      showOrg
+    />
   );
 }
 

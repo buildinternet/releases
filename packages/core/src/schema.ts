@@ -189,6 +189,9 @@ export const usageLog = sqliteTable("usage_log", {
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
 });
 
+export const FETCH_LOG_STATUSES = ["success", "error", "no_change", "dry_run"] as const;
+export type FetchLogStatus = (typeof FETCH_LOG_STATUSES)[number];
+
 export const fetchLog = sqliteTable("fetch_log", {
   id: text("id").primaryKey().$defaultFn(newFetchLogId),
   sourceId: text("source_id")
@@ -198,7 +201,7 @@ export const fetchLog = sqliteTable("fetch_log", {
   releasesFound: integer("releases_found").notNull(),
   releasesInserted: integer("releases_inserted").notNull(),
   durationMs: integer("duration_ms"),
-  status: text("status", { enum: ["success", "error", "no_change", "dry_run"] }).notNull(),
+  status: text("status", { enum: FETCH_LOG_STATUSES }).notNull(),
   error: text("error"),
   rawContent: text("raw_content"),
   createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),

@@ -17,6 +17,20 @@ export interface FetchLogEntry {
 
 export type FetchLogStatusFilter = FetchLogEntry["status"] | "all";
 
+export interface FetchLogStatusCounts {
+  success: number;
+  error: number;
+  no_change: number;
+  dry_run: number;
+}
+
+export interface FetchLogResponse {
+  entries: FetchLogEntry[];
+  nextCursor: string | null;
+  totalCount?: number;
+  statusCounts?: FetchLogStatusCounts;
+}
+
 export function formatFetchDuration(ms?: number | null): string {
   if (ms == null) return "-";
   if (ms < 1000) return `${ms}ms`;

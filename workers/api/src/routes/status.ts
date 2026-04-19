@@ -1,9 +1,17 @@
 import { Hono } from "hono";
 import { and, desc, eq, sql, gte, lte } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { fetchLog, sources, organizations, usageLog } from "@releases/core-internal/schema";
+import {
+  FETCH_LOG_STATUSES,
+  type FetchLogStatus,
+  fetchLog,
+  sources,
+  organizations,
+  usageLog,
+} from "@releases/core-internal/schema";
 import type { Env } from "../index.js";
 import { getStatusHub } from "../utils.js";
+import { encodeCursor, decodeCursor } from "./fetch-log-cursor.js";
 
 export const statusRoutes = new Hono<Env>();
 
@@ -16,17 +24,34 @@ statusRoutes.get("/status/ws", async (c) => {
 
 statusRoutes.get("/status/fetch-log", async (c) => {
   const db = createDb(c.env.DB);
-  const limit = parseInt(c.req.query("limit") ?? "200", 10);
-  const after = c.req.query("after");   // ISO date string
-  const before = c.req.query("before"); // ISO date string
-  const org = c.req.query("org");       // org slug filter
+  const rawLimit = parseInt(c.req.query("limit") ?? "25", 10);
+  const limit = Math.min(Math.max(Number.isFinite(rawLimit) ? rawLimit : 25, 1), 100);
+  const after = c.req.query("after");
+  const before = c.req.query("before");
+  const org = c.req.query("org");
+  const statusParam = c.req.query("status");
+  const status = (FETCH_LOG_STATUSES as readonly string[]).includes(statusParam ?? "")
+    ? (statusParam as FetchLogStatus)
+    : undefined;
+  const cursorToken = c.req.query("cursor");
+  const cursor = cursorToken ? decodeCursor(cursorToken) : null;
 
-  const conditions = [];
-  if (after) conditions.push(gte(fetchLog.createdAt, after));
-  if (before) conditions.push(lte(fetchLog.createdAt, before));
-  if (org) conditions.push(eq(organizations.slug, org));
+  // Scope predicates — apply to both counts and the page.
+  const scope = [];
+  if (after) scope.push(gte(fetchLog.createdAt, after));
+  if (before) scope.push(lte(fetchLog.createdAt, before));
+  if (org) scope.push(eq(organizations.slug, org));
 
-  const logs = await db
+  // Page predicates add status and cursor.
+  const pagePredicates = [...scope];
+  if (status) pagePredicates.push(eq(fetchLog.status, status));
+  if (cursor) {
+    pagePredicates.push(
+      sql`(${fetchLog.createdAt}, ${fetchLog.id}) < (${cursor.createdAt}, ${cursor.id})`,
+    );
+  }
+
+  const rows = await db
     .select({
       id: fetchLog.id,
       sourceId: fetchLog.sourceId,
@@ -46,11 +71,41 @@ statusRoutes.get("/status/fetch-log", async (c) => {
     .from(fetchLog)
     .leftJoin(sources, sql`${fetchLog.sourceId} = ${sources.id}`)
     .leftJoin(organizations, sql`${sources.orgId} = ${organizations.id}`)
-    .where(conditions.length > 0 ? and(...conditions) : undefined)
-    .orderBy(desc(fetchLog.createdAt))
-    .limit(limit);
+    .where(pagePredicates.length > 0 ? and(...pagePredicates) : undefined)
+    .orderBy(desc(fetchLog.createdAt), desc(fetchLog.id))
+    .limit(limit + 1);
 
-  return c.json(logs);
+  const hasMore = rows.length > limit;
+  const entries = hasMore ? rows.slice(0, limit) : rows;
+  const last = entries[entries.length - 1];
+  const nextCursor =
+    hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
+
+  // Count query runs only on the first page (no cursor). The grouped
+  // rollup gives us both the per-status counts and the scope-wide total.
+  let totalCount: number | undefined;
+  let statusCounts: Record<FetchLogStatus, number> | undefined;
+  if (!cursor) {
+    const grouped = await db
+      .select({ status: fetchLog.status, n: sql<number>`count(*)` })
+      .from(fetchLog)
+      .leftJoin(sources, sql`${fetchLog.sourceId} = ${sources.id}`)
+      .leftJoin(organizations, sql`${sources.orgId} = ${organizations.id}`)
+      .where(scope.length > 0 ? and(...scope) : undefined)
+      .groupBy(fetchLog.status);
+
+    statusCounts = Object.fromEntries(
+      FETCH_LOG_STATUSES.map((s) => [s, 0]),
+    ) as Record<FetchLogStatus, number>;
+    totalCount = 0;
+    for (const row of grouped) {
+      const n = Number(row.n);
+      totalCount += n;
+      statusCounts[row.status as FetchLogStatus] = n;
+    }
+  }
+
+  return c.json({ entries, nextCursor, totalCount, statusCounts });
 });
 
 statusRoutes.get("/status/usage", async (c) => {
