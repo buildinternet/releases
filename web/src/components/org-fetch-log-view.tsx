@@ -1,8 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import {
-  type FetchLogEntry,
   type FetchLogStatusFilter,
   FetchStatusBadge,
   FetchLogResultCell,
@@ -10,6 +9,7 @@ import {
   formatFetchDuration,
   FETCH_LOG_FILTER_BUTTONS,
 } from "./fetch-log-shared";
+import { useFetchLog } from "./use-fetch-log";
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -21,53 +21,30 @@ function formatTime(iso: string): string {
 }
 
 export function OrgFetchLogView({ apiUrl, apiKey, orgSlug }: { apiUrl: string; apiKey?: string; orgSlug: string }) {
-  const [logs, setLogs] = useState<FetchLogEntry[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore } = useFetchLog({
+    apiUrl, apiKey, org: orgSlug, status: filter,
+  });
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-    const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    fetch(`${apiUrl}/v1/status/fetch-log?org=${encodeURIComponent(orgSlug)}`, { headers })
-      .then((r) => {
-        if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
-        return r.json();
-      })
-      .then((data) => {
-        if (cancelled) return;
-        setLogs(data as FetchLogEntry[]);
-        setLoading(false);
-      })
-      .catch((e) => {
-        if (cancelled) return;
-        setError(e instanceof Error ? e.message : String(e));
-        setLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [apiUrl, apiKey, orgSlug]);
-
-  if (loading) {
+  if (loading && entries.length === 0) {
     return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">Loading fetch log…</div>;
   }
-  if (error) {
+  if (error && entries.length === 0) {
     return <div className="text-sm text-red-500 py-8 text-center">Failed to load fetch log: {error}</div>;
   }
-  if (logs.length === 0) {
+  if (!loading && totalCount === 0) {
     return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No fetch log entries for this organization.</div>;
   }
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.status === filter);
+  const activeTotal = filter === "all" ? totalCount : statusCounts[filter];
+  const totalLabel = filter === "all" ? "entries" : filter.replace("_", " ");
 
   return (
     <div className="mt-5">
       <div className="flex gap-1 mb-3">
         {FETCH_LOG_FILTER_BUTTONS.map((f) => {
-          const count = f.value === "all" ? logs.length : logs.filter((l) => l.status === f.value).length;
+          const count = f.value === "all" ? totalCount : statusCounts[f.value];
           if (count === 0 && f.value !== "all") return null;
           return (
             <button
@@ -93,7 +70,7 @@ export function OrgFetchLogView({ apiUrl, apiKey, orgSlug }: { apiUrl: string; a
           <div>Result</div>
           <div className="text-right">Duration</div>
         </div>
-        {filtered.map((log) => {
+        {entries.map((log) => {
           const isExpanded = expandedIds.has(log.id);
           return (
             <div key={log.id}>
@@ -133,8 +110,20 @@ export function OrgFetchLogView({ apiUrl, apiKey, orgSlug }: { apiUrl: string; a
           );
         })}
       </div>
-      <div className="mt-2 text-[11px] text-stone-400 dark:text-stone-500">
-        {filtered.length} of {logs.length} entries
+
+      <div className="flex items-center justify-between mt-2 text-[11px] text-stone-400 dark:text-stone-500">
+        <span>
+          Showing {entries.length} of {activeTotal.toLocaleString()} {totalLabel}
+        </span>
+        {hasMore && (
+          <button
+            onClick={loadMore}
+            disabled={loading}
+            className="px-3 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-40 disabled:cursor-default"
+          >
+            {loading ? "Loading…" : "Load 25 more"}
+          </button>
+        )}
       </div>
     </div>
   );
