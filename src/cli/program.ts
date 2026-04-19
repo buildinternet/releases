@@ -33,6 +33,7 @@ import { registerPlaybookCommand } from "./commands/playbook.js";
 import { registerShowCommand } from "./commands/show.js";
 import { registerEmbedCommand } from "./commands/admin/embed.js";
 import { registerWebhookAdminCommand } from "./commands/admin/webhook.js";
+import { registerWebhookCommand } from "./commands/webhook-verify.js";
 import { registerTelemetryCommand } from "./commands/telemetry.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { isAdminMode } from "../lib/mode.js";
@@ -157,6 +158,7 @@ export const program = new Command()
 // Public commands — available to all users
 registerSearchCommand(program);
 registerTailCommand(program);
+registerWebhookCommand(program);
 registerSummaryCommand(program);
 registerCompareCommand(program);
 registerStatsCommand(program);
