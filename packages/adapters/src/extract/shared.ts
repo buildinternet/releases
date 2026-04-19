@@ -238,7 +238,7 @@ export function findContentStart(lines: string[]): number {
     }
 
     // Heading with version number (e.g. "## v2.1.87", "## [4.67.0]")
-    if (/^#{1,3}\s+[\[v]?\d+\.\d+/.test(line)) {
+    if (/^#{1,3}\s+[[v]?\d+\.\d+/.test(line)) {
       return Math.max(0, i - 2);
     }
 

@@ -1,0 +1,31 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn",
+    "perf": "warn"
+  },
+  "rules": {
+    "no-console": "off",
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+    "typescript/no-explicit-any": "off",
+    "typescript/no-non-null-assertion": "off",
+    "unicorn/no-null": "off",
+    "unicorn/no-array-reduce": "off",
+    "unicorn/no-await-expression-member": "off"
+  },
+  "ignorePatterns": [
+    "node_modules",
+    "dist",
+    ".wrangler",
+    ".next",
+    "web/.next",
+    "web/next-env.d.ts",
+    "web/public/**",
+    "**/migrations/**",
+    "**/*.d.ts",
+    "plugins/claude-code/skills/**",
+    "packages/*/dist/**"
+  ]
+}

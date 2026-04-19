@@ -40,6 +40,8 @@
     "db:studio:d1": "bun drizzle-kit studio --config drizzle-d1.config.ts",
     "db:query": "wrangler d1 execute released-db --local --config workers/api/wrangler.jsonc --command",
     "db:pull": "rm -rf workers/api/.wrangler/state/v3/d1 && wrangler d1 export released-db --remote --no-schema --table organizations --table org_accounts --table sources --table releases --table usage_log --table fetch_log --table ignored_urls --output /tmp/releases-d1-export.sql --config workers/api/wrangler.jsonc && bun run db:migrate:local && sqlite3 $(find workers/api/.wrangler -name '*.sqlite' | head -1) < /tmp/releases-d1-export.sql && rm /tmp/releases-d1-export.sql",
+    "lint": "oxlint",
+    "lint:fix": "oxlint --fix",
     "test": "bun test",
     "eval": "bun test ./tests/evals/parsing.eval.ts ./tests/evals/evaluation.eval.ts ./tests/evals/discovery.eval.ts --timeout 120000",
     "eval:parsing": "bun test ./tests/evals/parsing.eval.ts --timeout 120000",
@@ -83,6 +85,7 @@
     "better-sqlite3": "^12.9.0",
     "drizzle-kit": "^0.31.10",
     "hono": "^4.12.14",
+    "oxlint": "^1.60.0",
     "typescript": "^6.0.3",
     "wrangler": "^4.83.0"
   }

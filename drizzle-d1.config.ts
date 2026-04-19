@@ -19,7 +19,7 @@ try {
   if (files.length === 0) throw new Error(noDbMessage);
   dbPath = join(d1Dir, files[0]);
 } catch (e: any) {
-  if (e.code === "ENOENT") throw new Error(noDbMessage);
+  if (e.code === "ENOENT") throw new Error(noDbMessage, { cause: e });
   throw e;
 }
 

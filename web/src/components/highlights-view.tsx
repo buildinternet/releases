@@ -25,7 +25,7 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
   }
 
   const sortedMonthly = [...monthly]
-    .sort((a, b) => {
+    .toSorted((a, b) => {
       if (a.year !== b.year) return (b.year ?? 0) - (a.year ?? 0);
       return (b.month ?? 0) - (a.month ?? 0);
     })

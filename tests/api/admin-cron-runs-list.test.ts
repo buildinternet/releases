@@ -29,6 +29,6 @@ describe("GET /v1/admin/cron-runs", () => {
     const app = mkApp(db);
     const res = await app.request("/v1/admin/cron-runs?status=degraded,aborted&since=2000-01-01T00:00:00Z");
     const body = await res.json() as Array<{ status: string }>;
-    expect(body.map((r) => r.status).sort()).toEqual(["aborted", "degraded"]);
+    expect(body.map((r) => r.status).toSorted()).toEqual(["aborted", "degraded"]);
   });
 });

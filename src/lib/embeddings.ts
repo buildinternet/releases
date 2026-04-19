@@ -290,7 +290,7 @@ async function callOpenAiCompatible(
     data: Array<{ embedding: number[]; index: number }>;
     usage?: { total_tokens?: number };
   };
-  const sorted = [...body.data].sort((a, b) => a.index - b.index);
+  const sorted = [...body.data].toSorted((a, b) => a.index - b.index);
   return {
     vectors: sorted.map((d) => d.embedding),
     dims: sorted[0]?.embedding.length ?? 0,

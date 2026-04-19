@@ -93,6 +93,6 @@ describe("expand", () => {
       sub({ id: "whk_3", orgId: "org_a", sourceId: "src_b" }),
     ];
     const out = expand(events, subs, eventOwner);
-    expect(out.map((m) => m.subscriptionId).sort()).toEqual(["whk_1", "whk_2"]);
+    expect(out.map((m) => m.subscriptionId).toSorted()).toEqual(["whk_1", "whk_2"]);
   });
 });

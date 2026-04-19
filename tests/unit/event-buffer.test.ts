@@ -18,7 +18,7 @@ function makeStore(): EventStore {
     async delete(keys) { for (const k of keys) map.delete(k); },
     async list<T>({ prefix, startAfter }: { prefix: string; startAfter?: string }) {
       const out = new Map<string, T>();
-      const sorted = [...map.keys()].filter((k) => k.startsWith(prefix)).sort();
+      const sorted = [...map.keys()].filter((k) => k.startsWith(prefix)).toSorted();
       for (const k of sorted) {
         if (startAfter && k <= startAfter) continue;
         out.set(k, map.get(k) as T);

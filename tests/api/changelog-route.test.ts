@@ -116,7 +116,7 @@ describe("source changelog route resolution", () => {
     const selected = selectChangelog(rows, null);
     if (typeof selected === "string") throw new Error("expected row");
     const res = buildChangelogResponse(selected, { offset: null, limit: null }, buildFiles(rows));
-    expect(res.files.map((f) => f.path).sort()).toEqual([
+    expect(res.files.map((f) => f.path).toSorted()).toEqual([
       "CHANGELOG.md",
       "packages/alpha/CHANGELOG.md",
       "packages/huge/CHANGELOG.md",

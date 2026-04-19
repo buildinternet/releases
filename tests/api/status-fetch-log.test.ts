@@ -58,8 +58,8 @@ describe("GET /v1/status/fetch-log", () => {
     expect(second.entries.length).toBe(2);
     expect(second.nextCursor).toBeNull();
     const ids1 = first.entries.map((e) => e.id);
-    const ids2 = second.entries.map((e) => e.id);
-    expect(ids1.some((i) => ids2.includes(i))).toBe(false);
+    const ids2 = new Set(second.entries.map((e) => e.id));
+    expect(ids1.some((i) => ids2.has(i))).toBe(false);
   });
 
   it("omits totalCount and statusCounts on cursor pages", async () => {

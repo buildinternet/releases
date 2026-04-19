@@ -27,7 +27,7 @@ export function selectReleasesForOverview(
   const capped = perSource.flatMap(({ type, releases }) =>
     releases.slice(0, PER_SOURCE_CAPS[type] ?? 20),
   );
-  const sorted = capped.sort((a, b) =>
+  const sorted = capped.toSorted((a, b) =>
     (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
   );
   return { releases: sorted.slice(0, limit), totalAvailable };

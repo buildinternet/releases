@@ -193,6 +193,6 @@ test("hybridSearch: empty query short-circuits and never builds a query vector",
 
   expect(embedCalls).toBe(0);
   expect(result.length).toBe(2);
-  expect(result.map((r) => r.id).sort()).toEqual(["rel_1", "rel_2"]);
+  expect(result.map((r) => r.id).toSorted()).toEqual(["rel_1", "rel_2"]);
   for (const r of result) expect(r.source).toBe("fts");
 });

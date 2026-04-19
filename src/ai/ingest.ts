@@ -107,7 +107,7 @@ ${sample}
 
       // Find the most common pattern prefix (first 20 chars)
       const prefixes = boundaryPatterns.map((p) => p.slice(0, 20));
-      const commonPrefix = prefixes.sort((a, b) =>
+      const commonPrefix = prefixes.toSorted((a, b) =>
         prefixes.filter((p) => p === b).length - prefixes.filter((p) => p === a).length
       )[0];
 
@@ -122,7 +122,7 @@ ${sample}
       }
     }
 
-    return boundaries.sort((a, b) => a - b);
+    return boundaries.toSorted((a, b) => a - b);
   } catch {
     return [];
   }
@@ -273,7 +273,7 @@ export async function parseChangelog(markdown: string, sourceSlug?: string, opti
   } else {
     // Multiple chunks — parse in parallel with concurrency limit
     const concurrency = 5;
-    const results: ParsedRelease[][] = new Array(chunks.length);
+    const results: ParsedRelease[][] = Array.from({ length: chunks.length });
 
     for (let start = 0; start < chunks.length; start += concurrency) {
       const batch = chunks.slice(start, start + concurrency);
