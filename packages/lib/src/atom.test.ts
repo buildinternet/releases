@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { sourceToAtom, orgReleasesToAtom } from "./atom.js";
-import type { SourceDetail, OrgReleaseItem } from "../../../src/api/types.js";
+import type { SourceDetail, OrgReleaseItem } from "./api-types.js";
 
 const BASE = "https://releases.sh";
 

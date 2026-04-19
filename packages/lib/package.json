@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./api-types": "./src/api-types.ts",
     "./atom": "./src/atom.ts",
     "./atom-http": "./src/atom-http.ts",
     "./config": "./src/config.ts",

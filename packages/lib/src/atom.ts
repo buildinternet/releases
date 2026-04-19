@@ -6,7 +6,7 @@
  * emit an identical feed.
  */
 
-import type { ReleaseItem, SourceDetail, OrgReleaseItem } from "../../../src/api/types.js";
+import type { ReleaseItem, SourceDetail, OrgReleaseItem } from "./api-types.js";
 
 export interface AtomFeedOptions {
   /** Canonical base URL, e.g. "https://releases.sh". Required for stable ids. */

@@ -1,4 +1,4 @@
-import type { MediaItem } from "@releases/api/types.js";
+import type { MediaItem } from "@releases/lib/api-types";
 
 /** Max events retained per DO. Ring buffer — oldest trimmed when exceeded. ~7 days at current ~700 events/day. */
 export const EVENT_BUFFER_SIZE = 7000;

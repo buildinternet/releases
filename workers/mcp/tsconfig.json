@@ -17,6 +17,5 @@
       "drizzle-orm/*": ["../../node_modules/drizzle-orm/*"]
     }
   },
-  "include": ["src/**/*.ts"],
-  "files": ["../../src/api/types.ts"]
+  "include": ["src/**/*.ts"]
 }
