@@ -14,7 +14,11 @@
     "./embedding-cache": "./src/embedding-cache.ts",
     "./embeddings": "./src/embeddings.ts",
     "./errors": "./src/errors.ts",
+    "./formatters": "./src/formatters.ts",
     "./logger": "./src/logger.ts",
+    "./media": "./src/media.ts",
+    "./media-url": "./src/media-url.ts",
+    "./source-edit": "./src/source-edit.ts",
     "./vector-search": "./src/vector-search.ts"
   }
 }

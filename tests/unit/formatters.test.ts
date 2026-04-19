@@ -5,7 +5,7 @@ import {
   knowledgeToMarkdown,
   type FormatSourceDetail,
   type FormatOrgDetail,
-} from "../../src/lib/formatters.js";
+} from "@releases/lib/formatters";
 import type { KnowledgePageItem } from "../../src/api/types.js";
 
 // ── Fixtures ───────────────────────────────────────────────────────

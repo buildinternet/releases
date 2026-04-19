@@ -3,7 +3,7 @@ import {
   inferFeedTypeFromUrl,
   resolveFeedUpdate,
   VALID_FEED_TYPES,
-} from "../../src/lib/source-edit.js";
+} from "@releases/lib/source-edit";
 
 describe("inferFeedTypeFromUrl", () => {
   it("returns jsonfeed for .json extensions", () => {

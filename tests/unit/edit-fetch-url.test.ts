@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { resolveFetchUrlUpdate } from "../../src/lib/source-edit.js";
+import { resolveFetchUrlUpdate } from "@releases/lib/source-edit";
 
 describe("resolveFetchUrlUpdate", () => {
   it("is a no-op when --fetch-url is not passed", () => {

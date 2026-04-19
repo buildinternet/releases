@@ -15,7 +15,7 @@ import type {
   OrgReleaseItem,
   UnifiedSearchResponse,
   OverviewPageItem,
-} from "../api/types.js";
+} from "../../../src/api/types.js";
 
 // Re-export under the old names for any callers still using them
 export type FormatRelease = ReleaseItem;

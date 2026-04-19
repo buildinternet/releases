@@ -8,14 +8,14 @@
     "lib": ["ESNext"],
     "types": ["@cloudflare/workers-types", "bun"],
     "paths": {
-      "@buildinternet/releases-lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
+      "@buildinternet/releases-lib/*": ["../../packages/lib/src/*"],
       "@releases/core-internal/*": ["../../packages/core/src/*"],
       "@releases/ai-internal/*": ["../../packages/ai/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
-      "@releases/lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
+      "@releases/lib/*": ["../../packages/lib/src/*"],
       "@releases/*": ["../../src/*"]
     }
   },
   "include": ["src/**/*.ts"],
-  "files": ["../../src/lib/formatters.ts", "../../src/api/types.ts"]
+  "files": ["../../packages/lib/src/formatters.ts", "../../src/api/types.ts"]
 }

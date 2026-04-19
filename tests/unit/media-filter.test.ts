@@ -4,14 +4,10 @@ import {
   filterJunkMedia,
   type MediaRef,
   type AmbiguousMediaClassifier,
-} from "../../src/lib/media.js";
+} from "@releases/lib/media";
 // normalizeMediaUrl lives in media-url.ts so the workers can import it
 // without pulling in the Node-only classifier/upload code.
-import {
-  normalizeMediaUrl,
-  unwrapImageProxyUrls,
-  hydrateMediaUrls,
-} from "../../src/lib/media-url.js";
+import { normalizeMediaUrl, unwrapImageProxyUrls, hydrateMediaUrls } from "@releases/lib/media-url";
 
 // ── preCheckMedia (deterministic) ───────────────────────────────────
 
