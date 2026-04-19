@@ -192,9 +192,11 @@ export interface FetchOneResult {
   releasesFound: number;
   releasesInserted: number;
   durationMs: number;
-  status: "success" | "no_change" | "error";
+  status: "success" | "no_change" | "error" | "dry_run";
   error?: string;
 }
+
+export const DEFAULT_FETCH_MAX_ENTRIES = 200;
 
 export interface FetchOneEnv {
   GITHUB_TOKEN?: string;
@@ -219,11 +221,13 @@ export async function fetchOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
   env: FetchOneEnv,
-  opts?: { sessionId?: string },
+  opts?: { sessionId?: string; dryRun?: boolean; maxEntries?: number },
 ): Promise<FetchOneResult> {
   const start = Date.now();
   const meta = getSourceMeta(source);
   const sessionId = opts?.sessionId ?? null;
+  const dryRun = opts?.dryRun ?? false;
+  const maxEntries = opts?.maxEntries ?? DEFAULT_FETCH_MAX_ENTRIES;
 
   try {
     let rawReleases: RawRelease[];
@@ -261,23 +265,46 @@ export async function fetchOne(
       const result = await fetchAndParseFeed(
         meta.feedUrl,
         meta.feedType as "rss" | "atom" | "jsonfeed",
-        { maxEntries: 200 },
+        { maxEntries },
         Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
       );
       rawReleases = result.releases;
 
-      const metaUpdates: Partial<SourceMetadata> = {};
-      if (result.etag) metaUpdates.feedEtag = result.etag;
-      if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
-      if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
-      if (meta.feed4xxStreak) metaUpdates.feed4xxStreak = undefined;
-      if (Object.keys(metaUpdates).length > 0) {
-        const merged = { ...meta, ...metaUpdates };
-        await db
-          .update(sources)
-          .set({ metadata: JSON.stringify(merged) })
-          .where(eq(sources.id, source.id));
+      // Dry-run is a pure probe — skip persisting new etag/lastModified so a
+      // follow-up real fetch sees the same upstream state the dry-run saw.
+      if (!dryRun) {
+        const metaUpdates: Partial<SourceMetadata> = {};
+        if (result.etag) metaUpdates.feedEtag = result.etag;
+        if (result.lastModified) metaUpdates.feedLastModified = result.lastModified;
+        if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
+        if (meta.feed4xxStreak) metaUpdates.feed4xxStreak = undefined;
+        if (Object.keys(metaUpdates).length > 0) {
+          const merged = { ...meta, ...metaUpdates };
+          await db
+            .update(sources)
+            .set({ metadata: JSON.stringify(merged) })
+            .where(eq(sources.id, source.id));
+        }
       }
+    }
+
+    if (dryRun) {
+      const dur = Date.now() - start;
+      await db.insert(fetchLog).values({
+        sourceId: source.id,
+        sessionId,
+        releasesFound: rawReleases.length,
+        releasesInserted: 0,
+        durationMs: dur,
+        status: "dry_run",
+      });
+      console.log(`[cron] Fetch ${source.slug}: dry-run (${rawReleases.length} found, ${dur}ms)`);
+      return {
+        releasesFound: rawReleases.length,
+        releasesInserted: 0,
+        durationMs: dur,
+        status: "dry_run" as const,
+      };
     }
 
     if (rawReleases.length === 0) {
