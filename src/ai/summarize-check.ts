@@ -19,7 +19,10 @@ function getOrgMeta(org: Organization): OrgMetadata {
  * Check order: source metadata → org metadata → default (enabled).
  * Pass a pre-fetched org to avoid a redundant DB lookup.
  */
-export async function isSummarizationEnabled(source: Source, org?: Organization | null): Promise<boolean> {
+export async function isSummarizationEnabled(
+  source: Source,
+  org?: Organization | null,
+): Promise<boolean> {
   // Source-level opt-out
   const sourceMeta = getSourceMeta(source);
   if (sourceMeta.summarize === false) return false;

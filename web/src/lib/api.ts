@@ -67,7 +67,10 @@ export class ApiSetupError extends Error {
   }
 }
 
-async function fetchApi<T>(path: string, init?: { cache?: RequestCache; next?: { revalidate?: number | false } }): Promise<T> {
+async function fetchApi<T>(
+  path: string,
+  init?: { cache?: RequestCache; next?: { revalidate?: number | false } },
+): Promise<T> {
   let res: Response;
   const headers: Record<string, string> = {};
   if (API_SECRET) {
@@ -77,15 +80,18 @@ async function fetchApi<T>(path: string, init?: { cache?: RequestCache; next?: {
   if (init?.cache) {
     fetchInit.cache = init.cache;
   } else {
-    (fetchInit as { next?: { revalidate?: number | false } }).next = init?.next ?? { revalidate: 60 };
+    (fetchInit as { next?: { revalidate?: number | false } }).next = init?.next ?? {
+      revalidate: 60,
+    };
   }
   try {
     res = await fetch(`${API_URL}${path}`, fetchInit);
   } catch {
-    throw new ApiSetupError(
-      `Cannot connect to the API at ${API_URL}. Is the server running?`,
-      [`bun run dev:api    # start the Cloudflare worker API`, `# or`, `bun run api         # start the local Bun API server`]
-    );
+    throw new ApiSetupError(`Cannot connect to the API at ${API_URL}. Is the server running?`, [
+      `bun run dev:api    # start the Cloudflare worker API`,
+      `# or`,
+      `bun run api         # start the local Bun API server`,
+    ]);
   }
 
   if (res.status === 503) {
@@ -104,11 +110,14 @@ export const api = {
   orgs: () => fetchApi<OrgListItem[]>("/v1/orgs"),
   sitemap: () => fetchApi<SitemapPayload>("/v1/sitemap"),
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
-  sources: (independent?: boolean) => fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),
+  sources: (independent?: boolean) =>
+    fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),
   sourceDetail: (slug: string, page = 1, pageSize = 20) =>
     fetchApi<SourceDetail>(`/v1/sources/${slug}?page=${page}&pageSize=${pageSize}`),
   search: (q: string, limit = 20, offset = 0) =>
-    fetchApi<UnifiedSearchResponse>(`/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+    fetchApi<UnifiedSearchResponse>(
+      `/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`,
+    ),
   sourceActivity: (slug: string, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
@@ -144,18 +153,14 @@ export const api = {
     if (range?.offset !== undefined) params.set("offset", String(range.offset));
     if (range?.limit !== undefined) params.set("limit", String(range.limit));
     const qs = params.toString();
-    return fetchApi<SourceChangelogResponse>(
-      `/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`,
-    );
+    return fetchApi<SourceChangelogResponse>(`/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`);
   },
   relatedReleases: (releaseId: string, scope: "org" | "global" = "global", limit = 8) =>
     fetchApi<RelatedReleasesResponse>(
       `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}`,
     ),
   coverage: (releaseId: string) =>
-    fetchApi<ReleaseCoverageResponse>(
-      `/v1/releases/${encodeURIComponent(releaseId)}/coverage`,
-    ),
+    fetchApi<ReleaseCoverageResponse>(`/v1/releases/${encodeURIComponent(releaseId)}/coverage`),
   relatedSources: (sourceIdOrSlug: string, scope: "org" | "global" = "global", limit = 6) =>
     fetchApi<RelatedSourcesResponse>(
       `/v1/related/sources?source=${encodeURIComponent(sourceIdOrSlug)}&scope=${scope}&limit=${limit}`,

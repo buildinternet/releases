@@ -2,12 +2,7 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
-import {
-  organizations,
-  sources,
-  releases,
-  usageLog,
-} from "@releases/core-internal/schema";
+import { organizations, sources, releases, usageLog } from "@releases/core-internal/schema";
 
 type AnthropicCall = { model: string; messages: unknown; system: string };
 const anthropicCalls: AnthropicCall[] = [];
@@ -21,11 +16,14 @@ mock.module("../src/lib/anthropic.js", () => ({
       this.status = status;
     }
   },
-  callAnthropic: async (_apiKey: string, req: {
-    model: string;
-    system: string;
-    messages: unknown;
-  }) => {
+  callAnthropic: async (
+    _apiKey: string,
+    req: {
+      model: string;
+      system: string;
+      messages: unknown;
+    },
+  ) => {
     anthropicCalls.push({ model: req.model, system: req.system, messages: req.messages });
     return { text: nextResponseText, inputTokens: 100, outputTokens: 50 };
   },
@@ -60,16 +58,73 @@ async function seed(db: ReturnType<typeof mkDb>) {
     { id: "org_b", slug: "other", name: "Other", category: "cloud" },
   ]);
   await db.insert(sources).values([
-    { id: "src_a1", orgId: "org_a", slug: "acme-one", name: "Acme One", url: "https://a.test/1", type: "feed" },
-    { id: "src_a2", orgId: "org_a", slug: "acme-two", name: "Acme Two", url: "https://a.test/2", type: "feed" },
-    { id: "src_b1", orgId: "org_b", slug: "other-one", name: "Other One", url: "https://b.test/1", type: "feed" },
+    {
+      id: "src_a1",
+      orgId: "org_a",
+      slug: "acme-one",
+      name: "Acme One",
+      url: "https://a.test/1",
+      type: "feed",
+    },
+    {
+      id: "src_a2",
+      orgId: "org_a",
+      slug: "acme-two",
+      name: "Acme Two",
+      url: "https://a.test/2",
+      type: "feed",
+    },
+    {
+      id: "src_b1",
+      orgId: "org_b",
+      slug: "other-one",
+      name: "Other One",
+      url: "https://b.test/1",
+      type: "feed",
+    },
   ]);
   const now = new Date().toISOString();
   await db.insert(releases).values([
-    { id: "rel_1", sourceId: "src_a1", title: "A1 r1", content: "A1 body 1", url: "https://a.test/1/r1", publishedAt: now, fetchedAt: now, contentHash: "h1" },
-    { id: "rel_2", sourceId: "src_a1", title: "A1 r2", content: "A1 body 2", url: "https://a.test/1/r2", publishedAt: now, fetchedAt: now, contentHash: "h2" },
-    { id: "rel_3", sourceId: "src_a2", title: "A2 r1", content: "A2 body 1", url: "https://a.test/2/r1", publishedAt: now, fetchedAt: now, contentHash: "h3" },
-    { id: "rel_4", sourceId: "src_b1", title: "B1 r1", content: "B1 body 1", url: "https://b.test/1/r1", publishedAt: now, fetchedAt: now, contentHash: "h4" },
+    {
+      id: "rel_1",
+      sourceId: "src_a1",
+      title: "A1 r1",
+      content: "A1 body 1",
+      url: "https://a.test/1/r1",
+      publishedAt: now,
+      fetchedAt: now,
+      contentHash: "h1",
+    },
+    {
+      id: "rel_2",
+      sourceId: "src_a1",
+      title: "A1 r2",
+      content: "A1 body 2",
+      url: "https://a.test/1/r2",
+      publishedAt: now,
+      fetchedAt: now,
+      contentHash: "h2",
+    },
+    {
+      id: "rel_3",
+      sourceId: "src_a2",
+      title: "A2 r1",
+      content: "A2 body 1",
+      url: "https://a.test/2/r1",
+      publishedAt: now,
+      fetchedAt: now,
+      contentHash: "h3",
+    },
+    {
+      id: "rel_4",
+      sourceId: "src_b1",
+      title: "B1 r1",
+      content: "B1 body 1",
+      url: "https://b.test/1/r1",
+      publishedAt: now,
+      fetchedAt: now,
+      contentHash: "h4",
+    },
   ]);
 }
 
@@ -85,14 +140,20 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
     nextResponseText = "# Acme One\n- thing happened";
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "acme-one" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "acme-one" }),
+      }),
+    );
 
     expect(res.status).toBe(200);
-    const body = await res.json() as { summary: string; releaseCount: number; scope: { kind: string; slug: string } };
+    const body = (await res.json()) as {
+      summary: string;
+      releaseCount: number;
+      scope: { kind: string; slug: string };
+    };
     expect(body.summary).toBe("# Acme One\n- thing happened");
     expect(body.releaseCount).toBe(2);
     expect(body.scope).toMatchObject({ kind: "source", slug: "acme-one" });
@@ -105,14 +166,16 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "src_a1" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "src_a1" }),
+      }),
+    );
 
     expect(res.status).toBe(200);
-    const body = await res.json() as { scope: { id: string } };
+    const body = (await res.json()) as { scope: { id: string } };
     expect(body.scope.id).toBe("src_a1");
   });
 
@@ -121,14 +184,19 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ org: "acme" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ org: "acme" }),
+      }),
+    );
 
     expect(res.status).toBe(200);
-    const body = await res.json() as { releaseCount: number; scope: { kind: string; slug: string } };
+    const body = (await res.json()) as {
+      releaseCount: number;
+      scope: { kind: string; slug: string };
+    };
     expect(body.releaseCount).toBe(3);
     expect(body.scope).toMatchObject({ kind: "org", slug: "acme" });
   });
@@ -138,11 +206,13 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "acme-one", instructions: "focus on breaking changes" }),
-    }));
+    await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "acme-one", instructions: "focus on breaking changes" }),
+      }),
+    );
 
     const userMsg = (anthropicCalls[0].messages as Array<{ content: string }>)[0].content;
     expect(userMsg).toContain("focus on breaking changes");
@@ -153,11 +223,13 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({}),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({}),
+      }),
+    );
     expect(res.status).toBe(400);
   });
 
@@ -166,11 +238,13 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "acme-one", org: "acme" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "acme-one", org: "acme" }),
+      }),
+    );
     expect(res.status).toBe(400);
   });
 
@@ -179,11 +253,13 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "acme-one", days: 9999 }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "acme-one", days: 9999 }),
+      }),
+    );
     expect(res.status).toBe(400);
   });
 
@@ -192,11 +268,13 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "ghost" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "ghost" }),
+      }),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -205,11 +283,13 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ org: "ghost-org" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ org: "ghost-org" }),
+      }),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -218,27 +298,38 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db, { apiKey: null });
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "acme-one" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "acme-one" }),
+      }),
+    );
     expect(res.status).toBe(503);
   });
 
   it("returns releaseCount=0 without calling AI when no releases in window", async () => {
     const db = mkDb();
     await db.insert(organizations).values({ id: "org_x", slug: "x", name: "X", category: "cloud" });
-    await db.insert(sources).values({ id: "src_x", orgId: "org_x", slug: "x-src", name: "X", url: "https://x.test", type: "feed" });
+    await db.insert(sources).values({
+      id: "src_x",
+      orgId: "org_x",
+      slug: "x-src",
+      name: "X",
+      url: "https://x.test",
+      type: "feed",
+    });
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "x-src" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "x-src" }),
+      }),
+    );
     expect(res.status).toBe(200);
-    const body = await res.json() as { summary: unknown; releaseCount: number };
+    const body = (await res.json()) as { summary: unknown; releaseCount: number };
     expect(body.releaseCount).toBe(0);
     expect(body.summary).toBeNull();
     expect(anthropicCalls).toHaveLength(0);
@@ -249,11 +340,13 @@ describe("POST /v1/admin/summaries", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    await fetch(new Request("https://x.test/v1/admin/summaries", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ source: "acme-one" }),
-    }));
+    await fetch(
+      new Request("https://x.test/v1/admin/summaries", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ source: "acme-one" }),
+      }),
+    );
 
     const rows = await db.select().from(usageLog);
     expect(rows).toHaveLength(1);
@@ -270,14 +363,16 @@ describe("POST /v1/admin/compare", () => {
     const fetch = mkApp(db);
     nextResponseText = "## Compare\n- diff";
 
-    const res = await fetch(new Request("https://x.test/v1/admin/compare", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/compare", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
+      }),
+    );
 
     expect(res.status).toBe(200);
-    const body = await res.json() as {
+    const body = (await res.json()) as {
       comparison: string;
       releaseCountA: number;
       releaseCountB: number;
@@ -296,11 +391,13 @@ describe("POST /v1/admin/compare", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/compare", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceA: "acme-one" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/compare", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceA: "acme-one" }),
+      }),
+    );
     expect(res.status).toBe(400);
   });
 
@@ -309,11 +406,13 @@ describe("POST /v1/admin/compare", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/compare", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceA: "acme-one", sourceB: "ghost" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/compare", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceA: "acme-one", sourceB: "ghost" }),
+      }),
+    );
     expect(res.status).toBe(404);
   });
 
@@ -321,18 +420,38 @@ describe("POST /v1/admin/compare", () => {
     const db = mkDb();
     await db.insert(organizations).values({ id: "org_x", slug: "x", name: "X", category: "cloud" });
     await db.insert(sources).values([
-      { id: "src_x1", orgId: "org_x", slug: "x-one", name: "X1", url: "https://x.test/1", type: "feed" },
-      { id: "src_x2", orgId: "org_x", slug: "x-two", name: "X2", url: "https://x.test/2", type: "feed" },
+      {
+        id: "src_x1",
+        orgId: "org_x",
+        slug: "x-one",
+        name: "X1",
+        url: "https://x.test/1",
+        type: "feed",
+      },
+      {
+        id: "src_x2",
+        orgId: "org_x",
+        slug: "x-two",
+        name: "X2",
+        url: "https://x.test/2",
+        type: "feed",
+      },
     ]);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/admin/compare", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceA: "x-one", sourceB: "x-two" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/compare", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceA: "x-one", sourceB: "x-two" }),
+      }),
+    );
     expect(res.status).toBe(200);
-    const body = await res.json() as { comparison: unknown; releaseCountA: number; releaseCountB: number };
+    const body = (await res.json()) as {
+      comparison: unknown;
+      releaseCountA: number;
+      releaseCountB: number;
+    };
     expect(body.comparison).toBeNull();
     expect(body.releaseCountA).toBe(0);
     expect(body.releaseCountB).toBe(0);
@@ -344,11 +463,13 @@ describe("POST /v1/admin/compare", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    await fetch(new Request("https://x.test/v1/admin/compare", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
-    }));
+    await fetch(
+      new Request("https://x.test/v1/admin/compare", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
+      }),
+    );
 
     const rows = await db.select().from(usageLog);
     expect(rows).toHaveLength(1);
@@ -361,11 +482,13 @@ describe("POST /v1/admin/compare", () => {
     await seed(db);
     const fetch = mkApp(db, { apiKey: null });
 
-    const res = await fetch(new Request("https://x.test/v1/admin/compare", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
-    }));
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/compare", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
+      }),
+    );
     expect(res.status).toBe(503);
   });
 });

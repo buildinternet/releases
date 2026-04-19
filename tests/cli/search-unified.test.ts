@@ -12,7 +12,17 @@ describe("unified search", () => {
       ["admin", "org", "add", "Vercel", "--category", "cloud"],
       ["admin", "org", "add", "Anthropic", "--category", "ai"],
       ["admin", "product", "add", "Next.js", "--org", "vercel"],
-      ["admin", "source", "add", "Vercel Blog", "--url", "https://vercel.com/changelog", "--org", "vercel", "--skip-eval"],
+      [
+        "admin",
+        "source",
+        "add",
+        "Vercel Blog",
+        "--url",
+        "https://vercel.com/changelog",
+        "--org",
+        "vercel",
+        "--skip-eval",
+      ],
     ]) {
       const r = cli(dataDir, args);
       if (r.exitCode !== 0) throw new Error(`Seed failed (${args.join(" ")}): ${r.stderr}`);
@@ -22,24 +32,22 @@ describe("unified search", () => {
   afterAll(() => cleanup());
 
   it("returns orgs matching by name", () => {
-    const result = cliJson<{ orgs: { slug: string }[] }>(dataDir, [
-      "search", "vercel", "--json",
-    ]);
+    const result = cliJson<{ orgs: { slug: string }[] }>(dataDir, ["search", "vercel", "--json"]);
     expect(result.orgs.length).toBeGreaterThan(0);
     expect(result.orgs[0].slug).toBe("vercel");
   });
 
   it("returns products matching by name", () => {
-    const result = cliJson<{ products: { slug: string }[] }>(dataDir, [
-      "search", "next", "--json",
-    ]);
+    const result = cliJson<{ products: { slug: string }[] }>(dataDir, ["search", "next", "--json"]);
     expect(result.products.length).toBeGreaterThan(0);
     expect(result.products[0].slug).toBe("next-js");
   });
 
   it("folds standalone sources into products", () => {
     const result = cliJson<{ products: { slug: string; kind?: string }[] }>(dataDir, [
-      "search", "vercel blog", "--json",
+      "search",
+      "vercel blog",
+      "--json",
     ]);
     const source = result.products.find((p) => p.slug === "vercel-blog");
     expect(source).toBeDefined();
@@ -48,7 +56,11 @@ describe("unified search", () => {
 
   it("filters to a single type with --type", () => {
     const result = cliJson<Record<string, unknown>>(dataDir, [
-      "search", "vercel", "--type", "orgs", "--json",
+      "search",
+      "vercel",
+      "--type",
+      "orgs",
+      "--json",
     ]);
     expect(result.orgs).toBeDefined();
     expect(result.products).toBeUndefined();
@@ -56,10 +68,11 @@ describe("unified search", () => {
   });
 
   it("returns empty gracefully", () => {
-    const result = cliJson<{ orgs: unknown[]; products: unknown[]; releases: unknown[] }>(
-      dataDir,
-      ["search", "zzzznonexistent", "--json"],
-    );
+    const result = cliJson<{ orgs: unknown[]; products: unknown[]; releases: unknown[] }>(dataDir, [
+      "search",
+      "zzzznonexistent",
+      "--json",
+    ]);
     expect(result.orgs).toEqual([]);
     expect(result.products).toEqual([]);
     expect(result.releases).toEqual([]);

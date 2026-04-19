@@ -102,16 +102,16 @@ export function formatCronReport(report: CronReport): FormattedReport {
   const text = lines.join("\n");
 
   const statusColor =
-    report.status === "done" ? "#16a34a" :
-    report.status === "degraded" ? "#d97706" :
-    "#dc2626";
+    report.status === "done" ? "#16a34a" : report.status === "degraded" ? "#d97706" : "#dc2626";
 
   const htmlRows: string[] = [];
   const row = (label: string, value: string) =>
     `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">${escapeHtml(label)}</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${escapeHtml(value)}</td></tr>`;
   htmlRows.push(row("Cron", report.cronName));
   htmlRows.push(row("Run", report.runId));
-  htmlRows.push(row("Status", report.status + (report.abortReason ? ` (${report.abortReason})` : "")));
+  htmlRows.push(
+    row("Status", report.status + (report.abortReason ? ` (${report.abortReason})` : "")),
+  );
   htmlRows.push(row("Started", report.startedAt));
   htmlRows.push(row("Ended", report.endedAt));
   htmlRows.push(row("Duration", formatDuration(report.durationMs)));

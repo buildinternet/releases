@@ -6,16 +6,25 @@ function mockWs(script: Array<StreamMessage | "close">) {
   const listeners: Record<string, (ev: any) => void> = {};
   const ws: any = {
     readyState: 0,
-    close() { listeners.close?.({}); },
-    addEventListener(type: string, fn: (ev: any) => void) { listeners[type] = fn; },
-    removeEventListener(type: string, _fn: any) { delete listeners[type]; },
+    close() {
+      listeners.close?.({});
+    },
+    addEventListener(type: string, fn: (ev: any) => void) {
+      listeners[type] = fn;
+    },
+    removeEventListener(type: string, _fn: any) {
+      delete listeners[type];
+    },
     send() {},
   };
   setTimeout(() => {
     ws.readyState = 1;
     listeners.open?.({});
     for (const msg of script) {
-      if (msg === "close") { listeners.close?.({ wasClean: true }); break; }
+      if (msg === "close") {
+        listeners.close?.({ wasClean: true });
+        break;
+      }
       listeners.message?.({ data: JSON.stringify(msg) });
     }
     listeners.close?.({ wasClean: true });
@@ -32,7 +41,11 @@ describe("streamReleases", () => {
       "close",
     ]);
     const messages: StreamMessage[] = [];
-    for await (const m of streamReleases({ url: "ws://fake", openWebSocket: () => ws, reconnect: false })) {
+    for await (const m of streamReleases({
+      url: "ws://fake",
+      openWebSocket: () => ws,
+      reconnect: false,
+    })) {
       messages.push(m);
     }
     expect(messages.map((m) => m.type)).toEqual(["ready", "release.created", "release.created"]);
@@ -45,7 +58,11 @@ describe("streamReleases", () => {
       "close",
     ]);
     const seen: string[] = [];
-    for await (const m of streamReleases({ url: "ws://fake", openWebSocket: () => ws, reconnect: false })) {
+    for await (const m of streamReleases({
+      url: "ws://fake",
+      openWebSocket: () => ws,
+      reconnect: false,
+    })) {
       seen.push(m.type);
       if (m.type === "snapshot_gap") break;
     }
@@ -55,7 +72,13 @@ describe("streamReleases", () => {
 
 function stubPayload(id: string) {
   return {
-    id, title: `t-${id}`, version: null, publishedAt: null,
-    sourceName: "x", sourceSlug: "x", contentSummary: null, media: [],
+    id,
+    title: `t-${id}`,
+    version: null,
+    publishedAt: null,
+    sourceName: "x",
+    sourceSlug: "x",
+    contentSummary: null,
+    media: [],
   };
 }

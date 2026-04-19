@@ -1,5 +1,11 @@
 import { describe, it, expect } from "bun:test";
-import { newSourceId, newReleaseId, newOrgId, newProductId, newTagId } from "@releases/core-internal/id";
+import {
+  newSourceId,
+  newReleaseId,
+  newOrgId,
+  newProductId,
+  newTagId,
+} from "@releases/core-internal/id";
 import { newCronRunId } from "@releases/core-internal/id";
 
 describe("ID generators", () => {

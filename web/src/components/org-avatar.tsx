@@ -9,7 +9,8 @@ interface OrgAvatarProps {
 }
 
 export function OrgAvatar({ avatarUrl, githubHandle, name, size = 24 }: OrgAvatarProps) {
-  const src = avatarUrl ?? (githubHandle ? `https://github.com/${githubHandle}.png?size=${size * 2}` : null);
+  const src =
+    avatarUrl ?? (githubHandle ? `https://github.com/${githubHandle}.png?size=${size * 2}` : null);
 
   if (!src) {
     return (

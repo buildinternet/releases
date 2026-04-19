@@ -2,7 +2,12 @@ import { SourceTypeIcon } from "@/components/source-type-icon";
 
 export function formatSourceDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export function shortUrl(url: string) {
@@ -10,7 +15,9 @@ export function shortUrl(url: string) {
     const u = new URL(url);
     const path = u.pathname.replace(/\/$/, "");
     return path && path !== "/" ? u.hostname + path : u.hostname;
-  } catch { return url; }
+  } catch {
+    return url;
+  }
 }
 
 function githubRepoHandle(url: string): string | null {
@@ -20,7 +27,9 @@ function githubRepoHandle(url: string): string | null {
     const [owner, repo] = u.pathname.replace(/^\/+|\/+$/g, "").split("/");
     if (!owner || !repo) return null;
     return `@${owner}/${repo}`;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 interface SourceSidebarItem {

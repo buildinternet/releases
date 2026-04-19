@@ -2,7 +2,13 @@ import { Hono } from "hono";
 import { count, gte, desc, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, sources, releases, products, fetchLog } from "@releases/core-internal/schema";
+import {
+  organizations,
+  sources,
+  releases,
+  products,
+  fetchLog,
+} from "@releases/core-internal/schema";
 import { daysAgoIso } from "@releases/core-internal/dates";
 import type { Env } from "../index.js";
 
@@ -25,7 +31,10 @@ statsRoutes.get("/stats", async (c) => {
   ] = await Promise.all([
     db.select({ n: count() }).from(organizations),
     db.select({ n: count() }).from(sources),
-    db.select({ n: count() }).from(releases).where(sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
+    db
+      .select({ n: count() })
+      .from(releases)
+      .where(sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
     db.select({ n: count() }).from(products),
     db
       .select({ n: count() })
@@ -37,10 +46,7 @@ statsRoutes.get("/stats", async (c) => {
       .select({ n: count() })
       .from(sources)
       .where(sql`${sources.lastFetchedAt} IS NULL`),
-    db
-      .select({ n: count() })
-      .from(sources)
-      .where(gte(sources.lastFetchedAt, cutoff)),
+    db.select({ n: count() }).from(sources).where(gte(sources.lastFetchedAt, cutoff)),
   ]);
 
   const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
@@ -64,7 +70,9 @@ statsRoutes.get("/stats", async (c) => {
     .where(notDisabled)
     .groupBy(sources.id)
     .orderBy(
-      desc(sql`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`),
+      desc(
+        sql`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
+      ),
     );
 
   // Recent fetch activity — join sources + orgs so we can return name/slug/org

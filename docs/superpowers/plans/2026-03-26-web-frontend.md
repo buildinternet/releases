@@ -16,39 +16,39 @@
 
 ### API (in existing CLI)
 
-| File | Purpose |
-|------|---------|
-| `src/api/server.ts` | Bun HTTP server: routing, CORS, error handling |
-| `src/api/routes/stats.ts` | `GET /api/stats` handler |
-| `src/api/routes/orgs.ts` | `GET /api/orgs` and `GET /api/orgs/:slug` handlers |
-| `src/api/routes/sources.ts` | `GET /api/sources` and `GET /api/sources/:slug` handlers |
-| `src/api/routes/search.ts` | `GET /api/search` handler |
-| `src/api/metrics.ts` | Shared activity metrics computation (last 30 days, avg/week) |
-| `src/cli/commands/api.ts` | Commander registration for `api` command |
-| `src/db/queries.ts` | New query helpers added to existing file |
+| File                        | Purpose                                                      |
+| --------------------------- | ------------------------------------------------------------ |
+| `src/api/server.ts`         | Bun HTTP server: routing, CORS, error handling               |
+| `src/api/routes/stats.ts`   | `GET /api/stats` handler                                     |
+| `src/api/routes/orgs.ts`    | `GET /api/orgs` and `GET /api/orgs/:slug` handlers           |
+| `src/api/routes/sources.ts` | `GET /api/sources` and `GET /api/sources/:slug` handlers     |
+| `src/api/routes/search.ts`  | `GET /api/search` handler                                    |
+| `src/api/metrics.ts`        | Shared activity metrics computation (last 30 days, avg/week) |
+| `src/cli/commands/api.ts`   | Commander registration for `api` command                     |
+| `src/db/queries.ts`         | New query helpers added to existing file                     |
 
 ### Frontend (new `web/` directory)
 
-| File | Purpose |
-|------|---------|
-| `web/package.json` | Next.js project config |
-| `web/next.config.ts` | Next.js configuration |
-| `web/tailwind.config.ts` | Tailwind with stone color palette |
-| `web/tsconfig.json` | TypeScript config |
-| `web/src/app/layout.tsx` | Root layout with header, system font, global styles |
-| `web/src/app/page.tsx` | Homepage: search, stats, org grid, independent sources |
-| `web/src/app/[orgSlug]/page.tsx` | Org detail page with sidebar |
-| `web/src/app/[orgSlug]/[sourceSlug]/page.tsx` | Source detail page with sidebar (org-affiliated) |
-| `web/src/app/source/[slug]/page.tsx` | Source detail page (independent, redirects if has org) |
-| `web/src/app/search/page.tsx` | Search results page |
-| `web/src/lib/api.ts` | API client — typed fetch wrappers for all endpoints |
-| `web/src/components/header.tsx` | Site header with nav |
-| `web/src/components/sidebar.tsx` | Metadata sidebar (reused on org + source pages) |
-| `web/src/components/source-card.tsx` | Source card (reused on homepage + org page) |
-| `web/src/components/release-item.tsx` | Release list item |
-| `web/src/components/pagination.tsx` | Pagination controls |
-| `web/src/components/source-type-icon.tsx` | GitHub/RSS/globe icon at low opacity |
-| `web/src/components/search-bar.tsx` | Search input with navigation |
+| File                                          | Purpose                                                |
+| --------------------------------------------- | ------------------------------------------------------ |
+| `web/package.json`                            | Next.js project config                                 |
+| `web/next.config.ts`                          | Next.js configuration                                  |
+| `web/tailwind.config.ts`                      | Tailwind with stone color palette                      |
+| `web/tsconfig.json`                           | TypeScript config                                      |
+| `web/src/app/layout.tsx`                      | Root layout with header, system font, global styles    |
+| `web/src/app/page.tsx`                        | Homepage: search, stats, org grid, independent sources |
+| `web/src/app/[orgSlug]/page.tsx`              | Org detail page with sidebar                           |
+| `web/src/app/[orgSlug]/[sourceSlug]/page.tsx` | Source detail page with sidebar (org-affiliated)       |
+| `web/src/app/source/[slug]/page.tsx`          | Source detail page (independent, redirects if has org) |
+| `web/src/app/search/page.tsx`                 | Search results page                                    |
+| `web/src/lib/api.ts`                          | API client — typed fetch wrappers for all endpoints    |
+| `web/src/components/header.tsx`               | Site header with nav                                   |
+| `web/src/components/sidebar.tsx`              | Metadata sidebar (reused on org + source pages)        |
+| `web/src/components/source-card.tsx`          | Source card (reused on homepage + org page)            |
+| `web/src/components/release-item.tsx`         | Release list item                                      |
+| `web/src/components/pagination.tsx`           | Pagination controls                                    |
+| `web/src/components/source-type-icon.tsx`     | GitHub/RSS/globe icon at low opacity                   |
+| `web/src/components/search-bar.tsx`           | Search input with navigation                           |
 
 ---
 
@@ -57,6 +57,7 @@
 ### Task 1: API Server Skeleton and Stats Endpoint
 
 **Files:**
+
 - Create: `src/api/server.ts`
 - Create: `src/api/routes/stats.ts`
 - Create: `src/cli/commands/api.ts`
@@ -142,7 +143,8 @@ export function startApiServer(port: number) {
         const orgParams = matchRoute(pathname, "/api/orgs/:slug");
         if (orgParams) {
           const result = handleOrgDetail(orgParams.slug);
-          if (!result) return errorResponse("not_found", `No organization with slug '${orgParams.slug}'`, 404);
+          if (!result)
+            return errorResponse("not_found", `No organization with slug '${orgParams.slug}'`, 404);
           return jsonResponse(result);
         }
 
@@ -158,7 +160,8 @@ export function startApiServer(port: number) {
             return errorResponse("bad_request", "Invalid page or pageSize parameter", 400);
           }
           const result = handleSourceDetail(sourceParams.slug, page, pageSize);
-          if (!result) return errorResponse("not_found", `No source with slug '${sourceParams.slug}'`, 404);
+          if (!result)
+            return errorResponse("not_found", `No source with slug '${sourceParams.slug}'`, 404);
           return jsonResponse(result);
         }
 
@@ -233,11 +236,13 @@ export function registerApiCommand(program: Command) {
 Add to `src/cli/program.ts`:
 
 1. Add import at the top with the other imports:
+
 ```typescript
 import { registerApiCommand } from "./commands/api.js";
 ```
 
 2. Add registration after `registerStatsCommand(program);` (the last existing registration):
+
 ```typescript
 registerApiCommand(program);
 ```
@@ -257,6 +262,7 @@ git commit -m "Add API server skeleton with stats endpoint"
 ### Task 2: Activity Metrics Helper
 
 **Files:**
+
 - Create: `src/api/metrics.ts`
 
 - [ ] **Step 1: Create the shared metrics computation module**
@@ -321,10 +327,15 @@ export function getOrgMetrics(orgId: string): ActivityMetrics {
   const [recent] = db
     .select({ n: count() })
     .from(releases)
-    .where(and(
-      sql`${releases.sourceId} IN (${sql.join(sourceIds.map(id => sql`${id}`), sql`, `)})`,
-      gte(releases.publishedAt, cutoff),
-    ))
+    .where(
+      and(
+        sql`${releases.sourceId} IN (${sql.join(
+          sourceIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`,
+        gte(releases.publishedAt, cutoff),
+      ),
+    )
     .all();
 
   const [totals] = db
@@ -333,10 +344,15 @@ export function getOrgMetrics(orgId: string): ActivityMetrics {
       oldest: min(releases.publishedAt),
     })
     .from(releases)
-    .where(and(
-      sql`${releases.sourceId} IN (${sql.join(sourceIds.map(id => sql`${id}`), sql`, `)})`,
-      sql`${releases.publishedAt} IS NOT NULL`,
-    ))
+    .where(
+      and(
+        sql`${releases.sourceId} IN (${sql.join(
+          sourceIds.map((id) => sql`${id}`),
+          sql`, `,
+        )})`,
+        sql`${releases.publishedAt} IS NOT NULL`,
+      ),
+    )
     .all();
 
   return {
@@ -374,6 +390,7 @@ git commit -m "Add shared activity metrics computation"
 ### Task 3: Orgs Endpoints
 
 **Files:**
+
 - Create: `src/api/routes/orgs.ts`
 
 - [ ] **Step 1: Create the orgs route handlers**
@@ -435,11 +452,7 @@ export function handleOrgs() {
 export function handleOrgDetail(slug: string) {
   const db = getDb();
 
-  const [org] = db
-    .select()
-    .from(organizations)
-    .where(eq(organizations.slug, slug))
-    .all();
+  const [org] = db.select().from(organizations).where(eq(organizations.slug, slug)).all();
 
   if (!org) return null;
 
@@ -476,16 +489,18 @@ export function handleOrgDetail(slug: string) {
       .all();
 
     // Fallback: most recently fetched if no dated releases
-    const latestVersion = latest?.version ?? (() => {
-      const [fallback] = db
-        .select({ version: releases.version })
-        .from(releases)
-        .where(eq(releases.sourceId, src.id))
-        .orderBy(desc(releases.fetchedAt))
-        .limit(1)
-        .all();
-      return fallback?.version ?? null;
-    })();
+    const latestVersion =
+      latest?.version ??
+      (() => {
+        const [fallback] = db
+          .select({ version: releases.version })
+          .from(releases)
+          .where(eq(releases.sourceId, src.id))
+          .orderBy(desc(releases.fetchedAt))
+          .limit(1)
+          .all();
+        return fallback?.version ?? null;
+      })();
 
     return {
       slug: src.slug,
@@ -524,6 +539,7 @@ export function handleOrgDetail(slug: string) {
 
 Run: `bun src/index.ts api`
 Test:
+
 - `curl http://localhost:3456/api/orgs` — returns array of orgs
 - `curl http://localhost:3456/api/orgs/<a-real-slug>` — returns org detail
 - `curl http://localhost:3456/api/orgs/nonexistent` — returns 404
@@ -538,6 +554,7 @@ git commit -m "Add orgs list and detail API endpoints"
 ### Task 4: Sources Endpoints
 
 **Files:**
+
 - Create: `src/api/routes/sources.ts`
 
 - [ ] **Step 1: Create the sources route handlers**
@@ -647,7 +664,8 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   const releasesFormatted = releaseRows.map((r) => ({
     version: r.version,
     title: r.title,
-    summary: r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    summary:
+      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     publishedAt: r.published_at,
     url: r.url,
   }));
@@ -661,16 +679,18 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
     .limit(1)
     .all();
 
-  const latestVersion = latest?.version ?? (() => {
-    const [fallback] = db
-      .select({ version: releases.version })
-      .from(releases)
-      .where(eq(releases.sourceId, src.id))
-      .orderBy(desc(releases.fetchedAt))
-      .limit(1)
-      .all();
-    return fallback?.version ?? null;
-  })();
+  const latestVersion =
+    latest?.version ??
+    (() => {
+      const [fallback] = db
+        .select({ version: releases.version })
+        .from(releases)
+        .where(eq(releases.sourceId, src.id))
+        .orderBy(desc(releases.fetchedAt))
+        .limit(1)
+        .all();
+      return fallback?.version ?? null;
+    })();
 
   const metrics = getSourceMetrics(src.id);
   const totalPages = Math.ceil(relCount.n / pageSize);
@@ -702,6 +722,7 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
 
 Run: `bun src/index.ts api`
 Test:
+
 - `curl http://localhost:3456/api/sources?independent=true` — returns sources without orgs
 - `curl http://localhost:3456/api/sources/<a-real-slug>` — returns source detail with releases
 - `curl http://localhost:3456/api/sources/<slug>?page=2` — returns page 2
@@ -716,6 +737,7 @@ git commit -m "Add sources list and detail API endpoints"
 ### Task 5: Search Endpoint
 
 **Files:**
+
 - Create: `src/api/routes/search.ts`
 - Modify: `src/db/fts.ts` (extend to support offset)
 
@@ -734,7 +756,11 @@ export interface SearchApiResult {
   publishedAt: string | null;
 }
 
-export function searchReleasesForApi(query: string, limit: number, offset: number): SearchApiResult[] {
+export function searchReleasesForApi(
+  query: string,
+  limit: number,
+  offset: number,
+): SearchApiResult[] {
   const db = getDb();
   return db.all<SearchApiResult>(sql`
     SELECT
@@ -796,6 +822,7 @@ git commit -m "Add search API endpoint with FTS5 join"
 ### Task 6: Scaffold Next.js App
 
 **Files:**
+
 - Create: `web/package.json`
 - Create: `web/next.config.ts`
 - Create: `web/tailwind.config.ts`
@@ -894,13 +921,17 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "released",
-  description: "Release notes, indexed. Track changelogs across the tools and libraries you depend on.",
+  description:
+    "Release notes, indexed. Track changelogs across the tools and libraries you depend on.",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en">
-      <body className="bg-stone-50 text-stone-900 antialiased" style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}>
+      <body
+        className="bg-stone-50 text-stone-900 antialiased"
+        style={{ fontFamily: "system-ui, -apple-system, sans-serif" }}
+      >
         {children}
       </body>
     </html>
@@ -926,6 +957,7 @@ git commit -m "Scaffold Next.js frontend app"
 ### Task 7: API Client and Shared Components
 
 **Files:**
+
 - Create: `web/src/lib/api.ts`
 - Create: `web/src/components/header.tsx`
 - Create: `web/src/components/source-type-icon.tsx`
@@ -1037,7 +1069,9 @@ export const api = {
   sourceDetail: (slug: string, page = 1, pageSize = 20) =>
     fetchApi<SourceDetail>(`/api/sources/${slug}?page=${page}&pageSize=${pageSize}`),
   search: (q: string, limit = 20, offset = 0) =>
-    fetchApi<SearchResponse>(`/api/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`),
+    fetchApi<SearchResponse>(
+      `/api/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`,
+    ),
 };
 ```
 
@@ -1055,8 +1089,12 @@ export function Header() {
         released
       </Link>
       <nav className="flex gap-5 text-sm text-stone-500">
-        <Link href="/" className="hover:text-stone-700">Browse</Link>
-        <Link href="/search" className="hover:text-stone-700">Search</Link>
+        <Link href="/" className="hover:text-stone-700">
+          Browse
+        </Link>
+        <Link href="/search" className="hover:text-stone-700">
+          Search
+        </Link>
       </nav>
     </header>
   );
@@ -1071,7 +1109,13 @@ Create `web/src/components/source-type-icon.tsx`:
 export function SourceTypeIcon({ type, size = 16 }: { type: string; size?: number }) {
   if (type === "github") {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="currentColor" className="text-stone-900 opacity-25">
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="currentColor"
+        className="text-stone-900 opacity-25"
+      >
         <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z" />
       </svg>
     );
@@ -1079,16 +1123,40 @@ export function SourceTypeIcon({ type, size = 16 }: { type: string; size?: numbe
 
   if (type === "feed") {
     return (
-      <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-stone-900 opacity-25">
-        <path d="M4 11a9 9 0 0 1 9 9" /><path d="M4 4a16 16 0 0 1 16 16" /><circle cx="5" cy="19" r="1" />
+      <svg
+        width={size}
+        height={size}
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        className="text-stone-900 opacity-25"
+      >
+        <path d="M4 11a9 9 0 0 1 9 9" />
+        <path d="M4 4a16 16 0 0 1 16 16" />
+        <circle cx="5" cy="19" r="1" />
       </svg>
     );
   }
 
   // scrape / default: globe
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-stone-900 opacity-25">
-      <circle cx="12" cy="12" r="10" /><path d="M2 12h20" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="text-stone-900 opacity-25"
+    >
+      <circle cx="12" cy="12" r="10" />
+      <path d="M2 12h20" />
+      <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
     </svg>
   );
 }
@@ -1105,26 +1173,35 @@ import type { SourceListItem } from "@/lib/api";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 function hostname(url?: string) {
   if (!url) return null;
-  try { return new URL(url).hostname; } catch { return null; }
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
 }
 
 export function SourceCard({ source, orgSlug }: { source: SourceListItem; orgSlug?: string }) {
   const href = orgSlug ? `/${orgSlug}/${source.slug}` : `/source/${source.slug}`;
 
   return (
-    <Link href={href} className="block bg-white border border-stone-200 rounded-lg p-4 hover:border-stone-300 transition-colors">
+    <Link
+      href={href}
+      className="block bg-white border border-stone-200 rounded-lg p-4 hover:border-stone-300 transition-colors"
+    >
       <div className="flex justify-between items-center">
         <span className="font-semibold text-[15px] text-stone-900">{source.name}</span>
         <SourceTypeIcon type={source.type} />
       </div>
-      {source.url && (
-        <div className="text-[13px] text-stone-500 mt-1">{hostname(source.url)}</div>
-      )}
+      {source.url && <div className="text-[13px] text-stone-500 mt-1">{hostname(source.url)}</div>}
       <div className="text-xs text-stone-400 mt-2">
         {source.latestVersion && <>Latest: {source.latestVersion}</>}
         {source.latestDate && <> · {formatDate(source.latestDate)}</>}
@@ -1144,16 +1221,18 @@ import type { ReleaseItem } from "@/lib/api";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export function ReleaseListItem({ release }: { release: ReleaseItem }) {
   return (
     <div className="border-b border-stone-200 py-4 first:pt-0 last:border-b-0">
       <div className="flex justify-between items-baseline mb-1">
-        <span className="font-semibold text-[15px] text-stone-900">
-          {release.version ?? "—"}
-        </span>
+        <span className="font-semibold text-[15px] text-stone-900">{release.version ?? "—"}</span>
         <span className="text-xs text-stone-400 whitespace-nowrap ml-4">
           {formatDate(release.publishedAt)}
         </span>
@@ -1193,7 +1272,9 @@ export function Pagination({ page, totalPages, basePath }: PaginationProps) {
   return (
     <div className="mt-4 pt-4 border-t border-stone-200 flex justify-center gap-2 text-sm">
       {page > 1 ? (
-        <Link href={href(page - 1)} className="text-stone-500 hover:text-stone-700">Previous</Link>
+        <Link href={href(page - 1)} className="text-stone-500 hover:text-stone-700">
+          Previous
+        </Link>
       ) : (
         <span className="text-stone-300">Previous</span>
       )}
@@ -1202,9 +1283,10 @@ export function Pagination({ page, totalPages, basePath }: PaginationProps) {
         <Link
           key={p}
           href={href(p)}
-          className={p === page
-            ? "font-semibold text-stone-900 bg-stone-100 px-2 py-0.5 rounded"
-            : "text-stone-500 hover:text-stone-700 px-2 py-0.5"
+          className={
+            p === page
+              ? "font-semibold text-stone-900 bg-stone-100 px-2 py-0.5 rounded"
+              : "text-stone-500 hover:text-stone-700 px-2 py-0.5"
           }
         >
           {p}
@@ -1212,7 +1294,9 @@ export function Pagination({ page, totalPages, basePath }: PaginationProps) {
       ))}
 
       {page < totalPages ? (
-        <Link href={href(page + 1)} className="text-stone-500 hover:text-stone-700">Next</Link>
+        <Link href={href(page + 1)} className="text-stone-500 hover:text-stone-700">
+          Next
+        </Link>
       ) : (
         <span className="text-stone-300">Next</span>
       )}
@@ -1257,15 +1341,21 @@ export function Sidebar({ sections, accounts }: SidebarProps) {
                 {item.label}
               </div>
               {item.link ? (
-                <Link href={item.link} className="text-sm font-medium text-stone-900 hover:text-stone-600">
+                <Link
+                  href={item.link}
+                  className="text-sm font-medium text-stone-900 hover:text-stone-600"
+                >
                   {String(item.value)}
                 </Link>
               ) : (
                 <>
-                  <div className={item.large
-                    ? "text-[22px] font-bold text-stone-900"
-                    : "text-sm font-medium text-stone-900"
-                  }>
+                  <div
+                    className={
+                      item.large
+                        ? "text-[22px] font-bold text-stone-900"
+                        : "text-sm font-medium text-stone-900"
+                    }
+                  >
                     {item.value ?? "—"}
                   </div>
                   {item.subtitle && (
@@ -1347,6 +1437,7 @@ git commit -m "Add API client and shared UI components"
 ### Task 8: Homepage
 
 **Files:**
+
 - Create: `web/src/app/page.tsx`
 
 - [ ] **Step 1: Create the homepage**
@@ -1381,9 +1472,15 @@ export default async function HomePage() {
         </p>
         <SearchBar />
         <div className="flex justify-center gap-8 mt-5 text-[13px] text-stone-400">
-          <span><strong className="text-stone-600">{stats.orgs}</strong> orgs</span>
-          <span><strong className="text-stone-600">{stats.sources}</strong> sources</span>
-          <span><strong className="text-stone-600">{stats.releases.toLocaleString()}</strong> releases</span>
+          <span>
+            <strong className="text-stone-600">{stats.orgs}</strong> orgs
+          </span>
+          <span>
+            <strong className="text-stone-600">{stats.sources}</strong> sources
+          </span>
+          <span>
+            <strong className="text-stone-600">{stats.releases.toLocaleString()}</strong> releases
+          </span>
         </div>
       </div>
 
@@ -1453,6 +1550,7 @@ git commit -m "Add homepage with org grid and independent sources"
 ### Task 9: Org Detail Page
 
 **Files:**
+
 - Create: `web/src/app/[orgSlug]/page.tsx`
 
 - [ ] **Step 1: Create the org page**
@@ -1469,7 +1567,11 @@ import Link from "next/link";
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export default async function OrgPage({ params }: { params: Promise<{ orgSlug: string }> }) {
@@ -1497,9 +1599,7 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
       ],
     },
     {
-      items: [
-        { label: "Tracking Since", value: formatDate(org.trackingSince) },
-      ],
+      items: [{ label: "Tracking Since", value: formatDate(org.trackingSince) }],
     },
   ];
 
@@ -1510,15 +1610,15 @@ export default async function OrgPage({ params }: { params: Promise<{ orgSlug: s
       <div className="max-w-4xl mx-auto px-6">
         {/* Breadcrumb */}
         <div className="pt-5 text-[13px] text-stone-400">
-          <Link href="/" className="hover:text-stone-600">Home</Link>
+          <Link href="/" className="hover:text-stone-600">
+            Home
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 font-medium">{org.name}</span>
         </div>
 
         {/* Title */}
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 mt-4">
-          {org.name}
-        </h1>
+        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 mt-4">{org.name}</h1>
 
         {/* Two-column layout */}
         <div className="flex gap-10 mt-6 pb-12">
@@ -1552,6 +1652,7 @@ git commit -m "Add org detail page with sidebar layout"
 ### Task 10: Source Detail Page (Org-Affiliated)
 
 **Files:**
+
 - Create: `web/src/app/[orgSlug]/[sourceSlug]/page.tsx`
 
 - [ ] **Step 1: Create the source page**
@@ -1570,7 +1671,11 @@ import Link from "next/link";
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export default async function SourcePage({
@@ -1601,20 +1706,30 @@ export default async function SourcePage({
 
   const sidebarSections = [
     {
-      items: [
-        { label: "Releases", value: source.releaseCount, large: true },
-      ],
+      items: [{ label: "Releases", value: source.releaseCount, large: true }],
     },
     {
       items: [
-        { label: "Last 30 Days", value: source.releasesLast30Days, large: true, subtitle: "releases" },
-        { label: "Avg per Week", value: source.avgReleasesPerWeek, large: true, subtitle: "releases" },
+        {
+          label: "Last 30 Days",
+          value: source.releasesLast30Days,
+          large: true,
+          subtitle: "releases",
+        },
+        {
+          label: "Avg per Week",
+          value: source.avgReleasesPerWeek,
+          large: true,
+          subtitle: "releases",
+        },
       ],
     },
     {
       items: [
         { label: "Latest", value: source.latestVersion, subtitle: formatDate(source.latestDate) },
-        ...(source.org ? [{ label: "Organization", value: source.org.name, link: `/${source.org.slug}` }] : []),
+        ...(source.org
+          ? [{ label: "Organization", value: source.org.name, link: `/${source.org.slug}` }]
+          : []),
         { label: "Source", value: new URL(source.url).hostname },
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
@@ -1628,16 +1743,16 @@ export default async function SourcePage({
       <div className="max-w-4xl mx-auto px-6">
         {/* Breadcrumb */}
         <div className="pt-5 text-[13px] text-stone-400">
-          <Link href={`/${source.org.slug}`} className="hover:text-stone-600">{source.org.name}</Link>
+          <Link href={`/${source.org.slug}`} className="hover:text-stone-600">
+            {source.org.name}
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 font-medium">{source.name}</span>
         </div>
 
         {/* Title */}
         <div className="flex items-center gap-2.5 mt-4">
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900">
-            {source.name}
-          </h1>
+          <h1 className="text-[28px] font-bold tracking-tight text-stone-900">{source.name}</h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
 
@@ -1678,6 +1793,7 @@ git commit -m "Add source detail page with releases and sidebar"
 ### Task 11: Independent Source Page
 
 **Files:**
+
 - Create: `web/src/app/source/[slug]/page.tsx`
 
 - [ ] **Step 1: Create the independent source page**
@@ -1696,7 +1812,11 @@ import Link from "next/link";
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
 export default async function IndependentSourcePage({
@@ -1724,14 +1844,22 @@ export default async function IndependentSourcePage({
 
   const sidebarSections = [
     {
-      items: [
-        { label: "Releases", value: source.releaseCount, large: true },
-      ],
+      items: [{ label: "Releases", value: source.releaseCount, large: true }],
     },
     {
       items: [
-        { label: "Last 30 Days", value: source.releasesLast30Days, large: true, subtitle: "releases" },
-        { label: "Avg per Week", value: source.avgReleasesPerWeek, large: true, subtitle: "releases" },
+        {
+          label: "Last 30 Days",
+          value: source.releasesLast30Days,
+          large: true,
+          subtitle: "releases",
+        },
+        {
+          label: "Avg per Week",
+          value: source.avgReleasesPerWeek,
+          large: true,
+          subtitle: "releases",
+        },
       ],
     },
     {
@@ -1750,16 +1878,16 @@ export default async function IndependentSourcePage({
       <div className="max-w-4xl mx-auto px-6">
         {/* Breadcrumb */}
         <div className="pt-5 text-[13px] text-stone-400">
-          <Link href="/" className="hover:text-stone-600">Home</Link>
+          <Link href="/" className="hover:text-stone-600">
+            Home
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 font-medium">{source.name}</span>
         </div>
 
         {/* Title */}
         <div className="flex items-center gap-2.5 mt-4">
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900">
-            {source.name}
-          </h1>
+          <h1 className="text-[28px] font-bold tracking-tight text-stone-900">{source.name}</h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
 
@@ -1794,6 +1922,7 @@ git commit -m "Add independent source page with org redirect"
 ### Task 12: Search Page
 
 **Files:**
+
 - Create: `web/src/app/search/page.tsx`
 
 - [ ] **Step 1: Create the search results page**
@@ -1808,10 +1937,18 @@ import Link from "next/link";
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }
 
-export default async function SearchPage({ searchParams }: { searchParams: Promise<{ q?: string }> }) {
+export default async function SearchPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ q?: string }>;
+}) {
   const { q } = await searchParams;
 
   let results = null;
@@ -1836,9 +1973,7 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
         {results && (
           <div className="mt-8">
             {results.results.length === 0 ? (
-              <p className="text-center text-stone-400 text-sm">
-                No results for &ldquo;{q}&rdquo;
-              </p>
+              <p className="text-center text-stone-400 text-sm">No results for &ldquo;{q}&rdquo;</p>
             ) : (
               <div>
                 {results.results.map((r, i) => {
@@ -1846,11 +1981,16 @@ export default async function SearchPage({ searchParams }: { searchParams: Promi
                     ? `/${r.orgSlug}/${r.sourceSlug}`
                     : `/source/${r.sourceSlug}`;
                   return (
-                    <div key={i} className="border-b border-stone-200 py-4 first:pt-0 last:border-b-0">
+                    <div
+                      key={i}
+                      className="border-b border-stone-200 py-4 first:pt-0 last:border-b-0"
+                    >
                       <div className="flex justify-between items-baseline mb-1">
                         <div className="flex items-baseline gap-2">
                           {r.version && (
-                            <span className="font-semibold text-[15px] text-stone-900">{r.version}</span>
+                            <span className="font-semibold text-[15px] text-stone-900">
+                              {r.version}
+                            </span>
                           )}
                           <span className="text-sm text-stone-600">{r.title}</span>
                         </div>
@@ -1901,12 +2041,14 @@ Expected: No errors.
 - [ ] **Step 3: End-to-end smoke test**
 
 Start both:
+
 ```bash
 bun src/index.ts api &
 cd web && bun run dev
 ```
 
 Verify:
+
 - Homepage loads with real data
 - Clicking an org navigates to org page with sidebar
 - Clicking a source navigates to source page with releases

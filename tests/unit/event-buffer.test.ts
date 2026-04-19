@@ -14,8 +14,12 @@ function makeStore(): EventStore {
     async get<T>(key: string): Promise<T | null> {
       return (map.get(key) ?? null) as T | null;
     },
-    async put(key, value) { map.set(key, value); },
-    async delete(keys) { for (const k of keys) map.delete(k); },
+    async put(key, value) {
+      map.set(key, value);
+    },
+    async delete(keys) {
+      for (const k of keys) map.delete(k);
+    },
     async list<T>({ prefix, startAfter }: { prefix: string; startAfter?: string }) {
       const out = new Map<string, T>();
       const sorted = [...map.keys()].filter((k) => k.startsWith(prefix)).toSorted();
@@ -30,8 +34,14 @@ function makeStore(): EventStore {
 
 function payload(id: string): ReleaseEventPayload {
   return {
-    id, title: `t-${id}`, version: null, publishedAt: null,
-    sourceName: "Acme", sourceSlug: "acme", contentSummary: null, media: [],
+    id,
+    title: `t-${id}`,
+    version: null,
+    publishedAt: null,
+    sourceName: "Acme",
+    sourceSlug: "acme",
+    contentSummary: null,
+    media: [],
   };
 }
 

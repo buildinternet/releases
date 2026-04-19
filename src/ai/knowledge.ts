@@ -99,7 +99,9 @@ export async function regenerateOrgOverview(
   };
 }
 
-export function isActiveSource<T extends Pick<Source, "isHidden" | "fetchPriority">>(s: T): boolean {
+export function isActiveSource<T extends Pick<Source, "isHidden" | "fetchPriority">>(
+  s: T,
+): boolean {
   return !s.isHidden && s.fetchPriority !== "paused";
 }
 
@@ -166,8 +168,11 @@ function formatReleasesForPrompt(releases: Release[]): string {
     .join("\n");
 }
 
-export async function generateKnowledgePage(input: KnowledgeInput): Promise<KnowledgeResult | null> {
-  const { name, slug, description, existingContent, newReleases, totalReleaseCount, sourceNames } = input;
+export async function generateKnowledgePage(
+  input: KnowledgeInput,
+): Promise<KnowledgeResult | null> {
+  const { name, slug, description, existingContent, newReleases, totalReleaseCount, sourceNames } =
+    input;
 
   if (newReleases.length === 0 && !existingContent) {
     return null;
@@ -177,9 +182,7 @@ export async function generateKnowledgePage(input: KnowledgeInput): Promise<Know
   const model = config.summaryModel();
 
   const productLabel = description?.trim() ? `${name} (${description.trim()})` : name;
-  const sourcesNote = sourceNames.length > 1
-    ? `\nTracked sources: ${sourceNames.join(", ")}.`
-    : "";
+  const sourcesNote = sourceNames.length > 1 ? `\nTracked sources: ${sourceNames.join(", ")}.` : "";
 
   let userMessage: string;
 

@@ -50,9 +50,8 @@ async function buildSkillsIndex() {
         if (!res.ok) throw new Error(`Fetch ${url} failed: ${res.status}`);
         const body = await res.text();
         const { data } = matter(body);
-        const description = typeof data.description === "string"
-          ? data.description.replace(/\s+/g, " ").trim()
-          : "";
+        const description =
+          typeof data.description === "string" ? data.description.replace(/\s+/g, " ").trim() : "";
         if (!description) throw new Error(`Skill ${name} has no description`);
         return {
           name,
@@ -61,7 +60,7 @@ async function buildSkillsIndex() {
           url,
           digest: `sha256:${createHash("sha256").update(body).digest("hex")}`,
         };
-      })
+      }),
     );
     writeJson(SKILLS_INDEX_PATH, {
       $schema: "https://schemas.agentskills.io/discovery/0.2.0/schema.json",

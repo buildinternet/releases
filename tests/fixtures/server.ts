@@ -41,7 +41,9 @@ export interface FixtureServer {
  * Start a local HTTP server for test fixtures.
  * Only works with async tests — spawnSync will deadlock this server.
  */
-export function startFixtureServer(options?: { routes?: Record<string, FixtureRoute> }): FixtureServer {
+export function startFixtureServer(options?: {
+  routes?: Record<string, FixtureRoute>;
+}): FixtureServer {
   const routes = options?.routes ?? {};
 
   const server = Bun.serve({
@@ -77,9 +79,9 @@ function sleepMs(ms: number): void {
  * Start a fixture server in a separate subprocess so that spawnSync-based
  * CLI helpers don't deadlock the server's event loop.
  */
-export function startSubprocessFixtureServer(
-  options?: { routes?: Record<string, FixtureRoute> },
-): SubprocessFixtureServer {
+export function startSubprocessFixtureServer(options?: {
+  routes?: Record<string, FixtureRoute>;
+}): SubprocessFixtureServer {
   const routes = options?.routes ?? {};
   const tmpDir = mkdtempSync(join(tmpdir(), "releases-fixture-server-"));
   const configPath = join(tmpDir, "routes.json");

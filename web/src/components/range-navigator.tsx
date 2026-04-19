@@ -53,7 +53,10 @@ const MODEL_MILESTONES: ModelMilestone[] = [
 
 const VENDOR_COLORS = {
   claude: { line: "rgba(217, 119, 56, 0.35)", text: "text-amber-600/60 dark:text-amber-500/50" },
-  openai: { line: "rgba(16, 163, 127, 0.35)", text: "text-emerald-600/60 dark:text-emerald-500/50" },
+  openai: {
+    line: "rgba(16, 163, 127, 0.35)",
+    text: "text-emerald-600/60 dark:text-emerald-500/50",
+  },
 } as const;
 
 type PositionedMilestone = ModelMilestone & { pct: number };
@@ -61,9 +64,10 @@ type PositionedMilestone = ModelMilestone & { pct: number };
 function milestonesInRange(from: Date, to: Date): PositionedMilestone[] {
   const span = to.getTime() - from.getTime();
   if (span <= 0) return [];
-  return MODEL_MILESTONES
-    .filter((m) => m.date >= from && m.date <= to)
-    .map((m) => ({ ...m, pct: ((m.date.getTime() - from.getTime()) / span) * 100 }));
+  return MODEL_MILESTONES.filter((m) => m.date >= from && m.date <= to).map((m) => ({
+    ...m,
+    pct: ((m.date.getTime() - from.getTime()) / span) * 100,
+  }));
 }
 
 const ANNOTATIONS_STORAGE_KEY = "released:show-model-annotations";
@@ -71,13 +75,19 @@ const ANNOTATIONS_STORAGE_KEY = "released:show-model-annotations";
 function useModelAnnotations() {
   const [show, setShow] = useState(() => {
     if (typeof window === "undefined") return false;
-    try { return localStorage.getItem(ANNOTATIONS_STORAGE_KEY) === "1"; } catch { return false; }
+    try {
+      return localStorage.getItem(ANNOTATIONS_STORAGE_KEY) === "1";
+    } catch {
+      return false;
+    }
   });
 
   const toggle = useCallback(() => {
     setShow((prev) => {
       const next = !prev;
-      try { localStorage.setItem(ANNOTATIONS_STORAGE_KEY, next ? "1" : "0"); } catch {}
+      try {
+        localStorage.setItem(ANNOTATIONS_STORAGE_KEY, next ? "1" : "0");
+      } catch {}
       return next;
     });
   }, []);
@@ -140,7 +150,12 @@ function toDate(ctx: { min: Date; max: Date }, pct: number): Date {
 }
 
 function fmtDate(d: Date) {
-  return d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function fmtMonth(d: Date) {
@@ -221,7 +236,21 @@ function Root({
   );
 
   return (
-    <Ctx.Provider value={{ brushStart, brushEnd, setBrush, min, max, buckets, sourceBuckets: (sourceBuckets && sourceBuckets.length > 1) ? sourceBuckets : null, productBuckets: productBuckets ?? null, earliestRelease, showAnnotations, toggleAnnotations }}>
+    <Ctx.Provider
+      value={{
+        brushStart,
+        brushEnd,
+        setBrush,
+        min,
+        max,
+        buckets,
+        sourceBuckets: sourceBuckets && sourceBuckets.length > 1 ? sourceBuckets : null,
+        productBuckets: productBuckets ?? null,
+        earliestRelease,
+        showAnnotations,
+        toggleAnnotations,
+      }}
+    >
       <div
         data-slot="range-navigator"
         className={`bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5 ${className ?? ""}`}
@@ -246,7 +275,10 @@ function Header({ title = "Releases over time" }: { title?: string }) {
   return (
     <div data-slot="range-navigator-header" className="flex justify-between items-center mb-3">
       <div className="flex items-center gap-2">
-        <div data-slot="range-navigator-title" className="text-[13px] font-semibold text-stone-900 dark:text-stone-100">
+        <div
+          data-slot="range-navigator-title"
+          className="text-[13px] font-semibold text-stone-900 dark:text-stone-100"
+        >
           {title}
         </div>
         <button
@@ -259,7 +291,14 @@ function Header({ title = "Releases over time" }: { title?: string }) {
               : "text-stone-400 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 border border-transparent hover:border-stone-200 dark:hover:border-stone-700"
           }`}
         >
-          <svg className="w-3 h-3" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round">
+          <svg
+            className="w-3 h-3"
+            viewBox="0 0 16 16"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.5"
+            strokeLinecap="round"
+          >
             <path d="M8 2v12M4 6v6M12 4v8" />
           </svg>
           <span>AI models</span>
@@ -285,7 +324,17 @@ const DETAIL_HEIGHT = 120;
 type StackMode = "all" | "source" | "product";
 
 function DetailChart() {
-  const { buckets, sourceBuckets, productBuckets, brushStart, brushEnd, min, max, earliestRelease, showAnnotations } = useNav();
+  const {
+    buckets,
+    sourceBuckets,
+    productBuckets,
+    brushStart,
+    brushEnd,
+    min,
+    max,
+    earliestRelease,
+    showAnnotations,
+  } = useNav();
   const [stackMode, setStackModeRaw] = useState<StackMode>("all");
   const [hiddenSources, setHiddenSources] = useState<Set<string>>(new Set());
 
@@ -385,8 +434,7 @@ function DetailChart() {
     if (span <= 0) return [];
 
     const monthsInSpan =
-      (last.getFullYear() - first.getFullYear()) * 12 +
-      (last.getMonth() - first.getMonth()) + 1;
+      (last.getFullYear() - first.getFullYear()) * 12 + (last.getMonth() - first.getMonth()) + 1;
 
     const TARGET_TICKS = 10;
     const stride = [1, 2, 3, 6, 12].find((s) => Math.ceil(monthsInSpan / s) <= TARGET_TICKS) ?? 12;
@@ -420,7 +468,9 @@ function DetailChart() {
         className="flex flex-col items-center justify-center text-stone-400 text-xs gap-1"
         style={{ height: DETAIL_HEIGHT }}
       >
-        <span className="text-stone-500 dark:text-stone-400 font-medium">No data in this range</span>
+        <span className="text-stone-500 dark:text-stone-400 font-medium">
+          No data in this range
+        </span>
         {isBeforeEarliest && (
           <span className="text-stone-400 dark:text-stone-500">
             Earliest tracked release: {fmtDate(earliestRelease)}
@@ -509,72 +559,80 @@ function DetailChart() {
             </div>
           )}
           <div className="flex items-end gap-px h-full">
-          {brushedBuckets.map((bucket, i) => {
-            const visibleCount = isStacked ? stackedData[i].total : bucket.count;
-            const h = visibleCount > 0 ? Math.max(2, (visibleCount / maxCount) * DETAIL_HEIGHT) : 0;
-            const weekEnd = new Date(bucket.weekStart.getTime() + 6 * DAY_MS);
-            const weekSegments = isStacked ? stackedData[i].segments : null;
+            {brushedBuckets.map((bucket, i) => {
+              const visibleCount = isStacked ? stackedData[i].total : bucket.count;
+              const h =
+                visibleCount > 0 ? Math.max(2, (visibleCount / maxCount) * DETAIL_HEIGHT) : 0;
+              const weekEnd = new Date(bucket.weekStart.getTime() + 6 * DAY_MS);
+              const weekSegments = isStacked ? stackedData[i].segments : null;
 
-            return (
-              <HoverCard.Root key={i}>
-                <HoverCard.Trigger
-                  data-slot="detail-bar"
-                  data-state={visibleCount === 0 ? "empty" : "filled"}
-                  className={`flex-1 rounded-t-sm transition-colors duration-75 ${
-                    isStacked
-                      ? "data-[state=empty]:bg-stone-100 dark:data-[state=empty]:bg-stone-800"
-                      : "data-[state=filled]:bg-blue-500 data-[state=filled]:hover:bg-blue-600 data-[state=empty]:bg-stone-100 dark:data-[state=empty]:bg-stone-800"
-                  }`}
-                  style={{
-                    height: `${h}px`,
-                    alignSelf: "flex-end",
-                    ...(isStacked && visibleCount > 0
-                      ? { display: "flex", flexDirection: "column-reverse" as const, overflow: "hidden" }
-                      : {}),
-                  }}
-                >
-                  {isStacked && weekSegments && visibleCount > 0 && (
-                    <>
-                      {weekSegments.map((seg, si) => (
-                        <div
-                          key={si}
-                          style={{
-                            height: `${(seg.count / visibleCount) * 100}%`,
-                            backgroundColor: getProductColor(seg.colorIndex),
-                            minHeight: 1,
-                          }}
-                        />
-                      ))}
-                    </>
-                  )}
-                </HoverCard.Trigger>
-                {bucket.count > 0 && (
-                  <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
-                    <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
-                      {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
-                    </div>
-                    <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
-                      {bucket.count} {bucket.count === 1 ? "release" : "releases"}
-                    </div>
-                    {isStacked && weekSegments && weekSegments.length > 0 && (
-                      <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-stone-800 space-y-0.5">
+              return (
+                <HoverCard.Root key={i}>
+                  <HoverCard.Trigger
+                    data-slot="detail-bar"
+                    data-state={visibleCount === 0 ? "empty" : "filled"}
+                    className={`flex-1 rounded-t-sm transition-colors duration-75 ${
+                      isStacked
+                        ? "data-[state=empty]:bg-stone-100 dark:data-[state=empty]:bg-stone-800"
+                        : "data-[state=filled]:bg-blue-500 data-[state=filled]:hover:bg-blue-600 data-[state=empty]:bg-stone-100 dark:data-[state=empty]:bg-stone-800"
+                    }`}
+                    style={{
+                      height: `${h}px`,
+                      alignSelf: "flex-end",
+                      ...(isStacked && visibleCount > 0
+                        ? {
+                            display: "flex",
+                            flexDirection: "column-reverse" as const,
+                            overflow: "hidden",
+                          }
+                        : {}),
+                    }}
+                  >
+                    {isStacked && weekSegments && visibleCount > 0 && (
+                      <>
                         {weekSegments.map((seg, si) => (
-                          <div key={si} className="flex items-center gap-1.5 text-[11px] text-stone-600 dark:text-stone-400">
-                            <span
-                              className="inline-block w-2 h-2 rounded-sm shrink-0"
-                              style={{ backgroundColor: getProductColor(seg.colorIndex) }}
-                            />
-                            <span className="truncate">{seg.name}</span>
-                            <span className="ml-auto font-medium tabular-nums">{seg.count}</span>
-                          </div>
+                          <div
+                            key={si}
+                            style={{
+                              height: `${(seg.count / visibleCount) * 100}%`,
+                              backgroundColor: getProductColor(seg.colorIndex),
+                              minHeight: 1,
+                            }}
+                          />
                         ))}
-                      </div>
+                      </>
                     )}
-                  </HoverCard.Content>
-                )}
-              </HoverCard.Root>
-            );
-          })}
+                  </HoverCard.Trigger>
+                  {bucket.count > 0 && (
+                    <HoverCard.Content className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 rounded-lg shadow-lg px-3 py-2 min-w-[140px]">
+                      <div className="text-[11px] font-medium text-stone-500 dark:text-stone-400 mb-1">
+                        {fmtWeek(bucket.weekStart)} – {fmtWeek(weekEnd)}
+                      </div>
+                      <div className="text-sm font-semibold text-stone-900 dark:text-stone-100">
+                        {bucket.count} {bucket.count === 1 ? "release" : "releases"}
+                      </div>
+                      {isStacked && weekSegments && weekSegments.length > 0 && (
+                        <div className="mt-1.5 pt-1.5 border-t border-stone-100 dark:border-stone-800 space-y-0.5">
+                          {weekSegments.map((seg, si) => (
+                            <div
+                              key={si}
+                              className="flex items-center gap-1.5 text-[11px] text-stone-600 dark:text-stone-400"
+                            >
+                              <span
+                                className="inline-block w-2 h-2 rounded-sm shrink-0"
+                                style={{ backgroundColor: getProductColor(seg.colorIndex) }}
+                              />
+                              <span className="truncate">{seg.name}</span>
+                              <span className="ml-auto font-medium tabular-nums">{seg.count}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </HoverCard.Content>
+                  )}
+                </HoverCard.Root>
+              );
+            })}
           </div>
         </div>
       </div>
@@ -617,7 +675,9 @@ function DetailChart() {
                   className="w-2.5 h-2.5 rounded-full shrink-0"
                   style={{ backgroundColor: getProductColor(src.colorIndex) }}
                 />
-                <span className={`text-[11px] text-stone-600 dark:text-stone-400 ${isHidden ? "line-through" : ""}`}>
+                <span
+                  className={`text-[11px] text-stone-600 dark:text-stone-400 ${isHidden ? "line-through" : ""}`}
+                >
                   {src.name}
                 </span>
               </button>
@@ -636,7 +696,8 @@ function DetailChart() {
 const OVERVIEW_HEIGHT = 32;
 
 function Overview() {
-  const { buckets, brushStart, brushEnd, setBrush, min, max, earliestRelease, showAnnotations } = useNav();
+  const { buckets, brushStart, brushEnd, setBrush, min, max, earliestRelease, showAnnotations } =
+    useNav();
   const trackRef = useRef<HTMLDivElement>(null);
   const dragRef = useRef<{
     mode: "left" | "right" | "move";
@@ -659,7 +720,8 @@ function Overview() {
     // Align to the same Monday-start grid the API uses
     const firstWeek = buckets.length > 0 ? buckets[0].weekStart.getTime() : min.getTime();
     const overshoot = firstWeek - min.getTime();
-    const gridStart = overshoot <= 0 ? firstWeek : firstWeek - Math.ceil(overshoot / WEEK_MS) * WEEK_MS;
+    const gridStart =
+      overshoot <= 0 ? firstWeek : firstWeek - Math.ceil(overshoot / WEEK_MS) * WEEK_MS;
     for (let ts = gridStart; ts < max.getTime(); ts += WEEK_MS) {
       result.push({ weekStart: new Date(ts), count: bucketMap.get(ts) ?? 0 });
     }
@@ -670,11 +732,14 @@ function Overview() {
   const bucketCount = completeBuckets.length;
   const gridStartMs = bucketCount > 0 ? completeBuckets[0].weekStart.getTime() : 0;
 
-  const dateToBucketPct = useCallback((d: Date): number => {
-    if (bucketCount === 0) return 0;
-    const idx = (d.getTime() - gridStartMs) / WEEK_MS;
-    return (idx / bucketCount) * 100;
-  }, [gridStartMs, bucketCount]);
+  const dateToBucketPct = useCallback(
+    (d: Date): number => {
+      if (bucketCount === 0) return 0;
+      const idx = (d.getTime() - gridStartMs) / WEEK_MS;
+      return (idx / bucketCount) * 100;
+    },
+    [gridStartMs, bucketCount],
+  );
 
   const overviewMilestones = useMemo(
     () => (showAnnotations ? milestonesInRange(min, max) : []),
@@ -698,17 +763,14 @@ function Overview() {
 
   /* --- Pointer drag --- */
 
-  const onPointerDown = useCallback(
-    (e: React.PointerEvent, mode: "left" | "right" | "move") => {
-      e.preventDefault();
-      e.stopPropagation();
-      const { brushStart: bs, brushEnd: be } = brushRef.current;
-      dragRef.current = { mode, startX: e.clientX, startBS: bs, startBE: be };
-      setIsDragging(true);
-      (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
-    },
-    [],
-  );
+  const onPointerDown = useCallback((e: React.PointerEvent, mode: "left" | "right" | "move") => {
+    e.preventDefault();
+    e.stopPropagation();
+    const { brushStart: bs, brushEnd: be } = brushRef.current;
+    dragRef.current = { mode, startX: e.clientX, startBS: bs, startBE: be };
+    setIsDragging(true);
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+  }, []);
 
   useEffect(() => {
     const onMove = (e: PointerEvent) => {
@@ -812,138 +874,148 @@ function Overview() {
     <div data-slot="overview" className="mb-2">
       {/* Mini sparkline with brush */}
       <div className="relative">
-      <div
-        ref={trackRef}
-        data-slot="overview-track"
-        className="relative bg-stone-50 dark:bg-stone-800 rounded cursor-pointer select-none border border-stone-100 dark:border-stone-700"
-        style={{ height: OVERVIEW_HEIGHT + 16 }}
-        onClick={onTrackClick}
-      >
-        {/* Mini bars */}
-        <div className="absolute inset-x-0 bottom-2 top-2 flex items-end gap-px px-px" aria-hidden="true">
-          {completeBuckets.map((bucket, i) => {
-            const h = bucket.count > 0 ? Math.max(1, (bucket.count / maxCount) * (OVERVIEW_HEIGHT - 4)) : 0;
-            return (
-              <div
-                key={i}
-                className="flex-1 rounded-t-[1px] bg-stone-400 dark:bg-stone-500"
-                style={{ height: `${h}px`, alignSelf: "flex-end" }}
-              />
-            );
-          })}
-        </div>
-
-        {/* Year boundary lines */}
-        {yearLabels.map((yl) => (
-          <div
-            key={yl.year}
-            className="absolute top-0 bottom-0 border-l border-stone-400 dark:border-stone-500"
-            style={{ left: `${yl.pct}%` }}
-          >
-            <span className="absolute -top-0.5 left-1 text-[9px] font-bold text-stone-500 dark:text-stone-400 bg-stone-50 dark:bg-stone-800 px-0.5 rounded-sm">
-              {yl.year}
-            </span>
-          </div>
-        ))}
-
-        {/* AI model milestone ticks in overview */}
-        {overviewMilestones.map((m) => (
-          <div
-            key={`${m.vendor}-${m.name}`}
-            className="absolute top-1 bottom-1 w-px pointer-events-none"
-            style={{ left: `${m.pct}%`, backgroundColor: VENDOR_COLORS[m.vendor].line }}
-          />
-        ))}
-
-        {/* Earliest release marker line */}
-        {earliestRelease && bucketCount > 0 && earliestRelease > min && earliestRelease < max && (
-          <div
-            className="absolute top-0 bottom-0 border-l border-dashed border-stone-400 dark:border-stone-500 z-[1]"
-            style={{ left: `${dateToBucketPct(earliestRelease)}%` }}
-          />
-        )}
-
-        {/* Left mask */}
         <div
-          data-slot="brush-mask"
-          className="absolute top-0 bottom-0 left-0 bg-white/75 dark:bg-stone-950/75 pointer-events-none rounded-l"
-          style={{ width: `${brushStart * 100}%` }}
-        />
-
-        {/* Right mask */}
-        <div
-          data-slot="brush-mask"
-          className="absolute top-0 bottom-0 right-0 bg-white/75 dark:bg-stone-950/75 pointer-events-none rounded-r"
-          style={{ width: `${(1 - brushEnd) * 100}%` }}
-        />
-
-        {/* Selection region */}
-        <div
-          data-slot="brush-selection"
-          data-state={isDragging ? "dragging" : "idle"}
-          className="absolute top-0 bottom-0 bg-blue-500/8 border border-blue-400/40 rounded-sm cursor-grab data-[state=dragging]:cursor-grabbing"
-          style={{
-            left: `${brushStart * 100}%`,
-            width: `${(brushEnd - brushStart) * 100}%`,
-          }}
-          onPointerDown={(e) => {
-            if ((e.target as HTMLElement).getAttribute("data-slot") === "brush-handle") return;
-            onPointerDown(e, "move");
-          }}
+          ref={trackRef}
+          data-slot="overview-track"
+          className="relative bg-stone-50 dark:bg-stone-800 rounded cursor-pointer select-none border border-stone-100 dark:border-stone-700"
+          style={{ height: OVERVIEW_HEIGHT + 16 }}
+          onClick={onTrackClick}
         >
-          {/* Left handle */}
+          {/* Mini bars */}
           <div
-            data-slot="brush-handle"
-            className="absolute -left-[5px] -top-0.5 -bottom-0.5 w-2.5 bg-blue-500 rounded-sm cursor-ew-resize z-[3] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
-            role="slider"
-            tabIndex={0}
-            aria-label="Range start"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(brushStart * 100)}
-            aria-valuetext={fmtDate(startDate)}
-            onPointerDown={(e) => onPointerDown(e, "left")}
-            onKeyDown={(e) => onHandleKeyDown(e, "left")}
+            className="absolute inset-x-0 bottom-2 top-2 flex items-end gap-px px-px"
+            aria-hidden="true"
           >
-            <span className="block w-0.5 h-2.5 border-l border-r border-white/40" />
+            {completeBuckets.map((bucket, i) => {
+              const h =
+                bucket.count > 0
+                  ? Math.max(1, (bucket.count / maxCount) * (OVERVIEW_HEIGHT - 4))
+                  : 0;
+              return (
+                <div
+                  key={i}
+                  className="flex-1 rounded-t-[1px] bg-stone-400 dark:bg-stone-500"
+                  style={{ height: `${h}px`, alignSelf: "flex-end" }}
+                />
+              );
+            })}
           </div>
 
-          {/* Right handle */}
+          {/* Year boundary lines */}
+          {yearLabels.map((yl) => (
+            <div
+              key={yl.year}
+              className="absolute top-0 bottom-0 border-l border-stone-400 dark:border-stone-500"
+              style={{ left: `${yl.pct}%` }}
+            >
+              <span className="absolute -top-0.5 left-1 text-[9px] font-bold text-stone-500 dark:text-stone-400 bg-stone-50 dark:bg-stone-800 px-0.5 rounded-sm">
+                {yl.year}
+              </span>
+            </div>
+          ))}
+
+          {/* AI model milestone ticks in overview */}
+          {overviewMilestones.map((m) => (
+            <div
+              key={`${m.vendor}-${m.name}`}
+              className="absolute top-1 bottom-1 w-px pointer-events-none"
+              style={{ left: `${m.pct}%`, backgroundColor: VENDOR_COLORS[m.vendor].line }}
+            />
+          ))}
+
+          {/* Earliest release marker line */}
+          {earliestRelease && bucketCount > 0 && earliestRelease > min && earliestRelease < max && (
+            <div
+              className="absolute top-0 bottom-0 border-l border-dashed border-stone-400 dark:border-stone-500 z-[1]"
+              style={{ left: `${dateToBucketPct(earliestRelease)}%` }}
+            />
+          )}
+
+          {/* Left mask */}
           <div
-            data-slot="brush-handle"
-            className="absolute -right-[5px] -top-0.5 -bottom-0.5 w-2.5 bg-blue-500 rounded-sm cursor-ew-resize z-[3] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
-            role="slider"
-            tabIndex={0}
-            aria-label="Range end"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(brushEnd * 100)}
-            aria-valuetext={fmtDate(endDate)}
-            onPointerDown={(e) => onPointerDown(e, "right")}
-            onKeyDown={(e) => onHandleKeyDown(e, "right")}
+            data-slot="brush-mask"
+            className="absolute top-0 bottom-0 left-0 bg-white/75 dark:bg-stone-950/75 pointer-events-none rounded-l"
+            style={{ width: `${brushStart * 100}%` }}
+          />
+
+          {/* Right mask */}
+          <div
+            data-slot="brush-mask"
+            className="absolute top-0 bottom-0 right-0 bg-white/75 dark:bg-stone-950/75 pointer-events-none rounded-r"
+            style={{ width: `${(1 - brushEnd) * 100}%` }}
+          />
+
+          {/* Selection region */}
+          <div
+            data-slot="brush-selection"
+            data-state={isDragging ? "dragging" : "idle"}
+            className="absolute top-0 bottom-0 bg-blue-500/8 border border-blue-400/40 rounded-sm cursor-grab data-[state=dragging]:cursor-grabbing"
+            style={{
+              left: `${brushStart * 100}%`,
+              width: `${(brushEnd - brushStart) * 100}%`,
+            }}
+            onPointerDown={(e) => {
+              if ((e.target as HTMLElement).getAttribute("data-slot") === "brush-handle") return;
+              onPointerDown(e, "move");
+            }}
           >
-            <span className="block w-0.5 h-2.5 border-l border-r border-white/40" />
+            {/* Left handle */}
+            <div
+              data-slot="brush-handle"
+              className="absolute -left-[5px] -top-0.5 -bottom-0.5 w-2.5 bg-blue-500 rounded-sm cursor-ew-resize z-[3] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
+              role="slider"
+              tabIndex={0}
+              aria-label="Range start"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(brushStart * 100)}
+              aria-valuetext={fmtDate(startDate)}
+              onPointerDown={(e) => onPointerDown(e, "left")}
+              onKeyDown={(e) => onHandleKeyDown(e, "left")}
+            >
+              <span className="block w-0.5 h-2.5 border-l border-r border-white/40" />
+            </div>
+
+            {/* Right handle */}
+            <div
+              data-slot="brush-handle"
+              className="absolute -right-[5px] -top-0.5 -bottom-0.5 w-2.5 bg-blue-500 rounded-sm cursor-ew-resize z-[3] flex items-center justify-center focus-visible:outline-2 focus-visible:outline-blue-500 focus-visible:outline-offset-2"
+              role="slider"
+              tabIndex={0}
+              aria-label="Range end"
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-valuenow={Math.round(brushEnd * 100)}
+              aria-valuetext={fmtDate(endDate)}
+              onPointerDown={(e) => onPointerDown(e, "right")}
+              onKeyDown={(e) => onHandleKeyDown(e, "right")}
+            >
+              <span className="block w-0.5 h-2.5 border-l border-r border-white/40" />
+            </div>
           </div>
         </div>
-      </div>
 
-      {/* Earliest release label positioned outside the clipping track */}
-      {earliestRelease && bucketCount > 0 && earliestRelease > min && earliestRelease < max && (() => {
-        const pct = dateToBucketPct(earliestRelease);
-        return (
-          <div className="relative h-3 mt-0.5" aria-hidden="true">
-            <span
-              className="absolute text-[9px] text-stone-500 dark:text-stone-400 whitespace-nowrap"
-              style={{
-                left: `${pct}%`,
-                transform: pct > 70 ? "translateX(-100%)" : "translateX(0)",
-              }}
-            >
-              ↑ earliest tracked release
-            </span>
-          </div>
-        );
-      })()}
+        {/* Earliest release label positioned outside the clipping track */}
+        {earliestRelease &&
+          bucketCount > 0 &&
+          earliestRelease > min &&
+          earliestRelease < max &&
+          (() => {
+            const pct = dateToBucketPct(earliestRelease);
+            return (
+              <div className="relative h-3 mt-0.5" aria-hidden="true">
+                <span
+                  className="absolute text-[9px] text-stone-500 dark:text-stone-400 whitespace-nowrap"
+                  style={{
+                    left: `${pct}%`,
+                    transform: pct > 70 ? "translateX(-100%)" : "translateX(0)",
+                  }}
+                >
+                  ↑ earliest tracked release
+                </span>
+              </div>
+            );
+          })()}
       </div>
     </div>
   );
@@ -1016,7 +1088,15 @@ function QuickRanges({ defaultPreset }: { defaultPreset?: string }) {
         aria-expanded={open}
       >
         {clickedLabel ?? "Select range"}
-        <svg className="w-3.5 h-3.5 text-stone-400" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg
+          className="w-3.5 h-3.5 text-stone-400"
+          viewBox="0 0 16 16"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
           <path d="M4 6l4 4 4-4" />
         </svg>
       </button>
@@ -1041,7 +1121,15 @@ function QuickRanges({ defaultPreset }: { defaultPreset?: string }) {
             >
               {qr.label}
               {clickedLabel === qr.label && (
-                <svg className="w-3.5 h-3.5 text-stone-500" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <svg
+                  className="w-3.5 h-3.5 text-stone-500"
+                  viewBox="0 0 16 16"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
                   <path d="M3 8.5l3.5 3.5 6.5-8" />
                 </svg>
               )}

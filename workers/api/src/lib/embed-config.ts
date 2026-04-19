@@ -12,7 +12,11 @@
  * The MCP worker is read-only and never calls this path.
  */
 
-import { DEFAULT_MODELS, type EmbeddingConfig, type EmbeddingProvider } from "@releases/lib/embeddings.js";
+import {
+  DEFAULT_MODELS,
+  type EmbeddingConfig,
+  type EmbeddingProvider,
+} from "@releases/lib/embeddings.js";
 
 /** Shape returned by {@link buildEmbedConfig} — `provider` and `model` are always resolved. */
 export type ResolvedEmbedConfig = EmbeddingConfig & {
@@ -32,15 +36,9 @@ interface EmbedEnv {
  * Returns a Partial<EmbeddingConfig> ready to hand to embedBatch, or null
  * if the configured provider has no API key bound.
  */
-export async function buildEmbedConfig(
-  env: EmbedEnv,
-): Promise<ResolvedEmbedConfig | null> {
+export async function buildEmbedConfig(env: EmbedEnv): Promise<ResolvedEmbedConfig | null> {
   const rawProvider = (env.EMBEDDING_PROVIDER ?? "voyage").toLowerCase();
-  if (
-    rawProvider !== "voyage" &&
-    rawProvider !== "openai" &&
-    rawProvider !== "workers-ai"
-  ) {
+  if (rawProvider !== "voyage" && rawProvider !== "openai" && rawProvider !== "workers-ai") {
     console.warn(`[embed-config] unknown EMBEDDING_PROVIDER: ${rawProvider}`);
     return null;
   }

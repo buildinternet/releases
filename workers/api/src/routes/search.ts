@@ -69,10 +69,7 @@ function parseMode(raw: string | undefined): HybridMode {
 searchRoutes.get("/search", async (c) => {
   const q = c.req.query("q") ?? "";
   if (!q) {
-    return c.json(
-      { error: "bad_request", message: "Missing required query parameter: q" },
-      400,
-    );
+    return c.json({ error: "bad_request", message: "Missing required query parameter: q" }, 400);
   }
 
   const limit = parseInt(c.req.query("limit") ?? "20", 10);
@@ -158,7 +155,9 @@ searchRoutes.get("/search", async (c) => {
     );
 
   const chunks = hybrid.hits
-    .filter((h): h is Extract<typeof h, { kind: "changelog_chunk" }> => h.kind === "changelog_chunk")
+    .filter(
+      (h): h is Extract<typeof h, { kind: "changelog_chunk" }> => h.kind === "changelog_chunk",
+    )
     .map((h) => ({
       sourceSlug: h.chunk.source.slug,
       sourceName: h.chunk.source.name,

@@ -2,7 +2,14 @@ import { sql } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import { isRemoteMode } from "../lib/mode.js";
 import { logger } from "@buildinternet/releases-lib/logger";
-import type { SearchOrgHit, SearchProductHit, SearchSourceHit, SearchReleaseHit, RawSourceHit, MediaItem } from "../api/types.js";
+import type {
+  SearchOrgHit,
+  SearchProductHit,
+  SearchSourceHit,
+  SearchReleaseHit,
+  RawSourceHit,
+  MediaItem,
+} from "../api/types.js";
 import { foldSourcesIntoProducts } from "../api/types.js";
 import { hydrateMediaUrls, resolveR2Url } from "../lib/media-url.js";
 
@@ -22,7 +29,9 @@ export function searchReleases(
   opts: { includeCoverage?: boolean } = {},
 ): FtsResult[] {
   if (isRemoteMode()) {
-    throw new Error("searchReleases() is not available in remote mode — use searchReleasesRemote() from queries.ts instead");
+    throw new Error(
+      "searchReleases() is not available in remote mode — use searchReleasesRemote() from queries.ts instead",
+    );
   }
   const db = getDb();
   const coverageFilter = opts.includeCoverage
@@ -87,7 +96,9 @@ function hydrateLocalRelease(row: RawLocalReleaseRow): SearchReleaseHit {
         r2Url: resolveR2Url(m.r2Key, mediaOrigin),
       }));
     }
-  } catch { /* malformed row — leave media empty */ }
+  } catch {
+    /* malformed row — leave media empty */
+  }
   return {
     id: row.id,
     sourceSlug: row.sourceSlug,
@@ -177,10 +188,24 @@ export function unifiedSearchLocal(
   // Cascading enrichment: show recent releases from matched orgs/products
   if (rawReleases.length === 0 && (orgs.length > 0 || mergedProducts.length > 0)) {
     const orgSlugs = orgs.map((o) => o.slug);
-    const matchedProductSlugs = mergedProducts.filter((p) => p.kind !== "source").map((p) => p.slug);
+    const matchedProductSlugs = mergedProducts
+      .filter((p) => p.kind !== "source")
+      .map((p) => p.slug);
     const conditions = [];
-    if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
-    if (matchedProductSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(matchedProductSlugs.map((s) => sql`${s}`), sql`, `)})`);
+    if (orgSlugs.length > 0)
+      conditions.push(
+        sql`o.slug IN (${sql.join(
+          orgSlugs.map((s) => sql`${s}`),
+          sql`, `,
+        )})`,
+      );
+    if (matchedProductSlugs.length > 0)
+      conditions.push(
+        sql`p.slug IN (${sql.join(
+          matchedProductSlugs.map((s) => sql`${s}`),
+          sql`, `,
+        )})`,
+      );
     if (conditions.length > 0) {
       rawReleases = db.all(sql`
         SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,

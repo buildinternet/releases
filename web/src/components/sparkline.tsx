@@ -71,10 +71,7 @@ export function Sparkline({
           <stop offset="100%" stopColor={color} stopOpacity={0} />
         </linearGradient>
       </defs>
-      <path
-        d={`${d}L${last.x},${height}L${points[0].x},${height}Z`}
-        fill={`url(#${gradientId})`}
-      />
+      <path d={`${d}L${last.x},${height}L${points[0].x},${height}Z`} fill={`url(#${gradientId})`} />
       <path
         d={d}
         fill="none"
@@ -83,12 +80,7 @@ export function Sparkline({
         strokeLinecap="round"
         strokeLinejoin="round"
       />
-      <circle
-        cx={last.x}
-        cy={last.y}
-        r={DOT_RADIUS}
-        fill={color}
-      />
+      <circle cx={last.x} cy={last.y} r={DOT_RADIUS} fill={color} />
     </svg>
   );
 }
@@ -113,7 +105,10 @@ function buildMonotonePath(points: { x: number; y: number }[]): string {
     if (m[i - 1] * m[i] <= 0) {
       tangents.push(0);
     } else {
-      tangents.push(3 * (dx[i - 1] + dx[i]) / ((2 * dx[i] + dx[i - 1]) / m[i - 1] + (dx[i] + 2 * dx[i - 1]) / m[i]));
+      tangents.push(
+        (3 * (dx[i - 1] + dx[i])) /
+          ((2 * dx[i] + dx[i - 1]) / m[i - 1] + (dx[i] + 2 * dx[i - 1]) / m[i]),
+      );
     }
   }
   tangents.push(m[n - 2]);

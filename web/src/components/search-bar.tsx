@@ -39,9 +39,7 @@ export function SearchBar({
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
       debounceRef.current = null;
-      const url = value.trim()
-        ? `/search?q=${encodeURIComponent(value.trim())}`
-        : "/search";
+      const url = value.trim() ? `/search?q=${encodeURIComponent(value.trim())}` : "/search";
       router.replace(url, { scroll: false });
     }, 300);
   }

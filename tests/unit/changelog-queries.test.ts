@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import {
-  organizations,
-  sources,
-  sourceChangelogFiles,
-} from "@releases/core-internal/schema";
+import { organizations, sources, sourceChangelogFiles } from "@releases/core-internal/schema";
 import { isTruncated } from "@releases/core-internal/changelog-slice";
 
 let testDatabase: TestDatabase;
@@ -21,11 +17,7 @@ function seedSource() {
   db.delete(sources).run();
   db.delete(organizations).run();
 
-  const [org] = db
-    .insert(organizations)
-    .values({ name: "Acme", slug: "acme" })
-    .returning()
-    .all();
+  const [org] = db.insert(organizations).values({ name: "Acme", slug: "acme" }).returning().all();
   const [src] = db
     .insert(sources)
     .values({

@@ -1,7 +1,14 @@
 import { Hono } from "hono";
 import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { products, sources, organizations, orgAccounts, tags, productTags } from "@releases/core-internal/schema";
+import {
+  products,
+  sources,
+  organizations,
+  orgAccounts,
+  tags,
+  productTags,
+} from "@releases/core-internal/schema";
 import { toSlug } from "@releases/core-internal/slug";
 import { isValidCategory } from "@releases/core-internal/categories";
 import { isConflictError, getOrCreateTagsD1, productWhere, orgWhere } from "../utils.js";
@@ -47,14 +54,25 @@ productRoutes.post("/products/adopt", async (c) => {
   }>();
 
   if (!body.sourceOrgSlug || !body.targetOrgSlug) {
-    return c.json({ error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" }, 400);
+    return c.json(
+      { error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" },
+      400,
+    );
   }
 
   const [sourceOrg] = await db.select().from(organizations).where(orgWhere(body.sourceOrgSlug));
-  if (!sourceOrg) return c.json({ error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` }, 404);
+  if (!sourceOrg)
+    return c.json(
+      { error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` },
+      404,
+    );
 
   const [targetOrg] = await db.select().from(organizations).where(orgWhere(body.targetOrgSlug));
-  if (!targetOrg) return c.json({ error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` }, 404);
+  if (!targetOrg)
+    return c.json(
+      { error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` },
+      404,
+    );
 
   const sourcesToMove = await db.select().from(sources).where(eq(sources.orgId, sourceOrg.id));
 
@@ -64,7 +82,12 @@ productRoutes.post("/products/adopt", async (c) => {
   if (body.dryRun) {
     return c.json({
       dryRun: true,
-      product: { name: sourceOrg.name, slug: productSlug, url: productUrl, orgSlug: targetOrg.slug },
+      product: {
+        name: sourceOrg.name,
+        slug: productSlug,
+        url: productUrl,
+        orgSlug: targetOrg.slug,
+      },
       sourcesToMove: sourcesToMove.map((s) => s.slug),
       sourceOrgToDelete: sourceOrg.slug,
     });
@@ -72,32 +95,50 @@ productRoutes.post("/products/adopt", async (c) => {
 
   let product;
   try {
-    [product] = await db.insert(products).values({
-      name: sourceOrg.name,
-      slug: productSlug,
-      orgId: targetOrg.id,
-      url: productUrl,
-      description: sourceOrg.description,
-    }).returning();
+    [product] = await db
+      .insert(products)
+      .values({
+        name: sourceOrg.name,
+        slug: productSlug,
+        orgId: targetOrg.id,
+        url: productUrl,
+        description: sourceOrg.description,
+      })
+      .returning();
   } catch (err) {
     if (isConflictError(err)) {
-      return c.json({ error: "conflict", message: `Product with slug "${productSlug}" already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Product with slug "${productSlug}" already exists` },
+        409,
+      );
     }
     throw err;
   }
 
   // Move sources to target org and link to new product
   if (sourcesToMove.length > 0) {
-    await db.update(sources)
+    await db
+      .update(sources)
       .set({ orgId: targetOrg.id, productId: product.id })
       .where(eq(sources.orgId, sourceOrg.id));
   }
 
   // Move org accounts to target org (skip duplicates)
-  const accountsToMove = await db.select().from(orgAccounts).where(eq(orgAccounts.orgId, sourceOrg.id));
+  const accountsToMove = await db
+    .select()
+    .from(orgAccounts)
+    .where(eq(orgAccounts.orgId, sourceOrg.id));
   if (accountsToMove.length > 0) {
-    await db.insert(orgAccounts)
-      .values(accountsToMove.map((a) => ({ orgId: targetOrg.id, platform: a.platform, handle: a.handle, createdAt: a.createdAt })))
+    await db
+      .insert(orgAccounts)
+      .values(
+        accountsToMove.map((a) => ({
+          orgId: targetOrg.id,
+          platform: a.platform,
+          handle: a.handle,
+          createdAt: a.createdAt,
+        })),
+      )
       .onConflictDoNothing();
   }
 
@@ -122,7 +163,13 @@ productRoutes.get("/products/:identifier", async (c) => {
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const productSources = await db
-    .select({ id: sources.id, slug: sources.slug, name: sources.name, type: sources.type, url: sources.url })
+    .select({
+      id: sources.id,
+      slug: sources.slug,
+      name: sources.name,
+      type: sources.type,
+      url: sources.url,
+    })
     .from(sources)
     .where(eq(sources.productId, product.id))
     .orderBy(sources.name);
@@ -140,10 +187,22 @@ productRoutes.get("/products/:identifier", async (c) => {
 // Create product
 productRoutes.post("/products", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ orgId?: string; orgSlug?: string; name: string; slug?: string; url?: string; description?: string; category?: string; tags?: string[] }>();
+  const body = await c.req.json<{
+    orgId?: string;
+    orgSlug?: string;
+    name: string;
+    slug?: string;
+    url?: string;
+    description?: string;
+    category?: string;
+    tags?: string[];
+  }>();
 
   if ((!body.orgId && !body.orgSlug) || !body.name) {
-    return c.json({ error: "bad_request", message: "Missing required fields: orgId or orgSlug, name" }, 400);
+    return c.json(
+      { error: "bad_request", message: "Missing required fields: orgId or orgSlug, name" },
+      400,
+    );
   }
 
   const orgCond = body.orgId ? eq(organizations.id, body.orgId) : orgWhere(body.orgSlug!);
@@ -182,7 +241,10 @@ productRoutes.post("/products", async (c) => {
     return c.json(created, 201);
   } catch (err) {
     if (isConflictError(err)) {
-      return c.json({ error: "conflict", message: `Product with slug "${slug}" already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Product with slug "${slug}" already exists` },
+        409,
+      );
     }
     throw err;
   }
@@ -192,7 +254,13 @@ productRoutes.post("/products", async (c) => {
 productRoutes.patch("/products/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; url?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
+  const body = await c.req.json<{
+    name?: string;
+    url?: string | null;
+    description?: string | null;
+    category?: string | null;
+    tags?: string[];
+  }>();
 
   const [product] = await db.select().from(products).where(productWhere(slug));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
@@ -213,7 +281,11 @@ productRoutes.patch("/products/:slug", async (c) => {
 
   let updated = product;
   if (Object.keys(updates).length > 0) {
-    [updated] = await db.update(products).set(updates).where(eq(products.id, product.id)).returning();
+    [updated] = await db
+      .update(products)
+      .set(updates)
+      .where(eq(products.id, product.id))
+      .returning();
   }
 
   if (body.tags !== undefined) {
@@ -284,7 +356,9 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
     const tagSlug = toSlug(tagName);
     const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
     if (tag) {
-      await db.delete(productTags).where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
+      await db
+        .delete(productTags)
+        .where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
     }
   }
   return c.json({ ok: true });
@@ -323,18 +397,21 @@ async function embedProductSideEffect(
       }
     }
     await embedAndUpsertEntities({
-      entities: [{
-        id: product.id,
-        kind: "product" as EntityKind,
-        name: product.name,
-        description: product.description,
-        category: product.category,
-        domain,
-        orgId: product.orgId ?? null,
-      }],
+      entities: [
+        {
+          id: product.id,
+          kind: "product" as EntityKind,
+          name: product.name,
+          description: product.description,
+          category: product.category,
+          domain,
+          orgId: product.orgId ?? null,
+        },
+      ],
       // Cast: workers-types VectorizeIndex has a stricter metadata value
       // type than the shared runtime-agnostic interface.
-      vectorIndex: env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+      vectorIndex:
+        env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
       embedConfig,
       onPersisted: async () => {
         await db
@@ -344,6 +421,8 @@ async function embedProductSideEffect(
       },
     });
   } catch (err) {
-    console.warn(`[products] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(
+      `[products] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }

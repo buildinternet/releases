@@ -67,7 +67,8 @@ export function parseWorkspaces(pkgJsonText: string): string[] {
   const ws = parsed.workspaces;
   if (!ws) return [];
   if (Array.isArray(ws)) return ws.filter((x): x is string => typeof x === "string");
-  if (Array.isArray(ws.packages)) return ws.packages.filter((x): x is string => typeof x === "string");
+  if (Array.isArray(ws.packages))
+    return ws.packages.filter((x): x is string => typeof x === "string");
   return [];
 }
 
@@ -77,7 +78,11 @@ export function pickChangelogInDir(entries: GitHubContentEntry[]): string | null
   return CHANGELOG_FILENAMES.find((name) => files.has(name)) ?? null;
 }
 
-function truncateToByteCap(content: string): { content: string; bytes: number; truncated: boolean } {
+function truncateToByteCap(content: string): {
+  content: string;
+  bytes: number;
+  truncated: boolean;
+} {
   const encoder = new TextEncoder();
   const bytes = encoder.encode(content).length;
   if (bytes <= CHANGELOG_MAX_BYTES) {
@@ -148,17 +153,23 @@ async function fetchAndBuildFile(
   try {
     res = await fetch(rawUrl, { headers: rawHeaders });
   } catch (err) {
-    logger.warn(`fetchChangelogFiles(${sourceSlug}): raw fetch failed for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(
+      `fetchChangelogFiles(${sourceSlug}): raw fetch failed for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
   if (!res.ok) {
-    logger.warn(`fetchChangelogFiles(${sourceSlug}): raw fetch returned ${res.status} for ${fullPath}`);
+    logger.warn(
+      `fetchChangelogFiles(${sourceSlug}): raw fetch returned ${res.status} for ${fullPath}`,
+    );
     return null;
   }
   const rawContent = await res.text();
   const { content, bytes, truncated } = truncateToByteCap(rawContent);
   if (truncated) {
-    logger.warn(`fetchChangelogFiles(${sourceSlug}): ${fullPath} exceeds size cap, truncated to ${bytes} bytes`);
+    logger.warn(
+      `fetchChangelogFiles(${sourceSlug}): ${fullPath} exceeds size cap, truncated to ${bytes} bytes`,
+    );
   }
   return {
     path: fullPath,
@@ -186,7 +197,9 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
   try {
     ({ owner, repo } = parseOwnerRepo(source.url));
   } catch (err) {
-    logger.warn(`fetchChangelogFiles: cannot parse owner/repo for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+    logger.warn(
+      `fetchChangelogFiles: cannot parse owner/repo for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return [];
   }
 
@@ -223,7 +236,9 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
     const seen = new Set(files.map((f) => f.path));
     for (const entry of override) {
       if (files.length >= CHANGELOG_MAX_FILES) {
-        logger.info(`fetchChangelogFiles(${source.slug}): hit CHANGELOG_MAX_FILES cap, skipping remaining overrides`);
+        logger.info(
+          `fetchChangelogFiles(${source.slug}): hit CHANGELOG_MAX_FILES cap, skipping remaining overrides`,
+        );
         break;
       }
       const normalized = entry.replace(/^\.?\//, "");
@@ -238,7 +253,9 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
         seen.add(f.path);
       }
     }
-    logger.info(`fetchChangelogFiles(${source.slug}): ${files.length} files, ${requestCount} requests (override)`);
+    logger.info(
+      `fetchChangelogFiles(${source.slug}): ${files.length} files, ${requestCount} requests (override)`,
+    );
     return files;
   }
 
@@ -311,7 +328,9 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
     }
   }
 
-  logger.info(`fetchChangelogFiles(${source.slug}): ${files.length} files, ${requestCount} requests`);
+  logger.info(
+    `fetchChangelogFiles(${source.slug}): ${files.length} files, ${requestCount} requests`,
+  );
   return files;
 }
 
@@ -396,15 +415,16 @@ export const github: Adapter = {
     }
 
     const releases: RawRelease[] = [];
-    let url: string | null =
-      `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`;
+    let url: string | null = `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`;
     let hitDateCutoff = false;
 
     while (url && !hitDateCutoff) {
       const res: Response = await fetch(url, { headers });
 
       if (res.status === 429) {
-        logger.warn(`GitHub rate limit hit for ${owner}/${repo}. Returning ${releases.length} releases fetched so far.`);
+        logger.warn(
+          `GitHub rate limit hit for ${owner}/${repo}. Returning ${releases.length} releases fetched so far.`,
+        );
         break;
       }
 

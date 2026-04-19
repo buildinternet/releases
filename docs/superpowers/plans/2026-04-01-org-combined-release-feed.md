@@ -15,6 +15,7 @@
 ### Task 1: API Endpoint — `GET /api/orgs/:slug/releases`
 
 **Files:**
+
 - Modify: `workers/api/src/routes/orgs.ts` (add new route after existing endpoints)
 
 - [ ] **Step 1: Add the route handler**
@@ -34,11 +35,7 @@ orgRoutes.get("/:slug/releases", async (c) => {
   const org = await db
     .select({ id: organizations.id })
     .from(organizations)
-    .where(
-      slug.startsWith("org_")
-        ? eq(organizations.id, slug)
-        : eq(organizations.slug, slug)
-    )
+    .where(slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug))
     .get();
 
   if (!org) return c.json({ error: "org_not_found" }, 404);
@@ -74,7 +71,8 @@ orgRoutes.get("/:slug/releases", async (c) => {
   // Query releases joined with sources — fetch limit + 1 to detect next page.
   // Use c.env.DB.prepare() for raw SQL — matches the activity endpoint pattern in this file.
 
-  const stmt = c.env.DB.prepare(`
+  const stmt = c.env.DB.prepare(
+    `
     SELECT r.id, r.version, r.title, r.content, r.content_summary,
            r.published_at, r.fetched_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
@@ -88,7 +86,8 @@ orgRoutes.get("/:slug/releases", async (c) => {
       r.published_at DESC,
       r.id DESC
     LIMIT ?
-  `).bind(...sourceIds, ...cursorBindings, limit + 1);
+  `,
+  ).bind(...sourceIds, ...cursorBindings, limit + 1);
 
   const { results } = await stmt.all<{
     id: string;
@@ -112,16 +111,15 @@ orgRoutes.get("/:slug/releases", async (c) => {
   let nextCursor: string | null = null;
   if (hasMore && pageRows.length > 0) {
     const last = pageRows[pageRows.length - 1];
-    nextCursor = last.published_at
-      ? `${last.published_at}|${last.id}`
-      : null;
+    nextCursor = last.published_at ? `${last.published_at}|${last.id}` : null;
   }
 
   const releasesFormatted = pageRows.map((r) => ({
     id: r.id,
     version: r.version,
     title: r.title,
-    summary: r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    summary:
+      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     content: r.content,
     publishedAt: r.published_at,
     url: r.url,
@@ -162,6 +160,7 @@ git commit -m "feat: add GET /api/orgs/:slug/releases endpoint with cursor pagin
 ### Task 2: API Client Types and Method
 
 **Files:**
+
 - Modify: `web/src/lib/api.ts`
 
 - [ ] **Step 1: Add the new types**
@@ -210,6 +209,7 @@ git commit -m "feat: add orgReleases API client method and types"
 ### Task 3: `ReleaseListItem` — Add Source Byline
 
 **Files:**
+
 - Modify: `web/src/components/release-item.tsx`
 
 - [ ] **Step 1: Update the component signature and add byline**
@@ -268,6 +268,7 @@ git commit -m "feat: add optional sourceByline prop to ReleaseListItem"
 ### Task 4: `OrgTabs` Component
 
 **Files:**
+
 - Create: `web/src/components/org-tabs.tsx`
 
 - [ ] **Step 1: Create the component**
@@ -334,6 +335,7 @@ git commit -m "feat: add OrgTabs component for sources/releases tab switching"
 ### Task 5: `OrgReleaseList` Client Component
 
 **Files:**
+
 - Create: `web/src/components/org-release-list.tsx`
 
 - [ ] **Step 1: Create the component**
@@ -469,6 +471,7 @@ git commit -m "feat: add OrgReleaseList component with load-more pagination"
 ### Task 6: Wire Up the Org Page
 
 **Files:**
+
 - Modify: `web/src/app/[orgSlug]/page.tsx`
 
 - [ ] **Step 1: Add imports and data fetching**

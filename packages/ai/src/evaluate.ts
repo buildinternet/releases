@@ -121,10 +121,7 @@ interface PreCheckResults {
 
 async function runPreChecks(url: string): Promise<PreCheckResults> {
   // Phase 1: Provider detection and generic feed discovery in parallel
-  const [provider, genericFeed] = await Promise.all([
-    detectProvider(url),
-    discoverFeed(url),
-  ]);
+  const [provider, genericFeed] = await Promise.all([detectProvider(url), discoverFeed(url)]);
 
   if (provider) logger.info(`Provider detected: ${provider.name}`);
 

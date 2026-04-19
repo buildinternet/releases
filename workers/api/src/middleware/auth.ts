@@ -17,13 +17,17 @@ export async function isValidBearerAuth(c: Context<Env>): Promise<boolean> {
 }
 
 /** Requires a valid Bearer token for all requests. Returns 401 if missing/invalid. */
-export const authMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({ allowPublicReads: false });
+export const authMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
+  allowPublicReads: false,
+});
 
 /**
  * GET/HEAD/OPTIONS pass through without auth (public read access).
  * POST/PATCH/DELETE require a valid Bearer token.
  */
-export const publicReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({ allowPublicReads: true });
+export const publicReadAuthMiddleware: MiddlewareHandler<Env> = createAuthMiddleware({
+  allowPublicReads: true,
+});
 
 function createAuthMiddleware(opts: { allowPublicReads: boolean }): MiddlewareHandler<Env> {
   return async (c, next) => {

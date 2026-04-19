@@ -55,17 +55,19 @@ function loadSkill(): string {
 }
 
 function formatCandidates(candidates: GroupingCandidate[]): string {
-  return candidates.map((c) => {
-    const contentSnippet = (c.content || "").slice(0, 400).replace(/\s+/g, " ").trim();
-    return [
-      `ID: ${c.id}`,
-      `Title: ${c.title}`,
-      `Version: ${c.version || "(none)"}`,
-      `Source: ${c.sourceSlug}`,
-      `Published: ${c.publishedAt?.slice(0, 10) || "(unknown)"}`,
-      `Content: ${contentSnippet}`,
-    ].join("\n");
-  }).join("\n---\n");
+  return candidates
+    .map((c) => {
+      const contentSnippet = (c.content || "").slice(0, 400).replace(/\s+/g, " ").trim();
+      return [
+        `ID: ${c.id}`,
+        `Title: ${c.title}`,
+        `Version: ${c.version || "(none)"}`,
+        `Source: ${c.sourceSlug}`,
+        `Published: ${c.publishedAt?.slice(0, 10) || "(unknown)"}`,
+        `Content: ${contentSnippet}`,
+      ].join("\n");
+    })
+    .join("\n---\n");
 }
 
 function extractJson(text: string): unknown {
@@ -96,7 +98,9 @@ export function extractClustersFromResponse(
       "grouping: response truncated (stop_reason=max_tokens). Increase max_tokens or split the candidate set.",
     );
   }
-  const parsed = extractJson(rawResponse) as { clusters?: Array<{ canonical_id?: string; coverage_ids?: string[]; reason?: string }> };
+  const parsed = extractJson(rawResponse) as {
+    clusters?: Array<{ canonical_id?: string; coverage_ids?: string[]; reason?: string }>;
+  };
   const rawClusters = parsed.clusters;
   if (!Array.isArray(rawClusters)) {
     throw new Error(`model response missing "clusters" array: ${rawResponse.slice(0, 200)}`);
@@ -140,7 +144,9 @@ export async function groupReleases(
     formatCandidates(candidates),
     "",
     "Apply the grouping-releases skill and return the JSON.",
-  ].filter(Boolean).join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 
   const response = await client.messages.create({
     model,
@@ -163,7 +169,9 @@ export async function groupReleases(
   const clusters = extractClustersFromResponse(rawResponse, response.stop_reason);
   validateClusters(clusters, candidates);
 
-  logger.info(`grouping-releases: ${candidates.length} candidates → ${clusters.length} clusters via ${model}`);
+  logger.info(
+    `grouping-releases: ${candidates.length} candidates → ${clusters.length} clusters via ${model}`,
+  );
   return { clusters, model, rawResponse };
 }
 
@@ -171,7 +179,10 @@ export async function groupReleases(
  * Exported for tests. Enforces the grouping-releases skill's "every ID appears in exactly
  * one cluster" contract and rejects hallucinated IDs so callers don't write bad data.
  */
-export function validateClusters(clusters: GroupingCluster[], candidates: GroupingCandidate[]): void {
+export function validateClusters(
+  clusters: GroupingCluster[],
+  candidates: GroupingCandidate[],
+): void {
   const inputIds = new Set(candidates.map((c) => c.id));
   const seen = new Map<string, "canonical" | "coverage">();
 
@@ -203,7 +214,9 @@ export function validateClusters(clusters: GroupingCluster[], candidates: Groupi
 
   const missing = [...inputIds].filter((id) => !seen.has(id));
   if (missing.length > 0) {
-    throw new Error(`grouping: input IDs missing from output (${missing.length}): ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "..." : ""}`);
+    throw new Error(
+      `grouping: input IDs missing from output (${missing.length}): ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? "..." : ""}`,
+    );
   }
 }
 

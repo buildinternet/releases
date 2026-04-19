@@ -334,7 +334,7 @@ async function resolveCname(hostname: string): Promise<string | null> {
     clearTimeout(timer);
     if (!res.ok) return null;
 
-    const data = await res.json() as {
+    const data = (await res.json()) as {
       Answer?: Array<{ type: number; data: string }>;
     };
 
@@ -453,7 +453,9 @@ export function detectFromUrl(url: string): ProviderDef | null {
         }
       }
     }
-  } catch { /* skip */ }
+  } catch {
+    /* skip */
+  }
   return null;
 }
 
@@ -500,7 +502,10 @@ export async function detectProvider(url: string): Promise<DetectedProvider | nu
  * Detect provider for a given URL using only the cached HTTP signals.
  * Useful when you've already fetched the page and have the HTML.
  */
-export function detectProviderFromHtml(headHtml: string, headers?: Record<string, string>): DetectedProvider | null {
+export function detectProviderFromHtml(
+  headHtml: string,
+  headers?: Record<string, string>,
+): DetectedProvider | null {
   const signals: HttpSignals = { headers: headers ?? {}, headHtml };
   const provider = detectFromHttpSignals(signals);
   if (!provider) return null;

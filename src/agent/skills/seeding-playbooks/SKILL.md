@@ -59,22 +59,24 @@ done
 ## Step 3: Choose Workflow and Model
 
 ### Compilation workflow (fast, metadata-only)
+
 - Agent writes notes from source metadata without querying release data
 - Good for: bulk scaffolding, low-priority orgs, initial coverage
 - Notes are educated guesses — claims about page structure and cadence are inferred, not verified
 
 ### Verified workflow (thorough, data-grounded)
+
 - Agent queries release data (`list <slug> --json`) and fetch logs (`admin source fetch-log <slug> --json`) before writing
 - Good for: high-value orgs, scrape sources, orgs with known data quality issues
 - Every claim is backed by observed data — version formats, actual cadence, content quality, fetch errors
 
 ### Model selection
 
-| Model | Cost/playbook | Best for |
-|-------|-----------|----------|
-| Opus | ~$0.07 (compilation) / ~$0.13 (verified) | Top-10 orgs, complex source sets, first-time verified runs |
-| Sonnet | ~$0.01 / ~$0.03 | Sweet spot for quality/cost. Most thorough output. Use for top-20 verified runs |
-| Haiku | ~$0.008 / ~$0.009 | Bulk coverage (orgs 20+). Output is usable but may include filler. Cheapest even with higher token count (extra tokens are cached input) |
+| Model  | Cost/playbook                            | Best for                                                                                                                                 |
+| ------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| Opus   | ~$0.07 (compilation) / ~$0.13 (verified) | Top-10 orgs, complex source sets, first-time verified runs                                                                               |
+| Sonnet | ~$0.01 / ~$0.03                          | Sweet spot for quality/cost. Most thorough output. Use for top-20 verified runs                                                          |
+| Haiku  | ~$0.008 / ~$0.009                        | Bulk coverage (orgs 20+). Output is usable but may include filler. Cheapest even with higher token count (extra tokens are cached input) |
 
 ## Step 4: Dispatch Sub-Agents
 
@@ -162,10 +164,10 @@ Verify with: bun src/index.ts admin content playbook {slug} 2>/dev/null | tail -
 // Launch up to 10 agents in parallel per batch
 Agent({
   description: "Write playbook: {slug}",
-  model: "sonnet",  // or "haiku" for bulk
+  model: "sonnet", // or "haiku" for bulk
   prompt: compiledPromptTemplate,
   run_in_background: true,
-})
+});
 ```
 
 ## Step 5: Handle the Parent-Saves Pattern

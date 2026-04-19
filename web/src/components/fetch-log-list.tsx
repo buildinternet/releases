@@ -93,7 +93,9 @@ export function FetchLogList({
                 className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
               >
                 <div className="flex items-start gap-1.5">
-                  <span className="text-stone-300 dark:text-stone-600 shrink-0">{isExpanded ? "▾" : "▸"}</span>
+                  <span className="text-stone-300 dark:text-stone-600 shrink-0">
+                    {isExpanded ? "▾" : "▸"}
+                  </span>
                   <div>
                     <div className="text-stone-900 dark:text-stone-100">
                       {log.sourceSlug ? (
@@ -110,14 +112,22 @@ export function FetchLogList({
                     </div>
                     {showOrg && log.orgName && <div className="text-stone-400">{log.orgName}</div>}
                     {log.sessionId && (
-                      <span className="text-[10px] font-sans text-indigo-400 dark:text-indigo-500">agent</span>
+                      <span className="text-[10px] font-sans text-indigo-400 dark:text-indigo-500">
+                        agent
+                      </span>
                     )}
                   </div>
                 </div>
                 <div className="text-stone-500">{formatTime(log.createdAt)}</div>
-                <div><FetchStatusBadge status={log.status} /></div>
-                <div className="text-stone-500"><FetchLogResultCell log={log} /></div>
-                <div className="text-stone-400 text-right">{formatFetchDuration(log.durationMs)}</div>
+                <div>
+                  <FetchStatusBadge status={log.status} />
+                </div>
+                <div className="text-stone-500">
+                  <FetchLogResultCell log={log} />
+                </div>
+                <div className="text-stone-400 text-right">
+                  {formatFetchDuration(log.durationMs)}
+                </div>
               </button>
               {isExpanded && <FetchLogDetail log={log} />}
             </div>

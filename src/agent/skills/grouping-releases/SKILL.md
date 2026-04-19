@@ -11,7 +11,7 @@ description: >
 
 ## What this is for
 
-Releases enter the index from **sources** — individual URLs we track for an organization. One org typically has several sources: a product changelog, a news page, an engineering blog, a GitHub repo. When a big launch happens, it's common for multiple sources to cover the same event. A model launch might show up on a marketing post, a platform changelog, *and* an app-level version note — three releases, one story.
+Releases enter the index from **sources** — individual URLs we track for an organization. One org typically has several sources: a product changelog, a news page, an engineering blog, a GitHub repo. When a big launch happens, it's common for multiple sources to cover the same event. A model launch might show up on a marketing post, a platform changelog, _and_ an app-level version note — three releases, one story.
 
 That overlap is signal, not a bug. Readers want the clearest explanation first, with the corroborating entries attached as supporting coverage. This skill decides which releases belong together and which one leads.
 
@@ -36,8 +36,8 @@ Releases from the same org that cover **the same underlying event**, published w
 
 - Different launches that happen to land the same day (a model release and a pricing change are two separate stories).
 - Follow-ups that add substantive new information days or weeks later (standalone — don't bury them under the original).
-- App or SDK version bumps that mention the launch but aren't a new launch themselves — these can be coverage if they're the *mechanism* by which users get the feature, but if they're mostly unrelated changelog bullets, keep them standalone.
-- Posts that are *about* a previously-launched product but aren't themselves a launch. If one of these got parsed as a release, flag it instead of grouping.
+- App or SDK version bumps that mention the launch but aren't a new launch themselves — these can be coverage if they're the _mechanism_ by which users get the feature, but if they're mostly unrelated changelog bullets, keep them standalone.
+- Posts that are _about_ a previously-launched product but aren't themselves a launch. If one of these got parsed as a release, flag it instead of grouping.
 
 ## Examples
 
@@ -75,7 +75,7 @@ All three landed the same day on the same source. Tempting to merge. Don't — t
 - `rel_h` — "Introducing Anthropic Labs" (anthropic-news, Apr 10)
 - `rel_i` — "Introducing Claude Design by Anthropic Labs" (anthropic-news, Apr 17)
 
-Same product family, a week apart. The later post is a *new* launch under the Labs umbrella, not coverage of the first announcement.
+Same product family, a week apart. The later post is a _new_ launch under the Labs umbrella, not coverage of the first announcement.
 
 ## What to output
 

@@ -49,7 +49,11 @@ async function applySource(source: AgentDiscoveredSource, orgId?: string): Promi
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     // Conflict (already exists) is treated as skipped, not error
-    if (message.includes("UNIQUE constraint") || message.includes("409") || message.includes("already exists")) {
+    if (
+      message.includes("UNIQUE constraint") ||
+      message.includes("409") ||
+      message.includes("already exists")
+    ) {
       return { slug, url, action: "skipped" };
     }
     return { slug, url, action: "error", error: message };
@@ -62,15 +66,16 @@ export function registerOnboardApplyCommand(onboardCmd: Command) {
     .description("Apply discovery results from a state file to the database")
     .argument("<state-file>", "Path to a DiscoveryState JSON file (or - for stdin)")
     .option("--json", "Output results as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin discovery onboard apply discovery-state.json
   releases admin discovery onboard apply discovery-state.json --json
-  cat state.json | releases admin discovery onboard apply -`)
+  cat state.json | releases admin discovery onboard apply -`,
+    )
     .action(async (stateFile: string, opts: { json?: boolean }) => {
-      const raw = stateFile === "-"
-        ? await Bun.stdin.text()
-        : await Bun.file(stateFile).text();
+      const raw = stateFile === "-" ? await Bun.stdin.text() : await Bun.file(stateFile).text();
 
       let state: DiscoveryState;
       try {
@@ -115,15 +120,15 @@ Examples:
       if (opts.json) {
         console.log(JSON.stringify(results, null, 2));
       } else {
-        let added = 0, ignored = 0, errors = 0;
+        let added = 0,
+          ignored = 0,
+          errors = 0;
         for (const r of results) {
           if (r.action === "added") added++;
           else if (r.action === "ignored") ignored++;
           else if (r.action === "error") errors++;
         }
-        logger.info(
-          chalk.bold(`\nApplied: ${added} added, ${ignored} ignored, ${errors} errors`),
-        );
+        logger.info(chalk.bold(`\nApplied: ${added} added, ${ignored} ignored, ${errors} errors`));
       }
 
       if (results.some((r) => r.action === "error")) {

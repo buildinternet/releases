@@ -12,9 +12,9 @@ function getLogFile(): string {
 
 function writeToFile(level: string, args: unknown[]) {
   const timestamp = new Date().toISOString();
-  const message = args.map((a) =>
-    typeof a === "string" ? a : JSON.stringify(a, null, 2)
-  ).join(" ");
+  const message = args
+    .map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2)))
+    .join(" ");
   appendFileSync(getLogFile(), `${timestamp} [${level}] ${message}\n`);
 }
 

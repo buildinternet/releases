@@ -16,9 +16,7 @@ const defaults: Required<MarkdownComponentOptions> = {
  * Build markdown component overrides for ReactMarkdown.
  * Handles safe image rendering and YouTube/Vimeo/Loom video embeds.
  */
-export function createMarkdownComponents(
-  opts: MarkdownComponentOptions = {}
-): Record<string, any> {
+export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): Record<string, any> {
   const { imgClass, videoClass } = { ...defaults, ...opts };
 
   return {
@@ -128,6 +126,10 @@ export const collapsedMarkdownComponents: Record<string, any> = {
     if (!isSafeHref(href)) return <>{children}</>;
     if (/youtube|vimeo|loom/i.test(href)) return <>{children}</>;
     if (/\.(mp4|webm)(\?.*)?$/i.test(href)) return null;
-    return <a href={href} target="_blank" rel="noopener noreferrer">{children}</a>;
+    return (
+      <a href={href} target="_blank" rel="noopener noreferrer">
+        {children}
+      </a>
+    );
   },
 };

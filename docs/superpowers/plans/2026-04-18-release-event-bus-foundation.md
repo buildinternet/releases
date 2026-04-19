@@ -37,38 +37,39 @@ Each follow-up plan should start with a fresh spec brainstorm before implementat
 
 ### New files
 
-| Path | Responsibility |
-| --- | --- |
-| `workers/api/src/events/types.ts` | `ReleaseEvent` wire type, `ReleaseEventPayload`, `EVENT_BUFFER_SIZE`, event-id helper |
-| `workers/api/src/events/buffer.ts` | Pure ring-buffer store helpers (`appendEvent`, `replayEvents`) over a tiny `EventStore` interface (KV-shaped). |
-| `workers/api/src/events/build-event.ts` | Pure function mapping inserted rows + source context → `ReleaseEventPayload[]`. |
-| `workers/api/src/events/publish.ts` | `publishReleaseEvents(env, { rows, src })` — builds events, POSTs to the hub DO, swallows errors. |
-| `workers/api/src/release-hub.ts` | `ReleaseHub` Durable Object class (mirrors `status-hub.ts` location). |
-| `workers/api/src/routes/stream.ts` | `GET /v1/releases/stream` WebSocket upgrade route — proxies to the DO. |
-| `src/api/stream.ts` | Client-side `streamReleases()` async generator with reconnect + `since` resume. |
-| `tests/unit/event-buffer.test.ts` | Buffer unit tests with in-memory store. |
-| `tests/unit/event-build.test.ts` | Event-build unit tests. |
-| `tests/unit/publish-release-events.test.ts` | Publisher unit test (mock DO namespace). |
-| `tests/unit/stream-client.test.ts` | Client stream helper unit tests (mock `WebSocket`). |
-| `docs/architecture/events.md` | Architecture doc: event contract, DO, replay semantics, publish path. |
+| Path                                        | Responsibility                                                                                                 |
+| ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `workers/api/src/events/types.ts`           | `ReleaseEvent` wire type, `ReleaseEventPayload`, `EVENT_BUFFER_SIZE`, event-id helper                          |
+| `workers/api/src/events/buffer.ts`          | Pure ring-buffer store helpers (`appendEvent`, `replayEvents`) over a tiny `EventStore` interface (KV-shaped). |
+| `workers/api/src/events/build-event.ts`     | Pure function mapping inserted rows + source context → `ReleaseEventPayload[]`.                                |
+| `workers/api/src/events/publish.ts`         | `publishReleaseEvents(env, { rows, src })` — builds events, POSTs to the hub DO, swallows errors.              |
+| `workers/api/src/release-hub.ts`            | `ReleaseHub` Durable Object class (mirrors `status-hub.ts` location).                                          |
+| `workers/api/src/routes/stream.ts`          | `GET /v1/releases/stream` WebSocket upgrade route — proxies to the DO.                                         |
+| `src/api/stream.ts`                         | Client-side `streamReleases()` async generator with reconnect + `since` resume.                                |
+| `tests/unit/event-buffer.test.ts`           | Buffer unit tests with in-memory store.                                                                        |
+| `tests/unit/event-build.test.ts`            | Event-build unit tests.                                                                                        |
+| `tests/unit/publish-release-events.test.ts` | Publisher unit test (mock DO namespace).                                                                       |
+| `tests/unit/stream-client.test.ts`          | Client stream helper unit tests (mock `WebSocket`).                                                            |
+| `docs/architecture/events.md`               | Architecture doc: event contract, DO, replay semantics, publish path.                                          |
 
 ### Modified files
 
-| Path | Change |
-| --- | --- |
-| `workers/api/wrangler.jsonc` | Add `RELEASE_HUB` DO binding + v2 migration. |
-| `workers/api/src/index.ts` | Export `ReleaseHub`, add `RELEASE_HUB` to `Env.Bindings`, mount `streamRoutes`. |
-| `workers/api/src/routes/sources.ts` | After the `/releases/batch` D1 commit, call `ctx.waitUntil(publishReleaseEvents(...))`. |
+| Path                                 | Change                                                                                           |
+| ------------------------------------ | ------------------------------------------------------------------------------------------------ |
+| `workers/api/wrangler.jsonc`         | Add `RELEASE_HUB` DO binding + v2 migration.                                                     |
+| `workers/api/src/index.ts`           | Export `ReleaseHub`, add `RELEASE_HUB` to `Env.Bindings`, mount `streamRoutes`.                  |
+| `workers/api/src/routes/sources.ts`  | After the `/releases/batch` D1 commit, call `ctx.waitUntil(publishReleaseEvents(...))`.          |
 | `workers/api/src/cron/poll-fetch.ts` | After `fetchOne` insert, call `publishReleaseEvents` (thread `RELEASE_HUB` through the env arg). |
-| `src/cli/commands/tail.ts` | Follow mode: try `streamReleases()`; fall back to existing polling on error or `snapshot_gap`. |
-| `docs/architecture/remote-mode.md` | Add a "Realtime streaming" subsection linking to `events.md`. |
-| `README.md` | Mention `tail -f` now streams (2-3 words). |
+| `src/cli/commands/tail.ts`           | Follow mode: try `streamReleases()`; fall back to existing polling on error or `snapshot_gap`.   |
+| `docs/architecture/remote-mode.md`   | Add a "Realtime streaming" subsection linking to `events.md`.                                    |
+| `README.md`                          | Mention `tail -f` now streams (2-3 words).                                                       |
 
 ---
 
 ## Task 1: Event types + ring buffer (pure)
 
 **Files:**
+
 - Create: `workers/api/src/events/types.ts`
 - Create: `workers/api/src/events/buffer.ts`
 - Create: `tests/unit/event-buffer.test.ts`
@@ -78,11 +79,7 @@ Each follow-up plan should start with a fresh spec brainstorm before implementat
 ```ts
 // tests/unit/event-buffer.test.ts
 import { describe, it, expect } from "bun:test";
-import {
-  appendEvent,
-  replayEvents,
-  type EventStore,
-} from "../../workers/api/src/events/buffer.js";
+import { appendEvent, replayEvents, type EventStore } from "../../workers/api/src/events/buffer.js";
 import type { ReleaseEvent, ReleaseEventPayload } from "../../workers/api/src/events/types.js";
 
 function makeStore(): EventStore {
@@ -91,8 +88,12 @@ function makeStore(): EventStore {
     async get<T>(key: string): Promise<T | null> {
       return (map.get(key) ?? null) as T | null;
     },
-    async put(key, value) { map.set(key, value); },
-    async delete(keys) { for (const k of keys) map.delete(k); },
+    async put(key, value) {
+      map.set(key, value);
+    },
+    async delete(keys) {
+      for (const k of keys) map.delete(k);
+    },
     async list<T>({ prefix, startAfter }: { prefix: string; startAfter?: string }) {
       const out = new Map<string, T>();
       const sorted = [...map.keys()].filter((k) => k.startsWith(prefix)).sort();
@@ -107,8 +108,14 @@ function makeStore(): EventStore {
 
 function payload(id: string): ReleaseEventPayload {
   return {
-    id, title: `t-${id}`, version: null, publishedAt: null,
-    sourceName: "Acme", sourceSlug: "acme", contentSummary: null, media: [],
+    id,
+    title: `t-${id}`,
+    version: null,
+    publishedAt: null,
+    sourceName: "Acme",
+    sourceSlug: "acme",
+    contentSummary: null,
+    media: [],
   };
 }
 
@@ -212,12 +219,7 @@ export function padSeq(seq: number): string {
 
 ```ts
 // workers/api/src/events/buffer.ts
-import {
-  type ReleaseEvent,
-  type ReleaseEventPayload,
-  newEventId,
-  padSeq,
-} from "./types.js";
+import { type ReleaseEvent, type ReleaseEventPayload, newEventId, padSeq } from "./types.js";
 
 /** Minimal storage interface matching Cloudflare DurableObjectStorage's KV subset. */
 export interface EventStore {
@@ -259,10 +261,7 @@ export async function appendEvent(
 }
 
 /** Replay events with seq > since, in ascending order. */
-export async function replayEvents(
-  store: EventStore,
-  since: number,
-): Promise<ReleaseEvent[]> {
+export async function replayEvents(store: EventStore, since: number): Promise<ReleaseEvent[]> {
   const after = since > 0 ? `${EVT_PREFIX}${padSeq(since)}` : undefined;
   const entries = await store.list<ReleaseEvent>({
     prefix: EVT_PREFIX,
@@ -313,6 +312,7 @@ git commit -m "feat(events): release event types + ring-buffer helpers"
 ## Task 2: Event-build pure function
 
 **Files:**
+
 - Create: `workers/api/src/events/build-event.ts`
 - Create: `tests/unit/event-build.test.ts`
 
@@ -446,6 +446,7 @@ git commit -m "feat(events): pure helper to build release event payloads"
 ## Task 3: `ReleaseHub` Durable Object
 
 **Files:**
+
 - Create: `workers/api/src/release-hub.ts`
 
 No unit test — the class is a thin wrapper over Task 1/2 logic + Cloudflare runtime primitives (`DurableObject`, `WebSocketPair`, `acceptWebSocket`). Integration-verified via `wrangler dev` in Task 10's smoke test.
@@ -462,11 +463,7 @@ import {
   oldestSeq,
   type EventStore,
 } from "./events/buffer.js";
-import {
-  EVENT_BUFFER_SIZE,
-  type ReleaseEvent,
-  type ReleaseEventPayload,
-} from "./events/types.js";
+import { EVENT_BUFFER_SIZE, type ReleaseEvent, type ReleaseEventPayload } from "./events/types.js";
 
 /** Adapt DurableObjectStorage to our EventStore interface. */
 function storageAsEventStore(storage: DurableObjectStorage): EventStore {
@@ -524,7 +521,13 @@ export class ReleaseHub extends DurableObject {
         const oldest = await oldestSeq(store);
         if (oldest > 0 && since < oldest - 1) {
           // Caller's cursor is beyond our buffer — they must REST backfill.
-          pair[1].send(JSON.stringify({ type: "snapshot_gap", since, oldestSeq: oldest } satisfies ServerMessage));
+          pair[1].send(
+            JSON.stringify({
+              type: "snapshot_gap",
+              since,
+              oldestSeq: oldest,
+            } satisfies ServerMessage),
+          );
         } else if (since < head) {
           // Replay buffered events they missed.
           const replay = await replayEvents(store, since);
@@ -547,13 +550,22 @@ export class ReleaseHub extends DurableObject {
   }
 
   async webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): Promise<void> {}
-  async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
+  async webSocketClose(
+    _ws: WebSocket,
+    _code: number,
+    _reason: string,
+    _wasClean: boolean,
+  ): Promise<void> {}
   async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {}
 
   private broadcast(event: ReleaseEvent): void {
     const payload = JSON.stringify(event);
     for (const ws of this.ctx.getWebSockets()) {
-      try { ws.send(payload); } catch { /* disconnected */ }
+      try {
+        ws.send(payload);
+      } catch {
+        /* disconnected */
+      }
     }
   }
 }
@@ -585,6 +597,7 @@ git commit -m "feat(events): ReleaseHub Durable Object with publish/subscribe + 
 ## Task 4: Wrangler config + Env binding
 
 **Files:**
+
 - Modify: `workers/api/wrangler.jsonc`
 - Modify: `workers/api/src/index.ts`
 
@@ -635,13 +648,13 @@ export { ReleaseHub } from "./release-hub.js";
 In the `Env.Bindings` block (around line 45), locate:
 
 ```ts
-    STATUS_HUB: DurableObjectNamespace;
+STATUS_HUB: DurableObjectNamespace;
 ```
 
 Add below it:
 
 ```ts
-    RELEASE_HUB: DurableObjectNamespace;
+RELEASE_HUB: DurableObjectNamespace;
 ```
 
 - [ ] **Step 3: Type-check**
@@ -672,6 +685,7 @@ git commit -m "feat(events): bind ReleaseHub durable object in api worker"
 ## Task 5: Stream route
 
 **Files:**
+
 - Create: `workers/api/src/routes/stream.ts`
 - Modify: `workers/api/src/index.ts`
 
@@ -704,9 +718,11 @@ streamRoutes.get("/releases/stream", async (c) => {
   const url = new URL(c.req.raw.url);
   const since = url.searchParams.get("since");
   const qs = since ? `?since=${encodeURIComponent(since)}` : "";
-  return stub.fetch(new Request(`https://do/subscribe${qs}`, {
-    headers: c.req.raw.headers,
-  }));
+  return stub.fetch(
+    new Request(`https://do/subscribe${qs}`, {
+      headers: c.req.raw.headers,
+    }),
+  );
 });
 ```
 
@@ -764,6 +780,7 @@ git commit -m "feat(api): GET /v1/releases/stream WebSocket route"
 ## Task 6: Publisher helper
 
 **Files:**
+
 - Create: `workers/api/src/events/publish.ts`
 - Create: `tests/unit/publish-release-events.test.ts`
 
@@ -821,7 +838,11 @@ describe("publishReleaseEvents", () => {
   it("swallows errors from the hub (ingestion must not fail on publish errors)", async () => {
     const namespace = {
       idFromName: (n: string) => n,
-      get: () => ({ fetch: async () => { throw new Error("hub down"); } }),
+      get: () => ({
+        fetch: async () => {
+          throw new Error("hub down");
+        },
+      }),
     };
     await expect(
       publishReleaseEvents(
@@ -870,18 +891,18 @@ export async function publishReleaseEvents(
   const events = buildReleaseEventPayloads(ctx);
   try {
     const stub = env.RELEASE_HUB.get(env.RELEASE_HUB.idFromName("global"));
-    const res = await stub.fetch(new Request("https://do/publish", {
-      method: "POST",
-      body: JSON.stringify({ events }),
-      headers: { "Content-Type": "application/json" },
-    }));
+    const res = await stub.fetch(
+      new Request("https://do/publish", {
+        method: "POST",
+        body: JSON.stringify({ events }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
     if (!res.ok) {
       console.warn(`[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`);
     }
   } catch (err) {
-    console.warn(
-      `[events] publish failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    console.warn(`[events] publish failed: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 ```
@@ -906,6 +927,7 @@ git commit -m "feat(events): publisher helper that fans events into ReleaseHub"
 ## Task 7: Publish on `/releases/batch`
 
 **Files:**
+
 - Modify: `workers/api/src/routes/sources.ts`
 
 - [ ] **Step 1: Add the import**
@@ -921,23 +943,27 @@ import { publishReleaseEvents } from "../events/publish.js";
 Locate the batch-insert block around line 298–305 (after the `for` loop that inserts chunks and builds `insertedIds`). Just before the existing `if (insertedIds.length > 0) { c.executionCtx.waitUntil(...)` embedding block, add:
 
 ```ts
-    // Fire-and-forget publish to the ReleaseHub DO so subscribers (CLI
-    // `tail -f`, the upcoming web live view, webhook delivery) see new
-    // releases in real time. Builds the event payload from the already-
-    // prepared chunk, so no extra D1 roundtrip is needed.
-    if (insertedIds.length > 0) {
-      const publishRows = body.releases.map((r, i) => ({
-        id: insertedIds[i] ?? "",
-        title: r.title,
-        version: r.version ?? null,
-        publishedAt: r.publishedAt ?? null,
-        media: r.media ?? null,
-      })).filter((r) => r.id !== "");
-      c.executionCtx.waitUntil(publishReleaseEvents(c.env, {
-        src: { name: src.name, slug: src.slug },
-        inserted: publishRows,
-      }));
-    }
+// Fire-and-forget publish to the ReleaseHub DO so subscribers (CLI
+// `tail -f`, the upcoming web live view, webhook delivery) see new
+// releases in real time. Builds the event payload from the already-
+// prepared chunk, so no extra D1 roundtrip is needed.
+if (insertedIds.length > 0) {
+  const publishRows = body.releases
+    .map((r, i) => ({
+      id: insertedIds[i] ?? "",
+      title: r.title,
+      version: r.version ?? null,
+      publishedAt: r.publishedAt ?? null,
+      media: r.media ?? null,
+    }))
+    .filter((r) => r.id !== "");
+  c.executionCtx.waitUntil(
+    publishReleaseEvents(c.env, {
+      src: { name: src.name, slug: src.slug },
+      inserted: publishRows,
+    }),
+  );
+}
 ```
 
 **Note:** `body.releases` and `insertedIds` can diverge in length when `onConflictDoUpdate` returns fewer rows than submitted (pure no-ops still return the row, but the parallel-array assumption holds because RETURNING preserves input order for the `VALUES(...)` batch). The `.filter` guards against any edge case where the loop truncates.
@@ -970,6 +996,7 @@ git commit -m "feat(api): publish release events on /sources/:slug/releases/batc
 ## Task 8: Publish on cron `fetchOne`
 
 **Files:**
+
 - Modify: `workers/api/src/cron/poll-fetch.ts`
 
 - [ ] **Step 1: Thread `RELEASE_HUB` through `fetchOne`'s env arg**
@@ -991,22 +1018,22 @@ import { publishReleaseEvents } from "../events/publish.js";
 Locate the block around line 296–305 (inside `fetchOne`, just after the `for` loop that builds `insertedIds`, and before the `if (insertedIds.length > 0 && env.RELEASES_INDEX)` embedding block). Add:
 
 ```ts
-    if (insertedIds.length > 0 && env.RELEASE_HUB) {
-      // Build event rows from the already-prepared `rows` array (parallel
-      // to insertedIds by insertion order). Fire-and-forget — publish
-      // errors are swallowed inside publishReleaseEvents.
-      const publishRows = rows.slice(0, insertedIds.length).map((r, i) => ({
-        id: insertedIds[i],
-        title: r.title,
-        version: r.version ?? null,
-        publishedAt: r.publishedAt,
-        media: r.media ?? null,
-      }));
-      await publishReleaseEvents(
-        { RELEASE_HUB: env.RELEASE_HUB },
-        { src: { name: source.name, slug: source.slug }, inserted: publishRows },
-      );
-    }
+if (insertedIds.length > 0 && env.RELEASE_HUB) {
+  // Build event rows from the already-prepared `rows` array (parallel
+  // to insertedIds by insertion order). Fire-and-forget — publish
+  // errors are swallowed inside publishReleaseEvents.
+  const publishRows = rows.slice(0, insertedIds.length).map((r, i) => ({
+    id: insertedIds[i],
+    title: r.title,
+    version: r.version ?? null,
+    publishedAt: r.publishedAt,
+    media: r.media ?? null,
+  }));
+  await publishReleaseEvents(
+    { RELEASE_HUB: env.RELEASE_HUB },
+    { src: { name: source.name, slug: source.slug }, inserted: publishRows },
+  );
+}
 ```
 
 **Note:** Cron runs inside a `ctx.waitUntil` at the scheduled handler in `index.ts`, so `await`-ing publish is fine — it still shares the cron's duration budget, but errors are internally swallowed.
@@ -1033,6 +1060,7 @@ git commit -m "feat(cron): publish release events from hourly fetch pipeline"
 ## Task 9: Client stream helper
 
 **Files:**
+
 - Create: `src/api/stream.ts`
 - Create: `tests/unit/stream-client.test.ts`
 
@@ -1050,16 +1078,25 @@ function mockWs(script: Array<StreamMessage | "close">) {
   const listeners: Record<string, (ev: any) => void> = {};
   const ws: any = {
     readyState: 0,
-    close() { listeners.close?.({}); },
-    addEventListener(type: string, fn: (ev: any) => void) { listeners[type] = fn; },
-    removeEventListener(type: string, _fn: any) { delete listeners[type]; },
+    close() {
+      listeners.close?.({});
+    },
+    addEventListener(type: string, fn: (ev: any) => void) {
+      listeners[type] = fn;
+    },
+    removeEventListener(type: string, _fn: any) {
+      delete listeners[type];
+    },
     send() {},
   };
   setTimeout(() => {
     ws.readyState = 1;
     listeners.open?.({});
     for (const msg of script) {
-      if (msg === "close") { listeners.close?.({ wasClean: true }); break; }
+      if (msg === "close") {
+        listeners.close?.({ wasClean: true });
+        break;
+      }
       listeners.message?.({ data: JSON.stringify(msg) });
     }
     listeners.close?.({ wasClean: true });
@@ -1076,7 +1113,11 @@ describe("streamReleases", () => {
       "close",
     ]);
     const messages: StreamMessage[] = [];
-    for await (const m of streamReleases({ url: "ws://fake", openWebSocket: () => ws, reconnect: false })) {
+    for await (const m of streamReleases({
+      url: "ws://fake",
+      openWebSocket: () => ws,
+      reconnect: false,
+    })) {
       messages.push(m);
     }
     expect(messages.map((m) => m.type)).toEqual(["ready", "release.created", "release.created"]);
@@ -1089,7 +1130,11 @@ describe("streamReleases", () => {
       "close",
     ]);
     const seen: string[] = [];
-    for await (const m of streamReleases({ url: "ws://fake", openWebSocket: () => ws, reconnect: false })) {
+    for await (const m of streamReleases({
+      url: "ws://fake",
+      openWebSocket: () => ws,
+      reconnect: false,
+    })) {
       seen.push(m.type);
       if (m.type === "snapshot_gap") break;
     }
@@ -1099,8 +1144,14 @@ describe("streamReleases", () => {
 
 function stubPayload(id: string) {
   return {
-    id, title: `t-${id}`, version: null, publishedAt: null,
-    sourceName: "x", sourceSlug: "x", contentSummary: null, media: [],
+    id,
+    title: `t-${id}`,
+    version: null,
+    publishedAt: null,
+    sourceName: "x",
+    sourceSlug: "x",
+    contentSummary: null,
+    media: [],
   };
 }
 ```
@@ -1187,7 +1238,9 @@ export async function* streamReleases(opts: StreamOptions): AsyncGenerator<Strea
         if (m.type === "ready") lastSeq = Math.max(lastSeq, m.seq);
         if (m.type === "release.created") lastSeq = Math.max(lastSeq, m.seq);
         push(m);
-      } catch { /* ignore malformed frames */ }
+      } catch {
+        /* ignore malformed frames */
+      }
     });
     ws.addEventListener("close", () => finish());
     ws.addEventListener("error", () => finish());
@@ -1199,7 +1252,9 @@ export async function* streamReleases(opts: StreamOptions): AsyncGenerator<Strea
         continue;
       }
       if (closed) break;
-      const next = await new Promise<{ done: boolean; value?: StreamMessage }>((resolve) => pending.push(resolve));
+      const next = await new Promise<{ done: boolean; value?: StreamMessage }>((resolve) =>
+        pending.push(resolve),
+      );
       if (next.done) break;
       yield next.value!;
     }
@@ -1268,6 +1323,7 @@ git commit -m "feat(cli): WebSocket stream client with reconnect + seq resume"
 ## Task 10: `tail -f` uses streaming with fallback
 
 **Files:**
+
 - Modify: `src/cli/commands/tail.ts`
 
 The existing polling loop already tracks seen IDs — that stays intact. We insert a streaming mode above polling that kicks in when follow mode is requested; polling becomes the fallback.
@@ -1298,28 +1354,32 @@ function streamUrl(): string | null {
 Locate the current follow-mode tail (lines 104–129 of `src/cli/commands/tail.ts`):
 
 ```ts
-      if (!opts.follow) return;
+if (!opts.follow) return;
 
-      const seen = new Set<string>();
-      rememberSeen(seen, rows.map((r) => r.id));
-      console.error(
-        chalk.dim(`\n  Following (every ${intervalSeconds}s). Ctrl-C to stop.`),
-      );
+const seen = new Set<string>();
+rememberSeen(
+  seen,
+  rows.map((r) => r.id),
+);
+console.error(chalk.dim(`\n  Following (every ${intervalSeconds}s). Ctrl-C to stop.`));
 
-      while (true) {
-        await sleep(intervalSeconds * 1000);
-        const fresh = await getLatestReleases(fetchOpts);
-        const novel = fresh.filter((r) => !seen.has(r.id));
-        if (novel.length === 0) continue;
+while (true) {
+  await sleep(intervalSeconds * 1000);
+  const fresh = await getLatestReleases(fetchOpts);
+  const novel = fresh.filter((r) => !seen.has(r.id));
+  if (novel.length === 0) continue;
 
-        rememberSeen(seen, novel.map((r) => r.id));
-        const ordered = novel.slice().reverse();
-        if (opts.json) {
-          for (const row of ordered) console.log(JSON.stringify(row));
-        } else {
-          for (const row of ordered) console.log(renderStreamLine(row));
-        }
-      }
+  rememberSeen(
+    seen,
+    novel.map((r) => r.id),
+  );
+  const ordered = novel.slice().reverse();
+  if (opts.json) {
+    for (const row of ordered) console.log(JSON.stringify(row));
+  } else {
+    for (const row of ordered) console.log(renderStreamLine(row));
+  }
+}
 ```
 
 Replace with:
@@ -1469,14 +1529,16 @@ git commit -m "feat(cli): tail -f uses live WebSocket stream with polling fallba
 ## Task 11: Documentation
 
 **Files:**
+
 - Create: `docs/architecture/events.md`
 - Modify: `docs/architecture/remote-mode.md`
 - Modify: `README.md`
 
 - [ ] **Step 1: Write the architecture doc**
 
-```markdown
+````markdown
 <!-- docs/architecture/events.md -->
+
 # Release event bus
 
 The API worker publishes a `release.created` event each time a release row is
@@ -1490,9 +1552,9 @@ buffer for short-window resume.
 ```jsonc
 {
   "type": "release.created",
-  "id": "evt_abc123def4xyz",     // globally unique event id
-  "seq": 42,                      // monotonic sequence within the DO
-  "ts": 1713484800000,            // epoch ms at publish time
+  "id": "evt_abc123def4xyz", // globally unique event id
+  "seq": 42, // monotonic sequence within the DO
+  "ts": 1713484800000, // epoch ms at publish time
   "release": {
     "id": "rel_...",
     "title": "v1.2.3",
@@ -1500,11 +1562,12 @@ buffer for short-window resume.
     "publishedAt": "2026-04-18T10:00:00Z",
     "sourceName": "Claude Code",
     "sourceSlug": "claude-code",
-    "contentSummary": null,       // omitted on publish; clients fetch via REST if needed
-    "media": []
-  }
+    "contentSummary": null, // omitted on publish; clients fetch via REST if needed
+    "media": [],
+  },
 }
 ```
+````
 
 `seq` is the cursor. Clients should store the most recent seq they
 observed and pass it as `?since=<seq>` on reconnect.
@@ -1538,7 +1601,8 @@ free; the buffer is bounded at 1000 events so DO storage stays flat.
 See `docs/architecture/remote-mode.md` for how this relates to the
 cached `/v1/releases/latest` endpoint (which remains the REST fallback
 and the backfill path after `snapshot_gap`).
-```
+
+````
 
 - [ ] **Step 2: Add a Realtime subsection to remote-mode.md**
 
@@ -1553,7 +1617,7 @@ events as they land in D1. Backed by the global `ReleaseHub` Durable Object
 with hibernation. The CLI's `tail -f` uses this stream in remote mode and
 falls back to polling `/v1/releases/latest` on transport failure or
 `snapshot_gap`. See [events.md](./events.md).
-```
+````
 
 - [ ] **Step 3: Add a short mention to README.md**
 
@@ -1616,6 +1680,7 @@ Prior to running `gh pr create`, write the PR body to `/tmp/pr-body.md` with a s
 ## Self-review
 
 **Spec coverage:**
+
 - Event model (contract) — Task 1 + doc
 - `ReleaseHub` DO (WebSocket + hibernation + buffer + replay) — Task 3
 - Wrangler binding + migration — Task 4
@@ -1632,6 +1697,7 @@ All items from the "Plan 1" brainstorm are covered. Web live view, webhooks, Que
 **Placeholder scan:** no TBDs. Every code block is complete. Tests have real assertions, not outlines.
 
 **Type consistency:**
+
 - `ReleaseEvent`, `ReleaseEventPayload`, `EVENT_BUFFER_SIZE`, `EventStore`, `InsertedReleaseRow` names are stable across Tasks 1-6.
 - `publishReleaseEvents(env, ctx)` signature matches between Task 6 (definition) and Tasks 7/8 (callers).
 - `streamReleases(opts)` signature in Task 9 matches the call in Task 10.

@@ -8,7 +8,7 @@ import { getFormat } from "@/lib/request";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ orgSlug: string }> }
+  { params }: { params: Promise<{ orgSlug: string }> },
 ) {
   const { orgSlug } = await params;
   const format = getFormat(request);
@@ -21,7 +21,10 @@ export async function GET(
         api.orgReleases(orgSlug, undefined, ATOM_DEFAULT_MAX_ENTRIES),
       ]);
     } catch {
-      return NextResponse.json({ error: "not_found", message: "Organization not found" }, { status: 404 });
+      return NextResponse.json(
+        { error: "not_found", message: "Organization not found" },
+        { status: 404 },
+      );
     }
     return orgAtomResponse(request, org, feed);
   }
@@ -30,7 +33,10 @@ export async function GET(
   try {
     org = await api.orgDetail(orgSlug);
   } catch {
-    return NextResponse.json({ error: "not_found", message: "Organization not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "not_found", message: "Organization not found" },
+      { status: 404 },
+    );
   }
 
   if (format === "md") {

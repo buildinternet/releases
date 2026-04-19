@@ -1,0 +1,12 @@
+node_modules
+dist
+.wrangler
+.next
+web/.next
+web/next-env.d.ts
+**/*.d.ts
+bun.lock
+package-lock.json
+**/migrations/**/*.sql
+plugins/claude-code/skills
+packages/*/dist

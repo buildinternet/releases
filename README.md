@@ -179,6 +179,7 @@ claude --plugin-dir plugins/claude/releases
 ```
 
 The plugin includes:
+
 - **MCP tools** — search releases, inspect orgs/products/sources, read stored CHANGELOGs (via `mcp.releases.sh`)
 - **Skills** — auto-triggers on changelog/release questions, plus operational skills for source management
 - **Agents** — `discovery` (finds and onboards sources) and `worker` (executes fetches)
@@ -267,30 +268,30 @@ releases admin mcp serve
 
 **MCP Tools:**
 
-| Tool | Description | Remote | Local |
-|------|-------------|:------:|:-----:|
-| `search_releases` | Hybrid lexical + semantic search across releases and CHANGELOG chunks (filter by product, org, `type`, or `mode`); each hit carries a `kind` discriminator | Yes | Yes |
-| `search_registry` | Vector-backed search across orgs, products, and sources | Yes | Yes |
-| `get_latest_releases` | Most recent releases (filter by product, org, or `type`) | Yes | Yes |
-| `get_release` | Full content of a single release by id (accepts `rel_` prefix or bare nanoid) | Yes | Yes |
-| `summarize_changes` | AI summary of a product's recent changes | Gated | Gated |
-| `compare_products` | AI comparison between two products | Gated | Gated |
-| `list_sources` | List all tracked sources | Yes | Yes |
-| `get_source` | Detail for a single source with org/product linkage, release count, and whether a CHANGELOG file is stored | Yes | Yes |
-| `get_source_changelog` | Canonical `CHANGELOG.md` stored for a GitHub source, with heading-aligned `offset` + `limit` (chars) or `tokens` (cl100k_base) slicing for Context7-style paging through large files | Yes | Yes |
-| `list_organizations` | List all organizations with their linked sources | Yes | Yes |
-| `get_organization` | Detailed view of a single org (accounts, tags, sources, products, aliases) | Yes | Yes |
-| `list_products` | List products, optionally scoped to one organization | Yes | Yes |
-| `get_product` | Detail for a single product with its organization, tags, and the sources grouped under it | Yes | Yes |
-| `add_source` | Add a new changelog source from a URL | -- | Admin only |
-| `remove_source` | Remove a source from the index | -- | Admin only |
-| `fetch_source` | Fetch new releases from a source | -- | Admin only |
-| `add_organization` | Create a new organization | -- | Admin only |
-| `link_account` | Link a platform account to an organization | -- | Admin only |
-| `suppress_release` / `unsuppress_release` | Hide or restore a release | -- | Admin only |
-| `ignore_url` / `unignore_url` | Manage org-scoped URL ignore list | -- | Admin only |
-| `block_url` / `unblock_url` / `list_blocked_urls` | Manage global URL block list | -- | Admin only |
-| `list_ignored_urls` | List ignored URLs for an organization | -- | Admin only |
+| Tool                                              | Description                                                                                                                                                                          | Remote |   Local    |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | :----: | :--------: |
+| `search_releases`                                 | Hybrid lexical + semantic search across releases and CHANGELOG chunks (filter by product, org, `type`, or `mode`); each hit carries a `kind` discriminator                           |  Yes   |    Yes     |
+| `search_registry`                                 | Vector-backed search across orgs, products, and sources                                                                                                                              |  Yes   |    Yes     |
+| `get_latest_releases`                             | Most recent releases (filter by product, org, or `type`)                                                                                                                             |  Yes   |    Yes     |
+| `get_release`                                     | Full content of a single release by id (accepts `rel_` prefix or bare nanoid)                                                                                                        |  Yes   |    Yes     |
+| `summarize_changes`                               | AI summary of a product's recent changes                                                                                                                                             | Gated  |   Gated    |
+| `compare_products`                                | AI comparison between two products                                                                                                                                                   | Gated  |   Gated    |
+| `list_sources`                                    | List all tracked sources                                                                                                                                                             |  Yes   |    Yes     |
+| `get_source`                                      | Detail for a single source with org/product linkage, release count, and whether a CHANGELOG file is stored                                                                           |  Yes   |    Yes     |
+| `get_source_changelog`                            | Canonical `CHANGELOG.md` stored for a GitHub source, with heading-aligned `offset` + `limit` (chars) or `tokens` (cl100k_base) slicing for Context7-style paging through large files |  Yes   |    Yes     |
+| `list_organizations`                              | List all organizations with their linked sources                                                                                                                                     |  Yes   |    Yes     |
+| `get_organization`                                | Detailed view of a single org (accounts, tags, sources, products, aliases)                                                                                                           |  Yes   |    Yes     |
+| `list_products`                                   | List products, optionally scoped to one organization                                                                                                                                 |  Yes   |    Yes     |
+| `get_product`                                     | Detail for a single product with its organization, tags, and the sources grouped under it                                                                                            |  Yes   |    Yes     |
+| `add_source`                                      | Add a new changelog source from a URL                                                                                                                                                |   --   | Admin only |
+| `remove_source`                                   | Remove a source from the index                                                                                                                                                       |   --   | Admin only |
+| `fetch_source`                                    | Fetch new releases from a source                                                                                                                                                     |   --   | Admin only |
+| `add_organization`                                | Create a new organization                                                                                                                                                            |   --   | Admin only |
+| `link_account`                                    | Link a platform account to an organization                                                                                                                                           |   --   | Admin only |
+| `suppress_release` / `unsuppress_release`         | Hide or restore a release                                                                                                                                                            |   --   | Admin only |
+| `ignore_url` / `unignore_url`                     | Manage org-scoped URL ignore list                                                                                                                                                    |   --   | Admin only |
+| `block_url` / `unblock_url` / `list_blocked_urls` | Manage global URL block list                                                                                                                                                         |   --   | Admin only |
+| `list_ignored_urls`                               | List ignored URLs for an organization                                                                                                                                                |   --   | Admin only |
 
 **Gated** = requires `ENABLE_AI_TOOLS=true`. These tools make Anthropic API calls and are disabled by default. Set the env var in the worker config or local environment to enable them.
 
@@ -338,6 +339,7 @@ releases admin source add --name "My Blog" --url https://example.com/changelog
 The name can be a positional argument or passed via `--name`.
 
 By default, `add` runs automated pre-checks that determine the best ingestion method for a URL. This includes provider detection (Mintlify, Docusaurus, etc.), feed discovery, and markdown suffix probing:
+
 - **GitHub URLs** → uses the GitHub Releases API directly
 - **Other URLs** → evaluates and stores the recommended method (feed, markdown, scrape, or crawl) so the first `fetch` already knows the optimal path
 

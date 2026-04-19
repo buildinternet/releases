@@ -21,9 +21,7 @@ export function TerminalCompare({ panes }: { panes: TerminalPane[] }) {
   const { copied, copy } = useCopyToClipboard();
 
   const current = panes[active];
-  const fullText = current.command
-    ? `$ ${current.command}\n${current.output}`
-    : current.output;
+  const fullText = current.command ? `$ ${current.command}\n${current.output}` : current.output;
 
   return (
     <div className="not-prose my-8">

@@ -14,7 +14,9 @@ export const cronRuns = sqliteTable(
     startedAt: text("started_at").notNull(),
     endedAt: text("ended_at"),
     durationMs: integer("duration_ms"),
-    status: text("status", { enum: ["running", "done", "degraded", "dispatch_failed", "aborted"] }).notNull(),
+    status: text("status", {
+      enum: ["running", "done", "degraded", "dispatch_failed", "aborted"],
+    }).notNull(),
     candidates: integer("candidates").notNull().default(0),
     dispatched: integer("dispatched").notNull().default(0),
     skippedOverCap: integer("skipped_over_cap").notNull().default(0),
@@ -24,9 +26,7 @@ export const cronRuns = sqliteTable(
     abortReason: text("abort_reason"),
     notes: text("notes"),
   },
-  (table) => [
-    index("idx_cron_runs_name_started").on(table.cronName, table.startedAt),
-  ],
+  (table) => [index("idx_cron_runs_name_started").on(table.cronName, table.startedAt)],
 );
 
 export type CronRun = typeof cronRuns.$inferSelect;

@@ -11,9 +11,9 @@ buffer for short-window resume.
 ```jsonc
 {
   "type": "release.created",
-  "id": "evt_abc123def4xyz",     // globally unique event id
-  "seq": 42,                      // monotonic sequence within the DO
-  "ts": 1713484800000,            // epoch ms at publish time
+  "id": "evt_abc123def4xyz", // globally unique event id
+  "seq": 42, // monotonic sequence within the DO
+  "ts": 1713484800000, // epoch ms at publish time
   "release": {
     "id": "rel_...",
     "title": "v1.2.3",
@@ -21,9 +21,9 @@ buffer for short-window resume.
     "publishedAt": "2026-04-18T10:00:00Z",
     "sourceName": "Claude Code",
     "sourceSlug": "claude-code",
-    "contentSummary": null,       // omitted on publish; clients fetch via REST if needed
-    "media": []
-  }
+    "contentSummary": null, // omitted on publish; clients fetch via REST if needed
+    "media": [],
+  },
 }
 ```
 

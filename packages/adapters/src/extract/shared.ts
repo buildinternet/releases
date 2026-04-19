@@ -47,7 +47,7 @@ export const releaseItemProperties = {
     type: "string" as const,
     enum: [...RELEASE_TYPES],
     description:
-      "Classification of the release. Use \"feature\" (default) for a single feature, version, or tight group of changes. Use \"rollup\" for seasonal, quarterly, or annual catch-all pages that span many features (e.g. \"Fall Release 2025\", \"What's New in Q3\", \"Year in Review\"). Omit to default to feature.",
+      'Classification of the release. Use "feature" (default) for a single feature, version, or tight group of changes. Use "rollup" for seasonal, quarterly, or annual catch-all pages that span many features (e.g. "Fall Release 2025", "What\'s New in Q3", "Year in Review"). Omit to default to feature.',
   },
   media: {
     type: "array" as const,
@@ -56,7 +56,11 @@ export const releaseItemProperties = {
     items: {
       type: "object" as const,
       properties: {
-        type: { type: "string" as const, enum: ["image", "video", "gif"], description: "Media type" },
+        type: {
+          type: "string" as const,
+          enum: ["image", "video", "gif"],
+          description: "Media type",
+        },
         url: { type: "string" as const, description: "Original URL of the media" },
         alt: { type: "string" as const, description: "Alt text or caption, if available" },
       },
@@ -71,7 +75,8 @@ export const releaseItemRequired = ["title", "content", "isBreaking"] as const;
  *  so the agent can record per-entry links discovered in the page body. */
 export const extractReleasesToolFull: Anthropic.Tool = {
   name: "extract_releases",
-  description: "Call this tool with the structured release entries you extracted from the changelog page(s).",
+  description:
+    "Call this tool with the structured release entries you extracted from the changelog page(s).",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -83,7 +88,8 @@ export const extractReleasesToolFull: Anthropic.Tool = {
             ...releaseItemProperties,
             url: {
               type: "string" as const,
-              description: "URL to the individual entry page. Extract from <a href> links on the page. If no individual page exists, omit.",
+              description:
+                "URL to the individual entry page. Extract from <a href> links on the page. If no individual page exists, omit.",
             },
           },
           required: [...releaseItemRequired],
@@ -98,7 +104,8 @@ export const extractReleasesToolFull: Anthropic.Tool = {
  *  when the sliced content didn't include changelog body (retry upstream). */
 export const extractReleasesToolIncremental: Anthropic.Tool = {
   name: "extract_releases",
-  description: "Extract the NEW release entries you found. Only include releases not in the known list. Return an empty array if there are no new releases.",
+  description:
+    "Extract the NEW release entries you found. Only include releases not in the known list. Return an empty array if there are no new releases.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -243,7 +250,11 @@ export function findContentStart(lines: string[]): number {
     }
 
     // Heading with a date-like pattern (e.g. "## March 2026")
-    if (/^#{1,3}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(line)) {
+    if (
+      /^#{1,3}\s+(January|February|March|April|May|June|July|August|September|October|November|December)\b/i.test(
+        line,
+      )
+    ) {
       return Math.max(0, i - 2);
     }
   }

@@ -1,11 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { sql } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import {
-  organizations,
-  sources,
-  releases,
-} from "@releases/core-internal/schema";
+import { organizations, sources, releases } from "@releases/core-internal/schema";
 
 let testDatabase: TestDatabase;
 testDatabase = createTestDb();
@@ -29,21 +25,32 @@ describe("Heatmap daily bucketing", () => {
   function seedOrg() {
     const db = getDb();
     db.insert(organizations).values({ id: "org_1", name: "Acme", slug: "acme" }).run();
-    db.insert(sources).values({ id: "src_1", name: "Blog", slug: "acme-blog", type: "feed", url: "https://acme.com/blog", orgId: "org_1" }).run();
+    db.insert(sources)
+      .values({
+        id: "src_1",
+        name: "Blog",
+        slug: "acme-blog",
+        type: "feed",
+        url: "https://acme.com/blog",
+        orgId: "org_1",
+      })
+      .run();
   }
 
   function insertRelease(id: string, publishedAt: string) {
     const db = getDb();
-    db.insert(releases).values({
-      id,
-      sourceId: "src_1",
-      title: `Release ${id}`,
-      content: "",
-      url: `https://acme.com/${id}`,
-      contentHash: id,
-      publishedAt,
-      fetchedAt: new Date().toISOString(),
-    }).run();
+    db.insert(releases)
+      .values({
+        id,
+        sourceId: "src_1",
+        title: `Release ${id}`,
+        content: "",
+        url: `https://acme.com/${id}`,
+        contentHash: id,
+        publishedAt,
+        fetchedAt: new Date().toISOString(),
+      })
+      .run();
   }
 
   it("groups releases by date", () => {
@@ -135,19 +142,30 @@ describe("Heatmap daily bucketing", () => {
     seedOrg();
     // Another org's source
     db.insert(organizations).values({ id: "org_2", name: "Other", slug: "other" }).run();
-    db.insert(sources).values({ id: "src_2", name: "Other Blog", slug: "other-blog", type: "feed", url: "https://other.com/blog", orgId: "org_2" }).run();
+    db.insert(sources)
+      .values({
+        id: "src_2",
+        name: "Other Blog",
+        slug: "other-blog",
+        type: "feed",
+        url: "https://other.com/blog",
+        orgId: "org_2",
+      })
+      .run();
 
     insertRelease("r1", "2026-03-10T10:00:00Z");
-    db.insert(releases).values({
-      id: "r2",
-      sourceId: "src_2",
-      title: "Other Release",
-      content: "",
-      url: "https://other.com/r2",
-      contentHash: "r2",
-      publishedAt: "2026-03-10T10:00:00Z",
-      fetchedAt: new Date().toISOString(),
-    }).run();
+    db.insert(releases)
+      .values({
+        id: "r2",
+        sourceId: "src_2",
+        title: "Other Release",
+        content: "",
+        url: "https://other.com/r2",
+        contentHash: "r2",
+        publishedAt: "2026-03-10T10:00:00Z",
+        fetchedAt: new Date().toISOString(),
+      })
+      .run();
 
     const rows = db.all<{ date: string; cnt: number }>(sql`
       SELECT

@@ -66,29 +66,31 @@ describe("handleSitemap", () => {
       })
       .returning()
       .all();
-    db.insert(releases).values([
-      {
-        sourceId: src.id,
-        url: "https://example.com/r1",
-        title: "v1",
-        content: "",
-        publishedAt: "2026-01-02T00:00:00Z",
-      },
-      {
-        sourceId: src.id,
-        url: "https://example.com/r2",
-        title: "v2",
-        content: "",
-        publishedAt: "2026-03-15T00:00:00Z",
-      },
-      {
-        sourceId: src.id,
-        url: "https://example.com/r3",
-        title: "no date",
-        content: "",
-        publishedAt: null,
-      },
-    ]).run();
+    db.insert(releases)
+      .values([
+        {
+          sourceId: src.id,
+          url: "https://example.com/r1",
+          title: "v1",
+          content: "",
+          publishedAt: "2026-01-02T00:00:00Z",
+        },
+        {
+          sourceId: src.id,
+          url: "https://example.com/r2",
+          title: "v2",
+          content: "",
+          publishedAt: "2026-03-15T00:00:00Z",
+        },
+        {
+          sourceId: src.id,
+          url: "https://example.com/r3",
+          title: "no date",
+          content: "",
+          publishedAt: null,
+        },
+      ])
+      .run();
 
     const result = await callSitemap();
 
@@ -104,23 +106,25 @@ describe("handleSitemap", () => {
   test("filters out hidden sources but keeps their parent org", async () => {
     const db = testDatabase.db;
     const [org] = db.insert(organizations).values({ name: "Corp", slug: "corp" }).returning().all();
-    db.insert(sources).values([
-      {
-        orgId: org.id,
-        name: "Visible",
-        slug: "corp-visible",
-        type: "feed",
-        url: "https://corp.com/v",
-      },
-      {
-        orgId: org.id,
-        name: "Hidden",
-        slug: "corp-hidden",
-        type: "feed",
-        url: "https://corp.com/h",
-        isHidden: true,
-      },
-    ]).run();
+    db.insert(sources)
+      .values([
+        {
+          orgId: org.id,
+          name: "Visible",
+          slug: "corp-visible",
+          type: "feed",
+          url: "https://corp.com/v",
+        },
+        {
+          orgId: org.id,
+          name: "Hidden",
+          slug: "corp-hidden",
+          type: "feed",
+          url: "https://corp.com/h",
+          isHidden: true,
+        },
+      ])
+      .run();
 
     const result = await callSitemap();
 
@@ -130,13 +134,23 @@ describe("handleSitemap", () => {
 
   test("emits one product entry per org/product, grouped by org slug", async () => {
     const db = testDatabase.db;
-    const [o1] = db.insert(organizations).values({ name: "Vercel", slug: "vercel" }).returning().all();
-    const [o2] = db.insert(organizations).values({ name: "Other", slug: "other" }).returning().all();
-    db.insert(products).values([
-      { orgId: o1.id, name: "Next.js", slug: "nextjs" },
-      { orgId: o1.id, name: "Turborepo", slug: "turborepo" },
-      { orgId: o2.id, name: "Thing", slug: "thing" },
-    ]).run();
+    const [o1] = db
+      .insert(organizations)
+      .values({ name: "Vercel", slug: "vercel" })
+      .returning()
+      .all();
+    const [o2] = db
+      .insert(organizations)
+      .values({ name: "Other", slug: "other" })
+      .returning()
+      .all();
+    db.insert(products)
+      .values([
+        { orgId: o1.id, name: "Next.js", slug: "nextjs" },
+        { orgId: o1.id, name: "Turborepo", slug: "turborepo" },
+        { orgId: o2.id, name: "Thing", slug: "thing" },
+      ])
+      .run();
 
     const result = await callSitemap();
 
@@ -147,13 +161,15 @@ describe("handleSitemap", () => {
   test("excludes orphan sources (orgId is null)", async () => {
     const db = testDatabase.db;
     db.insert(organizations).values({ name: "Host", slug: "host" }).run();
-    db.insert(sources).values({
-      orgId: null,
-      name: "Orphan",
-      slug: "orphan",
-      type: "feed",
-      url: "https://orphan.dev/",
-    }).run();
+    db.insert(sources)
+      .values({
+        orgId: null,
+        name: "Orphan",
+        slug: "orphan",
+        type: "feed",
+        url: "https://orphan.dev/",
+      })
+      .run();
 
     const result = await callSitemap();
     expect(result.sources).toEqual([]);
@@ -163,28 +179,28 @@ describe("handleSitemap", () => {
   test("carries lastActivity from the max(sources.lastFetchedAt) for each org", async () => {
     const db = testDatabase.db;
     const [org] = db.insert(organizations).values({ name: "Org", slug: "org" }).returning().all();
-    db.insert(sources).values([
-      {
-        orgId: org.id,
-        name: "A",
-        slug: "org-a",
-        type: "feed",
-        url: "https://a.org/",
-        lastFetchedAt: "2026-04-10T00:00:00Z",
-      },
-      {
-        orgId: org.id,
-        name: "B",
-        slug: "org-b",
-        type: "feed",
-        url: "https://b.org/",
-        lastFetchedAt: "2026-04-15T09:00:00Z",
-      },
-    ]).run();
+    db.insert(sources)
+      .values([
+        {
+          orgId: org.id,
+          name: "A",
+          slug: "org-a",
+          type: "feed",
+          url: "https://a.org/",
+          lastFetchedAt: "2026-04-10T00:00:00Z",
+        },
+        {
+          orgId: org.id,
+          name: "B",
+          slug: "org-b",
+          type: "feed",
+          url: "https://b.org/",
+          lastFetchedAt: "2026-04-15T09:00:00Z",
+        },
+      ])
+      .run();
 
     const result = await callSitemap();
-    expect(result.orgs).toEqual([
-      { slug: "org", lastActivity: "2026-04-15T09:00:00Z" },
-    ]);
+    expect(result.orgs).toEqual([{ slug: "org", lastActivity: "2026-04-15T09:00:00Z" }]);
   });
 });

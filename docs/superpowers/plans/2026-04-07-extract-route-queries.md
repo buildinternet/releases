@@ -14,26 +14,27 @@
 
 ### New files
 
-| File | Responsibility |
-|------|---------------|
-| `workers/api/src/queries/shared.ts` | Reusable SQL fragments: `notSuppressed`, `notDisabled` conditions; common row types |
-| `workers/api/src/queries/sources.ts` | Query helpers for source list, source detail, source activity, release pagination |
-| `workers/api/src/queries/orgs.ts` | Query helpers for org list, org detail, org activity, org release feed |
-| `workers/api/src/queries/search.ts` | Query helpers for unified search (org/product/source/release FTS) |
+| File                                 | Responsibility                                                                      |
+| ------------------------------------ | ----------------------------------------------------------------------------------- |
+| `workers/api/src/queries/shared.ts`  | Reusable SQL fragments: `notSuppressed`, `notDisabled` conditions; common row types |
+| `workers/api/src/queries/sources.ts` | Query helpers for source list, source detail, source activity, release pagination   |
+| `workers/api/src/queries/orgs.ts`    | Query helpers for org list, org detail, org activity, org release feed              |
+| `workers/api/src/queries/search.ts`  | Query helpers for unified search (org/product/source/release FTS)                   |
 
 ### Modified files
 
-| File | What changes |
-|------|-------------|
-| `workers/api/src/routes/sources.ts` | Replace inline SQL in GET /sources, GET /:slug, GET /:slug/activity with query helper calls |
-| `workers/api/src/routes/orgs.ts` | Replace inline SQL in GET /orgs, GET /:slug, GET /:slug/activity, GET /:slug/releases with query helper calls |
-| `workers/api/src/routes/search.ts` | Replace inline SQL in GET /search with query helper calls |
+| File                                | What changes                                                                                                  |
+| ----------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `workers/api/src/routes/sources.ts` | Replace inline SQL in GET /sources, GET /:slug, GET /:slug/activity with query helper calls                   |
+| `workers/api/src/routes/orgs.ts`    | Replace inline SQL in GET /orgs, GET /:slug, GET /:slug/activity, GET /:slug/releases with query helper calls |
+| `workers/api/src/routes/search.ts`  | Replace inline SQL in GET /search with query helper calls                                                     |
 
 ---
 
 ### Task 1: Create shared SQL fragments
 
 **Files:**
+
 - Create: `workers/api/src/queries/shared.ts`
 
 - [ ] **Step 1: Create the shared module**
@@ -94,6 +95,7 @@ git commit -m "refactor: add shared SQL fragments for route query extraction"
 ### Task 2: Extract source query helpers
 
 **Files:**
+
 - Create: `workers/api/src/queries/sources.ts`
 - Modify: `workers/api/src/routes/sources.ts`
 
@@ -128,10 +130,7 @@ export type SourceListRow = {
   latest_date: string | null;
 };
 
-export async function getSourcesWithStats(
-  db: D1Db,
-  whereClause?: SQL,
-): Promise<SourceListRow[]> {
+export async function getSourcesWithStats(db: D1Db, whereClause?: SQL): Promise<SourceListRow[]> {
   return db.all<SourceListRow>(sql`
     SELECT
       sources.*,
@@ -235,7 +234,7 @@ import { getSourcesWithStats } from "../queries/sources.js";
 // OLD:
 //   const rows = await db.all<{...}>(sql`SELECT sources.*, ...`);
 // NEW:
-  const rows = await getSourcesWithStats(db, whereClause);
+const rows = await getSourcesWithStats(db, whereClause);
 ```
 
 The rest of the handler (building `conditions`, mapping `rows` to `result`) stays unchanged.
@@ -252,7 +251,7 @@ import { getSourcesWithStats, getSourceReleasesPaginated } from "../queries/sour
 // OLD:
 //   const releaseRows = await db.all<{...}>(sql`SELECT id, version, ...`);
 // NEW:
-  const releaseRows = await getSourceReleasesPaginated(db, src.id, pageSize, offset);
+const releaseRows = await getSourceReleasesPaginated(db, src.id, pageSize, offset);
 ```
 
 - [ ] **Step 4: Update routes/sources.ts GET /sources/:slug/activity handler**
@@ -261,13 +260,17 @@ Replace the CTE query at lines 483-513 with `getSourceActivityBuckets`:
 
 ```typescript
 // Add to import:
-import { getSourcesWithStats, getSourceReleasesPaginated, getSourceActivityBuckets } from "../queries/sources.js";
+import {
+  getSourcesWithStats,
+  getSourceReleasesPaginated,
+  getSourceActivityBuckets,
+} from "../queries/sources.js";
 
 // In GET /sources/:slug/activity handler, replace lines 483-513:
 // OLD:
 //   const bucketRows = await db.all<{...}>(sql`WITH bucketed AS (...)`);
 // NEW:
-  const bucketRows = await getSourceActivityBuckets(db, src.id, from, toExclusive);
+const bucketRows = await getSourceActivityBuckets(db, src.id, from, toExclusive);
 ```
 
 - [ ] **Step 5: Type-check**
@@ -287,6 +290,7 @@ git commit -m "refactor: extract source route queries into shared helpers"
 ### Task 3: Extract org query helpers
 
 **Files:**
+
 - Create: `workers/api/src/queries/orgs.ts`
 - Modify: `workers/api/src/routes/orgs.ts`
 
@@ -301,10 +305,7 @@ import { sql } from "drizzle-orm";
 import type { D1Db } from "../db.js";
 import type { OrgListRow } from "./shared.js";
 
-export async function getOrgsWithStats(
-  db: D1Db,
-  cutoff30d: string,
-): Promise<OrgListRow[]> {
+export async function getOrgsWithStats(db: D1Db, cutoff30d: string): Promise<OrgListRow[]> {
   return db.all<OrgListRow>(sql`
     SELECT
       o.id, o.slug, o.name, o.domain, o.description, o.category,
@@ -323,10 +324,7 @@ export async function getOrgsWithStats(
 ```typescript
 import type { SourceWithStats } from "./shared.js";
 
-export async function getOrgSourcesWithStats(
-  db: D1Db,
-  orgId: string,
-): Promise<SourceWithStats[]> {
+export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<SourceWithStats[]> {
   return db.all<SourceWithStats>(sql`
     SELECT
       s.id, s.slug, s.name, s.type, s.url, s.is_primary,
@@ -486,7 +484,9 @@ export async function getOrgReleasesFeed(
   cursor: { cursorWhere: string; cursorBindings: string[] },
   limit: number,
 ): Promise<OrgReleaseRow[]> {
-  const stmt = d1.prepare(`
+  const stmt = d1
+    .prepare(
+      `
     SELECT r.id, r.version, r.title, r.content, r.content_summary,
            r.published_at, r.fetched_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
@@ -501,7 +501,9 @@ export async function getOrgReleasesFeed(
       r.fetched_at DESC,
       r.id DESC
     LIMIT ?
-  `).bind(orgId, ...cursor.cursorBindings, limit);
+  `,
+    )
+    .bind(orgId, ...cursor.cursorBindings, limit);
 
   const { results } = await stmt.all<OrgReleaseRow>();
   return results;
@@ -514,13 +516,18 @@ Replace lines 19-39 with:
 
 ```typescript
 // At top, add import:
-import { getOrgsWithStats, getOrgSourcesWithStats, getOrgActivityData, getOrgReleasesFeed } from "../queries/orgs.js";
+import {
+  getOrgsWithStats,
+  getOrgSourcesWithStats,
+  getOrgActivityData,
+  getOrgReleasesFeed,
+} from "../queries/orgs.js";
 
 // In GET /orgs handler:
 // OLD:
 //   const rows = await db.all<{...}>(sql`SELECT o.id, o.slug, ...`);
 // NEW:
-  const rows = await getOrgsWithStats(db, cutoff30d);
+const rows = await getOrgsWithStats(db, cutoff30d);
 ```
 
 - [ ] **Step 3: Update routes/orgs.ts GET /orgs/:slug handler**
@@ -539,8 +546,13 @@ Update the destructured variable name and downstream usage to match the `SourceW
 Replace the 4 parallel queries at lines 473-569 with:
 
 ```typescript
-  const { bucketRows, statsRows, latestVersionRows, earliestVersionRows } =
-    await getOrgActivityData(db, org.id, sourceIds, from, toExclusive);
+const { bucketRows, statsRows, latestVersionRows, earliestVersionRows } = await getOrgActivityData(
+  db,
+  org.id,
+  sourceIds,
+  from,
+  toExclusive,
+);
 ```
 
 The rest of the handler (building maps, assembling response) stays unchanged.
@@ -550,7 +562,12 @@ The rest of the handler (building maps, assembling response) stays unchanged.
 Replace the `.prepare()` query at lines 673-702 with:
 
 ```typescript
-  const results = await getOrgReleasesFeed(c.env.DB, org.id, { cursorWhere, cursorBindings }, limit + 1);
+const results = await getOrgReleasesFeed(
+  c.env.DB,
+  org.id,
+  { cursorWhere, cursorBindings },
+  limit + 1,
+);
 ```
 
 The cursor parsing logic (lines 654-671) and response formatting (lines 704-743) stay in the route handler.
@@ -572,6 +589,7 @@ git commit -m "refactor: extract org route queries into shared helpers"
 ### Task 4: Extract search query helpers
 
 **Files:**
+
 - Create: `workers/api/src/queries/search.ts`
 - Modify: `workers/api/src/routes/search.ts`
 
@@ -589,7 +607,11 @@ import type {
   SearchReleaseHit,
 } from "../../../../src/api/types.js";
 
-export async function searchOrgs(db: D1Db, pattern: string, limit: number): Promise<SearchOrgHit[]> {
+export async function searchOrgs(
+  db: D1Db,
+  pattern: string,
+  limit: number,
+): Promise<SearchOrgHit[]> {
   return db.all<SearchOrgHit>(sql`
     SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
     FROM organizations o
@@ -600,7 +622,11 @@ export async function searchOrgs(db: D1Db, pattern: string, limit: number): Prom
   `);
 }
 
-export async function searchProducts(db: D1Db, pattern: string, limit: number): Promise<SearchProductHit[]> {
+export async function searchProducts(
+  db: D1Db,
+  pattern: string,
+  limit: number,
+): Promise<SearchProductHit[]> {
   return db.all<SearchProductHit>(sql`
     SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category
     FROM products p
@@ -611,7 +637,11 @@ export async function searchProducts(db: D1Db, pattern: string, limit: number): 
   `);
 }
 
-export async function searchSources(db: D1Db, pattern: string, limit: number): Promise<SearchSourceHit[]> {
+export async function searchSources(
+  db: D1Db,
+  pattern: string,
+  limit: number,
+): Promise<SearchSourceHit[]> {
   return db.all<SearchSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
            p.slug as productSlug
@@ -653,8 +683,20 @@ export async function searchReleasesFromMatchedEntities(
   limit: number,
 ): Promise<SearchReleaseHit[]> {
   const conditions = [];
-  if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
-  if (productSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(productSlugs.map((s) => sql`${s}`), sql`, `)})`);
+  if (orgSlugs.length > 0)
+    conditions.push(
+      sql`o.slug IN (${sql.join(
+        orgSlugs.map((s) => sql`${s}`),
+        sql`, `,
+      )})`,
+    );
+  if (productSlugs.length > 0)
+    conditions.push(
+      sql`p.slug IN (${sql.join(
+        productSlugs.map((s) => sql`${s}`),
+        sql`, `,
+      )})`,
+    );
   if (conditions.length === 0) return [];
 
   return db.all<SearchReleaseHit>(sql`
@@ -688,22 +730,22 @@ import {
 } from "../queries/search.js";
 
 // In GET /search handler, replace lines 30-106 with:
-  const [orgs, products, sources, ftsReleases] = await Promise.all([
-    searchOrgs(db, pattern, limit),
-    searchProducts(db, pattern, limit),
-    searchSources(db, pattern, limit),
-    searchReleasesFts(db, q, limit, offset).catch(() => [] as SearchReleaseHit[]),
-  ]);
+const [orgs, products, sources, ftsReleases] = await Promise.all([
+  searchOrgs(db, pattern, limit),
+  searchProducts(db, pattern, limit),
+  searchSources(db, pattern, limit),
+  searchReleasesFts(db, q, limit, offset).catch(() => [] as SearchReleaseHit[]),
+]);
 
-  let releases = ftsReleases;
-  if (releases.length === 0 && (orgs.length > 0 || products.length > 0)) {
-    releases = await searchReleasesFromMatchedEntities(
-      db,
-      orgs.map((o) => o.slug),
-      products.map((p) => p.slug),
-      limit,
-    );
-  }
+let releases = ftsReleases;
+if (releases.length === 0 && (orgs.length > 0 || products.length > 0)) {
+  releases = await searchReleasesFromMatchedEntities(
+    db,
+    orgs.map((o) => o.slug),
+    products.map((p) => p.slug),
+    limit,
+  );
+}
 ```
 
 Remove the now-unused `sql` import from drizzle-orm (it was only used for inline queries). Keep the remaining imports.
@@ -725,6 +767,7 @@ git commit -m "refactor: extract search route queries into shared helpers"
 ### Task 5: Clean up duplicate `notDisabled` definitions
 
 **Files:**
+
 - Modify: `workers/api/src/routes/sources.ts`
 
 - [ ] **Step 1: Replace local `notDisabled` definitions in sources.ts**

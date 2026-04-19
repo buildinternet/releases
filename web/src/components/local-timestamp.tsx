@@ -7,7 +7,15 @@
 
 import { useEffect, useState } from "react";
 
-export function LocalTimestamp({ iso, prefix, className }: { iso: string; prefix?: string; className?: string }) {
+export function LocalTimestamp({
+  iso,
+  prefix,
+  className,
+}: {
+  iso: string;
+  prefix?: string;
+  className?: string;
+}) {
   const [formatted, setFormatted] = useState<string | null>(null);
 
   useEffect(() => {
@@ -19,7 +27,7 @@ export function LocalTimestamp({ iso, prefix, className }: { iso: string; prefix
         hour: "numeric",
         minute: "2-digit",
         timeZoneName: "short",
-      })
+      }),
     );
   }, [iso]);
 
@@ -33,7 +41,8 @@ export function LocalTimestamp({ iso, prefix, className }: { iso: string; prefix
 
   return (
     <span className={className}>
-      {prefix}{formatted ?? fallback}
+      {prefix}
+      {formatted ?? fallback}
     </span>
   );
 }

@@ -38,7 +38,10 @@ function stripLeadingHeading(content: string): string {
  * otherwise truncates at the nearest word boundary and appends an ellipsis.
  * Leaves the input unchanged when it already fits.
  */
-export function overviewPreview(content: string, maxWords: number = OVERVIEW_PREVIEW_WORDS): string {
+export function overviewPreview(
+  content: string,
+  maxWords: number = OVERVIEW_PREVIEW_WORDS,
+): string {
   const trimmed = stripLeadingHeading(content.trim());
   if (!trimmed) return "";
 

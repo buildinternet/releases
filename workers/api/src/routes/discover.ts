@@ -3,7 +3,11 @@ import type { Env } from "../index.js";
 
 export const discoverRoutes = new Hono<Env>();
 
-function proxyToDiscovery(env: Env["Bindings"], path: string, init: RequestInit): Promise<Response> {
+function proxyToDiscovery(
+  env: Env["Bindings"],
+  path: string,
+  init: RequestInit,
+): Promise<Response> {
   if (!env.DISCOVERY_WORKER) {
     return Promise.resolve(
       new Response(JSON.stringify({ error: "Discovery worker not configured" }), {

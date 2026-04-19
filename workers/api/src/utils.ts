@@ -5,9 +5,7 @@ export { hydrateMediaUrls, resolveR2Url } from "@releases/lib/media-url.js";
 
 /** Resolve a source by ID (src_ prefix) or slug */
 export function sourceWhere(identifier: string) {
-  return identifier.startsWith("src_")
-    ? eq(sources.id, identifier)
-    : eq(sources.slug, identifier);
+  return identifier.startsWith("src_") ? eq(sources.id, identifier) : eq(sources.slug, identifier);
 }
 
 /** Resolve an org by ID (org_ prefix) or slug */
@@ -53,7 +51,10 @@ export async function getOrCreateTagD1(
   const slug = toSlug(name);
   const [existing] = await db.select().from(tags).where(eq(tags.slug, slug));
   if (existing) return existing;
-  const [created] = await db.insert(tags).values({ name, slug, createdAt: new Date().toISOString() }).returning();
+  const [created] = await db
+    .insert(tags)
+    .values({ name, slug, createdAt: new Date().toISOString() })
+    .returning();
   return created;
 }
 
@@ -83,7 +84,10 @@ export async function getOrCreateTagsD1(
 const ROLLING_WINDOW_DAYS = 90;
 
 /** Avg releases/week over a rolling 90-day window, or the actual span if shorter. */
-export function computeAvgPerWeek(releasesInWindow: number, oldestPublishedAt: string | null): number {
+export function computeAvgPerWeek(
+  releasesInWindow: number,
+  oldestPublishedAt: string | null,
+): number {
   if (releasesInWindow === 0 || !oldestPublishedAt) return 0;
   const ageMs = Date.now() - new Date(oldestPublishedAt).getTime();
   const ageDays = ageMs / (24 * 60 * 60 * 1000);

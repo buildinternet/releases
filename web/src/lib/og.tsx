@@ -1,15 +1,7 @@
 import { ImageResponse } from "next/og";
-import {
-  clamp,
-  isHeroImageResponse,
-  isJunkMediaUrl,
-} from "./og-helpers";
+import { clamp, isHeroImageResponse, isJunkMediaUrl } from "./og-helpers";
 
-export {
-  formatCount,
-  formatDate,
-  stripMarkdown,
-} from "./og-helpers";
+export { formatCount, formatDate, stripMarkdown } from "./og-helpers";
 
 export const OG_SIZE = { width: 1200, height: 630 } as const;
 export const OG_CONTENT_TYPE = "image/png" as const;
@@ -32,10 +24,13 @@ type MediaLike = {
   r2Url?: string | null;
 };
 
-type OrgAvatarShape = {
-  avatarUrl?: string | null;
-  accounts?: Array<{ platform: string; handle: string }>;
-} | null | undefined;
+type OrgAvatarShape =
+  | {
+      avatarUrl?: string | null;
+      accounts?: Array<{ platform: string; handle: string }>;
+    }
+  | null
+  | undefined;
 
 function clampProps(props: OgTemplateProps) {
   return {
@@ -135,10 +130,7 @@ function MetricRow({ metrics, bleed }: { metrics: OgMetric[]; bleed?: boolean })
       }}
     >
       {metrics.map((m) => (
-        <div
-          key={m.label}
-          style={{ display: "flex", flexDirection: "column", gap: "6px" }}
-        >
+        <div key={m.label} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
           <div
             style={{
               fontSize: "34px",
@@ -430,10 +422,7 @@ export function renderOgImageSplit(props: OgTemplateProps): ImageResponse {
               backgroundColor: "#1c1917",
             }}
           >
-            <img
-              src={hero}
-              style={{ width: "100%", height: "100%", objectFit: "cover" }}
-            />
+            <img src={hero} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
           </div>
         ) : null}
       </div>

@@ -25,7 +25,10 @@ adminCronRunsRoutes.get("/v1/admin/cron-runs", async (c) => {
   const conditions: any[] = [];
   if (cron) conditions.push(eq(cronRuns.cronName, cron));
   if (statusCsv) {
-    const statuses = statusCsv.split(",").map((s) => s.trim()).filter(Boolean);
+    const statuses = statusCsv
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (statuses.length > 0) conditions.push(inArray(cronRuns.status, statuses as any));
   }
   if (since) {

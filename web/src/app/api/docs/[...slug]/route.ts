@@ -3,10 +3,7 @@ import matter from "gray-matter";
 import { adminDocs } from "@/flags";
 import { loadDoc, stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
 
-export async function GET(
-  _req: Request,
-  { params }: { params: Promise<{ slug: string[] }> },
-) {
+export async function GET(_req: Request, { params }: { params: Promise<{ slug: string[] }> }) {
   const { slug: slugParts } = await params;
   const slug = slugParts.join("/") || "index";
 

@@ -25,34 +25,35 @@ Sources (GitHub Releases, Scraped Changelog Pages)
 
 ### `sources` table
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | INTEGER PK | Auto-increment |
-| name | TEXT | Display name (e.g. "Vercel") |
-| slug | TEXT UNIQUE | URL-safe identifier |
-| type | TEXT | `github` \| `scrape` |
-| url | TEXT | Source URL |
-| metadata | TEXT (JSON) | Type-specific config (e.g. GitHub owner/repo) |
-| created_at | TEXT | ISO 8601 |
-| last_fetched_at | TEXT | ISO 8601, nullable |
+| Column          | Type        | Notes                                         |
+| --------------- | ----------- | --------------------------------------------- |
+| id              | INTEGER PK  | Auto-increment                                |
+| name            | TEXT        | Display name (e.g. "Vercel")                  |
+| slug            | TEXT UNIQUE | URL-safe identifier                           |
+| type            | TEXT        | `github` \| `scrape`                          |
+| url             | TEXT        | Source URL                                    |
+| metadata        | TEXT (JSON) | Type-specific config (e.g. GitHub owner/repo) |
+| created_at      | TEXT        | ISO 8601                                      |
+| last_fetched_at | TEXT        | ISO 8601, nullable                            |
 
 ### `releases` table
 
-| Column | Type | Notes |
-|--------|------|-------|
-| id | INTEGER PK | Auto-increment |
-| source_id | INTEGER FK | References sources.id |
-| version | TEXT | Nullable — not all changelogs have versions |
-| title | TEXT | Release title |
-| content | TEXT | Raw markdown/text of the release |
-| content_summary | TEXT | AI-generated concise summary |
-| url | TEXT | Link to original release |
-| content_hash | TEXT | SHA-256 of normalized title+version+published_at for dedup |
-| metadata | TEXT (JSON) | Extensible metadata (e.g. isBreaking, image URLs) |
-| published_at | TEXT | ISO 8601 |
-| fetched_at | TEXT | ISO 8601 |
+| Column          | Type        | Notes                                                      |
+| --------------- | ----------- | ---------------------------------------------------------- |
+| id              | INTEGER PK  | Auto-increment                                             |
+| source_id       | INTEGER FK  | References sources.id                                      |
+| version         | TEXT        | Nullable — not all changelogs have versions                |
+| title           | TEXT        | Release title                                              |
+| content         | TEXT        | Raw markdown/text of the release                           |
+| content_summary | TEXT        | AI-generated concise summary                               |
+| url             | TEXT        | Link to original release                                   |
+| content_hash    | TEXT        | SHA-256 of normalized title+version+published_at for dedup |
+| metadata        | TEXT (JSON) | Extensible metadata (e.g. isBreaking, image URLs)          |
+| published_at    | TEXT        | ISO 8601                                                   |
+| fetched_at      | TEXT        | ISO 8601                                                   |
 
 **Constraints:**
+
 - `UNIQUE(source_id, url)` — primary dedup key
 - `UNIQUE(source_id, content_hash)` — fallback dedup via SHA-256 hash of normalized title+version+published_at
 - Index on `source_id, published_at DESC` — for latest/summary queries
@@ -69,21 +70,23 @@ Image URLs encountered during ingestion are preserved as markdown links in `cont
 ## Source Adapters
 
 Common interface:
+
 ```typescript
 interface RawRelease {
-  version?: string
-  title: string
-  content: string        // raw markdown/HTML
-  url?: string
-  publishedAt?: Date
+  version?: string;
+  title: string;
+  content: string; // raw markdown/HTML
+  url?: string;
+  publishedAt?: Date;
 }
 
 interface Adapter {
-  fetch(source: Source): Promise<RawRelease[]>
+  fetch(source: Source): Promise<RawRelease[]>;
 }
 ```
 
 ### GitHub Adapter
+
 - Calls `GET /repos/{owner}/{repo}/releases` via GitHub REST API
 - Parses owner/repo from the source URL
 - Handles pagination via Link header
@@ -91,6 +94,7 @@ interface Adapter {
 - Returns structured data directly — AI ingestion agent not needed for this adapter
 
 ### Scrape Adapter
+
 - Uses Cloudflare Browser Rendering `/markdown` endpoint to convert changelog pages to clean markdown
 - Handles JS-rendered pages that simple HTTP fetches would miss
 - The AI ingestion agent then parses the markdown into individual release entries
@@ -98,6 +102,7 @@ interface Adapter {
 
 **Paginated changelogs via `/crawl`:**
 The Cloudflare `/crawl` endpoint is asynchronous — POST returns a job ID, results are polled via GET. The scrape adapter handles this with a polling loop:
+
 1. POST to `/crawl` with the source URL and page limit
 2. Poll the job status endpoint every 5 seconds (configurable), with a 5-minute timeout
 3. On completion, collect all crawled pages and concatenate the markdown
@@ -112,24 +117,28 @@ The `released fetch` command blocks during polling (with a spinner on stderr). J
 Two distinct roles, using the Anthropic SDK (`@anthropic-ai/sdk`):
 
 ### Ingestion Agent (fetch-time)
+
 - Takes raw markdown content from the scrape adapter (GitHub adapter returns structured data, no AI needed)
 - Critical for scraped changelogs where a single page may contain many releases
 - Uses Haiku for speed and cost (configurable via env var)
 
 **Expected output schema (via tool use for structured output):**
+
 ```typescript
 interface ParsedRelease {
-  version?: string       // e.g. "v1.2.3", null if not versioned
-  title: string          // release title or heading
-  content: string        // the release body as markdown
-  publishedAt?: string   // ISO 8601 date if found
-  isBreaking: boolean    // whether it contains breaking changes
+  version?: string; // e.g. "v1.2.3", null if not versioned
+  title: string; // release title or heading
+  content: string; // the release body as markdown
+  publishedAt?: string; // ISO 8601 date if found
+  isBreaking: boolean; // whether it contains breaking changes
 }
 // The agent returns ParsedRelease[] — one entry per release found on the page
 ```
+
 The `isBreaking` flag is stored in the `metadata` JSON column (added to releases table) for future filtering. The `content` field preserves image URLs as markdown links.
 
 ### Query Agent (query-time)
+
 - `summarizeReleases(releases[])` — concise summary of what changed
 - `compareProducts(releasesA[], releasesB[])` — trend comparison across products
 - Uses Sonnet for quality (configurable via env var)
@@ -161,15 +170,16 @@ released serve                 # start MCP server on stdio
 
 Integrated into the CLI as `released serve`. Runs on stdio via `StdioServerTransport`. Registered tools:
 
-| Tool | Input | Description |
-|------|-------|-------------|
-| `search_releases` | query, product?, limit? | Full-text search across releases |
-| `get_latest_releases` | product?, count? | Most recent releases |
-| `summarize_changes` | product, days? | AI summary of recent changes |
-| `compare_products` | products[], days? | Trend comparison |
-| `list_products` | — | All tracked sources |
+| Tool                  | Input                   | Description                      |
+| --------------------- | ----------------------- | -------------------------------- |
+| `search_releases`     | query, product?, limit? | Full-text search across releases |
+| `get_latest_releases` | product?, count?        | Most recent releases             |
+| `summarize_changes`   | product, days?          | AI summary of recent changes     |
+| `compare_products`    | products[], days?       | Trend comparison                 |
+| `list_products`       | —                       | All tracked sources              |
 
 Claude Desktop config:
+
 ```json
 {
   "mcpServers": {
@@ -198,18 +208,18 @@ Claude Desktop config:
 
 ## NPM Packages
 
-| Package | Purpose |
-|---------|---------|
-| `commander` | CLI framework |
-| `drizzle-orm` + `better-sqlite3` | SQLite with type-safe queries |
-| `drizzle-kit` | Schema migrations |
-| `@modelcontextprotocol/sdk` | MCP server |
-| `zod` | Schema validation (required by MCP SDK) |
-| `@anthropic-ai/sdk` | AI ingestion and query agents |
-| `dayjs` | Date normalization |
-| `chalk` + `cli-table3` | Terminal output formatting |
-| `tsup` | TypeScript bundler |
-| `vitest` | Testing |
+| Package                          | Purpose                                 |
+| -------------------------------- | --------------------------------------- |
+| `commander`                      | CLI framework                           |
+| `drizzle-orm` + `better-sqlite3` | SQLite with type-safe queries           |
+| `drizzle-kit`                    | Schema migrations                       |
+| `@modelcontextprotocol/sdk`      | MCP server                              |
+| `zod`                            | Schema validation (required by MCP SDK) |
+| `@anthropic-ai/sdk`              | AI ingestion and query agents           |
+| `dayjs`                          | Date normalization                      |
+| `chalk` + `cli-table3`           | Terminal output formatting              |
+| `tsup`                           | TypeScript bundler                      |
+| `vitest`                         | Testing                                 |
 
 ## File Structure
 
@@ -247,15 +257,15 @@ src/
 
 ## Environment Variables
 
-| Variable | Required | Default | Notes |
-|----------|----------|---------|-------|
-| `ANTHROPIC_API_KEY` | Yes | — | For AI ingestion and query agents |
-| `CLOUDFLARE_ACCOUNT_ID` | For scrape sources | — | Cloudflare Browser Rendering |
-| `CLOUDFLARE_API_TOKEN` | For scrape sources | — | Needs "Browser Rendering - Edit" permission |
-| `GITHUB_TOKEN` | No | — | Increases GitHub API rate limit to 5000 req/hr |
-| `RELEASED_DATA_DIR` | No | `~/.released` | Override data directory |
-| `RELEASED_INGEST_MODEL` | No | `claude-haiku-4-5-20251001` | Model for ingestion agent |
-| `RELEASED_QUERY_MODEL` | No | `claude-sonnet-4-6` | Model for query agent |
+| Variable                | Required           | Default                     | Notes                                          |
+| ----------------------- | ------------------ | --------------------------- | ---------------------------------------------- |
+| `ANTHROPIC_API_KEY`     | Yes                | —                           | For AI ingestion and query agents              |
+| `CLOUDFLARE_ACCOUNT_ID` | For scrape sources | —                           | Cloudflare Browser Rendering                   |
+| `CLOUDFLARE_API_TOKEN`  | For scrape sources | —                           | Needs "Browser Rendering - Edit" permission    |
+| `GITHUB_TOKEN`          | No                 | —                           | Increases GitHub API rate limit to 5000 req/hr |
+| `RELEASED_DATA_DIR`     | No                 | `~/.released`               | Override data directory                        |
+| `RELEASED_INGEST_MODEL` | No                 | `claude-haiku-4-5-20251001` | Model for ingestion agent                      |
+| `RELEASED_QUERY_MODEL`  | No                 | `claude-sonnet-4-6`         | Model for query agent                          |
 
 ## Risks
 

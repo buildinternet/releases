@@ -1,5 +1,9 @@
 import { describe, it, expect } from "bun:test";
-import { validateClusters, type GroupingCandidate, type GroupingCluster } from "../../src/ai/grouping.js";
+import {
+  validateClusters,
+  type GroupingCandidate,
+  type GroupingCluster,
+} from "../../src/ai/grouping.js";
 
 function candidate(id: string): GroupingCandidate {
   return { id, title: id, version: null, publishedAt: "2026-04-16", sourceSlug: "s", content: "" };
@@ -67,9 +71,7 @@ describe("validateClusters", () => {
   });
 
   it("rejects a cluster with an empty canonical_id", () => {
-    const clusters: GroupingCluster[] = [
-      { canonicalId: "", coverageIds: [], reason: "" },
-    ];
+    const clusters: GroupingCluster[] = [{ canonicalId: "", coverageIds: [], reason: "" }];
     expect(() => validateClusters(clusters, candidates)).toThrow(/missing canonical_id/);
   });
 });

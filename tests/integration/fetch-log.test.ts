@@ -30,7 +30,8 @@ function readFetchLogs(dataDir: string, slug: string) {
   const sqlite = new Database(join(dataDir, "releases.db"), { readonly: true });
   try {
     const db = drizzle(sqlite);
-    return db.select()
+    return db
+      .select()
       .from(fetchLog)
       .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
       .where(eq(sources.slug, slug))
@@ -50,11 +51,18 @@ describe("fetch-log tracking", () => {
     ({ dataDir, cleanup } = createTempDataDir());
     cli(dataDir, ["admin", "org", "add", "Log Org", "--category", "cloud"]);
     cli(dataDir, [
-      "admin", "source", "add", "Log Source",
-      "--url", `${server.url}/feed.xml`,
-      "--feed-url", `${server.url}/feed.xml`,
-      "--org", "log-org",
-      "--type", "feed",
+      "admin",
+      "source",
+      "add",
+      "Log Source",
+      "--url",
+      `${server.url}/feed.xml`,
+      "--feed-url",
+      `${server.url}/feed.xml`,
+      "--org",
+      "log-org",
+      "--type",
+      "feed",
       "--skip-eval",
     ]);
   });
@@ -62,7 +70,9 @@ describe("fetch-log tracking", () => {
   afterAll(() => cleanup());
 
   it("records successful fetch in fetch-log", () => {
-    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], {
+      timeout: 15_000,
+    });
     expect(fetchResult.exitCode).toBe(0);
 
     const logs = readFetchLogs(dataDir, "log-source");
@@ -74,7 +84,9 @@ describe("fetch-log tracking", () => {
   }, 20_000);
 
   it("records no_change on subsequent fetch", () => {
-    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], {
+      timeout: 15_000,
+    });
     expect(fetchResult.exitCode).toBe(0);
 
     const logs = readFetchLogs(dataDir, "log-source");
@@ -83,14 +95,25 @@ describe("fetch-log tracking", () => {
 
   it("records dry_run in fetch-log", () => {
     cli(dataDir, [
-      "admin", "source", "add", "Dry Log Source",
-      "--url", `${server.url}/feed.xml`,
-      "--feed-url", `${server.url}/feed.xml`,
-      "--org", "log-org",
-      "--type", "feed",
+      "admin",
+      "source",
+      "add",
+      "Dry Log Source",
+      "--url",
+      `${server.url}/feed.xml`,
+      "--feed-url",
+      `${server.url}/feed.xml`,
+      "--org",
+      "log-org",
+      "--type",
+      "feed",
       "--skip-eval",
     ]);
-    const fetchResult = cli(dataDir, ["admin", "source", "fetch", "dry-log-source", "--dry-run", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(
+      dataDir,
+      ["admin", "source", "fetch", "dry-log-source", "--dry-run", "--no-summarize"],
+      { timeout: 15_000 },
+    );
     expect(fetchResult.exitCode).toBe(0);
 
     const logs = readFetchLogs(dataDir, "dry-log-source");

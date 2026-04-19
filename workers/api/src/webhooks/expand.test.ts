@@ -3,7 +3,9 @@ import { expand } from "./expand.js";
 import type { ReleaseEvent } from "../events/types.js";
 import type { WebhookSubscription } from "@releases/core-internal/schema";
 
-function evt(overrides: Partial<ReleaseEvent["release"]> & { orgId: string; sourceId: string }): ReleaseEvent {
+function evt(
+  overrides: Partial<ReleaseEvent["release"]> & { orgId: string; sourceId: string },
+): ReleaseEvent {
   return {
     id: "evt_x",
     seq: 1,

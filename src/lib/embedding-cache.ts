@@ -17,11 +17,7 @@
  */
 export interface EmbedCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
-  put(
-    key: string,
-    value: string,
-    options?: { expirationTtl?: number },
-  ): Promise<void>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
 }
 
 import type { EmbeddingProvider } from "./embeddings.js";
@@ -89,10 +85,7 @@ export function withEmbedCache(
   };
 }
 
-async function buildKey(
-  parts: EmbedCacheKeyParts,
-  normalizedQuery: string,
-): Promise<string> {
+async function buildKey(parts: EmbedCacheKeyParts, normalizedQuery: string): Promise<string> {
   const hash = await sha256Hex(normalizedQuery);
   return `${KEY_PREFIX}:${parts.provider}:${parts.model}:${parts.dim}:${hash}`;
 }
@@ -106,9 +99,5 @@ async function sha256Hex(input: string): Promise<string> {
 }
 
 function isVector(value: unknown, expectedDim: number): value is number[] {
-  return (
-    Array.isArray(value) &&
-    value.length === expectedDim &&
-    typeof value[0] === "number"
-  );
+  return Array.isArray(value) && value.length === expectedDim && typeof value[0] === "number";
 }

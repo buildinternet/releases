@@ -77,6 +77,7 @@ Previously completed in this project: Anthropic, OpenAI, Vercel, Cloudflare, Git
 Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each org. Send all agent calls in a single message for maximum parallelism.
 
 Each agent prompt should include:
+
 1. The working directory (`/Users/zachdunn/Code/released`)
 2. That `releases` is bun-linked and remote mode is active
 3. The org slug
@@ -105,6 +106,6 @@ Report back: sources fetched, new releases found, overview status
 After all agents complete, compile a summary table:
 
 | Org | Sources | New Releases | Overview |
-|-----|---------|-------------|----------|
+| --- | ------- | ------------ | -------- |
 
 This gives a quick audit of what changed and whether any orgs need attention.

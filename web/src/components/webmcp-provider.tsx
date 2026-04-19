@@ -23,7 +23,10 @@ interface ModelContextTool {
 }
 
 interface ModelContext {
-  registerTool: (tool: ModelContextTool, options?: { signal?: AbortSignal }) => void | Promise<void>;
+  registerTool: (
+    tool: ModelContextTool,
+    options?: { signal?: AbortSignal },
+  ) => void | Promise<void>;
 }
 
 declare global {
@@ -79,7 +82,8 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
       {
         name: "list_organizations",
         title: "List organizations",
-        description: "List all organizations tracked in the releases.sh registry, with release counts and activity.",
+        description:
+          "List all organizations tracked in the releases.sh registry, with release counts and activity.",
         inputSchema: { type: "object", properties: {} },
         annotations: { readOnlyHint: true },
         execute: () => apiFetch("/v1/orgs"),
@@ -131,7 +135,9 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
           const page = Number(input.page ?? 1);
           const pageSize = Number(input.pageSize ?? 20);
           if (!slug) throw new Error("`slug` is required");
-          return apiFetch(`/v1/sources/${encodeURIComponent(slug)}?page=${page}&pageSize=${pageSize}`);
+          return apiFetch(
+            `/v1/sources/${encodeURIComponent(slug)}?page=${page}&pageSize=${pageSize}`,
+          );
         },
       },
       { signal },
@@ -141,7 +147,8 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
       {
         name: "get_release",
         title: "Get release",
-        description: "Fetch a single release by ID (prefix 'rel_'), including its full content and metadata.",
+        description:
+          "Fetch a single release by ID (prefix 'rel_'), including its full content and metadata.",
         inputSchema: {
           type: "object",
           properties: {

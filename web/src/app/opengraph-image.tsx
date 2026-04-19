@@ -9,7 +9,6 @@ export default function Image() {
   return renderOgImage({
     title: "releases.sh",
     subtitle: "An agent-friendly API for product changelogs",
-    description:
-      "A unified registry of product releases, available via CLI, API, or MCP.",
+    description: "A unified registry of product releases, available via CLI, API, or MCP.",
   });
 }

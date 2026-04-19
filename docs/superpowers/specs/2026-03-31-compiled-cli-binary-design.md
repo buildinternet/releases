@@ -44,6 +44,7 @@ The binary is on `$PATH` in the container (`/usr/local/bin/released`).
 Agent skills (`.md` files) must be on disk for the Agent SDK to discover them.
 
 **Resolution order:**
+
 1. `RELEASED_SKILLS_DIR` env var (if set)
 2. `/usr/share/released/skills/` (container convention)
 3. `~/.released/skills/` (local fallback)
@@ -76,12 +77,12 @@ EXPOSE 8081
 
 ## Code Changes
 
-| File | Change |
-|------|--------|
-| `package.json` | Replace `build` script, add `build:linux` |
-| `src/agent/released.ts` | Replace `cliCmd` construction with `"released"`. Replace skills path resolution with conventional-path-with-env-override logic. |
-| `workers/discovery/Dockerfile` | Replace with simplified version above |
-| `.gitignore` | Add `dist/` |
+| File                           | Change                                                                                                                          |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| `package.json`                 | Replace `build` script, add `build:linux`                                                                                       |
+| `src/agent/released.ts`        | Replace `cliCmd` construction with `"released"`. Replace skills path resolution with conventional-path-with-env-override logic. |
+| `workers/discovery/Dockerfile` | Replace with simplified version above                                                                                           |
+| `.gitignore`                   | Add `dist/`                                                                                                                     |
 
 ## Not Changing
 

@@ -53,8 +53,7 @@ mock.module("../src/webhooks/queries.js", () => ({
     _db: unknown,
     orgId: string,
     opts?: { enabledOnly?: boolean },
-  ) =>
-    store.filter((s) => s.orgId === orgId && (!opts?.enabledOnly || s.enabled)),
+  ) => store.filter((s) => s.orgId === orgId && (!opts?.enabledOnly || s.enabled)),
   updateWebhookSubscription: async (
     _db: unknown,
     id: string,
@@ -90,15 +89,11 @@ const { adminWebhooksRoutes } = await import("../src/routes/admin-webhooks.js");
 const TEST_MASTER_KEY = "a".repeat(64);
 
 function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
-  const masterKey = opts === undefined
-    ? TEST_MASTER_KEY
-    : opts.masterKey ?? TEST_MASTER_KEY;
+  const masterKey = opts === undefined ? TEST_MASTER_KEY : (opts.masterKey ?? TEST_MASTER_KEY);
   const withQueue = opts?.withQueue !== false; // default true
   const fakeEnv: Record<string, unknown> = {
     DB: {},
-    WEBHOOK_HMAC_MASTER: masterKey !== null
-      ? { get: async () => masterKey }
-      : undefined,
+    WEBHOOK_HMAC_MASTER: masterKey !== null ? { get: async () => masterKey } : undefined,
   };
   if (withQueue) {
     fakeEnv.WEBHOOK_DELIVERY_QUEUE = {
@@ -131,7 +126,7 @@ describe("POST /v1/admin/webhooks", () => {
       }),
     );
     expect(res.status).toBe(201);
-    const body = await res.json() as { id?: string; signingKey?: string };
+    const body = (await res.json()) as { id?: string; signingKey?: string };
     expect(body.id).toMatch(/^whk_/);
     expect(body.signingKey).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -197,7 +192,7 @@ describe("GET /v1/admin/webhooks", () => {
     );
     const res = await fetch(new Request("https://x.test/v1/admin/webhooks?org=org_test"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { subscriptions: { id: string; orgId: string }[] };
+    const body = (await res.json()) as { subscriptions: { id: string; orgId: string }[] };
     expect(body.subscriptions).toHaveLength(1);
     expect(body.subscriptions[0].orgId).toBe("org_test");
   });
@@ -235,7 +230,7 @@ describe("GET /v1/admin/webhooks/:id", () => {
     const id = store[0].id;
     const res = await fetch(new Request(`https://x.test/v1/admin/webhooks/${id}`));
     expect(res.status).toBe(200);
-    const body = await res.json() as { id?: string };
+    const body = (await res.json()) as { id?: string };
     expect(body.id).toBe(id);
   });
 });
@@ -340,7 +335,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as FakeSub;
+    const body = (await res.json()) as FakeSub;
     expect(body.enabled).toBe(true);
     expect(body.consecutiveFailures).toBe(0);
     expect(body.disabledReason).toBeNull();
@@ -365,7 +360,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as FakeSub;
+    const body = (await res.json()) as FakeSub;
     expect(body.enabled).toBe(false);
     expect(body.disabledReason).toBe("manually disabled");
   });
@@ -389,7 +384,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as FakeSub;
+    const body = (await res.json()) as FakeSub;
     expect(body.id).toBe(id);
     expect(body.description).toBe("updated description");
   });
@@ -481,7 +476,7 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { secretVersion: number; signingKey: string };
+    const body = (await res.json()) as { secretVersion: number; signingKey: string };
     expect(body.secretVersion).toBe(2);
     expect(body.signingKey).toMatch(/^[0-9a-f]{64}$/);
   });
@@ -496,7 +491,7 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
       }),
     );
-    const original = await createRes.json() as { id: string; signingKey: string };
+    const original = (await createRes.json()) as { id: string; signingKey: string };
     const id = original.id;
 
     const rotateRes = await fetch(
@@ -504,7 +499,7 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
         method: "POST",
       }),
     );
-    const rotated = await rotateRes.json() as { secretVersion: number; signingKey: string };
+    const rotated = (await rotateRes.json()) as { secretVersion: number; signingKey: string };
     expect(rotated.signingKey).not.toBe(original.signingKey);
   });
 });
@@ -541,7 +536,7 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
       }),
     );
     expect(res.status).toBe(200);
-    const body = await res.json() as { enqueued: boolean; eventId: string };
+    const body = (await res.json()) as { enqueued: boolean; eventId: string };
     expect(body.enqueued).toBe(true);
     expect(body.eventId).toMatch(/^evt_/);
 
@@ -592,7 +587,7 @@ describe("GET /v1/admin/webhooks/:id/deliveries", () => {
       new Request("https://x.test/v1/admin/webhooks/whk_test0001/deliveries"),
     );
     expect(res.status).toBe(501);
-    const body = await res.json() as { error: string; message: string };
+    const body = (await res.json()) as { error: string; message: string };
     expect(body.error).toBe("deliveries_unavailable");
   });
 

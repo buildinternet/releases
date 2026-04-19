@@ -94,11 +94,14 @@ export function registerCheckCommand(program: Command) {
     .command("check [slug]")
     .description("Check health and availability of changelog sources")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin source check                     Check all sources
   releases admin source check my-source           Check a specific source
-  releases admin source check --json              Output health data as JSON`)
+  releases admin source check --json              Output health data as JSON`,
+    )
     .action(async (slug: string | undefined, opts: { json?: boolean }) => {
       let sourcesToCheck: Source[];
 

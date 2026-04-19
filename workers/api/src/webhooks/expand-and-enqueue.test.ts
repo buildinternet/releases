@@ -17,7 +17,15 @@ describe("expandAndEnqueue", () => {
   it("no-ops when no subscriptions match", async () => {
     const sendBatch = mock(async (_: any[]) => {});
     await expandAndEnqueue({
-      events: [{ id: "evt_1", seq: 1, ts: 1, type: "release.created" as const, release: { id: "rel_1" } as any }],
+      events: [
+        {
+          id: "evt_1",
+          seq: 1,
+          ts: 1,
+          type: "release.created" as const,
+          release: { id: "rel_1" } as any,
+        },
+      ],
       eventOwners: new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]),
       loadSubscriptions: async () => [],
       queue: { sendBatch } as any,
@@ -30,11 +38,33 @@ describe("expandAndEnqueue", () => {
     const sendBatch = mock(async (msgs: { body: DeliveryMessage }[]) => {
       for (const m of msgs) sent.push(m.body);
     });
-    const events = [{ id: "evt_1", seq: 1, ts: 1, type: "release.created" as const, release: { id: "rel_1" } as any }];
+    const events = [
+      {
+        id: "evt_1",
+        seq: 1,
+        ts: 1,
+        type: "release.created" as const,
+        release: { id: "rel_1" } as any,
+      },
+    ];
     const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]);
     const subs = [
-      { id: "whk_1", orgId: "org_a", sourceId: null, url: "https://h1", secretVersion: 1, enabled: true } as any,
-      { id: "whk_2", orgId: "org_b", sourceId: null, url: "https://h2", secretVersion: 1, enabled: true } as any,
+      {
+        id: "whk_1",
+        orgId: "org_a",
+        sourceId: null,
+        url: "https://h1",
+        secretVersion: 1,
+        enabled: true,
+      } as any,
+      {
+        id: "whk_2",
+        orgId: "org_b",
+        sourceId: null,
+        url: "https://h2",
+        secretVersion: 1,
+        enabled: true,
+      } as any,
     ];
     await expandAndEnqueue({
       events,
@@ -48,12 +78,29 @@ describe("expandAndEnqueue", () => {
 
   it("chunks sendBatch calls at 100 messages each", async () => {
     const calls: number[] = [];
-    const sendBatch = mock(async (msgs: any[]) => { calls.push(msgs.length); });
+    const sendBatch = mock(async (msgs: any[]) => {
+      calls.push(msgs.length);
+    });
     const events = Array.from({ length: 250 }, (_, i) => ({
-      id: `evt_${i}`, seq: i + 1, ts: 1, type: "release.created" as const, release: { id: `rel_${i}` } as any,
+      id: `evt_${i}`,
+      seq: i + 1,
+      ts: 1,
+      type: "release.created" as const,
+      release: { id: `rel_${i}` } as any,
     }));
-    const owners = new Map(events.map((e) => [(e.release as any).id, { orgId: "org_a", sourceId: "src_a" }]));
-    const subs = [{ id: "whk_1", orgId: "org_a", sourceId: null, url: "https://h", secretVersion: 1, enabled: true } as any];
+    const owners = new Map(
+      events.map((e) => [(e.release as any).id, { orgId: "org_a", sourceId: "src_a" }]),
+    );
+    const subs = [
+      {
+        id: "whk_1",
+        orgId: "org_a",
+        sourceId: null,
+        url: "https://h",
+        secretVersion: 1,
+        enabled: true,
+      } as any,
+    ];
     await expandAndEnqueue({
       events,
       eventOwners: owners,
@@ -64,10 +111,34 @@ describe("expandAndEnqueue", () => {
   });
 
   it("swallows queue errors with a warn — never throws", async () => {
-    const sendBatch = mock(async (_: any[]) => { throw new Error("queue down"); });
-    const events = [{ id: "evt_1", seq: 1, ts: 1, type: "release.created" as const, release: { id: "rel_1" } as any }];
+    const sendBatch = mock(async (_: any[]) => {
+      throw new Error("queue down");
+    });
+    const events = [
+      {
+        id: "evt_1",
+        seq: 1,
+        ts: 1,
+        type: "release.created" as const,
+        release: { id: "rel_1" } as any,
+      },
+    ];
     const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]);
-    const subs = [{ id: "whk_1", orgId: "org_a", sourceId: null, url: "https://h", secretVersion: 1, enabled: true } as any];
-    await expandAndEnqueue({ events, eventOwners: owners, loadSubscriptions: async () => subs, queue: { sendBatch } as any });
+    const subs = [
+      {
+        id: "whk_1",
+        orgId: "org_a",
+        sourceId: null,
+        url: "https://h",
+        secretVersion: 1,
+        enabled: true,
+      } as any,
+    ];
+    await expandAndEnqueue({
+      events,
+      eventOwners: owners,
+      loadSubscriptions: async () => subs,
+      queue: { sendBatch } as any,
+    });
   });
 });

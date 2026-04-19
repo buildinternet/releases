@@ -3,13 +3,7 @@
 import { CopyIcon } from "@/components/copy-icon";
 import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
-export function CopyPageButton({
-  markdown,
-  slug,
-}: {
-  markdown: string;
-  slug: string;
-}) {
+export function CopyPageButton({ markdown, slug }: { markdown: string; slug: string }) {
   const { copied, copy } = useCopyToClipboard();
   const viewHref = `/docs/${slug === "index" ? "" : slug}.md`;
 

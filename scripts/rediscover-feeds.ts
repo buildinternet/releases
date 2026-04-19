@@ -23,7 +23,11 @@
  * All progress/logs go to stderr. Only --json output goes to stdout.
  */
 
-import { type DiscoveredFeed, discoverFeed, fetchAndParseFeed } from "../packages/adapters/src/feed.js";
+import {
+  type DiscoveredFeed,
+  discoverFeed,
+  fetchAndParseFeed,
+} from "../packages/adapters/src/feed.js";
 
 type SourceRow = {
   slug: string;
@@ -104,7 +108,7 @@ async function patchSource(slug: string, patchedMetadata: Record<string, unknown
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
-      "Authorization": `Bearer ${API_KEY}`,
+      Authorization: `Bearer ${API_KEY}`,
     },
     body: JSON.stringify({ metadata: JSON.stringify(patchedMetadata) }),
   });
@@ -155,7 +159,11 @@ async function processOne(row: Candidate): Promise<Verdict> {
     try {
       await patchSource(row.slug, patched);
     } catch (err) {
-      return { ...verdict, status: "error", error: err instanceof Error ? err.message : String(err) };
+      return {
+        ...verdict,
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
   }
 
@@ -172,7 +180,9 @@ async function main(): Promise<void> {
     const v = await processOne(row);
     let statusLabel: string = v.status;
     if (v.status === "promoted") statusLabel = apply ? "promoted" : "would promote";
-    log(`    → ${statusLabel}${v.feedUrl ? `: ${v.feedUrl} (${v.feedType})` : ""}${v.error ? ` — ${v.error}` : ""}`);
+    log(
+      `    → ${statusLabel}${v.feedUrl ? `: ${v.feedUrl} (${v.feedType})` : ""}${v.error ? ` — ${v.error}` : ""}`,
+    );
     if (v.sampleTitles?.length) {
       for (const t of v.sampleTitles) log(`      • ${t}`);
     }

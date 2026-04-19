@@ -7,11 +7,16 @@ import { Hono, type MiddlewareHandler } from "hono";
 // the full Cloudflare Workers type surface.
 const { authMiddleware } = (await import(
   "../../workers/api/src/middleware/auth.js"
-)) as unknown as { authMiddleware: MiddlewareHandler };
+)) as unknown as {
+  authMiddleware: MiddlewareHandler;
+};
 
-const { cacheControl } = (await import(
-  "../../workers/api/src/middleware/cache.js"
-)) as unknown as { cacheControl: (maxAge: number, options?: { staleWhileRevalidate?: number; isPublic?: boolean }) => MiddlewareHandler };
+const { cacheControl } = (await import("../../workers/api/src/middleware/cache.js")) as unknown as {
+  cacheControl: (
+    maxAge: number,
+    options?: { staleWhileRevalidate?: number; isPublic?: boolean },
+  ) => MiddlewareHandler;
+};
 
 // ---------------------------------------------------------------------------
 // Auth middleware
@@ -153,11 +158,7 @@ describe("cacheControl", () => {
 
   it("skips caching when CACHE_DISABLED is set", async () => {
     const { app } = createApp(60);
-    const res = await app.request(
-      "/test",
-      { method: "GET" },
-      { CACHE_DISABLED: "1" },
-    );
+    const res = await app.request("/test", { method: "GET" }, { CACHE_DISABLED: "1" });
     expect(res.headers.get("Cache-Control")).toBeNull();
   });
 

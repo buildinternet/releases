@@ -4,15 +4,38 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products, tags, orgTags, productTags, domainAliases, knowledgePages, sourceChangelogFiles,
-  type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
-  type ReleaseSummary, type NewReleaseSummary, type Product, type Tag, type DomainAlias,
-  type KnowledgePage, type SourceChangelogFile,
+  sources,
+  releases,
+  organizations,
+  orgAccounts,
+  ignoredUrls,
+  blockedUrls,
+  fetchLog,
+  usageLog,
+  releaseSummaries,
+  mediaAssets,
+  products,
+  tags,
+  orgTags,
+  productTags,
+  domainAliases,
+  knowledgePages,
+  sourceChangelogFiles,
+  type Source,
+  type Release,
+  type Organization,
+  type OrgAccount,
+  type IgnoredUrl,
+  type BlockedUrl,
+  type ReleaseSummary,
+  type NewReleaseSummary,
+  type Product,
+  type Tag,
+  type DomainAlias,
+  type KnowledgePage,
+  type SourceChangelogFile,
 } from "@releases/core-internal/schema";
-import {
-  webhookSubscriptions,
-  type WebhookSubscription,
-} from "@releases/core-internal/schema";
+import { webhookSubscriptions, type WebhookSubscription } from "@releases/core-internal/schema";
 import { releaseCoverage, type ReleaseCoverage } from "./schema-coverage.js";
 import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core-internal/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
@@ -21,12 +44,24 @@ import { toSlug } from "@releases/core-internal/slug";
 import { countTokensSafe } from "@releases/core-internal/tokens";
 import * as apiClient from "../api/client.js";
 import type {
-  SourceWithOrg, SourcePatchInput, ReleaseWithSource,
-  StatsSummary, FetchLogEntry, LatestRelease, UsageBreakdownRow, UsageStatsResponse,
+  SourceWithOrg,
+  SourcePatchInput,
+  ReleaseWithSource,
+  StatsSummary,
+  FetchLogEntry,
+  LatestRelease,
+  UsageBreakdownRow,
+  UsageStatsResponse,
 } from "../api/types.js";
 export type {
-  SourceWithOrg, SourcePatchInput, ReleaseWithSource,
-  StatsSummary, FetchLogEntry, LatestRelease, UsageBreakdownRow, UsageStatsResponse,
+  SourceWithOrg,
+  SourcePatchInput,
+  ReleaseWithSource,
+  StatsSummary,
+  FetchLogEntry,
+  LatestRelease,
+  UsageBreakdownRow,
+  UsageStatsResponse,
 };
 
 export type AnyDb = BunSQLiteDatabase<any> | DrizzleD1Database<any>;
@@ -70,7 +105,13 @@ export async function getRecentReleases(
   return db
     .select()
     .from(releases)
-    .where(and(eq(releases.sourceId, sourceId), gte(releases.publishedAt, cutoffIso), eq(releases.suppressed, false)))
+    .where(
+      and(
+        eq(releases.sourceId, sourceId),
+        gte(releases.publishedAt, cutoffIso),
+        eq(releases.suppressed, false),
+      ),
+    )
     .orderBy(desc(releases.publishedAt));
 }
 
@@ -87,11 +128,17 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
   const db = getDb();
 
   // 1. Slug (case-insensitive — slugs are always lowercase)
-  const [bySlug] = await db.select().from(organizations).where(eq(organizations.slug, identifier.toLowerCase()));
+  const [bySlug] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.slug, identifier.toLowerCase()));
   if (bySlug) return bySlug;
 
   // 2. Domain (exact)
-  const [byDomain] = await db.select().from(organizations).where(eq(organizations.domain, identifier));
+  const [byDomain] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.domain, identifier));
   if (byDomain) return byDomain;
 
   // 3. Name (case-insensitive, oldest first for determinism)
@@ -122,31 +169,38 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
   return null;
 }
 
-export async function suggestOrgs(term: string, limit = 5): Promise<Array<{ slug: string; name: string }>> {
+export async function suggestOrgs(
+  term: string,
+  limit = 5,
+): Promise<Array<{ slug: string; name: string }>> {
   const lower = term.toLowerCase();
   if (isRemoteMode()) return apiClient.suggestOrgs(lower, limit);
   const db = getDb();
   return db
     .select({ slug: organizations.slug, name: organizations.name })
     .from(organizations)
-    .where(or(
-      like(organizations.slug, `%${lower}%`),
-      sql`LOWER(${organizations.name}) LIKE ${"%" + lower + "%"}`,
-    ))
+    .where(
+      or(
+        like(organizations.slug, `%${lower}%`),
+        sql`LOWER(${organizations.name}) LIKE ${"%" + lower + "%"}`,
+      ),
+    )
     .limit(limit);
 }
 
-export async function suggestSources(term: string, limit = 5): Promise<Array<{ slug: string; name: string }>> {
+export async function suggestSources(
+  term: string,
+  limit = 5,
+): Promise<Array<{ slug: string; name: string }>> {
   const lower = term.toLowerCase();
   if (isRemoteMode()) return apiClient.suggestSources(lower, limit);
   const db = getDb();
   return db
     .select({ slug: sources.slug, name: sources.name })
     .from(sources)
-    .where(or(
-      like(sources.slug, `%${lower}%`),
-      sql`LOWER(${sources.name}) LIKE ${"%" + lower + "%"}`,
-    ))
+    .where(
+      or(like(sources.slug, `%${lower}%`), sql`LOWER(${sources.name}) LIKE ${"%" + lower + "%"}`),
+    )
     .limit(limit);
 }
 
@@ -192,7 +246,14 @@ export async function getRecentReleasesByOrg(
     })
     .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
-    .where(and(eq(sources.orgId, orgId), gte(releases.publishedAt, cutoffIso), eq(releases.suppressed, false), notDisabled))
+    .where(
+      and(
+        eq(sources.orgId, orgId),
+        gte(releases.publishedAt, cutoffIso),
+        eq(releases.suppressed, false),
+        notDisabled,
+      ),
+    )
     .orderBy(desc(releases.publishedAt));
   return rows;
 }
@@ -217,14 +278,9 @@ export async function listOrgs(opts?: {
   if (opts?.query && allOrgs.length > 0) {
     const q = opts.query.toLowerCase();
     const orgIds = allOrgs.map((o) => o.id);
-    const accounts = await db
-      .select()
-      .from(orgAccounts)
-      .where(inArray(orgAccounts.orgId, orgIds));
+    const accounts = await db.select().from(orgAccounts).where(inArray(orgAccounts.orgId, orgIds));
     const orgIdsWithMatchingHandle = new Set(
-      accounts
-        .filter((a) => a.handle.toLowerCase().includes(q))
-        .map((a) => a.orgId),
+      accounts.filter((a) => a.handle.toLowerCase().includes(q)).map((a) => a.orgId),
     );
     allOrgs = allOrgs.filter(
       (o) =>
@@ -262,15 +318,18 @@ export async function createSource(data: {
 }): Promise<Source> {
   if (isRemoteMode()) return apiClient.createSource(data);
   const db = getDb();
-  const [created] = await db.insert(sources).values({
-    name: data.name,
-    slug: data.slug,
-    type: data.type as "github" | "scrape" | "feed" | "agent",
-    url: data.url,
-    orgId: data.orgId ?? null,
-    productId: data.productId ?? null,
-    metadata: data.metadata,
-  }).returning();
+  const [created] = await db
+    .insert(sources)
+    .values({
+      name: data.name,
+      slug: data.slug,
+      type: data.type as "github" | "scrape" | "feed" | "agent",
+      url: data.url,
+      orgId: data.orgId ?? null,
+      productId: data.productId ?? null,
+      metadata: data.metadata,
+    })
+    .returning();
   return created;
 }
 
@@ -286,7 +345,9 @@ export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
 export async function findIgnoredUrl(url: string, orgId: string): Promise<IgnoredUrl | null> {
   if (isRemoteMode()) return apiClient.findIgnoredUrl(url, orgId);
   const db = getDb();
-  const [row] = await db.select().from(ignoredUrls)
+  const [row] = await db
+    .select()
+    .from(ignoredUrls)
     .where(and(eq(ignoredUrls.url, url), eq(ignoredUrls.orgId, orgId)));
   return row ?? null;
 }
@@ -294,11 +355,14 @@ export async function findIgnoredUrl(url: string, orgId: string): Promise<Ignore
 export async function addIgnoredUrl(url: string, orgId: string, reason?: string): Promise<void> {
   if (isRemoteMode()) return apiClient.addIgnoredUrl(url, orgId, reason);
   const db = getDb();
-  await db.insert(ignoredUrls).values({
-    url,
-    orgId,
-    reason: reason ?? null,
-  }).onConflictDoNothing();
+  await db
+    .insert(ignoredUrls)
+    .values({
+      url,
+      orgId,
+      reason: reason ?? null,
+    })
+    .onConflictDoNothing();
 }
 
 export async function listIgnoredUrls(orgId: string): Promise<IgnoredUrl[]> {
@@ -310,8 +374,7 @@ export async function listIgnoredUrls(orgId: string): Promise<IgnoredUrl[]> {
 export async function removeIgnoredUrl(url: string, orgId: string): Promise<void> {
   if (isRemoteMode()) return apiClient.removeIgnoredUrl(url, orgId);
   const db = getDb();
-  await db.delete(ignoredUrls)
-    .where(and(eq(ignoredUrls.url, url), eq(ignoredUrls.orgId, orgId)));
+  await db.delete(ignoredUrls).where(and(eq(ignoredUrls.url, url), eq(ignoredUrls.orgId, orgId)));
 }
 
 // ── Blocked URLs (global) ──
@@ -320,8 +383,14 @@ export async function findBlockedUrl(url: string): Promise<BlockedUrl | null> {
   if (isRemoteMode()) return apiClient.findBlockedUrl(url);
   const db = getDb();
   let domain = "";
-  try { domain = new URL(url).hostname; } catch { /* not a valid URL, skip domain match */ }
-  const rows = await db.select().from(blockedUrls)
+  try {
+    domain = new URL(url).hostname;
+  } catch {
+    /* not a valid URL, skip domain match */
+  }
+  const rows = await db
+    .select()
+    .from(blockedUrls)
     .where(
       or(
         and(eq(blockedUrls.pattern, url), eq(blockedUrls.type, "exact")),
@@ -333,14 +402,21 @@ export async function findBlockedUrl(url: string): Promise<BlockedUrl | null> {
   return rows.find((r) => r.type === "exact") ?? rows[0] ?? null;
 }
 
-export async function addBlockedUrl(pattern: string, type: "exact" | "domain", reason?: string): Promise<void> {
+export async function addBlockedUrl(
+  pattern: string,
+  type: "exact" | "domain",
+  reason?: string,
+): Promise<void> {
   if (isRemoteMode()) return apiClient.addBlockedUrl(pattern, type, reason);
   const db = getDb();
-  await db.insert(blockedUrls).values({
-    pattern,
-    type,
-    reason: reason ?? null,
-  }).onConflictDoNothing();
+  await db
+    .insert(blockedUrls)
+    .values({
+      pattern,
+      type,
+      reason: reason ?? null,
+    })
+    .onConflictDoNothing();
 }
 
 export async function listBlockedUrls(): Promise<BlockedUrl[]> {
@@ -356,12 +432,12 @@ export async function removeBlockedUrl(pattern: string): Promise<void> {
 }
 
 /** Check if a URL is blocked globally OR ignored for a specific org */
-export async function isUrlExcluded(url: string, orgId?: string): Promise<{ excluded: boolean; reason?: string; scope?: "blocked" | "ignored" }> {
+export async function isUrlExcluded(
+  url: string,
+  orgId?: string,
+): Promise<{ excluded: boolean; reason?: string; scope?: "blocked" | "ignored" }> {
   if (orgId) {
-    const [blocked, ignored] = await Promise.all([
-      findBlockedUrl(url),
-      findIgnoredUrl(url, orgId),
-    ]);
+    const [blocked, ignored] = await Promise.all([findBlockedUrl(url), findIgnoredUrl(url, orgId)]);
     if (blocked) return { excluded: true, reason: blocked.reason ?? undefined, scope: "blocked" };
     if (ignored) return { excluded: true, reason: ignored.reason ?? undefined, scope: "ignored" };
     return { excluded: false };
@@ -379,10 +455,7 @@ export async function isUrlExcluded(url: string, orgId?: string): Promise<{ excl
  * extraction (e.g. AI hit max_tokens) leaves the hash unset, allowing a
  * retry on the same body once the prompt is fixed.
  */
-export async function checkContentHash(
-  source: Source,
-  contentHash: string,
-): Promise<boolean> {
+export async function checkContentHash(source: Source, contentHash: string): Promise<boolean> {
   if (isRemoteMode()) return apiClient.checkContentHash(source, contentHash);
   return source.lastContentHash === contentHash;
 }
@@ -431,10 +504,7 @@ export async function listSourcesWithOrg(opts?: {
 
   if (opts?.category) {
     conditions.push(
-      or(
-        eq(organizations.category, opts.category),
-        eq(products.category, opts.category),
-      )!,
+      or(eq(organizations.category, opts.category), eq(products.category, opts.category))!,
     );
   }
 
@@ -445,9 +515,7 @@ export async function listSourcesWithOrg(opts?: {
   }
 
   if (!opts?.includeHidden) {
-    conditions.push(
-      notDisabled,
-    );
+    conditions.push(notDisabled);
   }
 
   if (opts?.query) {
@@ -483,17 +551,26 @@ export async function listSourcesWithOrg(opts?: {
       metadata: sources.metadata,
       isPrimary: sql<boolean>`coalesce(${sources.isPrimary}, 0)`.as("isPrimary"),
       isHidden: sources.isHidden,
-      releaseCount: sql<number>`(SELECT COUNT(*) FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0))`.as("releaseCount"),
-      latestVersion: sql<string | null>`(SELECT ${releases.version} FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} IS NOT NULL ORDER BY ${releases.publishedAt} DESC LIMIT 1)`.as("latestVersion"),
-      latestDate: sql<string | null>`(SELECT MAX(${releases.publishedAt}) FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0))`.as("latestDate"),
+      releaseCount:
+        sql<number>`(SELECT COUNT(*) FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0))`.as(
+          "releaseCount",
+        ),
+      latestVersion: sql<
+        string | null
+      >`(SELECT ${releases.version} FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} IS NOT NULL ORDER BY ${releases.publishedAt} DESC LIMIT 1)`.as(
+        "latestVersion",
+      ),
+      latestDate: sql<
+        string | null
+      >`(SELECT MAX(${releases.publishedAt}) FROM ${releases} WHERE ${releases.sourceId} = ${sources.id} AND (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0))`.as(
+        "latestDate",
+      ),
     })
     .from(sources)
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .leftJoin(products, eq(sources.productId, products.id));
 
-  let baseQuery = conditions.length > 0
-    ? query.where(and(...conditions))
-    : query;
+  let baseQuery = conditions.length > 0 ? query.where(and(...conditions)) : query;
 
   if (opts?.limit != null) {
     baseQuery = (baseQuery as typeof baseQuery).limit(opts.limit) as typeof baseQuery;
@@ -513,7 +590,6 @@ export async function listSourcesWithOrg(opts?: {
 }
 
 // ── Stats summary (for `stats` command) ──
-
 
 export async function getStatsSummary(days: number): Promise<StatsSummary> {
   if (isRemoteMode()) return apiClient.getStatsSummary(days);
@@ -602,7 +678,6 @@ export async function getStatsSummary(days: number): Promise<StatsSummary> {
 
 // ── Fetch log (for `fetch-log` command) ──
 
-
 export async function getFetchLogs(opts: {
   sourceSlug?: string;
   limit: number;
@@ -638,7 +713,6 @@ export async function getFetchLogs(opts: {
 
 // ── Latest releases (for `latest` command) ──
 
-
 export async function getLatestReleases(opts: {
   slug?: string;
   orgSlug?: string;
@@ -658,7 +732,10 @@ export async function getLatestReleases(opts: {
   if (opts.orgSlug) {
     const org = await findOrg(opts.orgSlug);
     if (!org) return [];
-    const orgSources = await db.select({ id: sources.id }).from(sources).where(and(eq(sources.orgId, org.id), notDisabled));
+    const orgSources = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(and(eq(sources.orgId, org.id), notDisabled));
     orgSourceIds = orgSources.map((s) => s.id);
     if (orgSourceIds.length === 0) return [];
   }
@@ -693,7 +770,13 @@ export async function getLatestReleases(opts: {
 
   return rows.map((r) => ({
     ...r,
-    media: (() => { try { return JSON.parse(r.media || "[]"); } catch { return []; } })(),
+    media: (() => {
+      try {
+        return JSON.parse(r.media || "[]");
+      } catch {
+        return [];
+      }
+    })(),
   }));
 }
 
@@ -726,22 +809,31 @@ export async function getKnownReleasesForSource(
 
 export async function createOrg(
   name: string,
-  opts?: { slug?: string; domain?: string; description?: string; category?: string; avatarUrl?: string },
+  opts?: {
+    slug?: string;
+    domain?: string;
+    description?: string;
+    category?: string;
+    avatarUrl?: string;
+  },
 ): Promise<Organization> {
   if (isRemoteMode()) return apiClient.createOrg(name, opts);
   const db = getDb();
   const slug = opts?.slug ?? toSlug(name);
   const now = new Date().toISOString();
-  const [created] = await db.insert(organizations).values({
-    name,
-    slug,
-    domain: opts?.domain ?? null,
-    description: opts?.description ?? null,
-    category: opts?.category ?? null,
-    avatarUrl: opts?.avatarUrl ?? null,
-    createdAt: now,
-    updatedAt: now,
-  }).returning();
+  const [created] = await db
+    .insert(organizations)
+    .values({
+      name,
+      slug,
+      domain: opts?.domain ?? null,
+      description: opts?.description ?? null,
+      category: opts?.category ?? null,
+      avatarUrl: opts?.avatarUrl ?? null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
   return created;
 }
 
@@ -751,24 +843,25 @@ export async function removeOrg(orgId: string, orgSlug: string): Promise<void> {
   await db.delete(organizations).where(eq(organizations.id, orgId));
 }
 
-export async function updateOrg(org: Organization, data: Record<string, unknown>): Promise<Organization> {
+export async function updateOrg(
+  org: Organization,
+  data: Record<string, unknown>,
+): Promise<Organization> {
   if (isRemoteMode()) return apiClient.updateOrg(org.slug, data);
   const db = getDb();
   data.updatedAt = new Date().toISOString();
-  const [updated] = await db.update(organizations).set(data).where(eq(organizations.id, org.id)).returning();
+  const [updated] = await db
+    .update(organizations)
+    .set(data)
+    .where(eq(organizations.id, org.id))
+    .returning();
   return updated;
 }
 
-export async function getOrgAccountsBySlug(
-  orgSlug: string,
-  orgId: string,
-): Promise<OrgAccount[]> {
+export async function getOrgAccountsBySlug(orgSlug: string, orgId: string): Promise<OrgAccount[]> {
   if (isRemoteMode()) return apiClient.getOrgAccountsBySlug(orgSlug);
   const db = getDb();
-  return db
-    .select()
-    .from(orgAccounts)
-    .where(eq(orgAccounts.orgId, orgId));
+  return db.select().from(orgAccounts).where(eq(orgAccounts.orgId, orgId));
 }
 
 // ── Product queries ──
@@ -781,14 +874,17 @@ export async function createProduct(
   if (isRemoteMode()) return apiClient.createProduct(orgId, name, opts);
   const db = getDb();
   const slug = opts?.slug ?? toSlug(name);
-  const [created] = await db.insert(products).values({
-    name,
-    slug,
-    orgId,
-    url: opts?.url ?? null,
-    description: opts?.description ?? null,
-    category: opts?.category ?? null,
-  }).returning();
+  const [created] = await db
+    .insert(products)
+    .values({
+      name,
+      slug,
+      orgId,
+      url: opts?.url ?? null,
+      description: opts?.description ?? null,
+      category: opts?.category ?? null,
+    })
+    .returning();
   return created;
 }
 
@@ -812,7 +908,9 @@ export async function findProduct(identifier: string): Promise<Product | null> {
   return null;
 }
 
-export async function getProductsByOrg(orgId: string): Promise<Array<Product & { sourceCount: number }>> {
+export async function getProductsByOrg(
+  orgId: string,
+): Promise<Array<Product & { sourceCount: number }>> {
   if (isRemoteMode()) return apiClient.getProductsByOrg(orgId);
   const db = getDb();
   const rows = await db
@@ -834,10 +932,17 @@ export async function getProductsByOrg(orgId: string): Promise<Array<Product & {
   return rows;
 }
 
-export async function updateProduct(product: Product, data: Record<string, unknown>): Promise<Product> {
+export async function updateProduct(
+  product: Product,
+  data: Record<string, unknown>,
+): Promise<Product> {
   if (isRemoteMode()) return apiClient.updateProduct(product.slug, data);
   const db = getDb();
-  const [updated] = await db.update(products).set(data).where(eq(products.id, product.id)).returning();
+  const [updated] = await db
+    .update(products)
+    .set(data)
+    .where(eq(products.id, product.id))
+    .returning();
   return updated;
 }
 
@@ -878,9 +983,10 @@ export async function removeDomainAlias(
   return deleted.length > 0;
 }
 
-export async function listDomainAliases(
-  target: { orgId?: string; productId?: string },
-): Promise<DomainAlias[]> {
+export async function listDomainAliases(target: {
+  orgId?: string;
+  productId?: string;
+}): Promise<DomainAlias[]> {
   if (isRemoteMode()) {
     return apiClient.listDomainAliases(target);
   }
@@ -967,7 +1073,9 @@ export async function removeTagsFromProduct(productId: string, tagNames: string[
     const slug = toSlug(name);
     const [tag] = await db.select().from(tags).where(eq(tags.slug, slug));
     if (tag) {
-      await db.delete(productTags).where(and(eq(productTags.productId, productId), eq(productTags.tagId, tag.id)));
+      await db
+        .delete(productTags)
+        .where(and(eq(productTags.productId, productId), eq(productTags.tagId, tag.id)));
     }
   }
 }
@@ -980,11 +1088,14 @@ export async function linkOrgAccount(
 ): Promise<OrgAccount> {
   if (isRemoteMode()) return apiClient.linkOrgAccount(orgSlug, platform, handle);
   const db = getDb();
-  const [created] = await db.insert(orgAccounts).values({
-    orgId,
-    platform,
-    handle,
-  }).returning();
+  const [created] = await db
+    .insert(orgAccounts)
+    .values({
+      orgId,
+      platform,
+      handle,
+    })
+    .returning();
   await db
     .update(organizations)
     .set({ updatedAt: new Date().toISOString() })
@@ -1020,20 +1131,28 @@ export async function unlinkOrgAccount(
 export async function suppressRelease(releaseId: string, reason?: string): Promise<boolean> {
   if (isRemoteMode()) return apiClient.suppressRelease(releaseId, reason);
   const db = getDb();
-  const [updated] = await db.update(releases).set({
-    suppressed: true,
-    suppressedReason: reason ?? null,
-  }).where(eq(releases.id, releaseId)).returning({ id: releases.id });
+  const [updated] = await db
+    .update(releases)
+    .set({
+      suppressed: true,
+      suppressedReason: reason ?? null,
+    })
+    .where(eq(releases.id, releaseId))
+    .returning({ id: releases.id });
   return !!updated;
 }
 
 export async function unsuppressRelease(releaseId: string): Promise<boolean> {
   if (isRemoteMode()) return apiClient.unsuppressRelease(releaseId);
   const db = getDb();
-  const [updated] = await db.update(releases).set({
-    suppressed: false,
-    suppressedReason: null,
-  }).where(eq(releases.id, releaseId)).returning({ id: releases.id });
+  const [updated] = await db
+    .update(releases)
+    .set({
+      suppressed: false,
+      suppressedReason: null,
+    })
+    .where(eq(releases.id, releaseId))
+    .returning({ id: releases.id });
   return !!updated;
 }
 
@@ -1050,26 +1169,30 @@ export async function linkReleaseCoverage(row: {
   }
   if (isRemoteMode()) return apiClient.linkReleaseCoverage(row);
   const db = getDb();
-  await db.insert(releaseCoverage).values({
-    canonicalId: row.canonicalId,
-    coverageId: row.coverageId,
-    reason: row.reason ?? null,
-    decidedBy: row.decidedBy,
-  }).onConflictDoUpdate({
-    target: releaseCoverage.coverageId,
-    set: {
+  await db
+    .insert(releaseCoverage)
+    .values({
       canonicalId: row.canonicalId,
+      coverageId: row.coverageId,
       reason: row.reason ?? null,
       decidedBy: row.decidedBy,
-      decidedAt: new Date().toISOString(),
-    },
-  });
+    })
+    .onConflictDoUpdate({
+      target: releaseCoverage.coverageId,
+      set: {
+        canonicalId: row.canonicalId,
+        reason: row.reason ?? null,
+        decidedBy: row.decidedBy,
+        decidedAt: new Date().toISOString(),
+      },
+    });
 }
 
 export async function unlinkReleaseCoverage(releaseId: string): Promise<boolean> {
   if (isRemoteMode()) return apiClient.unlinkReleaseCoverage(releaseId);
   const db = getDb();
-  const deleted = await db.delete(releaseCoverage)
+  const deleted = await db
+    .delete(releaseCoverage)
     .where(eq(releaseCoverage.coverageId, releaseId))
     .returning({ id: releaseCoverage.coverageId });
   return deleted.length > 0;
@@ -1082,23 +1205,24 @@ export async function getReleaseCoverage(releaseId: string): Promise<{
 }> {
   if (isRemoteMode()) return apiClient.getReleaseCoverage(releaseId);
   const db = getDb();
-  const [asCoverage] = await db.select().from(releaseCoverage)
+  const [asCoverage] = await db
+    .select()
+    .from(releaseCoverage)
     .where(eq(releaseCoverage.coverageId, releaseId))
     .limit(1);
   if (asCoverage) return { role: "coverage", canonical: asCoverage, covers: [] };
-  const covers = await db.select().from(releaseCoverage)
+  const covers = await db
+    .select()
+    .from(releaseCoverage)
     .where(eq(releaseCoverage.canonicalId, releaseId));
   if (covers.length > 0) return { role: "canonical", canonical: null, covers };
   return { role: "standalone", canonical: null, covers: [] };
 }
 
-export async function getCoverageForReleaseIds(
-  releaseIds: string[],
-): Promise<ReleaseCoverage[]> {
+export async function getCoverageForReleaseIds(releaseIds: string[]): Promise<ReleaseCoverage[]> {
   if (isRemoteMode() || releaseIds.length === 0) return [];
   const db = getDb();
-  return db.select().from(releaseCoverage)
-    .where(inArray(releaseCoverage.coverageId, releaseIds));
+  return db.select().from(releaseCoverage).where(inArray(releaseCoverage.coverageId, releaseIds));
 }
 
 // ── Search ──
@@ -1112,7 +1236,10 @@ export async function unifiedSearch(
     return apiClient.unifiedSearch(query, limit, opts);
   }
   const { unifiedSearchLocal } = await import("./fts.js");
-  return { query, ...unifiedSearchLocal(query, limit, 0, { includeCoverage: opts?.includeCoverage }) };
+  return {
+    query,
+    ...unifiedSearchLocal(query, limit, 0, { includeCoverage: opts?.includeCoverage }),
+  };
 }
 
 // ── Source CRUD helpers ──
@@ -1155,31 +1282,40 @@ export async function listFetchableSources(opts: {
   }
   const db = getDb();
   if (opts.mode === "unfetched") {
-    return db.select().from(sources).where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
+    return db
+      .select()
+      .from(sources)
+      .where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
   }
   if (opts.mode === "stale" && opts.staleHours) {
     const cutoff = new Date(Date.now() - opts.staleHours * 3600_000).toISOString();
     const now = new Date().toISOString();
-    return db.select().from(sources).where(
-      and(
-        sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
-        sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
-        sql`${sources.fetchPriority} != 'paused'`,
-        notDisabled
-      )
-    );
+    return db
+      .select()
+      .from(sources)
+      .where(
+        and(
+          sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
+          sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
+          sql`${sources.fetchPriority} != 'paused'`,
+          notDisabled,
+        ),
+      );
   }
   if (opts.mode === "retry_errors") {
-    return db.select().from(sources).where(
-      and(
-        sql`${sources.id} IN (
+    return db
+      .select()
+      .from(sources)
+      .where(
+        and(
+          sql`${sources.id} IN (
           SELECT f.source_id FROM fetch_log f
           WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
           AND f.status = 'error'
         )`,
-        notDisabled
-      )
-    );
+          notDisabled,
+        ),
+      );
   }
   return db.select().from(sources).where(notDisabled);
 }
@@ -1190,13 +1326,16 @@ export async function listFeedSources(): Promise<Source[]> {
     return apiClient.listFeedSources();
   }
   const db = getDb();
-  return db.select().from(sources).where(
-    and(
-      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
-      sql`${sources.fetchPriority} != 'paused'`,
-      notDisabled,
-    )
-  );
+  return db
+    .select()
+    .from(sources)
+    .where(
+      and(
+        sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
+        sql`${sources.fetchPriority} != 'paused'`,
+        notDisabled,
+      ),
+    );
 }
 
 /** List scrape sources that don't have a feed URL (candidates for HEAD pre-check). */
@@ -1205,15 +1344,18 @@ export async function listScrapeSources(): Promise<Source[]> {
     return []; // Not yet supported in remote mode
   }
   const db = getDb();
-  return db.select().from(sources).where(
-    and(
-      eq(sources.type, "scrape"),
-      sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR json_extract(${sources.metadata}, '$.feedUrl') = '')`,
-      sql`(json_extract(${sources.metadata}, '$.headCheckUseless') IS NULL OR json_extract(${sources.metadata}, '$.headCheckUseless') = false)`,
-      sql`${sources.fetchPriority} != 'paused'`,
-      notDisabled,
-    )
-  );
+  return db
+    .select()
+    .from(sources)
+    .where(
+      and(
+        eq(sources.type, "scrape"),
+        sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR json_extract(${sources.metadata}, '$.feedUrl') = '')`,
+        sql`(json_extract(${sources.metadata}, '$.headCheckUseless') IS NULL OR json_extract(${sources.metadata}, '$.headCheckUseless') = false)`,
+        sql`${sources.fetchPriority} != 'paused'`,
+        notDisabled,
+      ),
+    );
 }
 
 export async function setChangeDetected(source: Source): Promise<void> {
@@ -1240,12 +1382,10 @@ export async function listSourcesWithChanges(): Promise<Source[]> {
     return apiClient.listSourcesWithChanges();
   }
   const db = getDb();
-  return db.select().from(sources).where(
-    and(
-      sql`${sources.changeDetectedAt} IS NOT NULL`,
-      notDisabled,
-    )
-  );
+  return db
+    .select()
+    .from(sources)
+    .where(and(sql`${sources.changeDetectedAt} IS NOT NULL`, notDisabled));
 }
 
 export async function deleteReleasesForSource(source: Source): Promise<number> {
@@ -1267,7 +1407,9 @@ export async function insertReleases(source: Source, rows: ReleaseUpsertRow[]): 
   let inserted = 0;
   for (let i = 0; i < rows.length; i += 500) {
     const chunk = rows.slice(i, i + 500);
-    const result = await db.insert(releases).values(chunk)
+    const result = await db
+      .insert(releases)
+      .values(chunk)
       .onConflictDoUpdate(RELEASE_URL_UPSERT)
       .returning({ id: releases.id });
     inserted += result.length;
@@ -1310,11 +1452,17 @@ export async function deleteRelease(id: string): Promise<boolean> {
     return apiClient.deleteRelease(id);
   }
   const db = getDb();
-  const deleted = await db.delete(releases).where(eq(releases.id, id)).returning({ id: releases.id });
+  const deleted = await db
+    .delete(releases)
+    .where(eq(releases.id, id))
+    .returning({ id: releases.id });
   return deleted.length > 0;
 }
 
-export async function updateRelease(id: string, data: Record<string, unknown>): Promise<Release | null> {
+export async function updateRelease(
+  id: string,
+  data: Record<string, unknown>,
+): Promise<Release | null> {
   if (isRemoteMode()) {
     const result = await apiClient.updateRelease(id, data);
     if (!result) return null;
@@ -1331,7 +1479,9 @@ export async function deleteReleasesByFilter(opts: {
   dryRun?: boolean;
 }): Promise<{ deleted: number; releases: Array<{ id: string; title: string }> }> {
   if (isRemoteMode()) {
-    throw new Error("deleteReleasesByFilter not yet supported in remote mode — delete individually");
+    throw new Error(
+      "deleteReleasesByFilter not yet supported in remote mode — delete individually",
+    );
   }
   const db = getDb();
   const conditions = [];
@@ -1357,7 +1507,6 @@ export async function deleteReleasesByFilter(opts: {
 }
 
 // ── Usage stats (for `usage` command) ──
-
 
 /** @deprecated Use UsageStatsResponse */
 export type UsageStats = UsageStatsResponse;
@@ -1439,9 +1588,7 @@ export async function insertFetchLog(entry: {
 
 // ── Release summaries ──
 
-export async function getSummariesForSource(
-  sourceId: string,
-): Promise<ReleaseSummary[]> {
+export async function getSummariesForSource(sourceId: string): Promise<ReleaseSummary[]> {
   if (isRemoteMode()) {
     return apiClient.getSummariesForSource(sourceId);
   }
@@ -1453,9 +1600,7 @@ export async function getSummariesForSource(
     .orderBy(desc(releaseSummaries.generatedAt));
 }
 
-export async function upsertSummary(
-  data: NewReleaseSummary,
-): Promise<void> {
+export async function upsertSummary(data: NewReleaseSummary): Promise<void> {
   if (isRemoteMode()) {
     return apiClient.upsertSummary(data);
   }
@@ -1464,7 +1609,13 @@ export async function upsertSummary(
     .insert(releaseSummaries)
     .values(data)
     .onConflictDoUpdate({
-      target: [releaseSummaries.sourceId, releaseSummaries.orgId, releaseSummaries.type, releaseSummaries.year, releaseSummaries.month],
+      target: [
+        releaseSummaries.sourceId,
+        releaseSummaries.orgId,
+        releaseSummaries.type,
+        releaseSummaries.year,
+        releaseSummaries.month,
+      ],
       set: {
         summary: data.summary,
         releaseCount: data.releaseCount,
@@ -1499,7 +1650,10 @@ export async function getMonthlySummary(
 
 // ── Overview Pages ──
 
-export async function getOrgOverview(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
+export async function getOrgOverview(
+  orgId: string,
+  orgSlug?: string,
+): Promise<KnowledgePage | null> {
   if (isRemoteMode() && orgSlug) {
     return apiClient.getOverview("org", orgSlug);
   }
@@ -1511,7 +1665,10 @@ export async function getOrgOverview(orgId: string, orgSlug?: string): Promise<K
   return row ?? null;
 }
 
-export async function getProductOverview(productId: string, productSlug?: string): Promise<KnowledgePage | null> {
+export async function getProductOverview(
+  productId: string,
+  productSlug?: string,
+): Promise<KnowledgePage | null> {
   if (isRemoteMode() && productSlug) {
     return apiClient.getOverview("product", productSlug);
   }
@@ -1523,7 +1680,10 @@ export async function getProductOverview(productId: string, productSlug?: string
   return row ?? null;
 }
 
-export async function getPlaybookForOrg(orgId: string, orgSlug?: string): Promise<KnowledgePage | null> {
+export async function getPlaybookForOrg(
+  orgId: string,
+  orgSlug?: string,
+): Promise<KnowledgePage | null> {
   if (isRemoteMode() && orgSlug) {
     return apiClient.getPlaybook(orgSlug);
   }
@@ -1535,17 +1695,24 @@ export async function getPlaybookForOrg(orgId: string, orgSlug?: string): Promis
   return row ?? null;
 }
 
-export async function upsertOverviewPage(
-  data: { scope: "org" | "product" | "playbook"; orgId?: string | null; productId?: string | null; content: string; notes?: string | null; releaseCount: number; lastContributingReleaseAt?: string | null },
-): Promise<void> {
+export async function upsertOverviewPage(data: {
+  scope: "org" | "product" | "playbook";
+  orgId?: string | null;
+  productId?: string | null;
+  content: string;
+  notes?: string | null;
+  releaseCount: number;
+  lastContributingReleaseAt?: string | null;
+}): Promise<void> {
   if (isRemoteMode()) {
     return apiClient.upsertOverview(data);
   }
   const db = getDb();
   const now = new Date().toISOString();
-  const conflictTarget = data.scope === "product"
-    ? [knowledgePages.scope, knowledgePages.productId]
-    : [knowledgePages.scope, knowledgePages.orgId];
+  const conflictTarget =
+    data.scope === "product"
+      ? [knowledgePages.scope, knowledgePages.productId]
+      : [knowledgePages.scope, knowledgePages.orgId];
   await db
     .insert(knowledgePages)
     .values({
@@ -1570,7 +1737,11 @@ export async function upsertOverviewPage(
     });
 }
 
-export async function updatePlaybookNotes(orgId: string, orgSlug: string, notes: string): Promise<void> {
+export async function updatePlaybookNotes(
+  orgId: string,
+  orgSlug: string,
+  notes: string,
+): Promise<void> {
   if (isRemoteMode()) {
     return apiClient.updatePlaybookNotes(orgSlug, notes);
   }
@@ -1617,16 +1788,18 @@ export async function insertMediaAssets(assets: MediaAssetInput[]): Promise<numb
     const chunk = deduped.slice(i, i + 500);
     const result = await db
       .insert(mediaAssets)
-      .values(chunk.map((a) => ({
-        r2Key: a.r2Key,
-        sourceUrl: a.sourceUrl,
-        sourceFilename: a.sourceFilename,
-        contentType: a.contentType,
-        contentHash: a.contentHash,
-        byteSize: a.byteSize,
-        sourceId: a.sourceId ?? null,
-        releaseId: a.releaseId ?? null,
-      })))
+      .values(
+        chunk.map((a) => ({
+          r2Key: a.r2Key,
+          sourceUrl: a.sourceUrl,
+          sourceFilename: a.sourceFilename,
+          contentType: a.contentType,
+          contentHash: a.contentHash,
+          byteSize: a.byteSize,
+          sourceId: a.sourceId ?? null,
+          releaseId: a.releaseId ?? null,
+        })),
+      )
       .onConflictDoNothing()
       .returning({ id: mediaAssets.id });
     inserted += result.length;
@@ -1669,13 +1842,18 @@ export interface ChangelogFileInput {
 }
 
 /** Local-mode only. The worker mirrors this in workers/api/src/cron/poll-fetch.ts#refreshChangelogFile. */
-export async function upsertChangelogFile(sourceId: string, file: ChangelogFileInput): Promise<{ inserted: boolean; updated: boolean }> {
+export async function upsertChangelogFile(
+  sourceId: string,
+  file: ChangelogFileInput,
+): Promise<{ inserted: boolean; updated: boolean }> {
   const db = getDb();
   const now = new Date().toISOString();
   const [existing] = await db
     .select()
     .from(sourceChangelogFiles)
-    .where(and(eq(sourceChangelogFiles.sourceId, sourceId), eq(sourceChangelogFiles.path, file.path)));
+    .where(
+      and(eq(sourceChangelogFiles.sourceId, sourceId), eq(sourceChangelogFiles.path, file.path)),
+    );
 
   if (!existing) {
     await db.insert(sourceChangelogFiles).values({
@@ -1696,22 +1874,26 @@ export async function upsertChangelogFile(sourceId: string, file: ChangelogFileI
   if (existing.contentHash === file.contentHash) {
     const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
     if (existing.tokens === null) touch.tokens = countTokensSafe(existing.content);
-    await db.update(sourceChangelogFiles)
+    await db
+      .update(sourceChangelogFiles)
       .set(touch)
       .where(eq(sourceChangelogFiles.id, existing.id));
     return { inserted: false, updated: false };
   }
 
-  await db.update(sourceChangelogFiles).set({
-    filename: file.filename,
-    url: file.url,
-    rawUrl: file.rawUrl,
-    content: file.content,
-    contentHash: file.contentHash,
-    bytes: file.bytes,
-    tokens: countTokensSafe(file.content),
-    fetchedAt: now,
-  }).where(eq(sourceChangelogFiles.id, existing.id));
+  await db
+    .update(sourceChangelogFiles)
+    .set({
+      filename: file.filename,
+      url: file.url,
+      rawUrl: file.rawUrl,
+      content: file.content,
+      contentHash: file.contentHash,
+      bytes: file.bytes,
+      tokens: countTokensSafe(file.content),
+      fetchedAt: now,
+    })
+    .where(eq(sourceChangelogFiles.id, existing.id));
   return { inserted: false, updated: true };
 }
 
@@ -1790,7 +1972,11 @@ export async function getWebhookSubscriptionById(
   db: AnyDb,
   id: string,
 ): Promise<WebhookSubscription | null> {
-  const rows = await db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(webhookSubscriptions)
+    .where(eq(webhookSubscriptions.id, id))
+    .limit(1);
   return rows[0] ?? null;
 }
 
@@ -1800,7 +1986,9 @@ export async function listWebhookSubscriptionsByOrg(
   opts?: { enabledOnly?: boolean },
 ): Promise<WebhookSubscription[]> {
   if (opts?.enabledOnly) {
-    return db.select().from(webhookSubscriptions)
+    return db
+      .select()
+      .from(webhookSubscriptions)
       .where(and(eq(webhookSubscriptions.orgId, orgId), eq(webhookSubscriptions.enabled, true)));
   }
   return db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.orgId, orgId));
@@ -1816,11 +2004,12 @@ export async function matchWebhookSubscriptions(
   orgIds: string[],
 ): Promise<WebhookSubscription[]> {
   if (orgIds.length === 0) return [];
-  return db.select().from(webhookSubscriptions)
-    .where(and(
-      eq(webhookSubscriptions.enabled, true),
-      inArray(webhookSubscriptions.orgId, orgIds),
-    ));
+  return db
+    .select()
+    .from(webhookSubscriptions)
+    .where(
+      and(eq(webhookSubscriptions.enabled, true), inArray(webhookSubscriptions.orgId, orgIds)),
+    );
 }
 
 export type SummaryUpdate =
@@ -1833,14 +2022,16 @@ export async function updateWebhookSubscriptionSummary(
   update: SummaryUpdate,
 ): Promise<void> {
   if (update.kind === "success") {
-    await db.update(webhookSubscriptions)
+    await db
+      .update(webhookSubscriptions)
       .set({ lastSuccessAt: update.at, consecutiveFailures: 0 })
       .where(eq(webhookSubscriptions.id, id));
   } else {
     // Read-modify-write: not atomic. Concurrent retries may double-increment.
     const cur = await getWebhookSubscriptionById(db, id);
     if (!cur) return;
-    await db.update(webhookSubscriptions)
+    await db
+      .update(webhookSubscriptions)
       .set({
         lastErrorAt: update.at,
         lastErrorMsg: update.message,
@@ -1856,7 +2047,8 @@ export async function setWebhookSubscriptionEnabled(
   enabled: boolean,
   reason: string | null,
 ): Promise<void> {
-  await db.update(webhookSubscriptions)
+  await db
+    .update(webhookSubscriptions)
     .set({ enabled, disabledReason: enabled ? null : reason })
     .where(eq(webhookSubscriptions.id, id));
 }
@@ -1869,7 +2061,8 @@ export async function bumpWebhookSecretVersion(db: AnyDb, id: string): Promise<n
   const cur = await getWebhookSubscriptionById(db, id);
   if (!cur) throw new Error(`subscription not found: ${id}`);
   const newVersion = cur.secretVersion + 1;
-  await db.update(webhookSubscriptions)
+  await db
+    .update(webhookSubscriptions)
     .set({ secretVersion: newVersion })
     .where(eq(webhookSubscriptions.id, id));
   return newVersion;

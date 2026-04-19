@@ -3,9 +3,7 @@ import chalk from "chalk";
 import { setTelemetryEnabled, telemetryStatus } from "../../lib/telemetry.js";
 
 export function registerTelemetryCommand(parent: Command): void {
-  const cmd = parent
-    .command("telemetry")
-    .description("Manage anonymous usage telemetry");
+  const cmd = parent.command("telemetry").description("Manage anonymous usage telemetry");
 
   cmd
     .command("status")
@@ -24,7 +22,9 @@ export function registerTelemetryCommand(parent: Command): void {
       console.log(`${chalk.dim("Kind:")}    ${s.clientKind}`);
       console.log(`${chalk.dim("Endpoint:")}${" "}${s.endpoint}/v1/telemetry`);
       console.log("");
-      console.log(chalk.dim("Collected: command name, CLI version, OS/arch, runtime, exit code, duration."));
+      console.log(
+        chalk.dim("Collected: command name, CLI version, OS/arch, runtime, exit code, duration."),
+      );
       console.log(chalk.dim("Never collected: arguments, flag values, paths, slugs, or content."));
     });
 

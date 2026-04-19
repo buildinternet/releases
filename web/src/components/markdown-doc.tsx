@@ -16,9 +16,7 @@ const markdownComponents = {
 
 const SLOT_PATTERN = /<!--\s*slot:([a-z0-9-]+)\s*-->/gi;
 
-type Segment =
-  | { type: "markdown"; content: string }
-  | { type: "slot"; name: string };
+type Segment = { type: "markdown"; content: string } | { type: "slot"; name: string };
 
 function splitBySlots(content: string): Segment[] {
   const segments: Segment[] = [];
@@ -69,7 +67,7 @@ export async function MarkdownDoc({
               {seg.content}
             </ReactMarkdown>
           ) : (
-            slots?.[seg.name] ?? null
+            (slots?.[seg.name] ?? null)
           )}
         </Fragment>
       ))}

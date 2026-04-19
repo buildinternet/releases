@@ -173,33 +173,56 @@ describe("parseArgs", () => {
 
   it("preserves double-quoted strings", () => {
     expect(parseArgs('org add "Val Town" --category ai')).toEqual([
-      "org", "add", "Val Town", "--category", "ai",
+      "org",
+      "add",
+      "Val Town",
+      "--category",
+      "ai",
     ]);
   });
 
   it("preserves single-quoted strings", () => {
     expect(parseArgs("org add 'Val Town' --category ai")).toEqual([
-      "org", "add", "Val Town", "--category", "ai",
+      "org",
+      "add",
+      "Val Town",
+      "--category",
+      "ai",
     ]);
   });
 
   it("handles --description with quoted multi-word value", () => {
-    expect(parseArgs('org add "Val Town" --description "A platform for writing and deploying code"')).toEqual([
-      "org", "add", "Val Town", "--description", "A platform for writing and deploying code",
+    expect(
+      parseArgs('org add "Val Town" --description "A platform for writing and deploying code"'),
+    ).toEqual([
+      "org",
+      "add",
+      "Val Town",
+      "--description",
+      "A platform for writing and deploying code",
     ]);
   });
 
   it("handles backslash escapes", () => {
-    expect(parseArgs('org add Val\\ Town')).toEqual(["org", "add", "Val Town"]);
+    expect(parseArgs("org add Val\\ Town")).toEqual(["org", "add", "Val Town"]);
   });
 
   it("handles empty quoted string", () => {
-    expect(parseArgs('add "" --url http://example.com')).toEqual(["add", "", "--url", "http://example.com"]);
+    expect(parseArgs('add "" --url http://example.com')).toEqual([
+      "add",
+      "",
+      "--url",
+      "http://example.com",
+    ]);
   });
 
   it("handles mixed quotes", () => {
     expect(parseArgs(`org add "Val Town" --tags 'a,b,c'`)).toEqual([
-      "org", "add", "Val Town", "--tags", "a,b,c",
+      "org",
+      "add",
+      "Val Town",
+      "--tags",
+      "a,b,c",
     ]);
   });
 

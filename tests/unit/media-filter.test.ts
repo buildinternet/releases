@@ -7,7 +7,11 @@ import {
 } from "../../src/lib/media.js";
 // normalizeMediaUrl lives in media-url.ts so the workers can import it
 // without pulling in the Node-only classifier/upload code.
-import { normalizeMediaUrl, unwrapImageProxyUrls, hydrateMediaUrls } from "../../src/lib/media-url.js";
+import {
+  normalizeMediaUrl,
+  unwrapImageProxyUrls,
+  hydrateMediaUrls,
+} from "../../src/lib/media-url.js";
 
 // ── preCheckMedia (deterministic) ───────────────────────────────────
 
@@ -164,35 +168,40 @@ describe("normalizeMediaUrl", () => {
 
 describe("unwrapImageProxyUrls", () => {
   it("rewrites a markdown image with a Next.js basePath optimizer URL", () => {
-    const content = "Here's a screenshot:\n\n![shot](https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2F6jz6vxxd%2Fproduction%2Fabc-878x802.png&w=1920&q=75)";
+    const content =
+      "Here's a screenshot:\n\n![shot](https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fimages%2F6jz6vxxd%2Fproduction%2Fabc-878x802.png&w=1920&q=75)";
     const out = unwrapImageProxyUrls(content);
     expect(out).toContain("https://cdn.sanity.io/images/6jz6vxxd/production/abc-878x802.png");
     expect(out).not.toContain("_next/image");
   });
 
   it("rewrites an HTML img tag with an optimizer URL", () => {
-    const content = '<p>intro</p><img src="https://example.com/_next/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75" alt="hero"/>';
+    const content =
+      '<p>intro</p><img src="https://example.com/_next/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75" alt="hero"/>';
     const out = unwrapImageProxyUrls(content);
     expect(out).toContain('src="https://cdn.example.com/hero.png"');
     expect(out).not.toContain("_next/image");
   });
 
   it("resolves relative inner URLs against the proxy origin", () => {
-    const content = "![](https://supabase.com/blog/launch-week-15-top-10/_next/image?url=%2Fimages%2Fblog%2Fwrap.png&w=3840&q=75)";
+    const content =
+      "![](https://supabase.com/blog/launch-week-15-top-10/_next/image?url=%2Fimages%2Fblog%2Fwrap.png&w=3840&q=75)";
     const out = unwrapImageProxyUrls(content);
     expect(out).toContain("https://supabase.com/images/blog/wrap.png");
     expect(out).not.toContain("_next/image");
   });
 
   it("handles HTML-escaped ampersands in content", () => {
-    const content = 'See <img src="https://example.com/_next/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&amp;w=1920&amp;q=75"/>.';
+    const content =
+      'See <img src="https://example.com/_next/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&amp;w=1920&amp;q=75"/>.';
     const out = unwrapImageProxyUrls(content);
     expect(out).toContain("https://cdn.example.com/hero.png");
     expect(out).not.toContain("_next/image");
   });
 
   it("rewrites /_vercel/image URLs too", () => {
-    const content = "![](https://example.com/_vercel/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75)";
+    const content =
+      "![](https://example.com/_vercel/image?url=https%3A%2F%2Fcdn.example.com%2Fhero.png&w=1920&q=75)";
     const out = unwrapImageProxyUrls(content);
     expect(out).toContain("https://cdn.example.com/hero.png");
     expect(out).not.toContain("_vercel/image");
@@ -208,7 +217,8 @@ describe("unwrapImageProxyUrls", () => {
   });
 
   it("runs automatically inside hydrateMediaUrls", () => {
-    const content = "![](https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fa.png&w=1920&q=75) and /_media/foo/bar.png";
+    const content =
+      "![](https://ramp.com/product-releases/_next/image?url=https%3A%2F%2Fcdn.sanity.io%2Fa.png&w=1920&q=75) and /_media/foo/bar.png";
     const out = hydrateMediaUrls(content, "https://media.example.com");
     expect(out).toContain("https://cdn.sanity.io/a.png");
     expect(out).toContain("https://media.example.com/");
@@ -256,9 +266,7 @@ describe("filterJunkMedia — full two-stage pipeline", () => {
       called = true;
       return [];
     };
-    const media: MediaRef[] = [
-      { type: "video", url: "https://www.youtube.com/watch?v=abc" },
-    ];
+    const media: MediaRef[] = [{ type: "video", url: "https://www.youtube.com/watch?v=abc" }];
     const result = await filterJunkMedia(media, "see video here", { classifier });
     expect(result.media.length).toBe(1);
     expect(called).toBe(false);
@@ -277,7 +285,10 @@ describe("filterJunkMedia — full two-stage pipeline", () => {
     ];
     const classifier = makeClassifier({
       "https://example.com/avatars/leerob.png": { decision: "drop", confidence: "high" },
-      "https://cdn.example.com/posts/icons/new-design.png": { decision: "keep", confidence: "high" },
+      "https://cdn.example.com/posts/icons/new-design.png": {
+        decision: "keep",
+        confidence: "high",
+      },
     });
     const result = await filterJunkMedia(media, "body", { classifier });
     expect(result.media.map((m) => m.url)).toEqual([
@@ -288,9 +299,7 @@ describe("filterJunkMedia — full two-stage pipeline", () => {
   });
 
   it("keeps low-confidence drops conservatively (precision-over-recall)", async () => {
-    const media: MediaRef[] = [
-      { type: "image", url: "https://example.com/badges/maybe.svg" },
-    ];
+    const media: MediaRef[] = [{ type: "image", url: "https://example.com/badges/maybe.svg" }];
     const classifier = makeClassifier({
       "https://example.com/badges/maybe.svg": { decision: "drop", confidence: "low" },
     });
@@ -300,18 +309,14 @@ describe("filterJunkMedia — full two-stage pipeline", () => {
   });
 
   it("keeps ambiguous items when the classifier is unavailable (returns null)", async () => {
-    const media: MediaRef[] = [
-      { type: "image", url: "https://example.com/avatars/someone.png" },
-    ];
+    const media: MediaRef[] = [{ type: "image", url: "https://example.com/avatars/someone.png" }];
     const classifier: AmbiguousMediaClassifier = async () => null;
     const result = await filterJunkMedia(media, "body", { classifier });
     expect(result.media.length).toBe(1);
   });
 
   it("strips markdown image references for dropped URLs", async () => {
-    const media: MediaRef[] = [
-      { type: "image", url: "https://example.com/favicon.ico" },
-    ];
+    const media: MediaRef[] = [{ type: "image", url: "https://example.com/favicon.ico" }];
     const content = "before\n\n![favicon](https://example.com/favicon.ico)\n\nafter";
     const result = await filterJunkMedia(media, content, {
       classifier: async () => [],

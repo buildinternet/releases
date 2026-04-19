@@ -135,9 +135,7 @@ test("chunkChangelog: heading extraction reflects the most recent heading", () =
 
   // Some later chunk should land inside Section A or Section B.
   const headings = chunks.map((c) => c.heading);
-  expect(headings.some((h) => h === "Section A" || h === "Section B")).toBe(
-    true,
-  );
+  expect(headings.some((h) => h === "Section A" || h === "Section B")).toBe(true);
 });
 
 test("chunkChangelog: hash is deterministic across runs", () => {

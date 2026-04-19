@@ -69,7 +69,13 @@ app.post("/", async (c) => {
       releaseCount,
     })
     .onConflictDoUpdate({
-      target: [releaseSummaries.sourceId, releaseSummaries.orgId, releaseSummaries.type, releaseSummaries.year, releaseSummaries.month],
+      target: [
+        releaseSummaries.sourceId,
+        releaseSummaries.orgId,
+        releaseSummaries.type,
+        releaseSummaries.year,
+        releaseSummaries.month,
+      ],
       set: {
         summary,
         releaseCount,

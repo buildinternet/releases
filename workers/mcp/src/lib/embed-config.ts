@@ -37,15 +37,9 @@ interface EmbedEnv {
   OPENAI_API_KEY?: SecretBinding;
 }
 
-export async function buildEmbedConfig(
-  env: EmbedEnv,
-): Promise<ResolvedEmbedConfig | null> {
+export async function buildEmbedConfig(env: EmbedEnv): Promise<ResolvedEmbedConfig | null> {
   const rawProvider = (env.EMBEDDING_PROVIDER ?? "voyage").toLowerCase();
-  if (
-    rawProvider !== "voyage" &&
-    rawProvider !== "openai" &&
-    rawProvider !== "workers-ai"
-  ) {
+  if (rawProvider !== "voyage" && rawProvider !== "openai" && rawProvider !== "workers-ai") {
     console.warn(`[embed-config] unknown EMBEDDING_PROVIDER: ${rawProvider}`);
     return null;
   }

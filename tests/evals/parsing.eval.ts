@@ -47,29 +47,36 @@ describe("parsing evals", () => {
     "minimal-content",
     "keepachangelog-format",
     "bold-versions",
-  ])("parses %s correctly", async (fixtureName) => {
-    const fixture = fixtures.find((f) => f.name === fixtureName);
-    if (!fixture) {
-      throw new Error(`Fixture ${fixtureName} not found — check fixtures directory`);
-    }
+  ])(
+    "parses %s correctly",
+    async (fixtureName) => {
+      const fixture = fixtures.find((f) => f.name === fixtureName);
+      if (!fixture) {
+        throw new Error(`Fixture ${fixtureName} not found — check fixtures directory`);
+      }
 
-    const actual = await parseChangelog(fixture.markdown, `eval-${fixtureName}`);
-    const result = gradeFixture(fixture.name, fixture.expected, actual);
-    allResults.push(result);
+      const actual = await parseChangelog(fixture.markdown, `eval-${fixtureName}`);
+      const result = gradeFixture(fixture.name, fixture.expected, actual);
+      allResults.push(result);
 
-    // The test passes if the overall field score is >= 80%.
-    // This allows minor deviations (e.g. slightly different date format)
-    // while catching real regressions (wrong version, missed releases).
-    expect(result.score).toBeGreaterThanOrEqual(0.8);
+      // The test passes if the overall field score is >= 80%.
+      // This allows minor deviations (e.g. slightly different date format)
+      // while catching real regressions (wrong version, missed releases).
+      expect(result.score).toBeGreaterThanOrEqual(0.8);
 
-    // Release count must match exactly — missing or extra releases is a hard fail.
-    expect(result.releaseCountMatch).toBe(true);
-  }, 60_000);
+      // Release count must match exactly — missing or extra releases is a hard fail.
+      expect(result.releaseCountMatch).toBe(true);
+    },
+    60_000,
+  );
 
   it("prints summary", () => {
     if (allResults.length > 0) {
       printResults(allResults, "Parsing Evals");
-      saveResults(allResults, join(RESULTS_DIR, `parsing-${new Date().toISOString().slice(0, 10)}.json`));
+      saveResults(
+        allResults,
+        join(RESULTS_DIR, `parsing-${new Date().toISOString().slice(0, 10)}.json`),
+      );
     }
   });
 });

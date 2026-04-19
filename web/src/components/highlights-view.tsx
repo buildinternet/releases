@@ -8,7 +8,8 @@ interface HighlightsViewProps {
   monthly: ReleaseSummaryItem[];
 }
 
-const summaryClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
+const summaryClasses =
+  "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_p]:my-1 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
 
 function formatMonth(year: number, month: number): string {
   const date = new Date(Date.UTC(year, month - 1));
@@ -19,7 +20,8 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
   if (!rolling && monthly.length === 0) {
     return (
       <div className="py-12 text-center text-stone-400 dark:text-stone-500 text-sm">
-        No summaries generated yet. Summaries are created automatically when new releases are fetched.
+        No summaries generated yet. Summaries are created automatically when new releases are
+        fetched.
       </div>
     );
   }
@@ -29,7 +31,9 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
       if (a.year !== b.year) return (b.year ?? 0) - (a.year ?? 0);
       return (b.month ?? 0) - (a.month ?? 0);
     })
-    .filter((m, i, arr) => i === 0 || `${m.year}-${m.month}` !== `${arr[i - 1].year}-${arr[i - 1].month}`);
+    .filter(
+      (m, i, arr) => i === 0 || `${m.year}-${m.month}` !== `${arr[i - 1].year}-${arr[i - 1].month}`,
+    );
 
   return (
     <div className="pt-4">
@@ -45,11 +49,21 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
             </span>
           </div>
           <div className={summaryClasses}>
-            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]}>{rolling.summary}</ReactMarkdown>
+            <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]}>
+              {rolling.summary}
+            </ReactMarkdown>
           </div>
           {rolling.generatedAt && (
             <div className="text-[10px] text-stone-400 dark:text-stone-600 mt-3 tabular-nums">
-              Generated {new Date(rolling.generatedAt).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" })}
+              Generated{" "}
+              {new Date(rolling.generatedAt).toLocaleString("en-US", {
+                month: "short",
+                day: "numeric",
+                year: "numeric",
+                hour: "numeric",
+                minute: "2-digit",
+                timeZoneName: "short",
+              })}
             </div>
           )}
         </div>
@@ -75,7 +89,9 @@ export function HighlightsView({ rolling, monthly }: HighlightsViewProps) {
               </span>
             </div>
             <div className={summaryClasses}>
-              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]}>{m.summary}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]}>
+                {m.summary}
+              </ReactMarkdown>
             </div>
           </div>
         </div>

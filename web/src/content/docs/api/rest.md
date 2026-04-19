@@ -41,19 +41,19 @@ Get organization details including sources, products, and release metrics.
 
 Paginated release feed across all sources in the org.
 
-| Param | Description |
-| --- | --- |
+| Param    | Description                              |
+| -------- | ---------------------------------------- |
 | `cursor` | Pagination cursor from previous response |
-| `limit` | Results per page (1-100, default 20) |
+| `limit`  | Results per page (1-100, default 20)     |
 
 ### `GET /v1/orgs/:slug/activity`
 
 Weekly release activity for the organization.
 
-| Param | Description |
-| --- | --- |
+| Param  | Description             |
+| ------ | ----------------------- |
 | `from` | Start date (YYYY-MM-DD) |
-| `to` | End date (YYYY-MM-DD) |
+| `to`   | End date (YYYY-MM-DD)   |
 
 ---
 
@@ -75,22 +75,22 @@ Get product details by slug or ID.
 
 List sources with filters.
 
-| Param | Description |
-| --- | --- |
-| `independent` | Only sources not tied to an org |
-| `orgSlug` | Filter by organization slug |
-| `productSlug` | Filter by product slug |
-| `hasFeed` | Only sources with a feed URL |
-| `query` | Substring search on name, slug, or URL |
-| `category` | Filter by category |
+| Param         | Description                            |
+| ------------- | -------------------------------------- |
+| `independent` | Only sources not tied to an org        |
+| `orgSlug`     | Filter by organization slug            |
+| `productSlug` | Filter by product slug                 |
+| `hasFeed`     | Only sources with a feed URL           |
+| `query`       | Substring search on name, slug, or URL |
+| `category`    | Filter by category                     |
 
 ### `GET /v1/sources/:slug`
 
 Source details with paginated releases.
 
-| Param | Description |
-| --- | --- |
-| `page` | Page number |
+| Param      | Description      |
+| ---------- | ---------------- |
+| `page`     | Page number      |
 | `pageSize` | Results per page |
 
 ### `GET /v1/sources/:slug/activity`
@@ -105,10 +105,10 @@ Releases after a cutoff date. Requires `?cutoff=ISO-date`.
 
 Read the canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md`) tracked for a GitHub source. Supports heading-aligned range slicing by characters or by tokens (cl100k_base) — useful for agent-friendly Context7-style access to large files (e.g. Apollo Client's 700KB CHANGELOG).
 
-| Param | Description |
-| --- | --- |
-| `offset` | Character offset into the full file. Snapped forward to the next `##`/`###`/`#` heading unless 0. |
-| `limit` | Target slice size in **characters**. The slice ends at a heading boundary; overshoots to the next heading if a single section is bigger than `limit`. Default 40000 when either range param is present and `tokens` is not set. |
+| Param    | Description                                                                                                                                                                                                                                         |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `offset` | Character offset into the full file. Snapped forward to the next `##`/`###`/`#` heading unless 0.                                                                                                                                                   |
+| `limit`  | Target slice size in **characters**. The slice ends at a heading boundary; overshoots to the next heading if a single section is bigger than `limit`. Default 40000 when either range param is present and `tokens` is not set.                     |
 | `tokens` | Target slice size in **tokens** (cl100k_base). Walks sections forward under the budget with the same heading-snap and overshoot rules as `limit`. Takes precedence when both are passed. Recommended brackets: `2000` / `5000` / `10000` / `20000`. |
 
 With no range params, the full file is returned (back-compat). Response body:
@@ -146,11 +146,11 @@ Chain successive requests by passing the returned `nextOffset` back as the next 
 
 Unified feed of the most recent releases. Backs the CLI's `tail`/`latest` command and the public homepage activity feed. The default unfiltered request is cached in KV for 5 minutes (`X-Cache: HIT|MISS`); any request that applies `source`, `org`, a non-default `count`, or `include_coverage=true` bypasses the cache (`X-Cache: BYPASS`) and is served directly from the database.
 
-| Param | Description |
-| --- | --- |
-| `count` | Max releases to return (1-100, default 10) |
-| `source` | Source slug or id to filter by (mutually exclusive with `org`) |
-| `org` | Org slug or id to filter by (mutually exclusive with `source`) |
+| Param              | Description                                                                          |
+| ------------------ | ------------------------------------------------------------------------------------ |
+| `count`            | Max releases to return (1-100, default 10)                                           |
+| `source`           | Source slug or id to filter by (mutually exclusive with `org`)                       |
+| `org`              | Org slug or id to filter by (mutually exclusive with `source`)                       |
 | `include_coverage` | Include coverage-side rows (default `false` — hides duplicate-launch coverage items) |
 
 Coverage-side releases are hidden by default so the feed shows one entry per launch. `source` and `org` both accept either a slug or an id (`src_…`, `org_…`).
@@ -167,12 +167,12 @@ Get full release details by ID, including content and media assets.
 
 Hybrid search across orgs, products, sources, releases, and CHANGELOG chunks. FTS5 and vector similarity are fused with Reciprocal Rank Fusion; hybrid is the default.
 
-| Param | Description |
-| --- | --- |
-| `q` | Search query (required) |
-| `limit` | Max results (default 20) |
-| `offset` | Pagination offset |
-| `mode` | `lexical`, `semantic`, or `hybrid` (default `hybrid`). `lexical` returns the legacy FTS-only shape. |
+| Param    | Description                                                                                         |
+| -------- | --------------------------------------------------------------------------------------------------- |
+| `q`      | Search query (required)                                                                             |
+| `limit`  | Max results (default 20)                                                                            |
+| `offset` | Pagination offset                                                                                   |
+| `mode`   | `lexical`, `semantic`, or `hybrid` (default `hybrid`). `lexical` returns the legacy FTS-only shape. |
 
 Hybrid and semantic responses include a ranked `chunks` array interleaved with release hits, plus `mode`, `degraded`, and `degradedReason` fields. `degraded: true` means the request fell back to lexical because Vectorize or the embedding provider was unavailable — results are still returned.
 
@@ -182,11 +182,11 @@ Each chunk hit carries `sourceSlug`, `orgSlug`, `filePath`, `offset`, `length`, 
 
 Semantically similar releases for an anchor release. Reuses the release's existing vector — no re-embedding.
 
-| Param | Description |
-| --- | --- |
-| `release` | Anchor release id (required) |
-| `scope` | `org` (same organization) or `global` (default `global`) |
-| `limit` | Max results (1-20, default 5) |
+| Param     | Description                                              |
+| --------- | -------------------------------------------------------- |
+| `release` | Anchor release id (required)                             |
+| `scope`   | `org` (same organization) or `global` (default `global`) |
+| `limit`   | Max results (1-20, default 5)                            |
 
 Degrades to an empty `items` array with `degraded: true` when Vectorize bindings are unavailable. Anchor is excluded from its own results. Cached for 5 minutes.
 
@@ -194,12 +194,12 @@ Degrades to an empty `items` array with `degraded: true` when Vectorize bindings
 
 Semantically similar sources for an anchor source. Uses the entity vector.
 
-| Param | Description |
-| --- | --- |
-| `source` | Anchor source slug or id (required) |
-| `scope` | `org` (siblings in the same organization) or `global` (default `global`) |
+| Param            | Description                                                                                                  |
+| ---------------- | ------------------------------------------------------------------------------------------------------------ |
+| `source`         | Anchor source slug or id (required)                                                                          |
+| `scope`          | `org` (siblings in the same organization) or `global` (default `global`)                                     |
 | `excludeOrgSlug` | Optional org slug to exclude from global results (used to avoid overlap when rendering both scopes together) |
-| `limit` | Max results (1-20, default 5) |
+| `limit`          | Max results (1-20, default 5)                                                                                |
 
 Same degradation and anchor-exclusion semantics as `/v1/related/releases`.
 
@@ -211,12 +211,12 @@ Same degradation and anchor-exclusion semantics as `/v1/related/releases`.
 
 Get cached AI summaries for a source.
 
-| Param | Description |
-| --- | --- |
+| Param        | Description                             |
+| ------------ | --------------------------------------- |
 | `sourceSlug` | Source slug (required, or use sourceId) |
-| `type` | `rolling` or `monthly` |
-| `year` | Filter by year (for monthly summaries) |
-| `month` | Filter by month |
+| `type`       | `rolling` or `monthly`                  |
+| `year`       | Filter by year (for monthly summaries)  |
+| `month`      | Filter by month                         |
 
 ---
 
@@ -224,10 +224,10 @@ Get cached AI summaries for a source.
 
 Every org and source page on `releases.sh` has three machine-readable URL suffixes alongside the HTML:
 
-| Suffix | Content-Type | Use case |
-| --- | --- | --- |
-| `.json` | `application/json` | Programmatic / agent consumption |
-| `.md` | `text/markdown` | LLM context, prompt-friendly output |
+| Suffix  | Content-Type           | Use case                                                    |
+| ------- | ---------------------- | ----------------------------------------------------------- |
+| `.json` | `application/json`     | Programmatic / agent consumption                            |
+| `.md`   | `text/markdown`        | LLM context, prompt-friendly output                         |
 | `.atom` | `application/atom+xml` | Feed readers (Feedly, Inoreader, NetNewsWire), webhook bots |
 
 ```

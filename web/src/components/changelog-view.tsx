@@ -8,7 +8,8 @@ import { ChangelogStream } from "./changelog-stream";
 import { ChangelogFilePicker } from "./changelog-file-picker";
 import { DEFAULT_CHANGELOG_SLICE_LIMIT } from "@releases/core-internal/changelog-range";
 
-const markdownClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
+const markdownClasses =
+  "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 
 export function ChangelogSkeleton() {
   return (
@@ -115,27 +116,33 @@ export async function ChangelogView({
           role="alert"
           className="mb-4 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 px-3 py-2 text-[12px] text-amber-800 dark:text-amber-200"
         >
-          This file exceeds 1MB and has been truncated{file.truncatedAt !== null ? ` at byte ${file.truncatedAt.toLocaleString()}` : ""}. The tail of the upstream file is not shown.
+          This file exceeds 1MB and has been truncated
+          {file.truncatedAt !== null ? ` at byte ${file.truncatedAt.toLocaleString()}` : ""}. The
+          tail of the upstream file is not shown.
         </div>
       )}
-      {hasDeepLink && (() => {
-        // Build a path back to the top of the changelog so users who land
-        // via a chunk deep-link can rewind to the preamble. Preserves the
-        // active file path for multi-file sources.
-        const topQs = new URLSearchParams({ tab: "changelog" });
-        if (file.path) topQs.set("path", file.path);
-        return (
-          <div className="mb-3 flex items-center justify-between gap-2 rounded border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/60 px-3 py-2 text-[12px] text-stone-600 dark:text-stone-400">
-            <span>Showing section starting at byte {file.offset.toLocaleString()} of {file.totalChars.toLocaleString()}.</span>
-            <a
-              href={`?${topQs.toString()}`}
-              className="text-stone-600 dark:text-stone-300 underline hover:text-stone-900 dark:hover:text-stone-100"
-            >
-              Jump to top
-            </a>
-          </div>
-        );
-      })()}
+      {hasDeepLink &&
+        (() => {
+          // Build a path back to the top of the changelog so users who land
+          // via a chunk deep-link can rewind to the preamble. Preserves the
+          // active file path for multi-file sources.
+          const topQs = new URLSearchParams({ tab: "changelog" });
+          if (file.path) topQs.set("path", file.path);
+          return (
+            <div className="mb-3 flex items-center justify-between gap-2 rounded border border-stone-200 dark:border-stone-800 bg-stone-50 dark:bg-stone-900/60 px-3 py-2 text-[12px] text-stone-600 dark:text-stone-400">
+              <span>
+                Showing section starting at byte {file.offset.toLocaleString()} of{" "}
+                {file.totalChars.toLocaleString()}.
+              </span>
+              <a
+                href={`?${topQs.toString()}`}
+                className="text-stone-600 dark:text-stone-300 underline hover:text-stone-900 dark:hover:text-stone-100"
+              >
+                Jump to top
+              </a>
+            </div>
+          );
+        })()}
       <ChangelogStream
         // Keying by path resets stream state on file switch so chunks from a
         // prior file don't bleed into the new one.

@@ -165,25 +165,30 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const hydrate = useCallback(() => {
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    const safeFetch = (url: string) => fetch(url, { headers }).then((r) => r.ok ? r.json() : null);
-    return Promise.all([
-      safeFetch(`${apiUrl}/v1/sessions`),
-      safeFetch(`${apiUrl}/v1/status/usage`),
-    ]).then(([s, u]) => {
-      if (s) setSessions(s as SessionState[]);
-      if (u) setUsage(u as UsageEntry[]);
-      return s as SessionState[] | null;
-    }).catch(() => null);
+    const safeFetch = (url: string) =>
+      fetch(url, { headers }).then((r) => (r.ok ? r.json() : null));
+    return Promise.all([safeFetch(`${apiUrl}/v1/sessions`), safeFetch(`${apiUrl}/v1/status/usage`)])
+      .then(([s, u]) => {
+        if (s) setSessions(s as SessionState[]);
+        if (u) setUsage(u as UsageEntry[]);
+        return s as SessionState[] | null;
+      })
+      .catch(() => null);
   }, [apiUrl, apiKey]);
 
-  useEffect(() => { hydrate(); }, [hydrate]);
+  useEffect(() => {
+    hydrate();
+  }, [hydrate]);
 
   // Fetch sources once on mount (not tied to date range — requires auth)
   useEffect(() => {
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    fetch(`${apiUrl}/v1/sources`, { headers }).then((r) => r.ok ? r.json() : null)
-      .then((src) => { if (src) setAllSources(src as SourceEntry[]); })
+    fetch(`${apiUrl}/v1/sources`, { headers })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((src) => {
+        if (src) setAllSources(src as SourceEntry[]);
+      })
       .catch(() => {});
   }, [apiUrl, apiKey]);
 
@@ -197,16 +202,19 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
     }
 
     if (msg.type === "session:start") {
-      setSessions((prev) => [{
-        sessionId: msg.sessionId as string,
-        company: msg.company as string,
-        agent: msg.agent as SessionState["agent"],
-        runner: msg.runner as string | undefined,
-        correlationId: msg.correlationId as string | undefined,
-        anthropicSessionId: msg.anthropicSessionId as string | undefined,
-        status: "running",
-        startedAt: Date.now(),
-      }, ...prev]);
+      setSessions((prev) => [
+        {
+          sessionId: msg.sessionId as string,
+          company: msg.company as string,
+          agent: msg.agent as SessionState["agent"],
+          runner: msg.runner as string | undefined,
+          correlationId: msg.correlationId as string | undefined,
+          anthropicSessionId: msg.anthropicSessionId as string | undefined,
+          status: "running",
+          startedAt: Date.now(),
+        },
+        ...prev,
+      ]);
     } else if (msg.type === "session:progress") {
       const sid = msg.sessionId as string;
       setSessions((prev) =>
@@ -222,14 +230,18 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
                 sourcesFetched: msg.sourcesFetched as number | undefined,
                 releasesFound: msg.releasesFound as number | undefined,
                 releasesInserted: msg.releasesInserted as number | undefined,
-                ...(msg.anthropicSessionId ? { anthropicSessionId: msg.anthropicSessionId as string } : {}),
+                ...(msg.anthropicSessionId
+                  ? { anthropicSessionId: msg.anthropicSessionId as string }
+                  : {}),
               }
-            : s
-        )
+            : s,
+        ),
       );
       if (msg.logLine || msg.currentAction) {
         const line = (msg.logLine ?? msg.currentAction) as string;
-        const timestamp = new Date((msg.timestamp as number) || Date.now()).toISOString().slice(11, 19);
+        const timestamp = new Date((msg.timestamp as number) || Date.now())
+          .toISOString()
+          .slice(11, 19);
         setSessionLogs((prev) => {
           const existing = prev[sid] ?? [];
           const updated = [...existing, `${timestamp}  ${line}`];
@@ -239,19 +251,23 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
     } else if (msg.type === "session:complete") {
       setSessions((prev) =>
         prev.map((s) =>
-          s.sessionId === (msg.sessionId as string) ? { ...s, status: "complete" } : s
-        )
+          s.sessionId === (msg.sessionId as string) ? { ...s, status: "complete" } : s,
+        ),
       );
     } else if (msg.type === "session:error") {
       setSessions((prev) =>
         prev.map((s) =>
-          s.sessionId === (msg.sessionId as string) ? { ...s, status: "error", error: msg.error as string } : s
-        )
+          s.sessionId === (msg.sessionId as string)
+            ? { ...s, status: "error", error: msg.error as string }
+            : s,
+        ),
       );
     } else if (msg.type === "session:stdout") {
       const sid = msg.sessionId as string;
       const stream = msg.stream === "stderr" ? "ERR" : "OUT";
-      const timestamp = new Date((msg.timestamp as number) || Date.now()).toISOString().slice(11, 19);
+      const timestamp = new Date((msg.timestamp as number) || Date.now())
+        .toISOString()
+        .slice(11, 19);
       const line = `${timestamp} [${stream}] ${msg.line}`;
       setSessionStdout((prev) => {
         const existing = prev[sid] ?? [];
@@ -331,7 +347,9 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
 
   // Re-hydrate via HTTP when tab becomes visible again
   useEffect(() => {
-    if (visible) { hydrate(); }
+    if (visible) {
+      hydrate();
+    }
   }, [visible, hydrate]);
 
   // Update elapsed times every second — only when visible and sessions are running
@@ -344,34 +362,35 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
 
   // Fetch persisted logs and stdout once when expanding a session
   const fetchedLogsRef = useRef<Set<string>>(new Set());
-  const fetchLogsForSession = useCallback((sid: string) => {
-    if (fetchedLogsRef.current.has(sid)) return;
-    fetchedLogsRef.current.add(sid);
-    const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    fetch(`${apiUrl}/v1/sessions/${sid}/logs`, { headers })
-      .then((r) => r.ok ? r.json() : null)
-      .then((logs: string[] | null) => {
-        if (logs?.length) {
-          setSessionLogs((prev) => ({ ...prev, [sid]: logs }));
-        }
-      })
-      .catch(() => {});
-    fetch(`${apiUrl}/v1/sessions/${sid}/stdout`, { headers })
-      .then((r) => r.ok ? r.json() : null)
-      .then((lines: string[] | null) => {
-        if (lines?.length) {
-          setSessionStdout((prev) => ({ ...prev, [sid]: lines }));
-        }
-      })
-      .catch(() => {});
-  }, [apiUrl, apiKey]);
+  const fetchLogsForSession = useCallback(
+    (sid: string) => {
+      if (fetchedLogsRef.current.has(sid)) return;
+      fetchedLogsRef.current.add(sid);
+      const headers: Record<string, string> = {};
+      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
+      fetch(`${apiUrl}/v1/sessions/${sid}/logs`, { headers })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((logs: string[] | null) => {
+          if (logs?.length) {
+            setSessionLogs((prev) => ({ ...prev, [sid]: logs }));
+          }
+        })
+        .catch(() => {});
+      fetch(`${apiUrl}/v1/sessions/${sid}/stdout`, { headers })
+        .then((r) => (r.ok ? r.json() : null))
+        .then((lines: string[] | null) => {
+          if (lines?.length) {
+            setSessionStdout((prev) => ({ ...prev, [sid]: lines }));
+          }
+        })
+        .catch(() => {});
+    },
+    [apiUrl, apiKey],
+  );
 
   // Filter sessions client-side by date range (sessions come from DO, not SQL)
   const afterMs = after ? new Date(after).getTime() : 0;
-  const filteredSessions = after
-    ? sessions.filter((s) => s.startedAt >= afterMs)
-    : sessions;
+  const filteredSessions = after ? sessions.filter((s) => s.startedAt >= afterMs) : sessions;
 
   const runningCount = sessions.filter((s) => s.status === "running").length;
   const totalInput = usage.reduce((sum, u) => sum + u.totalInput, 0);
@@ -381,7 +400,9 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
     <div>
       {/* Connection status */}
       <div className="flex items-center gap-2 mb-4">
-        <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : hasRunningSessions ? "bg-red-400" : "bg-stone-300 dark:bg-stone-600"}`} />
+        <div
+          className={`w-2 h-2 rounded-full ${connected ? "bg-green-500" : hasRunningSessions ? "bg-red-400" : "bg-stone-300 dark:bg-stone-600"}`}
+        />
         <span className="text-xs text-stone-400 dark:text-stone-500">
           {connected ? "Live" : hasRunningSessions ? "Reconnecting..." : "Idle"}
         </span>
@@ -393,7 +414,12 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           Today: {formatTokens(totalInput)} input / {formatTokens(totalOutput)} output
           {usage.length > 1 && (
             <span className="ml-3 text-stone-400">
-              {usage.map((u) => `${formatModelName(u.model)}: ${formatTokens(u.totalInput + u.totalOutput)}`).join(" · ")}
+              {usage
+                .map(
+                  (u) =>
+                    `${formatModelName(u.model)}: ${formatTokens(u.totalInput + u.totalOutput)}`,
+                )
+                .join(" · ")}
             </span>
           )}
         </div>
@@ -447,7 +473,10 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
             <button
               key={range}
-              onClick={() => { setDateRange(range); setSessionPage(0); }}
+              onClick={() => {
+                setDateRange(range);
+                setSessionPage(0);
+              }}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 dateRange === range
                   ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
@@ -498,9 +527,12 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
 }
 
 const timeFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short", day: "numeric",
-  hour: "2-digit", minute: "2-digit",
-  hour12: false, timeZoneName: "short",
+  month: "short",
+  day: "numeric",
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+  timeZoneName: "short",
 });
 
 function formatTime(ts: number): string {
@@ -533,7 +565,11 @@ function SessionsTable({
   onDismiss: (id: string) => void;
 }) {
   if (sessions.length === 0) {
-    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No sessions yet.</div>;
+    return (
+      <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">
+        No sessions yet.
+      </div>
+    );
   }
 
   const totalPages = Math.ceil(sessions.length / perPage);
@@ -552,75 +588,106 @@ function SessionsTable({
         {paginated.map((session) => {
           const isUpdate = session.type === "update";
           const isExpanded = expandedSessions.has(session.sessionId);
-          return (<div key={session.sessionId}>
-            <button
-              onClick={() => onToggle(session.sessionId)}
-              className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
-            >
-              <div className="text-stone-900 dark:text-stone-100">
-                <span className="mr-1.5 text-stone-300 dark:text-stone-600">{isExpanded ? "▾" : "▸"}</span>
-                {session.company}
-                <AgentBadge agent={session.agent} runner={session.runner} />
-              </div>
-              <div className="text-stone-500 dark:text-stone-400">
-                {formatTime(session.startedAt)}
-              </div>
-              <div>
-                <StepBadge step={session.step} status={session.status} type={session.type} warnings={session.warnings} />
-              </div>
-              <div className="text-stone-500">
-                {session.status === "error" ? (
-                  <span className="text-red-500">{session.error?.slice(0, 40)}</span>
-                ) : session.status === "complete" ? (
-                  isUpdate ? (
-                    <span className="text-green-600">
-                      {(session.sourcesFetched ?? 0) > 0 && <span>{session.sourcesFetched} src</span>}
-                      {(session.releasesInserted ?? 0) > 0 && <span className="ml-1.5 text-green-700">+{session.releasesInserted}</span>}
-                      {(session.sourcesFetched ?? 0) === 0 && (session.releasesInserted ?? 0) === 0 && <span>no changes</span>}
-                    </span>
-                  ) : (
-                    <span className="text-green-600">+{session.sourcesFound ?? 0} sources</span>
-                  )
-                ) : (
-                  isUpdate ? (
+          return (
+            <div key={session.sessionId}>
+              <button
+                onClick={() => onToggle(session.sessionId)}
+                className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2.5 w-full text-left text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors"
+              >
+                <div className="text-stone-900 dark:text-stone-100">
+                  <span className="mr-1.5 text-stone-300 dark:text-stone-600">
+                    {isExpanded ? "▾" : "▸"}
+                  </span>
+                  {session.company}
+                  <AgentBadge agent={session.agent} runner={session.runner} />
+                </div>
+                <div className="text-stone-500 dark:text-stone-400">
+                  {formatTime(session.startedAt)}
+                </div>
+                <div>
+                  <StepBadge
+                    step={session.step}
+                    status={session.status}
+                    type={session.type}
+                    warnings={session.warnings}
+                  />
+                </div>
+                <div className="text-stone-500">
+                  {session.status === "error" ? (
+                    <span className="text-red-500">{session.error?.slice(0, 40)}</span>
+                  ) : session.status === "complete" ? (
+                    isUpdate ? (
+                      <span className="text-green-600">
+                        {(session.sourcesFetched ?? 0) > 0 && (
+                          <span>{session.sourcesFetched} src</span>
+                        )}
+                        {(session.releasesInserted ?? 0) > 0 && (
+                          <span className="ml-1.5 text-green-700">+{session.releasesInserted}</span>
+                        )}
+                        {(session.sourcesFetched ?? 0) === 0 &&
+                          (session.releasesInserted ?? 0) === 0 && <span>no changes</span>}
+                      </span>
+                    ) : (
+                      <span className="text-green-600">+{session.sourcesFound ?? 0} sources</span>
+                    )
+                  ) : isUpdate ? (
                     <span>
                       {session.sourcesFetched ?? 0}/{session.totalSources ?? "?"} src
-                      {(session.releasesInserted ?? 0) > 0 && <span className="ml-1.5 text-green-600">+{session.releasesInserted}</span>}
+                      {(session.releasesInserted ?? 0) > 0 && (
+                        <span className="ml-1.5 text-green-600">+{session.releasesInserted}</span>
+                      )}
                     </span>
                   ) : (
                     <span>
                       {session.sourcesFound ?? 0} found, {session.sourcesValidated ?? 0} validated
                     </span>
-                  )
-                )}
-              </div>
-              <div className="text-stone-400 dark:text-stone-500 text-right flex items-center justify-end gap-2">
-                <span>
-                  {formatElapsed(session.startedAt, session.status !== "running" ? session.lastUpdatedAt : undefined)}
-                  <SessionTokens usage={session.usage} />
-                </span>
-                {session.status !== "running" && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 transition-colors"
-                    title="Dismiss"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" });
-                      onDismiss(session.sessionId);
-                    }}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.stopPropagation(); fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" }); onDismiss(session.sessionId); } }}
-                  >
-                    &times;
+                  )}
+                </div>
+                <div className="text-stone-400 dark:text-stone-500 text-right flex items-center justify-end gap-2">
+                  <span>
+                    {formatElapsed(
+                      session.startedAt,
+                      session.status !== "running" ? session.lastUpdatedAt : undefined,
+                    )}
+                    <SessionTokens usage={session.usage} />
                   </span>
-                )}
-              </div>
-            </button>
-            {isExpanded && (
-              <SessionLogPanel sessionId={session.sessionId} correlationId={session.correlationId} anthropicSessionId={session.anthropicSessionId} logs={sessionLogs[session.sessionId] ?? []} stdout={sessionStdout[session.sessionId] ?? []} currentAction={session.currentAction} status={session.status} />
-            )}
-          </div>);
+                  {session.status !== "running" && (
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 transition-colors"
+                      title="Dismiss"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" });
+                        onDismiss(session.sessionId);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.stopPropagation();
+                          fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" });
+                          onDismiss(session.sessionId);
+                        }
+                      }}
+                    >
+                      &times;
+                    </span>
+                  )}
+                </div>
+              </button>
+              {isExpanded && (
+                <SessionLogPanel
+                  sessionId={session.sessionId}
+                  correlationId={session.correlationId}
+                  anthropicSessionId={session.anthropicSessionId}
+                  logs={sessionLogs[session.sessionId] ?? []}
+                  stdout={sessionStdout[session.sessionId] ?? []}
+                  currentAction={session.currentAction}
+                  status={session.status}
+                />
+              )}
+            </div>
+          );
         })}
       </div>
       {totalPages > 1 && (
@@ -634,7 +701,9 @@ function SessionsTable({
             >
               Prev
             </button>
-            <span>{page + 1} / {totalPages}</span>
+            <span>
+              {page + 1} / {totalPages}
+            </span>
             <button
               onClick={() => onPageChange(page + 1)}
               disabled={page >= totalPages - 1}
@@ -649,9 +718,23 @@ function SessionsTable({
   );
 }
 
-function StepBadge({ step, status, type, warnings }: { step?: string; status: string; type?: string; warnings?: string[] }) {
+function StepBadge({
+  step,
+  status,
+  type,
+  warnings,
+}: {
+  step?: string;
+  status: string;
+  type?: string;
+  warnings?: string[];
+}) {
   if (status === "complete" && warnings && warnings.length > 0) {
-    return <span className="text-amber-500" title={warnings.join("\n")}>Complete <span className="text-xs">⚠ {warnings.length}</span></span>;
+    return (
+      <span className="text-amber-500" title={warnings.join("\n")}>
+        Complete <span className="text-xs">⚠ {warnings.length}</span>
+      </span>
+    );
   }
   if (status === "complete") return <span className="text-green-600">Complete</span>;
   if (status === "error") return <span className="text-red-500">Error</span>;
@@ -672,8 +755,14 @@ function StepBadge({ step, status, type, warnings }: { step?: string; status: st
 }
 
 const agentStyles: Record<string, { bg: string; label: string }> = {
-  haiku: { bg: "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400", label: "Haiku" },
-  sonnet: { bg: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400", label: "Sonnet" },
+  haiku: {
+    bg: "bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400",
+    label: "Haiku",
+  },
+  sonnet: {
+    bg: "bg-amber-100 text-amber-600 dark:bg-amber-900/30 dark:text-amber-400",
+    label: "Sonnet",
+  },
 };
 
 function AgentBadge({ agent, runner }: { agent?: string; runner?: string }): ReactNode {
@@ -681,7 +770,9 @@ function AgentBadge({ agent, runner }: { agent?: string; runner?: string }): Rea
     const style = agentStyles[agent];
     if (!style) return null;
     return (
-      <span className={`ml-2 text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-full ${style.bg}`}>
+      <span
+        className={`ml-2 text-[10px] font-sans font-medium px-1.5 py-0.5 rounded-full ${style.bg}`}
+      >
         {style.label}
       </span>
     );
@@ -707,7 +798,23 @@ function SessionTokens({ usage }: { usage?: SessionState["usage"] }): ReactNode 
 
 type LogMode = "structured" | "raw";
 
-function SessionLogPanel({ sessionId, correlationId, anthropicSessionId, logs, stdout, currentAction, status }: { sessionId: string; correlationId?: string; anthropicSessionId?: string; logs: string[]; stdout: string[]; currentAction?: string; status: string }) {
+function SessionLogPanel({
+  sessionId,
+  correlationId,
+  anthropicSessionId,
+  logs,
+  stdout,
+  currentAction,
+  status,
+}: {
+  sessionId: string;
+  correlationId?: string;
+  anthropicSessionId?: string;
+  logs: string[];
+  stdout: string[];
+  currentAction?: string;
+  status: string;
+}) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [mode, setMode] = useState<LogMode>("structured");
 
@@ -737,9 +844,7 @@ function SessionLogPanel({ sessionId, correlationId, anthropicSessionId, logs, s
         <button
           onClick={() => setMode("raw")}
           className={`px-2 py-0.5 text-xs rounded transition-colors ${
-            mode === "raw"
-              ? "bg-stone-600 text-stone-100"
-              : "text-stone-400 hover:text-stone-300"
+            mode === "raw" ? "bg-stone-600 text-stone-100" : "text-stone-400 hover:text-stone-300"
           }`}
         >
           Raw
@@ -749,25 +854,33 @@ function SessionLogPanel({ sessionId, correlationId, anthropicSessionId, logs, s
             {anthropicSessionId && (
               <span title={anthropicSessionId}>anthropic:{anthropicSessionId.slice(0, 16)}</span>
             )}
-            {correlationId && (
-              <span title={correlationId}>cid:{correlationId.slice(0, 12)}</span>
-            )}
+            {correlationId && <span title={correlationId}>cid:{correlationId.slice(0, 12)}</span>}
           </span>
         )}
       </div>
-      <div ref={containerRef} className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed">
+      <div
+        ref={containerRef}
+        className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed"
+      >
         {lines.length === 0 && mode === "structured" && currentAction && (
           <div className="text-stone-500">{currentAction}</div>
         )}
         {lines.length === 0 && !(mode === "structured" && currentAction) && (
           <div className="text-stone-600">
             {status === "running"
-              ? mode === "raw" ? "Waiting for stdout..." : "Waiting for log output..."
-              : mode === "raw" ? "No stdout captured for this session." : "No logs recorded for this session."}
+              ? mode === "raw"
+                ? "Waiting for stdout..."
+                : "Waiting for log output..."
+              : mode === "raw"
+                ? "No stdout captured for this session."
+                : "No logs recorded for this session."}
           </div>
         )}
         {lines.map((line, i) => (
-          <div key={`${sessionId}-${mode}-${i}`} className={mode === "raw" && line.includes("[ERR]") ? "text-red-400" : undefined}>
+          <div
+            key={`${sessionId}-${mode}-${i}`}
+            className={mode === "raw" && line.includes("[ERR]") ? "text-red-400" : undefined}
+          >
             {line}
           </div>
         ))}
@@ -789,23 +902,39 @@ function FetchLogTable({
   prependRef: React.RefObject<((entry: FetchLogEntry) => void) | null>;
 }) {
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
-  const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore, prepend } = useFetchLog({
-    apiUrl, apiKey, after, status: filter,
-  });
+  const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore, prepend } =
+    useFetchLog({
+      apiUrl,
+      apiKey,
+      after,
+      status: filter,
+    });
 
   useEffect(() => {
     prependRef.current = prepend;
-    return () => { prependRef.current = null; };
+    return () => {
+      prependRef.current = null;
+    };
   }, [prepend, prependRef]);
 
   if (loading && entries.length === 0) {
-    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">Loading fetch log…</div>;
+    return (
+      <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">
+        Loading fetch log…
+      </div>
+    );
   }
   if (error && entries.length === 0) {
-    return <div className="text-sm text-red-500 py-8 text-center">Failed to load fetch log: {error}</div>;
+    return (
+      <div className="text-sm text-red-500 py-8 text-center">Failed to load fetch log: {error}</div>
+    );
   }
   if (!loading && totalCount === 0) {
-    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No fetch log entries yet.</div>;
+    return (
+      <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">
+        No fetch log entries yet.
+      </div>
+    );
   }
 
   return (
@@ -826,7 +955,15 @@ function FetchLogTable({
 
 type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 
-function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; apiUrl: string; apiKey?: string }) {
+function SourcesTable({
+  sources,
+  apiUrl,
+  apiKey,
+}: {
+  sources: SourceEntry[];
+  apiUrl: string;
+  apiKey?: string;
+}) {
   const [filter, setFilter] = useState<SourceTypeFilter>("all");
   const [query, setQuery] = useState("");
   const [fetching, setFetching] = useState<Set<string>>(new Set());
@@ -844,7 +981,11 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
     if (filter !== "all" && s.type !== filter) return false;
     if (query) {
       const q = query.toLowerCase();
-      return (s.name.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q) || (s.orgSlug ?? "").toLowerCase().includes(q));
+      return (
+        s.name.toLowerCase().includes(q) ||
+        s.slug.toLowerCase().includes(q) ||
+        (s.orgSlug ?? "").toLowerCase().includes(q)
+      );
     }
     return true;
   });
@@ -854,7 +995,11 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
 
   const triggerFetch = async (slug: string) => {
     setFetching((prev) => new Set(prev).add(slug));
-    setResults((prev) => { const next = { ...prev }; delete next[slug]; return next; });
+    setResults((prev) => {
+      const next = { ...prev };
+      delete next[slug];
+      return next;
+    });
     try {
       const headers: Record<string, string> = {};
       if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
@@ -864,7 +1009,11 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
     } catch {
       setResults((prev) => ({ ...prev, [slug]: { error: "Request failed" } }));
     } finally {
-      setFetching((prev) => { const next = new Set(prev); next.delete(slug); return next; });
+      setFetching((prev) => {
+        const next = new Set(prev);
+        next.delete(slug);
+        return next;
+      });
     }
   };
 
@@ -877,7 +1026,11 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
   ];
 
   if (sources.length === 0) {
-    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No sources loaded.</div>;
+    return (
+      <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">
+        No sources loaded.
+      </div>
+    );
   }
 
   return (
@@ -891,7 +1044,10 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
             return (
               <button
                 key={f.value}
-                onClick={() => { setFilter(f.value); setPage(0); }}
+                onClick={() => {
+                  setFilter(f.value);
+                  setPage(0);
+                }}
                 className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                   filter === f.value
                     ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
@@ -907,7 +1063,10 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
           type="text"
           placeholder="Filter sources..."
           value={query}
-          onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+          onChange={(e) => {
+            setQuery(e.target.value);
+            setPage(0);
+          }}
           className="px-2.5 py-1 text-xs rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 w-48"
         />
       </div>
@@ -927,7 +1086,10 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
           const isFetching = fetching.has(src.slug);
           const cadence = describeCadence(src.medianGapDays, src.fetchPriority, src.lastRetieredAt);
           return (
-            <div key={src.id} className="grid grid-cols-[2fr_1fr_1fr_1.4fr_0.9fr_1.2fr_auto] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center">
+            <div
+              key={src.id}
+              className="grid grid-cols-[2fr_1fr_1fr_1.4fr_0.9fr_1.2fr_auto] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center"
+            >
               <div className="text-stone-900 dark:text-stone-100 truncate" title={src.slug}>
                 {src.name}
               </div>
@@ -936,11 +1098,21 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
                 <SourceTypeBadge type={src.type} />
               </div>
               <div className="text-stone-500">
-                {src.lastFetchedAt ? formatTime(new Date(src.lastFetchedAt).getTime()) : <span className="text-stone-400">never</span>}
+                {src.lastFetchedAt ? (
+                  formatTime(new Date(src.lastFetchedAt).getTime())
+                ) : (
+                  <span className="text-stone-400">never</span>
+                )}
               </div>
               <div className="text-stone-500 capitalize">{src.fetchPriority ?? "normal"}</div>
               <div title={cadence.tooltip}>
-                <div className={cadence.tone === "warn" ? "text-amber-600 dark:text-amber-400" : "text-stone-500"}>
+                <div
+                  className={
+                    cadence.tone === "warn"
+                      ? "text-amber-600 dark:text-amber-400"
+                      : "text-stone-500"
+                  }
+                >
                   {cadence.primary}
                 </div>
                 <div className="text-stone-400 text-[10px]">{cadence.secondary}</div>
@@ -958,7 +1130,9 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
                     {result.error ? (
                       <span className="text-red-500">{result.error.slice(0, 30)}</span>
                     ) : result.fetched ? (
-                      <span className="text-green-600">+{result.releasesInserted ?? 0} ({formatFetchDuration(result.durationMs)})</span>
+                      <span className="text-green-600">
+                        +{result.releasesInserted ?? 0} ({formatFetchDuration(result.durationMs)})
+                      </span>
                     ) : result.queued ? (
                       <span className="text-amber-500">Queued</span>
                     ) : null}
@@ -982,7 +1156,9 @@ function SourcesTable({ sources, apiUrl, apiKey }: { sources: SourceEntry[]; api
             >
               Prev
             </button>
-            <span>{page + 1} / {totalPages}</span>
+            <span>
+              {page + 1} / {totalPages}
+            </span>
             <button
               onClick={() => setPage(page + 1)}
               disabled={page >= totalPages - 1}

@@ -147,10 +147,7 @@ function splitIntoChunks<T>(items: T[], size: number): T[][] {
   return out;
 }
 
-async function callWithRetry(
-  chunk: string[],
-  cfg: EmbeddingConfig,
-): Promise<EmbeddingResult> {
+async function callWithRetry(chunk: string[], cfg: EmbeddingConfig): Promise<EmbeddingResult> {
   const maxRetries = cfg.maxRetries ?? 3;
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -186,10 +183,7 @@ function isRetryable(err: unknown): boolean {
   return false;
 }
 
-async function dispatchProvider(
-  chunk: string[],
-  cfg: EmbeddingConfig,
-): Promise<EmbeddingResult> {
+async function dispatchProvider(chunk: string[], cfg: EmbeddingConfig): Promise<EmbeddingResult> {
   switch (cfg.provider) {
     case "voyage":
       return callOpenAiCompatible(chunk, cfg, {
@@ -226,15 +220,8 @@ async function fetchWithTimeout(
   try {
     return await fetchImpl(url, { ...init, signal: controller.signal });
   } catch (err) {
-    if (
-      (err instanceof Error && err.name === "AbortError") ||
-      controller.signal.aborted
-    ) {
-      throw new EmbeddingApiError(
-        `embedding request timed out after ${timeoutMs}ms`,
-        0,
-        true,
-      );
+    if ((err instanceof Error && err.name === "AbortError") || controller.signal.aborted) {
+      throw new EmbeddingApiError(`embedding request timed out after ${timeoutMs}ms`, 0, true);
     }
     throw err;
   } finally {
@@ -300,10 +287,7 @@ async function callOpenAiCompatible(
   };
 }
 
-async function callWorkersAi(
-  chunk: string[],
-  cfg: EmbeddingConfig,
-): Promise<EmbeddingResult> {
+async function callWorkersAi(chunk: string[], cfg: EmbeddingConfig): Promise<EmbeddingResult> {
   if (!cfg.workersAi) {
     throw new Error("workersAi binding is required for workers-ai provider");
   }

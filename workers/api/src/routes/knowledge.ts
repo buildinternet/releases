@@ -47,10 +47,7 @@ app.get("/", async (c) => {
   }
 
   if (scope === "product") {
-    const [product] = await db
-      .select({ id: products.id })
-      .from(products)
-      .where(productWhere(slug));
+    const [product] = await db.select({ id: products.id }).from(products).where(productWhere(slug));
     if (!product) return c.json(null);
 
     const [row] = await db
@@ -88,7 +85,10 @@ app.post("/", async (c) => {
       VALUES (${id}, ${scope}, NULL, ${productId}, ${content}, ${releaseCount}, ${lastContributingReleaseAt ?? null}, ${now}, ${now})
       ON CONFLICT (scope, product_id) DO UPDATE SET content = ${content}, release_count = ${releaseCount}, last_contributing_release_at = ${lastContributingReleaseAt ?? null}, updated_at = ${now}`);
   } else {
-    return c.json({ error: "Must provide orgId (for org/playbook scope) or productId (for product scope)" }, 400);
+    return c.json(
+      { error: "Must provide orgId (for org/playbook scope) or productId (for product scope)" },
+      400,
+    );
   }
 
   return c.json({ ok: true });
@@ -104,7 +104,12 @@ app.patch("/notes", async (c) => {
   if (body.notes === undefined) return c.json({ error: "notes field required" }, 400);
 
   const [org] = await db
-    .select({ id: organizations.id, name: organizations.name, slug: organizations.slug, domain: organizations.domain })
+    .select({
+      id: organizations.id,
+      name: organizations.name,
+      slug: organizations.slug,
+      domain: organizations.domain,
+    })
     .from(organizations)
     .where(orgWhere(slug));
   if (!org) return c.json({ error: "Organization not found" }, 404);
@@ -125,7 +130,12 @@ app.patch("/notes", async (c) => {
     // Generate header on the fly for first-time creation
     const orgSources = await db.select().from(sources).where(eq(sources.orgId, org.id));
     const orgProducts = await db
-      .select({ id: products.id, name: products.name, slug: products.slug, description: products.description })
+      .select({
+        id: products.id,
+        name: products.name,
+        slug: products.slug,
+        description: products.description,
+      })
       .from(products)
       .where(eq(products.orgId, org.id));
 
@@ -134,7 +144,12 @@ app.patch("/notes", async (c) => {
       orgSlug: org.slug,
       domain: org.domain,
       sources: orgSources,
-      products: orgProducts.map((p) => ({ id: p.id, name: p.name, slug: p.slug, description: p.description })),
+      products: orgProducts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+      })),
     });
 
     const id = newKnowledgePageId();

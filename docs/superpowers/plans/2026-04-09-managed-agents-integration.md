@@ -30,26 +30,30 @@
 
 ## File Structure
 
-| File | Action | Responsibility |
-|------|--------|----------------|
-| `package.json` | Modify | Upgrade `@anthropic-ai/sdk` to `^0.86.1` |
+| File                             | Action | Responsibility                                                                                   |
+| -------------------------------- | ------ | ------------------------------------------------------------------------------------------------ |
+| `package.json`                   | Modify | Upgrade `@anthropic-ai/sdk` to `^0.86.1`                                                         |
 | `src/agent/managed-discovery.ts` | Create | Managed Agents client — agent/env setup, session lifecycle, custom tool handler, event streaming |
-| `src/cli/commands/onboard.ts` | Modify | Add `--managed-agents` flag, wire to new module |
+| `src/cli/commands/onboard.ts`    | Modify | Add `--managed-agents` flag, wire to new module                                                  |
 
 ---
 
 ### Task 1: Upgrade Anthropic SDK
 
 **Files:**
+
 - Modify: `package.json` (the `@anthropic-ai/sdk` version)
 
 - [ ] **Step 1: Update the SDK version**
 
 In `package.json`, change:
+
 ```json
 "@anthropic-ai/sdk": "^0.80.0"
 ```
+
 to:
+
 ```json
 "@anthropic-ai/sdk": "^0.86.1"
 ```
@@ -81,6 +85,7 @@ git commit -m "chore: upgrade @anthropic-ai/sdk to ^0.86.1 for managed agents su
 ### Task 2: Create managed-discovery module
 
 **Files:**
+
 - Create: `src/agent/managed-discovery.ts`
 
 This is the core module. It mirrors the interface of `runDiscovery()` from `src/agent/released.ts` but uses Anthropic Managed Agents instead of the Claude Agent SDK.
@@ -247,7 +252,9 @@ async function ensureAgentAndEnv(
 ): Promise<{ agentId: string; agentVersion: number; environmentId: string }> {
   const cached = loadCachedConfig();
   if (cached) {
-    logger.debug(`[managed-agents] Using cached agent=${cached.agentId} env=${cached.environmentId}`);
+    logger.debug(
+      `[managed-agents] Using cached agent=${cached.agentId} env=${cached.environmentId}`,
+    );
     return cached;
   }
 
@@ -295,7 +302,9 @@ async function ensureAgentAndEnv(
   };
 
   saveCachedConfig(cfg);
-  logger.info(`[managed-agents] Agent ${agent.id} and environment ${environment.id} created and cached`);
+  logger.info(
+    `[managed-agents] Agent ${agent.id} and environment ${environment.id} created and cached`,
+  );
 
   return cfg;
 }
@@ -482,16 +491,19 @@ never enter the Managed Agent container."
 ### Task 3: Wire up the onboard command
 
 **Files:**
+
 - Modify: `src/cli/commands/onboard.ts`
 
 - [ ] **Step 1: Add the `--managed-agents` flag and import**
 
 At the top of `src/cli/commands/onboard.ts`, add the import:
+
 ```typescript
 import { runManagedDiscovery } from "../../agent/managed-discovery.js";
 ```
 
 Add `managedAgents?: boolean` to the `OnboardOpts` interface:
+
 ```typescript
 interface OnboardOpts {
   domain?: string;
@@ -504,6 +516,7 @@ interface OnboardOpts {
 ```
 
 Add the CLI option after the `--local` option (before `.addHelpText`):
+
 ```typescript
 .option("--managed-agents", "Use Anthropic Managed Agents instead of Cloudflare Sandbox")
 ```
@@ -546,18 +559,22 @@ async function runManagedAgentsDiscovery(company: string, opts: OnboardOpts): Pr
     company,
     domain: opts.domain,
     githubOrg: opts.githubOrg,
-    onProgress: opts.json ? undefined : (text) => {
-      process.stderr.write(chalk.dim(text));
-    },
-    onToolUse: opts.json ? undefined : (toolName, command) => {
-      if (toolName === "releases_cli" && command) {
-        const display = command.length > 120 ? command.slice(0, 117) + "..." : command;
-        process.stderr.write(chalk.gray(`  $ releases ${display}\n`));
-      } else if (toolName !== lastToolName) {
-        process.stderr.write(chalk.gray(`  [${toolName}]\n`));
-      }
-      lastToolName = toolName;
-    },
+    onProgress: opts.json
+      ? undefined
+      : (text) => {
+          process.stderr.write(chalk.dim(text));
+        },
+    onToolUse: opts.json
+      ? undefined
+      : (toolName, command) => {
+          if (toolName === "releases_cli" && command) {
+            const display = command.length > 120 ? command.slice(0, 117) + "..." : command;
+            process.stderr.write(chalk.gray(`  $ releases ${display}\n`));
+          } else if (toolName !== lastToolName) {
+            process.stderr.write(chalk.gray(`  [${toolName}]\n`));
+          }
+          lastToolName = toolName;
+        },
   });
 
   if (opts.json) {
@@ -572,6 +589,7 @@ async function runManagedAgentsDiscovery(company: string, opts: OnboardOpts): Pr
 - [ ] **Step 3: Update the help text**
 
 Add a managed agents example to the `.addHelpText` block:
+
 ```
   releases onboard "Acme" --managed-agents
 ```

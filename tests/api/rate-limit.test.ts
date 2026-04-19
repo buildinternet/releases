@@ -3,7 +3,9 @@ import { Hono, type MiddlewareHandler } from "hono";
 
 const { publicRateLimitMiddleware } = (await import(
   "../../workers/api/src/middleware/rate-limit.js"
-)) as unknown as { publicRateLimitMiddleware: MiddlewareHandler };
+)) as unknown as {
+  publicRateLimitMiddleware: MiddlewareHandler;
+};
 
 type LimitResult = { success: boolean };
 type RateLimiter = { limit(options: { key: string }): Promise<LimitResult> };
@@ -111,11 +113,7 @@ describe("publicRateLimitMiddleware", () => {
   it("falls back to 'unknown' when cf-connecting-ip is absent", async () => {
     const app = createApp();
     const limiter = mockLimiter([true]);
-    await app.request(
-      "/test",
-      {},
-      { PUBLIC_RATE_LIMITER: limiter, RATE_LIMIT_ENABLED: "true" },
-    );
+    await app.request("/test", {}, { PUBLIC_RATE_LIMITER: limiter, RATE_LIMIT_ENABLED: "true" });
     expect(limiter.calls).toEqual(["unknown"]);
   });
 

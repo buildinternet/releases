@@ -66,12 +66,7 @@ export function registerWebhookAdminCommand(parent: Command): void {
     .option("--disabled", "Show only disabled subscriptions")
     .option("--json", "Machine-readable JSON output")
     .action(
-      async (opts: {
-        org: string;
-        enabled?: boolean;
-        disabled?: boolean;
-        json?: boolean;
-      }) => {
+      async (opts: { org: string; enabled?: boolean; disabled?: boolean; json?: boolean }) => {
         let enabledFilter: boolean | undefined;
         if (opts.enabled) enabledFilter = true;
         else if (opts.disabled) enabledFilter = false;
@@ -155,7 +150,9 @@ export function registerWebhookAdminCommand(parent: Command): void {
         else if (opts.disable) patch.enabled = false;
 
         if (Object.keys(patch).length === 0) {
-          console.error(chalk.red("No changes specified. Use --url, --description, --enable, or --disable."));
+          console.error(
+            chalk.red("No changes specified. Use --url, --description, --enable, or --disable."),
+          );
           process.exit(1);
         }
 
@@ -200,38 +197,33 @@ export function registerWebhookAdminCommand(parent: Command): void {
     .option("--failed", "Show only failed deliveries")
     .option("--limit <n>", "Max rows to return", (v) => parseInt(v, 10))
     .option("--json", "Machine-readable JSON output")
-    .action(
-      async (id: string, opts: { failed?: boolean; limit?: number; json?: boolean }) => {
-        const data = await getWebhookDeliveries(id, {
-          failed: opts.failed,
-          limit: opts.limit,
-        });
+    .action(async (id: string, opts: { failed?: boolean; limit?: number; json?: boolean }) => {
+      const data = await getWebhookDeliveries(id, {
+        failed: opts.failed,
+        limit: opts.limit,
+      });
 
-        if (opts.json) {
-          console.log(JSON.stringify(data, null, 2));
-          return;
-        }
+      if (opts.json) {
+        console.log(JSON.stringify(data, null, 2));
+        return;
+      }
 
-        const rows: WebhookDeliveryRow[] = data.data?.[0]?.rows ?? data.rows ?? [];
+      const rows: WebhookDeliveryRow[] = data.data?.[0]?.rows ?? data.rows ?? [];
 
-        if (rows.length === 0) {
-          console.log("No deliveries found.");
-          return;
-        }
+      if (rows.length === 0) {
+        console.log("No deliveries found.");
+        return;
+      }
 
-        for (const row of rows) {
-          const ts = row.timestamp ?? "";
-          const outcome = row.outcome ?? "unknown";
-          const eventId = row.event_id ?? "";
-          const status = row.http_status != null ? String(row.http_status) : "—";
-          const latency = row.latency_ms != null ? `${row.latency_ms}ms` : "—";
-          const suffix = row.error_message ? chalk.gray(` — ${row.error_message}`) : "";
-          const outcomeStr =
-            outcome === "success"
-              ? chalk.green(outcome)
-              : chalk.red(outcome);
-          console.log(`[${ts}] ${outcomeStr} ${eventId} ${status}/${latency}${suffix}`);
-        }
-      },
-    );
+      for (const row of rows) {
+        const ts = row.timestamp ?? "";
+        const outcome = row.outcome ?? "unknown";
+        const eventId = row.event_id ?? "";
+        const status = row.http_status != null ? String(row.http_status) : "—";
+        const latency = row.latency_ms != null ? `${row.latency_ms}ms` : "—";
+        const suffix = row.error_message ? chalk.gray(` — ${row.error_message}`) : "";
+        const outcomeStr = outcome === "success" ? chalk.green(outcome) : chalk.red(outcome);
+        console.log(`[${ts}] ${outcomeStr} ${eventId} ${status}/${latency}${suffix}`);
+      }
+    });
 }

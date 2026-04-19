@@ -41,6 +41,7 @@ The API lives in the CLI for now. It can be extracted to its own service later w
 Two-column layout: content left, metadata sidebar right.
 
 **Left column:**
+
 - Breadcrumb: Home / Org Name
 - Org name as page title
 - Source cards (single column, stacked):
@@ -49,6 +50,7 @@ Two-column layout: content left, metadata sidebar right.
   - Latest version, date, total release count
 
 **Right sidebar:**
+
 - Domain
 - Source count
 - Total releases (large number)
@@ -62,6 +64,7 @@ Two-column layout: content left, metadata sidebar right.
 Two-column layout: content left, metadata sidebar right.
 
 **Left column:**
+
 - Breadcrumb: Org Name / Source Name (or Home / Source Name for independents)
 - Source name as page title + subtle source-type icon
 - Release list (paginated):
@@ -71,6 +74,7 @@ Two-column layout: content left, metadata sidebar right.
 - Pagination controls at bottom
 
 **Right sidebar:**
+
 - Total releases (large number)
 - Last 30 days (release count)
 - Avg per week (release rate)
@@ -81,20 +85,22 @@ Two-column layout: content left, metadata sidebar right.
 
 ## URL Structure
 
-| Page | URL |
-|------|-----|
-| Homepage | `/` |
-| Org | `/:orgSlug` |
+| Page                    | URL                     |
+| ----------------------- | ----------------------- |
+| Homepage                | `/`                     |
+| Org                     | `/:orgSlug`             |
 | Source (org-affiliated) | `/:orgSlug/:sourceSlug` |
-| Source (independent) | `/source/:slug` |
-| Search results | `/search?q=` |
+| Source (independent)    | `/source/:slug`         |
+| Search results          | `/search?q=`            |
 
 ## API Endpoints
 
 New `api` command in the CLI starts a Bun HTTP server. All endpoints are read-only (`GET`), return JSON, support CORS.
 
 ### `GET /api/stats`
+
 Top-level counts for the homepage.
+
 ```json
 {
   "orgs": 142,
@@ -104,20 +110,26 @@ Top-level counts for the homepage.
 ```
 
 ### `GET /api/orgs`
+
 List all organizations with source counts.
+
 ```json
-[{
-  "slug": "vercel",
-  "name": "Vercel",
-  "domain": "vercel.com",
-  "sourceCount": 8,
-  "releaseCount": 412,
-  "lastActivity": "2026-03-24T00:00:00Z"
-}]
+[
+  {
+    "slug": "vercel",
+    "name": "Vercel",
+    "domain": "vercel.com",
+    "sourceCount": 8,
+    "releaseCount": 412,
+    "lastActivity": "2026-03-24T00:00:00Z"
+  }
+]
 ```
 
 ### `GET /api/orgs/:slug`
+
 Org detail with sources list and activity metrics.
+
 ```json
 {
   "slug": "vercel",
@@ -132,19 +144,23 @@ Org detail with sources list and activity metrics.
     { "platform": "github", "handle": "vercel" },
     { "platform": "github", "handle": "vercel-labs" }
   ],
-  "sources": [{
-    "slug": "next-js",
-    "name": "Next.js",
-    "type": "github",
-    "releaseCount": 247,
-    "latestVersion": "v15.3.1",
-    "latestDate": "2026-03-24T00:00:00Z"
-  }]
+  "sources": [
+    {
+      "slug": "next-js",
+      "name": "Next.js",
+      "type": "github",
+      "releaseCount": 247,
+      "latestVersion": "v15.3.1",
+      "latestDate": "2026-03-24T00:00:00Z"
+    }
+  ]
 }
 ```
 
 ### `GET /api/sources/:slug`
+
 Source detail with paginated releases.
+
 ```json
 {
   "slug": "next-js",
@@ -158,13 +174,15 @@ Source detail with paginated releases.
   "latestVersion": "v15.3.1",
   "latestDate": "2026-03-24T00:00:00Z",
   "trackingSince": "2026-01-12T00:00:00Z",
-  "releases": [{
-    "version": "v15.3.1",
-    "title": "Improved Turbopack stability",
-    "summary": "Bug fixes for Turbopack HMR, improved CSS module resolution...",
-    "publishedAt": "2026-03-24T00:00:00Z",
-    "url": "https://github.com/vercel/next.js/releases/tag/v15.3.1"
-  }],
+  "releases": [
+    {
+      "version": "v15.3.1",
+      "title": "Improved Turbopack stability",
+      "summary": "Bug fixes for Turbopack HMR, improved CSS module resolution...",
+      "publishedAt": "2026-03-24T00:00:00Z",
+      "url": "https://github.com/vercel/next.js/releases/tag/v15.3.1"
+    }
+  ],
   "pagination": {
     "page": 1,
     "pageSize": 20,
@@ -173,41 +191,51 @@ Source detail with paginated releases.
   }
 }
 ```
+
 Query params: `?page=1&pageSize=20`
 
 ### `GET /api/sources`
+
 List all sources. Used for the "Independent Projects" homepage section.
 Query param: `?independent=true` returns only sources where `orgId` is null.
 Without the param, returns all sources.
+
 ```json
-[{
-  "slug": "htmx",
-  "name": "htmx",
-  "type": "github",
-  "url": "https://github.com/bigskysoftware/htmx",
-  "orgSlug": null,
-  "releaseCount": 42,
-  "latestVersion": "v2.0.4",
-  "latestDate": "2026-03-20T00:00:00Z"
-}]
+[
+  {
+    "slug": "htmx",
+    "name": "htmx",
+    "type": "github",
+    "url": "https://github.com/bigskysoftware/htmx",
+    "orgSlug": null,
+    "releaseCount": 42,
+    "latestVersion": "v2.0.4",
+    "latestDate": "2026-03-20T00:00:00Z"
+  }
+]
 ```
 
 ### `GET /api/search?q=`
+
 Full-text search across releases.
+
 ```json
 {
   "query": "turbopack",
-  "results": [{
-    "sourceSlug": "next-js",
-    "sourceName": "Next.js",
-    "orgSlug": "vercel",
-    "version": "v15.3.1",
-    "title": "Improved Turbopack stability",
-    "summary": "Bug fixes for Turbopack HMR...",
-    "publishedAt": "2026-03-24T00:00:00Z"
-  }]
+  "results": [
+    {
+      "sourceSlug": "next-js",
+      "sourceName": "Next.js",
+      "orgSlug": "vercel",
+      "version": "v15.3.1",
+      "title": "Improved Turbopack stability",
+      "summary": "Bug fixes for Turbopack HMR...",
+      "publishedAt": "2026-03-24T00:00:00Z"
+    }
+  ]
 }
 ```
+
 Query params: `?q=&limit=20&offset=0`. The `total` field is omitted — the client detects end-of-results when fewer than `limit` results are returned. This avoids a separate FTS5 count query.
 
 ## URL-to-API Resolution
@@ -219,6 +247,7 @@ If the source's `orgSlug` doesn't match the URL's org segment, redirect to the c
 ## API Error Responses
 
 All error responses use a consistent shape:
+
 ```json
 {
   "error": "not_found",
@@ -226,11 +255,11 @@ All error responses use a consistent shape:
 }
 ```
 
-| Status | When |
-|--------|------|
-| 400 | Missing required query param (e.g. `q` on search), invalid `page`/`pageSize` |
-| 404 | Unknown org or source slug |
-| 500 | Unexpected server error |
+| Status | When                                                                         |
+| ------ | ---------------------------------------------------------------------------- |
+| 400    | Missing required query param (e.g. `q` on search), invalid `page`/`pageSize` |
+| 404    | Unknown org or source slug                                                   |
+| 500    | Unexpected server error                                                      |
 
 Search with empty or missing `q` returns 400.
 

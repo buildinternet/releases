@@ -48,9 +48,7 @@ describe("Organizations CRUD", () => {
 
   it("inserts an org with auto-generated ID and timestamps", () => {
     const db = getDb();
-    db.insert(organizations)
-      .values({ name: "Acme Corp", slug: "acme" })
-      .run();
+    db.insert(organizations).values({ name: "Acme Corp", slug: "acme" }).run();
 
     const rows = db.select().from(organizations).all();
     expect(rows).toHaveLength(1);
@@ -62,15 +60,9 @@ describe("Organizations CRUD", () => {
 
   it("finds an org by slug", () => {
     const db = getDb();
-    db.insert(organizations)
-      .values({ name: "Vercel", slug: "vercel" })
-      .run();
+    db.insert(organizations).values({ name: "Vercel", slug: "vercel" }).run();
 
-    const found = db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.slug, "vercel"))
-      .get();
+    const found = db.select().from(organizations).where(eq(organizations.slug, "vercel")).get();
 
     expect(found).toBeDefined();
     expect(found!.name).toBe("Vercel");
@@ -78,29 +70,19 @@ describe("Organizations CRUD", () => {
 
   it("persists category on insert", () => {
     const db = getDb();
-    db.insert(organizations)
-      .values({ name: "OpenAI", slug: "openai", category: "ai" })
-      .run();
+    db.insert(organizations).values({ name: "OpenAI", slug: "openai", category: "ai" }).run();
 
-    const row = db
-      .select()
-      .from(organizations)
-      .where(eq(organizations.slug, "openai"))
-      .get();
+    const row = db.select().from(organizations).where(eq(organizations.slug, "openai")).get();
 
     expect(row!.category).toBe("ai");
   });
 
   it("rejects duplicate slugs", () => {
     const db = getDb();
-    db.insert(organizations)
-      .values({ name: "First", slug: "same-slug" })
-      .run();
+    db.insert(organizations).values({ name: "First", slug: "same-slug" }).run();
 
     expect(() => {
-      db.insert(organizations)
-        .values({ name: "Second", slug: "same-slug" })
-        .run();
+      db.insert(organizations).values({ name: "Second", slug: "same-slug" }).run();
     }).toThrow();
   });
 
@@ -117,9 +99,7 @@ describe("Organizations CRUD", () => {
 
   it("avatarUrl defaults to null when not provided", () => {
     const db = getDb();
-    db.insert(organizations)
-      .values({ name: "No Avatar", slug: "no-avatar" })
-      .run();
+    db.insert(organizations).values({ name: "No Avatar", slug: "no-avatar" }).run();
 
     const row = db.select().from(organizations).where(eq(organizations.slug, "no-avatar")).get();
     expect(row).toBeDefined();
@@ -443,11 +423,7 @@ describe("Releases", () => {
       ])
       .run();
 
-    const visible = db
-      .select()
-      .from(releases)
-      .where(eq(releases.suppressed, false))
-      .all();
+    const visible = db.select().from(releases).where(eq(releases.suppressed, false)).all();
 
     expect(visible).toHaveLength(1);
     expect(visible[0].title).toBe("Visible");
@@ -483,15 +459,9 @@ describe("Org Accounts", () => {
 
   it("links a GitHub account to an org", () => {
     const db = getDb();
-    db.insert(orgAccounts)
-      .values({ orgId, platform: "github", handle: "acme-corp" })
-      .run();
+    db.insert(orgAccounts).values({ orgId, platform: "github", handle: "acme-corp" }).run();
 
-    const rows = db
-      .select()
-      .from(orgAccounts)
-      .where(eq(orgAccounts.orgId, orgId))
-      .all();
+    const rows = db.select().from(orgAccounts).where(eq(orgAccounts.orgId, orgId)).all();
 
     expect(rows).toHaveLength(1);
     expect(rows[0].platform).toBe("github");
@@ -500,16 +470,10 @@ describe("Org Accounts", () => {
 
   it("enforces unique (platform, handle) constraint", () => {
     const db = getDb();
-    db.insert(orgAccounts)
-      .values({ orgId, platform: "github", handle: "unique-handle" })
-      .run();
+    db.insert(orgAccounts).values({ orgId, platform: "github", handle: "unique-handle" }).run();
 
     // Even for a different org, same platform+handle should fail
-    const org2 = db
-      .insert(organizations)
-      .values({ name: "Org2", slug: "org2" })
-      .returning()
-      .get();
+    const org2 = db.insert(organizations).values({ name: "Org2", slug: "org2" }).returning().get();
 
     expect(() => {
       db.insert(orgAccounts)
@@ -520,9 +484,7 @@ describe("Org Accounts", () => {
 
   it("cascades delete when org is removed", () => {
     const db = getDb();
-    db.insert(orgAccounts)
-      .values({ orgId, platform: "github", handle: "cascade-test" })
-      .run();
+    db.insert(orgAccounts).values({ orgId, platform: "github", handle: "cascade-test" }).run();
 
     // Verify account exists
     let accounts = db.select().from(orgAccounts).all();
@@ -566,9 +528,7 @@ describe("Products", () => {
 
   it("creates a product under an org", () => {
     const db = getDb();
-    db.insert(products)
-      .values({ name: "Next.js", slug: "nextjs", orgId })
-      .run();
+    db.insert(products).values({ name: "Next.js", slug: "nextjs", orgId }).run();
 
     const rows = db.select().from(products).where(eq(products.orgId, orgId)).all();
     expect(rows).toHaveLength(1);
@@ -578,9 +538,7 @@ describe("Products", () => {
 
   it("cascades delete when org is removed", () => {
     const db = getDb();
-    db.insert(products)
-      .values({ name: "Turborepo", slug: "turborepo", orgId })
-      .run();
+    db.insert(products).values({ name: "Turborepo", slug: "turborepo", orgId }).run();
 
     db.delete(organizations).where(eq(organizations.id, orgId)).run();
 
@@ -648,11 +606,7 @@ describe("Tags", () => {
 
   it("associates a tag with an org via orgTags", () => {
     const db = getDb();
-    const tag = db
-      .insert(tags)
-      .values({ name: "Edge", slug: "edge" })
-      .returning()
-      .get();
+    const tag = db.insert(tags).values({ name: "Edge", slug: "edge" }).returning().get();
 
     db.insert(orgTags).values({ orgId, tagId: tag.id }).run();
 
@@ -663,19 +617,11 @@ describe("Tags", () => {
 
   it("associates a tag with a product via productTags", () => {
     const db = getDb();
-    const tag = db
-      .insert(tags)
-      .values({ name: "React", slug: "react" })
-      .returning()
-      .get();
+    const tag = db.insert(tags).values({ name: "React", slug: "react" }).returning().get();
 
     db.insert(productTags).values({ productId, tagId: tag.id }).run();
 
-    const rows = db
-      .select()
-      .from(productTags)
-      .where(eq(productTags.productId, productId))
-      .all();
+    const rows = db.select().from(productTags).where(eq(productTags.productId, productId)).all();
     expect(rows).toHaveLength(1);
     expect(rows[0].tagId).toBe(tag.id);
   });
@@ -697,11 +643,7 @@ describe("Tags", () => {
 
   it("enforces unique constraint on productTags join", () => {
     const db = getDb();
-    const tag = db
-      .insert(tags)
-      .values({ name: "CLI", slug: "cli" })
-      .returning()
-      .get();
+    const tag = db.insert(tags).values({ name: "CLI", slug: "cli" }).returning().get();
 
     db.insert(productTags).values({ productId, tagId: tag.id }).run();
 
@@ -752,11 +694,7 @@ describe("Ignored URLs", () => {
       .values({ url: "https://spam.example.com", orgId: orgId1, reason: "not a changelog" })
       .run();
 
-    const rows = db
-      .select()
-      .from(ignoredUrls)
-      .where(eq(ignoredUrls.orgId, orgId1))
-      .all();
+    const rows = db.select().from(ignoredUrls).where(eq(ignoredUrls.orgId, orgId1)).all();
 
     expect(rows).toHaveLength(1);
     expect(rows[0].url).toBe("https://spam.example.com");
@@ -776,14 +714,10 @@ describe("Ignored URLs", () => {
 
   it("rejects duplicate (org, url) pairs", () => {
     const db = getDb();
-    db.insert(ignoredUrls)
-      .values({ url: "https://dupe.example.com", orgId: orgId1 })
-      .run();
+    db.insert(ignoredUrls).values({ url: "https://dupe.example.com", orgId: orgId1 }).run();
 
     expect(() => {
-      db.insert(ignoredUrls)
-        .values({ url: "https://dupe.example.com", orgId: orgId1 })
-        .run();
+      db.insert(ignoredUrls).values({ url: "https://dupe.example.com", orgId: orgId1 }).run();
     }).toThrow();
   });
 });
@@ -811,9 +745,7 @@ describe("Blocked URLs", () => {
 
   it("enforces unique pattern constraint", () => {
     const db = getDb();
-    db.insert(blockedUrls)
-      .values({ pattern: "https://bad.example.com/page", type: "exact" })
-      .run();
+    db.insert(blockedUrls).values({ pattern: "https://bad.example.com/page", type: "exact" }).run();
 
     expect(() => {
       db.insert(blockedUrls)

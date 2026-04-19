@@ -13,19 +13,19 @@ export function registerCompareCommand(program: Command) {
     .argument("<slugB>", "Second source slug")
     .option("-d, --days <n>", "Number of days to look back", "30")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases compare next-js remix
   releases compare next-js remix --days 7
-  releases compare next-js remix --json`)
+  releases compare next-js remix --json`,
+    )
     .action(async (slugA: string, slugB: string, opts: { days: string; json?: boolean }) => {
       const days = parseInt(opts.days, 10);
       const cutoff = daysAgoIso(days);
 
-      const [sourceA, sourceB] = await Promise.all([
-        findSource(slugA),
-        findSource(slugB),
-      ]);
+      const [sourceA, sourceB] = await Promise.all([findSource(slugA), findSource(slugB)]);
 
       if (!sourceA) {
         console.error(chalk.red(`Source not found: ${slugA}`));
@@ -42,9 +42,7 @@ Examples:
       ]);
 
       if (releasesA.length === 0 && releasesB.length === 0) {
-        console.log(
-          chalk.yellow(`No releases found for either source in the last ${days} days.`),
-        );
+        console.log(chalk.yellow(`No releases found for either source in the last ${days} days.`));
         return;
       }
 

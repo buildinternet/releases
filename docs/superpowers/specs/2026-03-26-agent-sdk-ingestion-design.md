@@ -9,6 +9,7 @@ Released currently ingests changelogs from non-GitHub sources using a multi-step
 3. **The scrape adapter** (`src/adapters/scrape.ts`) assigns URLs and maps to `RawRelease[]`
 
 This pipeline has known limitations:
+
 - Individual entry URLs are lost (all releases get the source URL or synthetic fragments)
 - Cloudflare's crawl API is unreliable for some sites (e.g., Resend — only returned the index page)
 - The rendering and parsing steps are separated, losing page context (links, structure) between them
@@ -31,6 +32,7 @@ Add a new `agent` adapter type alongside the existing `scrape` adapter (don't re
 ### New adapter: `src/adapters/agent.ts`
 
 Uses the Claude Agent SDK's `query()` function with:
+
 - **Tools:** `WebFetch`, `WebSearch` (for sitemap discovery)
 - **Model:** Haiku-class (proven sufficient for extraction)
 - **System prompt:** Structured extraction instructions with output schema
@@ -92,7 +94,7 @@ for await (const message of query({
   prompt,
   options: {
     allowedTools: ["WebFetch", "WebSearch"],
-    model: "haiku",  // or configured via RELEASED_INGEST_MODEL
+    model: "haiku", // or configured via RELEASED_INGEST_MODEL
     permissionMode: "default",
   },
 })) {

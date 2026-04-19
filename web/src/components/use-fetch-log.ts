@@ -35,15 +35,7 @@ function buildUrl(base: string, params: Record<string, string | null | undefined
   return `${base}${qs.toString() ? `?${qs}` : ""}`;
 }
 
-export function useFetchLog({
-  apiUrl,
-  apiKey,
-  after,
-  before,
-  org,
-  status,
-  pageSize = 25,
-}: Params) {
+export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSize = 25 }: Params) {
   const [state, setState] = useState<State>({
     entries: [],
     nextCursor: null,

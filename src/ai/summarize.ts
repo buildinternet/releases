@@ -82,7 +82,9 @@ export async function generateSummary(input: SummaryInput): Promise<SummaryResul
   const model = config.summaryModel();
   const systemPrompt = type === "rolling" ? ROLLING_SYSTEM_PROMPT : MONTHLY_SYSTEM_PROMPT;
 
-  const productLabel = orgDescription?.trim() ? `${sourceName} (${orgDescription.trim()})` : sourceName;
+  const productLabel = orgDescription?.trim()
+    ? `${sourceName} (${orgDescription.trim()})`
+    : sourceName;
 
   const userMessage =
     type === "rolling"

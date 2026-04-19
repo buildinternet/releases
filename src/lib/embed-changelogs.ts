@@ -118,10 +118,7 @@ export function chunkChangelog(content: string): Chunk[] {
     if (chunks.length > 0) {
       const prev = chunks[chunks.length - 1];
       const prevStart = prev.offset;
-      startOffset = Math.max(
-        slice.offset - CHUNK_CHAR_OVERLAP_STEP,
-        prevStart + 1,
-      );
+      startOffset = Math.max(slice.offset - CHUNK_CHAR_OVERLAP_STEP, prevStart + 1);
     }
 
     const text = content.slice(startOffset, snappedEnd);
@@ -176,10 +173,7 @@ export interface DiffResult {
  * Each existing row is consumed at most once; if `next` contains duplicate
  * hashes the unmatched copies fall through to toInsert.
  */
-export function diffChunks(args: {
-  existing: ExistingChunkRow[];
-  next: Chunk[];
-}): DiffResult {
+export function diffChunks(args: { existing: ExistingChunkRow[]; next: Chunk[] }): DiffResult {
   const { existing, next } = args;
 
   const existingByHash = new Map<string, ExistingChunkRow[]>();
@@ -224,9 +218,6 @@ export function diffChunks(args: {
  *   targeted and IDs from different files cannot collide even on
  *   improbable hash overlap.
  */
-export function buildVectorId(
-  sourceChangelogFileId: string,
-  contentHash: string,
-): string {
+export function buildVectorId(sourceChangelogFileId: string, contentHash: string): string {
   return `chunk_${contentHash.slice(0, 12)}_${sourceChangelogFileId}`;
 }

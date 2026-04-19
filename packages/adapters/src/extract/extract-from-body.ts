@@ -44,15 +44,18 @@ export async function extractFromBody(
 ): Promise<ExtractFromBodyResult> {
   const { anthropicClient, agentModel, logger } = deps;
 
-  const content = opts.body.length > MAX_BODY_CHARS
-    ? opts.body.slice(0, MAX_BODY_CHARS) + "\n\n[Content truncated]"
-    : opts.body;
+  const content =
+    opts.body.length > MAX_BODY_CHARS
+      ? opts.body.slice(0, MAX_BODY_CHARS) + "\n\n[Content truncated]"
+      : opts.body;
 
   const approxTokens = countTokensSafe(content);
   const isHuge = approxTokens >= HUGE_BODY_TOKEN_THRESHOLD;
   const isLarge = approxTokens >= LARGE_BODY_TOKEN_THRESHOLD;
   if (isLarge) {
-    logger.info(`Body is ~${approxTokens.toLocaleString()} tokens — applying ${isHuge ? "huge" : "large"}-body guardrails`);
+    logger.info(
+      `Body is ~${approxTokens.toLocaleString()} tokens — applying ${isHuge ? "huge" : "large"}-body guardrails`,
+    );
   }
 
   const systemBlocks: Anthropic.TextBlockParam[] = [
@@ -72,9 +75,7 @@ export async function extractFromBody(
     system: systemBlocks,
     tools: [extractReleasesToolFull],
     tool_choice: { type: "tool", name: "extract_releases" },
-    messages: [
-      { role: "user", content: `${opts.userMessage}\n\n${content}` },
-    ],
+    messages: [{ role: "user", content: `${opts.userMessage}\n\n${content}` }],
   });
   const response = await stream.finalMessage();
 
@@ -83,7 +84,9 @@ export async function extractFromBody(
   const hitMaxTokens = response.stop_reason === "max_tokens";
 
   if (hitMaxTokens) {
-    logger.warn("AI extraction hit max_tokens — some entries may be lost; content hash will not be persisted so retry can run on the same body");
+    logger.warn(
+      "AI extraction hit max_tokens — some entries may be lost; content hash will not be persisted so retry can run on the same body",
+    );
   }
 
   const toolBlock = response.content.find((b) => b.type === "tool_use");

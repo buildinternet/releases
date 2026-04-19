@@ -65,7 +65,9 @@ export async function* streamReleases(opts: StreamOptions): AsyncGenerator<Strea
         if (m.type === "ready") lastSeq = Math.max(lastSeq, m.seq);
         if (m.type === "release.created") lastSeq = Math.max(lastSeq, m.seq);
         push(m);
-      } catch { /* ignore malformed frames */ }
+      } catch {
+        /* ignore malformed frames */
+      }
     });
     ws.addEventListener("close", () => finish());
     ws.addEventListener("error", () => finish());
@@ -77,7 +79,9 @@ export async function* streamReleases(opts: StreamOptions): AsyncGenerator<Strea
         continue;
       }
       if (closed) break;
-      const next = await new Promise<{ done: boolean; value?: StreamMessage }>((resolve) => pending.push(resolve));
+      const next = await new Promise<{ done: boolean; value?: StreamMessage }>((resolve) =>
+        pending.push(resolve),
+      );
       if (next.done) break;
       yield next.value!;
     }

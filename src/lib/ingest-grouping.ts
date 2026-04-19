@@ -1,10 +1,6 @@
 import { daysAgoIso } from "@releases/core-internal/dates";
 import { getRecentReleasesByOrg, linkReleaseCoverage } from "../db/queries.js";
-import {
-  groupReleases,
-  rowsToCandidates,
-  writeCoverageClusters,
-} from "../ai/grouping.js";
+import { groupReleases, rowsToCandidates, writeCoverageClusters } from "../ai/grouping.js";
 import { decidedByAgent } from "../db/schema-coverage.js";
 
 /** Same-org lookback for ingest-time candidate selection. */

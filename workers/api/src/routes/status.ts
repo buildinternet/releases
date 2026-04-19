@@ -94,9 +94,10 @@ statusRoutes.get("/status/fetch-log", async (c) => {
       .where(scope.length > 0 ? and(...scope) : undefined)
       .groupBy(fetchLog.status);
 
-    statusCounts = Object.fromEntries(
-      FETCH_LOG_STATUSES.map((s) => [s, 0]),
-    ) as Record<FetchLogStatus, number>;
+    statusCounts = Object.fromEntries(FETCH_LOG_STATUSES.map((s) => [s, 0])) as Record<
+      FetchLogStatus,
+      number
+    >;
     totalCount = 0;
     for (const row of grouped) {
       const n = Number(row.n);
@@ -128,10 +129,12 @@ statusRoutes.get("/status/usage", async (c) => {
 
 statusRoutes.post("/status/event", async (c) => {
   const event = await c.req.json();
-  await getStatusHub(c.env).fetch(new Request("https://do/event", {
-    method: "POST",
-    body: JSON.stringify(event),
-    headers: { "Content-Type": "application/json" },
-  }));
+  await getStatusHub(c.env).fetch(
+    new Request("https://do/event", {
+      method: "POST",
+      body: JSON.stringify(event),
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
   return c.json({ ok: true });
 });

@@ -11,7 +11,6 @@
         "@buildinternet/releases-skills": "^0.13.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@releases/adapters": "workspace:*",
-        "@releases/ai-internal": "workspace:*",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
         "chalk": "^5.6.2",
@@ -30,6 +29,7 @@
         "drizzle-kit": "^0.31.10",
         "hono": "^4.12.14",
         "oxlint": "^1.60.0",
+        "prettier": "^3.8.3",
         "typescript": "^6.0.3",
         "wrangler": "^4.83.0",
       },
@@ -41,14 +41,6 @@
         "@anthropic-ai/sdk": "^0.88.0",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
-      },
-    },
-    "packages/ai": {
-      "name": "@releases/ai-internal",
-      "version": "0.0.0",
-      "dependencies": {
-        "@releases/adapters": "workspace:*",
-        "@releases/core-internal": "workspace:*",
       },
     },
     "packages/core": {
@@ -401,8 +393,6 @@
     "@poppinss/exception": ["@poppinss/exception@1.2.3", "", {}, "sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw=="],
 
     "@releases/adapters": ["@releases/adapters@workspace:packages/adapters"],
-
-    "@releases/ai-internal": ["@releases/ai-internal@workspace:packages/ai"],
 
     "@releases/core-internal": ["@releases/core-internal@workspace:packages/core"],
 
@@ -1215,6 +1205,8 @@
     "postcss-selector-parser": ["postcss-selector-parser@6.0.10", "", { "dependencies": { "cssesc": "^3.0.0", "util-deprecate": "^1.0.2" } }, "sha512-IQ7TZdoaqbT+LCpShg46jnZVlhWD2w6iQYAcYXfHARZ7X1t/UGhhceQDs5X0cGqKvYlHNOuv7Oa1xmb0oQuA3w=="],
 
     "prebuild-install": ["prebuild-install@7.1.3", "", { "dependencies": { "detect-libc": "^2.0.0", "expand-template": "^2.0.3", "github-from-package": "0.0.0", "minimist": "^1.2.3", "mkdirp-classic": "^0.5.3", "napi-build-utils": "^2.0.0", "node-abi": "^3.3.0", "pump": "^3.0.0", "rc": "^1.2.7", "simple-get": "^4.0.0", "tar-fs": "^2.0.0", "tunnel-agent": "^0.6.0" }, "bin": { "prebuild-install": "bin.js" } }, "sha512-8Mf2cbV7x1cXPUILADGI3wuhfqWvtiLA1iclTDbFRZkgRQS0NqsPZphna9V+HyTEadheuPmjaJMsbzKQFOzLug=="],
+
+    "prettier": ["prettier@3.8.3", "", { "bin": { "prettier": "bin/prettier.cjs" } }, "sha512-7igPTM53cGHMW8xWuVTydi2KO233VFiTNyF5hLJqpilHfmn8C8gPf+PS7dUT64YcXFbiMGZxS9pCSxL/Dxm/Jw=="],
 
     "pretty-ms": ["pretty-ms@7.0.1", "", { "dependencies": { "parse-ms": "^2.1.0" } }, "sha512-973driJZvxiGOQ5ONsFhOF/DtzPMOMtgC11kCpUrPGMTgqp2q/1gwzCquocrN33is0VZ5GFHXZYMM9l6h67v2Q=="],
 

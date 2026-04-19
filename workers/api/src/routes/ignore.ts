@@ -19,7 +19,9 @@ ignoreRoutes.get("/orgs/:slug/ignored-urls", async (c) => {
   const singleUrl = c.req.query("url");
   if (singleUrl && c.req.query("single")) {
     const decoded = decodeURIComponent(singleUrl);
-    const [row] = await db.select().from(ignoredUrls)
+    const [row] = await db
+      .select()
+      .from(ignoredUrls)
       .where(and(eq(ignoredUrls.orgId, org.id), eq(ignoredUrls.url, decoded)));
     return c.json(row ?? null);
   }
@@ -36,14 +38,18 @@ ignoreRoutes.post("/orgs/:slug/ignored-urls", async (c) => {
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const body = await c.req.json<{ url: string; reason?: string }>();
-  if (!body.url) return c.json({ error: "bad_request", message: "Missing required field: url" }, 400);
+  if (!body.url)
+    return c.json({ error: "bad_request", message: "Missing required field: url" }, 400);
 
-  await db.insert(ignoredUrls).values({
-    url: body.url,
-    orgId: org.id,
-    reason: body.reason ?? null,
-    ignoredAt: new Date().toISOString(),
-  }).onConflictDoNothing();
+  await db
+    .insert(ignoredUrls)
+    .values({
+      url: body.url,
+      orgId: org.id,
+      reason: body.reason ?? null,
+      ignoredAt: new Date().toISOString(),
+    })
+    .onConflictDoNothing();
 
   return c.json({ ignored: true }, 201);
 });
@@ -56,8 +62,7 @@ ignoreRoutes.delete("/orgs/:slug/ignored-urls/:url", async (c) => {
   const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  await db.delete(ignoredUrls)
-    .where(and(eq(ignoredUrls.orgId, org.id), eq(ignoredUrls.url, url)));
+  await db.delete(ignoredUrls).where(and(eq(ignoredUrls.orgId, org.id), eq(ignoredUrls.url, url)));
   return c.json({ deleted: true });
 });
 
@@ -70,8 +75,14 @@ ignoreRoutes.get("/blocked-urls", async (c) => {
   if (singleUrl && c.req.query("single")) {
     const decoded = decodeURIComponent(singleUrl);
     let domain = "";
-    try { domain = new URL(decoded).hostname; } catch { /* skip domain match */ }
-    const rows = await db.select().from(blockedUrls)
+    try {
+      domain = new URL(decoded).hostname;
+    } catch {
+      /* skip domain match */
+    }
+    const rows = await db
+      .select()
+      .from(blockedUrls)
       .where(
         or(
           and(eq(blockedUrls.pattern, decoded), eq(blockedUrls.type, "exact")),
@@ -91,14 +102,18 @@ ignoreRoutes.post("/blocked-urls", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ pattern: string; type?: "exact" | "domain"; reason?: string }>();
 
-  if (!body.pattern) return c.json({ error: "bad_request", message: "Missing required field: pattern" }, 400);
+  if (!body.pattern)
+    return c.json({ error: "bad_request", message: "Missing required field: pattern" }, 400);
 
-  await db.insert(blockedUrls).values({
-    pattern: body.pattern,
-    type: body.type ?? "exact",
-    reason: body.reason ?? null,
-    createdAt: new Date().toISOString(),
-  }).onConflictDoNothing();
+  await db
+    .insert(blockedUrls)
+    .values({
+      pattern: body.pattern,
+      type: body.type ?? "exact",
+      reason: body.reason ?? null,
+      createdAt: new Date().toISOString(),
+    })
+    .onConflictDoNothing();
 
   return c.json({ blocked: true }, 201);
 });

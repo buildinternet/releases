@@ -36,21 +36,13 @@ describe("computeMedianGapDays", () => {
   });
 
   it("handles out-of-order input by sorting first", () => {
-    const dates = [
-      "2026-04-14T00:00:00Z",
-      "2026-04-01T00:00:00Z",
-      "2026-04-08T00:00:00Z",
-    ];
+    const dates = ["2026-04-14T00:00:00Z", "2026-04-01T00:00:00Z", "2026-04-08T00:00:00Z"];
     // Sorted: 04-01, 04-08, 04-14 → gaps [7, 6] → median = 6.5
     expect(computeMedianGapDays(dates)).toBe(6.5);
   });
 
   it("drops invalid timestamps rather than poisoning the median", () => {
-    const dates = [
-      "2026-04-01T00:00:00Z",
-      "not-a-date",
-      "2026-04-08T00:00:00Z",
-    ];
+    const dates = ["2026-04-01T00:00:00Z", "not-a-date", "2026-04-08T00:00:00Z"];
     expect(computeMedianGapDays(dates)).toBe(7);
   });
 });

@@ -70,7 +70,14 @@ export interface WeeklyBucket {
 }
 
 /** Parse raw weekly bucket data from API into WeeklyBucket objects. */
-export function parseBuckets(raw: Array<{ weekStart: string; count: number; earliestVersion?: string | null; latestVersion?: string | null }>): WeeklyBucket[] {
+export function parseBuckets(
+  raw: Array<{
+    weekStart: string;
+    count: number;
+    earliestVersion?: string | null;
+    latestVersion?: string | null;
+  }>,
+): WeeklyBucket[] {
   return raw.map((b) => ({
     weekStart: new Date(b.weekStart),
     count: b.count,
@@ -79,11 +86,7 @@ export function parseBuckets(raw: Array<{ weekStart: string; count: number; earl
   }));
 }
 
-export function bucketByWeek(
-  dates: Date[],
-  rangeStart: Date,
-  rangeEnd: Date,
-): WeeklyBucket[] {
+export function bucketByWeek(dates: Date[], rangeStart: Date, rangeEnd: Date): WeeklyBucket[] {
   const weekMs = WEEK_MS;
   const totalMs = rangeEnd.getTime() - rangeStart.getTime();
   const bucketCount = Math.max(1, Math.ceil(totalMs / weekMs));

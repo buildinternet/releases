@@ -17,7 +17,9 @@ export default function StatusPage() {
       <Header />
       <div className="max-w-5xl mx-auto px-6 pt-8 pb-12">
         <div className="flex items-center justify-between mb-6">
-          <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100">Status</h1>
+          <h1 className="text-xl font-bold tracking-tight text-stone-900 dark:text-stone-100">
+            Status
+          </h1>
         </div>
         <StatusDashboard apiUrl={apiUrl} apiKey={apiKey} />
       </div>

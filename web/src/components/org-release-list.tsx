@@ -51,13 +51,16 @@ export function OrgReleaseList({
           key={release.id ?? i}
           release={release}
           hideDate={
-            i > 0 &&
-            release.publishedAt?.slice(0, 10) ===
-              releases[i - 1].publishedAt?.slice(0, 10)
+            i > 0 && release.publishedAt?.slice(0, 10) === releases[i - 1].publishedAt?.slice(0, 10)
           }
           sourceByline={
             multipleSourcesExist
-              ? { name: release.source.name, slug: release.source.slug, orgSlug, type: release.source.type }
+              ? {
+                  name: release.source.name,
+                  slug: release.source.slug,
+                  orgSlug,
+                  type: release.source.type,
+                }
               : undefined
           }
         />

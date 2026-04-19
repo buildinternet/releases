@@ -31,8 +31,8 @@ export interface SourceMetadata {
   crawlPattern?: string;
   lastCrawlJobId?: string;
   lastCrawlAt?: string;
-  crawlMaxAge?: number;       // seconds — Cloudflare R2 cache TTL (default 86400, max 604800)
-  crawlRender?: boolean;      // false = skip headless browser, fast HTML-only fetch
+  crawlMaxAge?: number; // seconds — Cloudflare R2 cache TTL (default 86400, max 604800)
+  crawlRender?: boolean; // false = skip headless browser, fast HTML-only fetch
   crawlSource?: "all" | "sitemaps" | "links"; // URL discovery method
 
   /** Agent/user override — true = always use headless browser, false = fast fetch OK, absent = use provider hint */
@@ -56,7 +56,7 @@ export interface SourceMetadata {
   feedContentDepth?: "full" | "summary-only";
 
   // Per-source AI guidance
-  parseInstructions?: string;  // freeform text appended to AI parsing prompts
+  parseInstructions?: string; // freeform text appended to AI parsing prompts
 
   // Summary generation
   summarize?: boolean; // false = opt-out of AI summaries
@@ -65,8 +65,8 @@ export interface SourceMetadata {
   pageEtag?: string;
   pageLastModified?: string;
   pageContentLength?: string;
-  headCheckUseless?: boolean;      // server never returns useful headers
-  headCheckSkips?: number;         // times HEAD said unchanged and content hash agreed
+  headCheckUseless?: boolean; // server never returns useful headers
+  headCheckSkips?: number; // times HEAD said unchanged and content hash agreed
   headCheckFalseNegatives?: number; // times HEAD said unchanged but content hash differed
 
   // Direct-fetch fields (agent adapter): conditional GET this URL and hand

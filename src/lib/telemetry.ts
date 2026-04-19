@@ -61,7 +61,12 @@ export function setTelemetryEnabled(enabled: boolean): void {
   }
 }
 
-function detectClientKind(): { kind: TelemetryClientKind; sessionId?: string; agentName?: string; model?: string } {
+function detectClientKind(): {
+  kind: TelemetryClientKind;
+  sessionId?: string;
+  agentName?: string;
+  model?: string;
+} {
   const envKind = process.env.RELEASED_CLIENT_KIND as TelemetryClientKind | undefined;
   if (envKind) {
     return {

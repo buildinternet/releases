@@ -13,8 +13,8 @@ interface CrawlOptions {
   includePatterns?: string[];
   limit?: number;
   modifiedSince?: number; // unix timestamp
-  maxAge?: number;            // Cloudflare R2 cache TTL in seconds
-  render?: boolean;           // false = skip headless browser rendering
+  maxAge?: number; // Cloudflare R2 cache TTL in seconds
+  render?: boolean; // false = skip headless browser rendering
   source?: "all" | "sitemaps" | "links"; // URL discovery method
 }
 
@@ -98,7 +98,7 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
     throw new AdapterError("crawl", `Failed to start crawl: ${res.status} ${text}`);
   }
 
-  const data = await res.json() as { success: boolean; result: string };
+  const data = (await res.json()) as { success: boolean; result: string };
   if (!data.success || !data.result) {
     throw new AdapterError("crawl", "Crawl API returned unexpected response");
   }
@@ -134,7 +134,7 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
       throw new AdapterError("crawl", `Failed to poll crawl ${jobId}: ${res.status}`);
     }
 
-    const data = await res.json() as {
+    const data = (await res.json()) as {
       success: boolean;
       result: {
         status: string;
@@ -146,7 +146,9 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
     };
 
     const jobStatus = data.result.status;
-    logger.debug(`Crawl ${jobId}: ${jobStatus} (${data.result.finished ?? 0}/${data.result.total ?? "?"})`);
+    logger.debug(
+      `Crawl ${jobId}: ${jobStatus} (${data.result.finished ?? 0}/${data.result.total ?? "?"})`,
+    );
 
     if (TERMINAL_STATUSES.has(jobStatus)) {
       if (jobStatus !== "completed") {
@@ -164,7 +166,7 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
           pageUrl.searchParams.set("cursor", cursor);
           const pageRes = await fetch(pageUrl.toString(), { headers: cfHeaders() });
           if (!pageRes.ok) break;
-          const pageData = await pageRes.json() as typeof data;
+          const pageData = (await pageRes.json()) as typeof data;
           pages.push(...recordsToPages(pageData.result.records ?? []));
           cursor = pageData.result_info?.cursor;
         }

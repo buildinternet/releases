@@ -7,11 +7,7 @@
 
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
-  put(
-    key: string,
-    value: string,
-    options?: { expirationTtl?: number },
-  ): Promise<void>;
+  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
 }
 
 // Sized to keep KV write volume bounded under sustained `tail -f` polling —
@@ -58,10 +54,7 @@ function isDefaultLatestRequest(p: NormalizedLatestParams): boolean {
   );
 }
 
-export function isCacheableLatestRequest(
-  key: string,
-  params: NormalizedLatestParams,
-): boolean {
+export function isCacheableLatestRequest(key: string, params: NormalizedLatestParams): boolean {
   return isDefaultLatestRequest(params) || ALLOWLISTED_CACHE_KEYS.has(key);
 }
 

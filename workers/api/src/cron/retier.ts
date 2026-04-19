@@ -20,9 +20,7 @@ const MIN_RELEASES_FOR_SIGNAL = 3;
 
 type FetchPriority = "normal" | "low" | "paused";
 
-export async function retierSources(
-  env: { DB: D1Database; CRON_ENABLED?: string },
-): Promise<void> {
+export async function retierSources(env: { DB: D1Database; CRON_ENABLED?: string }): Promise<void> {
   if (env.CRON_ENABLED === "false") {
     console.log("[retier] Disabled via CRON_ENABLED=false, skipping");
     return;
@@ -67,17 +65,18 @@ export async function retierSources(
   // cron on ~200 × D1 RTTs.
   const writes = allSources.map((src) => {
     const dates = datesBySource.get(src.id) ?? [];
-    const medianGap = dates.length >= MIN_RELEASES_FOR_SIGNAL
-      ? computeMedianGapDays(dates)
-      : null;
+    const medianGap = dates.length >= MIN_RELEASES_FOR_SIGNAL ? computeMedianGapDays(dates) : null;
     if (medianGap != null) withSignal++;
 
     const current = src.fetchPriority as FetchPriority;
-    const target = medianGap != null && current !== "paused"
-      ? classifyTier(medianGap, current)
-      : current;
+    const target =
+      medianGap != null && current !== "paused" ? classifyTier(medianGap, current) : current;
 
-    const updates: { fetchPriority?: FetchPriority; medianGapDays: number | null; lastRetieredAt: string } = {
+    const updates: {
+      fetchPriority?: FetchPriority;
+      medianGapDays: number | null;
+      lastRetieredAt: string;
+    } = {
       medianGapDays: medianGap,
       lastRetieredAt: now,
     };
@@ -111,15 +110,10 @@ export function computeMedianGapDays(isoDates: string[]): number {
   }
   gaps.sort((a, b) => a - b);
   const mid = Math.floor(gaps.length / 2);
-  return gaps.length % 2 === 0
-    ? (gaps[mid - 1] + gaps[mid]) / 2
-    : gaps[mid];
+  return gaps.length % 2 === 0 ? (gaps[mid - 1] + gaps[mid]) / 2 : gaps[mid];
 }
 
-export function classifyTier(
-  medianGapDays: number,
-  current: FetchPriority,
-): FetchPriority {
+export function classifyTier(medianGapDays: number, current: FetchPriority): FetchPriority {
   if (medianGapDays <= NORMAL_MAX_DAYS) return "normal";
   if (medianGapDays <= LOW_MAX_DAYS) return "low";
   // Above LOW_MAX: preserve current tier. Don't auto-pause (see module

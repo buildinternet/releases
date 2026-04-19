@@ -1,17 +1,44 @@
 import { Hono } from "hono";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases, knowledgePages } from "@releases/core-internal/schema";
+import {
+  organizations,
+  orgAccounts,
+  sources,
+  releases,
+  products,
+  tags,
+  orgTags,
+  domainAliases,
+  knowledgePages,
+} from "@releases/core-internal/schema";
 import { daysAgoIso } from "@releases/core-internal/dates";
 import { isValidCategory } from "@releases/core-internal/categories";
 import { toSlug } from "@releases/core-internal/slug";
-import { isConflictError, computeAvgPerWeek, getOrCreateTagsD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
+import {
+  isConflictError,
+  computeAvgPerWeek,
+  getOrCreateTagsD1,
+  orgWhere,
+  heatmapDateRange,
+  hydrateMediaUrls,
+  resolveR2Url,
+  parseBoolParam,
+} from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
-import { assemblePlaybook } from "@releases/ai-internal/playbook";
+import { assemblePlaybook } from "@releases/ai/playbook.js";
 import type { Env } from "../index.js";
-import { getOrgsWithStats, getOrgSparklines, getOrgSourcesWithStats, getOrgActivityData, getOrgHeatmapData, getOrgSourceSparklines, getOrgReleasesFeed } from "../queries/orgs.js";
+import {
+  getOrgsWithStats,
+  getOrgSparklines,
+  getOrgSourcesWithStats,
+  getOrgActivityData,
+  getOrgHeatmapData,
+  getOrgSourceSparklines,
+  getOrgReleasesFeed,
+} from "../queries/orgs.js";
 import { notDisabled } from "../queries/shared.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
@@ -33,7 +60,10 @@ orgRoutes.get("/orgs", async (c) => {
   const sparklineMap = new Map<string, number[]>();
   for (const row of sparklineRows) {
     if (!sparklineMap.has(row.org_id)) {
-      sparklineMap.set(row.org_id, Array.from({ length: 30 }, () => 0));
+      sparklineMap.set(
+        row.org_id,
+        Array.from({ length: 30 }, () => 0),
+      );
     }
     const dayDate = new Date(row.date + "T00:00:00Z");
     const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -79,7 +109,17 @@ orgRoutes.get("/orgs/:slug", async (c) => {
   const cutoff = daysAgoIso(30);
   const cutoff90d = daysAgoIso(90);
 
-  const [accounts, tagRows, orgSources, productRows, aliasRows, totalReleaseRow, latestFetchRow, knowledgePageRows, metricsRow] = await Promise.all([
+  const [
+    accounts,
+    tagRows,
+    orgSources,
+    productRows,
+    aliasRows,
+    totalReleaseRow,
+    latestFetchRow,
+    knowledgePageRows,
+    metricsRow,
+  ] = await Promise.all([
     db
       .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
       .from(orgAccounts)
@@ -130,7 +170,9 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     db
       .select()
       .from(knowledgePages)
-      .where(and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id))),
+      .where(
+        and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id)),
+      ),
 
     // Recent-release metrics — scoped via subquery so this joins the parallel
     // wave instead of blocking on orgSources.
@@ -141,10 +183,12 @@ orgRoutes.get("/orgs/:slug", async (c) => {
         oldest: min(releases.publishedAt),
       })
       .from(releases)
-      .where(and(
-        sql`${releases.sourceId} IN (SELECT id FROM sources WHERE org_id = ${org.id})`,
-        sql`${releases.publishedAt} IS NOT NULL`,
-      )),
+      .where(
+        and(
+          sql`${releases.sourceId} IN (SELECT id FROM sources WHERE org_id = ${org.id})`,
+          sql`${releases.publishedAt} IS NOT NULL`,
+        ),
+      ),
   ]);
 
   const sourcesWithStats = orgSources.map((row) => ({
@@ -179,14 +223,16 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     ? (knowledgePageRows.find((r) => r.scope === "playbook") ?? null)
     : null;
 
-  const overviewData = knowledgeRow ? {
-    scope: knowledgeRow.scope as "org",
-    content: knowledgeRow.content,
-    releaseCount: knowledgeRow.releaseCount,
-    lastContributingReleaseAt: knowledgeRow.lastContributingReleaseAt,
-    generatedAt: knowledgeRow.generatedAt,
-    updatedAt: knowledgeRow.updatedAt,
-  } : null;
+  const overviewData = knowledgeRow
+    ? {
+        scope: knowledgeRow.scope as "org",
+        content: knowledgeRow.content,
+        releaseCount: knowledgeRow.releaseCount,
+        lastContributingReleaseAt: knowledgeRow.lastContributingReleaseAt,
+        generatedAt: knowledgeRow.generatedAt,
+        updatedAt: knowledgeRow.updatedAt,
+      }
+    : null;
 
   const result = {
     id: org.id,
@@ -208,11 +254,13 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     sources: sourcesWithStats,
     overview: overviewData,
     knowledgePage: overviewData, // deprecated — use overview
-    playbook: playbookRow ? {
-      scope: playbookRow.scope as "playbook",
-      content: assemblePlaybook(playbookRow.content, playbookRow.notes),
-      updatedAt: playbookRow.updatedAt,
-    } : null,
+    playbook: playbookRow
+      ? {
+          scope: playbookRow.scope as "playbook",
+          content: assemblePlaybook(playbookRow.content, playbookRow.notes),
+          updatedAt: playbookRow.updatedAt,
+        }
+      : null,
   };
 
   if (wantsMarkdown(c)) {
@@ -231,9 +279,17 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
 orgRoutes.post("/orgs", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ name: string; slug?: string; domain?: string; description?: string; category?: string; tags?: string[] }>();
+  const body = await c.req.json<{
+    name: string;
+    slug?: string;
+    domain?: string;
+    description?: string;
+    category?: string;
+    tags?: string[];
+  }>();
 
-  if (!body.name) return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+  if (!body.name)
+    return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
 
   if (body.category && !isValidCategory(body.category)) {
     return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
@@ -245,7 +301,15 @@ orgRoutes.post("/orgs", async (c) => {
   try {
     const [org] = await db
       .insert(organizations)
-      .values({ name: body.name, slug, domain: body.domain ?? null, description: body.description ?? null, category: body.category ?? null, createdAt: now, updatedAt: now })
+      .values({
+        name: body.name,
+        slug,
+        domain: body.domain ?? null,
+        description: body.description ?? null,
+        category: body.category ?? null,
+        createdAt: now,
+        updatedAt: now,
+      })
       .returning();
 
     if (body.tags && body.tags.length > 0) {
@@ -261,7 +325,10 @@ orgRoutes.post("/orgs", async (c) => {
     return c.json(org, 201);
   } catch (err) {
     if (isConflictError(err)) {
-      return c.json({ error: "conflict", message: `Organization with slug "${slug}" already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Organization with slug "${slug}" already exists` },
+        409,
+      );
     }
     throw err;
   }
@@ -270,7 +337,14 @@ orgRoutes.post("/orgs", async (c) => {
 orgRoutes.patch("/orgs/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; slug?: string; domain?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
+  const body = await c.req.json<{
+    name?: string;
+    slug?: string;
+    domain?: string | null;
+    description?: string | null;
+    category?: string | null;
+    tags?: string[];
+  }>();
 
   if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
     return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
@@ -286,7 +360,11 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
   if (body.description !== undefined) updates.description = body.description;
   if (body.category !== undefined) updates.category = body.category;
 
-  const [updated] = await db.update(organizations).set(updates).where(eq(organizations.id, org.id)).returning();
+  const [updated] = await db
+    .update(organizations)
+    .set(updates)
+    .where(eq(organizations.id, org.id))
+    .returning();
 
   if (body.tags !== undefined) {
     await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
@@ -341,10 +419,7 @@ orgRoutes.get("/orgs/:slug/accounts", async (c) => {
     return c.json(account ?? null);
   }
 
-  const accounts = await db
-    .select()
-    .from(orgAccounts)
-    .where(eq(orgAccounts.orgId, org.id));
+  const accounts = await db.select().from(orgAccounts).where(eq(orgAccounts.orgId, org.id));
   return c.json(accounts);
 });
 
@@ -433,13 +508,17 @@ orgRoutes.delete("/orgs/:slug/tags", async (c) => {
 orgRoutes.post("/tags", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ name: string }>();
-  if (!body.name) return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+  if (!body.name)
+    return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
 
   const tagSlug = toSlug(body.name);
   const [existing] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
   if (existing) return c.json(existing);
 
-  const [created] = await db.insert(tags).values({ name: body.name, slug: tagSlug, createdAt: new Date().toISOString() }).returning();
+  const [created] = await db
+    .insert(tags)
+    .values({ name: body.name, slug: tagSlug, createdAt: new Date().toISOString() })
+    .returning();
   return c.json(created, 201);
 });
 
@@ -457,10 +536,16 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   const toParam = c.req.query("to");
 
   if (fromParam && !dateRe.test(fromParam)) {
-    return c.json({ error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." }, 400);
+    return c.json(
+      { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
+      400,
+    );
   }
   if (toParam && !dateRe.test(toParam)) {
-    return c.json({ error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." }, 400);
+    return c.json(
+      { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
+      400,
+    );
   }
   if (fromParam && toParam && fromParam > toParam) {
     return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
@@ -492,11 +577,13 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
     const [bounds] = await db
       .select({ oldest: min(releases.publishedAt), newest: max(releases.publishedAt) })
       .from(releases)
-      .where(and(
-        inArray(releases.sourceId, sourceIds),
-        sql`${releases.publishedAt} IS NOT NULL`,
-        sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`,
-      ));
+      .where(
+        and(
+          inArray(releases.sourceId, sourceIds),
+          sql`${releases.publishedAt} IS NOT NULL`,
+          sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`,
+        ),
+      );
     const today = new Date().toISOString().slice(0, 10);
     if (!from) from = bounds.oldest?.slice(0, 10) ?? today;
     if (!to) to = bounds.newest?.slice(0, 10) ?? today;
@@ -507,8 +594,12 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   toDate.setUTCDate(toDate.getUTCDate() + 1);
   const toExclusive = toDate.toISOString().slice(0, 10);
 
-  const { bucketRows, statsRows, latestVersionRows: versionRows, earliestVersionRows } =
-    await getOrgActivityData(db, org.id, sourceIds, from, toExclusive);
+  const {
+    bucketRows,
+    statsRows,
+    latestVersionRows: versionRows,
+    earliestVersionRows,
+  } = await getOrgActivityData(db, org.id, sourceIds, from, toExclusive);
 
   const latestVersionBySource = new Map<string, string | null>();
   for (const row of versionRows) {
@@ -522,10 +613,21 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
 
   // Index stats and buckets by source ID
   const statsMap = new Map(statsRows.map((r) => [r.source_id, r]));
-  const bucketMap = new Map<string, { weekStart: string; count: number; earliestVersion: string | null; latestVersion: string | null }[]>();
+  const bucketMap = new Map<
+    string,
+    {
+      weekStart: string;
+      count: number;
+      earliestVersion: string | null;
+      latestVersion: string | null;
+    }[]
+  >();
   for (const row of bucketRows) {
     let arr = bucketMap.get(row.source_id);
-    if (!arr) { arr = []; bucketMap.set(row.source_id, arr); }
+    if (!arr) {
+      arr = [];
+      bucketMap.set(row.source_id, arr);
+    }
     arr.push({
       weekStart: row.week_start,
       count: row.cnt,
@@ -615,7 +717,12 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
   const [sparklineRows, orgSources, productRows] = await Promise.all([
     getOrgSourceSparklines(db, org.id, cutoff30d),
     db
-      .select({ id: sources.id, slug: sources.slug, name: sources.name, productId: sources.productId })
+      .select({
+        id: sources.id,
+        slug: sources.slug,
+        name: sources.name,
+        productId: sources.productId,
+      })
       .from(sources)
       .where(eq(sources.orgId, org.id))
       .orderBy(sources.name),
@@ -629,7 +736,10 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
   // Build per-source sparkline arrays (30 entries, index 0 = 30d ago)
   const sourceSparklineMap = new Map<string, number[]>();
   for (const src of orgSources) {
-    sourceSparklineMap.set(src.id, Array.from({ length: 30 }, () => 0));
+    sourceSparklineMap.set(
+      src.id,
+      Array.from({ length: 30 }, () => 0),
+    );
   }
   for (const row of sparklineRows) {
     let arr = sourceSparklineMap.get(row.source_id);
@@ -657,7 +767,10 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
   for (const src of orgSources) {
     if (src.productId) {
       let arr = productSourceMap.get(src.productId);
-      if (!arr) { arr = []; productSourceMap.set(src.productId, arr); }
+      if (!arr) {
+        arr = [];
+        productSourceMap.set(src.productId, arr);
+      }
       arr.push(src.id);
     }
   }
@@ -716,7 +829,8 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
   const cursorBindings: string[] = [];
   if (cursorParam) {
     const pipeIdx = cursorParam.indexOf("|");
-    const cursorDate = pipeIdx > 0 ? cursorParam.slice(0, pipeIdx) : (pipeIdx === -1 ? cursorParam : "");
+    const cursorDate =
+      pipeIdx > 0 ? cursorParam.slice(0, pipeIdx) : pipeIdx === -1 ? cursorParam : "";
     const cursorId = pipeIdx >= 0 ? cursorParam.slice(pipeIdx + 1) : "";
     if (cursorDate && cursorId) {
       cursorWhere = `AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))`;
@@ -731,7 +845,13 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     }
   }
 
-  const results = await getOrgReleasesFeed(c.env.DB, org.id, { cursorWhere, cursorBindings }, limit + 1, { includeCoverage });
+  const results = await getOrgReleasesFeed(
+    c.env.DB,
+    org.id,
+    { cursorWhere, cursorBindings },
+    limit + 1,
+    { includeCoverage },
+  );
 
   const hasMore = results.length > limit;
   const pageRows = hasMore ? results.slice(0, limit) : results;
@@ -740,9 +860,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
   let nextCursor: string | null = null;
   if (hasMore && pageRows.length > 0) {
     const last = pageRows[pageRows.length - 1];
-    nextCursor = last.published_at
-      ? `${last.published_at}|${last.id}`
-      : `|${last.id}`;
+    nextCursor = last.published_at ? `${last.published_at}|${last.id}` : `|${last.id}`;
   }
 
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -751,12 +869,17 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     version: r.version,
     type: r.type,
     title: r.title,
-    summary: r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    summary:
+      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
     media: (() => {
-      try { return JSON.parse(r.media ?? "[]"); } catch { return []; }
+      try {
+        return JSON.parse(r.media ?? "[]");
+      } catch {
+        return [];
+      }
     })().map((m: any) => ({
       ...m,
       r2Url: resolveR2Url(m.r2Key, mediaOrigin),
@@ -793,7 +916,10 @@ orgRoutes.get("/orgs/:slug/recent-releases", async (c) => {
   const limit = isNaN(limitParam) || limitParam < 1 ? 500 : Math.min(limitParam, 2000);
 
   if (!since) {
-    return c.json({ error: "bad_request", message: "Missing required query param: since (ISO date)" }, 400);
+    return c.json(
+      { error: "bad_request", message: "Missing required query param: since (ISO date)" },
+      400,
+    );
   }
 
   const [org] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(slug));
@@ -822,12 +948,14 @@ orgRoutes.get("/orgs/:slug/recent-releases", async (c) => {
     })
     .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
-    .where(and(
-      eq(sources.orgId, org.id),
-      gte(releases.publishedAt, since),
-      eq(releases.suppressed, false),
-      notDisabled,
-    ))
+    .where(
+      and(
+        eq(sources.orgId, org.id),
+        gte(releases.publishedAt, since),
+        eq(releases.suppressed, false),
+        notDisabled,
+      ),
+    )
     .orderBy(desc(releases.publishedAt))
     .limit(limit);
 
@@ -840,7 +968,10 @@ orgRoutes.post("/orgs/:slug/accounts", async (c) => {
   const body = await c.req.json<{ platform: string; handle: string }>();
 
   if (!body.platform || !body.handle) {
-    return c.json({ error: "bad_request", message: "Missing required fields: platform, handle" }, 400);
+    return c.json(
+      { error: "bad_request", message: "Missing required fields: platform, handle" },
+      400,
+    );
   }
 
   const [org] = await db.select().from(organizations).where(orgWhere(slug));
@@ -849,12 +980,20 @@ orgRoutes.post("/orgs/:slug/accounts", async (c) => {
   try {
     const [account] = await db
       .insert(orgAccounts)
-      .values({ orgId: org.id, platform: body.platform, handle: body.handle, createdAt: new Date().toISOString() })
+      .values({
+        orgId: org.id,
+        platform: body.platform,
+        handle: body.handle,
+        createdAt: new Date().toISOString(),
+      })
       .returning();
     return c.json(account, 201);
   } catch (err) {
     if (isConflictError(err)) {
-      return c.json({ error: "conflict", message: `Account ${body.platform}/${body.handle} already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Account ${body.platform}/${body.handle} already exists` },
+        409,
+      );
     }
     throw err;
   }
@@ -873,22 +1012,25 @@ async function embedOrgSideEffect(
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
     if (!org) return;
     await embedAndUpsertEntities({
-      entities: [{
-        id: org.id,
-        kind: "org" as EntityKind,
-        name: org.name,
-        description: org.description,
-        category: org.category,
-        domain: org.domain,
-        // Set `orgId` to the org's own id so the metadata filter works
-        // uniformly — an "org scope" lookup can match orgs, products, and
-        // sources all via `filter: { org_id: <id> }`.
-        orgId: org.id,
-      }],
+      entities: [
+        {
+          id: org.id,
+          kind: "org" as EntityKind,
+          name: org.name,
+          description: org.description,
+          category: org.category,
+          domain: org.domain,
+          // Set `orgId` to the org's own id so the metadata filter works
+          // uniformly — an "org scope" lookup can match orgs, products, and
+          // sources all via `filter: { org_id: <id> }`.
+          orgId: org.id,
+        },
+      ],
       // Cast: workers-types VectorizeIndex has a stricter metadata value
       // type than the shared runtime-agnostic interface. Assignable at
       // runtime; only diverges by type-system variance.
-      vectorIndex: env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+      vectorIndex:
+        env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
       embedConfig,
       onPersisted: async () => {
         await db
@@ -898,6 +1040,8 @@ async function embedOrgSideEffect(
       },
     });
   } catch (err) {
-    console.warn(`[orgs] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(
+      `[orgs] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }

@@ -1,9 +1,4 @@
-import {
-  type ReleaseEvent,
-  type ReleaseEventPayload,
-  newEventId,
-  padSeq,
-} from "./types.js";
+import { type ReleaseEvent, type ReleaseEventPayload, newEventId, padSeq } from "./types.js";
 
 /** Minimal storage interface matching Cloudflare DurableObjectStorage's KV subset. */
 export interface EventStore {
@@ -52,10 +47,7 @@ export async function appendEvent(
 }
 
 /** Replay events with seq > since, in ascending order. */
-export async function replayEvents(
-  store: EventStore,
-  since: number,
-): Promise<ReleaseEvent[]> {
+export async function replayEvents(store: EventStore, since: number): Promise<ReleaseEvent[]> {
   // A fresh subscriber passes since=0 meaning "everything". We must pass
   // startAfter=undefined in that case — passing padSeq(0) would still work
   // here (no event is ever written at seq 0), but the undefined path is

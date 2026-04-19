@@ -81,7 +81,9 @@ function RelatedSourceCard({ item }: { item: RelatedSourceItem }) {
       </div>
       <div className="text-[11px] text-stone-400 dark:text-stone-500 mt-1 truncate">
         {item.orgName && <span>{item.orgName}</span>}
-        {item.orgName && (item.releaseCount > 0 || item.latestDate) && <span className="mx-1">·</span>}
+        {item.orgName && (item.releaseCount > 0 || item.latestDate) && (
+          <span className="mx-1">·</span>
+        )}
         {item.releaseCount > 0 && <span>{item.releaseCount} releases</span>}
         {item.latestDate && (
           <>

@@ -103,7 +103,11 @@ describe("generatePlaybookHeader", () => {
     const header = generatePlaybookHeader({
       orgName: "Acme",
       orgSlug: "acme",
-      sources: [makeSource({ metadata: JSON.stringify({ parseInstructions: "Only extract new features" }) })],
+      sources: [
+        makeSource({
+          metadata: JSON.stringify({ parseInstructions: "Only extract new features" }),
+        }),
+      ],
     });
 
     expect(header).toContain("## Parse Instructions");

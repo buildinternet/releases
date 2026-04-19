@@ -61,7 +61,11 @@ describe("releases id-IN bind budget", () => {
   it("UPDATE ... SET embedded_at WHERE id IN (chunk) stays under the cap", () => {
     // +1 for the SET binding — this is the path that was silently 500ing
     // inside waitUntil when the chunk was 100.
-    const q = db.update(releases).set({ embeddedAt: "2026-01-01" }).where(inArray(releases.id, ids)).toSQL();
+    const q = db
+      .update(releases)
+      .set({ embeddedAt: "2026-01-01" })
+      .where(inArray(releases.id, ids))
+      .toSQL();
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
   });
 });

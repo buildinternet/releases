@@ -12,21 +12,22 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|---------------|
-| `src/adapters/feed.ts` | Modify | Add `headCheckFeed()` function, `feedContentLength` to `SourceMetadata`, integrate HEAD pre-check into `fetchViaFeed()` |
-| `src/db/schema.ts` | Modify | Add `changeDetectedAt` column to `sources` table |
-| `src/db/queries.ts` | Modify | Add `setChangeDetected()`, `clearChangeDetected()`, `listSourcesWithChanges()`, `listFeedSources()` helpers |
-| `src/cli/commands/poll.ts` | Create | New `released poll` CLI command |
-| `src/cli/program.ts` | Modify | Register poll command |
-| `src/db/migrations/0002_*.sql` | Create | Local migration for `changeDetectedAt` |
-| `workers/api/migrations/0002_add_change_detected_at.sql` | Create | D1 migration for `changeDetectedAt` |
+| File                                                     | Action | Responsibility                                                                                                          |
+| -------------------------------------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `src/adapters/feed.ts`                                   | Modify | Add `headCheckFeed()` function, `feedContentLength` to `SourceMetadata`, integrate HEAD pre-check into `fetchViaFeed()` |
+| `src/db/schema.ts`                                       | Modify | Add `changeDetectedAt` column to `sources` table                                                                        |
+| `src/db/queries.ts`                                      | Modify | Add `setChangeDetected()`, `clearChangeDetected()`, `listSourcesWithChanges()`, `listFeedSources()` helpers             |
+| `src/cli/commands/poll.ts`                               | Create | New `released poll` CLI command                                                                                         |
+| `src/cli/program.ts`                                     | Modify | Register poll command                                                                                                   |
+| `src/db/migrations/0002_*.sql`                           | Create | Local migration for `changeDetectedAt`                                                                                  |
+| `workers/api/migrations/0002_add_change_detected_at.sql` | Create | D1 migration for `changeDetectedAt`                                                                                     |
 
 ---
 
 ### Task 1: Add `changeDetectedAt` Column
 
 **Files:**
+
 - Modify: `src/db/schema.ts:89-111`
 - Create: `src/db/migrations/0002_add_change_detected_at.sql`
 - Create: `workers/api/migrations/0002_add_change_detected_at.sql`
@@ -75,6 +76,7 @@ git commit -m "feat: add changeDetectedAt column to sources table"
 ### Task 2: Add `headCheckFeed()` Function
 
 **Files:**
+
 - Modify: `src/adapters/feed.ts:15-45` (SourceMetadata interface)
 - Modify: `src/adapters/feed.ts` (new function after `fetchAndParseFeed`)
 
@@ -138,13 +140,16 @@ export async function headCheckFeed(
 
     // Compare each available header against stored value
     if (etag && stored.etag) {
-      if (etag !== stored.etag) return { status: "changed", etag, lastModified, contentLength, responseMs };
+      if (etag !== stored.etag)
+        return { status: "changed", etag, lastModified, contentLength, responseMs };
     }
     if (lastModified && stored.lastModified) {
-      if (lastModified !== stored.lastModified) return { status: "changed", etag, lastModified, contentLength, responseMs };
+      if (lastModified !== stored.lastModified)
+        return { status: "changed", etag, lastModified, contentLength, responseMs };
     }
     if (contentLength && stored.contentLength) {
-      if (contentLength !== stored.contentLength) return { status: "changed", etag, lastModified, contentLength, responseMs };
+      if (contentLength !== stored.contentLength)
+        return { status: "changed", etag, lastModified, contentLength, responseMs };
     }
 
     // If we had stored values and all matching headers agree, unchanged
@@ -184,6 +189,7 @@ git commit -m "feat: add headCheckFeed() for lightweight feed change detection"
 ### Task 3: Add Query Helpers
 
 **Files:**
+
 - Modify: `src/db/queries.ts`
 
 - [ ] **Step 1: Add `listFeedSources()` helper**
@@ -197,13 +203,16 @@ export async function listFeedSources(): Promise<Source[]> {
     return apiClient.listFeedSources();
   }
   const db = getDb();
-  return db.select().from(sources).where(
-    and(
-      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
-      sql`${sources.fetchPriority} != 'paused'`,
-      notDisabled,
-    )
-  );
+  return db
+    .select()
+    .from(sources)
+    .where(
+      and(
+        sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
+        sql`${sources.fetchPriority} != 'paused'`,
+        notDisabled,
+      ),
+    );
 }
 ```
 
@@ -242,12 +251,10 @@ export async function listSourcesWithChanges(): Promise<Source[]> {
     return apiClient.listSourcesWithChanges();
   }
   const db = getDb();
-  return db.select().from(sources).where(
-    and(
-      sql`${sources.changeDetectedAt} IS NOT NULL`,
-      notDisabled,
-    )
-  );
+  return db
+    .select()
+    .from(sources)
+    .where(and(sql`${sources.changeDetectedAt} IS NOT NULL`, notDisabled));
 }
 ```
 
@@ -268,6 +275,7 @@ git commit -m "feat: add query helpers for feed change detection"
 ### Task 4: Create `released poll` CLI Command
 
 **Files:**
+
 - Create: `src/cli/commands/poll.ts`
 - Modify: `src/cli/program.ts`
 
@@ -279,7 +287,12 @@ Create `src/cli/commands/poll.ts`:
 import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
-import { findSourceBySlug, listFeedSources, setChangeDetected, listSourcesWithChanges } from "../../db/queries.js";
+import {
+  findSourceBySlug,
+  listFeedSources,
+  setChangeDetected,
+  listSourcesWithChanges,
+} from "../../db/queries.js";
 import { getSourceMeta, updateSourceMeta, headCheckFeed } from "../../adapters/feed.js";
 import type { ChangeStatus } from "../../adapters/feed.js";
 import { timeAgo } from "../../lib/dates.js";
@@ -334,9 +347,12 @@ async function pollSource(source: Source): Promise<PollResult | null> {
 
 function statusLabel(status: ChangeStatus): string {
   switch (status) {
-    case "changed": return chalk.yellow("changed");
-    case "unchanged": return chalk.green("unchanged");
-    case "unknown": return chalk.dim("unknown");
+    case "changed":
+      return chalk.yellow("changed");
+    case "unchanged":
+      return chalk.green("unchanged");
+    case "unknown":
+      return chalk.dim("unknown");
   }
 }
 
@@ -346,12 +362,15 @@ export function registerPollCommand(program: Command) {
     .description("Check feed sources for upstream changes via HEAD requests")
     .option("--json", "Output as JSON")
     .option("--changed", "Only show sources with detected changes")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   released poll                      Poll all feed sources
   released poll my-source            Poll a specific source
   released poll --changed            Show only sources with changes
-  released poll --json               Output as JSON`)
+  released poll --json               Output as JSON`,
+    )
     .action(async (slug: string | undefined, opts: { json?: boolean; changed?: boolean }) => {
       let sourcesToPoll: Source[];
 
@@ -423,7 +442,9 @@ Examples:
       const changed = results.filter((r) => r.status === "changed").length;
       const unchanged = results.filter((r) => r.status === "unchanged").length;
       const unknown = results.filter((r) => r.status === "unknown").length;
-      console.log(`\n${results.length} polled: ${chalk.yellow(`${changed} changed`)}, ${chalk.green(`${unchanged} unchanged`)}, ${chalk.dim(`${unknown} unknown`)}`);
+      console.log(
+        `\n${results.length} polled: ${chalk.yellow(`${changed} changed`)}, ${chalk.green(`${unchanged} unchanged`)}, ${chalk.dim(`${unknown} unknown`)}`,
+      );
     });
 }
 ```
@@ -445,7 +466,7 @@ registerPollCommand(program);
 Update the help text in `printStyledHelp()` — add after the `check` row:
 
 ```typescript
-  lines.push(row("poll [slug]", "Poll feed sources for upstream changes"));
+lines.push(row("poll [slug]", "Poll feed sources for upstream changes"));
 ```
 
 - [ ] **Step 3: Verify type-check passes**
@@ -473,6 +494,7 @@ git commit -m "feat: add released poll command for feed change detection"
 ### Task 5: Integrate HEAD Pre-Check into Fetch Flow
 
 **Files:**
+
 - Modify: `src/adapters/feed.ts:258-330` (`fetchViaFeed` function)
 
 - [ ] **Step 1: Add HEAD pre-check to `fetchViaFeed()`**
@@ -480,30 +502,30 @@ git commit -m "feat: add released poll command for feed change detection"
 In `src/adapters/feed.ts`, inside `fetchViaFeed()`, add a HEAD pre-check block between the conditional headers setup (line ~298) and the `fetchAndParseFeed()` call (line ~302). Insert after line 298 (`if (meta.feedLastModified) conditionalHeaders["If-Modified-Since"] = meta.feedLastModified;`):
 
 ```typescript
-  // HEAD pre-check: skip full fetch if feed hasn't changed
-  const hasStoredHeaders = meta.feedEtag || meta.feedLastModified || meta.feedContentLength;
-  if (hasStoredHeaders && !options?.full) {
-    const headResult = await headCheckFeed(feedUrl, {
-      etag: meta.feedEtag,
-      lastModified: meta.feedLastModified,
-      contentLength: meta.feedContentLength,
-    });
+// HEAD pre-check: skip full fetch if feed hasn't changed
+const hasStoredHeaders = meta.feedEtag || meta.feedLastModified || meta.feedContentLength;
+if (hasStoredHeaders && !options?.full) {
+  const headResult = await headCheckFeed(feedUrl, {
+    etag: meta.feedEtag,
+    lastModified: meta.feedLastModified,
+    contentLength: meta.feedContentLength,
+  });
 
-    // Persist any new header values from HEAD response
-    if (headResult.contentLength) metaUpdates.feedContentLength = headResult.contentLength;
-    if (headResult.etag) metaUpdates.feedEtag = headResult.etag;
-    if (headResult.lastModified) metaUpdates.feedLastModified = headResult.lastModified;
+  // Persist any new header values from HEAD response
+  if (headResult.contentLength) metaUpdates.feedContentLength = headResult.contentLength;
+  if (headResult.etag) metaUpdates.feedEtag = headResult.etag;
+  if (headResult.lastModified) metaUpdates.feedLastModified = headResult.lastModified;
 
-    if (headResult.status === "unchanged") {
-      logger.info(`HEAD check: feed unchanged, skipping full fetch`);
-      if (Object.keys(metaUpdates).length > 0) {
-        await updateSourceMeta(source, metaUpdates);
-      }
-      return [];
+  if (headResult.status === "unchanged") {
+    logger.info(`HEAD check: feed unchanged, skipping full fetch`);
+    if (Object.keys(metaUpdates).length > 0) {
+      await updateSourceMeta(source, metaUpdates);
     }
-
-    logger.info(`HEAD check: ${headResult.status}, proceeding to full fetch`);
+    return [];
   }
+
+  logger.info(`HEAD check: ${headResult.status}, proceeding to full fetch`);
+}
 ```
 
 - [ ] **Step 2: Clear `changeDetectedAt` on successful fetch**
@@ -511,24 +533,24 @@ In `src/adapters/feed.ts`, inside `fetchViaFeed()`, add a HEAD pre-check block b
 In `src/cli/commands/fetch.ts`, after the `updateSource` call on the success path (line ~537-542 where `consecutiveNoChange` is reset to 0), add `changeDetectedAt: null` to the update:
 
 ```typescript
-  await updateSource(source, {
-    lastFetchedAt: new Date().toISOString(),
-    consecutiveNoChange: 0,
-    consecutiveErrors: 0,
-    nextFetchAfter: null,
-    changeDetectedAt: null,
-  });
+await updateSource(source, {
+  lastFetchedAt: new Date().toISOString(),
+  consecutiveNoChange: 0,
+  consecutiveErrors: 0,
+  nextFetchAfter: null,
+  changeDetectedAt: null,
+});
 ```
 
 Also clear it on the no_change path (line ~381-385):
 
 ```typescript
-  await updateSource(source, {
-    consecutiveNoChange: newNoChange,
-    consecutiveErrors: 0,
-    nextFetchAfter: nextFetch,
-    changeDetectedAt: null,
-  });
+await updateSource(source, {
+  consecutiveNoChange: newNoChange,
+  consecutiveErrors: 0,
+  nextFetchAfter: nextFetch,
+  changeDetectedAt: null,
+});
 ```
 
 - [ ] **Step 3: Store `feedContentLength` during full feed fetches**
@@ -536,7 +558,7 @@ Also clear it on the no_change path (line ~381-385):
 In `src/adapters/feed.ts`, inside `fetchAndParseFeed()`, capture the content-length header alongside etag and lastModified (after line 223):
 
 ```typescript
-  const contentLength = res.headers.get("content-length") ?? undefined;
+const contentLength = res.headers.get("content-length") ?? undefined;
 ```
 
 Update the return type and return statement to include `contentLength`:
@@ -546,7 +568,7 @@ Update the return type and return statement to include `contentLength`:
 ```
 
 ```typescript
-  return { releases, etag, lastModified, contentLength };
+return { releases, etag, lastModified, contentLength };
 ```
 
 In `fetchViaFeed()`, after the existing `if (etag)` and `if (lastModified)` lines (~325-326), add:
@@ -579,6 +601,7 @@ git commit -m "feat: integrate HEAD pre-check into fetch flow"
 ### Task 6: Update Documentation
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 - Modify: `README.md` (if CLI command reference exists)
 

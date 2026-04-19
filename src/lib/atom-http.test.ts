@@ -71,8 +71,6 @@ describe("shouldReturn304", () => {
   it("prefers ETag match over a stale If-Modified-Since", () => {
     // Caller sends both; ETag matches so we should 304 even if the timestamp
     // comparison would have said the client is out of date.
-    expect(
-      shouldReturn304(etag, lastMod, etag, "Fri, 10 Apr 2026 00:00:00 GMT"),
-    ).toBe(true);
+    expect(shouldReturn304(etag, lastMod, etag, "Fri, 10 Apr 2026 00:00:00 GMT")).toBe(true);
   });
 });

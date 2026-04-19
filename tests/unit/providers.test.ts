@@ -270,9 +270,20 @@ describe("getProviderHints", () => {
 
   it("each known provider has at least one useful hint field", () => {
     const ids = [
-      "mintlify", "readme", "gitbook", "docusaurus", "ghost",
-      "wordpress", "hashnode", "nextra", "vitepress", "notion",
-      "vercel-docs", "intercom", "zendesk", "canny",
+      "mintlify",
+      "readme",
+      "gitbook",
+      "docusaurus",
+      "ghost",
+      "wordpress",
+      "hashnode",
+      "nextra",
+      "vitepress",
+      "notion",
+      "vercel-docs",
+      "intercom",
+      "zendesk",
+      "canny",
     ];
     for (const id of ids) {
       const hints = getProviderHints(id);

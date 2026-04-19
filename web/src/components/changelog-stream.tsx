@@ -96,7 +96,10 @@ export function ChangelogStream({
         </div>
       ))}
       {nextOffset != null && (
-        <div ref={sentinelRef} className="mt-6 flex items-center justify-center py-3 text-[12px] text-stone-400 dark:text-stone-500">
+        <div
+          ref={sentinelRef}
+          className="mt-6 flex items-center justify-center py-3 text-[12px] text-stone-400 dark:text-stone-500"
+        >
           {error ? (
             <button
               onClick={() => void loadNext()}

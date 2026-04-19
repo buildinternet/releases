@@ -94,7 +94,7 @@ const HEAD_DISCOVERY_BYTE_CAP = 512_000;
 async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null> {
   try {
     const res = await fetch(pageUrl, {
-      headers: { "Accept": "text/html", "User-Agent": "releases/0.1" },
+      headers: { Accept: "text/html", "User-Agent": "releases/0.1" },
       redirect: "follow",
     });
     if (!res.ok || !res.body) return null;
@@ -137,7 +137,11 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
   if (path.endsWith(".xml") || path.endsWith(".json") || path === "/feed" || path === "/rss") {
     const getRes = await fetch(probeUrl, {
       redirect: "follow",
-      headers: { "User-Agent": "releases/0.1", "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml" },
+      headers: {
+        "User-Agent": "releases/0.1",
+        Accept:
+          "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
+      },
     });
     if (!getRes.ok) return null;
     const getCt = getRes.headers.get("content-type") ?? "";
@@ -196,10 +200,16 @@ export async function fetchAndParseFeed(
   feedType: FeedType,
   options?: FetchOptions,
   headers?: Record<string, string>,
-): Promise<{ releases: RawRelease[]; etag?: string; lastModified?: string; contentLength?: string }> {
+): Promise<{
+  releases: RawRelease[];
+  etag?: string;
+  lastModified?: string;
+  contentLength?: string;
+}> {
   const reqHeaders: Record<string, string> = {
     "User-Agent": "releases/0.1",
-    "Accept": "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
+    Accept:
+      "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
     ...headers,
   };
 
@@ -221,16 +231,29 @@ export async function fetchAndParseFeed(
 
   let releases: RawRelease[];
   switch (feedType) {
-    case "rss": releases = parseRss(body); break;
-    case "atom": releases = parseAtom(body); break;
-    case "jsonfeed": releases = parseJsonFeed(body); break;
+    case "rss":
+      releases = parseRss(body);
+      break;
+    case "atom":
+      releases = parseAtom(body);
+      break;
+    case "jsonfeed":
+      releases = parseJsonFeed(body);
+      break;
     default: {
       const detected = detectFeedTypeFromContent(body);
       if (detected) {
         logger.info(`Feed type "${feedType}" unrecognized, detected ${detected} from content`);
-        releases = detected === "rss" ? parseRss(body) : detected === "atom" ? parseAtom(body) : parseJsonFeed(body);
+        releases =
+          detected === "rss"
+            ? parseRss(body)
+            : detected === "atom"
+              ? parseAtom(body)
+              : parseJsonFeed(body);
       } else {
-        throw new Error(`Cannot parse feed: unrecognized type "${feedType}" and content detection failed`);
+        throw new Error(
+          `Cannot parse feed: unrecognized type "${feedType}" and content detection failed`,
+        );
       }
     }
   }
@@ -436,7 +459,9 @@ function extractText(xml: string, tag: string): string | null {
 }
 
 function extractAtomLink(entry: string): string | null {
-  const altMatch = entry.match(/<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["'][^>]*\/?>/i);
+  const altMatch = entry.match(
+    /<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["'][^>]*\/?>/i,
+  );
   if (altMatch) return altMatch[1];
   const hrefMatch = entry.match(/<link[^>]*href=["']([^"']+)["'][^>]*\/?>/i);
   return hrefMatch ? hrefMatch[1] : null;
@@ -463,7 +488,9 @@ function isSafeLinkHref(raw: string): boolean {
 }
 
 /** Extract structured media items from HTML content. */
-export function extractMedia(html: string): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
+export function extractMedia(
+  html: string,
+): Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> {
   const media: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }> = [];
 
   const imgRe = /<img[^>]*src=["']([^"']+)["'](?:[^>]*alt=["']([^"']*)["'])?[^>]*\/?>/gi;
@@ -528,10 +555,15 @@ export function htmlToMarkdown(html: string): string {
   });
 
   md = md.replace(/<video[^>]*src=["']([^"']+)["'][^>]*>[\s\S]*?<\/video>/gi, "\n[Video]($1)\n");
-  md = md.replace(/<video[^>]*>[\s\S]*?<source[^>]*src=["']([^"']+)["'][^>]*\/?>/gi, "\n[Video]($1)\n");
+  md = md.replace(
+    /<video[^>]*>[\s\S]*?<source[^>]*src=["']([^"']+)["'][^>]*\/?>/gi,
+    "\n[Video]($1)\n",
+  );
 
-  md = md.replace(/<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi,
-    (_, code) => `\n\`\`\`\n${decodeHtmlEntities(code)}\n\`\`\`\n`);
+  md = md.replace(
+    /<pre[^>]*>\s*<code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi,
+    (_, code) => `\n\`\`\`\n${decodeHtmlEntities(code)}\n\`\`\`\n`,
+  );
 
   md = md.replace(/<(?:strong|b)(?:\s[^>]*)?>|<\/(?:strong|b)>/gi, "**");
   md = md.replace(/<(?:em|i)(?:\s[^>]*)?>|<\/(?:em|i)>/gi, "*");

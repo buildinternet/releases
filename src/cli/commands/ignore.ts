@@ -13,10 +13,13 @@ export function registerIgnoreCommand(program: Command) {
     .description("List ignored URLs for an organization")
     .requiredOption("--org <org>", "Organization slug, domain, or name")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin policy ignore list --org acme
-  releases admin policy ignore list --org acme --json`)
+  releases admin policy ignore list --org acme --json`,
+    )
     .action(async (opts: { org: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
@@ -48,11 +51,14 @@ Examples:
     .requiredOption("--org <org>", "Organization slug, domain, or name")
     .option("--reason <reason>", "Reason for ignoring this URL")
     .option("--dry-run", "Show what would be ignored without writing")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin policy ignore add https://example.com/blog --org acme
   releases admin policy ignore add https://example.com/blog --org acme --reason "not a changelog"
-  releases admin policy ignore add https://example.com/blog --org acme --dry-run`)
+  releases admin policy ignore add https://example.com/blog --org acme --dry-run`,
+    )
     .action(async (url: string, opts: { org: string; reason?: string; dryRun?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {
@@ -61,12 +67,18 @@ Examples:
       }
 
       if (opts.dryRun) {
-        logger.info(chalk.yellow(`[dry-run] Would ignore for ${org.name}: ${url}${opts.reason ? ` (${opts.reason})` : ""}`));
+        logger.info(
+          chalk.yellow(
+            `[dry-run] Would ignore for ${org.name}: ${url}${opts.reason ? ` (${opts.reason})` : ""}`,
+          ),
+        );
         return;
       }
 
       await addIgnoredUrl(url, org.id, opts.reason);
-      logger.info(chalk.green(`Ignored for ${org.name}: ${url}${opts.reason ? ` (${opts.reason})` : ""}`));
+      logger.info(
+        chalk.green(`Ignored for ${org.name}: ${url}${opts.reason ? ` (${opts.reason})` : ""}`),
+      );
     });
 
   ignore
@@ -74,9 +86,12 @@ Examples:
     .description("Un-ignore a URL for an organization")
     .requiredOption("--org <org>", "Organization slug, domain, or name")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
-  releases admin policy ignore remove https://example.com/blog --org acme`)
+  releases admin policy ignore remove https://example.com/blog --org acme`,
+    )
     .action(async (url: string, opts: { org: string; json?: boolean }) => {
       const org = await findOrg(opts.org);
       if (!org) {

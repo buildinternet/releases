@@ -24,7 +24,8 @@ function makeSource(): SourceDetail {
         version: "v15.0.0",
         title: "Next.js 15.0",
         summary: "Turbopack stable & caching overhaul",
-        content: "## Highlights\n\n- Turbopack stable <for> all builds\n- Caching & `use cache` directive",
+        content:
+          "## Highlights\n\n- Turbopack stable <for> all builds\n- Caching & `use cache` directive",
         publishedAt: "2026-04-10T12:34:56Z",
         url: "https://github.com/vercel/next.js/releases/tag/v15.0.0",
       },
@@ -76,7 +77,7 @@ describe("sourceToAtom", () => {
     const xml = sourceToAtom(makeSource(), { baseUrl: BASE });
 
     // CDATA wraps raw content; the < in the markdown does not leak as a tag.
-    expect(xml).toInclude("<content type=\"html\"><![CDATA[## Highlights");
+    expect(xml).toInclude('<content type="html"><![CDATA[## Highlights');
     // The `]]>` inside the second entry's content must be split to keep the
     // CDATA well-formed.
     expect(xml).toInclude("]]]]><![CDATA[>");

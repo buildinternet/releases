@@ -88,12 +88,7 @@ function Root({ children }: { children: ReactNode }) {
    Trigger — wrap around the hoverable element
    ================================================================ */
 
-function Trigger({
-  children,
-  className,
-  style,
-  ...props
-}: React.ComponentPropsWithoutRef<"div">) {
+function Trigger({ children, className, style, ...props }: React.ComponentPropsWithoutRef<"div">) {
   const { onEnterTrigger, onLeaveTrigger } = useHoverCard();
   const ref = useRef<HTMLDivElement>(null);
 

@@ -35,10 +35,7 @@ app.get("/", async (c) => {
   }
 
   if (scope === "product") {
-    const [product] = await db
-      .select({ id: products.id })
-      .from(products)
-      .where(productWhere(slug));
+    const [product] = await db.select({ id: products.id }).from(products).where(productWhere(slug));
     if (!product) return c.json(null);
 
     const [row] = await db
@@ -75,7 +72,10 @@ app.post("/", async (c) => {
       VALUES (${id}, ${scope}, NULL, ${productId}, ${content}, ${releaseCount}, ${lastContributingReleaseAt ?? null}, ${now}, ${now})
       ON CONFLICT (scope, product_id) DO UPDATE SET content = ${content}, release_count = ${releaseCount}, last_contributing_release_at = ${lastContributingReleaseAt ?? null}, updated_at = ${now}`);
   } else {
-    return c.json({ error: "Must provide orgId (for org/playbook scope) or productId (for product scope)" }, 400);
+    return c.json(
+      { error: "Must provide orgId (for org/playbook scope) or productId (for product scope)" },
+      400,
+    );
   }
 
   return c.json({ ok: true });

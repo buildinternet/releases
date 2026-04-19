@@ -51,10 +51,7 @@ function gateAdminArgv(argv: string[]): void {
   if (process.env.RELEASED_API_KEY) return;
 
   const isHelpInvocation =
-    args.length === 1 ||
-    args.includes("--help") ||
-    args.includes("-h") ||
-    args[1] === "help";
+    args.length === 1 || args.includes("--help") || args.includes("-h") || args[1] === "help";
 
   if (!isHelpInvocation) {
     logger.error('"admin" requires an API key. Set RELEASED_API_KEY to enable it.');

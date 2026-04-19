@@ -229,8 +229,20 @@ describe("buildChangelogResponse truncation + files", () => {
 
   it("flags truncated=false by default and includes files index", () => {
     const res = buildChangelogResponse(row, { offset: null, limit: null }, [
-      { path: "CHANGELOG.md", filename: "CHANGELOG.md", url: row.url, bytes: 18, fetchedAt: row.fetchedAt },
-      { path: "packages/a/CHANGELOG.md", filename: "CHANGELOG.md", url: row.url, bytes: 9, fetchedAt: row.fetchedAt },
+      {
+        path: "CHANGELOG.md",
+        filename: "CHANGELOG.md",
+        url: row.url,
+        bytes: 18,
+        fetchedAt: row.fetchedAt,
+      },
+      {
+        path: "packages/a/CHANGELOG.md",
+        filename: "CHANGELOG.md",
+        url: row.url,
+        bytes: 9,
+        fetchedAt: row.fetchedAt,
+      },
     ]);
     expect(res.truncated).toBe(false);
     expect(res.truncatedAt).toBeNull();

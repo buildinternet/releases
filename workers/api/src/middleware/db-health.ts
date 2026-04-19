@@ -23,7 +23,7 @@ export const dbHealthCheck: MiddlewareHandler<Env> = async (c, next) => {
 
   try {
     const row = await c.env.DB.prepare(
-      "SELECT name FROM sqlite_master WHERE type='table' AND name='sources' LIMIT 1"
+      "SELECT name FROM sqlite_master WHERE type='table' AND name='sources' LIMIT 1",
     ).first();
 
     if (!row) {

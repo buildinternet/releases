@@ -6,11 +6,7 @@
  * emit an identical feed.
  */
 
-import type {
-  ReleaseItem,
-  SourceDetail,
-  OrgReleaseItem,
-} from "../api/types.js";
+import type { ReleaseItem, SourceDetail, OrgReleaseItem } from "../api/types.js";
 
 export interface AtomFeedOptions {
   /** Canonical base URL, e.g. "https://releases.sh". Required for stable ids. */
@@ -23,10 +19,7 @@ export const ATOM_DEFAULT_MAX_ENTRIES = 50;
 // ── XML escaping ─────────────────────────────────────────────────────
 
 function escapeXml(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 function escapeAttr(value: string): string {
@@ -144,7 +137,9 @@ interface FeedShell {
 }
 
 function buildFeed(shell: FeedShell, opts: AtomFeedOptions): string {
-  const built = shell.entries.slice(0, ATOM_DEFAULT_MAX_ENTRIES).map((e) => buildEntry(e, opts.baseUrl));
+  const built = shell.entries
+    .slice(0, ATOM_DEFAULT_MAX_ENTRIES)
+    .map((e) => buildEntry(e, opts.baseUrl));
   const entriesXml = built.map((b) => b.xml).join("\n");
 
   // Feed <updated> must reflect the newest entry's timestamp; if there are
@@ -166,7 +161,7 @@ function buildFeed(shell: FeedShell, opts: AtomFeedOptions): string {
     `  <link rel="alternate" type="text/html" href="${escapeAttr(shell.alternateUrl)}" />`,
     `  <updated>${feedUpdated}</updated>`,
     `  <author><name>${escapeXml(shell.authorName)}</name></author>`,
-    "  <generator uri=\"https://releases.sh\">releases.sh</generator>",
+    '  <generator uri="https://releases.sh">releases.sh</generator>',
     "  <sy:updatePeriod>hourly</sy:updatePeriod>",
     "  <sy:updateFrequency>1</sy:updateFrequency>",
   ]
@@ -198,9 +193,7 @@ export function sourceToAtom(source: SourceDetail, opts: AtomFeedOptions): strin
     {
       scope: "source",
       slug: source.slug,
-      title: orgName
-        ? `${source.name} release notes — ${orgName}`
-        : `${source.name} release notes`,
+      title: orgName ? `${source.name} release notes — ${orgName}` : `${source.name} release notes`,
       subtitle: `Release notes and changelog for ${source.name}`,
       selfUrl: `${sourcePath}.atom`,
       alternateUrl: sourcePath,

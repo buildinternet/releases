@@ -46,7 +46,12 @@ export async function runAgentExtraction(
 
   logger.info(`Running agent extraction for ${source.url} (model: ${agentModel})...`);
 
-  let result: { entries: ExtractedEntry[]; totalInput: number; totalOutput: number; hitMaxTokens: boolean };
+  let result: {
+    entries: ExtractedEntry[];
+    totalInput: number;
+    totalOutput: number;
+    hitMaxTokens: boolean;
+  };
   // Tracks the content hash from any Cloudflare-rendered body, recorded
   // after extraction so a failed run doesn't lock out retries.
   let pendingContentHash: string | null = null;
@@ -68,12 +73,15 @@ export async function runAgentExtraction(
       return { releases: [], unchanged: true };
     }
 
-    result = await extractFromBody({
-      body: markdown,
-      systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
-      userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
-      guidance: opts.guidance,
-    }, deps);
+    result = await extractFromBody(
+      {
+        body: markdown,
+        systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
+        userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
+        guidance: opts.guidance,
+      },
+      deps,
+    );
     pendingContentHash = contentHash;
   } else {
     try {
@@ -86,7 +94,9 @@ export async function runAgentExtraction(
       );
     }
 
-    logger.info(`web_fetch found ${result.entries.length} entries (${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens)`);
+    logger.info(
+      `web_fetch found ${result.entries.length} entries (${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens)`,
+    );
 
     if (result.entries.length < MIN_EXPECTED_ENTRIES) {
       logger.info(`Only ${result.entries.length} entries — trying Cloudflare fallback...`);
@@ -101,14 +111,19 @@ export async function runAgentExtraction(
         }
 
         try {
-          const cfResult = await extractFromBody({
-            body: markdown,
-            systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
-            userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
-            guidance: opts.guidance,
-          }, deps);
+          const cfResult = await extractFromBody(
+            {
+              body: markdown,
+              systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
+              userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
+              guidance: opts.guidance,
+            },
+            deps,
+          );
           if (cfResult.entries.length > result.entries.length) {
-            logger.info(`Cloudflare found ${cfResult.entries.length} entries (vs ${result.entries.length}) — using Cloudflare results`);
+            logger.info(
+              `Cloudflare found ${cfResult.entries.length} entries (vs ${result.entries.length}) — using Cloudflare results`,
+            );
             result = {
               entries: cfResult.entries,
               totalInput: result.totalInput + cfResult.totalInput,
@@ -121,7 +136,9 @@ export async function runAgentExtraction(
           // unset — recording would tie the hash to a body whose result we're
           // discarding, which would block re-extraction once web_fetch improves.
         } catch (err) {
-          logger.warn(`Cloudflare extraction failed: ${err instanceof Error ? err.message : String(err)}`);
+          logger.warn(
+            `Cloudflare extraction failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
         }
       }
     }
@@ -140,7 +157,9 @@ export async function runAgentExtraction(
     releaseCount: result.entries.length,
   });
 
-  logger.info(`Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`);
+  logger.info(
+    `Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`,
+  );
 
   let releases = mapEntries(result.entries, { sourceUrl: source.url });
   if (opts.since) {

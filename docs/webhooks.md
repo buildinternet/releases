@@ -40,10 +40,12 @@ Respond `2xx` within 10 seconds to ack. Anything else triggers retry (5xx) or te
 import crypto from "node:crypto";
 
 function verify(secret, timestamp, body, signature) {
-  const expected = "sha256=" + crypto
-    .createHmac("sha256", Buffer.from(secret, "hex"))
-    .update(`${timestamp}.${body}`)
-    .digest("hex");
+  const expected =
+    "sha256=" +
+    crypto
+      .createHmac("sha256", Buffer.from(secret, "hex"))
+      .update(`${timestamp}.${body}`)
+      .digest("hex");
   return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
 }
 ```

@@ -17,10 +17,7 @@ app.get("/", async (c) => {
     return c.json({ error: "slug required" }, 400);
   }
 
-  const [org] = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(orgWhere(slug));
+  const [org] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(slug));
   if (!org) return c.json(null);
 
   const [row] = await db
@@ -43,7 +40,12 @@ app.patch("/notes", async (c) => {
   if (body.notes === undefined) return c.json({ error: "notes field required" }, 400);
 
   const [org] = await db
-    .select({ id: organizations.id, name: organizations.name, slug: organizations.slug, domain: organizations.domain })
+    .select({
+      id: organizations.id,
+      name: organizations.name,
+      slug: organizations.slug,
+      domain: organizations.domain,
+    })
     .from(organizations)
     .where(orgWhere(slug));
   if (!org) return c.json({ error: "Organization not found" }, 404);
@@ -62,7 +64,12 @@ app.patch("/notes", async (c) => {
   } else {
     const orgSources = await db.select().from(sources).where(eq(sources.orgId, org.id));
     const orgProducts = await db
-      .select({ id: products.id, name: products.name, slug: products.slug, description: products.description })
+      .select({
+        id: products.id,
+        name: products.name,
+        slug: products.slug,
+        description: products.description,
+      })
       .from(products)
       .where(eq(products.orgId, org.id));
 
@@ -71,7 +78,12 @@ app.patch("/notes", async (c) => {
       orgSlug: org.slug,
       domain: org.domain,
       sources: orgSources,
-      products: orgProducts.map((p) => ({ id: p.id, name: p.name, slug: p.slug, description: p.description })),
+      products: orgProducts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+      })),
     });
 
     const id = newKnowledgePageId();

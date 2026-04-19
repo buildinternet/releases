@@ -35,9 +35,7 @@ export function InactiveSourcesToggle({
         </span>
         <div className="flex-1 h-px bg-stone-200 dark:bg-stone-800" />
       </button>
-      {expanded && (
-        <div className="mt-3">{children}</div>
-      )}
+      {expanded && <div className="mt-3">{children}</div>}
     </div>
   );
 }

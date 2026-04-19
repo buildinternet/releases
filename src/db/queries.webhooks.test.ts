@@ -30,19 +30,23 @@ describe("webhook subscription queries", () => {
     const made = makeDb();
     db = made.db;
     // Seed an org and a source for FK satisfaction
-    db.insert(organizations).values({
-      id: "org_test1",
-      slug: "acme",
-      name: "Acme",
-    }).run();
-    db.insert(sources).values({
-      id: "src_test1",
-      slug: "acme-blog",
-      name: "Acme Blog",
-      url: "https://acme.example/blog",
-      type: "scrape",
-      orgId: "org_test1",
-    }).run();
+    db.insert(organizations)
+      .values({
+        id: "org_test1",
+        slug: "acme",
+        name: "Acme",
+      })
+      .run();
+    db.insert(sources)
+      .values({
+        id: "src_test1",
+        slug: "acme-blog",
+        name: "Acme Blog",
+        url: "https://acme.example/blog",
+        type: "scrape",
+        orgId: "org_test1",
+      })
+      .run();
   });
 
   it("inserts and retrieves a subscription", async () => {
@@ -85,7 +89,10 @@ describe("webhook subscription queries", () => {
       sourceId: null,
       description: null,
     });
-    await updateWebhookSubscriptionSummary(db, sub.id, { kind: "success", at: "2026-04-18T00:00:00Z" });
+    await updateWebhookSubscriptionSummary(db, sub.id, {
+      kind: "success",
+      at: "2026-04-18T00:00:00Z",
+    });
     const after = await getWebhookSubscriptionById(db, sub.id);
     expect(after?.lastSuccessAt).toBe("2026-04-18T00:00:00Z");
     expect(after?.consecutiveFailures).toBe(0);
@@ -98,8 +105,16 @@ describe("webhook subscription queries", () => {
       sourceId: null,
       description: null,
     });
-    await updateWebhookSubscriptionSummary(db, sub.id, { kind: "error", at: "2026-04-18T00:00:01Z", message: "boom" });
-    await updateWebhookSubscriptionSummary(db, sub.id, { kind: "error", at: "2026-04-18T00:00:02Z", message: "boom2" });
+    await updateWebhookSubscriptionSummary(db, sub.id, {
+      kind: "error",
+      at: "2026-04-18T00:00:01Z",
+      message: "boom",
+    });
+    await updateWebhookSubscriptionSummary(db, sub.id, {
+      kind: "error",
+      at: "2026-04-18T00:00:02Z",
+      message: "boom2",
+    });
     const after = await getWebhookSubscriptionById(db, sub.id);
     expect(after?.consecutiveFailures).toBe(2);
     expect(after?.lastErrorMsg).toBe("boom2");

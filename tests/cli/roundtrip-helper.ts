@@ -33,15 +33,10 @@ export function cli(
 }
 
 /** Throws if exit code is non-zero. */
-export function cliJson<T = unknown>(
-  dataDir: string,
-  args: string[],
-): T {
+export function cliJson<T = unknown>(dataDir: string, args: string[]): T {
   const result = cli(dataDir, args);
   if (result.exitCode !== 0) {
-    throw new Error(
-      `CLI exited with code ${result.exitCode}: ${result.stderr || result.stdout}`,
-    );
+    throw new Error(`CLI exited with code ${result.exitCode}: ${result.stderr || result.stdout}`);
   }
   return JSON.parse(result.stdout) as T;
 }

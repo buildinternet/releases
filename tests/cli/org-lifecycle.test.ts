@@ -17,7 +17,15 @@ describe("CLI org lifecycle", () => {
   });
 
   it("adds an organization", () => {
-    const result = cli(dataDir, ["admin", "org", "add", "Acme Corp", "--category", "cloud", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "org",
+      "add",
+      "Acme Corp",
+      "--category",
+      "cloud",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const org = JSON.parse(result.stdout);
     expect(org.name).toBe("Acme Corp");
@@ -32,34 +40,56 @@ describe("CLI org lifecycle", () => {
   });
 
   it("shows org details", () => {
-    const result = cliJson<{ name: string; slug: string; category: string }>(
-      dataDir,
-      ["admin", "org", "show", "acme-corp", "--json"],
-    );
+    const result = cliJson<{ name: string; slug: string; category: string }>(dataDir, [
+      "admin",
+      "org",
+      "show",
+      "acme-corp",
+      "--json",
+    ]);
     expect(result.name).toBe("Acme Corp");
     expect(result.slug).toBe("acme-corp");
     expect(result.category).toBe("cloud");
   });
 
   it("edits the organization category", () => {
-    const result = cli(dataDir, ["admin", "org", "edit", "acme-corp", "--category", "ai", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "org",
+      "edit",
+      "acme-corp",
+      "--category",
+      "ai",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.category).toBe("ai");
   });
 
   it("edits the organization name", () => {
-    const result = cli(dataDir, ["admin", "org", "edit", "acme-corp", "--name", "Acme Inc", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "org",
+      "edit",
+      "acme-corp",
+      "--name",
+      "Acme Inc",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.name).toBe("Acme Inc");
   });
 
   it("reflects edits in org show", () => {
-    const result = cliJson<{ name: string; category: string }>(
-      dataDir,
-      ["admin", "org", "show", "acme-corp", "--json"],
-    );
+    const result = cliJson<{ name: string; category: string }>(dataDir, [
+      "admin",
+      "org",
+      "show",
+      "acme-corp",
+      "--json",
+    ]);
     expect(result.name).toBe("Acme Inc");
     expect(result.category).toBe("ai");
   });
@@ -71,7 +101,15 @@ describe("CLI org lifecycle", () => {
   });
 
   it("adds a second organization", () => {
-    const result = cli(dataDir, ["admin", "org", "add", "Beta Labs", "--domain", "beta.io", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "org",
+      "add",
+      "Beta Labs",
+      "--domain",
+      "beta.io",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const org = JSON.parse(result.stdout);
     expect(org.slug).toBe("beta-labs");
@@ -84,7 +122,14 @@ describe("CLI org lifecycle", () => {
   });
 
   it("filters org list by query", () => {
-    const orgs = cliJson<{ slug: string }[]>(dataDir, ["admin", "org", "list", "--query", "beta", "--json"]);
+    const orgs = cliJson<{ slug: string }[]>(dataDir, [
+      "admin",
+      "org",
+      "list",
+      "--query",
+      "beta",
+      "--json",
+    ]);
     expect(orgs.length).toBe(1);
     expect(orgs[0].slug).toBe("beta-labs");
   });
@@ -116,8 +161,12 @@ describe("CLI org lifecycle", () => {
 
   it("org add with description", () => {
     const result = cli(dataDir, [
-      "admin", "org", "add", "Described Org",
-      "--description", "A well-described organization",
+      "admin",
+      "org",
+      "add",
+      "Described Org",
+      "--description",
+      "A well-described organization",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -127,8 +176,12 @@ describe("CLI org lifecycle", () => {
 
   it("edits org description", () => {
     const result = cli(dataDir, [
-      "admin", "org", "edit", "described-org",
-      "--description", "Updated description",
+      "admin",
+      "org",
+      "edit",
+      "described-org",
+      "--description",
+      "Updated description",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -138,8 +191,12 @@ describe("CLI org lifecycle", () => {
 
   it("org add with avatar", () => {
     const result = cli(dataDir, [
-      "admin", "org", "add", "Avatar Org",
-      "--avatar", "https://example.com/logo.png",
+      "admin",
+      "org",
+      "add",
+      "Avatar Org",
+      "--avatar",
+      "https://example.com/logo.png",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -149,8 +206,12 @@ describe("CLI org lifecycle", () => {
 
   it("edits org avatar", () => {
     const result = cli(dataDir, [
-      "admin", "org", "edit", "avatar-org",
-      "--avatar", "https://example.com/new-logo.png",
+      "admin",
+      "org",
+      "edit",
+      "avatar-org",
+      "--avatar",
+      "https://example.com/new-logo.png",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -159,11 +220,7 @@ describe("CLI org lifecycle", () => {
   });
 
   it("clears org avatar with --no-avatar", () => {
-    const result = cli(dataDir, [
-      "admin", "org", "edit", "avatar-org",
-      "--no-avatar",
-      "--json",
-    ]);
+    const result = cli(dataDir, ["admin", "org", "edit", "avatar-org", "--no-avatar", "--json"]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.avatarUrl).toBeNull();

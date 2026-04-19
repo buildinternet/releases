@@ -16,7 +16,12 @@ interface RelatedReleasesProps {
  * neighbors. Callers should stack multiple instances (e.g. one org-scoped +
  * one global) and let the empty path hide the ones that don't apply.
  */
-export async function RelatedReleases({ anchorReleaseId, scope, heading, limit = 8 }: RelatedReleasesProps) {
+export async function RelatedReleases({
+  anchorReleaseId,
+  scope,
+  heading,
+  limit = 8,
+}: RelatedReleasesProps) {
   let items: RelatedReleaseItem[] = [];
   try {
     const res = await api.relatedReleases(anchorReleaseId, scope, limit);
@@ -77,7 +82,9 @@ function RelatedReleaseCard({ item }: { item: RelatedReleaseItem }) {
         )}
       </div>
       {showSubtitle && (
-        <div className="text-[12px] text-stone-600 dark:text-stone-400 truncate mt-0.5">{item.title}</div>
+        <div className="text-[12px] text-stone-600 dark:text-stone-400 truncate mt-0.5">
+          {item.title}
+        </div>
       )}
       {/*
         The source name is shown as plain text (not a nested link) because

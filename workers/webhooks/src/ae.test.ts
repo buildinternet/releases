@@ -4,7 +4,11 @@ import { writeDeliveryAttempt } from "./ae.js";
 function fakeAE() {
   const written: any[] = [];
   return {
-    ds: { writeDataPoint: (point: any) => { written.push(point); } } as any,
+    ds: {
+      writeDataPoint: (point: any) => {
+        written.push(point);
+      },
+    } as any,
     written,
   };
 }

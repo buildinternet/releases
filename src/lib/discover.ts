@@ -9,7 +9,16 @@ import { logUsage } from "./usage.js";
 // ── Types ────────────────────────────────────────────────────────────
 
 export type DiscoveredType = "github" | "feed" | "scrape";
-export type DiscoveryMethod = "sitemap" | "feed" | "html-link" | "github-api" | "provider-hint" | "ai-verified" | "ai-suggested" | "well-known" | "link-rel";
+export type DiscoveryMethod =
+  | "sitemap"
+  | "feed"
+  | "html-link"
+  | "github-api"
+  | "provider-hint"
+  | "ai-verified"
+  | "ai-suggested"
+  | "well-known"
+  | "link-rel";
 export type Confidence = "high" | "medium" | "low";
 
 export interface DiscoveredSource {
@@ -77,7 +86,9 @@ export function parseSitemapUrlsFromRobots(robotsTxt: string, origin: string): s
       const url = match[1].trim();
       try {
         urls.push(new URL(url, origin).toString());
-      } catch { /* skip malformed */ }
+      } catch {
+        /* skip malformed */
+      }
     }
   }
   return urls.length > 0 ? urls : [`${origin}/sitemap.xml`];
@@ -144,7 +155,9 @@ async function discoverFromSitemap(origin: string): Promise<DiscoveredSource[]> 
       const dir = lastSlash > 0 ? parsed.pathname.slice(0, lastSlash) : parsed.pathname;
       const dirUrl = `${parsed.origin}${dir}`;
       dirCounts.set(dirUrl, (dirCounts.get(dirUrl) ?? 0) + 1);
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   // Emit collapsed parent directories (strong signal: multiple entries)
@@ -178,7 +191,9 @@ async function discoverFromSitemap(origin: string): Promise<DiscoveredSource[]> 
           label: extractPathLabel(url),
         });
       }
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   return dedup(results);
@@ -199,11 +214,13 @@ async function probeUrl(url: string): Promise<boolean> {
     clearTimeout(timer);
     if (!res.ok) return false;
     const ct = res.headers.get("content-type") ?? "";
-    return ct.includes("text/html")
-      || ct.includes("application/json")
-      || ct.includes("xml")
-      || ct.includes("rss")
-      || ct.includes("atom");
+    return (
+      ct.includes("text/html") ||
+      ct.includes("application/json") ||
+      ct.includes("xml") ||
+      ct.includes("rss") ||
+      ct.includes("atom")
+    );
   } catch {
     return false;
   }
@@ -217,11 +234,7 @@ async function discoverFeeds(
 ): Promise<DiscoveredSource[]> {
   const results: DiscoveredSource[] = [];
 
-  const urlsToProbe = [
-    origin,
-    `${origin}/changelog`,
-    `${origin}/blog`,
-  ];
+  const urlsToProbe = [origin, `${origin}/changelog`, `${origin}/blog`];
 
   const probeResults = await Promise.allSettled(
     urlsToProbe.map(async (url) => {
@@ -314,7 +327,9 @@ async function discoverFromHtmlLinks(origin: string): Promise<DiscoveredSource[]
         confidence: "high",
         label: `<link rel="${rel}">`,
       });
-    } catch { /* skip malformed URLs */ }
+    } catch {
+      /* skip malformed URLs */
+    }
   }
 
   // ── Anchor links from <body> ──
@@ -347,7 +362,9 @@ async function discoverFromHtmlLinks(origin: string): Promise<DiscoveredSource[]
         confidence: hrefMatches && textMatches ? "high" : "medium",
         label: text || extractPathLabel(resolved),
       });
-    } catch { /* skip malformed URLs */ }
+    } catch {
+      /* skip malformed URLs */
+    }
   }
 
   return results;
@@ -395,7 +412,9 @@ export function parseWellKnownText(text: string, origin: string): DiscoveredSour
           confidence: "high",
           label: "well-known changelog",
         });
-      } catch { /* skip malformed */ }
+      } catch {
+        /* skip malformed */
+      }
     }
 
     const feedMatch = trimmed.match(/^Feed:\s*(.+)/i);
@@ -409,7 +428,9 @@ export function parseWellKnownText(text: string, origin: string): DiscoveredSour
           confidence: "high",
           label: "well-known feed",
         });
-      } catch { /* skip malformed */ }
+      } catch {
+        /* skip malformed */
+      }
     }
   }
 
@@ -436,7 +457,9 @@ export function parseWellKnownJson(raw: string, origin: string): DiscoveredSourc
         confidence: "high",
         label: "well-known changelog",
       });
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
   if (manifest.feed) {
     try {
@@ -447,7 +470,9 @@ export function parseWellKnownJson(raw: string, origin: string): DiscoveredSourc
         confidence: "high",
         label: "well-known feed",
       });
-    } catch { /* skip */ }
+    } catch {
+      /* skip */
+    }
   }
 
   // Multi-product array
@@ -462,7 +487,9 @@ export function parseWellKnownJson(raw: string, origin: string): DiscoveredSourc
           confidence: "high",
           label: `well-known: ${name}`,
         });
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
     if (entry.feed) {
       try {
@@ -473,7 +500,9 @@ export function parseWellKnownJson(raw: string, origin: string): DiscoveredSourc
           confidence: "high",
           label: `well-known feed: ${name}`,
         });
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
   }
 
@@ -504,7 +533,9 @@ export function parseAgentsFile(text: string, origin: string): DiscoveredSource[
           confidence: "high",
           label: "AGENTS file changelog",
         });
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
       continue;
     }
 
@@ -521,12 +552,18 @@ export function parseAgentsFile(text: string, origin: string): DiscoveredSource[
           confidence: "high",
           label: `AGENTS file: ${mdMatch[1].trim()}`,
         });
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
 
     // Bare URLs on changelog-related lines — only if the URL path itself matches
     const urlMatch = trimmed.match(/https?:\/\/[^\s)>"]+/);
-    if (urlMatch && !results.some((r) => r.url === urlMatch[0]) && matchesChangelogPattern(urlMatch[0])) {
+    if (
+      urlMatch &&
+      !results.some((r) => r.url === urlMatch[0]) &&
+      matchesChangelogPattern(urlMatch[0])
+    ) {
       try {
         const url = new URL(urlMatch[0], origin).toString();
         results.push({
@@ -536,7 +573,9 @@ export function parseAgentsFile(text: string, origin: string): DiscoveredSource[
           confidence: "medium",
           label: "AGENTS file URL",
         });
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
   }
 
@@ -561,13 +600,15 @@ async function probeRootChangelog(origin: string): Promise<DiscoveredSource[]> {
 
   for (const r of results) {
     if (r.status === "fulfilled" && r.value) {
-      return [{
-        url: r.value.url,
-        type: "scrape" as const,
-        method: "well-known" as const,
-        confidence: "high" as const,
-        label: `root ${r.value.path}`,
-      }];
+      return [
+        {
+          url: r.value.url,
+          type: "scrape" as const,
+          method: "well-known" as const,
+          confidence: "high" as const,
+          label: `root ${r.value.path}`,
+        },
+      ];
     }
   }
   return [];
@@ -584,14 +625,14 @@ async function probeRootChangelog(origin: string): Promise<DiscoveredSource[]> {
 async function discoverFromWellKnown(origin: string): Promise<DiscoveredSource[]> {
   // Tier 1: All /.well-known/ paths in parallel (JSON preferred over text)
   const wellKnownResults = await Promise.allSettled([
-    fetchText(`${origin}/.well-known/changelog.json`, 8_000).then(
-      (body) => body ? parseWellKnownJson(body, origin) : [],
+    fetchText(`${origin}/.well-known/changelog.json`, 8_000).then((body) =>
+      body ? parseWellKnownJson(body, origin) : [],
     ),
-    fetchText(`${origin}/.well-known/releases.json`, 8_000).then(
-      (body) => body ? parseWellKnownJson(body, origin) : [],
+    fetchText(`${origin}/.well-known/releases.json`, 8_000).then((body) =>
+      body ? parseWellKnownJson(body, origin) : [],
     ),
-    fetchText(`${origin}/.well-known/changelog.txt`, 8_000).then(
-      (body) => body ? parseWellKnownText(body, origin) : [],
+    fetchText(`${origin}/.well-known/changelog.txt`, 8_000).then((body) =>
+      body ? parseWellKnownText(body, origin) : [],
     ),
   ]);
   // Prefer JSON over text — check in order
@@ -604,11 +645,11 @@ async function discoverFromWellKnown(origin: string): Promise<DiscoveredSource[]
 
   // Tier 3: AGENTS files (may contain changelog refs among other instructions)
   const [agentsMdResult, agentsTxtResult] = await Promise.allSettled([
-    fetchText(`${origin}/AGENTS.md`, 8_000).then(
-      (body) => body ? parseAgentsFile(body, origin) : [],
+    fetchText(`${origin}/AGENTS.md`, 8_000).then((body) =>
+      body ? parseAgentsFile(body, origin) : [],
     ),
-    fetchText(`${origin}/AGENTS.txt`, 8_000).then(
-      (body) => body ? parseAgentsFile(body, origin) : [],
+    fetchText(`${origin}/AGENTS.txt`, 8_000).then((body) =>
+      body ? parseAgentsFile(body, origin) : [],
     ),
   ]);
   const agentsSources: DiscoveredSource[] = [];
@@ -715,7 +756,8 @@ async function discoverFromGitHub(handle: string): Promise<DiscoveredSource[]> {
 
 const VERIFY_TOOL = {
   name: "report_results" as const,
-  description: "Report which candidate URLs are valid changelog pages and suggest any additional changelog URLs discovered.",
+  description:
+    "Report which candidate URLs are valid changelog pages and suggest any additional changelog URLs discovered.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -726,14 +768,18 @@ const VERIFY_TOOL = {
           type: "object" as const,
           properties: {
             url: { type: "string" as const },
-            label: { type: "string" as const, description: "Brief description of what this page contains" },
+            label: {
+              type: "string" as const,
+              description: "Brief description of what this page contains",
+            },
           },
           required: ["url", "label"],
         },
       },
       rejected: {
         type: "array" as const,
-        description: "Candidate URLs that are NOT changelog pages (404, homepage redirect, unrelated content)",
+        description:
+          "Candidate URLs that are NOT changelog pages (404, homepage redirect, unrelated content)",
         items: {
           type: "object" as const,
           properties: {
@@ -745,7 +791,8 @@ const VERIFY_TOOL = {
       },
       suggested: {
         type: "array" as const,
-        description: "Additional changelog/release-note URLs discovered that were not in the candidate list",
+        description:
+          "Additional changelog/release-note URLs discovered that were not in the candidate list",
         items: {
           type: "object" as const,
           properties: {
@@ -768,9 +815,12 @@ async function verifyWithAI(
 ): Promise<DiscoveredSource[]> {
   const client = getAnthropicClient();
 
-  const candidateList = candidates.map((c) =>
-    `- ${c.url} (found via ${c.method}, type: ${c.type}${c.label ? `, label: ${c.label}` : ""})`
-  ).join("\n");
+  const candidateList = candidates
+    .map(
+      (c) =>
+        `- ${c.url} (found via ${c.method}, type: ${c.type}${c.label ? `, label: ${c.label}` : ""})`,
+    )
+    .join("\n");
 
   const providerNote = provider
     ? `\nThe site appears to use ${provider.name} as its documentation/content platform.`
@@ -793,7 +843,9 @@ async function verifyWithAI(
         content: [
           `Domain: ${domain}${providerNote}`,
           "",
-          candidates.length > 0 ? `Candidate URLs to verify:\n${candidateList}` : "No candidates were found by automated discovery.",
+          candidates.length > 0
+            ? `Candidate URLs to verify:\n${candidateList}`
+            : "No candidates were found by automated discovery.",
           "",
           "Please verify each candidate and suggest any additional changelog/release-note URLs for this domain that automated discovery may have missed.",
           "Consider: support sites (support.domain.com), documentation sites (docs.domain.com), blog release categories, and known provider patterns.",
@@ -897,16 +949,21 @@ export function collapseChildren(sources: DiscoveredSource[]): DiscoveredSource[
         const parentUrl = `${parsed.origin}${parentPath}`;
         if (urls.has(parentUrl) && parentUrl !== s.url) return false;
       }
-    } catch { /* keep */ }
+    } catch {
+      /* keep */
+    }
     return true;
   });
 }
 
 export function confidenceRank(c: Confidence): number {
   switch (c) {
-    case "high": return 3;
-    case "medium": return 2;
-    case "low": return 1;
+    case "high":
+      return 3;
+    case "medium":
+      return 2;
+    case "low":
+      return 1;
   }
 }
 
@@ -969,7 +1026,9 @@ export async function discover(options: DiscoverOptions): Promise<DiscoverResult
       deduped = dedup(deduped);
       deduped.sort((a, b) => confidenceRank(b.confidence) - confidenceRank(a.confidence));
     } catch (err) {
-      logger.warn(`AI verification failed, returning unverified results: ${err instanceof Error ? err.message : String(err)}`);
+      logger.warn(
+        `AI verification failed, returning unverified results: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
 

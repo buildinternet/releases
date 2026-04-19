@@ -14,6 +14,7 @@ Many pages have better-structured data sources behind them — RSS feeds, raw ma
 After discovering a feed or structured source, always spot-check the entries before accepting it. Sample a few entries and verify they are actual changelog or release content — not blog posts, marketing articles, tutorials, or unrelated editorial content.
 
 Red flags that a feed is wrong:
+
 - Entry URLs point to `/blog/` paths rather than `/changelog/` or `/releases/` paths
 - Titles read like articles or tutorials (e.g., "Choosing a logging library: The definitive guide")
 - No version numbers, semver patterns, or feature/fix language anywhere in the entries
@@ -46,6 +47,7 @@ The discovery pipeline checks for standardized changelog metadata before falling
 ### Well-known files (highest priority)
 
 Checked in cascade — stops as soon as a tier produces results:
+
 1. `/.well-known/changelog.json` — JSON manifest (primary)
 2. `/.well-known/releases.json` — JSON manifest (alias)
 3. `/.well-known/changelog.txt` — text format (security.txt-style fallback)
@@ -55,6 +57,7 @@ Checked in cascade — stops as soon as a tier produces results:
 **JSON manifest format** (`/.well-known/changelog.json`):
 
 Single product:
+
 ```json
 {
   "version": 1,
@@ -64,17 +67,23 @@ Single product:
 ```
 
 Multi-product:
+
 ```json
 {
   "version": 1,
   "changelogs": [
-    { "name": "Platform", "url": "https://example.com/changelog", "feed": "https://example.com/changelog.rss" },
+    {
+      "name": "Platform",
+      "url": "https://example.com/changelog",
+      "feed": "https://example.com/changelog.rss"
+    },
     { "name": "API", "url": "https://example.com/api/changelog" }
   ]
 }
 ```
 
 **Text manifest format** (`/.well-known/changelog.txt`):
+
 ```
 # Changelog discovery — see https://releases.sh/well-known
 Changelog: https://example.com/changelog
@@ -84,6 +93,7 @@ Feed: https://example.com/changelog/feed.xml
 Lines starting with `#` are comments. Keys are `Changelog:` and `Feed:`, one per line.
 
 **AGENTS.md / AGENTS.txt** — AI agent instruction files may reference changelogs. The parser detects:
+
 - Key-value lines: `Changelog: https://example.com/changelog`
 - Markdown links: `[Our Changelog](https://example.com/changelog)`
 - Bare URLs on lines mentioning "changelog", "release notes", etc.
@@ -95,14 +105,15 @@ Lines starting with `#` are comments. Keys are `Changelog:` and `Feed:`, one per
 The discovery pipeline detects these `<link>` tags in the HTML `<head>`:
 
 ```html
-<link rel="changelog" href="/changelog">
-<link rel="releases" href="/releases">
-<link rel="release-notes" href="/docs/release-notes">
+<link rel="changelog" href="/changelog" />
+<link rel="releases" href="/releases" />
+<link rel="release-notes" href="/docs/release-notes" />
 ```
 
 If the tag includes a feed `type` attribute, the URL is treated as a feed source:
+
 ```html
-<link rel="changelog" type="application/atom+xml" href="/changelog.atom">
+<link rel="changelog" type="application/atom+xml" href="/changelog.atom" />
 ```
 
 These are distinct from standard feed autodiscovery (`rel="alternate"`) — they point directly to changelog pages or feeds, not generic site feeds.
@@ -110,6 +121,7 @@ These are distinct from standard feed autodiscovery (`rel="alternate"`) — they
 ### Discovery method labels
 
 Sources found via these mechanisms are tagged:
+
 - `method: "well-known"` — from `/.well-known/` manifest files
 - `method: "link-rel"` — from HTML `<link rel="changelog|releases|release-notes">`
 
@@ -120,6 +132,7 @@ Both carry `confidence: "high"` since they represent explicit publisher intent.
 Evaluate a URL to determine the best ingestion method. CLI: `releases admin discovery evaluate <url> --json`. Typed tool: `evaluate_url` with url param.
 
 Key fields in output:
+
 - `recommendedMethod`: `feed`, `github`, `markdown`, `scrape`, or `crawl`
 - `recommendedUrl`: The URL to use (may differ from the input URL)
 - `feedUrl` / `feedType`: If a feed was found
@@ -159,6 +172,7 @@ After adding sources, mark the primary one. CLI: `releases admin source edit <id
 ## When to Use Crawl
 
 Use `--crawl` (or set `crawlEnabled` in source metadata) when:
+
 - The page is an **index** linking to individual release pages (e.g., `/changelog/2024-03-15`)
 - Single-page scraping only gets titles/dates but not full content
 - The provider is known to use per-release pages (Intercom, Notion, some custom sites)
@@ -169,19 +183,19 @@ Do NOT use crawl for single-page changelogs or feeds.
 
 Detected automatically in pre-checks. Listed for reference:
 
-| Provider | Feed Paths | Markdown Suffix | Static | Notes |
-|----------|-----------|-----------------|--------|-------|
-| Mintlify | `/rss.xml` | Yes (`.md`) | Yes | — |
-| Fern | `/changelog.rss`, `/docs/changelog.rss` | — | No | RSS contains `fve-mdx-b64` attributes (noise, stripped automatically). `<generator>` tag = `buildwithfern.com`. |
-| ReadMe | `/changelog.rss` | — | No | — |
-| Docusaurus | `/blog/rss.xml`, `/blog/atom.xml`, `/blog/feed.json` | — | Yes | — |
-| Ghost | `/rss/` | — | Yes | — |
-| WordPress | `/feed/` | — | Yes | — |
-| Productboard | `/changelog.rss`, `/changelog/feed` | — | No | — |
-| Headway | `/feed` | — | No | — |
-| Beamer | `/feed` | — | No | — |
-| LaunchNotes | `/rss` | — | No | — |
-| GitBook, Notion, Intercom, Zendesk, etc. | — | — | No | No feeds; use crawl or scrape. Some may expose a title-only RSS feed (no content body) — these are auto-detected as `summary-only` and fall through to scrape |
+| Provider                                 | Feed Paths                                           | Markdown Suffix | Static | Notes                                                                                                                                                         |
+| ---------------------------------------- | ---------------------------------------------------- | --------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Mintlify                                 | `/rss.xml`                                           | Yes (`.md`)     | Yes    | —                                                                                                                                                             |
+| Fern                                     | `/changelog.rss`, `/docs/changelog.rss`              | —               | No     | RSS contains `fve-mdx-b64` attributes (noise, stripped automatically). `<generator>` tag = `buildwithfern.com`.                                               |
+| ReadMe                                   | `/changelog.rss`                                     | —               | No     | —                                                                                                                                                             |
+| Docusaurus                               | `/blog/rss.xml`, `/blog/atom.xml`, `/blog/feed.json` | —               | Yes    | —                                                                                                                                                             |
+| Ghost                                    | `/rss/`                                              | —               | Yes    | —                                                                                                                                                             |
+| WordPress                                | `/feed/`                                             | —               | Yes    | —                                                                                                                                                             |
+| Productboard                             | `/changelog.rss`, `/changelog/feed`                  | —               | No     | —                                                                                                                                                             |
+| Headway                                  | `/feed`                                              | —               | No     | —                                                                                                                                                             |
+| Beamer                                   | `/feed`                                              | —               | No     | —                                                                                                                                                             |
+| LaunchNotes                              | `/rss`                                               | —               | No     | —                                                                                                                                                             |
+| GitBook, Notion, Intercom, Zendesk, etc. | —                                                    | —               | No     | No feeds; use crawl or scrape. Some may expose a title-only RSS feed (no content body) — these are auto-detected as `summary-only` and fall through to scrape |
 
 ## Rendering Optimization
 
@@ -209,6 +223,7 @@ Only index an org's **own products**, not their ecosystem or community plugins. 
 - `next-auth` (community library) — no
 
 Signs that a repo is ecosystem, not core:
+
 - Maintained by a different team or community contributors
 - One of hundreds of similar repos (providers, plugins, extensions, adapters)
 - Ships independently of the org's main release cycle
@@ -217,6 +232,7 @@ Signs that a repo is ecosystem, not core:
 ### Staleness signals — when to skip
 
 Skip sources that show signs of being inactive or low-value:
+
 - **Maintenance mode:** No meaningful releases in 6+ months, or only dependency bumps
 - **Pre-release only:** Recent "releases" are all dev/alpha/RC builds with no stable versions
 - **Superseded:** The product has been replaced by a successor (e.g., Vagrant → dev containers)

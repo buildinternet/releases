@@ -23,7 +23,10 @@ export type PreflightAction =
  * truth for the preflight matrix in the design spec. Pure function — no
  * fetch, no side effects.
  */
-export function classifyPreflightResponse(input: { status: number; body: string }): PreflightAction {
+export function classifyPreflightResponse(input: {
+  status: number;
+  body: string;
+}): PreflightAction {
   const { status, body } = input;
   if (status === 200) return { action: "proceed" };
   if (status === 401 || status === 403) return { action: "abort", abortReason: "anthropic_auth" };
@@ -141,14 +144,15 @@ export async function queryCandidates(
     or(eq(sources.isHidden, false), isNull(sources.isHidden)),
   );
 
-  const rows = await db.select({
-    id: sources.id,
-    slug: sources.slug,
-    orgId: sources.orgId,
-    orgSlug: organizations.slug,
-    orgName: organizations.name,
-    changeDetectedAt: sources.changeDetectedAt,
-  })
+  const rows = await db
+    .select({
+      id: sources.id,
+      slug: sources.slug,
+      orgId: sources.orgId,
+      orgSlug: organizations.slug,
+      orgName: organizations.name,
+      changeDetectedAt: sources.changeDetectedAt,
+    })
     .from(sources)
     .innerJoin(organizations, eq(organizations.id, sources.orgId))
     .where(whereClause)
@@ -159,7 +163,8 @@ export async function queryCandidates(
   let sliced = rows;
   if (rows.length > params.cap) {
     sliced = rows.slice(0, params.cap);
-    const countResult = await db.select({ c: sql<number>`count(*)` })
+    const countResult = await db
+      .select({ c: sql<number>`count(*)` })
       .from(sources)
       .innerJoin(organizations, eq(organizations.id, sources.orgId))
       .where(whereClause);
@@ -215,7 +220,11 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   const sweepCorrelationId = crypto.randomUUID();
   const cap = parseMaxSessions(env.SCRAPE_AGENT_MAX_SESSIONS);
 
-  await reconcileStaleRunning(db, { cronName: CRON_NAME, now, thresholdMs: STALE_RUNNING_THRESHOLD_MS });
+  await reconcileStaleRunning(db, {
+    cronName: CRON_NAME,
+    now,
+    thresholdMs: STALE_RUNNING_THRESHOLD_MS,
+  });
 
   const runId = await insertRunningRow(db, { cronName: CRON_NAME, startedAt: now.toISOString() });
 
@@ -225,7 +234,9 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     const preflight = await runPreflight(env.ANTHROPIC_API_KEY);
     if (preflight.action === "abort") aborted = preflight;
   } else {
-    console.warn("[scrape-agent-cron] ANTHROPIC_API_KEY missing — skipping pre-flight; sessions may fail");
+    console.warn(
+      "[scrape-agent-cron] ANTHROPIC_API_KEY missing — skipping pre-flight; sessions may fail",
+    );
   }
 
   if (aborted) {
@@ -244,19 +255,22 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
       dispatchErrorDetail: [],
       notes,
     });
-    await sendCronReport(env, buildReport(env, {
-      runId,
-      startedAt: now.toISOString(),
-      endedAt,
-      durationMs: endedAtMs - now.getTime(),
-      status: "aborted",
-      abortReason: aborted.abortReason,
-      candidates: 0,
-      dispatched: 0,
-      skippedOverCap: 0,
-      dispatchErrors: 0,
-      notes,
-    }));
+    await sendCronReport(
+      env,
+      buildReport(env, {
+        runId,
+        startedAt: now.toISOString(),
+        endedAt,
+        durationMs: endedAtMs - now.getTime(),
+        status: "aborted",
+        abortReason: aborted.abortReason,
+        candidates: 0,
+        dispatched: 0,
+        skippedOverCap: 0,
+        dispatchErrors: 0,
+        notes,
+      }),
+    );
     return;
   }
 
@@ -270,8 +284,10 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   );
 
   const derived = deriveSweepStatus({ candidates: rows.length, dispatchResults });
-  const sessionsStarted = dispatchResults.flatMap((r) => r.ok ? [r.sessionId] : []);
-  const dispatchErrors = dispatchResults.flatMap((r) => !r.ok ? [{ orgSlug: r.orgSlug, error: r.error }] : []);
+  const sessionsStarted = dispatchResults.flatMap((r) => (r.ok ? [r.sessionId] : []));
+  const dispatchErrors = dispatchResults.flatMap((r) =>
+    !r.ok ? [{ orgSlug: r.orgSlug, error: r.error }] : [],
+  );
 
   const endedAtMs = Date.now();
   const endedAt = new Date(endedAtMs).toISOString();
@@ -288,23 +304,28 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     notes: derived.notes ?? null,
   });
 
-  console.log(`[scrape-agent-cron] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`);
+  console.log(
+    `[scrape-agent-cron] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`,
+  );
 
-  await sendCronReport(env, buildReport(env, {
-    runId,
-    startedAt: now.toISOString(),
-    endedAt,
-    durationMs: endedAtMs - now.getTime(),
-    status: derived.status,
-    abortReason: derived.abortReason,
-    candidates: rows.length,
-    dispatched: sessionsStarted.length,
-    skippedOverCap,
-    dispatchErrors: dispatchErrors.length,
-    notes: derived.notes ?? null,
-    sessionsStarted,
-    dispatchErrorDetail: dispatchErrors,
-  }));
+  await sendCronReport(
+    env,
+    buildReport(env, {
+      runId,
+      startedAt: now.toISOString(),
+      endedAt,
+      durationMs: endedAtMs - now.getTime(),
+      status: derived.status,
+      abortReason: derived.abortReason,
+      candidates: rows.length,
+      dispatched: sessionsStarted.length,
+      skippedOverCap,
+      dispatchErrors: dispatchErrors.length,
+      notes: derived.notes ?? null,
+      sessionsStarted,
+      dispatchErrorDetail: dispatchErrors,
+    }),
+  );
 }
 
 type ReportBody = Omit<CronReport, "cronName" | "adminBaseUrl">;
@@ -317,7 +338,9 @@ function parseMaxSessions(raw: string | undefined): number {
   if (!raw) return DEFAULT_MAX_SESSIONS;
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) {
-    console.warn(`[scrape-agent-cron] invalid SCRAPE_AGENT_MAX_SESSIONS=${raw}; using default ${DEFAULT_MAX_SESSIONS}`);
+    console.warn(
+      `[scrape-agent-cron] invalid SCRAPE_AGENT_MAX_SESSIONS=${raw}; using default ${DEFAULT_MAX_SESSIONS}`,
+    );
     return DEFAULT_MAX_SESSIONS;
   }
   return n;
@@ -334,7 +357,9 @@ async function runPreflight(apiKey: string): Promise<PreflightAction> {
     const body = await res.text().catch(() => "");
     return classifyPreflightResponse({ status: res.status, body });
   } catch (err) {
-    console.warn(`[scrape-agent-cron] preflight failed: ${err instanceof Error ? err.message : err}`);
+    console.warn(
+      `[scrape-agent-cron] preflight failed: ${err instanceof Error ? err.message : err}`,
+    );
     return { action: "warn" };
   } finally {
     clearTimeout(timeout);
@@ -367,6 +392,10 @@ async function dispatchOne(
     const { sessionId } = (await res.json()) as { sessionId: string };
     return { orgSlug: group.orgSlug, ok: true, sessionId };
   } catch (err) {
-    return { orgSlug: group.orgSlug, ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      orgSlug: group.orgSlug,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }

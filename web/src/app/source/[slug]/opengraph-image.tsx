@@ -13,17 +13,11 @@ export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
 
-export default async function Image({
-  params,
-}: {
-  params: Promise<{ slug: string }>;
-}) {
+export default async function Image({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   try {
     const source = await api.sourceDetail(slug);
-    const orgDetail = source.org
-      ? await api.orgDetail(source.org.slug).catch(() => null)
-      : null;
+    const orgDetail = source.org ? await api.orgDetail(source.org.slug).catch(() => null) : null;
     const avatarUrl = await resolveAvatarUrl(orgDetail);
 
     const metrics = [

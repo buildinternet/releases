@@ -13,11 +13,13 @@
 ## File Structure
 
 ### New files
+
 - `src/lib/categories.ts` — Category const and type
 - `workers/api/migrations/0014_categories_tags.sql` — D1 migration
 - `src/db/migrations/0010_*.sql` — Local Drizzle migration (generated)
 
 ### Modified files
+
 - `src/lib/id.ts` — Add `newTagId()`
 - `src/db/schema.ts` — Add `tags`, `org_tags`, `product_tags` tables; add `category` to orgs and products
 - `src/db/queries.ts` — Add tag CRUD helpers; update `createOrg`, `createProduct`
@@ -40,6 +42,7 @@
 ### Task 1: Categories const and tag ID generator
 
 **Files:**
+
 - Create: `src/lib/categories.ts`
 - Modify: `src/lib/id.ts`
 
@@ -92,6 +95,7 @@ git commit -m "feat: add categories const and tag ID generator"
 ### Task 2: Schema — tags, org_tags, product_tags tables; category columns
 
 **Files:**
+
 - Modify: `src/db/schema.ts`
 
 - [ ] **Step 1: Add category column to organizations**
@@ -119,7 +123,9 @@ export const tags = sqliteTable("tags", {
   id: text("id").primaryKey().$defaultFn(newTagId),
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
-  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
 });
 ```
 
@@ -137,11 +143,11 @@ export const orgTags = sqliteTable(
     tagId: text("tag_id")
       .notNull()
       .references(() => tags.id, { onDelete: "cascade" }),
-    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
   },
-  (table) => [
-    index("idx_org_tags_tag").on(table.tagId),
-  ],
+  (table) => [index("idx_org_tags_tag").on(table.tagId)],
 );
 ```
 
@@ -159,7 +165,9 @@ export const orgTags = sqliteTable(
     tagId: text("tag_id")
       .notNull()
       .references(() => tags.id, { onDelete: "cascade" }),
-    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
   },
   (table) => [
     uniqueIndex("idx_org_tags_pk").on(table.orgId, table.tagId),
@@ -180,7 +188,9 @@ export const productTags = sqliteTable(
     tagId: text("tag_id")
       .notNull()
       .references(() => tags.id, { onDelete: "cascade" }),
-    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
   },
   (table) => [
     uniqueIndex("idx_product_tags_pk").on(table.productId, table.tagId),
@@ -224,6 +234,7 @@ git commit -m "feat: add tags, org_tags, product_tags tables and category column
 ### Task 3: D1 migration
 
 **Files:**
+
 - Create: `workers/api/migrations/0014_categories_tags.sql`
 
 - [ ] **Step 1: Write the D1 migration**
@@ -274,6 +285,7 @@ git commit -m "feat: add D1 migration for categories and tags"
 ### Task 4: Query helpers — tag CRUD and category support
 
 **Files:**
+
 - Modify: `src/db/queries.ts`
 
 - [ ] **Step 1: Add imports**
@@ -362,7 +374,9 @@ export async function removeTagsFromProduct(productId: string, tagNames: string[
     const slug = toSlug(name);
     const [tag] = await db.select().from(tags).where(eq(tags.slug, slug));
     if (tag) {
-      await db.delete(productTags).where(and(eq(productTags.productId, productId), eq(productTags.tagId, tag.id)));
+      await db
+        .delete(productTags)
+        .where(and(eq(productTags.productId, productId), eq(productTags.tagId, tag.id)));
     }
   }
 }
@@ -381,15 +395,18 @@ export async function createOrg(
   const db = getDb();
   const slug = opts?.slug ?? toSlug(name);
   const now = new Date().toISOString();
-  const [created] = await db.insert(organizations).values({
-    name,
-    slug,
-    domain: opts?.domain ?? null,
-    description: opts?.description ?? null,
-    category: opts?.category ?? null,
-    createdAt: now,
-    updatedAt: now,
-  }).returning();
+  const [created] = await db
+    .insert(organizations)
+    .values({
+      name,
+      slug,
+      domain: opts?.domain ?? null,
+      description: opts?.description ?? null,
+      category: opts?.category ?? null,
+      createdAt: now,
+      updatedAt: now,
+    })
+    .returning();
   return created;
 }
 ```
@@ -407,14 +424,17 @@ export async function createProduct(
   if (isRemoteMode()) return apiClient.createProduct(orgId, name, opts);
   const db = getDb();
   const slug = opts?.slug ?? toSlug(name);
-  const [created] = await db.insert(products).values({
-    name,
-    slug,
-    orgId,
-    url: opts?.url ?? null,
-    description: opts?.description ?? null,
-    category: opts?.category ?? null,
-  }).returning();
+  const [created] = await db
+    .insert(products)
+    .values({
+      name,
+      slug,
+      orgId,
+      url: opts?.url ?? null,
+      description: opts?.description ?? null,
+      category: opts?.category ?? null,
+    })
+    .returning();
   return created;
 }
 ```
@@ -438,14 +458,11 @@ export async function listSourcesWithOrg(opts?: {
 Add this condition block after the existing `productSlug` condition:
 
 ```typescript
-  if (opts?.category) {
-    conditions.push(
-      or(
-        eq(organizations.category, opts.category),
-        eq(products.category, opts.category),
-      )!,
-    );
-  }
+if (opts?.category) {
+  conditions.push(
+    or(eq(organizations.category, opts.category), eq(products.category, opts.category))!,
+  );
+}
 ```
 
 - [ ] **Step 8: Type-check**
@@ -465,6 +482,7 @@ git commit -m "feat: add tag CRUD helpers and category support to query function
 ### Task 5: API client — remote mode tag/category support
 
 **Files:**
+
 - Modify: `src/api/client.ts`
 
 - [ ] **Step 1: Add Tag type import**
@@ -533,7 +551,13 @@ export async function createOrg(
 ): Promise<Organization> {
   return apiFetch<Organization>("/api/orgs", {
     method: "POST",
-    body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain, description: opts?.description, category: opts?.category }),
+    body: JSON.stringify({
+      name,
+      slug: opts?.slug,
+      domain: opts?.domain,
+      description: opts?.description,
+      category: opts?.category,
+    }),
   });
 }
 ```
@@ -548,7 +572,14 @@ export async function createProduct(
 ): Promise<Product> {
   return apiFetch<Product>(`/api/products`, {
     method: "POST",
-    body: JSON.stringify({ orgId, name, slug: opts?.slug, url: opts?.url, description: opts?.description, category: opts?.category }),
+    body: JSON.stringify({
+      orgId,
+      name,
+      slug: opts?.slug,
+      url: opts?.url,
+      description: opts?.description,
+      category: opts?.category,
+    }),
   });
 }
 ```
@@ -578,6 +609,7 @@ git commit -m "feat: add remote mode tag and category support to API client"
 ### Task 6: API routes — org tag/category endpoints
 
 **Files:**
+
 - Modify: `workers/api/src/routes/orgs.ts`
 
 - [ ] **Step 1: Add tags schema import**
@@ -585,7 +617,15 @@ git commit -m "feat: add remote mode tag and category support to API client"
 Add `tags, orgTags` to the schema import:
 
 ```typescript
-import { organizations, orgAccounts, sources, releases, products, tags, orgTags } from "../../../../src/db/schema.js";
+import {
+  organizations,
+  orgAccounts,
+  sources,
+  releases,
+  products,
+  tags,
+  orgTags,
+} from "../../../../src/db/schema.js";
 ```
 
 Add `isValidCategory` import:
@@ -599,11 +639,13 @@ import { isValidCategory } from "../../../../src/lib/categories.js";
 In the `GET /orgs` handler, add `o.category` to the raw SQL select and map it in the result:
 
 In the SQL select, add after `o.description,`:
+
 ```sql
 o.category,
 ```
 
 In the result mapping, add after `description: row.description,`:
+
 ```typescript
 category: row.category,
 ```
@@ -615,15 +657,16 @@ Update the type annotation on `rows` to include `category: string | null`.
 After the `accounts` query, add a tags query:
 
 ```typescript
-  const tagRows = await db
-    .select({ name: tags.name })
-    .from(orgTags)
-    .innerJoin(tags, eq(orgTags.tagId, tags.id))
-    .where(eq(orgTags.orgId, org.id))
-    .orderBy(tags.name);
+const tagRows = await db
+  .select({ name: tags.name })
+  .from(orgTags)
+  .innerJoin(tags, eq(orgTags.tagId, tags.id))
+  .where(eq(orgTags.orgId, org.id))
+  .orderBy(tags.name);
 ```
 
 In the response JSON, add:
+
 ```typescript
     category: org.category,
     tags: tagRows.map((t) => t.name),
@@ -634,15 +677,22 @@ In the response JSON, add:
 Change the body type to include `category` and `tags`:
 
 ```typescript
-const body = await c.req.json<{ name: string; slug?: string; domain?: string; description?: string; category?: string; tags?: string[] }>();
+const body = await c.req.json<{
+  name: string;
+  slug?: string;
+  domain?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+}>();
 ```
 
 Add category validation before the insert:
 
 ```typescript
-  if (body.category && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
-  }
+if (body.category && !isValidCategory(body.category)) {
+  return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+}
 ```
 
 Add `category: body.category ?? null` to the values object.
@@ -650,16 +700,16 @@ Add `category: body.category ?? null` to the values object.
 After the org is created, handle tags:
 
 ```typescript
-  if (body.tags && body.tags.length > 0) {
-    for (const tagName of body.tags) {
-      const tagSlug = toSlug(tagName);
-      let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-      if (!tag) {
-        [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
-      }
-      await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id }).onConflictDoNothing();
+if (body.tags && body.tags.length > 0) {
+  for (const tagName of body.tags) {
+    const tagSlug = toSlug(tagName);
+    let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+    if (!tag) {
+      [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
     }
+    await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id }).onConflictDoNothing();
   }
+}
 ```
 
 - [ ] **Step 5: Update PATCH /orgs/:slug to accept category and tags**
@@ -667,38 +717,44 @@ After the org is created, handle tags:
 Change the body type:
 
 ```typescript
-const body = await c.req.json<{ name?: string; domain?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
+const body = await c.req.json<{
+  name?: string;
+  domain?: string | null;
+  description?: string | null;
+  category?: string | null;
+  tags?: string[];
+}>();
 ```
 
 Add category validation:
 
 ```typescript
-  if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
-  }
+if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
+  return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+}
 ```
 
 Add to the updates object:
 
 ```typescript
-  if (body.category !== undefined) updates.category = body.category;
+if (body.category !== undefined) updates.category = body.category;
 ```
 
 After the update, handle tags if provided:
 
 ```typescript
-  if (body.tags !== undefined) {
-    // Replace all tags
-    await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
-    for (const tagName of body.tags) {
-      const tagSlug = toSlug(tagName);
-      let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-      if (!tag) {
-        [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
-      }
-      await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id }).onConflictDoNothing();
+if (body.tags !== undefined) {
+  // Replace all tags
+  await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
+  for (const tagName of body.tags) {
+    const tagSlug = toSlug(tagName);
+    let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+    if (!tag) {
+      [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
     }
+    await db.insert(orgTags).values({ orgId: org.id, tagId: tag.id }).onConflictDoNothing();
   }
+}
 ```
 
 - [ ] **Step 6: Add GET /orgs/:id/tags endpoint**
@@ -710,9 +766,10 @@ orgRoutes.get("/orgs/:slug/tags", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
 
-  const [org] = await db.select().from(organizations).where(
-    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
-  );
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   const rows = await db
@@ -734,9 +791,10 @@ orgRoutes.put("/orgs/:slug/tags", async (c) => {
   const slug = c.req.param("slug");
   const body = await c.req.json<{ tags: string[] }>();
 
-  const [org] = await db.select().from(organizations).where(
-    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
-  );
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -760,9 +818,10 @@ orgRoutes.delete("/orgs/:slug/tags", async (c) => {
   const slug = c.req.param("slug");
   const body = await c.req.json<{ tags: string[] }>();
 
-  const [org] = await db.select().from(organizations).where(
-    slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug),
-  );
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(slug.startsWith("org_") ? eq(organizations.id, slug) : eq(organizations.slug, slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -785,7 +844,8 @@ This can go in orgs.ts or a new tags route file. Since it's small, add to orgs.t
 orgRoutes.post("/tags", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ name: string }>();
-  if (!body.name) return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
+  if (!body.name)
+    return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
 
   const tagSlug = toSlug(body.name);
   const [existing] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
@@ -808,6 +868,7 @@ git commit -m "feat: add category and tag support to org API routes"
 ### Task 7: API routes — product tag/category endpoints
 
 **Files:**
+
 - Modify: `workers/api/src/routes/products.ts`
 
 - [ ] **Step 1: Add imports**
@@ -815,7 +876,14 @@ git commit -m "feat: add category and tag support to org API routes"
 Add `tags, productTags` to the schema import. Add `isValidCategory`:
 
 ```typescript
-import { products, sources, organizations, orgAccounts, tags, productTags } from "../../../../src/db/schema.js";
+import {
+  products,
+  sources,
+  organizations,
+  orgAccounts,
+  tags,
+  productTags,
+} from "../../../../src/db/schema.js";
 import { isValidCategory } from "../../../../src/lib/categories.js";
 ```
 
@@ -834,18 +902,18 @@ In the select object, add after `createdAt`:
 After the product query, add:
 
 ```typescript
-  const tagRows = await db
-    .select({ name: tags.name })
-    .from(productTags)
-    .innerJoin(tags, eq(productTags.tagId, tags.id))
-    .where(eq(productTags.productId, product.id))
-    .orderBy(tags.name);
+const tagRows = await db
+  .select({ name: tags.name })
+  .from(productTags)
+  .innerJoin(tags, eq(productTags.tagId, tags.id))
+  .where(eq(productTags.productId, product.id))
+  .orderBy(tags.name);
 ```
 
 In the response, add `category: product.category, tags: tagRows.map((t) => t.name)`:
 
 ```typescript
-  return c.json({ ...product, sources: productSources, tags: tagRows.map((t) => t.name) });
+return c.json({ ...product, sources: productSources, tags: tagRows.map((t) => t.name) });
 ```
 
 - [ ] **Step 4: Update POST /products to accept category and tags**
@@ -853,15 +921,23 @@ In the response, add `category: product.category, tags: tagRows.map((t) => t.nam
 Change the body type:
 
 ```typescript
-const body = await c.req.json<{ orgId: string; name: string; slug?: string; url?: string; description?: string; category?: string; tags?: string[] }>();
+const body = await c.req.json<{
+  orgId: string;
+  name: string;
+  slug?: string;
+  url?: string;
+  description?: string;
+  category?: string;
+  tags?: string[];
+}>();
 ```
 
 Add validation:
 
 ```typescript
-  if (body.category && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
-  }
+if (body.category && !isValidCategory(body.category)) {
+  return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+}
 ```
 
 Add `category: body.category ?? null` to the values object.
@@ -869,16 +945,19 @@ Add `category: body.category ?? null` to the values object.
 After creation, handle tags:
 
 ```typescript
-  if (body.tags && body.tags.length > 0) {
-    for (const tagName of body.tags) {
-      const tagSlug = toSlug(tagName);
-      let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-      if (!tag) {
-        [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
-      }
-      await db.insert(productTags).values({ productId: created.id, tagId: tag.id }).onConflictDoNothing();
+if (body.tags && body.tags.length > 0) {
+  for (const tagName of body.tags) {
+    const tagSlug = toSlug(tagName);
+    let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+    if (!tag) {
+      [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
     }
+    await db
+      .insert(productTags)
+      .values({ productId: created.id, tagId: tag.id })
+      .onConflictDoNothing();
   }
+}
 ```
 
 - [ ] **Step 5: Update PATCH /products/:slug to accept category and tags**
@@ -886,32 +965,41 @@ After creation, handle tags:
 Change the body type:
 
 ```typescript
-const body = await c.req.json<{ name?: string; url?: string | null; description?: string | null; category?: string | null; tags?: string[] }>();
+const body = await c.req.json<{
+  name?: string;
+  url?: string | null;
+  description?: string | null;
+  category?: string | null;
+  tags?: string[];
+}>();
 ```
 
 Add validation and updates:
 
 ```typescript
-  if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
-  }
-  if (body.category !== undefined) updates.category = body.category;
+if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
+  return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+}
+if (body.category !== undefined) updates.category = body.category;
 ```
 
 After the update, handle tags:
 
 ```typescript
-  if (body.tags !== undefined) {
-    await db.delete(productTags).where(eq(productTags.productId, product.id));
-    for (const tagName of body.tags) {
-      const tagSlug = toSlug(tagName);
-      let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
-      if (!tag) {
-        [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
-      }
-      await db.insert(productTags).values({ productId: product.id, tagId: tag.id }).onConflictDoNothing();
+if (body.tags !== undefined) {
+  await db.delete(productTags).where(eq(productTags.productId, product.id));
+  for (const tagName of body.tags) {
+    const tagSlug = toSlug(tagName);
+    let [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
+    if (!tag) {
+      [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
     }
+    await db
+      .insert(productTags)
+      .values({ productId: product.id, tagId: tag.id })
+      .onConflictDoNothing();
   }
+}
 ```
 
 - [ ] **Step 6: Add product tag endpoints**
@@ -920,9 +1008,12 @@ After the update, handle tags:
 productRoutes.get("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(
+      identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+    );
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const rows = await db
@@ -938,9 +1029,12 @@ productRoutes.put("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
   const body = await c.req.json<{ tags: string[] }>();
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(
+      identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+    );
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -949,7 +1043,10 @@ productRoutes.put("/products/:identifier/tags", async (c) => {
     if (!tag) {
       [tag] = await db.insert(tags).values({ name: tagName, slug: tagSlug }).returning();
     }
-    await db.insert(productTags).values({ productId: product.id, tagId: tag.id }).onConflictDoNothing();
+    await db
+      .insert(productTags)
+      .values({ productId: product.id, tagId: tag.id })
+      .onConflictDoNothing();
   }
   return c.json({ ok: true });
 });
@@ -958,16 +1055,21 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
   const body = await c.req.json<{ tags: string[] }>();
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(
+      identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+    );
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   for (const tagName of body.tags) {
     const tagSlug = toSlug(tagName);
     const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
     if (tag) {
-      await db.delete(productTags).where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
+      await db
+        .delete(productTags)
+        .where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));
     }
   }
   return c.json({ ok: true });
@@ -986,6 +1088,7 @@ git commit -m "feat: add category and tag support to product API routes"
 ### Task 8: CLI — category and tags on org commands
 
 **Files:**
+
 - Modify: `src/cli/commands/org.ts`
 
 - [ ] **Step 1: Add imports**
@@ -1009,27 +1112,35 @@ Add options:
 Update the action signature to include `category` and `tags`. Add validation:
 
 ```typescript
-      if (opts.category && !isValidCategory(opts.category)) {
-        console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
-        process.exit(1);
-      }
+if (opts.category && !isValidCategory(opts.category)) {
+  console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
+  process.exit(1);
+}
 ```
 
 Pass category to createOrg:
 
 ```typescript
-      const created = await createOrg(name, { slug, domain: opts.domain, description: opts.description, category: opts.category });
+const created = await createOrg(name, {
+  slug,
+  domain: opts.domain,
+  description: opts.description,
+  category: opts.category,
+});
 ```
 
 After creation, handle tags:
 
 ```typescript
-      if (opts.tags) {
-        const tagList = opts.tags.split(",").map((t: string) => t.trim()).filter(Boolean);
-        if (tagList.length > 0) {
-          await addTagsToOrg(created.id, tagList);
-        }
-      }
+if (opts.tags) {
+  const tagList = opts.tags
+    .split(",")
+    .map((t: string) => t.trim())
+    .filter(Boolean);
+  if (tagList.length > 0) {
+    await addTagsToOrg(created.id, tagList);
+  }
+}
 ```
 
 - [ ] **Step 3: Update org show — display category and tags**
@@ -1037,20 +1148,26 @@ After creation, handle tags:
 After loading the org, fetch tags:
 
 ```typescript
-      const orgTags = await getTagsForOrg(found.id);
+const orgTags = await getTagsForOrg(found.id);
 ```
 
 Add to the display output after the `Updated` line:
 
 ```typescript
-      if (found.category) console.log(`  Category: ${found.category}`);
-      if (orgTags.length > 0) console.log(`  Tags:    ${orgTags.join(", ")}`);
+if (found.category) console.log(`  Category: ${found.category}`);
+if (orgTags.length > 0) console.log(`  Tags:    ${orgTags.join(", ")}`);
 ```
 
 Add to the JSON output:
 
 ```typescript
-        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources, tags: orgTags }, null, 2));
+console.log(
+  JSON.stringify(
+    { ...found, accounts, products: orgProducts, sources: linkedSources, tags: orgTags },
+    null,
+    2,
+  ),
+);
 ```
 
 - [ ] **Step 4: Add org edit subcommand (does not exist yet)**
@@ -1058,17 +1175,27 @@ Add to the JSON output:
 Before the `unlink` command, add an `org edit` subcommand:
 
 ```typescript
-  org
-    .command("edit")
-    .description("Edit an organization")
-    .argument("<identifier>", "Org slug, domain, or name")
-    .option("--name <name>", "Update display name")
-    .option("--domain <domain>", "Update domain")
-    .option("--description <text>", "Update description")
-    .option("--category <category>", "Set category")
-    .option("--no-category", "Clear category")
-    .option("--json", "Output as JSON")
-    .action(async (identifier: string, opts: { name?: string; domain?: string; description?: string; category?: string | boolean; json?: boolean }) => {
+org
+  .command("edit")
+  .description("Edit an organization")
+  .argument("<identifier>", "Org slug, domain, or name")
+  .option("--name <name>", "Update display name")
+  .option("--domain <domain>", "Update domain")
+  .option("--description <text>", "Update description")
+  .option("--category <category>", "Set category")
+  .option("--no-category", "Clear category")
+  .option("--json", "Output as JSON")
+  .action(
+    async (
+      identifier: string,
+      opts: {
+        name?: string;
+        domain?: string;
+        description?: string;
+        category?: string | boolean;
+        json?: boolean;
+      },
+    ) => {
       const found = await findOrg(identifier);
       if (!found) {
         console.error(chalk.red(`Organization not found: ${identifier}`));
@@ -1084,7 +1211,9 @@ Before the `unlink` command, add an `org edit` subcommand:
         updates.category = null;
       } else if (typeof opts.category === "string") {
         if (!isValidCategory(opts.category)) {
-          console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
+          console.error(
+            chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`),
+          );
           process.exit(1);
         }
         updates.category = opts.category;
@@ -1110,7 +1239,8 @@ Before the `unlink` command, add an `org edit` subcommand:
       } else {
         console.log(chalk.green(`Updated organization: ${found.name} (${found.slug})`));
       }
-    });
+    },
+  );
 ```
 
 Note: This requires adding `updateOrg` to `api/client.ts` and optionally a query helper. Alternatively, the implementer can use the existing PATCH endpoint pattern. The key point is that the `org edit` CLI command needs to exist — it doesn't currently. The implementer should follow the same pattern as `product edit` (which already exists) and use the API client's apiFetch to PATCH.
@@ -1118,11 +1248,18 @@ Note: This requires adding `updateOrg` to `api/client.ts` and optionally a query
 A simpler approach: add an `updateOrg` function to queries.ts:
 
 ```typescript
-export async function updateOrg(org: Organization, data: Record<string, unknown>): Promise<Organization> {
+export async function updateOrg(
+  org: Organization,
+  data: Record<string, unknown>,
+): Promise<Organization> {
   if (isRemoteMode()) return apiClient.updateOrg(org.slug, data);
   const db = getDb();
   data.updatedAt = new Date().toISOString();
-  const [updated] = await db.update(organizations).set(data).where(eq(organizations.id, org.id)).returning();
+  const [updated] = await db
+    .update(organizations)
+    .set(data)
+    .where(eq(organizations.id, org.id))
+    .returning();
   return updated;
 }
 ```
@@ -1130,7 +1267,10 @@ export async function updateOrg(org: Organization, data: Record<string, unknown>
 And in `api/client.ts`:
 
 ```typescript
-export async function updateOrg(slug: string, data: Record<string, unknown>): Promise<Organization> {
+export async function updateOrg(
+  slug: string,
+  data: Record<string, unknown>,
+): Promise<Organization> {
   return apiFetch<Organization>(`/api/orgs/${slug}`, {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -1141,12 +1281,12 @@ export async function updateOrg(slug: string, data: Record<string, unknown>): Pr
 Then the org edit command becomes:
 
 ```typescript
-      const updated = await updateOrg(found, updates);
-      if (opts.json) {
-        console.log(JSON.stringify(updated, null, 2));
-      } else {
-        console.log(chalk.green(`Updated organization: ${updated.name} (${updated.slug})`));
-      }
+const updated = await updateOrg(found, updates);
+if (opts.json) {
+  console.log(JSON.stringify(updated, null, 2));
+} else {
+  console.log(chalk.green(`Updated organization: ${updated.name} (${updated.slug})`));
+}
 ```
 
 - [ ] **Step 5: Add org tag subcommand**
@@ -1154,70 +1294,70 @@ Then the org edit command becomes:
 After the `edit` command:
 
 ```typescript
-  const tag = org.command("tag").description("Manage organization tags");
+const tag = org.command("tag").description("Manage organization tags");
 
-  tag
-    .command("add")
-    .description("Add tags to an organization")
-    .argument("<identifier>", "Org slug")
-    .argument("<tags...>", "Tag names to add")
-    .option("--json", "Output as JSON")
-    .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
-      }
-      await addTagsToOrg(found.id, tagNames);
-      if (opts.json) {
-        const allTags = await getTagsForOrg(found.id);
-        console.log(JSON.stringify({ tags: allTags }, null, 2));
-      } else {
-        console.log(chalk.green(`Added tags to ${found.name}: ${tagNames.join(", ")}`));
-      }
-    });
-
-  tag
-    .command("remove")
-    .description("Remove tags from an organization")
-    .argument("<identifier>", "Org slug")
-    .argument("<tags...>", "Tag names to remove")
-    .option("--json", "Output as JSON")
-    .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
-      }
-      await removeTagsFromOrg(found.id, tagNames);
-      if (opts.json) {
-        const allTags = await getTagsForOrg(found.id);
-        console.log(JSON.stringify({ tags: allTags }, null, 2));
-      } else {
-        console.log(chalk.green(`Removed tags from ${found.name}: ${tagNames.join(", ")}`));
-      }
-    });
-
-  tag
-    .command("list")
-    .description("List tags for an organization")
-    .argument("<identifier>", "Org slug")
-    .option("--json", "Output as JSON")
-    .action(async (identifier: string, opts: { json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
-      }
+tag
+  .command("add")
+  .description("Add tags to an organization")
+  .argument("<identifier>", "Org slug")
+  .argument("<tags...>", "Tag names to add")
+  .option("--json", "Output as JSON")
+  .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
+    const found = await findOrg(identifier);
+    if (!found) {
+      console.error(chalk.red(`Organization not found: ${identifier}`));
+      process.exit(1);
+    }
+    await addTagsToOrg(found.id, tagNames);
+    if (opts.json) {
       const allTags = await getTagsForOrg(found.id);
-      if (opts.json) {
-        console.log(JSON.stringify(allTags, null, 2));
-      } else if (allTags.length === 0) {
-        console.log(chalk.yellow(`No tags for ${found.name}`));
-      } else {
-        console.log(allTags.join(", "));
-      }
-    });
+      console.log(JSON.stringify({ tags: allTags }, null, 2));
+    } else {
+      console.log(chalk.green(`Added tags to ${found.name}: ${tagNames.join(", ")}`));
+    }
+  });
+
+tag
+  .command("remove")
+  .description("Remove tags from an organization")
+  .argument("<identifier>", "Org slug")
+  .argument("<tags...>", "Tag names to remove")
+  .option("--json", "Output as JSON")
+  .action(async (identifier: string, tagNames: string[], opts: { json?: boolean }) => {
+    const found = await findOrg(identifier);
+    if (!found) {
+      console.error(chalk.red(`Organization not found: ${identifier}`));
+      process.exit(1);
+    }
+    await removeTagsFromOrg(found.id, tagNames);
+    if (opts.json) {
+      const allTags = await getTagsForOrg(found.id);
+      console.log(JSON.stringify({ tags: allTags }, null, 2));
+    } else {
+      console.log(chalk.green(`Removed tags from ${found.name}: ${tagNames.join(", ")}`));
+    }
+  });
+
+tag
+  .command("list")
+  .description("List tags for an organization")
+  .argument("<identifier>", "Org slug")
+  .option("--json", "Output as JSON")
+  .action(async (identifier: string, opts: { json?: boolean }) => {
+    const found = await findOrg(identifier);
+    if (!found) {
+      console.error(chalk.red(`Organization not found: ${identifier}`));
+      process.exit(1);
+    }
+    const allTags = await getTagsForOrg(found.id);
+    if (opts.json) {
+      console.log(JSON.stringify(allTags, null, 2));
+    } else if (allTags.length === 0) {
+      console.log(chalk.yellow(`No tags for ${found.name}`));
+    } else {
+      console.log(allTags.join(", "));
+    }
+  });
 ```
 
 - [ ] **Step 6: Type-check**
@@ -1237,6 +1377,7 @@ git commit -m "feat: add org edit command and category/tag support to org CLI"
 ### Task 9: CLI — category and tags on product commands
 
 **Files:**
+
 - Modify: `src/cli/commands/product.ts`
 
 - [ ] **Step 1: Add imports**
@@ -1269,17 +1410,19 @@ Add options:
 Add to updates mapping:
 
 ```typescript
-      if (opts.category !== undefined) {
-        if (opts.category === false) {
-          updates.category = null;
-        } else {
-          if (!isValidCategory(opts.category)) {
-            console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
-            process.exit(1);
-          }
-          updates.category = opts.category;
-        }
-      }
+if (opts.category !== undefined) {
+  if (opts.category === false) {
+    updates.category = null;
+  } else {
+    if (!isValidCategory(opts.category)) {
+      console.error(
+        chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`),
+      );
+      process.exit(1);
+    }
+    updates.category = opts.category;
+  }
+}
 ```
 
 - [ ] **Step 4: Add product tag subcommand**
@@ -1298,6 +1441,7 @@ git commit -m "feat: add category and tag support to product CLI commands"
 ### Task 10: CLI — categories command and list --category filter
 
 **Files:**
+
 - Modify: `src/cli/program.ts`
 - Modify: `src/cli/commands/list.ts`
 
@@ -1338,15 +1482,15 @@ In `src/cli/commands/list.ts`, add the option:
 Pass it to `listSourcesWithOrg`:
 
 ```typescript
-      const allSources = await listSourcesWithOrg({
-        orgSlug: opts.org,
-        productSlug: opts.product,
-        category: opts.category,
-        hasFeed: opts.hasFeed,
-        enrichable: opts.enrichable,
-        query: opts.query,
-        includeHidden: opts.includeHidden,
-      });
+const allSources = await listSourcesWithOrg({
+  orgSlug: opts.org,
+  productSlug: opts.product,
+  category: opts.category,
+  hasFeed: opts.hasFeed,
+  enrichable: opts.enrichable,
+  query: opts.query,
+  includeHidden: opts.includeHidden,
+});
 ```
 
 - [ ] **Step 3: Update program.ts help text**
@@ -1354,7 +1498,7 @@ Pass it to `listSourcesWithOrg`:
 Add `Categories` line:
 
 ```typescript
-  Categories:    categories
+Categories: categories;
 ```
 
 - [ ] **Step 4: Type-check and commit**
@@ -1369,6 +1513,7 @@ git commit -m "feat: add categories command and --category filter to list"
 ### Task 11: Import manifest — category and tags support
 
 **Files:**
+
 - Modify: `src/cli/commands/import.ts`
 
 - [ ] **Step 1: Update manifest types**
@@ -1392,22 +1537,24 @@ Add to `ManifestProduct`:
 After the existing org validation, add:
 
 ```typescript
-      if (org.category) {
-        const { isValidCategory } = await import("../../lib/categories.js");
-        if (!isValidCategory(org.category)) {
-          throw new Error(`organizations[${i}].category "${org.category}" is not a valid category`);
-        }
+if (org.category) {
+  const { isValidCategory } = await import("../../lib/categories.js");
+  if (!isValidCategory(org.category)) {
+    throw new Error(`organizations[${i}].category "${org.category}" is not a valid category`);
+  }
+}
+if (org.products) {
+  for (const [k, prod] of org.products.entries()) {
+    if (prod.category) {
+      const { isValidCategory } = await import("../../lib/categories.js");
+      if (!isValidCategory(prod.category)) {
+        throw new Error(
+          `organizations[${i}].products[${k}].category "${prod.category}" is not a valid category`,
+        );
       }
-      if (org.products) {
-        for (const [k, prod] of org.products.entries()) {
-          if (prod.category) {
-            const { isValidCategory } = await import("../../lib/categories.js");
-            if (!isValidCategory(prod.category)) {
-              throw new Error(`organizations[${i}].products[${k}].category "${prod.category}" is not a valid category`);
-            }
-          }
-        }
-      }
+    }
+  }
+}
 ```
 
 Better: import `isValidCategory` at the top of the file and use it directly.
@@ -1417,20 +1564,20 @@ Better: import `isValidCategory` at the top of the file and use it directly.
 In the real path (not dry-run), update the `createOrg` call:
 
 ```typescript
-            org = await createOrg(orgEntry.name, {
-              slug: orgSlug,
-              domain: orgEntry.domain,
-              description: orgEntry.description,
-              category: orgEntry.category,
-            });
+org = await createOrg(orgEntry.name, {
+  slug: orgSlug,
+  domain: orgEntry.domain,
+  description: orgEntry.description,
+  category: orgEntry.category,
+});
 ```
 
 After org creation, add tags:
 
 ```typescript
-          if (orgEntry.tags && orgEntry.tags.length > 0) {
-            await addTagsToOrg(org.id, orgEntry.tags);
-          }
+if (orgEntry.tags && orgEntry.tags.length > 0) {
+  await addTagsToOrg(org.id, orgEntry.tags);
+}
 ```
 
 - [ ] **Step 4: Pass category on product creation**
@@ -1438,20 +1585,20 @@ After org creation, add tags:
 Update the `createProduct` call:
 
 ```typescript
-                prod = await createProduct(org.id, prodEntry.name, {
-                  slug: prodSlug,
-                  url: prodEntry.url,
-                  description: prodEntry.description,
-                  category: prodEntry.category,
-                });
+prod = await createProduct(org.id, prodEntry.name, {
+  slug: prodSlug,
+  url: prodEntry.url,
+  description: prodEntry.description,
+  category: prodEntry.category,
+});
 ```
 
 After product creation, add tags:
 
 ```typescript
-              if (prodEntry.tags && prodEntry.tags.length > 0) {
-                await addTagsToProduct(prod.id, prodEntry.tags);
-              }
+if (prodEntry.tags && prodEntry.tags.length > 0) {
+  await addTagsToProduct(prod.id, prodEntry.tags);
+}
 ```
 
 - [ ] **Step 5: Add imports**
@@ -1476,6 +1623,7 @@ git commit -m "feat: add category and tag support to import manifests"
 ### Task 12: Agent prompt — inject categories and update system prompt
 
 **Files:**
+
 - Modify: `src/agent/released.ts`
 
 - [ ] **Step 1: Import categories**
@@ -1558,6 +1706,7 @@ git commit -m "feat: inject categories and product detection guidance into agent
 ### Task 13: Agent skill — light-touch finding-changelogs update
 
 **Files:**
+
 - Modify: `src/agent/skills/finding-changelogs/SKILL.md`
 
 - [ ] **Step 1: Add products and tagging section**
@@ -1586,6 +1735,7 @@ git commit -m "feat: add product and tagging guidance to finding-changelogs skil
 ### Task 14: Documentation updates
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 - Modify: `README.md`
 
@@ -1601,14 +1751,14 @@ Add to the Conventions section:
 Add to Common CLI Patterns:
 
 ```markdown
-bun src/index.ts categories                          # List valid categories
-bun src/index.ts categories --json                   # List as JSON
+bun src/index.ts categories # List valid categories
+bun src/index.ts categories --json # List as JSON
 bun src/index.ts org add "Acme" --category cloud --tags typescript,edge
-bun src/index.ts org tag add acme react serverless   # Add tags to org
-bun src/index.ts org tag list acme                   # List org tags
+bun src/index.ts org tag add acme react serverless # Add tags to org
+bun src/index.ts org tag list acme # List org tags
 bun src/index.ts product add "CLI" --org acme --category developer-tools --tags golang
-bun src/index.ts product tag add acme-cli testing    # Add tags to product
-bun src/index.ts list --category ai                  # Filter sources by category
+bun src/index.ts product tag add acme-cli testing # Add tags to product
+bun src/index.ts list --category ai # Filter sources by category
 ```
 
 - [ ] **Step 2: Update README.md**
@@ -1627,6 +1777,7 @@ git commit -m "docs: add category and tag documentation"
 ### Task 15: Sources list route — category filter support
 
 **Files:**
+
 - Modify: `workers/api/src/routes/sources.ts`
 
 - [ ] **Step 1: Add category query param support**
@@ -1634,20 +1785,20 @@ git commit -m "docs: add category and tag documentation"
 In the `GET /sources` handler, after the existing query filters, add:
 
 ```typescript
-  const categoryFilter = c.req.query("category");
+const categoryFilter = c.req.query("category");
 ```
 
 If `categoryFilter` is set, add a condition that joins through orgs/products to filter by category:
 
 ```typescript
-  if (categoryFilter) {
-    conditions.push(
-      sql`(
+if (categoryFilter) {
+  conditions.push(
+    sql`(
         EXISTS (SELECT 1 FROM organizations o WHERE o.id = sources.org_id AND o.category = ${categoryFilter})
         OR EXISTS (SELECT 1 FROM products p WHERE p.id = sources.product_id AND p.category = ${categoryFilter})
       )`,
-    );
-  }
+  );
+}
 ```
 
 - [ ] **Step 2: Commit**

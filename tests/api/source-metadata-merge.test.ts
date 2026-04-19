@@ -48,7 +48,7 @@ describe("mergeSourceMetadata", () => {
   it("handles the fetchUrl-rotation case (clear old headers, set new URL)", () => {
     const existing = JSON.stringify({
       fetchUrl: "https://old.example/data.json",
-      fetchEtag: "W/\"abc\"",
+      fetchEtag: 'W/"abc"',
       fetchLastModified: "Sat, 18 Apr 2026 18:53:02 GMT",
     });
     const patch = {

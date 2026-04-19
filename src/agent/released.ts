@@ -239,11 +239,11 @@ export async function runAgent(options: ReleasedAgentOptions): Promise<Discovery
       maxTurns: 30,
       maxBudgetUsd: 2.0,
       tools: { type: "preset", preset: "claude_code" } as const,
-      allowedTools: [
-        "Skill", "Bash", "Read", "Write",
-        "Glob", "Grep", "WebSearch", "WebFetch",
-      ],
-      mcpServers: mcpServers as Record<string, import("@anthropic-ai/claude-agent-sdk").McpServerConfig>,
+      allowedTools: ["Skill", "Bash", "Read", "Write", "Glob", "Grep", "WebSearch", "WebFetch"],
+      mcpServers: mcpServers as Record<
+        string,
+        import("@anthropic-ai/claude-agent-sdk").McpServerConfig
+      >,
       agents: {
         "bulk-worker": {
           description:
@@ -265,7 +265,7 @@ export async function runAgent(options: ReleasedAgentOptions): Promise<Discovery
         } else if (block.type === "tool_use") {
           const command =
             block.name === "Bash" && typeof block.input === "object" && block.input !== null
-              ? (block.input as Record<string, unknown>).command as string | undefined
+              ? ((block.input as Record<string, unknown>).command as string | undefined)
               : undefined;
           options.onToolUse?.(block.name, command);
         }
@@ -317,7 +317,9 @@ export interface DiscoveryOptions {
 }
 
 /** Build the user-facing discovery prompt with optional domain/org hints. */
-export function buildDiscoveryPrompt(options: Pick<DiscoveryOptions, "company" | "domain" | "githubOrg">): string {
+export function buildDiscoveryPrompt(
+  options: Pick<DiscoveryOptions, "company" | "domain" | "githubOrg">,
+): string {
   const hints: string[] = [];
   if (options.domain) hints.push(`Their website is ${options.domain}.`);
   if (options.githubOrg) hints.push(`Their GitHub organization is ${options.githubOrg}.`);

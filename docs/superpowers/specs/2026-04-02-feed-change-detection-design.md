@@ -20,7 +20,7 @@ type ChangeStatus = "changed" | "unchanged" | "unknown";
 async function headCheckFeed(
   feedUrl: string,
   stored: { etag?: string; lastModified?: string; contentLength?: string },
-): Promise<{ status: ChangeStatus; etag?: string; lastModified?: string; contentLength?: string }>
+): Promise<{ status: ChangeStatus; etag?: string; lastModified?: string; contentLength?: string }>;
 ```
 
 Sends an HTTP HEAD request. Compares response headers against stored values:
@@ -58,6 +58,7 @@ released check --json             # Machine-readable output
 ```
 
 Behavior:
+
 - Queries sources that have a `feedUrl` in metadata
 - Runs `headCheckFeed()` against each (concurrency-limited)
 - For `"changed"` results: sets `changeDetectedAt` to current timestamp
@@ -66,6 +67,7 @@ Behavior:
 - Reports summary: N checked, N changed, N unchanged, N unknown
 
 Table output example:
+
 ```
 Source               Status      Last Fetched
 cloudflare-changelog changed     2h ago

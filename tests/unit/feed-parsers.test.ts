@@ -273,11 +273,15 @@ describe("classifyFeedMime", () => {
 
 describe("detectFeedTypeFromContent", () => {
   it("detects JSON Feed from content body", () => {
-    expect(detectFeedTypeFromContent('{ "version": "https://jsonfeed.org/version/1.1" }')).toBe("jsonfeed");
+    expect(detectFeedTypeFromContent('{ "version": "https://jsonfeed.org/version/1.1" }')).toBe(
+      "jsonfeed",
+    );
   });
 
   it("detects Atom from content body", () => {
-    expect(detectFeedTypeFromContent('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">')).toBe("atom");
+    expect(
+      detectFeedTypeFromContent('<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom">'),
+    ).toBe("atom");
   });
 
   it("detects RSS from <rss> tag", () => {
@@ -333,7 +337,9 @@ describe("htmlToMarkdown", () => {
   });
 
   it("converts inline code", () => {
-    expect(htmlToMarkdown("Use <code>npm install</code> to install")).toBe("Use `npm install` to install");
+    expect(htmlToMarkdown("Use <code>npm install</code> to install")).toBe(
+      "Use `npm install` to install",
+    );
   });
 
   it("converts italic", () => {
@@ -461,7 +467,7 @@ describe("decodeHtmlEntities", () => {
   });
 
   it("decodes &quot;", () => {
-    expect(decodeHtmlEntities('He said &quot;hello&quot;')).toBe('He said "hello"');
+    expect(decodeHtmlEntities("He said &quot;hello&quot;")).toBe('He said "hello"');
   });
 
   it("decodes &#39; (numeric entity)", () => {
@@ -493,7 +499,11 @@ describe("extractMedia", () => {
     const html = '<img src="https://example.com/img.png" alt="Screenshot" />';
     const media = extractMedia(html);
     expect(media).toHaveLength(1);
-    expect(media[0]).toEqual({ type: "image", url: "https://example.com/img.png", alt: "Screenshot" });
+    expect(media[0]).toEqual({
+      type: "image",
+      url: "https://example.com/img.png",
+      alt: "Screenshot",
+    });
   });
 
   it("identifies GIFs", () => {
@@ -661,7 +671,9 @@ describe("parseFeedLinks", () => {
 
 describe("getSourceMeta", () => {
   it("parses valid JSON metadata", () => {
-    const source = { metadata: '{"feedUrl":"https://example.com/feed.xml","feedType":"rss"}' } as any;
+    const source = {
+      metadata: '{"feedUrl":"https://example.com/feed.xml","feedType":"rss"}',
+    } as any;
     const meta = getSourceMeta(source);
     expect(meta.feedUrl).toBe("https://example.com/feed.xml");
     expect(meta.feedType).toBe("rss");

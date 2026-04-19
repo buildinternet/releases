@@ -43,7 +43,10 @@ function getDb(c: any): any {
 async function requireMasterKey(c: any): Promise<string | Response> {
   const masterKey: string | undefined = await c.env.WEBHOOK_HMAC_MASTER?.get();
   if (!masterKey) {
-    return c.json({ error: "webhook_unavailable", message: "WEBHOOK_HMAC_MASTER not configured" }, 503);
+    return c.json(
+      { error: "webhook_unavailable", message: "WEBHOOK_HMAC_MASTER not configured" },
+      503,
+    );
   }
   return masterKey;
 }
@@ -97,9 +100,7 @@ adminWebhooksRoutes.get("/admin/webhooks", async (c) => {
   }
 
   const enabledParam = c.req.query("enabled");
-  const opts = enabledParam !== undefined
-    ? { enabledOnly: enabledParam === "true" }
-    : undefined;
+  const opts = enabledParam !== undefined ? { enabledOnly: enabledParam === "true" } : undefined;
 
   const db = getDb(c);
   const subscriptions = await listWebhookSubscriptionsByOrg(db, orgId, opts);
@@ -181,7 +182,10 @@ adminWebhooksRoutes.post("/admin/webhooks/:id/rotate-secret", async (c) => {
 adminWebhooksRoutes.post("/admin/webhooks/:id/test", async (c) => {
   const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
   if (!queue) {
-    return c.json({ error: "queue_unavailable", message: "WEBHOOK_DELIVERY_QUEUE binding missing" }, 503);
+    return c.json(
+      { error: "queue_unavailable", message: "WEBHOOK_DELIVERY_QUEUE binding missing" },
+      503,
+    );
   }
 
   const id = c.req.param("id");

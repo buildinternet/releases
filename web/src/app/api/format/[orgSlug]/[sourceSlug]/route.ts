@@ -8,7 +8,7 @@ import { getFormat } from "@/lib/request";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ orgSlug: string; sourceSlug: string }> }
+  { params }: { params: Promise<{ orgSlug: string; sourceSlug: string }> },
 ) {
   const { orgSlug, sourceSlug } = await params;
   const format = getFormat(request);
@@ -27,7 +27,10 @@ export async function GET(
 
   // Validate org slug matches
   if (!source.org || source.org.slug !== orgSlug) {
-    return NextResponse.json({ error: "not_found", message: "Source not found under this organization" }, { status: 404 });
+    return NextResponse.json(
+      { error: "not_found", message: "Source not found under this organization" },
+      { status: 404 },
+    );
   }
 
   if (format === "md") {

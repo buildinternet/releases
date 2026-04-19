@@ -28,7 +28,12 @@ export type FinalizeRunParams = {
   dispatchErrors: number;
   sessionsStarted: string[];
   dispatchErrorDetail: Array<{ orgSlug: string; error: string }>;
-  abortReason?: "anthropic_auth" | "anthropic_credits" | "stale_running" | "cron_disabled" | "config_missing";
+  abortReason?:
+    | "anthropic_auth"
+    | "anthropic_credits"
+    | "stale_running"
+    | "cron_disabled"
+    | "config_missing";
   notes: string | null;
 };
 
@@ -38,7 +43,8 @@ export async function finalizeRunRow(
   params: FinalizeRunParams,
 ): Promise<void> {
   // Compute duration from the running row's startedAt to avoid trusting callers.
-  const rows = await db.select({ startedAt: cronRuns.startedAt })
+  const rows = await db
+    .select({ startedAt: cronRuns.startedAt })
     .from(cronRuns)
     .where(eq(cronRuns.id, id));
   const existing = rows[0];
@@ -49,19 +55,22 @@ export async function finalizeRunRow(
   const sessionsArr = params.sessionsStarted.slice(0, CRON_RUNS_JSON_ARRAY_CAP);
   const errorsArr = params.dispatchErrorDetail.slice(0, CRON_RUNS_JSON_ARRAY_CAP);
 
-  await db.update(cronRuns).set({
-    endedAt: params.endedAt,
-    durationMs,
-    status: params.status,
-    candidates: params.candidates,
-    dispatched: params.dispatched,
-    skippedOverCap: params.skippedOverCap,
-    dispatchErrors: params.dispatchErrors,
-    sessionsStarted: sessionsArr.length > 0 ? JSON.stringify(sessionsArr) : null,
-    dispatchErrorDetail: errorsArr.length > 0 ? JSON.stringify(errorsArr) : null,
-    abortReason: params.abortReason ?? null,
-    notes: params.notes,
-  }).where(eq(cronRuns.id, id));
+  await db
+    .update(cronRuns)
+    .set({
+      endedAt: params.endedAt,
+      durationMs,
+      status: params.status,
+      candidates: params.candidates,
+      dispatched: params.dispatched,
+      skippedOverCap: params.skippedOverCap,
+      dispatchErrors: params.dispatchErrors,
+      sessionsStarted: sessionsArr.length > 0 ? JSON.stringify(sessionsArr) : null,
+      dispatchErrorDetail: errorsArr.length > 0 ? JSON.stringify(errorsArr) : null,
+      abortReason: params.abortReason ?? null,
+      notes: params.notes,
+    })
+    .where(eq(cronRuns.id, id));
 }
 
 export async function reconcileStaleRunning(
@@ -69,15 +78,21 @@ export async function reconcileStaleRunning(
   params: { cronName: string; now: Date; thresholdMs: number },
 ): Promise<number> {
   const cutoff = new Date(params.now.getTime() - params.thresholdMs).toISOString();
-  const result = await db.update(cronRuns).set({
-    status: "aborted",
-    abortReason: "stale_running",
-    endedAt: params.now.toISOString(),
-    notes: "reconciled by next sweep",
-  }).where(and(
-    eq(cronRuns.cronName, params.cronName),
-    eq(cronRuns.status, "running"),
-    lt(cronRuns.startedAt, cutoff),
-  )).returning({ id: cronRuns.id });
+  const result = await db
+    .update(cronRuns)
+    .set({
+      status: "aborted",
+      abortReason: "stale_running",
+      endedAt: params.now.toISOString(),
+      notes: "reconciled by next sweep",
+    })
+    .where(
+      and(
+        eq(cronRuns.cronName, params.cronName),
+        eq(cronRuns.status, "running"),
+        lt(cronRuns.startedAt, cutoff),
+      ),
+    )
+    .returning({ id: cronRuns.id });
   return Array.isArray(result) ? result.length : 0;
 }

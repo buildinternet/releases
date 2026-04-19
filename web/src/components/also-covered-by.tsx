@@ -77,9 +77,7 @@ export async function AlsoCoveredBy({ anchorReleaseId }: AlsoCoveredByProps) {
 
 function CoverageItem({ item }: { item: ReleaseDetail }) {
   const heading = item.version ?? item.title;
-  const byline = item.org?.name
-    ? `${item.org.name} · ${item.sourceName}`
-    : item.sourceName;
+  const byline = item.org?.name ? `${item.org.name} · ${item.sourceName}` : item.sourceName;
 
   return (
     <Link
@@ -87,12 +85,8 @@ function CoverageItem({ item }: { item: ReleaseDetail }) {
       className="flex items-baseline justify-between gap-3 py-1.5 px-2 -mx-2 rounded hover:bg-stone-100 dark:hover:bg-stone-900 transition-colors"
     >
       <div className="min-w-0 flex-1 truncate">
-        <span className="text-[14px] text-stone-900 dark:text-stone-100">
-          {heading}
-        </span>
-        <span className="ml-2 text-[12px] text-stone-500 dark:text-stone-400">
-          {byline}
-        </span>
+        <span className="text-[14px] text-stone-900 dark:text-stone-100">{heading}</span>
+        <span className="ml-2 text-[12px] text-stone-500 dark:text-stone-400">{byline}</span>
       </div>
       {item.publishedAt && (
         <span className="text-[11px] text-stone-400 dark:text-stone-500 shrink-0 tabular-nums">

@@ -64,7 +64,13 @@ interface RelatedReleaseItem {
   publishedAt: string | null;
   summary: string;
   score: number;
-  source: { id: string; slug: string; name: string; orgSlug: string | null; orgName: string | null };
+  source: {
+    id: string;
+    slug: string;
+    name: string;
+    orgSlug: string | null;
+    orgName: string | null;
+  };
 }
 
 interface RelatedSourceItem {
@@ -193,7 +199,10 @@ async function hydrateReleaseNeighbors(
     FROM releases r
     JOIN sources s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
-    WHERE r.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+    WHERE r.id IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
   `);
@@ -342,7 +351,10 @@ relatedRoutes.get("/related/sources", async (c) => {
                  COUNT(*) as n,
                  MAX(r.published_at) as latest
           FROM releases r
-          WHERE r.source_id IN (${sql.join(visibleIds.map((id) => sql`${id}`), sql`, `)})
+          WHERE r.source_id IN (${sql.join(
+            visibleIds.map((id) => sql`${id}`),
+            sql`, `,
+          )})
             AND (r.suppressed IS NULL OR r.suppressed = 0)
           GROUP BY r.source_id
         `)
@@ -374,4 +386,3 @@ relatedRoutes.get("/related/sources", async (c) => {
 
   return c.json({ scope, items });
 });
-

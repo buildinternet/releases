@@ -55,9 +55,7 @@ function buildEntityMetadata(e: EmbedEntityInput): Record<string, VectorMetadata
   return meta;
 }
 
-export async function embedAndUpsertEntities(
-  opts: EmbedAndUpsertEntitiesOptions,
-): Promise<void> {
+export async function embedAndUpsertEntities(opts: EmbedAndUpsertEntitiesOptions): Promise<void> {
   const { entities, vectorIndex, embedConfig, onPersisted } = opts;
   const logger = opts.logger ?? console;
 
@@ -103,9 +101,7 @@ export async function embedAndUpsertEntities(
     }
   } catch (err) {
     logger.warn(
-      `[embed-entities] embed pipeline failed: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      `[embed-entities] embed pipeline failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

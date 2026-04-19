@@ -1,6 +1,15 @@
 import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
-import { type CadenceKey, type WeeklyBucket, getCadenceInfo, getProductColor, fmtVersion, DAY_MS, fmtWeek, FETCH_CAP } from "@/lib/cadence";
+import {
+  type CadenceKey,
+  type WeeklyBucket,
+  getCadenceInfo,
+  getProductColor,
+  fmtVersion,
+  DAY_MS,
+  fmtWeek,
+  FETCH_CAP,
+} from "@/lib/cadence";
 import { HoverCard } from "@/components/hover-card";
 import type { SourceListItem } from "@/lib/api";
 
@@ -16,7 +25,12 @@ export interface SourceCadenceData {
 
 function formatDate(iso: string | null) {
   if (!iso) return null;
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function shortUrl(url?: string) {
@@ -29,7 +43,9 @@ function shortUrl(url?: string) {
       return path.replace(/^\//, "") || u.hostname;
     }
     return path && path !== "/" ? u.hostname + path : u.hostname;
-  } catch { return null; }
+  } catch {
+    return null;
+  }
 }
 
 const badgeStyles: Record<CadenceKey, string> = {
@@ -50,11 +66,15 @@ function InlineSparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: s
   const xFor = (i: number) => (n <= 1 ? W / 2 : (i / (n - 1)) * W);
   const yFor = (count: number) => H - PAD_Y - (count / max) * (H - PAD_Y * 2);
 
-  const points = buckets.map((b, i) => `${xFor(i).toFixed(2)},${yFor(b.count).toFixed(2)}`).join(" ");
+  const points = buckets
+    .map((b, i) => `${xFor(i).toFixed(2)},${yFor(b.count).toFixed(2)}`)
+    .join(" ");
 
   const tooltipLatest = buckets.length > 0 ? buckets[buckets.length - 1] : null;
   const tooltipFirst = buckets[0];
-  const tooltipEnd = tooltipLatest ? new Date(tooltipLatest.weekStart.getTime() + 6 * DAY_MS) : null;
+  const tooltipEnd = tooltipLatest
+    ? new Date(tooltipLatest.weekStart.getTime() + 6 * DAY_MS)
+    : null;
   const total = buckets.reduce((sum, b) => sum + b.count, 0);
 
   return (
@@ -92,19 +112,36 @@ function InlineSparkline({ buckets, color }: { buckets: WeeklyBucket[]; color: s
   );
 }
 
-export function SourceCard({ source, orgSlug, cadence, showProductBadge = true }: { source: SourceListItem; orgSlug?: string; cadence?: SourceCadenceData; showProductBadge?: boolean }) {
+export function SourceCard({
+  source,
+  orgSlug,
+  cadence,
+  showProductBadge = true,
+}: {
+  source: SourceListItem;
+  orgSlug?: string;
+  cadence?: SourceCadenceData;
+  showProductBadge?: boolean;
+}) {
   const href = orgSlug ? `/${orgSlug}/${source.slug}` : `/source/${source.slug}`;
   const cadenceInfo = cadence ? getCadenceInfo(cadence.avgReleasesPerWeek) : null;
   const color = cadence ? getProductColor(cadence.colorIndex) : undefined;
   const capped = cadence ? cadence.totalReleaseCount >= FETCH_CAP : false;
 
   return (
-    <Link href={href} className="block bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-4 hover:border-stone-300 dark:hover:border-stone-600 transition-colors">
+    <Link
+      href={href}
+      className="block bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg p-4 hover:border-stone-300 dark:hover:border-stone-600 transition-colors"
+    >
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">{source.name}</span>
+          <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
+            {source.name}
+          </span>
           {source.isPrimary && (
-            <span className="text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">Primary</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+              Primary
+            </span>
           )}
           {showProductBadge && source.productName && (
             <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded">
@@ -112,7 +149,9 @@ export function SourceCard({ source, orgSlug, cadence, showProductBadge = true }
             </span>
           )}
           {cadenceInfo && (
-            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeStyles[cadenceInfo.key]}`}>
+            <span
+              className={`text-[10px] font-semibold px-2 py-0.5 rounded-full uppercase tracking-wide ${badgeStyles[cadenceInfo.key]}`}
+            >
               {cadenceInfo.label}
             </span>
           )}
@@ -123,7 +162,8 @@ export function SourceCard({ source, orgSlug, cadence, showProductBadge = true }
           )}
           {cadence && color && (
             <span className="text-sm font-bold font-mono" style={{ color }}>
-              {cadence.releaseCount}{capped && "+"}
+              {cadence.releaseCount}
+              {capped && "+"}
             </span>
           )}
           <SourceTypeIcon type={source.type} />
@@ -137,15 +177,32 @@ export function SourceCard({ source, orgSlug, cadence, showProductBadge = true }
       {!cadence && (source.latestVersion || source.latestDate || source.releaseCount > 0) && (
         <div className="text-xs text-stone-400 dark:text-stone-500 mt-0.5">
           {source.latestVersion && <>Latest: {source.latestVersion}</>}
-          {source.latestDate && <>{source.latestVersion ? " · " : ""}{formatDate(source.latestDate)}</>}
-          {source.releaseCount > 0 && <>{(source.latestVersion || source.latestDate) ? " · " : ""}{source.releaseCount >= FETCH_CAP ? `${FETCH_CAP}+` : source.releaseCount} releases</>}
+          {source.latestDate && (
+            <>
+              {source.latestVersion ? " · " : ""}
+              {formatDate(source.latestDate)}
+            </>
+          )}
+          {source.releaseCount > 0 && (
+            <>
+              {source.latestVersion || source.latestDate ? " · " : ""}
+              {source.releaseCount >= FETCH_CAP ? `${FETCH_CAP}+` : source.releaseCount} releases
+            </>
+          )}
         </div>
       )}
       {cadence && cadence.weeklyBuckets.length > 0 && (
         <div className="flex justify-between mt-2 text-[11px] text-stone-500 dark:text-stone-400">
-          <span>{capped ? `${Math.round(cadence.avgReleasesPerWeek)}+` : Math.round(cadence.avgReleasesPerWeek)}/week avg</span>
+          <span>
+            {capped
+              ? `${Math.round(cadence.avgReleasesPerWeek)}+`
+              : Math.round(cadence.avgReleasesPerWeek)}
+            /week avg
+          </span>
           <span className="truncate ml-2">
-            {cadence.earliestVersion && cadence.latestVersion && cadence.earliestVersion !== cadence.latestVersion
+            {cadence.earliestVersion &&
+            cadence.latestVersion &&
+            cadence.earliestVersion !== cadence.latestVersion
               ? `${fmtVersion(cadence.earliestVersion)} → ${fmtVersion(cadence.latestVersion)}`
               : cadence.latestVersion
                 ? fmtVersion(cadence.latestVersion)

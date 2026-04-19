@@ -21,9 +21,13 @@ const QUEUE_BATCH_LIMIT = 100;
 export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void> {
   if (args.events.length === 0) return;
   try {
-    const orgIds = [...new Set(
-      args.events.map((e) => args.eventOwners.get(e.release.id)?.orgId).filter((x): x is string => !!x),
-    )];
+    const orgIds = [
+      ...new Set(
+        args.events
+          .map((e) => args.eventOwners.get(e.release.id)?.orgId)
+          .filter((x): x is string => !!x),
+      ),
+    ];
     if (orgIds.length === 0) return;
     const subs = await args.loadSubscriptions(orgIds);
     if (subs.length === 0) return;
@@ -38,6 +42,8 @@ export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void
       await args.queue.sendBatch(chunk.map((body) => ({ body })));
     }
   } catch (err) {
-    console.warn(`[webhooks] expandAndEnqueue failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(
+      `[webhooks] expandAndEnqueue failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }

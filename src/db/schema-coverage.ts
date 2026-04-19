@@ -12,7 +12,9 @@ export const releaseCoverage = sqliteTable(
       .references(() => releases.id, { onDelete: "cascade" }),
     reason: text("reason"),
     decidedBy: text("decided_by").notNull(),
-    decidedAt: text("decided_at").notNull().$defaultFn(() => new Date().toISOString()),
+    decidedAt: text("decided_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
   },
   (table) => [index("idx_release_coverage_canonical").on(table.canonicalId)],
 );

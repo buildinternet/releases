@@ -25,11 +25,7 @@ fetchLogRoutes.get("/fetch-log", async (c) => {
     return c.json(logs);
   }
 
-  const logs = await db
-    .select()
-    .from(fetchLog)
-    .orderBy(desc(fetchLog.createdAt))
-    .limit(limit);
+  const logs = await db.select().from(fetchLog).orderBy(desc(fetchLog.createdAt)).limit(limit);
   return c.json(logs);
 });
 
@@ -51,32 +47,36 @@ fetchLogRoutes.post("/fetch-log", async (c) => {
       let sourceName: string | undefined;
       let sourceSlug: string | undefined;
       if (body.sourceId) {
-        const [src] = await db.select({ name: sources.name, slug: sources.slug })
-          .from(sources).where(eq(sources.id, body.sourceId));
+        const [src] = await db
+          .select({ name: sources.name, slug: sources.slug })
+          .from(sources)
+          .where(eq(sources.id, body.sourceId));
         sourceName = src?.name;
         sourceSlug = src?.slug;
       }
 
       const id = c.env.STATUS_HUB.idFromName("global");
       const stub = c.env.STATUS_HUB.get(id);
-      await stub.fetch(new Request("https://do/event", {
-        method: "POST",
-        body: JSON.stringify({
-          type: "fetch:complete",
-          id: inserted.id,
-          sourceId: body.sourceId,
-          sessionId: body.sessionId ?? null,
-          sourceName,
-          sourceSlug,
-          releasesFound: body.releasesFound,
-          releasesInserted: body.releasesInserted,
-          durationMs: body.durationMs,
-          status: body.status,
-          error: body.error,
-          createdAt: inserted.createdAt,
+      await stub.fetch(
+        new Request("https://do/event", {
+          method: "POST",
+          body: JSON.stringify({
+            type: "fetch:complete",
+            id: inserted.id,
+            sourceId: body.sourceId,
+            sessionId: body.sessionId ?? null,
+            sourceName,
+            sourceSlug,
+            releasesFound: body.releasesFound,
+            releasesInserted: body.releasesInserted,
+            durationMs: body.durationMs,
+            status: body.status,
+            error: body.error,
+            createdAt: inserted.createdAt,
+          }),
+          headers: { "Content-Type": "application/json" },
         }),
-        headers: { "Content-Type": "application/json" },
-      }));
+      );
     } catch {
       // Dashboard notification is best-effort
     }

@@ -13,6 +13,7 @@
 ### Task 1: Add `postStatusEvent` to API client
 
 **Files:**
+
 - Modify: `src/api/client.ts`
 
 - [ ] **Step 1: Add the helper function**
@@ -46,6 +47,7 @@ git commit -m "feat: add postStatusEvent helper to API client"
 ### Task 2: Update SessionState and StatusHub DO
 
 **Files:**
+
 - Modify: `workers/api/src/status-hub.ts`
 
 - [ ] **Step 1: Add `type` and update-specific fields to SessionState interface**
@@ -130,6 +132,7 @@ git commit -m "feat: add type and update-specific fields to StatusHub SessionSta
 ### Task 3: Update dashboard to render update sessions
 
 **Files:**
+
 - Modify: `web/src/app/status/dashboard.tsx`
 
 - [ ] **Step 1: Update SessionState interface**
@@ -140,7 +143,7 @@ Add the same new fields to the dashboard's `SessionState`:
 interface SessionState {
   sessionId: string;
   company: string;
-  type?: "onboard" | "update";  // optional for backward compat
+  type?: "onboard" | "update"; // optional for backward compat
   status: "running" | "complete" | "error";
   step?: string;
   sourcesFound?: number;
@@ -215,10 +218,13 @@ In the session row, update the StepBadge call:
 - [ ] **Step 5: Update empty state text**
 
 Change the empty state message from:
+
 ```typescript
 return <div className="text-sm text-stone-400 py-8 text-center">No discovery sessions yet.</div>;
 ```
+
 to:
+
 ```typescript
 return <div className="text-sm text-stone-400 py-8 text-center">No sessions yet.</div>;
 ```
@@ -235,6 +241,7 @@ git commit -m "feat: render update sessions in status dashboard"
 ### Task 4: Emit session events from fetch command in remote mode
 
 **Files:**
+
 - Modify: `src/cli/commands/fetch.ts`
 
 - [ ] **Step 1: Add imports**
@@ -268,41 +275,51 @@ async function startSession() {
   // Resolve company name from first source's orgId
   const orgId = targetSources[0].orgId;
   if (orgId) {
-    const [org] = await db.select({ name: organizations.name }).from(organizations).where(eq(organizations.id, orgId));
+    const [org] = await db
+      .select({ name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, orgId));
     sessionCompany = org?.name ?? "";
   }
   if (!sessionCompany) {
-    sessionCompany = targetSources.length === 1 ? targetSources[0].name : `${targetSources.length} sources`;
+    sessionCompany =
+      targetSources.length === 1 ? targetSources[0].name : `${targetSources.length} sources`;
   }
 
-  await apiClient.postStatusEvent({
-    type: "session:start",
-    sessionId,
-    company: sessionCompany,
-    sessionType: "update",
-  }).catch(() => {});
+  await apiClient
+    .postStatusEvent({
+      type: "session:start",
+      sessionId,
+      company: sessionCompany,
+      sessionType: "update",
+    })
+    .catch(() => {});
 }
 
 async function progressSession() {
   if (!isRemoteMode()) return;
-  await apiClient.postStatusEvent({
-    type: "session:progress",
-    sessionId,
-    step: "fetching",
-    totalSources: targetSources.length,
-    sourcesFetched: sessionSourcesFetched,
-    releasesFound: sessionReleasesFound,
-    releasesInserted: sessionReleasesInserted,
-  }).catch(() => {});
+  await apiClient
+    .postStatusEvent({
+      type: "session:progress",
+      sessionId,
+      step: "fetching",
+      totalSources: targetSources.length,
+      sourcesFetched: sessionSourcesFetched,
+      releasesFound: sessionReleasesFound,
+      releasesInserted: sessionReleasesInserted,
+    })
+    .catch(() => {});
 }
 
 async function endSession(error?: string) {
   if (!isRemoteMode()) return;
-  await apiClient.postStatusEvent({
-    type: error ? "session:error" : "session:complete",
-    sessionId,
-    ...(error ? { error } : {}),
-  }).catch(() => {});
+  await apiClient
+    .postStatusEvent({
+      type: error ? "session:error" : "session:complete",
+      sessionId,
+      ...(error ? { error } : {}),
+    })
+    .catch(() => {});
 }
 ```
 
@@ -365,6 +382,7 @@ Expected: No errors.
 - [ ] **Step 2: Visual verification**
 
 Open the status dashboard in the browser and confirm:
+
 - Existing onboard sessions render correctly (backward compat)
 - The empty state says "No sessions yet" instead of "No discovery sessions yet"
 

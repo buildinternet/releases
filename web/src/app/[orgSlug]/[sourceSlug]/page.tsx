@@ -75,7 +75,11 @@ function RelatedRails({
   );
 }
 
-export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string; sourceSlug: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orgSlug: string; sourceSlug: string }>;
+}): Promise<Metadata> {
   const { orgSlug, sourceSlug } = await params;
   try {
     const source = await getSource(sourceSlug);
@@ -87,7 +91,10 @@ export async function generateMetadata({ params }: { params: Promise<{ orgSlug: 
       alternates: {
         types: {
           "application/atom+xml": [
-            { url: `/${orgSlug}/${sourceSlug}.atom`, title: `${source.name} release notes — ${orgName}` },
+            {
+              url: `/${orgSlug}/${sourceSlug}.atom`,
+              title: `${source.name} release notes — ${orgName}`,
+            },
           ],
         },
       },
@@ -154,7 +161,9 @@ export default async function SourcePage({
       items: [
         { label: "Latest", value: source.latestVersion ?? formatDate(source.latestDate) },
         sourceUrlSidebarItem(source),
-        ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),
+        ...(source.changelogUrl
+          ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }]
+          : []),
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
     },
@@ -163,9 +172,9 @@ export default async function SourcePage({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": source.name,
-    "softwareVersion": source.latestVersion ?? undefined,
-    "url": `https://releases.sh/${orgSlug}/${sourceSlug}`,
+    name: source.name,
+    softwareVersion: source.latestVersion ?? undefined,
+    url: `https://releases.sh/${orgSlug}/${sourceSlug}`,
   };
 
   return (
@@ -177,19 +186,30 @@ export default async function SourcePage({
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link href={`/${source.org.slug}`} className="hover:text-stone-600 dark:hover:text-stone-300">{source.org.name}</Link>
+          <Link
+            href={`/${source.org.slug}`}
+            className="hover:text-stone-600 dark:hover:text-stone-300"
+          >
+            {source.org.name}
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{source.name}</span>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{source.name}</h1>
+          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+            {source.name}
+          </h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
         <CliCommand identifier={source.slug} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0">
             {activity && (
-              <SourceTimeline activity={activity} heatmap={heatmap} trackingSince={source.trackingSince} />
+              <SourceTimeline
+                activity={activity}
+                heatmap={heatmap}
+                trackingSince={source.trackingSince}
+              />
             )}
             <SourceTabs
               hasHighlights={!!(source.summaries?.rolling || source.summaries?.monthly?.length)}
@@ -210,7 +230,14 @@ export default async function SourcePage({
               />
             )}
           </div>
-          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/${sourceSlug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
+          <Sidebar
+            sections={sidebarSections}
+            formatPath={`/${orgSlug}/${sourceSlug}`}
+            footnote={
+              source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null
+            }
+            footnoteTitle={source.lastFetchedAt}
+          />
         </div>
       </div>
     </div>

@@ -18,10 +18,7 @@ import {
   type VectorizeIndex as HybridVectorizeIndex,
 } from "@releases/lib/vector-search.js";
 import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/lib/embeddings.js";
-import {
-  withEmbedCache,
-  type EmbedCacheBinding,
-} from "@releases/lib/embedding-cache.js";
+import { withEmbedCache, type EmbedCacheBinding } from "@releases/lib/embedding-cache.js";
 import { buildEmbedConfig } from "./embed-config.js";
 import type { D1Db } from "../db.js";
 
@@ -111,7 +108,9 @@ export interface HybridSearchResponse {
  * references `r.id` rather than `releases.id`.
  */
 const coverageCondition = (includeCoverage?: boolean) =>
-  includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
+  includeCoverage
+    ? sql``
+    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
 
 async function ftsReleaseIds(
   db: D1Db,
@@ -194,7 +193,10 @@ async function hydrateReleases(
     FROM releases r
     JOIN sources s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
-    WHERE r.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+    WHERE r.id IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       ${coverageCondition(opts.includeCoverage)}
@@ -241,7 +243,10 @@ async function hydrateChunks(
     FROM source_changelog_chunks scc
     JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
     JOIN sources s ON s.id = scc.source_id
-    WHERE scc.vector_id IN (${sql.join(vectorIds.map((id) => sql`${id}`), sql`, `)})
+    WHERE scc.vector_id IN (${sql.join(
+      vectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
   `);
 
@@ -295,10 +300,10 @@ export async function runHybridSearch(
   const topK = params.topK ?? 20;
   const requestedMode: HybridMode = params.mode ?? "hybrid";
 
-  async function lexicalResponse(
-    degradedReason?: string,
-  ): Promise<HybridSearchResponse> {
-    const ids = await ftsReleaseIds(db, params.query, topK * 3, { includeCoverage: params.includeCoverage });
+  async function lexicalResponse(degradedReason?: string): Promise<HybridSearchResponse> {
+    const ids = await ftsReleaseIds(db, params.query, topK * 3, {
+      includeCoverage: params.includeCoverage,
+    });
     const hits = await buildReleaseHits(
       db,
       ids.map((id, i) => ({ id, score: 1 / (i + 1) })),
@@ -315,14 +320,11 @@ export async function runHybridSearch(
   if (requestedMode === "lexical") return lexicalResponse();
 
   const embedder = await buildEmbedder(env, opts.waitUntil);
-  const hasVectorize =
-    !!env.RELEASES_INDEX && !!env.CHANGELOG_CHUNKS_INDEX && !!embedder;
+  const hasVectorize = !!env.RELEASES_INDEX && !!env.CHANGELOG_CHUNKS_INDEX && !!embedder;
 
   if (!hasVectorize) {
     return lexicalResponse(
-      !embedder
-        ? "embedding provider unavailable or misconfigured"
-        : "vectorize bindings missing",
+      !embedder ? "embedding provider unavailable or misconfigured" : "vectorize bindings missing",
     );
   }
 
@@ -343,7 +345,9 @@ export async function runHybridSearch(
     requestedMode === "semantic"
       ? async () => [] as { id: string }[]
       : async (q: string, limit: number) => {
-          const ids = await ftsReleaseIds(db, q, limit, { includeCoverage: params.includeCoverage });
+          const ids = await ftsReleaseIds(db, q, limit, {
+            includeCoverage: params.includeCoverage,
+          });
           return ids.map((id) => ({ id }));
         };
 
@@ -370,7 +374,10 @@ export async function runHybridSearch(
 
   const [releaseHits, chunkMap] = await Promise.all([
     buildReleaseHits(db, releaseEntries, params),
-    hydrateChunks(db, chunkEntries.map((e) => e.id)),
+    hydrateChunks(
+      db,
+      chunkEntries.map((e) => e.id),
+    ),
   ]);
 
   const hitsById = new Map<string, HybridHit>();
@@ -400,7 +407,11 @@ async function buildReleaseHits(
   params: RunHybridSearchParams,
 ): Promise<HybridReleaseHit[]> {
   if (entries.length === 0) return [];
-  const map = await hydrateReleases(db, entries.map((e) => e.id), { includeCoverage: params.includeCoverage });
+  const map = await hydrateReleases(
+    db,
+    entries.map((e) => e.id),
+    { includeCoverage: params.includeCoverage },
+  );
   const out: HybridReleaseHit[] = [];
   for (const entry of entries) {
     const row = map.get(entry.id);
