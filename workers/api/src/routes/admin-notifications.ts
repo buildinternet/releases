@@ -28,7 +28,7 @@ type TestBody = {
 
 const VALID_STATUSES: CronReportStatus[] = ["done", "degraded", "dispatch_failed", "aborted"];
 
-adminNotificationsRoutes.post("/v1/admin/notifications/test", async (c) => {
+adminNotificationsRoutes.post("/admin/notifications/test", async (c) => {
   const body = await c.req.json<TestBody>().catch(() => ({} as TestBody));
 
   if (body.plain) {
