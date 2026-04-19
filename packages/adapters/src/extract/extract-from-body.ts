@@ -66,7 +66,7 @@ export async function extractFromBody(
     systemBlocks.push({ type: "text", text: buildBodyGuardrail(approxTokens) });
   }
 
-  const response = await anthropicClient.messages.create({
+  const stream = anthropicClient.messages.stream({
     model: agentModel,
     max_tokens: isHuge ? HUGE_BODY_MAX_OUTPUT_TOKENS : DEFAULT_MAX_OUTPUT_TOKENS,
     system: systemBlocks,
@@ -76,6 +76,7 @@ export async function extractFromBody(
       { role: "user", content: `${opts.userMessage}\n\n${content}` },
     ],
   });
+  const response = await stream.finalMessage();
 
   const totalInput = response.usage.input_tokens;
   const totalOutput = response.usage.output_tokens;
