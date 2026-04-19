@@ -64,7 +64,7 @@ export type Env = {
     RELEASES_INDEX: VectorizeIndex;
     ENTITIES_INDEX: VectorizeIndex;
     CHANGELOG_CHUNKS_INDEX: VectorizeIndex;
-    // Embedding provider config (see src/lib/embeddings.ts).
+    // Embedding provider config (see packages/lib/src/embeddings.ts).
     EMBEDDING_PROVIDER?: string;
     VOYAGE_API_KEY?: SecretBinding;
     OPENAI_API_KEY?: SecretBinding;
@@ -77,7 +77,7 @@ export type Env = {
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
     // Optional KV namespace caching single-query embeddings on the search
-    // path (see src/lib/embedding-cache.ts). Absent → every cold search
+    // path (see packages/lib/src/embedding-cache.ts). Absent → every cold search
     // re-calls the embedding provider, matching pre-cache behavior.
     EMBED_CACHE?: KVNamespace;
     // Optional KV namespace caching the GET /v1/releases/latest response

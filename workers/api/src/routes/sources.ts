@@ -1484,7 +1484,7 @@ async function embedSourceSideEffect(
       ],
       // Cast required: workers-types `VectorizeIndex` declares a narrower
       // metadata value type than the runtime-agnostic interface in
-      // `src/lib/vector-search.ts`. Assignable at runtime, diverges by
+      // `packages/lib/src/vector-search.ts`. Assignable at runtime, diverges by
       // variance in the type system.
       vectorIndex:
         env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,

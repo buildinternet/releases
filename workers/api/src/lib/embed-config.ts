@@ -1,6 +1,6 @@
 /**
  * Build an EmbeddingConfig override from the Worker Env for use by the
- * shared embed helpers under src/lib/embed-*.ts.
+ * shared embed helpers under @releases/lib/embed-*.
  *
  * Workers don't have process.env, so we pass config explicitly. This helper:
  *   - Resolves the secret binding (VOYAGE_API_KEY or OPENAI_API_KEY)
