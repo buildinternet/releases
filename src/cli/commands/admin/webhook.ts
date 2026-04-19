@@ -9,6 +9,7 @@ import {
   testWebhookSubscription,
   rotateWebhookSecret,
   getWebhookDeliveries,
+  type WebhookDeliveryRow,
 } from "../../../api/client.js";
 
 export function registerWebhookAdminCommand(parent: Command): void {
@@ -79,7 +80,7 @@ export function registerWebhookAdminCommand(parent: Command): void {
         const subs = result.subscriptions;
 
         if (opts.json) {
-          console.log(JSON.stringify(subs, null, 2));
+          console.log(JSON.stringify(result, null, 2));
           return;
         }
 
@@ -211,25 +212,7 @@ export function registerWebhookAdminCommand(parent: Command): void {
           return;
         }
 
-        // AE response shape: { data: [{ rows: [...] }] } or { rows: [...] }
-        type AeRow = {
-          timestamp?: string;
-          outcome?: string;
-          event_id?: string;
-          http_status?: number;
-          latency_ms?: number;
-          error_message?: string;
-        };
-        let rows: AeRow[] = [];
-        if (data && typeof data === "object") {
-          const d = data as Record<string, unknown>;
-          if (Array.isArray(d["data"]) && d["data"].length > 0) {
-            const inner = d["data"][0] as Record<string, unknown>;
-            rows = Array.isArray(inner["rows"]) ? (inner["rows"] as AeRow[]) : [];
-          } else if (Array.isArray(d["rows"])) {
-            rows = d["rows"] as AeRow[];
-          }
-        }
+        const rows: WebhookDeliveryRow[] = data.data?.[0]?.rows ?? data.rows ?? [];
 
         if (rows.length === 0) {
           console.log("No deliveries found.");

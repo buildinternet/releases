@@ -36,6 +36,8 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   });
 
   if (res.status === 404 && (!opts?.method || opts.method === "GET")) return null as T;
+  // Currently only DELETE /v1/admin/webhooks/:id returns 204. Future routes that
+  // return 204 with a typed body must opt out of this short-circuit.
   if (res.status === 204) return undefined as T;
 
   if (!res.ok) {
@@ -810,15 +812,30 @@ export async function rotateWebhookSecret(id: string): Promise<{ secretVersion: 
   });
 }
 
+export type WebhookDeliveryRow = {
+  timestamp?: string;
+  outcome?: string;
+  event_id?: string;
+  http_status?: number;
+  latency_ms?: number;
+  error_message?: string;
+};
+
+/** Cloudflare AE forwards its raw response; both `data[0].rows` and a flat `rows` are observed. */
+export type WebhookDeliveriesResponse = {
+  data?: Array<{ rows: WebhookDeliveryRow[] }>;
+  rows?: WebhookDeliveryRow[];
+};
+
 export async function getWebhookDeliveries(
   id: string,
   opts?: { failed?: boolean; limit?: number },
-): Promise<unknown> {
+): Promise<WebhookDeliveriesResponse> {
   const params = new URLSearchParams();
   if (opts?.failed) params.set("failed", "true");
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   const qs = params.toString();
-  return apiFetch<unknown>(`/v1/admin/webhooks/${id}/deliveries${qs ? `?${qs}` : ""}`);
+  return apiFetch<WebhookDeliveriesResponse>(`/v1/admin/webhooks/${id}/deliveries${qs ? `?${qs}` : ""}`);
 }
 
 // ── Media Assets ──
