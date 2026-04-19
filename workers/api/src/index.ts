@@ -30,6 +30,7 @@ import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedRoutes } from "./routes/admin-embed.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
+import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 import { retierSources } from "./cron/retier.js";
@@ -65,6 +66,7 @@ export type Env = {
     EMBEDDING_PROVIDER?: string;
     VOYAGE_API_KEY?: SecretBinding;
     OPENAI_API_KEY?: SecretBinding;
+    WEBHOOK_HMAC_MASTER?: SecretBinding;
     // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
     RATE_LIMIT_ENABLED?: string;
     PUBLIC_RATE_LIMITER?: { limit(options: { key: string }): Promise<{ success: boolean }> };
@@ -122,7 +124,7 @@ for (const r of publicReadRoutes) {
 const adminRoutes = [
   "sessions", "fetch-log", "usage-log", "blocked-urls",
   "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
-  "admin/embed", "admin/cron-runs", "playbook",
+  "admin/embed", "admin/cron-runs", "admin/webhooks", "playbook",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -173,6 +175,7 @@ v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedRoutes);
 v1.route("/", adminCronRunsRoutes);
+v1.route("/", adminWebhooksRoutes);
 v1.route("/", telemetryRoutes);
 
 // Static endpoint — categories are defined in code, not DB
