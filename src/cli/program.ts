@@ -33,6 +33,7 @@ import { registerPlaybookCommand } from "./commands/playbook.js";
 import { registerShowCommand } from "./commands/show.js";
 import { registerEmbedCommand } from "./commands/admin/embed.js";
 import { registerWebhookAdminCommand } from "./commands/admin/webhook.js";
+import { registerNotifyAdminCommand } from "./commands/admin/notify.js";
 import { registerWebhookCommand } from "./commands/webhook-verify.js";
 import { registerTelemetryCommand } from "./commands/telemetry.js";
 import { CATEGORIES } from "@releases/core-internal/categories";
@@ -199,6 +200,7 @@ registerOrgCommand(admin);
 registerProductCommand(admin);
 registerReleaseCommand(admin);
 registerWebhookAdminCommand(admin);
+registerNotifyAdminCommand(admin);
 
 const discoveryAdmin = admin
   .command("discovery")

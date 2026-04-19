@@ -25,7 +25,14 @@
     // Switch to "openai" or "workers-ai" requires updating the matching secret.
     "EMBEDDING_PROVIDER": "voyage",
     // Kill-switch for the PUBLIC_RATE_LIMITER binding below. Tune the cap there.
-    "RATE_LIMIT_ENABLED": "false"
+    "RATE_LIMIT_ENABLED": "false",
+    // Email notifications (see src/lib/email.ts + src/lib/notifications.ts).
+    // Recipient must be verified in Cloudflare Email Routing; sender domain
+    // (releases.sh) must have Email Routing enabled.
+    "EMAIL_NOTIFY_ENABLED": "true",
+    "EMAIL_NOTIFY_TO": "zach@releases.sh",
+    "EMAIL_FROM": "notifications@releases.sh",
+    "ADMIN_BASE_URL": "https://api.releases.sh"
   },
   "d1_databases": [
     {
@@ -70,6 +77,13 @@
       { "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }
     ]
   },
+  // Email send binding. Omitting `destination_address` keeps the binding open
+  // to any destination verified on the account, so EMAIL_NOTIFY_TO can be
+  // changed via vars without a binding rename. Pin it if we ever want to
+  // narrow the blast radius at the platform level.
+  "send_email": [
+    { "name": "SEND_EMAIL" }
+  ],
   "durable_objects": {
     "bindings": [
       { "class_name": "StatusHub", "name": "STATUS_HUB" },
