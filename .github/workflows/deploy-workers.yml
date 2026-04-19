@@ -134,15 +134,6 @@ jobs:
       - name: Install discovery worker deps
         working-directory: workers/discovery
         run: bun install --frozen-lockfile
-      # Dockerfile COPYs dist/releases and dist/releases-mcp-browser into the
-      # sandbox container image, so the binaries must exist before wrangler packs
-      # the image. Fail loudly if cross-compilation silently skips either target.
-      - name: Build CLI binaries for Linux sandbox
-        run: |
-          set -euo pipefail
-          bun run build:all:linux
-          test -x dist/releases
-          test -x dist/releases-mcp-browser
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -194,14 +185,17 @@ jobs:
             echo "[e2e] WEBHOOK_E2E_SUBSCRIPTION_ID not set — skipping"
             exit 0
           fi
-          bun src/index.ts admin webhook test "$SUBSCRIPTION_ID" || echo "[e2e] webhook test call failed (non-fatal)"
+          AUTH="Authorization: Bearer $RELEASED_API_KEY"
+          curl -fsS -X POST -H "$AUTH" "$RELEASED_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/test" \
+            || echo "[e2e] webhook test call failed (non-fatal)"
           # Queue max_batch_timeout is 5s, so a plain sleep races the flush. Poll up to ~14s.
           for _ in 1 2 3 4 5 6 7; do
-            ROWS=$(bun src/index.ts admin webhook deliveries "$SUBSCRIPTION_ID" --limit 1 --json 2>/dev/null || true)
+            ROWS=$(curl -fsS -H "$AUTH" "$RELEASED_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/deliveries?limit=1" 2>/dev/null || true)
             if echo "$ROWS" | grep -q '"event_id"'; then break; fi
             sleep 2
           done
-          bun src/index.ts admin webhook deliveries "$SUBSCRIPTION_ID" --limit 5 --json || echo "[e2e] deliveries call failed (non-fatal)"
+          curl -fsS -H "$AUTH" "$RELEASED_API_URL/v1/admin/webhooks/$SUBSCRIPTION_ID/deliveries?limit=5" \
+            || echo "[e2e] deliveries call failed (non-fatal)"
 
   publish-mcp-registry:
     name: Publish MCP registry metadata

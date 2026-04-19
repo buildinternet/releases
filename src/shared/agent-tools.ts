@@ -10,7 +10,7 @@
  */
 
 import { CATEGORIES } from "@releases/core-internal/categories";
-import { assemblePlaybook } from "../ai/playbook.js";
+import { assemblePlaybook } from "@releases/ai-internal/playbook";
 
 // ── Tool input types ─────────────────────────────────────────────────
 // Read tools (list_sources, list_organizations, get_latest_releases,

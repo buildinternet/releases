@@ -31,12 +31,10 @@ The CLI compiles to a self-contained binary via `bun build --compile`:
 
 ```bash
 bun run build                 # compile for current platform (macOS)
-bun run build:linux           # cross-compile for Linux (sandbox container)
-bun run build:all             # compile CLI + MCP browser server
-bun run build:all:linux       # cross-compile both for Linux
+bun run build:linux           # cross-compile for Linux
 ```
 
-Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_URL`) — local SQLite mode is only supported via `bun src/index.ts`.
+Output goes to `dist/releases`. The compiled binary requires remote mode (`RELEASED_API_URL`) — local SQLite mode is only supported via `bun src/index.ts`.
 
 **Workspaces:** Root `package.json` declares `workers/api`, `web`, `npm/*`, and `packages/*` as workspaces. `workers/discovery/` and `workers/mcp/` are intentionally excluded because Bun eagerly resolves imports across all workspace members at startup — the `cloudflare:workers` imports in those workers' files cause `bun src/index.ts` to fail even though the CLI never imports from them. Wrangler manages those workers' dependencies independently.
 
@@ -44,6 +42,7 @@ Output goes to `dist/`. The compiled binary requires remote mode (`RELEASED_API_
 
 - `packages/core/` → imported as **`@releases/core-internal`** inside the monorepo. Private superset: DB schema (source of truth), `release-upsert`, `tokens`, `changelog-range`, `hash`, `webhook-sign`, and the monorepo copies of `categories`, `dates`, `changelog-slice`, `overview`, `id`, `slug`. The OSS CLI (`buildinternet/releases-cli`) independently publishes `@buildinternet/releases-core` — a **narrower, curated** subset of these exports for thin-client use. The two are intentional forks; **do not import `@buildinternet/releases-core` inside this monorepo**. Tracked in #370 (consolidation plan).
 - `packages/adapters/` — adapter primitives (`types`, `source-meta`, `content-hash`), the `github`, `cloudflare`, and `crawl` adapters, and the pure subset of `feed`. DB-coupled adapters (`src/adapters/{feed,agent,scrape,resolve}.ts`) stay in `src/` because they reach into `src/db/queries` and `src/ai/*`.
+- `packages/ai/` → imported as **`@releases/ai-internal`**. Pure, worker-safe pieces of the AI/evaluation surface: `evaluate` (URL recommendation + `buildMetadataFromEvaluation`, no DB), `playbook` (deterministic markdown generation), `providers` (provider-detection table). DB-coupled `applyEvaluation` stays in `src/ai/evaluate.ts` (CLI-only, dies in #370 PR 4b).
 - `packages/lib/` — `@releases/lib/{config,errors}` private. `logger` is published as `@buildinternet/releases-lib/logger`. Published lib exposes only `getDataDir`/`getLogsDir`.
 
 Worker tsconfigs map `@releases/lib/*` to `../../src/lib/*` for files not yet carved out.

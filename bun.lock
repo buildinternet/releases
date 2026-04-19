@@ -11,6 +11,7 @@
         "@buildinternet/releases-skills": "^0.13.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@releases/adapters": "workspace:*",
+        "@releases/ai-internal": "workspace:*",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
         "chalk": "^5.6.2",
@@ -39,6 +40,14 @@
         "@anthropic-ai/sdk": "^0.88.0",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
+      },
+    },
+    "packages/ai": {
+      "name": "@releases/ai-internal",
+      "version": "0.0.0",
+      "dependencies": {
+        "@releases/adapters": "workspace:*",
+        "@releases/core-internal": "workspace:*",
       },
     },
     "packages/core": {
@@ -353,6 +362,8 @@
     "@poppinss/exception": ["@poppinss/exception@1.2.3", "", {}, "sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw=="],
 
     "@releases/adapters": ["@releases/adapters@workspace:packages/adapters"],
+
+    "@releases/ai-internal": ["@releases/ai-internal@workspace:packages/ai"],
 
     "@releases/core-internal": ["@releases/core-internal@workspace:packages/core"],
 

@@ -1,9 +1,5 @@
 FROM docker.io/cloudflare/sandbox:0.8.0
 
-# Copy compiled binaries
-COPY dist/releases /usr/local/bin/releases
-COPY dist/releases-mcp-browser /usr/local/bin/releases-mcp-browser
-
 # Skills live at the conventional path and are also pre-placed where the
 # Agent SDK discovers them (the SDK checks before ensureSkillsDiscoverable runs)
 COPY src/agent/skills/ /usr/share/releases/skills/

@@ -1,9 +1,5 @@
 # Ignore everything, then allowlist only what the sandbox needs
 *
 
-# Compiled binaries
-!dist/releases
-!dist/releases-mcp-browser
-
 # Agent skills (copied to /usr/share/releases/skills/ and .claude/skills/ in Dockerfile)
 !src/agent/skills/

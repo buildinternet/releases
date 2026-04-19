@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { evaluateChangelog } from "@releases/ai/evaluate.js";
+import { evaluateChangelog } from "@releases/ai-internal/evaluate";
 import type { Env } from "../index.js";
 
 export const evaluateRoutes = new Hono<Env>();

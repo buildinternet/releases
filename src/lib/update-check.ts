@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { join } from "path";
 import { getDataDir } from "@releases/lib/config";
-import { VERSION } from "../cli/version.js";
+import { VERSION } from "./version.js";
 
 const CACHE_FILE = "update-check.json";
 const CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000; // 24 hours
