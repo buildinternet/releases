@@ -43,6 +43,14 @@
         "@releases/lib": "workspace:*",
       },
     },
+    "packages/ai": {
+      "name": "@releases/ai-internal",
+      "version": "0.0.0",
+      "dependencies": {
+        "@releases/adapters": "workspace:*",
+        "@releases/core-internal": "workspace:*",
+      },
+    },
     "packages/core": {
       "name": "@releases/core-internal",
       "version": "0.0.0",
@@ -393,6 +401,8 @@
     "@poppinss/exception": ["@poppinss/exception@1.2.3", "", {}, "sha512-dCED+QRChTVatE9ibtoaxc+WkdzOSjYTKi/+uacHWIsfodVfpsueo3+DKpgU5Px8qXjgmXkSvhXvSCz3fnP9lw=="],
 
     "@releases/adapters": ["@releases/adapters@workspace:packages/adapters"],
+
+    "@releases/ai-internal": ["@releases/ai-internal@workspace:packages/ai"],
 
     "@releases/core-internal": ["@releases/core-internal@workspace:packages/core"],
 
