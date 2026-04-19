@@ -10,13 +10,20 @@ import { CliCommand } from "@/components/cli-command";
 import { AlsoCoveredBy } from "@/components/also-covered-by";
 import { ReleaseContent } from "./release-content";
 
-export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}): Promise<Metadata> {
   const { id } = await params;
   try {
     const release = await api.release(id);
     const heading = release.version ?? release.title;
     const rawDesc = release.contentSummary ?? release.content ?? "";
-    const stripped = rawDesc.replace(/[#*[\]`>_~]/g, "").replace(/\s+/g, " ").trim();
+    const stripped = rawDesc
+      .replace(/[#*[\]`>_~]/g, "")
+      .replace(/\s+/g, " ")
+      .trim();
     const description = stripped.length > 160 ? stripped.slice(0, 157) + "..." : stripped;
     return {
       title: `${heading} — ${release.sourceName}`,
@@ -41,11 +48,7 @@ function formatDate(iso: string | null) {
   });
 }
 
-export default async function ReleaseDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function ReleaseDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
   let release;
@@ -81,10 +84,10 @@ export default async function ReleaseDetailPage({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Article",
-    "headline": heading,
-    "datePublished": release.publishedAt ?? undefined,
-    "author": { "@type": "Organization", "name": release.sourceName },
-    "publisher": { "@type": "Organization", "name": "Releases", "url": "https://releases.sh" },
+    headline: heading,
+    datePublished: release.publishedAt ?? undefined,
+    author: { "@type": "Organization", name: release.sourceName },
+    publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
   };
 
   return (
@@ -108,16 +111,11 @@ export default async function ReleaseDetailPage({
               <span className="mx-1.5">/</span>
             </>
           )}
-          <Link
-            href={sourcePath}
-            className="hover:text-stone-600 dark:hover:text-stone-300"
-          >
+          <Link href={sourcePath} className="hover:text-stone-600 dark:hover:text-stone-300">
             {release.sourceName}
           </Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">
-            {heading}
-          </span>
+          <span className="text-stone-600 dark:text-stone-300 font-medium">{heading}</span>
         </div>
 
         {/* Header */}
@@ -126,20 +124,13 @@ export default async function ReleaseDetailPage({
             {heading}
           </h1>
           {showSubtitle && (
-            <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">
-              {release.title}
-            </p>
+            <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">{release.title}</p>
           )}
           <div className="flex items-center gap-3 mt-3 text-[13px] text-stone-400 dark:text-stone-500">
-            {release.publishedAt && (
-              <span>{formatDate(release.publishedAt)}</span>
-            )}
+            {release.publishedAt && <span>{formatDate(release.publishedAt)}</span>}
             <span className="flex items-center gap-1.5">
               <SourceTypeIcon type={release.sourceType} size={14} />
-              <Link
-                href={sourcePath}
-                className="hover:text-stone-600 dark:hover:text-stone-300"
-              >
+              <Link href={sourcePath} className="hover:text-stone-600 dark:hover:text-stone-300">
                 {release.sourceName}
               </Link>
             </span>
@@ -159,16 +150,15 @@ export default async function ReleaseDetailPage({
 
         {/* Content */}
         <div className="pb-12">
-          <ReleaseContent
-            content={release.content}
-            title={release.title}
-            media={media}
-          />
+          <ReleaseContent content={release.content} title={release.title} media={media} />
           <Suspense fallback={null}>
             <AlsoCoveredBy anchorReleaseId={release.id} />
           </Suspense>
           {release.fetchedAt && (
-            <p className="text-xs text-stone-400 dark:text-stone-500 mt-8" title={release.fetchedAt}>
+            <p
+              className="text-xs text-stone-400 dark:text-stone-500 mt-8"
+              title={release.fetchedAt}
+            >
               Fetched {formatDate(release.fetchedAt)}
             </p>
           )}

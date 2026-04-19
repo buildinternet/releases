@@ -8,7 +8,10 @@
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "./db.js";
 import { sources, organizations, products, knowledgePages } from "@releases/core-internal/schema";
-import { generatePlaybookHeader, extractNotesFromLegacyPlaybook } from "@releases/ai-internal/playbook";
+import {
+  generatePlaybookHeader,
+  extractNotesFromLegacyPlaybook,
+} from "@releases/ai-internal/playbook";
 import { newKnowledgePageId } from "./utils.js";
 
 /**
@@ -29,7 +32,12 @@ export async function regeneratePlaybook(
     if (orgSources.length === 0) return;
 
     const orgProducts = await db
-      .select({ id: products.id, name: products.name, slug: products.slug, description: products.description })
+      .select({
+        id: products.id,
+        name: products.name,
+        slug: products.slug,
+        description: products.description,
+      })
       .from(products)
       .where(eq(products.orgId, orgId));
 
@@ -38,7 +46,12 @@ export async function regeneratePlaybook(
       orgSlug: org.slug,
       domain: org.domain,
       sources: orgSources,
-      products: orgProducts.map((p) => ({ id: p.id, name: p.name, slug: p.slug, description: p.description })),
+      products: orgProducts.map((p) => ({
+        id: p.id,
+        name: p.name,
+        slug: p.slug,
+        description: p.description,
+      })),
     });
 
     // Check for existing playbook — migrate notes from old format if needed
@@ -48,8 +61,8 @@ export async function regeneratePlaybook(
       .where(and(eq(knowledgePages.scope, "playbook"), eq(knowledgePages.orgId, orgId)));
 
     // Prefer stored notes; fall back to extracting from old-format content for migration
-    const notes: string | null = existing?.notes
-      ?? (existing ? extractNotesFromLegacyPlaybook(existing.content) : null);
+    const notes: string | null =
+      existing?.notes ?? (existing ? extractNotesFromLegacyPlaybook(existing.content) : null);
 
     const now = new Date().toISOString();
     const id = newKnowledgePageId();

@@ -6,12 +6,7 @@
 import { Hono } from "hono";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { createDb } from "../db.js";
-import {
-  organizations,
-  releases,
-  sources,
-  usageLog,
-} from "@releases/core-internal/schema";
+import { organizations, releases, sources, usageLog } from "@releases/core-internal/schema";
 import { daysAgoIso } from "@releases/core-internal/dates";
 import { orgWhere, sourceWhere } from "../utils.js";
 import { notDisabled } from "../queries/shared.js";
@@ -84,9 +79,7 @@ async function logAiUsage(
       releaseCount: input.releaseCount,
     });
   } catch (err) {
-    console.warn(
-      `[admin-ai] failed to log usage: ${err instanceof Error ? err.message : err}`,
-    );
+    console.warn(`[admin-ai] failed to log usage: ${err instanceof Error ? err.message : err}`);
   }
 }
 
@@ -102,7 +95,7 @@ async function getAnthropicKey(env: Env["Bindings"]): Promise<string | null> {
 
 adminAiRoutes.post("/admin/summaries", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json().catch(() => ({})) as {
+  const body = (await c.req.json().catch(() => ({}))) as {
     source?: string;
     org?: string;
     days?: number | string;
@@ -224,10 +217,12 @@ adminAiRoutes.post("/admin/summaries", async (c) => {
       model: SUMMARY_MODEL,
       maxTokens: SUMMARY_MAX_TOKENS,
       system: SUMMARY_SYSTEM,
-      messages: [{
-        role: "user",
-        content: `Summarize these releases. Be very brief — the reader wants the gist, not the full changelog.${extraInstruction}\n\n${releasesText}`,
-      }],
+      messages: [
+        {
+          role: "user",
+          content: `Summarize these releases. Be very brief — the reader wants the gist, not the full changelog.${extraInstruction}\n\n${releasesText}`,
+        },
+      ],
     });
 
     await logAiUsage(db, {
@@ -262,7 +257,7 @@ adminAiRoutes.post("/admin/summaries", async (c) => {
 
 adminAiRoutes.post("/admin/compare", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json().catch(() => ({})) as {
+  const body = (await c.req.json().catch(() => ({}))) as {
     sourceA?: string;
     sourceB?: string;
     days?: number | string;
@@ -294,8 +289,14 @@ adminAiRoutes.post("/admin/compare", async (c) => {
   }
 
   const [[srcA], [srcB]] = await Promise.all([
-    db.select({ id: sources.id, slug: sources.slug, name: sources.name }).from(sources).where(sourceWhere(a)),
-    db.select({ id: sources.id, slug: sources.slug, name: sources.name }).from(sources).where(sourceWhere(b)),
+    db
+      .select({ id: sources.id, slug: sources.slug, name: sources.name })
+      .from(sources)
+      .where(sourceWhere(a)),
+    db
+      .select({ id: sources.id, slug: sources.slug, name: sources.name })
+      .from(sources)
+      .where(sourceWhere(b)),
   ]);
   if (!srcA) return c.json({ error: "not_found", message: `Source not found: ${a}` }, 404);
   if (!srcB) return c.json({ error: "not_found", message: `Source not found: ${b}` }, 404);
@@ -310,16 +311,30 @@ adminAiRoutes.post("/admin/compare", async (c) => {
   };
 
   const [rowsA, rowsB] = await Promise.all([
-    db.select(releaseCols).from(releases).where(and(
-      eq(releases.sourceId, srcA.id),
-      gte(releases.publishedAt, cutoff),
-      eq(releases.suppressed, false),
-    )).orderBy(desc(releases.publishedAt)).limit(RELEASE_LIMIT),
-    db.select(releaseCols).from(releases).where(and(
-      eq(releases.sourceId, srcB.id),
-      gte(releases.publishedAt, cutoff),
-      eq(releases.suppressed, false),
-    )).orderBy(desc(releases.publishedAt)).limit(RELEASE_LIMIT),
+    db
+      .select(releaseCols)
+      .from(releases)
+      .where(
+        and(
+          eq(releases.sourceId, srcA.id),
+          gte(releases.publishedAt, cutoff),
+          eq(releases.suppressed, false),
+        ),
+      )
+      .orderBy(desc(releases.publishedAt))
+      .limit(RELEASE_LIMIT),
+    db
+      .select(releaseCols)
+      .from(releases)
+      .where(
+        and(
+          eq(releases.sourceId, srcB.id),
+          gte(releases.publishedAt, cutoff),
+          eq(releases.suppressed, false),
+        ),
+      )
+      .orderBy(desc(releases.publishedAt))
+      .limit(RELEASE_LIMIT),
   ]);
 
   if (rowsA.length === 0 && rowsB.length === 0) {
@@ -343,10 +358,12 @@ adminAiRoutes.post("/admin/compare", async (c) => {
       model: COMPARE_MODEL,
       maxTokens: COMPARE_MAX_TOKENS,
       system: COMPARE_SYSTEM,
-      messages: [{
-        role: "user",
-        content: `Compare recent changes between these two products:\n\n${formatProduct(srcA.name, rowsA)}\n\n---\n\n${formatProduct(srcB.name, rowsB)}`,
-      }],
+      messages: [
+        {
+          role: "user",
+          content: `Compare recent changes between these two products:\n\n${formatProduct(srcA.name, rowsA)}\n\n---\n\n${formatProduct(srcB.name, rowsB)}`,
+        },
+      ],
     });
 
     await logAiUsage(db, {

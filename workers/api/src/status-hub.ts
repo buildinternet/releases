@@ -58,7 +58,10 @@ export class StatusHub extends DurableObject {
 
   private bufferStdoutLine(sessionId: string, line: string): void {
     let lines = this.stdoutBuffer.get(sessionId);
-    if (!lines) { lines = []; this.stdoutBuffer.set(sessionId, lines); }
+    if (!lines) {
+      lines = [];
+      this.stdoutBuffer.set(sessionId, lines);
+    }
     lines.push(line);
     if (!this.stdoutFlushTimer) {
       this.stdoutFlushTimer = setTimeout(() => this.flushStdout(), STDOUT_FLUSH_INTERVAL_MS);
@@ -221,7 +224,12 @@ export class StatusHub extends DurableObject {
   }
 
   async webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): Promise<void> {}
-  async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
+  async webSocketClose(
+    _ws: WebSocket,
+    _code: number,
+    _reason: string,
+    _wasClean: boolean,
+  ): Promise<void> {}
   async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {}
 
   async alarm(): Promise<void> {
@@ -268,14 +276,21 @@ export class StatusHub extends DurableObject {
       if (existing) {
         if (event.step !== undefined) existing.step = event.step as string;
         if (event.sourcesFound !== undefined) existing.sourcesFound = event.sourcesFound as number;
-        if (event.sourcesValidated !== undefined) existing.sourcesValidated = event.sourcesValidated as number;
-        if (event.currentAction !== undefined) existing.currentAction = event.currentAction as string;
+        if (event.sourcesValidated !== undefined)
+          existing.sourcesValidated = event.sourcesValidated as number;
+        if (event.currentAction !== undefined)
+          existing.currentAction = event.currentAction as string;
         if (event.totalSources !== undefined) existing.totalSources = event.totalSources as number;
-        if (event.sourcesFetched !== undefined) existing.sourcesFetched = event.sourcesFetched as number;
-        if (event.releasesFound !== undefined) existing.releasesFound = event.releasesFound as number;
-        if (event.releasesInserted !== undefined) existing.releasesInserted = event.releasesInserted as number;
-        if (event.activeSources !== undefined) existing.activeSources = event.activeSources as string[];
-        if (event.anthropicSessionId !== undefined) existing.anthropicSessionId = event.anthropicSessionId as string;
+        if (event.sourcesFetched !== undefined)
+          existing.sourcesFetched = event.sourcesFetched as number;
+        if (event.releasesFound !== undefined)
+          existing.releasesFound = event.releasesFound as number;
+        if (event.releasesInserted !== undefined)
+          existing.releasesInserted = event.releasesInserted as number;
+        if (event.activeSources !== undefined)
+          existing.activeSources = event.activeSources as string[];
+        if (event.anthropicSessionId !== undefined)
+          existing.anthropicSessionId = event.anthropicSessionId as string;
         if (typeof event.warning === "string") {
           existing.warnings = existing.warnings ?? [];
           existing.warnings.push(event.warning);
@@ -344,7 +359,11 @@ export class StatusHub extends DurableObject {
   private broadcast(message: StatusMessage): void {
     const payload = JSON.stringify(message);
     for (const ws of this.ctx.getWebSockets()) {
-      try { ws.send(payload); } catch { /* disconnected */ }
+      try {
+        ws.send(payload);
+      } catch {
+        /* disconnected */
+      }
     }
   }
 

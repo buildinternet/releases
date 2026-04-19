@@ -15,17 +15,11 @@ export const size = OG_SIZE;
 export const contentType = OG_CONTENT_TYPE;
 export const revalidate = 86400;
 
-export default async function Image({
-  params,
-}: {
-  params: Promise<{ id: string }>;
-}) {
+export default async function Image({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
   try {
     const release = await api.release(id);
-    const orgDetail = release.org
-      ? await api.orgDetail(release.org.slug).catch(() => null)
-      : null;
+    const orgDetail = release.org ? await api.orgDetail(release.org.slug).catch(() => null) : null;
 
     const [avatarUrl, heroImage] = await Promise.all([
       resolveAvatarUrl(orgDetail),
@@ -35,8 +29,7 @@ export default async function Image({
     const heading = release.version ?? release.title;
     const orgName = release.org?.name ?? null;
     const sourceName = release.sourceName;
-    const subtitle =
-      orgName && orgName !== sourceName ? `${sourceName} · ${orgName}` : sourceName;
+    const subtitle = orgName && orgName !== sourceName ? `${sourceName} · ${orgName}` : sourceName;
     const description = heroImage
       ? undefined
       : stripMarkdown(release.contentSummary ?? release.content) || undefined;

@@ -50,12 +50,18 @@ const feedReleases: OrgReleaseItem[] = [
 
 const searchResults: UnifiedSearchResponse = {
   query: "react",
-  orgs: [
-    { slug: "meta", name: "Meta", domain: "meta.com", avatarUrl: null, category: "ai" },
-  ],
+  orgs: [{ slug: "meta", name: "Meta", domain: "meta.com", avatarUrl: null, category: "ai" }],
   products: [
     { slug: "react", name: "React", orgSlug: "meta", orgName: "Meta", category: "frontend" },
-    { slug: "react-native", name: "React Native", orgSlug: "meta", orgName: "Meta", category: null, kind: "source", sourceSlug: "react-native" },
+    {
+      slug: "react-native",
+      name: "React Native",
+      orgSlug: "meta",
+      orgName: "Meta",
+      category: null,
+      kind: "source",
+      sourceSlug: "react-native",
+    },
   ],
   sources: [],
   releases: [
@@ -186,14 +192,22 @@ describe("orgReleaseFeedToMarkdown", () => {
   });
 
   it("includes has_more in frontmatter when cursor is present", () => {
-    const md = orgReleaseFeedToMarkdown("vercel", feedReleases, { nextCursor: "cursor", limit: 20 });
+    const md = orgReleaseFeedToMarkdown("vercel", feedReleases, {
+      nextCursor: "cursor",
+      limit: 20,
+    });
     expect(md).toContain("has_more: true");
   });
 
   it("includes next URL in Pagination when baseUrl is provided", () => {
     const cursor = "2024-06-10|rel_002";
-    const md = orgReleaseFeedToMarkdown("vercel", feedReleases, { nextCursor: cursor, limit: 20 }, { baseUrl: "https://releases.sh" });
-    expect(md).toContain("next=\"https://releases.sh/vercel/releases?cursor=");
+    const md = orgReleaseFeedToMarkdown(
+      "vercel",
+      feedReleases,
+      { nextCursor: cursor, limit: 20 },
+      { baseUrl: "https://releases.sh" },
+    );
+    expect(md).toContain('next="https://releases.sh/vercel/releases?cursor=');
   });
 
   it("handles empty releases array", () => {

@@ -2,10 +2,19 @@ import { Command } from "commander";
 import { createHash } from "crypto";
 import chalk from "chalk";
 import {
-  findSource, suppressRelease, unsuppressRelease,
-  getRelease, deleteRelease, updateRelease, deleteReleasesByFilter, deleteReleasesForSource,
-  getReleaseCoverage, linkReleaseCoverage, unlinkReleaseCoverage,
-  findOrg, getRecentReleasesByOrg,
+  findSource,
+  suppressRelease,
+  unsuppressRelease,
+  getRelease,
+  deleteRelease,
+  updateRelease,
+  deleteReleasesByFilter,
+  deleteReleasesForSource,
+  getReleaseCoverage,
+  linkReleaseCoverage,
+  unlinkReleaseCoverage,
+  findOrg,
+  getRecentReleasesByOrg,
 } from "../../db/queries.js";
 import { DECIDED_BY_CLI, decidedByAgent } from "../../db/schema-coverage.js";
 import { groupReleases, rowsToCandidates, writeCoverageClusters } from "../../ai/grouping.js";
@@ -19,9 +28,7 @@ function releaseNotFound(id: string): never {
 }
 
 export function registerReleaseCommand(program: Command) {
-  const release = program
-    .command("release")
-    .description("Manage releases");
+  const release = program.command("release").description("Manage releases");
 
   // ── release show ──
   release
@@ -29,10 +36,13 @@ export function registerReleaseCommand(program: Command) {
     .description("Show release details")
     .argument("<id>", "Release ID")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin release show abc123
-  releases admin release show abc123 --json`)
+  releases admin release show abc123 --json`,
+    )
     .action(async (rawId: string, opts: { json?: boolean }) => {
       const id = normalizeReleaseId(rawId);
       const result = await getRelease(id);
@@ -48,10 +58,15 @@ Examples:
 
       console.log(chalk.bold(stripAnsi(rel.title)));
       if (rel.version) console.log(`  Version:   ${stripAnsi(rel.version)}`);
-      console.log(`  Source:    ${rel.sourceName ? stripAnsi(rel.sourceName) : chalk.dim("—")} (${rel.sourceSlug ?? chalk.dim("—")})`);
+      console.log(
+        `  Source:    ${rel.sourceName ? stripAnsi(rel.sourceName) : chalk.dim("—")} (${rel.sourceSlug ?? chalk.dim("—")})`,
+      );
       if (rel.publishedAt) console.log(`  Published: ${rel.publishedAt}`);
       console.log(`  Fetched:   ${rel.fetchedAt}`);
-      if (rel.suppressed) console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`);
+      if (rel.suppressed)
+        console.log(
+          `  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`,
+        );
       if (rel.url) console.log(`  URL:       ${rel.url}`);
 
       if (rel.contentSummary) {
@@ -81,9 +96,15 @@ Examples:
             console.log(`  ${row.coverageId}${chalk.dim(reason)}`);
           }
         } else if (coverage.role === "coverage" && coverage.canonical) {
-          const reason = coverage.canonical.reason ? ` — ${stripAnsi(coverage.canonical.reason)}` : "";
+          const reason = coverage.canonical.reason
+            ? ` — ${stripAnsi(coverage.canonical.reason)}`
+            : "";
           console.log(`  Coverage of ${coverage.canonical.canonicalId}${chalk.dim(reason)}`);
-          console.log(chalk.dim(`  Decided by ${coverage.canonical.decidedBy} at ${coverage.canonical.decidedAt}`));
+          console.log(
+            chalk.dim(
+              `  Decided by ${coverage.canonical.decidedBy} at ${coverage.canonical.decidedAt}`,
+            ),
+          );
         }
       }
     });
@@ -97,122 +118,150 @@ Examples:
     .option("--before <date>", "Delete releases published before this ISO date")
     .option("--dry-run", "Show what would be deleted without deleting")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin release delete abc123
   releases admin release delete --source my-source
   releases admin release delete --source my-source --before 2024-01-01
-  releases admin release delete --source my-source --dry-run`)
-    .action(async (rawId: string | undefined, opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean }) => {
-      const id = rawId ? normalizeReleaseId(rawId) : undefined;
-      if (!id && !opts.source && !opts.before) {
-        console.error("Error: provide a release ID, --source, or --before\n");
-        console.error("  releases admin release delete abc123");
-        console.error("  releases admin release delete --source my-source");
-        console.error("  releases admin release delete --before 2024-01-01");
-        process.exit(1);
-      }
-
-      // Resolve source if needed
-      let resolvedSource: Awaited<ReturnType<typeof findSource>> | undefined;
-      let sourceId: string | undefined;
-      if (opts.source) {
-        resolvedSource = await findSource(opts.source);
-        if (!resolvedSource) {
-          console.error(chalk.red(`Source not found: ${opts.source}`));
+  releases admin release delete --source my-source --dry-run`,
+    )
+    .action(
+      async (
+        rawId: string | undefined,
+        opts: { source?: string; before?: string; json?: boolean; dryRun?: boolean },
+      ) => {
+        const id = rawId ? normalizeReleaseId(rawId) : undefined;
+        if (!id && !opts.source && !opts.before) {
+          console.error("Error: provide a release ID, --source, or --before\n");
+          console.error("  releases admin release delete abc123");
+          console.error("  releases admin release delete --source my-source");
+          console.error("  releases admin release delete --before 2024-01-01");
           process.exit(1);
         }
-        sourceId = resolvedSource.id;
-      }
 
-      // Single release delete by ID
-      if (id) {
-        if (opts.dryRun) {
-          const existing = await getRelease(id);
-          if (!existing) releaseNotFound(id);
+        // Resolve source if needed
+        let resolvedSource: Awaited<ReturnType<typeof findSource>> | undefined;
+        let sourceId: string | undefined;
+        if (opts.source) {
+          resolvedSource = await findSource(opts.source);
+          if (!resolvedSource) {
+            console.error(chalk.red(`Source not found: ${opts.source}`));
+            process.exit(1);
+          }
+          sourceId = resolvedSource.id;
+        }
+
+        // Single release delete by ID
+        if (id) {
+          if (opts.dryRun) {
+            const existing = await getRelease(id);
+            if (!existing) releaseNotFound(id);
+            if (opts.json) {
+              console.log(
+                JSON.stringify(
+                  { wouldDelete: 1, releases: [{ id, title: existing.title }] },
+                  null,
+                  2,
+                ),
+              );
+            } else {
+              console.log(chalk.yellow(`[dry-run] Would delete 1 release(s)`));
+              console.log(`  ${id}  ${stripAnsi(existing.title)}`);
+            }
+            return;
+          }
+
+          const deleted = await deleteRelease(id);
+          if (!deleted) {
+            console.error(chalk.red("No matching releases found."));
+            process.exit(1);
+          }
           if (opts.json) {
-            console.log(JSON.stringify({ wouldDelete: 1, releases: [{ id, title: existing.title }] }, null, 2));
+            console.log(JSON.stringify({ deleted: 1 }, null, 2));
           } else {
-            console.log(chalk.yellow(`[dry-run] Would delete 1 release(s)`));
-            console.log(`  ${id}  ${stripAnsi(existing.title)}`);
+            console.log(chalk.green(`Deleted 1 release.`));
           }
           return;
         }
 
-        const deleted = await deleteRelease(id);
-        if (!deleted) {
-          console.error(chalk.red("No matching releases found."));
-          process.exit(1);
-        }
-        if (opts.json) {
-          console.log(JSON.stringify({ deleted: 1 }, null, 2));
-        } else {
-          console.log(chalk.green(`Deleted 1 release.`));
-        }
-        return;
-      }
-
-      // Bulk delete by source only (remote-mode compatible path)
-      if (resolvedSource && !opts.before) {
-        if (opts.dryRun) {
-          console.log(chalk.yellow(`[dry-run] Would delete all releases for source: ${resolvedSource.slug}`));
+        // Bulk delete by source only (remote-mode compatible path)
+        if (resolvedSource && !opts.before) {
+          if (opts.dryRun) {
+            console.log(
+              chalk.yellow(
+                `[dry-run] Would delete all releases for source: ${resolvedSource.slug}`,
+              ),
+            );
+            return;
+          }
+          let deleted: number;
+          try {
+            deleted = await deleteReleasesForSource(resolvedSource);
+          } catch (err) {
+            console.error(chalk.red(err instanceof Error ? err.message : String(err)));
+            process.exit(1);
+          }
+          if (opts.json) {
+            console.log(JSON.stringify({ deleted }, null, 2));
+          } else {
+            console.log(chalk.green(`Deleted ${deleted} release${deleted === 1 ? "" : "s"}.`));
+          }
           return;
         }
-        let deleted: number;
+
+        // Bulk delete by filter (local mode only when --before is used)
+        const filterOpts: { sourceId?: string; before?: string; dryRun?: boolean } = {};
+        if (sourceId) filterOpts.sourceId = sourceId;
+        if (opts.before) filterOpts.before = opts.before;
+        if (opts.dryRun) filterOpts.dryRun = true;
+
+        let result: Awaited<ReturnType<typeof deleteReleasesByFilter>>;
         try {
-          deleted = await deleteReleasesForSource(resolvedSource);
+          result = await deleteReleasesByFilter(filterOpts);
         } catch (err) {
           console.error(chalk.red(err instanceof Error ? err.message : String(err)));
           process.exit(1);
         }
-        if (opts.json) {
-          console.log(JSON.stringify({ deleted }, null, 2));
-        } else {
-          console.log(chalk.green(`Deleted ${deleted} release${deleted === 1 ? "" : "s"}.`));
-        }
-        return;
-      }
 
-      // Bulk delete by filter (local mode only when --before is used)
-      const filterOpts: { sourceId?: string; before?: string; dryRun?: boolean } = {};
-      if (sourceId) filterOpts.sourceId = sourceId;
-      if (opts.before) filterOpts.before = opts.before;
-      if (opts.dryRun) filterOpts.dryRun = true;
-
-      let result: Awaited<ReturnType<typeof deleteReleasesByFilter>>;
-      try {
-        result = await deleteReleasesByFilter(filterOpts);
-      } catch (err) {
-        console.error(chalk.red(err instanceof Error ? err.message : String(err)));
-        process.exit(1);
-      }
-
-      if (opts.dryRun) {
-        if (opts.json) {
-          console.log(JSON.stringify({ wouldDelete: result.releases.length, releases: result.releases }, null, 2));
-        } else {
-          console.log(chalk.yellow(`[dry-run] Would delete ${result.releases.length} release(s)`));
-          for (const r of result.releases.slice(0, 10)) {
-            console.log(`  ${r.id}  ${stripAnsi(r.title)}`);
+        if (opts.dryRun) {
+          if (opts.json) {
+            console.log(
+              JSON.stringify(
+                { wouldDelete: result.releases.length, releases: result.releases },
+                null,
+                2,
+              ),
+            );
+          } else {
+            console.log(
+              chalk.yellow(`[dry-run] Would delete ${result.releases.length} release(s)`),
+            );
+            for (const r of result.releases.slice(0, 10)) {
+              console.log(`  ${r.id}  ${stripAnsi(r.title)}`);
+            }
+            if (result.releases.length > 10) {
+              console.log(chalk.dim(`  ... and ${result.releases.length - 10} more`));
+            }
           }
-          if (result.releases.length > 10) {
-            console.log(chalk.dim(`  ... and ${result.releases.length - 10} more`));
-          }
+          return;
         }
-        return;
-      }
 
-      if (result.deleted === 0) {
-        console.error(chalk.red("No matching releases found."));
-        process.exit(1);
-      }
+        if (result.deleted === 0) {
+          console.error(chalk.red("No matching releases found."));
+          process.exit(1);
+        }
 
-      if (opts.json) {
-        console.log(JSON.stringify({ deleted: result.deleted }, null, 2));
-      } else {
-        console.log(chalk.green(`Deleted ${result.deleted} release${result.deleted === 1 ? "" : "s"}.`));
-      }
-    });
+        if (opts.json) {
+          console.log(JSON.stringify({ deleted: result.deleted }, null, 2));
+        } else {
+          console.log(
+            chalk.green(`Deleted ${result.deleted} release${result.deleted === 1 ? "" : "s"}.`),
+          );
+        }
+      },
+    );
 
   // ── release edit ──
   release
@@ -223,53 +272,61 @@ Examples:
     .option("--version <version>", "Update version")
     .option("--content <content>", "Update content (recomputes contentHash)")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin release edit abc123 --title "New Title"
   releases admin release edit abc123 --version "2.0.0"
-  releases admin release edit abc123 --json`)
-    .action(async (rawId: string, opts: { title?: string; version?: string; content?: string; json?: boolean }) => {
-      const id = normalizeReleaseId(rawId);
-      const existing = await getRelease(id);
-      if (!existing) releaseNotFound(id);
+  releases admin release edit abc123 --json`,
+    )
+    .action(
+      async (
+        rawId: string,
+        opts: { title?: string; version?: string; content?: string; json?: boolean },
+      ) => {
+        const id = normalizeReleaseId(rawId);
+        const existing = await getRelease(id);
+        if (!existing) releaseNotFound(id);
 
-      const updates: Record<string, unknown> = {};
-      const changes: string[] = [];
+        const updates: Record<string, unknown> = {};
+        const changes: string[] = [];
 
-      if (opts.title) {
-        updates.title = opts.title;
-        changes.push(`title → ${opts.title}`);
-      }
-
-      if (opts.version) {
-        updates.version = opts.version;
-        changes.push(`version → ${opts.version}`);
-      }
-
-      if (opts.content) {
-        updates.content = opts.content;
-        const hash = createHash("sha256").update(opts.content).digest("hex");
-        updates.contentHash = hash;
-        changes.push(`content → (${opts.content.length} chars)`);
-        changes.push(`contentHash → ${hash.slice(0, 12)}…`);
-      }
-
-      if (changes.length === 0) {
-        console.log(chalk.yellow("No changes specified. Use --help to see options."));
-        return;
-      }
-
-      const updated = await updateRelease(id, updates);
-
-      if (opts.json) {
-        console.log(JSON.stringify(updated, null, 2));
-      } else {
-        console.log(chalk.green(`Updated release ${id}:`));
-        for (const change of changes) {
-          console.log(`  ${change}`);
+        if (opts.title) {
+          updates.title = opts.title;
+          changes.push(`title → ${opts.title}`);
         }
-      }
-    });
+
+        if (opts.version) {
+          updates.version = opts.version;
+          changes.push(`version → ${opts.version}`);
+        }
+
+        if (opts.content) {
+          updates.content = opts.content;
+          const hash = createHash("sha256").update(opts.content).digest("hex");
+          updates.contentHash = hash;
+          changes.push(`content → (${opts.content.length} chars)`);
+          changes.push(`contentHash → ${hash.slice(0, 12)}…`);
+        }
+
+        if (changes.length === 0) {
+          console.log(chalk.yellow("No changes specified. Use --help to see options."));
+          return;
+        }
+
+        const updated = await updateRelease(id, updates);
+
+        if (opts.json) {
+          console.log(JSON.stringify(updated, null, 2));
+        } else {
+          console.log(chalk.green(`Updated release ${id}:`));
+          for (const change of changes) {
+            console.log(`  ${change}`);
+          }
+        }
+      },
+    );
 
   // ── release suppress ──
   release
@@ -279,17 +336,26 @@ Examples:
     .option("--reason <reason>", "Reason for suppression (e.g. 'promotional content')")
     .option("--dry-run", "Show what would be suppressed without writing")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin release suppress abc123 --reason "promotional content"
-  releases admin release suppress abc123 --dry-run`)
+  releases admin release suppress abc123 --dry-run`,
+    )
     .action(async (rawId: string, opts: { reason?: string; dryRun?: boolean; json?: boolean }) => {
       const id = normalizeReleaseId(rawId);
       if (opts.dryRun) {
         if (opts.json) {
-          console.log(JSON.stringify({ id, suppressed: true, reason: opts.reason ?? null, dryRun: true }));
+          console.log(
+            JSON.stringify({ id, suppressed: true, reason: opts.reason ?? null, dryRun: true }),
+          );
         } else {
-          console.log(chalk.yellow(`[dry-run] Would suppress release ${id}${opts.reason ? ` (${opts.reason})` : ""}`));
+          console.log(
+            chalk.yellow(
+              `[dry-run] Would suppress release ${id}${opts.reason ? ` (${opts.reason})` : ""}`,
+            ),
+          );
         }
         return;
       }
@@ -300,7 +366,9 @@ Examples:
       if (opts.json) {
         console.log(JSON.stringify({ id, suppressed: true, reason: opts.reason ?? null }));
       } else {
-        console.log(chalk.green(`Suppressed release ${id}${opts.reason ? ` (${opts.reason})` : ""}`));
+        console.log(
+          chalk.green(`Suppressed release ${id}${opts.reason ? ` (${opts.reason})` : ""}`),
+        );
       }
     });
 
@@ -310,9 +378,12 @@ Examples:
     .description("Restore a suppressed release so it appears in queries again")
     .argument("<id>", "Release ID to unsuppress")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
-  releases admin release unsuppress abc123`)
+  releases admin release unsuppress abc123`,
+    )
     .action(async (rawId: string, opts: { json?: boolean }) => {
       const id = normalizeReleaseId(rawId);
       const found = await unsuppressRelease(id);
@@ -333,33 +404,46 @@ Examples:
     .argument("<coverage...>", "One or more coverage release IDs")
     .option("--reason <reason>", "One-line reason recorded with the link")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin release link rel_canonical rel_coverage_a rel_coverage_b
-  releases admin release link rel_canonical rel_coverage_a --reason "marketing post for launch"`)
-    .action(async (rawCanonical: string, rawCoverage: string[], opts: { reason?: string; json?: boolean }) => {
-      const canonicalId = normalizeReleaseId(rawCanonical);
-      const canonical = await getRelease(canonicalId);
-      if (!canonical) releaseNotFound(canonicalId);
+  releases admin release link rel_canonical rel_coverage_a --reason "marketing post for launch"`,
+    )
+    .action(
+      async (
+        rawCanonical: string,
+        rawCoverage: string[],
+        opts: { reason?: string; json?: boolean },
+      ) => {
+        const canonicalId = normalizeReleaseId(rawCanonical);
+        const canonical = await getRelease(canonicalId);
+        if (!canonical) releaseNotFound(canonicalId);
 
-      const coverageIds = rawCoverage.map(normalizeReleaseId);
-      for (const cid of coverageIds) {
-        const cov = await getRelease(cid);
-        if (!cov) releaseNotFound(cid);
-        await linkReleaseCoverage({
-          canonicalId,
-          coverageId: cid,
-          reason: opts.reason,
-          decidedBy: DECIDED_BY_CLI,
-        });
-      }
+        const coverageIds = rawCoverage.map(normalizeReleaseId);
+        for (const cid of coverageIds) {
+          const cov = await getRelease(cid);
+          if (!cov) releaseNotFound(cid);
+          await linkReleaseCoverage({
+            canonicalId,
+            coverageId: cid,
+            reason: opts.reason,
+            decidedBy: DECIDED_BY_CLI,
+          });
+        }
 
-      if (opts.json) {
-        console.log(JSON.stringify({ canonicalId, coverageIds, reason: opts.reason ?? null }, null, 2));
-      } else {
-        console.log(chalk.green(`Linked ${coverageIds.length} release(s) as coverage of ${canonicalId}.`));
-      }
-    });
+        if (opts.json) {
+          console.log(
+            JSON.stringify({ canonicalId, coverageIds, reason: opts.reason ?? null }, null, 2),
+          );
+        } else {
+          console.log(
+            chalk.green(`Linked ${coverageIds.length} release(s) as coverage of ${canonicalId}.`),
+          );
+        }
+      },
+    );
 
   // ── release unlink ──
   release
@@ -390,74 +474,98 @@ Examples:
     .option("--model <model>", "Override the grouping model (e.g. claude-sonnet-4-6)")
     .option("--dry-run", "Print the proposed clusters without writing")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin release cluster anthropic
   releases admin release cluster anthropic --window 7 --dry-run
-  releases admin release cluster anthropic --model claude-sonnet-4-6`)
-    .action(async (orgIdent: string, opts: { window?: string; model?: string; dryRun?: boolean; json?: boolean }) => {
-      const org = await findOrg(orgIdent);
-      if (!org) {
-        console.error(chalk.red(`Organization not found: ${orgIdent}`));
-        process.exit(1);
-      }
+  releases admin release cluster anthropic --model claude-sonnet-4-6`,
+    )
+    .action(
+      async (
+        orgIdent: string,
+        opts: { window?: string; model?: string; dryRun?: boolean; json?: boolean },
+      ) => {
+        const org = await findOrg(orgIdent);
+        if (!org) {
+          console.error(chalk.red(`Organization not found: ${orgIdent}`));
+          process.exit(1);
+        }
 
-      const windowDays = Number.parseInt(opts.window ?? "30", 10) || 30;
-      const cutoff = daysAgoIso(windowDays);
-      const rows = await getRecentReleasesByOrg(org.id, cutoff);
+        const windowDays = Number.parseInt(opts.window ?? "30", 10) || 30;
+        const cutoff = daysAgoIso(windowDays);
+        const rows = await getRecentReleasesByOrg(org.id, cutoff);
 
-      if (rows.length === 0) {
-        console.log(chalk.yellow(`No releases for ${org.slug} in the last ${windowDays} days.`));
-        return;
-      }
+        if (rows.length === 0) {
+          console.log(chalk.yellow(`No releases for ${org.slug} in the last ${windowDays} days.`));
+          return;
+        }
 
-      const candidates = rowsToCandidates(rows);
+        const candidates = rowsToCandidates(rows);
 
-      if (!opts.json) {
-        console.log(chalk.dim(`Grouping ${candidates.length} release(s) for ${org.slug} (window: ${windowDays}d)...`));
-      }
+        if (!opts.json) {
+          console.log(
+            chalk.dim(
+              `Grouping ${candidates.length} release(s) for ${org.slug} (window: ${windowDays}d)...`,
+            ),
+          );
+        }
 
-      const result = await groupReleases(candidates, {
-        model: opts.model,
-        context: `Organization: ${org.name} (${org.slug}). Window: last ${windowDays} days.`,
-      });
+        const result = await groupReleases(candidates, {
+          model: opts.model,
+          context: `Organization: ${org.name} (${org.slug}). Window: last ${windowDays} days.`,
+        });
 
-      const groupedClusters = result.clusters.filter((c) => c.coverageIds.length > 0);
-      const singletons = result.clusters.filter((c) => c.coverageIds.length === 0);
-      const coverageCount = groupedClusters.reduce((acc, c) => acc + c.coverageIds.length, 0);
+        const groupedClusters = result.clusters.filter((c) => c.coverageIds.length > 0);
+        const singletons = result.clusters.filter((c) => c.coverageIds.length === 0);
+        const coverageCount = groupedClusters.reduce((acc, c) => acc + c.coverageIds.length, 0);
 
-      if (opts.json) {
-        console.log(JSON.stringify({
-          org: org.slug,
-          windowDays,
-          model: result.model,
-          dryRun: !!opts.dryRun,
-          candidateCount: candidates.length,
-          clusters: result.clusters,
-        }, null, 2));
-      } else {
-        console.log();
-        console.log(chalk.bold(`${result.clusters.length} clusters — ${groupedClusters.length} grouped, ${singletons.length} singleton(s) — ${coverageCount} coverage link(s)`));
-        console.log(chalk.dim(`Model: ${result.model}${opts.dryRun ? " (dry run — nothing written)" : ""}`));
-        console.log();
-        const titleById = new Map(candidates.map((c) => [c.id, c.title]));
-        const titleFor = (id: string) => titleById.get(id) ?? id;
-        for (const c of groupedClusters) {
-          console.log(chalk.bold(`◆ ${titleFor(c.canonicalId)}`));
-          console.log(chalk.dim(`  ${c.canonicalId} — ${c.reason}`));
-          for (const cid of c.coverageIds) {
-            console.log(`    ${chalk.dim("↳")} ${titleFor(cid)} ${chalk.dim(`(${cid})`)}`);
+        if (opts.json) {
+          console.log(
+            JSON.stringify(
+              {
+                org: org.slug,
+                windowDays,
+                model: result.model,
+                dryRun: !!opts.dryRun,
+                candidateCount: candidates.length,
+                clusters: result.clusters,
+              },
+              null,
+              2,
+            ),
+          );
+        } else {
+          console.log();
+          console.log(
+            chalk.bold(
+              `${result.clusters.length} clusters — ${groupedClusters.length} grouped, ${singletons.length} singleton(s) — ${coverageCount} coverage link(s)`,
+            ),
+          );
+          console.log(
+            chalk.dim(`Model: ${result.model}${opts.dryRun ? " (dry run — nothing written)" : ""}`),
+          );
+          console.log();
+          const titleById = new Map(candidates.map((c) => [c.id, c.title]));
+          const titleFor = (id: string) => titleById.get(id) ?? id;
+          for (const c of groupedClusters) {
+            console.log(chalk.bold(`◆ ${titleFor(c.canonicalId)}`));
+            console.log(chalk.dim(`  ${c.canonicalId} — ${c.reason}`));
+            for (const cid of c.coverageIds) {
+              console.log(`    ${chalk.dim("↳")} ${titleFor(cid)} ${chalk.dim(`(${cid})`)}`);
+            }
           }
         }
-      }
 
-      if (opts.dryRun) return;
+        if (opts.dryRun) return;
 
-      const written = await writeCoverageClusters(result.clusters, decidedByAgent(result.model));
+        const written = await writeCoverageClusters(result.clusters, decidedByAgent(result.model));
 
-      if (!opts.json && written > 0) {
-        console.log();
-        console.log(chalk.green(`Wrote ${written} coverage link(s).`));
-      }
-    });
+        if (!opts.json && written > 0) {
+          console.log();
+          console.log(chalk.green(`Wrote ${written} coverage link(s).`));
+        }
+      },
+    );
 }

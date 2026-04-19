@@ -9,7 +9,10 @@ type Env = { Bindings: { CACHE_DISABLED?: string } };
  *
  * Set the CACHE_DISABLED env var to any truthy value to skip (e.g. for local dev).
  */
-export function cacheControl(maxAge: number, options?: { staleWhileRevalidate?: number; isPublic?: boolean }): MiddlewareHandler<Env> {
+export function cacheControl(
+  maxAge: number,
+  options?: { staleWhileRevalidate?: number; isPublic?: boolean },
+): MiddlewareHandler<Env> {
   const swr = options?.staleWhileRevalidate ?? 0;
   const visibility = options?.isPublic ? "public" : "private";
 

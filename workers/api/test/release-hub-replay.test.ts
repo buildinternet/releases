@@ -6,8 +6,13 @@ function makeHub() {
   const map = new Map<string, unknown>();
   const storage = {
     get: async (k: string) => map.get(k) ?? null,
-    put: async (k: string, v: unknown) => { map.set(k, v); },
-    delete: async (keys: string[]) => { for (const k of keys) map.delete(k); return undefined; },
+    put: async (k: string, v: unknown) => {
+      map.set(k, v);
+    },
+    delete: async (keys: string[]) => {
+      for (const k of keys) map.delete(k);
+      return undefined;
+    },
     list: async (opts: { prefix: string; startAfter?: string }) => {
       const out = new Map<string, unknown>();
       const keys = [...map.keys()].filter((k) => k.startsWith(opts.prefix)).toSorted();
@@ -32,15 +37,23 @@ async function publish(hub: any, n: number) {
   const events = [];
   for (let i = 0; i < n; i++) {
     events.push({
-      id: `rel_${i}`, title: `r${i}`, version: null, publishedAt: null,
-      sourceName: "s", sourceSlug: "s", contentSummary: null, media: [],
+      id: `rel_${i}`,
+      title: `r${i}`,
+      version: null,
+      publishedAt: null,
+      sourceName: "s",
+      sourceSlug: "s",
+      contentSummary: null,
+      media: [],
     });
   }
-  await hub.fetch(new Request("https://do/publish", {
-    method: "POST",
-    body: JSON.stringify({ events }),
-    headers: { "Content-Type": "application/json" },
-  }));
+  await hub.fetch(
+    new Request("https://do/publish", {
+      method: "POST",
+      body: JSON.stringify({ events }),
+      headers: { "Content-Type": "application/json" },
+    }),
+  );
 }
 
 describe("ReleaseHub /replay", () => {
@@ -49,7 +62,7 @@ describe("ReleaseHub /replay", () => {
     await publish(hub, 5);
     const res = await hub.fetch(new Request("https://do/replay?since=2"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { events: { seq: number }[]; head: number; gap?: unknown };
+    const body = (await res.json()) as { events: { seq: number }[]; head: number; gap?: unknown };
     expect(body.events.map((e) => e.seq)).toEqual([3, 4, 5]);
     expect(body.head).toBe(5);
     expect(body.gap).toBeUndefined();
@@ -61,7 +74,7 @@ describe("ReleaseHub /replay", () => {
     // Manually patch oldest-seq to simulate a trimmed buffer.
     await (hub.ctx.storage as any).put("oldest-seq", 100);
     const res = await hub.fetch(new Request("https://do/replay?since=10"));
-    const body = await res.json() as { gap?: { oldestSeq: number } };
+    const body = (await res.json()) as { gap?: { oldestSeq: number } };
     expect(body.gap).toEqual({ oldestSeq: 100 });
   });
 
@@ -69,7 +82,7 @@ describe("ReleaseHub /replay", () => {
     const hub = makeHub();
     await publish(hub, 600);
     const res = await hub.fetch(new Request("https://do/replay?since=0"));
-    const body = await res.json() as { events: unknown[] };
+    const body = (await res.json()) as { events: unknown[] };
     expect(body.events.length).toBe(500);
   });
 
@@ -77,7 +90,7 @@ describe("ReleaseHub /replay", () => {
     const hub = makeHub();
     await publish(hub, 50);
     const res = await hub.fetch(new Request("https://do/replay?since=0&limit=10"));
-    const body = await res.json() as { events: unknown[] };
+    const body = (await res.json()) as { events: unknown[] };
     expect(body.events.length).toBe(10);
   });
 });

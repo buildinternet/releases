@@ -1,5 +1,5 @@
 {
   "name": "releases-webhook-echo",
   "main": "src/index.ts",
-  "compatibility_date": "2026-03-27"
+  "compatibility_date": "2026-03-27",
 }

@@ -20,18 +20,10 @@ export interface DeliveryAttempt {
  *   blobs:   [event_id, error_message, error_code, outcome]
  *   doubles: [http_status, latency_ms, attempt_number]
  */
-export function writeDeliveryAttempt(
-  ds: AnalyticsEngineDataset,
-  attempt: DeliveryAttempt,
-): void {
+export function writeDeliveryAttempt(ds: AnalyticsEngineDataset, attempt: DeliveryAttempt): void {
   ds.writeDataPoint({
     indexes: [attempt.subscriptionId],
-    blobs: [
-      attempt.eventId,
-      attempt.errorMessage ?? "",
-      attempt.errorCode ?? "",
-      attempt.outcome,
-    ],
+    blobs: [attempt.eventId, attempt.errorMessage ?? "", attempt.errorCode ?? "", attempt.outcome],
     doubles: [attempt.httpStatus, attempt.latencyMs, attempt.attempt],
   });
 }

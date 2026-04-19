@@ -37,7 +37,11 @@ export class DiscoverySession extends DurableObject<Env> {
   }
 
   private async destroySandbox(): Promise<void> {
-    try { await this.getSandboxHandle().destroy(); } catch { /* container already gone */ }
+    try {
+      await this.getSandboxHandle().destroy();
+    } catch {
+      /* container already gone */
+    }
   }
 
   private async notifyStatusHub(event: Record<string, unknown>): Promise<void> {
@@ -49,9 +53,7 @@ export class DiscoverySession extends DurableObject<Env> {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          ...(apiKey
-            ? { Authorization: `Bearer ${apiKey}` }
-            : {}),
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         },
         body: JSON.stringify(event),
       });
@@ -163,7 +165,9 @@ export class DiscoverySession extends DurableObject<Env> {
       const response = await sandbox.wsConnect(wsUpgradeRequest, 8081);
       const ws = response.webSocket;
       if (!ws) {
-        console.log(`[discovery:${this.sessionId}] sandbox WS upgrade failed — no webSocket on response`);
+        console.log(
+          `[discovery:${this.sessionId}] sandbox WS upgrade failed — no webSocket on response`,
+        );
         return;
       }
       ws.accept();
@@ -176,7 +180,9 @@ export class DiscoverySession extends DurableObject<Env> {
           // Final state delivered over WS — store directly, no file polling needed
           if (msg.type === "state" && msg.payload) {
             const isError = msg.payload.status === "error";
-            console.log(`[discovery:${this.sessionId}] received state via WS (status=${msg.payload.status})`);
+            console.log(
+              `[discovery:${this.sessionId}] received state via WS (status=${msg.payload.status})`,
+            );
 
             if (isError) {
               await this.ctx.storage.put({
@@ -233,19 +239,24 @@ export class DiscoverySession extends DurableObject<Env> {
   /** Stream raw stdout/stderr from the agent process via Sandbox SDK. Fire-and-forget. */
   private streamStdout(processId: string): void {
     const sandbox = this.getSandboxHandle();
-    sandbox.streamProcessLogs(processId).then(async (stream) => {
-      for await (const log of parseSSEStream<LogEvent>(stream)) {
-        await this.notifyStatusHub({
-          type: "session:stdout",
-          sessionId: this.sessionId,
-          line: log.data ?? "",
-          stream: log.type === "stderr" ? "stderr" : "stdout",
-          timestamp: Date.now(),
-        });
-      }
-    }).catch((err) => {
-      console.log(`[discovery:${this.sessionId}] stdout stream unavailable: ${err instanceof Error ? err.message : String(err)}`);
-    });
+    sandbox
+      .streamProcessLogs(processId)
+      .then(async (stream) => {
+        for await (const log of parseSSEStream<LogEvent>(stream)) {
+          await this.notifyStatusHub({
+            type: "session:stdout",
+            sessionId: this.sessionId,
+            line: log.data ?? "",
+            stream: log.type === "stderr" ? "stderr" : "stdout",
+            timestamp: Date.now(),
+          });
+        }
+      })
+      .catch((err) => {
+        console.log(
+          `[discovery:${this.sessionId}] stdout stream unavailable: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      });
   }
 
   private async pollProgress(): Promise<void> {
@@ -258,7 +269,9 @@ export class DiscoverySession extends DurableObject<Env> {
     try {
       const progressFile = await sandbox.readFile("/tmp/discovery-progress.json");
       const progress = JSON.parse(progressFile.content);
-      console.log(`[discovery:${this.sessionId}] progress: step=${progress.step} sources=${progress.sourcesFound} validated=${progress.sourcesValidated}`);
+      console.log(
+        `[discovery:${this.sessionId}] progress: step=${progress.step} sources=${progress.sourcesFound} validated=${progress.sourcesValidated}`,
+      );
 
       await this.ctx.storage.put("progress", progress);
 
@@ -299,8 +312,14 @@ export class DiscoverySession extends DurableObject<Env> {
         const stateFile = await sandbox.readFile("/tmp/discovery-state.json");
         const state = JSON.parse(stateFile.content);
         if (state.status === "error") {
-          console.error(`[discovery:${this.sessionId}] agent error: ${JSON.stringify(state).slice(0, 500)}`);
-          await this.ctx.storage.put({ status: "error", errorMessage: state.error || "Discovery agent failed", result: state });
+          console.error(
+            `[discovery:${this.sessionId}] agent error: ${JSON.stringify(state).slice(0, 500)}`,
+          );
+          await this.ctx.storage.put({
+            status: "error",
+            errorMessage: state.error || "Discovery agent failed",
+            result: state,
+          });
           await this.notifyStatusHub({
             type: "session:error",
             sessionId: this.sessionId,
@@ -313,9 +332,16 @@ export class DiscoverySession extends DurableObject<Env> {
         // No state file either
       }
 
-      if (msg.includes("not running") || msg.includes("Sandbox error") || msg.includes("proxying request")) {
+      if (
+        msg.includes("not running") ||
+        msg.includes("Sandbox error") ||
+        msg.includes("proxying request")
+      ) {
         console.error(`[discovery:${this.sessionId}] container terminated: ${msg}`);
-        await this.ctx.storage.put({ status: "error", errorMessage: `Container terminated: ${msg}` });
+        await this.ctx.storage.put({
+          status: "error",
+          errorMessage: `Container terminated: ${msg}`,
+        });
         await this.notifyStatusHub({
           type: "session:error",
           sessionId: this.sessionId,
@@ -326,7 +352,10 @@ export class DiscoverySession extends DurableObject<Env> {
 
       if (startedAt > 0 && Date.now() - startedAt > SESSION_TIMEOUT_MS) {
         console.error(`[discovery:${this.sessionId}] session timed out`);
-        await this.ctx.storage.put({ status: "error", errorMessage: "Session timed out (no progress after 10 minutes)" });
+        await this.ctx.storage.put({
+          status: "error",
+          errorMessage: "Session timed out (no progress after 10 minutes)",
+        });
         await this.notifyStatusHub({
           type: "session:error",
           sessionId: this.sessionId,

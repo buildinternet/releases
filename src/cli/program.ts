@@ -25,7 +25,10 @@ import { registerSummarizeCommand } from "./commands/summarize.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
-import { registerRefreshChangelogCommand, registerChangelogCommand } from "./commands/refresh-changelog.js";
+import {
+  registerRefreshChangelogCommand,
+  registerChangelogCommand,
+} from "./commands/refresh-changelog.js";
 import { registerShowCommand } from "./commands/show.js";
 import { registerEmbedCommand } from "./commands/admin/embed.js";
 import { registerWebhookAdminCommand } from "./commands/admin/webhook.js";
@@ -89,7 +92,9 @@ function printStyledHelp(): string {
   lines.push("The most common commands are:");
   lines.push("");
   lines.push(`  - releases search     : ${chalk.dim("Full-text search across releases")}`);
-  lines.push(`  - releases tail       : ${chalk.dim("Show the most recent releases (add -f to follow)")}`);
+  lines.push(
+    `  - releases tail       : ${chalk.dim("Show the most recent releases (add -f to follow)")}`,
+  );
   lines.push(`  - releases list       : ${chalk.dim("List and inspect sources")}`);
   lines.push(`  - releases summary    : ${chalk.dim("Summarize recent changes")}`);
   lines.push("");
@@ -113,7 +118,11 @@ function printStyledHelp(): string {
   lines.push(row("-v, --version", "Print version number"));
   lines.push("");
 
-  lines.push(chalk.dim(`Use ${chalk.white('"releases <command> --help"')} for more information about a command.`));
+  lines.push(
+    chalk.dim(
+      `Use ${chalk.white('"releases <command> --help"')} for more information about a command.`,
+    ),
+  );
 
   return lines.join("\n");
 }
@@ -141,7 +150,9 @@ export const program = new Command()
     outputError: (str, write) => {
       write(str);
       // Append help hint to Commander error messages so users (and agents) know where to look
-      const hint = chalk.dim('\nRun "releases --help" for available commands, or "releases <command> --help" for details.');
+      const hint = chalk.dim(
+        '\nRun "releases --help" for available commands, or "releases <command> --help" for details.',
+      );
       write(hint + "\n");
     },
   })
@@ -216,21 +227,15 @@ const contentSummaryAdmin = contentAdmin
   .description("Generate persisted summaries");
 registerSummarizeCommand(contentSummaryAdmin, { commandName: "generate" });
 
-const statsAdmin = admin
-  .command("stats")
-  .description("Inspect operator metrics and usage");
+const statsAdmin = admin.command("stats").description("Inspect operator metrics and usage");
 registerUsageCommand(statsAdmin);
 
 registerEmbedCommand(admin);
 
-const mcpAdmin = admin
-  .command("mcp")
-  .description("Run the local MCP server");
+const mcpAdmin = admin.command("mcp").description("Run the local MCP server");
 registerServeCommand(mcpAdmin, { commandName: "serve" });
 
-const apiAdmin = admin
-  .command("api")
-  .description("Run the local JSON API server");
+const apiAdmin = admin.command("api").description("Run the local JSON API server");
 registerApiCommand(apiAdmin, { commandName: "serve" });
 
 gateAdminSubtree(admin);
@@ -247,7 +252,9 @@ program
         sub.help();
       } else {
         console.error(chalk.red(`Unknown command: ${command}`));
-        console.log(chalk.dim(`\nRun ${chalk.white('"releases --help"')} to see all available commands.`));
+        console.log(
+          chalk.dim(`\nRun ${chalk.white('"releases --help"')} to see all available commands.`),
+        );
         process.exit(1);
       }
     } else {

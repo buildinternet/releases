@@ -90,10 +90,7 @@ describe("embedAndUpsertEntities", () => {
       vectorIndex: vec.index,
       embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
     });
-    expect(calls[0].body.input).toEqual([
-      "Acme Cloud company cloud acme.com",
-      "Widget",
-    ]);
+    expect(calls[0].body.input).toEqual(["Acme Cloud company cloud acme.com", "Widget"]);
   });
 
   test("vector ID = entity id; metadata kind discriminator set per entity", async () => {
@@ -109,11 +106,7 @@ describe("embedAndUpsertEntities", () => {
       vectorIndex: vec.index,
       embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
     });
-    expect(vec.upserted.map((v: any) => v.id)).toEqual([
-      "org_a",
-      "prod_b",
-      "src_c",
-    ]);
+    expect(vec.upserted.map((v: any) => v.id)).toEqual(["org_a", "prod_b", "src_c"]);
     expect(vec.upserted[0].metadata).toEqual({ type: "org", category: "cloud" });
     expect(vec.upserted[1].metadata).toEqual({ type: "product" });
     expect(vec.upserted[2].metadata).toEqual({ type: "source", category: "ai" });
@@ -159,8 +152,7 @@ describe("embedAndUpsertEntities", () => {
   });
 
   test("embed failure → logs, no upsert, no onPersisted", async () => {
-    const fetchImpl = (async () =>
-      new Response("err", { status: 400 })) as unknown as typeof fetch;
+    const fetchImpl = (async () => new Response("err", { status: 400 })) as unknown as typeof fetch;
     const vec = fakeVectorize();
     const logger = captureLogger();
     let persistedCalled = false;
@@ -193,9 +185,7 @@ describe("embedAndUpsertEntities", () => {
       logger,
     });
     expect(persistedCalled).toBe(false);
-    expect(logger.warns.some((w) => w.includes("Vectorize upsert failed"))).toBe(
-      true,
-    );
+    expect(logger.warns.some((w) => w.includes("Vectorize upsert failed"))).toBe(true);
   });
 
   test("onPersisted failure is caught and logged", async () => {
@@ -211,8 +201,6 @@ describe("embedAndUpsertEntities", () => {
       },
       logger,
     });
-    expect(
-      logger.warns.some((w) => w.includes("onPersisted callback failed")),
-    ).toBe(true);
+    expect(logger.warns.some((w) => w.includes("onPersisted callback failed"))).toBe(true);
   });
 });

@@ -60,7 +60,10 @@ function hashPrompt(prompt: string): string {
 // ── Tool executor type ───────────────────────────────────────────
 
 /** Executes a typed tool call and returns the output. */
-export type ToolExecutor = (toolName: string, input: Record<string, unknown>) => Promise<string | null>;
+export type ToolExecutor = (
+  toolName: string,
+  input: Record<string, unknown>,
+) => Promise<string | null>;
 
 // ── Agent/Environment setup ───────────────────────────────────────
 
@@ -71,7 +74,9 @@ async function ensureAgentAndEnv(
   const envAgentId = process.env.ANTHROPIC_AGENT_ID;
   const envEnvId = process.env.ANTHROPIC_ENVIRONMENT_ID;
   if (envAgentId && envEnvId) {
-    const agentVersion = process.env.ANTHROPIC_AGENT_VERSION ? parseInt(process.env.ANTHROPIC_AGENT_VERSION, 10) : undefined;
+    const agentVersion = process.env.ANTHROPIC_AGENT_VERSION
+      ? parseInt(process.env.ANTHROPIC_AGENT_VERSION, 10)
+      : undefined;
     logger.debug(`[managed-agents] Using env var agent=${envAgentId} env=${envEnvId}`);
     return { agentId: envAgentId, agentVersion, environmentId: envEnvId };
   }
@@ -82,7 +87,9 @@ async function ensureAgentAndEnv(
   const cached = loadCachedConfig();
 
   if (cached && cached.promptHash === currentHash) {
-    logger.debug(`[managed-agents] Using cached agent=${cached.agentId} env=${cached.environmentId}`);
+    logger.debug(
+      `[managed-agents] Using cached agent=${cached.agentId} env=${cached.environmentId}`,
+    );
     return cached;
   }
 
@@ -217,18 +224,22 @@ export async function runManagedDiscovery(
   }
 
   // Build typed executor if not provided — requires remote API
-  const executeToolCall = executor ?? (() => {
-    const apiUrl = process.env.RELEASED_API_URL;
-    const releasedApiKey = process.env.RELEASED_API_KEY;
-    if (!apiUrl || !releasedApiKey) {
-      throw new Error("RELEASED_API_URL and RELEASED_API_KEY are required for managed agents discovery");
-    }
-    return createTypedExecutor({
-      fetcher: { fetch: globalThis.fetch.bind(globalThis) },
-      apiKey: releasedApiKey,
-      baseUrl: apiUrl.replace(/\/+$/, ""),
-    });
-  })();
+  const executeToolCall =
+    executor ??
+    (() => {
+      const apiUrl = process.env.RELEASED_API_URL;
+      const releasedApiKey = process.env.RELEASED_API_KEY;
+      if (!apiUrl || !releasedApiKey) {
+        throw new Error(
+          "RELEASED_API_URL and RELEASED_API_KEY are required for managed agents discovery",
+        );
+      }
+      return createTypedExecutor({
+        fetcher: { fetch: globalThis.fetch.bind(globalThis) },
+        apiKey: releasedApiKey,
+        baseUrl: apiUrl.replace(/\/+$/, ""),
+      });
+    })();
 
   const client = new Anthropic({ apiKey });
   // Sequential: ensureAgentAndEnv writes the config file that ensureVault reads
@@ -269,7 +280,11 @@ export async function runManagedDiscovery(
   const deadline = Date.now() + SESSION_TIMEOUT_MS;
   const timeoutTimer = setTimeout(() => {
     logger.warn("[managed-agents] Session timeout — aborting stream");
-    try { stream.controller.abort(); } catch { /* already closed */ }
+    try {
+      stream.controller.abort();
+    } catch {
+      /* already closed */
+    }
   }, SESSION_TIMEOUT_MS);
 
   try {
@@ -295,11 +310,13 @@ export async function runManagedDiscovery(
           const toolEvent = event as any;
           const sendResult = async (toolUseId: string, text: string) => {
             await client.beta.sessions.events.send(session.id, {
-              events: [{
-                type: "user.custom_tool_result",
-                custom_tool_use_id: toolUseId,
-                content: [{ type: "text", text }],
-              }],
+              events: [
+                {
+                  type: "user.custom_tool_result",
+                  custom_tool_use_id: toolUseId,
+                  content: [{ type: "text", text }],
+                },
+              ],
             });
           };
           const wasStateReport = await handleCustomToolUse(
@@ -307,7 +324,9 @@ export async function runManagedDiscovery(
             {
               sendResult,
               executor: executeToolCall,
-              onStateCapture: (state) => { captured.state = state as unknown as DiscoveryState; },
+              onStateCapture: (state) => {
+                captured.state = state as unknown as DiscoveryState;
+              },
               onToolCall: (toolName, toolInput) => {
                 options.onToolUse?.(toolName, JSON.stringify(toolInput));
                 toolCallCount++;
@@ -348,7 +367,11 @@ export async function runManagedDiscovery(
   } finally {
     clearTimeout(timeoutTimer);
     // Ensure stream is cleaned up
-    try { stream.controller.abort(); } catch { /* already closed */ }
+    try {
+      stream.controller.abort();
+    } catch {
+      /* already closed */
+    }
   }
 
   // Fetch usage for logging

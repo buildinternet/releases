@@ -25,10 +25,7 @@ export interface PublishEnv {
  * Both branches are fire-and-forget. Caller already wraps this in
  * ctx.waitUntil(). Errors are logged, never thrown.
  */
-export async function publishReleaseEvents(
-  env: PublishEnv,
-  ctx: PublishContext,
-): Promise<void> {
+export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext): Promise<void> {
   if (ctx.inserted.length === 0) return;
   const eventOwners = new Map<string, { orgId: string; sourceId: string }>();
   if (ctx.src.orgId) {
@@ -50,27 +47,34 @@ export async function publishReleaseEvents(
 
   const hubPublish = (async () => {
     try {
-      const res = await getReleaseHub(env).fetch(new Request("https://do/publish", {
-        method: "POST",
-        body: JSON.stringify({ events: payloads }),
-        headers: { "Content-Type": "application/json" },
-      }));
+      const res = await getReleaseHub(env).fetch(
+        new Request("https://do/publish", {
+          method: "POST",
+          body: JSON.stringify({ events: payloads }),
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
       if (!res.ok) {
-        console.warn(`[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`);
+        console.warn(
+          `[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`,
+        );
       }
     } catch (err) {
-      console.warn(`[events] hub publish failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(
+        `[events] hub publish failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   })();
 
-  const webhookFanout = env.WEBHOOK_DELIVERY_QUEUE && env.DB
-    ? expandAndEnqueue({
-        events,
-        eventOwners,
-        loadSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
-        queue: env.WEBHOOK_DELIVERY_QUEUE,
-      })
-    : Promise.resolve();
+  const webhookFanout =
+    env.WEBHOOK_DELIVERY_QUEUE && env.DB
+      ? expandAndEnqueue({
+          events,
+          eventOwners,
+          loadSubscriptions: (orgIds) => matchWebhookSubscriptions(createDb(env.DB!), orgIds),
+          queue: env.WEBHOOK_DELIVERY_QUEUE,
+        })
+      : Promise.resolve();
 
   await Promise.all([hubPublish, webhookFanout]);
 }

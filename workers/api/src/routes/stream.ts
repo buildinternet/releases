@@ -23,7 +23,9 @@ streamRoutes.get("/releases/stream", async (c) => {
   const url = new URL(c.req.raw.url);
   const since = url.searchParams.get("since");
   const qs = since ? `?since=${encodeURIComponent(since)}` : "";
-  return getReleaseHub(c.env).fetch(new Request(`https://do/subscribe${qs}`, {
-    headers: c.req.raw.headers,
-  }));
+  return getReleaseHub(c.env).fetch(
+    new Request(`https://do/subscribe${qs}`, {
+      headers: c.req.raw.headers,
+    }),
+  );
 });

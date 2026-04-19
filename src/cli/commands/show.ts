@@ -1,6 +1,12 @@
 import { Command } from "commander";
 import chalk from "chalk";
-import { findSource, findOrg, findProduct, getRelease, getLatestReleases } from "../../db/queries.js";
+import {
+  findSource,
+  findOrg,
+  findProduct,
+  getRelease,
+  getLatestReleases,
+} from "../../db/queries.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { renderLatestReleasesTable } from "../render/releases-table.js";
 import { getEntityType, normalizeReleaseId } from "@releases/core-internal/id";
@@ -11,7 +17,9 @@ export function registerShowCommand(program: Command) {
     .description("Show details for any entity by ID or slug")
     .argument("<identifier>", "ID (rel_/src_/org_/prod_) or slug")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases show rel_XqbzLaOqBFz7VSAIqx2zs
   releases show src_abc123
@@ -21,7 +29,8 @@ Examples:
 
 Dispatches to the right entity based on ID prefix. For deeper views use
 the nested commands: "list <src>", "org show <slug>", "product list <org>",
-"release show <id>".`)
+"release show <id>".`,
+    )
     .action(async (identifier: string, opts: { json?: boolean }) => {
       const type = getEntityType(identifier);
 
@@ -41,7 +50,11 @@ the nested commands: "list <src>", "org show <slug>", "product list <org>",
       if (source) return renderSource(source, opts);
 
       console.error(chalk.red(`Not found: ${identifier}`));
-      console.error(chalk.dim(`Make sure you're using a fully-resolved ID (rel_…, src_…, org_…, prod_…) or a valid slug.`));
+      console.error(
+        chalk.dim(
+          `Make sure you're using a fully-resolved ID (rel_…, src_…, org_…, prod_…) or a valid slug.`,
+        ),
+      );
       process.exit(1);
     });
 }
@@ -66,11 +79,15 @@ async function showRelease(id: string, opts: { json?: boolean }) {
   console.log(chalk.bold(stripAnsi(rel.title)));
   console.log(`  ID:        ${rel.id}`);
   if (rel.version) console.log(`  Version:   ${stripAnsi(rel.version)}`);
-  console.log(`  Source:    ${rel.sourceName ? stripAnsi(rel.sourceName) : chalk.dim("—")} (${rel.sourceSlug ?? chalk.dim("—")})`);
+  console.log(
+    `  Source:    ${rel.sourceName ? stripAnsi(rel.sourceName) : chalk.dim("—")} (${rel.sourceSlug ?? chalk.dim("—")})`,
+  );
   if (rel.publishedAt) console.log(`  Published: ${rel.publishedAt}`);
   if (rel.url) console.log(`  URL:       ${rel.url}`);
   if (rel.suppressed) {
-    console.log(`  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`);
+    console.log(
+      `  ${chalk.yellow("Suppressed")}${rel.suppressedReason ? `: ${stripAnsi(rel.suppressedReason)}` : ""}`,
+    );
   }
   if (rel.contentSummary) {
     console.log("");
@@ -83,7 +100,9 @@ async function showSource(identifier: string, opts: { json?: boolean }) {
   const source = await findSource(identifier);
   if (!source) {
     console.error(chalk.red(`Source not found: ${identifier}`));
-    console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. src_abc123…) or a valid slug.`));
+    console.error(
+      chalk.dim(`Make sure you're using the fully-resolved ID (e.g. src_abc123…) or a valid slug.`),
+    );
     process.exit(1);
   }
   renderSource(source, opts);
@@ -93,7 +112,9 @@ async function showOrg(identifier: string, opts: { json?: boolean }) {
   const org = await findOrg(identifier);
   if (!org) {
     console.error(chalk.red(`Organization not found: ${identifier}`));
-    console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. org_abc123…) or a valid slug.`));
+    console.error(
+      chalk.dim(`Make sure you're using the fully-resolved ID (e.g. org_abc123…) or a valid slug.`),
+    );
     process.exit(1);
   }
   await renderOrg(org, opts);
@@ -103,13 +124,28 @@ async function showProduct(identifier: string, opts: { json?: boolean }) {
   const product = await findProduct(identifier);
   if (!product) {
     console.error(chalk.red(`Product not found: ${identifier}`));
-    console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. prod_abc123…) or a valid slug.`));
+    console.error(
+      chalk.dim(
+        `Make sure you're using the fully-resolved ID (e.g. prod_abc123…) or a valid slug.`,
+      ),
+    );
     process.exit(1);
   }
   await renderProduct(product, opts);
 }
 
-function renderSource(source: { id: string; name: string; slug: string; type: string; url: string; orgId: string | null; productId: string | null }, opts: { json?: boolean }) {
+function renderSource(
+  source: {
+    id: string;
+    name: string;
+    slug: string;
+    type: string;
+    url: string;
+    orgId: string | null;
+    productId: string | null;
+  },
+  opts: { json?: boolean },
+) {
   if (opts.json) {
     console.log(JSON.stringify(source, null, 2));
     return;
@@ -148,10 +184,24 @@ async function renderOrg(
     console.log(chalk.dim(`Latest ${releases.length} release${releases.length === 1 ? "" : "s"}:`));
     console.log(renderLatestReleasesTable(releases));
   }
-  console.log(chalk.dim(`\n  More: "releases tail --org ${org.slug}" · "releases search <query> --org ${org.slug}"`));
+  console.log(
+    chalk.dim(
+      `\n  More: "releases tail --org ${org.slug}" · "releases search <query> --org ${org.slug}"`,
+    ),
+  );
 }
 
-async function renderProduct(product: { id: string; name: string; slug: string; orgId: string; url: string | null; category: string | null }, opts: { json?: boolean }) {
+async function renderProduct(
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+    orgId: string;
+    url: string | null;
+    category: string | null;
+  },
+  opts: { json?: boolean },
+) {
   const org = await findOrg(product.orgId);
   if (opts.json) {
     console.log(JSON.stringify({ ...product, orgSlug: org?.slug ?? null }, null, 2));
@@ -165,5 +215,9 @@ async function renderProduct(product: { id: string; name: string; slug: string; 
   console.log(`  URL:       ${product.url ?? chalk.dim("—")}`);
   console.log(`  Category:  ${product.category ?? chalk.dim("—")}`);
   const orgHint = org ? `releases tail --org ${org.slug}` : `releases tail --org <org-slug>`;
-  console.log(chalk.dim(`\n  More: "${orgHint}" for recent releases · "releases list --product ${product.slug}" for sources`));
+  console.log(
+    chalk.dim(
+      `\n  More: "${orgHint}" for recent releases · "releases list --product ${product.slug}" for sources`,
+    ),
+  );
 }

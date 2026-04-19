@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
 import { createTempDataDir, cli, cliJson } from "../cli/roundtrip-helper.js";
-import { startSubprocessFixtureServer, readFeedFixture, type SubprocessFixtureServer } from "../fixtures/server.js";
+import {
+  startSubprocessFixtureServer,
+  readFeedFixture,
+  type SubprocessFixtureServer,
+} from "../fixtures/server.js";
 
 let server: SubprocessFixtureServer;
 
@@ -26,11 +30,18 @@ describe("dry-run does not poison subsequent fetches", () => {
     ({ dataDir, cleanup } = createTempDataDir());
     cli(dataDir, ["admin", "org", "add", "DryHash Org", "--category", "cloud"]);
     cli(dataDir, [
-      "admin", "source", "add", "DryHash Feed",
-      "--url", `${server.url}/feed.xml`,
-      "--feed-url", `${server.url}/feed.xml`,
-      "--org", "dryhash-org",
-      "--type", "feed",
+      "admin",
+      "source",
+      "add",
+      "DryHash Feed",
+      "--url",
+      `${server.url}/feed.xml`,
+      "--feed-url",
+      `${server.url}/feed.xml`,
+      "--org",
+      "dryhash-org",
+      "--type",
+      "feed",
       "--skip-eval",
     ]);
   });
@@ -39,7 +50,11 @@ describe("dry-run does not poison subsequent fetches", () => {
 
   it("dry-run fetch followed by real fetch still finds releases", () => {
     // First: dry-run fetch — should find releases but not persist them
-    const dryResult = cli(dataDir, ["admin", "source", "fetch", "dryhash-feed", "--dry-run", "--no-summarize"], { timeout: 20_000 });
+    const dryResult = cli(
+      dataDir,
+      ["admin", "source", "fetch", "dryhash-feed", "--dry-run", "--no-summarize"],
+      { timeout: 20_000 },
+    );
     expect(dryResult.exitCode).toBe(0);
     expect(dryResult.stdout + dryResult.stderr).toMatch(/2 release/);
 
@@ -48,7 +63,11 @@ describe("dry-run does not poison subsequent fetches", () => {
     expect(afterDry.length).toBe(0);
 
     // Second: real fetch — should still find releases (not blocked by cached hash/ETag)
-    const realResult = cli(dataDir, ["admin", "source", "fetch", "dryhash-feed", "--no-summarize"], { timeout: 20_000 });
+    const realResult = cli(
+      dataDir,
+      ["admin", "source", "fetch", "dryhash-feed", "--no-summarize"],
+      { timeout: 20_000 },
+    );
     expect(realResult.exitCode).toBe(0);
     expect(realResult.stderr).toContain("Parsed 2 releases");
 

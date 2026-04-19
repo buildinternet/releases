@@ -1,19 +1,60 @@
 import { Hono } from "hono";
-import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
+import {
+  eq,
+  desc,
+  count,
+  and,
+  or,
+  like,
+  min,
+  isNull,
+  isNotNull,
+  sql,
+  gte,
+  inArray,
+} from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, releaseSummaries, products, sourceChangelogFiles, type ReleaseType } from "@releases/core-internal/schema";
+import {
+  sources,
+  releases,
+  organizations,
+  releaseSummaries,
+  products,
+  sourceChangelogFiles,
+  type ReleaseType,
+} from "@releases/core-internal/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso } from "@releases/core-internal/dates";
 import { toSlug } from "@releases/core-internal/slug";
-import { buildChangelogResponse, selectChangelogFile } from "@releases/core-internal/changelog-slice";
+import {
+  buildChangelogResponse,
+  selectChangelogFile,
+} from "@releases/core-internal/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@releases/api/types.js";
-import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
+import {
+  getStatusHub,
+  sourceWhere,
+  orgWhere,
+  productWhere,
+  isConflictError,
+  computeAvgPerWeek,
+  heatmapDateRange,
+  hydrateMediaUrls,
+  resolveR2Url,
+  parseBoolParam,
+} from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import type { Env } from "../index.js";
-import { getSourcesWithStats, countSourcesForList, getSourceReleasesPaginated, getSourceActivityBuckets, getSourceHeatmapData } from "../queries/sources.js";
+import {
+  getSourcesWithStats,
+  countSourcesForList,
+  getSourceReleasesPaginated,
+  getSourceActivityBuckets,
+  getSourceHeatmapData,
+} from "../queries/sources.js";
 import { notDisabled } from "../queries/shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
@@ -58,7 +99,11 @@ sourceRoutes.get("/sources", async (c) => {
 
   // Filter by org ID
   if (orgId) {
-    const rows = await db.select().from(sources).where(eq(sources.orgId, orgId)).orderBy(sources.name);
+    const rows = await db
+      .select()
+      .from(sources)
+      .where(eq(sources.orgId, orgId))
+      .orderBy(sources.name);
     return c.json(rows);
   }
 
@@ -180,30 +225,39 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
   let rows: (typeof sources.$inferSelect)[];
 
   if (mode === "unfetched") {
-    rows = await db.select().from(sources).where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
+    rows = await db
+      .select()
+      .from(sources)
+      .where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
   } else if (mode === "stale" && staleHours) {
     const hours = parseInt(staleHours, 10);
     const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
     const now = new Date().toISOString();
-    rows = await db.select().from(sources).where(
-      and(
-        sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
-        sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
-        sql`${sources.fetchPriority} != 'paused'`,
-        notDisabled
-      )
-    );
+    rows = await db
+      .select()
+      .from(sources)
+      .where(
+        and(
+          sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
+          sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
+          sql`${sources.fetchPriority} != 'paused'`,
+          notDisabled,
+        ),
+      );
   } else if (mode === "retry_errors") {
-    rows = await db.select().from(sources).where(
-      and(
-        sql`${sources.id} IN (
+    rows = await db
+      .select()
+      .from(sources)
+      .where(
+        and(
+          sql`${sources.id} IN (
           SELECT f.source_id FROM fetch_log f
           WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
           AND f.status = 'error'
         )`,
-        notDisabled
-      )
-    );
+          notDisabled,
+        ),
+      );
   } else {
     rows = await db.select().from(sources).where(notDisabled);
   }
@@ -215,24 +269,25 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
 
 sourceRoutes.get("/sources/feeds", async (c) => {
   const db = createDb(c.env.DB);
-  const rows = await db.select().from(sources).where(
-    and(
-      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
-      sql`${sources.fetchPriority} != 'paused'`,
-      notDisabled,
-    )
-  );
+  const rows = await db
+    .select()
+    .from(sources)
+    .where(
+      and(
+        sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
+        sql`${sources.fetchPriority} != 'paused'`,
+        notDisabled,
+      ),
+    );
   return c.json(rows);
 });
 
 sourceRoutes.get("/sources/changes", async (c) => {
   const db = createDb(c.env.DB);
-  const rows = await db.select().from(sources).where(
-    and(
-      isNotNull(sources.changeDetectedAt),
-      notDisabled,
-    )
-  );
+  const rows = await db
+    .select()
+    .from(sources)
+    .where(and(isNotNull(sources.changeDetectedAt), notDisabled));
   return c.json(rows);
 });
 
@@ -250,36 +305,46 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
     // Feed and GitHub sources: fetch server-side
     const githubToken = await c.env.GITHUB_TOKEN?.get();
     const sessionId = c.req.query("sessionId") ?? undefined;
-    const result = await fetchOne(db, src, {
-      GITHUB_TOKEN: githubToken,
-      RELEASES_INDEX: c.env.RELEASES_INDEX,
-      CHANGELOG_CHUNKS_INDEX: c.env.CHANGELOG_CHUNKS_INDEX,
-      EMBEDDING_PROVIDER: c.env.EMBEDDING_PROVIDER,
-      VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
-      OPENAI_API_KEY: c.env.OPENAI_API_KEY,
-    }, { sessionId });
+    const result = await fetchOne(
+      db,
+      src,
+      {
+        GITHUB_TOKEN: githubToken,
+        RELEASES_INDEX: c.env.RELEASES_INDEX,
+        CHANGELOG_CHUNKS_INDEX: c.env.CHANGELOG_CHUNKS_INDEX,
+        EMBEDDING_PROVIDER: c.env.EMBEDDING_PROVIDER,
+        VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
+        OPENAI_API_KEY: c.env.OPENAI_API_KEY,
+      },
+      { sessionId },
+    );
     responsePayload = { fetched: true, ...result };
   } else {
     // Scrape and agent sources: flag for CLI pickup
-    await db.update(sources).set({
-      changeDetectedAt: new Date().toISOString(),
-    }).where(eq(sources.id, src.id));
+    await db
+      .update(sources)
+      .set({
+        changeDetectedAt: new Date().toISOString(),
+      })
+      .where(eq(sources.id, src.id));
     responsePayload = { queued: true, type: "flagged" };
   }
 
   // Emit status event for dashboard feedback
   const hub = getStatusHub(c.env);
-  await hub.fetch(new Request("https://do/event", {
-    method: "POST",
-    body: JSON.stringify({
-      type: "fetch:triggered",
-      sourceSlug: src.slug,
-      sourceName: src.name,
-      sourceType: src.type,
-      ...responsePayload,
+  await hub.fetch(
+    new Request("https://do/event", {
+      method: "POST",
+      body: JSON.stringify({
+        type: "fetch:triggered",
+        sourceSlug: src.slug,
+        sourceName: src.name,
+        sourceType: src.type,
+        ...responsePayload,
+      }),
+      headers: { "Content-Type": "application/json" },
     }),
-    headers: { "Content-Type": "application/json" },
-  }));
+  );
 
   return c.json(responsePayload);
 });
@@ -292,11 +357,18 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
 
-  const body = await c.req.json<{ releases: Array<{
-    version?: string | null; title: string; content: string;
-    url?: string | null; contentHash?: string; publishedAt?: string | null;
-    media?: string | null; type?: ReleaseType;
-  }> }>();
+  const body = await c.req.json<{
+    releases: Array<{
+      version?: string | null;
+      title: string;
+      content: string;
+      url?: string | null;
+      contentHash?: string;
+      publishedAt?: string | null;
+      media?: string | null;
+      type?: ReleaseType;
+    }>;
+  }>();
 
   try {
     // D1 caps prepared statements at 100 bound parameters — see
@@ -319,7 +391,9 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
       // RELEASE_URL_UPSERT has a conditional WHERE clause that causes the
       // database to omit rows where the update didn't apply. The returned
       // rows are the authoritative set of affected ids + content.
-      const rows = await db.insert(releases).values(chunk)
+      const rows = await db
+        .insert(releases)
+        .values(chunk)
         .onConflictDoUpdate(RELEASE_URL_UPSERT)
         .returning({
           id: releases.id,
@@ -333,16 +407,21 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
     }
     const insertedIds = publishRows.map((r) => r.id);
 
-    const [{ n: total }] = await db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id));
+    const [{ n: total }] = await db
+      .select({ n: count() })
+      .from(releases)
+      .where(eq(releases.sourceId, src.id));
 
     // Fire-and-forget publish to the ReleaseHub DO so subscribers (CLI
     // `tail -f`, the upcoming web live view, webhook delivery) see new
     // releases in real time.
     if (publishRows.length > 0) {
-      c.executionCtx.waitUntil(publishReleaseEvents(c.env, {
-        src: { name: src.name, slug: src.slug, orgId: src.orgId, sourceId: src.id },
-        inserted: publishRows,
-      }));
+      c.executionCtx.waitUntil(
+        publishReleaseEvents(c.env, {
+          src: { name: src.name, slug: src.slug, orgId: src.orgId, sourceId: src.id },
+          inserted: publishRows,
+        }),
+      );
     }
 
     // Fire-and-forget: embed the rows we just wrote. Uses waitUntil so the
@@ -358,7 +437,10 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
             // Load the rows back so we have full content, category, etc.
             // We need the org/product category for metadata filtering.
             const [orgRow] = src.orgId
-              ? await db.select({ category: organizations.category }).from(organizations).where(eq(organizations.id, src.orgId))
+              ? await db
+                  .select({ category: organizations.category })
+                  .from(organizations)
+                  .where(eq(organizations.id, src.orgId))
               : [{ category: null as string | null }];
             // D1 bind-param cap is 100; chunk the IN clause so we stay
             // well clear of the limit even if the caller posts a large
@@ -400,7 +482,8 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
                 category,
               })),
               // See note in embedSourceSideEffect about the cast.
-              vectorIndex: c.env.RELEASES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+              vectorIndex: c.env
+                .RELEASES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
               embedConfig,
               onPersisted: async (ids) => {
                 if (ids.length === 0) return;
@@ -489,7 +572,10 @@ sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
   if (unchanged) return c.json({ unchanged: true });
 
   if (!peek) {
-    await db.update(sources).set({ lastContentHash: body.contentHash }).where(eq(sources.id, src.id));
+    await db
+      .update(sources)
+      .set({ lastContentHash: body.contentHash })
+      .where(eq(sources.id, src.id));
   }
   return c.json({ unchanged: false });
 });
@@ -506,9 +592,10 @@ export function mergeSourceMetadata(
   let base: Record<string, unknown>;
   try {
     const parsed = JSON.parse(existing ?? "{}");
-    base = parsed && typeof parsed === "object" && !Array.isArray(parsed)
-      ? parsed as Record<string, unknown>
-      : {};
+    base =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
   } catch {
     base = {};
   }
@@ -631,10 +718,16 @@ sourceRoutes.get("/sources/:slug/activity", async (c) => {
   const toParam = c.req.query("to");
 
   if (fromParam && !dateRe.test(fromParam)) {
-    return c.json({ error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." }, 400);
+    return c.json(
+      { error: "bad_request", message: "Invalid date format for 'from'. Use YYYY-MM-DD." },
+      400,
+    );
   }
   if (toParam && !dateRe.test(toParam)) {
-    return c.json({ error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." }, 400);
+    return c.json(
+      { error: "bad_request", message: "Invalid date format for 'to'. Use YYYY-MM-DD." },
+      400,
+    );
   }
   if (fromParam && toParam && fromParam > toParam) {
     return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
@@ -672,7 +765,10 @@ sourceRoutes.get("/sources/:slug/activity", async (c) => {
       .select({ slug: organizations.slug, name: organizations.name })
       .from(organizations)
       .where(eq(organizations.id, src.orgId));
-    if (org) { orgSlug = org.slug; orgName = org.name; }
+    if (org) {
+      orgSlug = org.slug;
+      orgName = org.name;
+    }
   }
 
   return c.json({
@@ -788,7 +884,10 @@ sourceRoutes.patch("/sources/:slug/changelog/tokens", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ tokens: number; path?: string }>();
   if (!Number.isFinite(body.tokens) || body.tokens < 0) {
-    return c.json({ error: "invalid_tokens", message: "tokens must be a non-negative number" }, 400);
+    return c.json(
+      { error: "invalid_tokens", message: "tokens must be a non-negative number" },
+      400,
+    );
   }
 
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
@@ -836,34 +935,65 @@ sourceRoutes.get("/sources/:slug", async (c) => {
 
   // Fire all independent reads in parallel — one D1 roundtrip wave instead of ~7 sequential ones.
   const orgQuery = src.orgId
-    ? db.select({ slug: organizations.slug, name: organizations.name })
+    ? db
+        .select({ slug: organizations.slug, name: organizations.name })
         .from(organizations)
         .where(eq(organizations.id, src.orgId))
     : Promise.resolve([]);
 
   // On page > 1 we can't derive latestVersion/latestDate from the paginated rows, so issue it in the same wave.
-  const latestByDateQuery = page === 1
-    ? Promise.resolve([])
-    : db.select({ version: releases.version, publishedAt: releases.publishedAt })
-        .from(releases)
-        .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`))
-        .orderBy(desc(releases.publishedAt))
-        .limit(1);
+  const latestByDateQuery =
+    page === 1
+      ? Promise.resolve([])
+      : db
+          .select({ version: releases.version, publishedAt: releases.publishedAt })
+          .from(releases)
+          .where(
+            and(
+              eq(releases.sourceId, src.id),
+              notSuppressed,
+              sql`${releases.publishedAt} IS NOT NULL`,
+            ),
+          )
+          .orderBy(desc(releases.publishedAt))
+          .limit(1);
 
-  const [releaseRows, orgRows, metricsRows, earliestRows, summaryRows, changelogExistsRows, latestByDateRows] = await Promise.all([
+  const [
+    releaseRows,
+    orgRows,
+    metricsRows,
+    earliestRows,
+    summaryRows,
+    changelogExistsRows,
+    latestByDateRows,
+  ] = await Promise.all([
     getSourceReleasesPaginated(db, src.id, pageSize, offset, { includeCoverage }),
     orgQuery,
-    db.select({
-      total: count(),
-      oldest: min(dateCol),
-      recent: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff} THEN 1 END)`,
-      recent90d: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff90d} THEN 1 END)`,
-    }).from(releases).where(and(eq(releases.sourceId, src.id), notSuppressed)),
-    db.select({ date: min(releases.publishedAt) })
+    db
+      .select({
+        total: count(),
+        oldest: min(dateCol),
+        recent: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff} THEN 1 END)`,
+        recent90d: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff90d} THEN 1 END)`,
+      })
       .from(releases)
-      .where(and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`)),
-    db.select().from(releaseSummaries).where(eq(releaseSummaries.sourceId, src.id)).orderBy(desc(releaseSummaries.generatedAt)),
-    db.select({ one: sql<number>`1` }).from(sourceChangelogFiles).where(eq(sourceChangelogFiles.sourceId, src.id)).limit(1),
+      .where(and(eq(releases.sourceId, src.id), notSuppressed)),
+    db
+      .select({ date: min(releases.publishedAt) })
+      .from(releases)
+      .where(
+        and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`),
+      ),
+    db
+      .select()
+      .from(releaseSummaries)
+      .where(eq(releaseSummaries.sourceId, src.id))
+      .orderBy(desc(releaseSummaries.generatedAt)),
+    db
+      .select({ one: sql<number>`1` })
+      .from(sourceChangelogFiles)
+      .where(eq(sourceChangelogFiles.sourceId, src.id))
+      .limit(1),
     latestByDateQuery,
   ]);
 
@@ -878,8 +1008,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     version: r.version,
     title: r.title,
     summary:
-      r.content_summary ??
-      (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
@@ -903,7 +1032,9 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     if (!latestVersion) latestVersion = releaseRows[0].version ?? null;
     if (!latestDate && latestPublished) latestDate = latestPublished.published_at;
   } else if (page > 1) {
-    const latest = (latestByDateRows as Array<{ version: string | null; publishedAt: string | null }>)[0];
+    const latest = (
+      latestByDateRows as Array<{ version: string | null; publishedAt: string | null }>
+    )[0];
     latestVersion = latest?.version ?? null;
     latestDate = latest?.publishedAt ?? null;
     if (!latestVersion) {
@@ -950,10 +1081,19 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     pagination: { page, pageSize, totalPages, totalItems },
     summaries: {
       rolling: rollingSummaryRow
-        ? { windowDays: rollingSummaryRow.windowDays, summary: rollingSummaryRow.summary, releaseCount: rollingSummaryRow.releaseCount, generatedAt: rollingSummaryRow.generatedAt }
+        ? {
+            windowDays: rollingSummaryRow.windowDays,
+            summary: rollingSummaryRow.summary,
+            releaseCount: rollingSummaryRow.releaseCount,
+            generatedAt: rollingSummaryRow.generatedAt,
+          }
         : null,
       monthly: monthlySummaryRows.map((s) => ({
-        year: s.year, month: s.month, summary: s.summary, releaseCount: s.releaseCount, generatedAt: s.generatedAt,
+        year: s.year,
+        month: s.month,
+        summary: s.summary,
+        releaseCount: s.releaseCount,
+        generatedAt: s.generatedAt,
       })),
     },
   };
@@ -968,8 +1108,13 @@ sourceRoutes.get("/sources/:slug", async (c) => {
 sourceRoutes.post("/sources", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{
-    name: string; url: string; type?: string; slug?: string;
-    orgId?: string; orgSlug?: string; metadata?: string;
+    name: string;
+    url: string;
+    type?: string;
+    slug?: string;
+    orgId?: string;
+    orgSlug?: string;
+    metadata?: string;
   }>();
 
   if (!body.name || !body.url) {
@@ -984,7 +1129,9 @@ sourceRoutes.post("/sources", async (c) => {
     try {
       const meta = JSON.parse(body.metadata);
       if (meta.feedUrl) type = "feed";
-    } catch { /* invalid metadata JSON — ignore */ }
+    } catch {
+      /* invalid metadata JSON — ignore */
+    }
   }
 
   // Resolve org by slug if orgSlug provided (preferred over raw orgId)
@@ -1008,11 +1155,14 @@ sourceRoutes.post("/sources", async (c) => {
       })
       .returning();
     if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
-    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db,source.id));
+    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
     return c.json(source, 201);
   } catch (err) {
     if (isConflictError(err)) {
-      return c.json({ error: "conflict", message: `Source with slug "${slug}" already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Source with slug "${slug}" already exists` },
+        409,
+      );
     }
     throw err;
   }
@@ -1027,10 +1177,23 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const UPDATABLE_FIELDS = [
-    "name", "url", "type", "slug", "metadata", "orgId", "productId",
-    "lastFetchedAt", "lastContentHash", "fetchPriority", "consecutiveNoChange",
-    "consecutiveErrors", "nextFetchAfter", "isPrimary", "isHidden",
-    "changeDetectedAt", "lastPolledAt",
+    "name",
+    "url",
+    "type",
+    "slug",
+    "metadata",
+    "orgId",
+    "productId",
+    "lastFetchedAt",
+    "lastContentHash",
+    "fetchPriority",
+    "consecutiveNoChange",
+    "consecutiveErrors",
+    "nextFetchAfter",
+    "isPrimary",
+    "isHidden",
+    "changeDetectedAt",
+    "lastPolledAt",
   ] as const;
 
   const updates: Record<string, unknown> = {};
@@ -1044,7 +1207,8 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.lastFetchedAt !== undefined) updates.lastFetchedAt = body.lastFetchedAt;
   if (body.lastContentHash !== undefined) updates.lastContentHash = body.lastContentHash;
   if (body.fetchPriority !== undefined) updates.fetchPriority = body.fetchPriority;
-  if (body.consecutiveNoChange !== undefined) updates.consecutiveNoChange = body.consecutiveNoChange;
+  if (body.consecutiveNoChange !== undefined)
+    updates.consecutiveNoChange = body.consecutiveNoChange;
   if (body.consecutiveErrors !== undefined) updates.consecutiveErrors = body.consecutiveErrors;
   if (body.nextFetchAfter !== undefined) updates.nextFetchAfter = body.nextFetchAfter;
   if (body.isPrimary !== undefined) updates.isPrimary = body.isPrimary;
@@ -1054,10 +1218,13 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
 
   if (Object.keys(updates).length === 0) {
     const bodyKeys = Object.keys(body);
-    const unrecognized = bodyKeys.filter((k) => !(UPDATABLE_FIELDS as readonly string[]).includes(k));
-    const message = unrecognized.length > 0
-      ? `Unrecognized fields: ${unrecognized.join(", ")}. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`
-      : `No values to set. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`;
+    const unrecognized = bodyKeys.filter(
+      (k) => !(UPDATABLE_FIELDS as readonly string[]).includes(k),
+    );
+    const message =
+      unrecognized.length > 0
+        ? `Unrecognized fields: ${unrecognized.join(", ")}. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`
+        : `No values to set. Updatable fields: ${UPDATABLE_FIELDS.join(", ")}`;
     return c.json({ error: "bad_request", message }, 400);
   }
 
@@ -1065,7 +1232,10 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   if (body.slug !== undefined && body.slug !== src.slug) {
     const [existing] = await db.select().from(sources).where(eq(sources.slug, body.slug));
     if (existing) {
-      return c.json({ error: "conflict", message: `Source with slug "${body.slug}" already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Source with slug "${body.slug}" already exists` },
+        409,
+      );
     }
   }
 
@@ -1074,10 +1244,9 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
   // Only re-embed if semantically-relevant fields changed. Metadata churn
   // (lastPolledAt, consecutiveErrors, etc.) would otherwise trigger a
   // needless embedding API call on every poll.
-  const semanticChanged =
-    body.name !== undefined || body.url !== undefined;
+  const semanticChanged = body.name !== undefined || body.url !== undefined;
   if (semanticChanged) {
-    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db,src.id));
+    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, src.id));
   }
   return c.json(updated);
 });
@@ -1104,9 +1273,16 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const body = await c.req.json<{
-    id?: string; version?: string; title: string; content: string;
-    contentSummary?: string; url?: string; contentHash?: string;
-    metadata?: string; publishedAt?: string; fetchedAt?: string;
+    id?: string;
+    version?: string;
+    title: string;
+    content: string;
+    contentSummary?: string;
+    url?: string;
+    contentHash?: string;
+    metadata?: string;
+    publishedAt?: string;
+    fetchedAt?: string;
     type?: ReleaseType;
   }>();
 
@@ -1167,7 +1343,15 @@ sourceRoutes.get("/releases/:id", async (c) => {
   }));
 
   const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
-  const result = { ...release, content: hydratedContent, media, sourceName, sourceSlug, sourceType, org };
+  const result = {
+    ...release,
+    content: hydratedContent,
+    media,
+    sourceName,
+    sourceSlug,
+    sourceType,
+    org,
+  };
 
   if (wantsMarkdown(c)) {
     return markdownResponse(c, releaseToMarkdown(result as any));
@@ -1180,8 +1364,12 @@ sourceRoutes.delete("/releases/:id", async (c) => {
   const db = createDb(c.env.DB);
   const id = c.req.param("id");
 
-  const deleted = await db.delete(releases).where(eq(releases.id, id)).returning({ id: releases.id });
-  if (deleted.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
+  const deleted = await db
+    .delete(releases)
+    .where(eq(releases.id, id))
+    .returning({ id: releases.id });
+  if (deleted.length === 0)
+    return c.json({ error: "not_found", message: "Release not found" }, 404);
 
   return c.json({ deleted: true });
 });
@@ -1190,8 +1378,12 @@ sourceRoutes.patch("/releases/:id", async (c) => {
   const db = createDb(c.env.DB);
   const id = c.req.param("id");
   const body = await c.req.json<{
-    title?: string; version?: string; content?: string;
-    url?: string; publishedAt?: string; contentHash?: string;
+    title?: string;
+    version?: string;
+    content?: string;
+    url?: string;
+    publishedAt?: string;
+    contentHash?: string;
   }>();
 
   const [existing] = await db.select().from(releases).where(eq(releases.id, id));
@@ -1216,10 +1408,14 @@ sourceRoutes.post("/releases/:id/suppress", async (c) => {
   const id = c.req.param("id");
   const body = await c.req.json<{ reason?: string }>().catch(() => ({}));
 
-  const [updated] = await db.update(releases).set({
-    suppressed: true,
-    suppressedReason: (body as { reason?: string }).reason ?? null,
-  }).where(eq(releases.id, id)).returning({ id: releases.id });
+  const [updated] = await db
+    .update(releases)
+    .set({
+      suppressed: true,
+      suppressedReason: (body as { reason?: string }).reason ?? null,
+    })
+    .where(eq(releases.id, id))
+    .returning({ id: releases.id });
 
   if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
   return c.json({ suppressed: true });
@@ -1229,10 +1425,14 @@ sourceRoutes.post("/releases/:id/unsuppress", async (c) => {
   const db = createDb(c.env.DB);
   const id = c.req.param("id");
 
-  const [updated] = await db.update(releases).set({
-    suppressed: false,
-    suppressedReason: null,
-  }).where(eq(releases.id, id)).returning({ id: releases.id });
+  const [updated] = await db
+    .update(releases)
+    .set({
+      suppressed: false,
+      suppressedReason: null,
+    })
+    .where(eq(releases.id, id))
+    .returning({ id: releases.id });
 
   if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
   return c.json({ unsuppressed: true });
@@ -1264,24 +1464,30 @@ async function embedSourceSideEffect(
     // Inherit category from the parent org for retrieval filtering.
     let category: string | null = null;
     if (src.orgId) {
-      const [org] = await db.select({ category: organizations.category }).from(organizations).where(eq(organizations.id, src.orgId));
+      const [org] = await db
+        .select({ category: organizations.category })
+        .from(organizations)
+        .where(eq(organizations.id, src.orgId));
       category = org?.category ?? null;
     }
     await embedAndUpsertEntities({
-      entities: [{
-        id: src.id,
-        kind: "source" as EntityKind,
-        name: src.name,
-        description: null,
-        category,
-        domain,
-        orgId: src.orgId ?? null,
-      }],
+      entities: [
+        {
+          id: src.id,
+          kind: "source" as EntityKind,
+          name: src.name,
+          description: null,
+          category,
+          domain,
+          orgId: src.orgId ?? null,
+        },
+      ],
       // Cast required: workers-types `VectorizeIndex` declares a narrower
       // metadata value type than the runtime-agnostic interface in
       // `src/lib/vector-search.ts`. Assignable at runtime, diverges by
       // variance in the type system.
-      vectorIndex: env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+      vectorIndex:
+        env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
       embedConfig,
       onPersisted: async () => {
         await db
@@ -1291,6 +1497,8 @@ async function embedSourceSideEffect(
       },
     });
   } catch (err) {
-    console.warn(`[sources] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(
+      `[sources] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
   }
 }

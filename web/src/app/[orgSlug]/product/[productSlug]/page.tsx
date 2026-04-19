@@ -54,9 +54,7 @@ export default async function ProductPage({
     {
       items: [
         { label: "Sources", value: product.sources.length, large: true },
-        ...(product.category
-          ? [{ label: "Category", value: product.category }]
-          : []),
+        ...(product.category ? [{ label: "Category", value: product.category }] : []),
       ],
     },
     ...(product.tags.length > 0
@@ -69,32 +67,22 @@ export default async function ProductPage({
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link
-            href="/"
-            className="hover:text-stone-600 dark:hover:text-stone-300"
-          >
+          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
             Home
           </Link>
           <span className="mx-1.5">/</span>
-          <Link
-            href={`/${orgSlug}`}
-            className="hover:text-stone-600 dark:hover:text-stone-300"
-          >
+          <Link href={`/${orgSlug}`} className="hover:text-stone-600 dark:hover:text-stone-300">
             {orgSlug}
           </Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">
-            {product.name}
-          </span>
+          <span className="text-stone-600 dark:text-stone-300 font-medium">{product.name}</span>
         </div>
 
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
           {product.name}
         </h1>
         {product.description && (
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-            {product.description}
-          </p>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">{product.description}</p>
         )}
         <CliCommand identifier={product.slug} />
 
@@ -113,10 +101,7 @@ export default async function ProductPage({
               ))}
             </div>
           </div>
-          <Sidebar
-            sections={sidebarSections}
-            formatPath={`/${orgSlug}/product/${productSlug}`}
-          />
+          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/product/${productSlug}`} />
         </div>
       </div>
     </div>

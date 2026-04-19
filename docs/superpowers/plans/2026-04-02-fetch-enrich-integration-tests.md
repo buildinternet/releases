@@ -13,6 +13,7 @@
 ### Task 1: Fixture HTTP Server Helper
 
 **Files:**
+
 - Create: `tests/fixtures/server.ts`
 
 This helper spins up a local HTTP server that serves fixture files and custom responses. Used by all integration tests in Tasks 2-5.
@@ -102,6 +103,7 @@ git commit -m "test: add fixture HTTP server helper for integration tests"
 ### Task 2: Feed Adapter Integration Tests (Fixture Server)
 
 **Files:**
+
 - Create: `tests/integration/feed-adapter.test.ts`
 
 Tests `fetchAndParseFeed()` against a real HTTP server serving fixture feeds. Covers conditional fetch (ETag/304), `since` and `maxEntries` filtering, and error handling.
@@ -187,9 +189,9 @@ describe("fetchAndParseFeed (HTTP integration)", () => {
   });
 
   it("throws on server error", async () => {
-    await expect(
-      fetchAndParseFeed(`${server.url}/error`, "rss"),
-    ).rejects.toThrow("Feed fetch failed: 500");
+    await expect(fetchAndParseFeed(`${server.url}/error`, "rss")).rejects.toThrow(
+      "Feed fetch failed: 500",
+    );
   });
 
   it("respects since filter", async () => {
@@ -228,6 +230,7 @@ git commit -m "test: add feed adapter integration tests with fixture HTTP server
 ### Task 3: Fetch CLI Integration Tests (Full Pipeline)
 
 **Files:**
+
 - Create: `tests/integration/fetch-pipeline.test.ts`
 
 Tests the full CLI `fetch` command pipeline: org → source → fetch → releases in DB. Uses fixture HTTP server + `createTempDataDir()` for isolated CLI round-trips.
@@ -283,10 +286,14 @@ describe("fetch CLI pipeline (fixture server)", () => {
       cli(dataDir, ["org", "add", "Test Org", "--category", "cloud"]);
       // Add source with type=feed pointing at fixture RSS
       cli(dataDir, [
-        "add", "Test Feed",
-        "--url", `${server.url}/feed.xml`,
-        "--org", "test-org",
-        "--type", "feed",
+        "add",
+        "Test Feed",
+        "--url",
+        `${server.url}/feed.xml`,
+        "--org",
+        "test-org",
+        "--type",
+        "feed",
         "--skip-eval",
       ]);
     });
@@ -323,10 +330,14 @@ describe("fetch CLI pipeline (fixture server)", () => {
       ({ dataDir, cleanup } = createTempDataDir());
       cli(dataDir, ["org", "add", "Max Test Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "Max Test Feed",
-        "--url", `${server.url}/atom.xml`,
-        "--org", "max-test-org",
-        "--type", "feed",
+        "add",
+        "Max Test Feed",
+        "--url",
+        `${server.url}/atom.xml`,
+        "--org",
+        "max-test-org",
+        "--type",
+        "feed",
         "--skip-eval",
       ]);
     });
@@ -334,7 +345,9 @@ describe("fetch CLI pipeline (fixture server)", () => {
     afterAll(() => cleanup());
 
     it("respects --max 1 limit", () => {
-      const result = cli(dataDir, ["fetch", "max-test-feed", "--max", "1", "--no-summarize"], { timeout: 15_000 });
+      const result = cli(dataDir, ["fetch", "max-test-feed", "--max", "1", "--no-summarize"], {
+        timeout: 15_000,
+      });
       expect(result.exitCode).toBe(0);
       const latest = cliJson<unknown[]>(dataDir, ["latest", "max-test-feed", "--json"]);
       expect(latest.length).toBe(1);
@@ -349,10 +362,14 @@ describe("fetch CLI pipeline (fixture server)", () => {
       ({ dataDir, cleanup } = createTempDataDir());
       cli(dataDir, ["org", "add", "Dry Run Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "Dry Run Feed",
-        "--url", `${server.url}/feed.json`,
-        "--org", "dry-run-org",
-        "--type", "feed",
+        "add",
+        "Dry Run Feed",
+        "--url",
+        `${server.url}/feed.json`,
+        "--org",
+        "dry-run-org",
+        "--type",
+        "feed",
         "--skip-eval",
       ]);
     });
@@ -360,7 +377,9 @@ describe("fetch CLI pipeline (fixture server)", () => {
     afterAll(() => cleanup());
 
     it("does not persist releases on --dry-run", () => {
-      const result = cli(dataDir, ["fetch", "dry-run-feed", "--dry-run", "--no-summarize"], { timeout: 15_000 });
+      const result = cli(dataDir, ["fetch", "dry-run-feed", "--dry-run", "--no-summarize"], {
+        timeout: 15_000,
+      });
       expect(result.exitCode).toBe(0);
       // Dry run should show found releases
       expect(result.stdout + result.stderr).toMatch(/2 release/);
@@ -379,10 +398,14 @@ describe("fetch CLI pipeline (fixture server)", () => {
       ({ dataDir, cleanup } = createTempDataDir());
       cli(dataDir, ["org", "add", "JSON Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "JSON Feed",
-        "--url", `${server.url}/feed.xml`,
-        "--org", "json-org",
-        "--type", "feed",
+        "add",
+        "JSON Feed",
+        "--url",
+        `${server.url}/feed.xml`,
+        "--org",
+        "json-org",
+        "--type",
+        "feed",
         "--skip-eval",
       ]);
     });
@@ -390,7 +413,9 @@ describe("fetch CLI pipeline (fixture server)", () => {
     afterAll(() => cleanup());
 
     it("returns structured JSON result", () => {
-      const result = cli(dataDir, ["fetch", "json-feed", "--json", "--no-summarize"], { timeout: 15_000 });
+      const result = cli(dataDir, ["fetch", "json-feed", "--json", "--no-summarize"], {
+        timeout: 15_000,
+      });
       expect(result.exitCode).toBe(0);
       const parsed = JSON.parse(result.stdout);
       expect(Array.isArray(parsed)).toBe(true);
@@ -418,6 +443,7 @@ git commit -m "test: add fetch CLI pipeline integration tests with fixture serve
 ### Task 4: Release Dedup and Backoff Tests (DB-Level)
 
 **Files:**
+
 - Create: `tests/integration/fetch-dedup-backoff.test.ts`
 
 Tests the dedup logic (UNIQUE constraints, onConflictDoNothing) and backoff mechanics using `createTestDb()` for direct DB manipulation.
@@ -443,18 +469,24 @@ afterEach(() => {
 });
 
 async function seedSource(db: typeof testDb.db) {
-  const [org] = await db.insert(organizations).values({
-    name: "Test Org",
-    slug: "test-org",
-  }).returning();
+  const [org] = await db
+    .insert(organizations)
+    .values({
+      name: "Test Org",
+      slug: "test-org",
+    })
+    .returning();
 
-  const [source] = await db.insert(sources).values({
-    name: "Test Source",
-    slug: "test-source",
-    type: "feed",
-    url: "https://example.com/feed.xml",
-    orgId: org.id,
-  }).returning();
+  const [source] = await db
+    .insert(sources)
+    .values({
+      name: "Test Source",
+      slug: "test-source",
+      type: "feed",
+      url: "https://example.com/feed.xml",
+      orgId: org.id,
+    })
+    .returning();
 
   return { org, source };
 }
@@ -545,12 +577,15 @@ describe("release dedup (UNIQUE constraints)", () => {
     const { source } = await seedSource(testDb.db);
 
     // Create a second source
-    const [source2] = await testDb.db.insert(sources).values({
-      name: "Other Source",
-      slug: "other-source",
-      type: "feed",
-      url: "https://other.com/feed.xml",
-    }).returning();
+    const [source2] = await testDb.db
+      .insert(sources)
+      .values({
+        name: "Other Source",
+        slug: "other-source",
+        type: "feed",
+        url: "https://other.com/feed.xml",
+      })
+      .returning();
 
     const raw = makeRawRelease();
     const sharedRow = {
@@ -563,7 +598,10 @@ describe("release dedup (UNIQUE constraints)", () => {
     };
 
     await testDb.db.insert(releases).values({ sourceId: source.id, ...sharedRow });
-    const result = await testDb.db.insert(releases).values({ sourceId: source2.id, ...sharedRow }).returning();
+    const result = await testDb.db
+      .insert(releases)
+      .values({ sourceId: source2.id, ...sharedRow })
+      .returning();
     expect(result).toHaveLength(1);
   });
 });
@@ -612,6 +650,7 @@ git commit -m "test: add release dedup and content hash tests"
 ### Task 5: Scrape Adapter Feed-First Path Tests
 
 **Files:**
+
 - Create: `tests/integration/scrape-feed-path.test.ts`
 
 Tests the scrape adapter's feed-first optimization: when a source has a feed URL in metadata, the scrape adapter fetches via feed instead of using Cloudflare AI. This is the key cost-saving path.
@@ -668,9 +707,12 @@ describe("scrape adapter feed-first path", () => {
       cli(dataDir, ["org", "add", "Feed Discovery Org", "--category", "cloud"]);
       // Add as scrape type (default) — the scrape adapter should discover the feed
       cli(dataDir, [
-        "add", "Feed Discovery Source",
-        "--url", `${server.url}/changelog`,
-        "--org", "feed-discovery-org",
+        "add",
+        "Feed Discovery Source",
+        "--url",
+        `${server.url}/changelog`,
+        "--org",
+        "feed-discovery-org",
         "--skip-eval",
       ]);
     });
@@ -678,7 +720,9 @@ describe("scrape adapter feed-first path", () => {
     afterAll(() => cleanup());
 
     it("discovers feed and fetches releases via feed path (no AI needed)", () => {
-      const result = cli(dataDir, ["fetch", "feed-discovery-source", "--no-summarize"], { timeout: 15_000 });
+      const result = cli(dataDir, ["fetch", "feed-discovery-source", "--no-summarize"], {
+        timeout: 15_000,
+      });
       expect(result.exitCode).toBe(0);
       // The scrape adapter should use the feed path
       expect(result.stderr).toContain("feed");
@@ -688,7 +732,11 @@ describe("scrape adapter feed-first path", () => {
     });
 
     it("stores feed URL in source metadata after discovery", () => {
-      const source = cliJson<{ metadata?: string }>(dataDir, ["list", "feed-discovery-source", "--json"]);
+      const source = cliJson<{ metadata?: string }>(dataDir, [
+        "list",
+        "feed-discovery-source",
+        "--json",
+      ]);
       const meta = JSON.parse(source.metadata ?? "{}");
       expect(meta.feedUrl).toContain("/changelog/feed.xml");
       expect(meta.feedType).toBe("rss");
@@ -703,9 +751,12 @@ describe("scrape adapter feed-first path", () => {
       ({ dataDir, cleanup } = createTempDataDir());
       cli(dataDir, ["org", "add", "No Feed Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "No Feed Source",
-        "--url", `${server.url}/no-feed`,
-        "--org", "no-feed-org",
+        "add",
+        "No Feed Source",
+        "--url",
+        `${server.url}/no-feed`,
+        "--org",
+        "no-feed-org",
         "--skip-eval",
       ]);
     });
@@ -715,7 +766,9 @@ describe("scrape adapter feed-first path", () => {
     it("marks noFeedFound after failed discovery", () => {
       // This will fail on the Cloudflare fallback (no credentials), but
       // feed discovery should complete and mark noFeedFound
-      const result = cli(dataDir, ["fetch", "no-feed-source", "--no-summarize"], { timeout: 15_000 });
+      const result = cli(dataDir, ["fetch", "no-feed-source", "--no-summarize"], {
+        timeout: 15_000,
+      });
       // Will error because Cloudflare credentials aren't set, but that's expected
       const source = cliJson<{ metadata?: string }>(dataDir, ["list", "no-feed-source", "--json"]);
       const meta = JSON.parse(source.metadata ?? "{}");
@@ -731,10 +784,14 @@ describe("scrape adapter feed-first path", () => {
       ({ dataDir, cleanup } = createTempDataDir());
       cli(dataDir, ["org", "add", "Preconfig Org", "--category", "cloud"]);
       cli(dataDir, [
-        "add", "Preconfig Source",
-        "--url", `${server.url}/changelog`,
-        "--org", "preconfig-org",
-        "--type", "feed",
+        "add",
+        "Preconfig Source",
+        "--url",
+        `${server.url}/changelog`,
+        "--org",
+        "preconfig-org",
+        "--type",
+        "feed",
         "--skip-eval",
       ]);
     });
@@ -742,7 +799,9 @@ describe("scrape adapter feed-first path", () => {
     afterAll(() => cleanup());
 
     it("uses feed type source to fetch directly", () => {
-      const result = cli(dataDir, ["fetch", "preconfig-source", "--no-summarize"], { timeout: 15_000 });
+      const result = cli(dataDir, ["fetch", "preconfig-source", "--no-summarize"], {
+        timeout: 15_000,
+      });
       expect(result.exitCode).toBe(0);
       const latest = cliJson<unknown[]>(dataDir, ["latest", "preconfig-source", "--json"]);
       expect(latest.length).toBeGreaterThan(0);
@@ -768,6 +827,7 @@ git commit -m "test: add scrape adapter feed-first path integration tests"
 ### Task 6: Fetch-Log and Backoff CLI Tests
 
 **Files:**
+
 - Create: `tests/integration/fetch-log.test.ts`
 
 Tests that the fetch command correctly logs operations to the fetch_log table and that the fetch-log CLI command displays them. Also tests that `--stale` respects backoff.
@@ -803,10 +863,14 @@ describe("fetch-log tracking", () => {
     ({ dataDir, cleanup } = createTempDataDir());
     cli(dataDir, ["org", "add", "Log Org", "--category", "cloud"]);
     cli(dataDir, [
-      "add", "Log Source",
-      "--url", `${server.url}/feed.xml`,
-      "--org", "log-org",
-      "--type", "feed",
+      "add",
+      "Log Source",
+      "--url",
+      `${server.url}/feed.xml`,
+      "--org",
+      "log-org",
+      "--type",
+      "feed",
       "--skip-eval",
     ]);
   });
@@ -814,7 +878,9 @@ describe("fetch-log tracking", () => {
   afterAll(() => cleanup());
 
   it("records successful fetch in fetch-log", () => {
-    const fetchResult = cli(dataDir, ["fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["fetch", "log-source", "--no-summarize"], {
+      timeout: 15_000,
+    });
     expect(fetchResult.exitCode).toBe(0);
 
     const logResult = cli(dataDir, ["fetch-log", "log-source", "--json"]);
@@ -828,7 +894,9 @@ describe("fetch-log tracking", () => {
   });
 
   it("records no_change on subsequent fetch", () => {
-    const fetchResult = cli(dataDir, ["fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["fetch", "log-source", "--no-summarize"], {
+      timeout: 15_000,
+    });
     expect(fetchResult.exitCode).toBe(0);
 
     const logResult = cli(dataDir, ["fetch-log", "log-source", "--json"]);
@@ -840,13 +908,19 @@ describe("fetch-log tracking", () => {
   it("records dry_run in fetch-log", () => {
     // Use a fresh source for clean dry-run
     cli(dataDir, [
-      "add", "Dry Log Source",
-      "--url", `${server.url}/feed.xml`,
-      "--org", "log-org",
-      "--type", "feed",
+      "add",
+      "Dry Log Source",
+      "--url",
+      `${server.url}/feed.xml`,
+      "--org",
+      "log-org",
+      "--type",
+      "feed",
       "--skip-eval",
     ]);
-    const fetchResult = cli(dataDir, ["fetch", "dry-log-source", "--dry-run", "--no-summarize"], { timeout: 15_000 });
+    const fetchResult = cli(dataDir, ["fetch", "dry-log-source", "--dry-run", "--no-summarize"], {
+      timeout: 15_000,
+    });
     expect(fetchResult.exitCode).toBe(0);
 
     const logResult = cli(dataDir, ["fetch-log", "dry-log-source", "--json"]);

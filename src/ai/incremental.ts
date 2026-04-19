@@ -20,7 +20,8 @@ import {
 
 const extractReleasesTool: Anthropic.Tool = {
   name: "extract_releases",
-  description: "Extract the NEW release entries you found. Only include releases not in the known list. Return an empty array if there are no new releases.",
+  description:
+    "Extract the NEW release entries you found. Only include releases not in the known list. Return an empty array if there are no new releases.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -34,7 +35,8 @@ const extractReleasesTool: Anthropic.Tool = {
       },
       needsMoreContext: {
         type: "boolean" as const,
-        description: "Set to true ONLY if the provided lines don't contain any changelog content (e.g. it's all navigation/header). False otherwise.",
+        description:
+          "Set to true ONLY if the provided lines don't contain any changelog content (e.g. it's all navigation/header). False otherwise.",
       },
     },
     required: ["releases", "needsMoreContext"],
@@ -59,8 +61,7 @@ const searchContentTool: Anthropic.Tool = {
 
 const readLinesTool: Anthropic.Tool = {
   name: "read_lines",
-  description:
-    "Read a range of lines from the changelog markdown. Line numbers are 1-based.",
+  description: "Read a range of lines from the changelog markdown. Line numbers are 1-based.",
   input_schema: {
     type: "object" as const,
     properties: {
@@ -171,7 +172,9 @@ async function singlePass(
   const preview = previewSlice.map((l, i) => `${contentStart + i + 1}: ${l}`).join("\n");
 
   if (contentStart > 0) {
-    logger.debug(`Skipped ${contentStart} lines of nav/TOC, previewing lines ${contentStart + 1}–${contentStart + previewCount}`);
+    logger.debug(
+      `Skipped ${contentStart} lines of nav/TOC, previewing lines ${contentStart + 1}–${contentStart + previewCount}`,
+    );
   }
 
   const response = await client.messages.create({
@@ -198,7 +201,9 @@ async function singlePass(
     (b): b is Anthropic.ToolUseBlock => b.type === "tool_use" && b.name === "extract_releases",
   );
 
-  const input = toolBlock?.input as { releases?: ParsedRelease[] | Record<string, unknown>; needsMoreContext?: boolean } | undefined;
+  const input = toolBlock?.input as
+    | { releases?: ParsedRelease[] | Record<string, unknown>; needsMoreContext?: boolean }
+    | undefined;
 
   const rawReleases = Array.isArray(input?.releases) ? input.releases : [];
   const releases = rawReleases.map((r) => ({
@@ -335,7 +340,8 @@ export async function parseIncremental(
 ): Promise<IncrementalParseResult> {
   const client = getAnthropicClient();
   const lines = markdown.split("\n");
-  const knownReleases = prefetchedKnownReleases ?? await getKnownReleasesForSource(sourceId, sourceSlug ?? "", 10);
+  const knownReleases =
+    prefetchedKnownReleases ?? (await getKnownReleasesForSource(sourceId, sourceSlug ?? "", 10));
 
   if (knownReleases.length === 0) {
     logger.debug("No known releases — skipping incremental, will use bulk");

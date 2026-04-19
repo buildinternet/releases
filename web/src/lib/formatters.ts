@@ -11,11 +11,7 @@ export {
   knowledgeToMarkdown,
 } from "@shared/formatters";
 
-export type {
-  FormatSourceDetail,
-  FormatOrgDetail,
-  FormatOptions,
-} from "@shared/formatters";
+export type { FormatSourceDetail, FormatOrgDetail, FormatOptions } from "@shared/formatters";
 
 /**
  * Format an ISO date string to a human-readable date.

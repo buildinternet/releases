@@ -110,11 +110,7 @@ function fakeIndex(matches: Array<{ id: string; score: number }>): VectorizeInde
 }
 
 test("hybridSearch: merges FTS + multiple vector indexes with correct kind precedence", async () => {
-  const ftsHits: HybridFtsHit[] = [
-    { id: "rel_1" },
-    { id: "rel_2" },
-    { id: "rel_shared" },
-  ];
+  const ftsHits: HybridFtsHit[] = [{ id: "rel_1" }, { id: "rel_2" }, { id: "rel_shared" }];
   const releaseIndex = fakeIndex([
     { id: "rel_shared", score: 0.99 }, // also in FTS
     { id: "rel_3", score: 0.88 },

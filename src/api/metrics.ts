@@ -36,8 +36,13 @@ export function getOrgMetrics(orgId: string): ActivityMetrics {
   const db = getDb();
   const cutoff = daysAgoIso(30);
   const cutoff90d = daysAgoIso(ROLLING_WINDOW_DAYS);
-  const orgSources = db.select({ id: sources.id }).from(sources).where(eq(sources.orgId, orgId)).all();
-  if (orgSources.length === 0) return { releasesLast30Days: 0, avgReleasesPerWeek: 0, oldestPublishedAt: null };
+  const orgSources = db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.orgId, orgId))
+    .all();
+  if (orgSources.length === 0)
+    return { releasesLast30Days: 0, avgReleasesPerWeek: 0, oldestPublishedAt: null };
   const sourceIds = orgSources.map((s) => s.id);
   const inClause = sql`${releases.sourceId} IN (${sql.join(
     sourceIds.map((id) => sql`${id}`),

@@ -4,13 +4,7 @@ const enc = new TextEncoder();
 
 async function importHmacKey(rawHex: string): Promise<CryptoKey> {
   const bytes = hexToBytes(rawHex);
-  return crypto.subtle.importKey(
-    "raw",
-    bytes,
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign"],
-  );
+  return crypto.subtle.importKey("raw", bytes, { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
 }
 
 function hexToBytes(hex: string): Uint8Array<ArrayBuffer> {

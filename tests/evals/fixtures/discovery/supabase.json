@@ -2,9 +2,7 @@
   "company": "Supabase",
   "domain": "supabase.com",
   "githubOrg": "supabase",
-  "expectedSources": [
-    { "urlPattern": "github.com/supabase/supabase", "type": "github" }
-  ],
+  "expectedSources": [{ "urlPattern": "github.com/supabase/supabase", "type": "github" }],
   "expectedProducts": [],
   "notes": "Open-source company — primary changelog is GitHub releases"
 }

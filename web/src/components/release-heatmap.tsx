@@ -41,7 +41,13 @@ const LEGEND_COLORS = [
 
 function formatTooltipDate(dateStr: string): string {
   const d = new Date(dateStr + "T12:00:00Z");
-  return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return d.toLocaleDateString("en-US", {
+    weekday: "short",
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 function formatMonth(dateStr: string): string {
@@ -62,7 +68,10 @@ interface MonthLabel {
   col: number;
 }
 
-function buildGrid(heatmap: HeatmapData, visibleWeeks: number): { cells: CellData[]; monthLabels: MonthLabel[] } {
+function buildGrid(
+  heatmap: HeatmapData,
+  visibleWeeks: number,
+): { cells: CellData[]; monthLabels: MonthLabel[] } {
   const countMap = new Map<string, number>();
   for (const entry of heatmap.dailyCounts) {
     countMap.set(entry.date, entry.count);
@@ -126,7 +135,12 @@ interface ReleaseHeatmapProps {
   bare?: boolean;
 }
 
-export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, bare = false }: ReleaseHeatmapProps) {
+export function ReleaseHeatmap({
+  heatmap,
+  trackingSince,
+  highlightDays = null,
+  bare = false,
+}: ReleaseHeatmapProps) {
   const [tooltip, setTooltip] = useState<{ text: string; x: number; y: number } | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [cellSize, setCellSize] = useState(MIN_CELL_SIZE);
@@ -139,7 +153,8 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
     function measure() {
       // clientWidth includes padding — subtract it to get the actual content box width
       const cs = getComputedStyle(el!);
-      const contentWidth = el!.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      const contentWidth =
+        el!.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
       const available = contentWidth - DAY_LABEL_WIDTH - 8; // 8px for flex gap
       const sizeAt52 = Math.floor((available + CELL_GAP) / MAX_WEEKS - CELL_GAP);
       if (sizeAt52 >= MIN_CELL_SIZE) {
@@ -171,7 +186,10 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
     return new Date(startMs).toISOString().slice(0, 10);
   }, [highlightDays, heatmap.range.to]);
 
-  const { cells, monthLabels } = useMemo(() => buildGrid(heatmap, visibleWeeks), [heatmap, visibleWeeks]);
+  const { cells, monthLabels } = useMemo(
+    () => buildGrid(heatmap, visibleWeeks),
+    [heatmap, visibleWeeks],
+  );
 
   // Use trackingSince if provided, otherwise fall back to earliest release in data.
   // Normalize to YYYY-MM-DD to match cell date format.
@@ -180,20 +198,33 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
     return raw ? raw.slice(0, 10) : null;
   }, [trackingSince, heatmap]);
 
-  const handleMouseEnter = useCallback((e: React.MouseEvent<SVGSVGElement>, cell: CellData, isPreTracking: boolean, isEarliestTracked: boolean) => {
-    const label = cell.count === 0 ? "No releases" : cell.count === 1 ? "1 release" : `${cell.count} releases`;
-    let text = `${label} on ${formatTooltipDate(cell.date)}`;
-    if (isEarliestTracked) {
-      text += " · Earliest tracked release";
-    } else if (isPreTracking) {
-      text += " · Before tracking";
-    }
-    setTooltip({
-      text,
-      x: e.clientX,
-      y: e.clientY,
-    });
-  }, []);
+  const handleMouseEnter = useCallback(
+    (
+      e: React.MouseEvent<SVGSVGElement>,
+      cell: CellData,
+      isPreTracking: boolean,
+      isEarliestTracked: boolean,
+    ) => {
+      const label =
+        cell.count === 0
+          ? "No releases"
+          : cell.count === 1
+            ? "1 release"
+            : `${cell.count} releases`;
+      let text = `${label} on ${formatTooltipDate(cell.date)}`;
+      if (isEarliestTracked) {
+        text += " · Earliest tracked release";
+      } else if (isPreTracking) {
+        text += " · Before tracking";
+      }
+      setTooltip({
+        text,
+        x: e.clientX,
+        y: e.clientY,
+      });
+    },
+    [],
+  );
 
   const handleMouseLeave = useCallback(() => {
     setTooltip(null);
@@ -222,7 +253,13 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
       {/* SVG defs for stripe pattern */}
       <svg width="0" height="0" className="absolute">
         <defs>
-          <pattern id={patternId} width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(-45)">
+          <pattern
+            id={patternId}
+            width="4"
+            height="4"
+            patternUnits="userSpaceOnUse"
+            patternTransform="rotate(-45)"
+          >
             <rect width="4" height="4" data-heat-level={0} />
             <line x1="0" y1="0" x2="0" y2="4" stroke="rgba(255,255,255,0.08)" strokeWidth="2" />
           </pattern>
@@ -231,15 +268,17 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
 
       {/* Header */}
       {!bare && (
-      <div className="flex justify-between items-center mb-3">
-        <span className="text-xs text-stone-500 dark:text-stone-400">
-          <strong className="text-stone-900 dark:text-stone-100 font-semibold">{heatmap.total}</strong>
-          {" "}releases in the last year
-        </span>
-        <span className="text-[11px] text-stone-400 dark:text-stone-500">
-          {heatmap.range.from} &mdash; {heatmap.range.to}
-        </span>
-      </div>
+        <div className="flex justify-between items-center mb-3">
+          <span className="text-xs text-stone-500 dark:text-stone-400">
+            <strong className="text-stone-900 dark:text-stone-100 font-semibold">
+              {heatmap.total}
+            </strong>{" "}
+            releases in the last year
+          </span>
+          <span className="text-[11px] text-stone-400 dark:text-stone-500">
+            {heatmap.range.from} &mdash; {heatmap.range.to}
+          </span>
+        </div>
       )}
 
       {/* Grid */}
@@ -250,7 +289,11 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
             <div
               key={d.label}
               className="text-stone-400 dark:text-stone-500 flex items-center"
-              style={{ height: cellSize, fontSize: 9, visibility: d.visible ? "visible" : "hidden" }}
+              style={{
+                height: cellSize,
+                fontSize: 9,
+                visibility: d.visible ? "visible" : "hidden",
+              }}
             >
               {d.label}
             </div>
@@ -288,7 +331,9 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
                       height={cellSize}
                       className="rounded-[2px] transition-opacity duration-300 ease-out"
                       style={{ opacity: outOfWindow ? 0.2 : 1 }}
-                      onMouseEnter={(e) => handleMouseEnter(e, cell, isPreTracking, isEarliestTracked)}
+                      onMouseEnter={(e) =>
+                        handleMouseEnter(e, cell, isPreTracking, isEarliestTracked)
+                      }
                       onMouseLeave={handleMouseLeave}
                     >
                       <rect
@@ -296,7 +341,13 @@ export function ReleaseHeatmap({ heatmap, trackingSince, highlightDays = null, b
                         height={cellSize}
                         rx={2}
                         data-heat-level={cell.level}
-                        fill={isPreTracking ? `url(#${patternId})` : (cell.level > 0 ? LEGEND_COLORS[cell.level]! : undefined)}
+                        fill={
+                          isPreTracking
+                            ? `url(#${patternId})`
+                            : cell.level > 0
+                              ? LEGEND_COLORS[cell.level]!
+                              : undefined
+                        }
                       />
                     </svg>
                   );

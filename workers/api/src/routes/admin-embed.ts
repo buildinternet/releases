@@ -26,7 +26,11 @@ import {
 } from "@releases/core-internal/schema";
 import type { Env } from "../index.js";
 import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/lib/embed-releases.js";
-import { embedAndUpsertEntities, type EmbedEntityInput, type EntityKind } from "@releases/lib/embed-entities.js";
+import {
+  embedAndUpsertEntities,
+  type EmbedEntityInput,
+  type EntityKind,
+} from "@releases/lib/embed-entities.js";
 import { embedAndUpsertChangelogFile } from "@releases/lib/embed-changelog-pipeline.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import type { VectorizeIndex } from "@releases/lib/vector-search.js";
@@ -79,20 +83,32 @@ adminEmbedRoutes.get("/admin/embed/status", async (c) => {
     [chunksEmbedded],
   ] = await Promise.all([
     db.select({ n: count() }).from(releases),
-    db.select({ n: count() }).from(releases).where(
-      and(
-        // Embedded is simply "embedded_at IS NOT NULL" — suppressed rows are
-        // still counted because the backfill treats them the same. Operators
-        // who care about suppressed gaps can diff against the search paths.
-        sql`${releases.embeddedAt} IS NOT NULL`,
+    db
+      .select({ n: count() })
+      .from(releases)
+      .where(
+        and(
+          // Embedded is simply "embedded_at IS NOT NULL" — suppressed rows are
+          // still counted because the backfill treats them the same. Operators
+          // who care about suppressed gaps can diff against the search paths.
+          sql`${releases.embeddedAt} IS NOT NULL`,
+        ),
       ),
-    ),
     db.select({ n: count() }).from(organizations),
-    db.select({ n: count() }).from(organizations).where(sql`${organizations.embeddedAt} IS NOT NULL`),
+    db
+      .select({ n: count() })
+      .from(organizations)
+      .where(sql`${organizations.embeddedAt} IS NOT NULL`),
     db.select({ n: count() }).from(products),
-    db.select({ n: count() }).from(products).where(sql`${products.embeddedAt} IS NOT NULL`),
+    db
+      .select({ n: count() })
+      .from(products)
+      .where(sql`${products.embeddedAt} IS NOT NULL`),
     db.select({ n: count() }).from(sources),
-    db.select({ n: count() }).from(sources).where(sql`${sources.embeddedAt} IS NOT NULL`),
+    db
+      .select({ n: count() })
+      .from(sources)
+      .where(sql`${sources.embeddedAt} IS NOT NULL`),
     db.select({ n: count() }).from(sourceChangelogChunks),
     db
       .select({ n: count() })
@@ -114,9 +130,21 @@ adminEmbedRoutes.get("/admin/embed/status", async (c) => {
       embedded: entitiesEmbedded,
       unembedded: entitiesTotal - entitiesEmbedded,
       breakdown: {
-        org: { total: orgsTotal.n, embedded: orgsEmbedded.n, unembedded: orgsTotal.n - orgsEmbedded.n },
-        product: { total: productsTotal.n, embedded: productsEmbedded.n, unembedded: productsTotal.n - productsEmbedded.n },
-        source: { total: sourcesTotal.n, embedded: sourcesEmbedded.n, unembedded: sourcesTotal.n - sourcesEmbedded.n },
+        org: {
+          total: orgsTotal.n,
+          embedded: orgsEmbedded.n,
+          unembedded: orgsTotal.n - orgsEmbedded.n,
+        },
+        product: {
+          total: productsTotal.n,
+          embedded: productsEmbedded.n,
+          unembedded: productsTotal.n - productsEmbedded.n,
+        },
+        source: {
+          total: sourcesTotal.n,
+          embedded: sourcesEmbedded.n,
+          unembedded: sourcesTotal.n - sourcesEmbedded.n,
+        },
       },
     },
     chunks: {
@@ -184,7 +212,10 @@ adminEmbedRoutes.post("/admin/embed/releases", async (c) => {
 
   const embedConfig = await buildEmbedConfig(c.env);
   if (!embedConfig) {
-    return c.json({ error: "embed_unavailable", message: "Embedding provider not configured" }, 503);
+    return c.json(
+      { error: "embed_unavailable", message: "Embedding provider not configured" },
+      503,
+    );
   }
   let persistedIds: string[] = [];
 
@@ -212,10 +243,7 @@ adminEmbedRoutes.post("/admin/embed/releases", async (c) => {
       // D1 has a ~100 param limit per statement; chunk conservatively.
       for (let i = 0; i < ids.length; i += 50) {
         const slice = ids.slice(i, i + 50);
-        await db
-          .update(releases)
-          .set({ embeddedAt: now })
-          .where(inArray(releases.id, slice));
+        await db.update(releases).set({ embeddedAt: now }).where(inArray(releases.id, slice));
       }
     },
   });
@@ -261,30 +289,74 @@ adminEmbedRoutes.post("/admin/embed/entities", async (c) => {
   async function fetchUnembedded(kind: EntityKind, n: number): Promise<void> {
     if (n <= 0) return;
     if (kind === "org") {
-      const rows = await db.select().from(organizations).where(sql`${organizations.embeddedAt} IS NULL`).limit(n);
+      const rows = await db
+        .select()
+        .from(organizations)
+        .where(sql`${organizations.embeddedAt} IS NULL`)
+        .limit(n);
       for (const r of rows) {
         // For orgs, `orgId` points at themselves so scope=org filters match.
-        entities.push({ id: r.id, kind, name: r.name, description: r.description, category: r.category, domain: r.domain, orgId: r.id });
+        entities.push({
+          id: r.id,
+          kind,
+          name: r.name,
+          description: r.description,
+          category: r.category,
+          domain: r.domain,
+          orgId: r.id,
+        });
       }
       return;
     }
     if (kind === "product") {
-      const rows = await db.select().from(products).where(sql`${products.embeddedAt} IS NULL`).limit(n);
+      const rows = await db
+        .select()
+        .from(products)
+        .where(sql`${products.embeddedAt} IS NULL`)
+        .limit(n);
       for (const r of rows) {
-        entities.push({ id: r.id, kind, name: r.name, description: r.description, category: r.category, domain: null, orgId: r.orgId });
+        entities.push({
+          id: r.id,
+          kind,
+          name: r.name,
+          description: r.description,
+          category: r.category,
+          domain: null,
+          orgId: r.orgId,
+        });
       }
       return;
     }
-    const rows = await db.select().from(sources).where(sql`${sources.embeddedAt} IS NULL`).limit(n);
+    const rows = await db
+      .select()
+      .from(sources)
+      .where(sql`${sources.embeddedAt} IS NULL`)
+      .limit(n);
     for (const r of rows) {
-      entities.push({ id: r.id, kind, name: r.name, description: null, category: null, domain: urlHost(r.url), orgId: r.orgId });
+      entities.push({
+        id: r.id,
+        kind,
+        name: r.name,
+        description: null,
+        category: null,
+        domain: urlHost(r.url),
+        orgId: r.orgId,
+      });
     }
   }
 
   async function countUnembeddedKind(kind: EntityKind): Promise<number> {
     const table = kind === "org" ? organizations : kind === "product" ? products : sources;
-    const col = kind === "org" ? organizations.embeddedAt : kind === "product" ? products.embeddedAt : sources.embeddedAt;
-    const [{ n }] = await db.select({ n: count() }).from(table).where(sql`${col} IS NULL`);
+    const col =
+      kind === "org"
+        ? organizations.embeddedAt
+        : kind === "product"
+          ? products.embeddedAt
+          : sources.embeddedAt;
+    const [{ n }] = await db
+      .select({ n: count() })
+      .from(table)
+      .where(sql`${col} IS NULL`);
     return n;
   }
 
@@ -301,7 +373,13 @@ adminEmbedRoutes.post("/admin/embed/entities", async (c) => {
 
   const remainingBefore = kindFilter
     ? await countUnembeddedKind(kindFilter)
-    : (await Promise.all([countUnembeddedKind("org"), countUnembeddedKind("product"), countUnembeddedKind("source")])).reduce((a, b) => a + b, 0);
+    : (
+        await Promise.all([
+          countUnembeddedKind("org"),
+          countUnembeddedKind("product"),
+          countUnembeddedKind("source"),
+        ])
+      ).reduce((a, b) => a + b, 0);
 
   if (entities.length === 0 || dryRun) {
     return c.json({
@@ -315,7 +393,10 @@ adminEmbedRoutes.post("/admin/embed/entities", async (c) => {
 
   const embedConfig = await buildEmbedConfig(c.env);
   if (!embedConfig) {
-    return c.json({ error: "embed_unavailable", message: "Embedding provider not configured" }, 503);
+    return c.json(
+      { error: "embed_unavailable", message: "Embedding provider not configured" },
+      503,
+    );
   }
   let persistedIds: string[] = [];
 
@@ -335,13 +416,22 @@ adminEmbedRoutes.post("/admin/embed/entities", async (c) => {
         if (kind) partitions[kind].push(id);
       }
       if (partitions.org.length > 0) {
-        await db.update(organizations).set({ embeddedAt: now }).where(inArray(organizations.id, partitions.org));
+        await db
+          .update(organizations)
+          .set({ embeddedAt: now })
+          .where(inArray(organizations.id, partitions.org));
       }
       if (partitions.product.length > 0) {
-        await db.update(products).set({ embeddedAt: now }).where(inArray(products.id, partitions.product));
+        await db
+          .update(products)
+          .set({ embeddedAt: now })
+          .where(inArray(products.id, partitions.product));
       }
       if (partitions.source.length > 0) {
-        await db.update(sources).set({ embeddedAt: now }).where(inArray(sources.id, partitions.source));
+        await db
+          .update(sources)
+          .set({ embeddedAt: now })
+          .where(inArray(sources.id, partitions.source));
       }
     },
   });
@@ -375,11 +465,7 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
   // diff against existing chunks.
   const fileConditions = [] as ReturnType<typeof eq>[];
   if (body.sourceSlug) {
-    const [src] = await db
-      .select()
-      .from(sources)
-      .where(eq(sources.slug, body.sourceSlug))
-      .limit(1);
+    const [src] = await db.select().from(sources).where(eq(sources.slug, body.sourceSlug)).limit(1);
     if (!src) {
       return c.json({ error: "not_found", message: `source not found: ${body.sourceSlug}` }, 404);
     }
@@ -438,7 +524,10 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
 
   const embedConfig = await buildEmbedConfig(c.env);
   if (!embedConfig) {
-    return c.json({ error: "embed_unavailable", message: "Embedding provider not configured" }, 503);
+    return c.json(
+      { error: "embed_unavailable", message: "Embedding provider not configured" },
+      503,
+    );
   }
   let succeeded = 0;
   let failed = 0;

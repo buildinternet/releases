@@ -1,7 +1,13 @@
 import { logger } from "@buildinternet/releases-lib/logger";
 import { handleStats } from "./routes/stats.js";
 import { handleOrgs, handleOrgDetail, handleSitemap } from "./routes/orgs.js";
-import { handleSources, handleSourceDetail, handleSourceActivity, handleSourceChangelog, CHANGELOG_PATH_NOT_FOUND } from "./routes/sources.js";
+import {
+  handleSources,
+  handleSourceDetail,
+  handleSourceActivity,
+  handleSourceChangelog,
+  CHANGELOG_PATH_NOT_FOUND,
+} from "./routes/sources.js";
 import { handleSearch } from "./routes/search.js";
 
 const CORS_HEADERS: Record<string, string> = {
@@ -79,7 +85,11 @@ export function startApiServer(port: number) {
         if (sourceChangelogMatch) {
           const result = handleSourceChangelog(sourceChangelogMatch[1], url.searchParams);
           if (result === CHANGELOG_PATH_NOT_FOUND) {
-            return errorResponse("not_found", `Changelog file not found for path: ${url.searchParams.get("path")}`, 404);
+            return errorResponse(
+              "not_found",
+              `Changelog file not found for path: ${url.searchParams.get("path")}`,
+              404,
+            );
           }
           if (!result) return errorResponse("not_found", "Changelog file not found", 404);
           return jsonResponse(result);

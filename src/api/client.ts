@@ -1,30 +1,60 @@
 import { getApiUrl, getApiKey, isAdminMode } from "../lib/mode.js";
 import { logger } from "@buildinternet/releases-lib/logger";
 import type {
-  Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
-  ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
+  Source,
+  Release,
+  Organization,
+  OrgAccount,
+  IgnoredUrl,
+  BlockedUrl,
+  ReleaseSummary,
+  NewReleaseSummary,
+  Product,
+  Tag,
+  DomainAlias,
+  KnowledgePage,
   ReleaseType,
 } from "@releases/core-internal/schema";
 import type { WebhookSubscription } from "@releases/core-internal/schema";
 import type { ReleaseCoverage } from "../db/schema-coverage.js";
 import type {
-  SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse,
-  ReleaseWithSource, StatsSummary, FetchLogEntry, LatestRelease,
-  UsageBreakdownRow, UsageStatsResponse, Session,
-  EmbedBackfillResponse, EmbedStatusResponse, MediaItem,
+  SourceWithOrg,
+  Stats,
+  UnifiedSearchResponse,
+  SourceChangelogResponse,
+  ReleaseWithSource,
+  StatsSummary,
+  FetchLogEntry,
+  LatestRelease,
+  UsageBreakdownRow,
+  UsageStatsResponse,
+  Session,
+  EmbedBackfillResponse,
+  EmbedStatusResponse,
+  MediaItem,
 } from "./types.js";
 export type {
-  SourceWithOrg, SourcePatchInput, ReleaseWithSource, StatsSummary,
-  FetchLogEntry, LatestRelease, UsageBreakdownRow, UsageStatsResponse,
-  Session, EmbedBackfillResponse, EmbedStatusResponse,
-  SearchResult, Stats, SourceListItem,
+  SourceWithOrg,
+  SourcePatchInput,
+  ReleaseWithSource,
+  StatsSummary,
+  FetchLogEntry,
+  LatestRelease,
+  UsageBreakdownRow,
+  UsageStatsResponse,
+  Session,
+  EmbedBackfillResponse,
+  EmbedStatusResponse,
+  SearchResult,
+  Stats,
+  SourceListItem,
 } from "./types.js";
 
 async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   const url = `${getApiUrl()}${path}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    ...opts?.headers as Record<string, string>,
+    ...(opts?.headers as Record<string, string>),
   };
   // Only send auth header when an API key is configured (admin mode)
   if (isAdminMode()) {
@@ -74,7 +104,9 @@ export async function sourceChangelog(
   if (range?.limit !== undefined) params.set("limit", String(range.limit));
   if (range?.tokens !== undefined) params.set("tokens", String(range.tokens));
   const qs = params.toString();
-  return apiFetch<SourceChangelogResponse | null>(`/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`);
+  return apiFetch<SourceChangelogResponse | null>(
+    `/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`,
+  );
 }
 
 export async function findSourcesByUrls(urls: string[]): Promise<Source[]> {
@@ -98,14 +130,19 @@ async function suggestEntities(
   return apiFetch<Array<{ slug: string; name: string }>>(`${endpoint}?${params}`) ?? [];
 }
 
-export const suggestOrgs = (term: string, limit: number) => suggestEntities("/v1/orgs", term, limit);
-export const suggestSources = (term: string, limit: number) => suggestEntities("/v1/sources", term, limit);
+export const suggestOrgs = (term: string, limit: number) =>
+  suggestEntities("/v1/orgs", term, limit);
+export const suggestSources = (term: string, limit: number) =>
+  suggestEntities("/v1/sources", term, limit);
 
 export async function getSourcesByOrg(orgId: string): Promise<Source[]> {
   return apiFetch<Source[]>(`/v1/sources?orgId=${orgId}`);
 }
 
-export async function listOrgs(opts?: { query?: string; platform?: string }): Promise<Organization[]> {
+export async function listOrgs(opts?: {
+  query?: string;
+  platform?: string;
+}): Promise<Organization[]> {
   const params = new URLSearchParams();
   if (opts?.query) params.set("q", opts.query);
   if (opts?.platform) params.set("platform", opts.platform);
@@ -113,7 +150,10 @@ export async function listOrgs(opts?: { query?: string; platform?: string }): Pr
   return apiFetch<Organization[]>(`/v1/orgs${qs ? `?${qs}` : ""}`);
 }
 
-export async function getOrgAccountByPlatform(orgId: string, platform: string): Promise<OrgAccount | null> {
+export async function getOrgAccountByPlatform(
+  orgId: string,
+  platform: string,
+): Promise<OrgAccount | null> {
   return apiFetch<OrgAccount | null>(`/v1/orgs/${orgId}/accounts?platform=${platform}`);
 }
 
@@ -146,7 +186,11 @@ export async function findBlockedUrl(url: string): Promise<BlockedUrl | null> {
   return apiFetch<BlockedUrl | null>(`/v1/blocked-urls?url=${encoded}&single=true`);
 }
 
-export async function addBlockedUrl(pattern: string, type: "exact" | "domain", reason?: string): Promise<void> {
+export async function addBlockedUrl(
+  pattern: string,
+  type: "exact" | "domain",
+  reason?: string,
+): Promise<void> {
   await apiFetch("/v1/blocked-urls", {
     method: "POST",
     body: JSON.stringify({ pattern, type, reason }),
@@ -168,11 +212,16 @@ export async function getRelease(id: string): Promise<ReleaseWithSource | null> 
 }
 
 export async function deleteRelease(id: string): Promise<boolean> {
-  const result = await apiFetch<{ deleted: boolean } | null>(`/v1/releases/${id}`, { method: "DELETE" });
+  const result = await apiFetch<{ deleted: boolean } | null>(`/v1/releases/${id}`, {
+    method: "DELETE",
+  });
   return result?.deleted ?? false;
 }
 
-export async function updateRelease(id: string, data: Record<string, unknown>): Promise<ReleaseWithSource> {
+export async function updateRelease(
+  id: string,
+  data: Record<string, unknown>,
+): Promise<ReleaseWithSource> {
   return apiFetch<ReleaseWithSource>(`/v1/releases/${id}`, {
     method: "PATCH",
     body: JSON.stringify(data),
@@ -248,10 +297,13 @@ export async function getRecentReleasesByOrg(
 // ── Content hash ──
 
 export async function checkContentHash(source: Source, contentHash: string): Promise<boolean> {
-  const result = await apiFetch<{ unchanged: boolean } | null>(`/v1/sources/${source.slug}/content-hash?peek=true`, {
-    method: "POST",
-    body: JSON.stringify({ contentHash }),
-  });
+  const result = await apiFetch<{ unchanged: boolean } | null>(
+    `/v1/sources/${source.slug}/content-hash?peek=true`,
+    {
+      method: "POST",
+      body: JSON.stringify({ contentHash }),
+    },
+  );
   return result?.unchanged ?? false;
 }
 
@@ -354,11 +406,19 @@ export async function getFetchLogs(opts: {
 }): Promise<FetchLogEntry[]> {
   const params = new URLSearchParams({ limit: String(opts.limit) });
   if (opts.sourceSlug) params.set("source", opts.sourceSlug);
-  const logs = await apiFetch<Array<{
-    id: string; sourceId: string; releasesFound: number; releasesInserted: number;
-    durationMs: number | null; status: string; error: string | null;
-    rawContent: string | null; createdAt: string;
-  }>>(`/v1/fetch-log?${params}`);
+  const logs = await apiFetch<
+    Array<{
+      id: string;
+      sourceId: string;
+      releasesFound: number;
+      releasesInserted: number;
+      durationMs: number | null;
+      status: string;
+      error: string | null;
+      rawContent: string | null;
+      createdAt: string;
+    }>
+  >(`/v1/fetch-log?${params}`);
 
   // The API fetch-log endpoint returns raw fetch_log rows without source name/slug.
   // In remote mode we don't have the join data, so we provide what we can.
@@ -377,8 +437,15 @@ export async function getFetchLogs(opts: {
 
 // ── Latest releases ──
 
-function toMediaItems(raw: Array<{ type: string; url: string; alt?: string; r2Url?: string }> | undefined): MediaItem[] {
-  return (raw ?? []).map((m) => ({ type: m.type as MediaItem["type"], url: m.url, alt: m.alt, r2Url: m.r2Url }));
+function toMediaItems(
+  raw: Array<{ type: string; url: string; alt?: string; r2Url?: string }> | undefined,
+): MediaItem[] {
+  return (raw ?? []).map((m) => ({
+    type: m.type as MediaItem["type"],
+    url: m.url,
+    alt: m.alt,
+    r2Url: m.r2Url,
+  }));
 }
 
 type LatestReleasesResponse = {
@@ -427,9 +494,9 @@ export async function getKnownReleasesForSource(
   sourceSlug: string,
   limit: number,
 ): Promise<Array<{ version: string | null; title: string; publishedAt: string | null }>> {
-  const data = await apiFetch<Array<{ version: string | null; title: string; publishedAt: string | null }>>(
-    `/v1/sources/${sourceSlug}/known-releases?limit=${limit}`,
-  );
+  const data = await apiFetch<
+    Array<{ version: string | null; title: string; publishedAt: string | null }>
+  >(`/v1/sources/${sourceSlug}/known-releases?limit=${limit}`);
   return data ?? [];
 }
 
@@ -465,16 +532,23 @@ export async function deleteSource(slug: string): Promise<void> {
   await apiFetch(`/v1/sources/${slug}`, { method: "DELETE" });
 }
 
-export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array<{
-  version?: string | null; title: string; content: string;
-  url?: string | null; contentHash?: string | null; publishedAt?: string | null;
-  type?: ReleaseType;
-}>): Promise<{ inserted: number; total: number }> {
+export async function insertReleasesBatch(
+  sourceSlug: string,
+  releaseRows: Array<{
+    version?: string | null;
+    title: string;
+    content: string;
+    url?: string | null;
+    contentHash?: string | null;
+    publishedAt?: string | null;
+    type?: ReleaseType;
+  }>,
+): Promise<{ inserted: number; total: number }> {
   // HTTP-level batching: send up to 100 rows per POST to keep round-trip
   // counts low for typical fetches. The worker chunks further internally
   // to stay under D1's 100 bound-parameter cap per statement.
   const REMOTE_CHUNK_SIZE = 100;
-  const chunks: typeof releaseRows[] = [];
+  const chunks: (typeof releaseRows)[] = [];
   for (let i = 0; i < releaseRows.length; i += REMOTE_CHUNK_SIZE) {
     chunks.push(releaseRows.slice(i, i + REMOTE_CHUNK_SIZE));
   }
@@ -483,8 +557,8 @@ export async function insertReleasesBatch(sourceSlug: string, releaseRows: Array
       apiFetch<{ inserted: number; total: number }>(`/v1/sources/${sourceSlug}/releases/batch`, {
         method: "POST",
         body: JSON.stringify({ releases: chunk }),
-      })
-    )
+      }),
+    ),
   );
 
   const succeeded = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
@@ -532,7 +606,13 @@ export async function createOrg(
 ): Promise<Organization> {
   return apiFetch<Organization>("/v1/orgs", {
     method: "POST",
-    body: JSON.stringify({ name, slug: opts?.slug, domain: opts?.domain, description: opts?.description, category: opts?.category }),
+    body: JSON.stringify({
+      name,
+      slug: opts?.slug,
+      domain: opts?.domain,
+      description: opts?.description,
+      category: opts?.category,
+    }),
   });
 }
 
@@ -540,16 +620,17 @@ export async function removeOrg(slug: string): Promise<void> {
   await apiFetch(`/v1/orgs/${slug}`, { method: "DELETE" });
 }
 
-export async function updateOrg(slug: string, data: Record<string, unknown>): Promise<Organization> {
+export async function updateOrg(
+  slug: string,
+  data: Record<string, unknown>,
+): Promise<Organization> {
   return apiFetch<Organization>(`/v1/orgs/${slug}`, {
     method: "PATCH",
     body: JSON.stringify(data),
   });
 }
 
-export async function getOrgAccountsBySlug(
-  orgSlug: string,
-): Promise<OrgAccount[]> {
+export async function getOrgAccountsBySlug(orgSlug: string): Promise<OrgAccount[]> {
   return apiFetch<OrgAccount[]>(`/v1/orgs/${orgSlug}/accounts`);
 }
 
@@ -586,7 +667,14 @@ export async function createProduct(
 ): Promise<Product> {
   return apiFetch<Product>(`/v1/products`, {
     method: "POST",
-    body: JSON.stringify({ orgId, name, slug: opts?.slug, url: opts?.url, description: opts?.description, category: opts?.category }),
+    body: JSON.stringify({
+      orgId,
+      name,
+      slug: opts?.slug,
+      url: opts?.url,
+      description: opts?.description,
+      category: opts?.category,
+    }),
   });
 }
 
@@ -594,7 +682,9 @@ export async function findProduct(identifier: string): Promise<Product | null> {
   return apiFetch<Product | null>(`/v1/products/${identifier}`);
 }
 
-export async function getProductsByOrg(orgId: string): Promise<Array<Product & { sourceCount: number }>> {
+export async function getProductsByOrg(
+  orgId: string,
+): Promise<Array<Product & { sourceCount: number }>> {
   return apiFetch<Array<Product & { sourceCount: number }>>(`/v1/products?orgId=${orgId}`);
 }
 
@@ -712,9 +802,7 @@ export async function getOverview(
   return apiFetch<KnowledgePage | null>(`/v1/overview?scope=${scope}&slug=${slug}`);
 }
 
-export async function getPlaybook(
-  slug: string,
-): Promise<KnowledgePage | null> {
+export async function getPlaybook(slug: string): Promise<KnowledgePage | null> {
   return apiFetch<KnowledgePage | null>(`/v1/playbook?slug=${slug}`);
 }
 
@@ -798,18 +886,25 @@ export async function deleteWebhookSubscription(id: string): Promise<void> {
   await apiFetch(`/v1/admin/webhooks/${id}`, { method: "DELETE" });
 }
 
-export async function testWebhookSubscription(id: string): Promise<{ enqueued: boolean; eventId: string }> {
+export async function testWebhookSubscription(
+  id: string,
+): Promise<{ enqueued: boolean; eventId: string }> {
   return apiFetch<{ enqueued: boolean; eventId: string }>(`/v1/admin/webhooks/${id}/test`, {
     method: "POST",
     body: JSON.stringify({}),
   });
 }
 
-export async function rotateWebhookSecret(id: string): Promise<{ secretVersion: number; signingKey: string }> {
-  return apiFetch<{ secretVersion: number; signingKey: string }>(`/v1/admin/webhooks/${id}/rotate-secret`, {
-    method: "POST",
-    body: JSON.stringify({}),
-  });
+export async function rotateWebhookSecret(
+  id: string,
+): Promise<{ secretVersion: number; signingKey: string }> {
+  return apiFetch<{ secretVersion: number; signingKey: string }>(
+    `/v1/admin/webhooks/${id}/rotate-secret`,
+    {
+      method: "POST",
+      body: JSON.stringify({}),
+    },
+  );
 }
 
 export type WebhookDeliveryRow = {
@@ -835,16 +930,16 @@ export async function getWebhookDeliveries(
   if (opts?.failed) params.set("failed", "true");
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   const qs = params.toString();
-  return apiFetch<WebhookDeliveriesResponse>(`/v1/admin/webhooks/${id}/deliveries${qs ? `?${qs}` : ""}`);
+  return apiFetch<WebhookDeliveriesResponse>(
+    `/v1/admin/webhooks/${id}/deliveries${qs ? `?${qs}` : ""}`,
+  );
 }
 
 // ── Media Assets ──
 
 import type { MediaAssetInput } from "../db/queries.js";
 
-export async function insertMediaAssets(
-  assets: MediaAssetInput[],
-): Promise<{ inserted: number }> {
+export async function insertMediaAssets(assets: MediaAssetInput[]): Promise<{ inserted: number }> {
   return apiFetch("/v1/media/assets", {
     method: "POST",
     body: JSON.stringify({ assets }),
@@ -855,7 +950,9 @@ export async function getMediaAssetStats(): Promise<{ count: number; totalBytes:
   return apiFetch("/v1/media/assets/stats");
 }
 
-export async function queryReleasesWithMedia(): Promise<{ id: string; sourceId: string; media: string }[]> {
+export async function queryReleasesWithMedia(): Promise<
+  { id: string; sourceId: string; media: string }[]
+> {
   return apiFetch("/v1/releases?hasMedia=true&fields=id,sourceId,media");
 }
 
@@ -869,8 +966,13 @@ export async function getSession(sessionId: string): Promise<Session | null> {
   return apiFetch<Session | null>(`/v1/sessions/${sessionId}`);
 }
 
-export async function getActiveSources(): Promise<{ slugs: string[]; sessionMap: Record<string, string> }> {
-  return apiFetch<{ slugs: string[]; sessionMap: Record<string, string> }>("/v1/sessions/active-sources");
+export async function getActiveSources(): Promise<{
+  slugs: string[];
+  sessionMap: Record<string, string>;
+}> {
+  return apiFetch<{ slugs: string[]; sessionMap: Record<string, string> }>(
+    "/v1/sessions/active-sources",
+  );
 }
 
 export async function cancelSession(sessionId: string): Promise<{ ok: boolean; error?: string }> {
@@ -931,13 +1033,17 @@ export async function addDomainAlias(
 }
 
 export async function removeDomainAlias(domain: string): Promise<boolean> {
-  const result = await apiFetch<{ deleted: boolean } | null>(`/v1/aliases/${encodeURIComponent(domain)}`, { method: "DELETE" });
+  const result = await apiFetch<{ deleted: boolean } | null>(
+    `/v1/aliases/${encodeURIComponent(domain)}`,
+    { method: "DELETE" },
+  );
   return result !== null;
 }
 
-export async function listDomainAliases(
-  target: { orgId?: string; productId?: string },
-): Promise<DomainAlias[]> {
+export async function listDomainAliases(target: {
+  orgId?: string;
+  productId?: string;
+}): Promise<DomainAlias[]> {
   if (!target.orgId && !target.productId) return [];
   const params = target.orgId ? `orgId=${target.orgId}` : `productId=${target.productId}`;
   return apiFetch<DomainAlias[]>(`/v1/aliases?${params}`);

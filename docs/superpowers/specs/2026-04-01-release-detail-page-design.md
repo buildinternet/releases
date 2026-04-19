@@ -29,6 +29,7 @@ Affects: `workers/api/src/routes/sources.ts` — the release mapping in the sour
 ### Update: Source/org routes accept slug or ID
 
 Update `GET /api/sources/:slugOrId` and `GET /api/orgs/:slugOrId` to resolve by either:
+
 - Slug (existing behavior, string like `nodejs`)
 - Canonical ID (e.g., `src_abc123` or `org_abc123`)
 
@@ -37,20 +38,24 @@ Detection: check if the param matches the ID prefix pattern (`src_`, `org_`), ot
 ## Page Layout
 
 ### Header
+
 - Version as primary heading (fall back to title if no version)
 - Published date, formatted consistently with list items
 
 ### Attribution
+
 - Source name with type icon, linking back to the source page
 - Org-aware linking: `/[orgSlug]/[sourceSlug]` for org sources, `/source/[slug]` for independent
 - External link to original changelog URL if available
 
 ### Content
+
 - Full markdown rendering — reuse existing markdown pipeline from `ReleaseListItem`
 - No collapse/truncation (unlike list view)
 - Embedded video support (YouTube, Vimeo, Loom)
 
 ### Media
+
 - Attached media displayed prominently at full width
 - Use `r2Url` when available, fall back to `sourceUrl`
 
@@ -74,6 +79,7 @@ ReleaseListItem (click permalink)
 ## Deployment
 
 Worker API changes must be deployed before the web app can use them:
+
 ```bash
 cd workers/api && wrangler deploy
 ```

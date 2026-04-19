@@ -53,9 +53,7 @@ describe("resolveConfig", () => {
   });
 
   test("throws on unknown provider", () => {
-    expect(() => resolveConfig({ provider: "bogus" as any })).toThrow(
-      /Unknown EMBEDDING_PROVIDER/,
-    );
+    expect(() => resolveConfig({ provider: "bogus" as any })).toThrow(/Unknown EMBEDDING_PROVIDER/);
   });
 });
 

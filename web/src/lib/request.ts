@@ -10,8 +10,6 @@ function isFormat(value: string): value is Format {
 /** Read the requested output format from the proxy header or query param. */
 export function getFormat(request: NextRequest): Format {
   const raw =
-    request.nextUrl.searchParams.get("format") ??
-    request.headers.get("x-format") ??
-    "json";
+    request.nextUrl.searchParams.get("format") ?? request.headers.get("x-format") ?? "json";
   return isFormat(raw) ? raw : "json";
 }

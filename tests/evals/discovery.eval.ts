@@ -116,7 +116,9 @@ function printDiscoveryGrade(grade: DiscoveryGrade): void {
 
   console.error(`\n  Status: ${grade.status}`);
   console.error(`  Sources found: ${grade.totalDiscovered}`);
-  console.error(`  Recall: ${(grade.recall * 100).toFixed(0)}% (${found}/${grade.sourceResults.length})`);
+  console.error(
+    `  Recall: ${(grade.recall * 100).toFixed(0)}% (${found}/${grade.sourceResults.length})`,
+  );
   console.error(`  Cost: $${grade.cost.toFixed(2)} | Turns: ${grade.turns}`);
 
   for (const result of grade.sourceResults) {

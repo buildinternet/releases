@@ -43,9 +43,7 @@ beforeEach(() => {
 async function seedCluster() {
   const db = testDatabase.db;
 
-  db.insert(organizations)
-    .values({ id: "org_test", name: "Test Org", slug: "test-org" })
-    .run();
+  db.insert(organizations).values({ id: "org_test", name: "Test Org", slug: "test-org" }).run();
   db.insert(sources)
     .values({
       id: "src_test",
@@ -116,7 +114,11 @@ describe("getLatestReleases — coverage collapse", () => {
     const scoped = await getLatestReleases({ slug: "test-src", count: 50 });
     expect(scoped.map((r) => r.id)).toEqual(["rel_canon"]);
 
-    const withCoverage = await getLatestReleases({ slug: "test-src", count: 50, includeCoverage: true });
+    const withCoverage = await getLatestReleases({
+      slug: "test-src",
+      count: 50,
+      includeCoverage: true,
+    });
     expect(withCoverage.map((r) => r.id).toSorted()).toEqual(["rel_blog", "rel_canon"]);
   });
 });

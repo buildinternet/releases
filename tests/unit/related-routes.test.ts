@@ -22,20 +22,14 @@ function buildApp() {
   return app;
 }
 
-function call(
-  path: string,
-  env: Record<string, unknown> = {},
-): Promise<Response> {
+function call(path: string, env: Record<string, unknown> = {}): Promise<Response> {
   const app = buildApp();
-  return app.fetch(
-    new Request(`http://local${path}`),
-    {
-      DB: {} as unknown,
-      RELEASES_INDEX: undefined,
-      ENTITIES_INDEX: undefined,
-      ...env,
-    },
-  );
+  return app.fetch(new Request(`http://local${path}`), {
+    DB: {} as unknown,
+    RELEASES_INDEX: undefined,
+    ENTITIES_INDEX: undefined,
+    ...env,
+  });
 }
 
 describe("GET /related/releases", () => {

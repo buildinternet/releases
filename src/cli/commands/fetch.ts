@@ -9,10 +9,21 @@ import { detectChangelogUrl, fetchChangelogFiles } from "@releases/adapters/gith
 import { getAdapter } from "../../adapters/resolve.js";
 import { contentHash } from "@releases/adapters/content-hash";
 import {
-  findSource, listAllSources, listFetchableSources, listSourcesWithChanges,
-  updateSource, deleteReleasesForSource, insertReleases, insertFetchLog,
-  upsertSummary, getMonthlySummary, getRecentReleases, getOrgById, getSourcesByOrg,
-  insertMediaAssets, clearChangeDetected,
+  findSource,
+  listAllSources,
+  listFetchableSources,
+  listSourcesWithChanges,
+  updateSource,
+  deleteReleasesForSource,
+  insertReleases,
+  insertFetchLog,
+  upsertSummary,
+  getMonthlySummary,
+  getRecentReleases,
+  getOrgById,
+  getSourcesByOrg,
+  insertMediaAssets,
+  clearChangeDetected,
   upsertChangelogFile,
   deleteChangelogFilesNotIn,
   findOrg,
@@ -22,7 +33,12 @@ import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
 import { regenerateOrgOverview, isActiveSource } from "../../ai/knowledge.js";
 import { logger } from "@buildinternet/releases-lib/logger";
-import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
+import {
+  processMediaForR2,
+  filterJunkMedia,
+  type MediaRef,
+  type MediaUploadProgress,
+} from "../../lib/media.js";
 import { MEDIA_PREFIX } from "../../lib/media-url.js";
 import { config } from "@releases/lib/config";
 import { elapsedFormatted, daysAgoIso } from "@releases/core-internal/dates";
@@ -46,9 +62,15 @@ export function registerFetchCommand(program: Command) {
     .option("--since <date>", "Only fetch releases after this date (ISO 8601 or YYYY-MM-DD)")
     .option("--max <n>", "Maximum number of releases to fetch per source (default: 200)")
     .option("--all", "Fetch all releases with no limits (overrides --max default)")
-    .option("--crawl", "Enable crawl mode for multi-page changelogs (scrape sources only, persists)")
+    .option(
+      "--crawl",
+      "Enable crawl mode for multi-page changelogs (scrape sources only, persists)",
+    )
     .option("--no-crawl", "One-off override to skip crawl mode for this invocation")
-    .option("--crawl-pattern <pattern>", "URL pattern to scope crawl (e.g. https://example.com/changelog/*)")
+    .option(
+      "--crawl-pattern <pattern>",
+      "URL pattern to scope crawl (e.g. https://example.com/changelog/*)",
+    )
     .option("--dry-run", "Run the adapter but skip DB inserts — show what would be fetched")
     .option("--force", "Delete existing releases for the source before fetching (clean re-fetch)")
     .option("--full", "Force full re-parse of all content (bypass incremental optimization)")
@@ -58,12 +80,20 @@ export function registerFetchCommand(program: Command) {
     .option("--retry-errors", "Only fetch sources whose last fetch was an error")
     .option("--no-summarize", "Skip summary generation after fetching")
     .option("--no-grouping", "Skip ingest-time release_coverage grouping")
-    .option("--skip-overview", "Skip end-of-fetch org overview regeneration (release summaries still run)")
+    .option(
+      "--skip-overview",
+      "Skip end-of-fetch org overview regeneration (release summaries still run)",
+    )
     .option("--skip-changelog", "Skip CHANGELOG.md fetch for GitHub sources")
     .option("--managed-agents", "Delegate fetching to a remote managed agent session")
-    .option("--org <slug>", "Fetch all active sources for an organization (combinable with other filters)")
+    .option(
+      "--org <slug>",
+      "Fetch all active sources for an organization (combinable with other filters)",
+    )
     .option("--concurrency <n>", "Number of sources to fetch in parallel (default: 1)", "1")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin source fetch src_abc123               Fetch a single source by ID (preferred)
   releases admin source fetch my-source                Fetch a single source by slug
@@ -77,907 +107,1047 @@ Examples:
   releases admin source fetch src_abc123 --force       Delete and re-fetch all releases
   releases admin source fetch --concurrency 5          Fetch 5 sources in parallel
   releases admin source fetch --json                   Output results as JSON
-  releases admin source fetch src_abc123 --managed-agents  Delegate fetch to a managed agent`)
-    .action(async (slugArg: string | undefined, opts: {
-      source?: string; json?: boolean; since?: string; max?: string; all?: boolean;
-      crawl?: boolean; crawlPattern?: string; dryRun?: boolean; force?: boolean; full?: boolean;
-      unfetched?: boolean; stale?: string; changed?: boolean; retryErrors?: boolean; concurrency?: string;
-      summarize?: boolean; grouping?: boolean; managedAgents?: boolean; skipChangelog?: boolean; skipOverview?: boolean; org?: string;
-    }) => {
-      // Positional arg takes precedence over --source option
-      const slug = slugArg ?? opts.source;
+  releases admin source fetch src_abc123 --managed-agents  Delegate fetch to a managed agent`,
+    )
+    .action(
+      async (
+        slugArg: string | undefined,
+        opts: {
+          source?: string;
+          json?: boolean;
+          since?: string;
+          max?: string;
+          all?: boolean;
+          crawl?: boolean;
+          crawlPattern?: string;
+          dryRun?: boolean;
+          force?: boolean;
+          full?: boolean;
+          unfetched?: boolean;
+          stale?: string;
+          changed?: boolean;
+          retryErrors?: boolean;
+          concurrency?: string;
+          summarize?: boolean;
+          grouping?: boolean;
+          managedAgents?: boolean;
+          skipChangelog?: boolean;
+          skipOverview?: boolean;
+          org?: string;
+        },
+      ) => {
+        // Positional arg takes precedence over --source option
+        const slug = slugArg ?? opts.source;
 
-      let orgFilter: { name: string; slug: string; id: string; activeSources: Source[]; activeSourceIds: Set<string> } | null = null;
-      if (opts.org) {
-        const org = await findOrg(opts.org);
-        if (!org) return orgNotFound(opts.org);
-        const activeSources = (await getSourcesByOrg(org.id)).filter(isActiveSource);
-        if (activeSources.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
+        let orgFilter: {
+          name: string;
+          slug: string;
+          id: string;
+          activeSources: Source[];
+          activeSourceIds: Set<string>;
+        } | null = null;
+        if (opts.org) {
+          const org = await findOrg(opts.org);
+          if (!org) return orgNotFound(opts.org);
+          const activeSources = (await getSourcesByOrg(org.id)).filter(isActiveSource);
+          if (activeSources.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log(chalk.yellow(`No active sources for ${org.name}.`));
+            }
+            return;
+          }
+          orgFilter = {
+            name: org.name,
+            slug: org.slug,
+            id: org.id,
+            activeSources,
+            activeSourceIds: new Set(activeSources.map((s) => s.id)),
+          };
+        }
+
+        // ── Managed agents delegation ──
+        if (opts.managedAgents) {
+          const apiUrl = process.env.RELEASED_API_URL;
+          const apiKey = process.env.RELEASED_API_KEY;
+          if (!apiUrl || !apiKey) {
+            logger.error("RELEASED_API_URL and RELEASED_API_KEY are required for --managed-agents");
+            process.exit(1);
+          }
+
+          // Resolve source identifiers from filters (prefer IDs over slugs)
+          let sourceIdentifiers: string[] = [];
+          let label = "manual fetch";
+
+          let orgId: string | undefined;
+
+          if (slug) {
+            // Resolve slug to ID for consistency — IDs are unambiguous
+            if (slug.startsWith("src_")) {
+              sourceIdentifiers = [slug];
+            } else {
+              const src = await apiClient.findSource(slug);
+              sourceIdentifiers = src ? [src.id] : [slug]; // fall back to slug if not found (let agent report the error)
+              if (src?.orgId) orgId = src.orgId;
+            }
+            label = slug;
+          } else if (opts.unfetched) {
+            const sources = await listFetchableSources({ mode: "unfetched" });
+            sourceIdentifiers = sources.map((s) => s.id);
+            label = `${sourceIdentifiers.length} unfetched sources`;
+          } else if (opts.stale) {
+            const hours = parseInt(opts.stale, 10);
+            const sources = await listFetchableSources({ mode: "stale", staleHours: hours });
+            sourceIdentifiers = sources.map((s) => s.id);
+            label = `${sourceIdentifiers.length} stale sources (>${hours}h)`;
+          } else if (opts.changed) {
+            const allChanged = await listSourcesWithChanges();
+            // Filter to scrape/agent sources only — feed and github sources are
+            // already fetched deterministically by the API cron, so sending them
+            // to a managed agent wastes tokens for no benefit.
+            const sources = allChanged.filter((s) => s.type === "scrape" || s.type === "agent");
+            const skipped = allChanged.length - sources.length;
+            if (skipped > 0) {
+              logger.info(`Skipping ${skipped} feed/github source(s) (handled by cron)`);
+            }
+            sourceIdentifiers = sources.map((s) => s.id);
+            label = `${sourceIdentifiers.length} changed scrape/agent sources`;
+          } else if (opts.retryErrors) {
+            const sources = await listFetchableSources({ mode: "retry_errors" });
+            sourceIdentifiers = sources.map((s) => s.id);
+            label = `${sourceIdentifiers.length} errored sources`;
+          } else if (orgFilter) {
+            sourceIdentifiers = Array.from(orgFilter.activeSourceIds);
+            orgId = orgFilter.id;
+            label = `all sources for ${orgFilter.slug} (${sourceIdentifiers.length})`;
           } else {
-            console.log(chalk.yellow(`No active sources for ${org.name}.`));
+            logger.error(
+              "--managed-agents requires a source slug or filter (--stale, --unfetched, --changed, --retry-errors, --org)",
+            );
+            process.exit(1);
+          }
+
+          // When --org is combined with another filter, narrow results to the org
+          const otherFilterUsed =
+            !!slug || opts.unfetched || !!opts.stale || opts.changed || opts.retryErrors;
+          if (orgFilter && otherFilterUsed && sourceIdentifiers.length > 0) {
+            const before = sourceIdentifiers.length;
+            sourceIdentifiers = sourceIdentifiers.filter((id) =>
+              orgFilter!.activeSourceIds.has(id),
+            );
+            orgId = orgFilter.id;
+            label = `${sourceIdentifiers.length} sources in ${orgFilter.slug} (narrowed from ${before})`;
+          }
+
+          if (sourceIdentifiers.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify({ sessionId: null, message: "No matching sources" }));
+            } else {
+              logger.info("No matching sources to fetch.");
+            }
+            return;
+          }
+
+          if (sourceIdentifiers.length > 20) {
+            logger.warn(
+              `Capping at 20 sources (${sourceIdentifiers.length} matched). Use multiple sessions for larger batches.`,
+            );
+            sourceIdentifiers = sourceIdentifiers.slice(0, 20);
+          }
+
+          const baseUrl = apiUrl.replace(/\/$/, "");
+          const res = await fetch(`${baseUrl}/v1/update`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${apiKey}`,
+            },
+            body: JSON.stringify({
+              company: label,
+              sourceIdentifiers,
+              orgId,
+              correlationId: newCorrelationId(),
+            }),
+          });
+
+          if (!res.ok) {
+            const body = await res.json().catch(() => ({ error: res.statusText }));
+            logger.error(
+              `Failed to start update session: ${(body as { error?: string }).error ?? res.statusText}`,
+            );
+            process.exit(1);
+          }
+
+          const result = (await res.json()) as { sessionId: string };
+          if (opts.json) {
+            console.log(JSON.stringify(result, null, 2));
+          } else {
+            logger.info(`Update session started: ${result.sessionId}`);
+            logger.info(
+              `Fetching ${sourceIdentifiers.length} source(s): ${sourceIdentifiers.join(", ")}`,
+            );
+            logger.info(`Track progress: releases admin discovery task list`);
           }
           return;
         }
-        orgFilter = {
-          name: org.name,
-          slug: org.slug,
-          id: org.id,
-          activeSources,
-          activeSourceIds: new Set(activeSources.map((s) => s.id)),
-        };
-      }
 
-      // ── Managed agents delegation ──
-      if (opts.managedAgents) {
-        const apiUrl = process.env.RELEASED_API_URL;
-        const apiKey = process.env.RELEASED_API_KEY;
-        if (!apiUrl || !apiKey) {
-          logger.error("RELEASED_API_URL and RELEASED_API_KEY are required for --managed-agents");
-          process.exit(1);
+        const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
+
+        let effectiveConcurrency = concurrency;
+        if (isRemoteMode()) {
+          if (concurrency === 1 && !opts.concurrency) {
+            effectiveConcurrency = REMOTE_DEFAULT_CONCURRENCY;
+          } else if (concurrency > REMOTE_MAX_CONCURRENCY) {
+            effectiveConcurrency = REMOTE_MAX_CONCURRENCY;
+            if (!opts.json) {
+              logger.warn(
+                `Remote concurrency capped at ${REMOTE_MAX_CONCURRENCY} (requested ${concurrency}).`,
+              );
+            }
+          }
         }
 
-        // Resolve source identifiers from filters (prefer IDs over slugs)
-        let sourceIdentifiers: string[] = [];
-        let label = "manual fetch";
-
-        let orgId: string | undefined;
+        const fetchResults: Array<{ source: string; newReleases: number; error?: string }> = [];
+        let targetSources: Source[];
 
         if (slug) {
-          // Resolve slug to ID for consistency — IDs are unambiguous
-          if (slug.startsWith("src_")) {
-            sourceIdentifiers = [slug];
-          } else {
-            const src = await apiClient.findSource(slug);
-            sourceIdentifiers = src ? [src.id] : [slug]; // fall back to slug if not found (let agent report the error)
-            if (src?.orgId) orgId = src.orgId;
+          const found = await findSource(slug);
+          if (!found) {
+            return sourceNotFound(slug);
           }
-          label = slug;
+          targetSources = [found];
         } else if (opts.unfetched) {
-          const sources = await listFetchableSources({ mode: "unfetched" });
-          sourceIdentifiers = sources.map(s => s.id);
-          label = `${sourceIdentifiers.length} unfetched sources`;
+          targetSources = await listFetchableSources({ mode: "unfetched" });
+          if (targetSources.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log(chalk.green("All sources have been fetched."));
+            }
+            return;
+          }
+          if (!opts.json) {
+            console.log(
+              chalk.bold(
+                `Fetching ${targetSources.length} unfetched source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`,
+              ),
+            );
+          }
+          // Default to 30 days of history for unfetched sources unless overridden
+          if (!opts.since && !opts.all) {
+            opts.since = daysAgoIso(30).split("T")[0];
+          }
         } else if (opts.stale) {
           const hours = parseInt(opts.stale, 10);
-          const sources = await listFetchableSources({ mode: "stale", staleHours: hours });
-          sourceIdentifiers = sources.map(s => s.id);
-          label = `${sourceIdentifiers.length} stale sources (>${hours}h)`;
+          targetSources = await listFetchableSources({ mode: "stale", staleHours: hours });
+          // Sort: normal priority first, then low; within each, oldest fetched first
+          targetSources.sort((a, b) => {
+            if (a.fetchPriority !== b.fetchPriority) return a.fetchPriority === "normal" ? -1 : 1;
+            return (a.lastFetchedAt ?? "").localeCompare(b.lastFetchedAt ?? "");
+          });
+          if (targetSources.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log(chalk.green("No stale sources found."));
+            }
+            return;
+          }
+          if (!opts.json) {
+            console.log(
+              chalk.bold(
+                `Fetching ${targetSources.length} stale source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`,
+              ),
+            );
+          }
         } else if (opts.changed) {
-          const allChanged = await listSourcesWithChanges();
-          // Filter to scrape/agent sources only — feed and github sources are
-          // already fetched deterministically by the API cron, so sending them
-          // to a managed agent wastes tokens for no benefit.
-          const sources = allChanged.filter(s => s.type === "scrape" || s.type === "agent");
-          const skipped = allChanged.length - sources.length;
-          if (skipped > 0) {
-            logger.info(`Skipping ${skipped} feed/github source(s) (handled by cron)`);
+          targetSources = await listSourcesWithChanges();
+          if (targetSources.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log(chalk.green("No sources with detected changes."));
+            }
+            return;
           }
-          sourceIdentifiers = sources.map(s => s.id);
-          label = `${sourceIdentifiers.length} changed scrape/agent sources`;
+          if (!opts.json) {
+            console.log(
+              chalk.bold(
+                `Fetching ${targetSources.length} changed source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`,
+              ),
+            );
+          }
         } else if (opts.retryErrors) {
-          const sources = await listFetchableSources({ mode: "retry_errors" });
-          sourceIdentifiers = sources.map(s => s.id);
-          label = `${sourceIdentifiers.length} errored sources`;
+          targetSources = await listFetchableSources({ mode: "retry_errors" });
+          if (targetSources.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log(chalk.green("No errored sources found."));
+            }
+            return;
+          }
+          if (!opts.json) {
+            console.log(
+              chalk.bold(
+                `Retrying ${targetSources.length} errored source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`,
+              ),
+            );
+          }
         } else if (orgFilter) {
-          sourceIdentifiers = Array.from(orgFilter.activeSourceIds);
-          orgId = orgFilter.id;
-          label = `all sources for ${orgFilter.slug} (${sourceIdentifiers.length})`;
-        } else {
-          logger.error("--managed-agents requires a source slug or filter (--stale, --unfetched, --changed, --retry-errors, --org)");
-          process.exit(1);
-        }
-
-        // When --org is combined with another filter, narrow results to the org
-        const otherFilterUsed = !!slug || opts.unfetched || !!opts.stale || opts.changed || opts.retryErrors;
-        if (orgFilter && otherFilterUsed && sourceIdentifiers.length > 0) {
-          const before = sourceIdentifiers.length;
-          sourceIdentifiers = sourceIdentifiers.filter((id) => orgFilter!.activeSourceIds.has(id));
-          orgId = orgFilter.id;
-          label = `${sourceIdentifiers.length} sources in ${orgFilter.slug} (narrowed from ${before})`;
-        }
-
-        if (sourceIdentifiers.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify({ sessionId: null, message: "No matching sources" }));
-          } else {
-            logger.info("No matching sources to fetch.");
-          }
-          return;
-        }
-
-        if (sourceIdentifiers.length > 20) {
-          logger.warn(`Capping at 20 sources (${sourceIdentifiers.length} matched). Use multiple sessions for larger batches.`);
-          sourceIdentifiers = sourceIdentifiers.slice(0, 20);
-        }
-
-        const baseUrl = apiUrl.replace(/\/$/, "");
-        const res = await fetch(`${baseUrl}/v1/update`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${apiKey}`,
-          },
-          body: JSON.stringify({ company: label, sourceIdentifiers, orgId, correlationId: newCorrelationId() }),
-        });
-
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({ error: res.statusText }));
-          logger.error(`Failed to start update session: ${(body as { error?: string }).error ?? res.statusText}`);
-          process.exit(1);
-        }
-
-        const result = await res.json() as { sessionId: string };
-        if (opts.json) {
-          console.log(JSON.stringify(result, null, 2));
-        } else {
-          logger.info(`Update session started: ${result.sessionId}`);
-          logger.info(`Fetching ${sourceIdentifiers.length} source(s): ${sourceIdentifiers.join(", ")}`);
-          logger.info(`Track progress: releases admin discovery task list`);
-        }
-        return;
-      }
-
-      const concurrency = Math.max(1, parseInt(opts.concurrency ?? "1", 10));
-
-      let effectiveConcurrency = concurrency;
-      if (isRemoteMode()) {
-        if (concurrency === 1 && !opts.concurrency) {
-          effectiveConcurrency = REMOTE_DEFAULT_CONCURRENCY;
-        } else if (concurrency > REMOTE_MAX_CONCURRENCY) {
-          effectiveConcurrency = REMOTE_MAX_CONCURRENCY;
+          // Bare --org bypasses the remote bulk-fetch block since it's org-scoped.
+          targetSources = orgFilter.activeSources;
           if (!opts.json) {
-            logger.warn(`Remote concurrency capped at ${REMOTE_MAX_CONCURRENCY} (requested ${concurrency}).`);
+            console.log(
+              chalk.bold(
+                `Fetching ${targetSources.length} source${targetSources.length > 1 ? "s" : ""} for ${orgFilter.name} (concurrency: ${effectiveConcurrency})\n`,
+              ),
+            );
           }
-        }
-      }
-
-      const fetchResults: Array<{ source: string; newReleases: number; error?: string }> = [];
-      let targetSources: Source[];
-
-      if (slug) {
-        const found = await findSource(slug);
-        if (!found) {
-          return sourceNotFound(slug);
-        }
-        targetSources = [found];
-      } else if (opts.unfetched) {
-        targetSources = await listFetchableSources({ mode: "unfetched" });
-        if (targetSources.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.green("All sources have been fetched."));
-          }
-          return;
-        }
-        if (!opts.json) {
-          console.log(chalk.bold(`Fetching ${targetSources.length} unfetched source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
-        }
-        // Default to 30 days of history for unfetched sources unless overridden
-        if (!opts.since && !opts.all) {
-          opts.since = daysAgoIso(30).split("T")[0];
-        }
-      } else if (opts.stale) {
-        const hours = parseInt(opts.stale, 10);
-        targetSources = await listFetchableSources({ mode: "stale", staleHours: hours });
-        // Sort: normal priority first, then low; within each, oldest fetched first
-        targetSources.sort((a, b) => {
-          if (a.fetchPriority !== b.fetchPriority) return a.fetchPriority === 'normal' ? -1 : 1;
-          return (a.lastFetchedAt ?? '').localeCompare(b.lastFetchedAt ?? '');
-        });
-        if (targetSources.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.green("No stale sources found."));
-          }
-          return;
-        }
-        if (!opts.json) {
-          console.log(chalk.bold(`Fetching ${targetSources.length} stale source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
-        }
-      } else if (opts.changed) {
-        targetSources = await listSourcesWithChanges();
-        if (targetSources.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.green("No sources with detected changes."));
-          }
-          return;
-        }
-        if (!opts.json) {
-          console.log(chalk.bold(`Fetching ${targetSources.length} changed source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
-        }
-      } else if (opts.retryErrors) {
-        targetSources = await listFetchableSources({ mode: "retry_errors" });
-        if (targetSources.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.green("No errored sources found."));
-          }
-          return;
-        }
-        if (!opts.json) {
-          console.log(chalk.bold(`Retrying ${targetSources.length} errored source${targetSources.length > 1 ? "s" : ""} (concurrency: ${effectiveConcurrency})\n`));
-        }
-      } else if (orgFilter) {
-        // Bare --org bypasses the remote bulk-fetch block since it's org-scoped.
-        targetSources = orgFilter.activeSources;
-        if (!opts.json) {
-          console.log(chalk.bold(`Fetching ${targetSources.length} source${targetSources.length > 1 ? "s" : ""} for ${orgFilter.name} (concurrency: ${effectiveConcurrency})\n`));
-        }
-      } else {
-        if (isRemoteMode()) {
-          console.error(chalk.red("Remote fetch requires a filter to prevent expensive bulk operations."));
-          console.error(chalk.gray("Use one of: a source slug, --stale <hours>, --unfetched, --changed, --retry-errors, or --org <slug>."));
-          process.exit(1);
-        }
-        targetSources = await listAllSources();
-        if (targetSources.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.yellow("No sources configured. Use `releases admin source add` to add one."));
-          }
-          return;
-        }
-      }
-
-      // When --org is combined with another filter, narrow results to that org.
-      // The bare --org branch above already produced org-scoped sources.
-      if (orgFilter && (slug || opts.unfetched || opts.stale || opts.changed || opts.retryErrors)) {
-        const before = targetSources.length;
-        targetSources = targetSources.filter((s) => orgFilter!.activeSourceIds.has(s.id));
-        if (!opts.json && targetSources.length < before) {
-          console.log(chalk.dim(`Narrowed to ${targetSources.length} source${targetSources.length === 1 ? "" : "s"} in ${orgFilter.name} (from ${before}).`));
-        }
-        if (targetSources.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log(chalk.yellow(`No matching sources in ${orgFilter.name}.`));
-          }
-          return;
-        }
-      }
-
-      // Build fetch options with defaults
-      const DEFAULT_MAX_RELEASES = 200;
-      const fetchOptions: FetchOptions = {};
-      if (!opts.all) {
-        if (opts.since) {
-          fetchOptions.since = new Date(opts.since);
-        }
-        if (opts.max) {
-          fetchOptions.maxEntries = parseInt(opts.max, 10);
         } else {
-          fetchOptions.maxEntries = DEFAULT_MAX_RELEASES;
+          if (isRemoteMode()) {
+            console.error(
+              chalk.red("Remote fetch requires a filter to prevent expensive bulk operations."),
+            );
+            console.error(
+              chalk.gray(
+                "Use one of: a source slug, --stale <hours>, --unfetched, --changed, --retry-errors, or --org <slug>.",
+              ),
+            );
+            process.exit(1);
+          }
+          targetSources = await listAllSources();
+          if (targetSources.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log(
+                chalk.yellow("No sources configured. Use `releases admin source add` to add one."),
+              );
+            }
+            return;
+          }
         }
-      }
 
-      // ── Session tracking for remote mode ──
-      const correlationId = newCorrelationId();
-      const sessionId = crypto.randomUUID();
-      let sessionCompany = "";
-      let sessionReleasesFound = 0;
-      let sessionReleasesInserted = 0;
-      let sessionSourcesFetched = 0;
-      let lastProgressAt = 0;
-      const PROGRESS_INTERVAL_MS = 2000;
+        // When --org is combined with another filter, narrow results to that org.
+        // The bare --org branch above already produced org-scoped sources.
+        if (
+          orgFilter &&
+          (slug || opts.unfetched || opts.stale || opts.changed || opts.retryErrors)
+        ) {
+          const before = targetSources.length;
+          targetSources = targetSources.filter((s) => orgFilter!.activeSourceIds.has(s.id));
+          if (!opts.json && targetSources.length < before) {
+            console.log(
+              chalk.dim(
+                `Narrowed to ${targetSources.length} source${targetSources.length === 1 ? "" : "s"} in ${orgFilter.name} (from ${before}).`,
+              ),
+            );
+          }
+          if (targetSources.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log(chalk.yellow(`No matching sources in ${orgFilter.name}.`));
+            }
+            return;
+          }
+        }
 
-      async function startSession() {
-        if (!isRemoteMode() || targetSources.length === 0) return;
-        sessionCompany = targetSources.length === 1
-          ? targetSources[0].name
-          : `${targetSources.length} sources`;
-        const runner = process.env.RELEASED_RUNNER_ID || os.hostname();
-        await apiClient.postStatusEvent({
-          type: "session:start",
-          sessionId,
-          company: sessionCompany,
-          sessionType: "update",
-          runner,
-          correlationId,
-          activeSources: targetSources.map((s) => s.slug),
-        }).catch(() => {});
-      }
+        // Build fetch options with defaults
+        const DEFAULT_MAX_RELEASES = 200;
+        const fetchOptions: FetchOptions = {};
+        if (!opts.all) {
+          if (opts.since) {
+            fetchOptions.since = new Date(opts.since);
+          }
+          if (opts.max) {
+            fetchOptions.maxEntries = parseInt(opts.max, 10);
+          } else {
+            fetchOptions.maxEntries = DEFAULT_MAX_RELEASES;
+          }
+        }
 
-      async function progressSession(logLine?: string) {
-        if (!isRemoteMode()) return;
-        const now = Date.now();
-        // Always send if there's a log line, otherwise throttle
-        if (!logLine && now - lastProgressAt < PROGRESS_INTERVAL_MS && sessionSourcesFetched < targetSources.length) return;
-        lastProgressAt = now;
-        const remainingSlugs = targetSources.slice(sessionSourcesFetched).map((s) => s.slug);
-        try {
-          const result = await apiClient.postStatusEvent({
-            type: "session:progress",
-            sessionId,
-            step: "fetching",
-            totalSources: targetSources.length,
-            sourcesFetched: sessionSourcesFetched,
-            releasesFound: sessionReleasesFound,
-            releasesInserted: sessionReleasesInserted,
-            activeSources: remainingSlugs,
-            ...(logLine ? { logLine, currentAction: logLine } : {}),
-          });
-          if (result.cancelRequested && !stopping) {
-            stopping = true;
+        // ── Session tracking for remote mode ──
+        const correlationId = newCorrelationId();
+        const sessionId = crypto.randomUUID();
+        let sessionCompany = "";
+        let sessionReleasesFound = 0;
+        let sessionReleasesInserted = 0;
+        let sessionSourcesFetched = 0;
+        let lastProgressAt = 0;
+        const PROGRESS_INTERVAL_MS = 2000;
+
+        async function startSession() {
+          if (!isRemoteMode() || targetSources.length === 0) return;
+          sessionCompany =
+            targetSources.length === 1 ? targetSources[0].name : `${targetSources.length} sources`;
+          const runner = process.env.RELEASED_RUNNER_ID || os.hostname();
+          await apiClient
+            .postStatusEvent({
+              type: "session:start",
+              sessionId,
+              company: sessionCompany,
+              sessionType: "update",
+              runner,
+              correlationId,
+              activeSources: targetSources.map((s) => s.slug),
+            })
+            .catch(() => {});
+        }
+
+        async function progressSession(logLine?: string) {
+          if (!isRemoteMode()) return;
+          const now = Date.now();
+          // Always send if there's a log line, otherwise throttle
+          if (
+            !logLine &&
+            now - lastProgressAt < PROGRESS_INTERVAL_MS &&
+            sessionSourcesFetched < targetSources.length
+          )
+            return;
+          lastProgressAt = now;
+          const remainingSlugs = targetSources.slice(sessionSourcesFetched).map((s) => s.slug);
+          try {
+            const result = await apiClient.postStatusEvent({
+              type: "session:progress",
+              sessionId,
+              step: "fetching",
+              totalSources: targetSources.length,
+              sourcesFetched: sessionSourcesFetched,
+              releasesFound: sessionReleasesFound,
+              releasesInserted: sessionReleasesInserted,
+              activeSources: remainingSlugs,
+              ...(logLine ? { logLine, currentAction: logLine } : {}),
+            });
+            if (result.cancelRequested && !stopping) {
+              stopping = true;
+              if (!opts.json) {
+                process.stderr.write(`\n${chalk.yellow(CANCEL_MSG)}\n`);
+              }
+            }
+          } catch {
+            // Non-critical — don't fail the fetch
+          }
+        }
+
+        let cancelCheckedAt = 0;
+        const CANCEL_CHECK_INTERVAL_MS = 30000; // Fallback only — primary cancel detection is piggybacked on progress events
+
+        async function checkCancelled(): Promise<boolean> {
+          if (!isRemoteMode()) return false;
+          const now = Date.now();
+          if (now - cancelCheckedAt < CANCEL_CHECK_INTERVAL_MS) return false;
+          cancelCheckedAt = now;
+          try {
+            const session = await apiClient.getSession(sessionId);
+            return session?.cancelRequested === true;
+          } catch {
+            return false;
+          }
+        }
+
+        async function endSession(error?: string) {
+          if (!isRemoteMode()) return;
+          await apiClient
+            .postStatusEvent({
+              type: error ? "session:error" : "session:complete",
+              sessionId,
+              ...(error ? { error } : {}),
+            })
+            .catch(() => {});
+        }
+
+        let completed = 0;
+        let active = 0;
+        let totalInserted = 0;
+        let stopping = false;
+        const total = targetSources.length;
+        const fetchStartTime = performance.now();
+        const orgsNeedingKnowledgeUpdate = new Set<string>();
+        const orgsNeedingGrouping = new Set<string>();
+        const showProgress = !opts.json && total > 1 && effectiveConcurrency > 1;
+        const showSummary = !opts.json && total > 1;
+
+        function onSigint() {
+          if (stopping) return;
+          stopping = true;
+          if (!opts.json) {
+            process.stderr.write(
+              `\n${chalk.yellow(`Stopping gracefully — waiting for ${active} active fetch(es) to finish...`)}\n`,
+            );
+          }
+        }
+        process.on("SIGINT", onSigint);
+
+        let lastSourceName = "";
+
+        function printProgress(sourceName?: string) {
+          if (!showProgress) return;
+          if (sourceName) lastSourceName = sourceName;
+          const pct = Math.round((completed / total) * 100);
+          const elapsed = elapsedFormatted(fetchStartTime);
+          const bar = chalk.gray(`[${completed}/${total}]`);
+          const errCount = fetchResults.filter((r) => r.error).length;
+          const activeStr = active > 0 ? chalk.gray(` (${active} active)`) : "";
+          const errStr = errCount > 0 ? chalk.red(` ${errCount} failed`) : "";
+          const insertStr = totalInserted > 0 ? chalk.green(` ${totalInserted} new`) : "";
+          const current = lastSourceName ? ` ${chalk.cyan(stripAnsi(lastSourceName))}` : "";
+          const time = chalk.gray(` ${elapsed}`);
+          process.stderr.write(
+            `\r${bar} ${pct}%${current}${activeStr}${insertStr}${errStr}${time}${"".padEnd(20)}`,
+          );
+        }
+
+        async function fetchOne(source: Source): Promise<void> {
+          const adapter = getAdapter(source.type);
+          if (!adapter) {
+            completed++;
+            return;
+          }
+
+          let sourceModified = false;
+
+          // Handle --crawl flag: persist on scrape sources, warn on others
+          if (opts.crawl === true && source.type !== "scrape") {
             if (!opts.json) {
-              process.stderr.write(`\n${chalk.yellow(CANCEL_MSG)}\n`);
+              logger.warn(
+                `--crawl is only supported for scrape sources, skipping for ${source.name} (${source.type})`,
+              );
             }
           }
-        } catch {
-          // Non-critical — don't fail the fetch
-        }
-      }
 
-      let cancelCheckedAt = 0;
-      const CANCEL_CHECK_INTERVAL_MS = 30000; // Fallback only — primary cancel detection is piggybacked on progress events
-
-      async function checkCancelled(): Promise<boolean> {
-        if (!isRemoteMode()) return false;
-        const now = Date.now();
-        if (now - cancelCheckedAt < CANCEL_CHECK_INTERVAL_MS) return false;
-        cancelCheckedAt = now;
-        try {
-          const session = await apiClient.getSession(sessionId);
-          return session?.cancelRequested === true;
-        } catch {
-          return false;
-        }
-      }
-
-      async function endSession(error?: string) {
-        if (!isRemoteMode()) return;
-        await apiClient.postStatusEvent({
-          type: error ? "session:error" : "session:complete",
-          sessionId,
-          ...(error ? { error } : {}),
-        }).catch(() => {});
-      }
-
-      let completed = 0;
-      let active = 0;
-      let totalInserted = 0;
-      let stopping = false;
-      const total = targetSources.length;
-      const fetchStartTime = performance.now();
-      const orgsNeedingKnowledgeUpdate = new Set<string>();
-      const orgsNeedingGrouping = new Set<string>();
-      const showProgress = !opts.json && total > 1 && effectiveConcurrency > 1;
-      const showSummary = !opts.json && total > 1;
-
-      function onSigint() {
-        if (stopping) return;
-        stopping = true;
-        if (!opts.json) {
-          process.stderr.write(`\n${chalk.yellow(`Stopping gracefully — waiting for ${active} active fetch(es) to finish...`)}\n`);
-        }
-      }
-      process.on("SIGINT", onSigint);
-
-      let lastSourceName = "";
-
-      function printProgress(sourceName?: string) {
-        if (!showProgress) return;
-        if (sourceName) lastSourceName = sourceName;
-        const pct = Math.round((completed / total) * 100);
-        const elapsed = elapsedFormatted(fetchStartTime);
-        const bar = chalk.gray(`[${completed}/${total}]`);
-        const errCount = fetchResults.filter((r) => r.error).length;
-        const activeStr = active > 0 ? chalk.gray(` (${active} active)`) : "";
-        const errStr = errCount > 0 ? chalk.red(` ${errCount} failed`) : "";
-        const insertStr = totalInserted > 0 ? chalk.green(` ${totalInserted} new`) : "";
-        const current = lastSourceName ? ` ${chalk.cyan(stripAnsi(lastSourceName))}` : "";
-        const time = chalk.gray(` ${elapsed}`);
-        process.stderr.write(`\r${bar} ${pct}%${current}${activeStr}${insertStr}${errStr}${time}${"".padEnd(20)}`);
-      }
-
-      async function fetchOne(source: Source): Promise<void> {
-        const adapter = getAdapter(source.type);
-        if (!adapter) {
-          completed++;
-          return;
-        }
-
-        let sourceModified = false;
-
-        // Handle --crawl flag: persist on scrape sources, warn on others
-        if (opts.crawl === true && source.type !== "scrape") {
-          if (!opts.json) {
-            logger.warn(`--crawl is only supported for scrape sources, skipping for ${source.name} (${source.type})`);
-          }
-        }
-
-        if (opts.crawl === true && source.type === "scrape" && !opts.dryRun) {
-          const pattern = opts.crawlPattern ?? `${source.url.replace(/\/$/, "")}/**`;
-          await updateSourceMeta(source, {
-            crawlEnabled: true,
-            crawlPattern: pattern,
-          });
-          await updateSource(source, { lastContentHash: null });
-          sourceModified = true;
-          if (!opts.json) {
-            logger.info(`Crawl mode enabled for ${source.name} (pattern: ${pattern})`);
-          }
-        }
-
-        // --force: delete existing releases for a clean re-fetch
-        if (opts.force && !opts.dryRun) {
-          const deletedCount = await deleteReleasesForSource(source);
-          if (!opts.json && deletedCount > 0) {
-            logger.info(`Cleared ${deletedCount} existing release(s) for ${source.name}`);
-          }
-          await updateSource(source, { lastContentHash: null, lastFetchedAt: null });
-          await updateSourceMeta(source, { lastCrawlAt: undefined, feedEtag: undefined, feedLastModified: undefined, feedContentLength: undefined });
-          sourceModified = true;
-        }
-
-        // Reload source from DB if we modified metadata/columns so the adapter sees fresh data
-        if (sourceModified) {
-          const reloaded = await findSource(source.slug);
-          if (reloaded) source = reloaded;
-        }
-
-        // Build per-source fetch options (clone to avoid mutation across concurrent fetches)
-        const sourceFetchOptions: FetchOptions = {
-          ...fetchOptions,
-          crawl: opts.crawl,
-          full: opts.full,
-          dryRun: opts.dryRun,
-          bustCache: opts.force,
-          onParseProgress: (completed, total) => {
-            progressSession(`${source.name}: parsing chunk ${completed}/${total}`);
-          },
-        };
-
-        if (!opts.json && !showProgress) {
-          const limits = [];
-          if (sourceFetchOptions.since) limits.push(`since ${sourceFetchOptions.since.toISOString().split("T")[0]}`);
-          if (sourceFetchOptions.maxEntries) limits.push(`max ${sourceFetchOptions.maxEntries}`);
-          const limitStr = limits.length > 0 ? ` (${limits.join(", ")})` : "";
-          logger.info(`Fetching releases from ${chalk.cyan(source.name)}${limitStr}...`);
-        }
-
-        active++;
-        printProgress(source.name);
-        progressSession(`Fetching ${source.name}...`);
-        const startTime = performance.now();
-
-        let rawContent: string | undefined;
-        try {
-          const result = await adapter.fetch(source, sourceFetchOptions);
-          const rawReleases = result.releases;
-          rawContent = result.rawContent;
-
-          if (rawReleases.length === 0) {
-            if (!opts.json && !showProgress) {
-              const msg = source.type === "scrape"
-                ? `No changes detected for ${source.name}`
-                : `No releases found for ${source.name}`;
-              console.log(chalk.yellow(`${msg} ${chalk.dim(`(${elapsedFormatted(startTime)})`)}`));
+          if (opts.crawl === true && source.type === "scrape" && !opts.dryRun) {
+            const pattern = opts.crawlPattern ?? `${source.url.replace(/\/$/, "")}/**`;
+            await updateSourceMeta(source, {
+              crawlEnabled: true,
+              crawlPattern: pattern,
+            });
+            await updateSource(source, { lastContentHash: null });
+            sourceModified = true;
+            if (!opts.json) {
+              logger.info(`Crawl mode enabled for ${source.name} (pattern: ${pattern})`);
             }
-            if (!opts.dryRun) {
+          }
+
+          // --force: delete existing releases for a clean re-fetch
+          if (opts.force && !opts.dryRun) {
+            const deletedCount = await deleteReleasesForSource(source);
+            if (!opts.json && deletedCount > 0) {
+              logger.info(`Cleared ${deletedCount} existing release(s) for ${source.name}`);
+            }
+            await updateSource(source, { lastContentHash: null, lastFetchedAt: null });
+            await updateSourceMeta(source, {
+              lastCrawlAt: undefined,
+              feedEtag: undefined,
+              feedLastModified: undefined,
+              feedContentLength: undefined,
+            });
+            sourceModified = true;
+          }
+
+          // Reload source from DB if we modified metadata/columns so the adapter sees fresh data
+          if (sourceModified) {
+            const reloaded = await findSource(source.slug);
+            if (reloaded) source = reloaded;
+          }
+
+          // Build per-source fetch options (clone to avoid mutation across concurrent fetches)
+          const sourceFetchOptions: FetchOptions = {
+            ...fetchOptions,
+            crawl: opts.crawl,
+            full: opts.full,
+            dryRun: opts.dryRun,
+            bustCache: opts.force,
+            onParseProgress: (completed, total) => {
+              progressSession(`${source.name}: parsing chunk ${completed}/${total}`);
+            },
+          };
+
+          if (!opts.json && !showProgress) {
+            const limits = [];
+            if (sourceFetchOptions.since)
+              limits.push(`since ${sourceFetchOptions.since.toISOString().split("T")[0]}`);
+            if (sourceFetchOptions.maxEntries) limits.push(`max ${sourceFetchOptions.maxEntries}`);
+            const limitStr = limits.length > 0 ? ` (${limits.join(", ")})` : "";
+            logger.info(`Fetching releases from ${chalk.cyan(source.name)}${limitStr}...`);
+          }
+
+          active++;
+          printProgress(source.name);
+          progressSession(`Fetching ${source.name}...`);
+          const startTime = performance.now();
+
+          let rawContent: string | undefined;
+          try {
+            const result = await adapter.fetch(source, sourceFetchOptions);
+            const rawReleases = result.releases;
+            rawContent = result.rawContent;
+
+            if (rawReleases.length === 0) {
+              if (!opts.json && !showProgress) {
+                const msg =
+                  source.type === "scrape"
+                    ? `No changes detected for ${source.name}`
+                    : `No releases found for ${source.name}`;
+                console.log(
+                  chalk.yellow(`${msg} ${chalk.dim(`(${elapsedFormatted(startTime)})`)}`),
+                );
+              }
+              if (!opts.dryRun) {
+                await insertFetchLog({
+                  sourceId: source.id,
+                  releasesFound: 0,
+                  releasesInserted: 0,
+                  durationMs: Math.round(performance.now() - startTime),
+                  status: "no_change",
+                  rawContent: rawContent ?? null,
+                });
+
+                // Update backoff counters for no_change
+                const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
+                const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
+                const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
+                await updateSource(source, {
+                  consecutiveNoChange: newNoChange,
+                  consecutiveErrors: 0,
+                  nextFetchAfter: nextFetch,
+                });
+                await clearChangeDetected(source);
+              }
+              fetchResults.push({ source: source.name, newReleases: 0 });
+              progressSession(`${source.name}: no changes`);
+              return;
+            }
+
+            // ── Dry-run: show results without writing releases to DB ──
+            if (opts.dryRun) {
+              fetchResults.push({ source: source.name, newReleases: rawReleases.length });
+              totalInserted += rawReleases.length;
+              sessionReleasesFound += rawReleases.length;
+
+              // Log to fetch_log with dry_run status so stats shows it correctly
               await insertFetchLog({
                 sourceId: source.id,
-                releasesFound: 0,
+                releasesFound: rawReleases.length,
                 releasesInserted: 0,
                 durationMs: Math.round(performance.now() - startTime),
-                status: "no_change",
+                status: "dry_run",
                 rawContent: rawContent ?? null,
               });
 
-              // Update backoff counters for no_change
-              const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
-              const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
-              const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
-              await updateSource(source, {
-                consecutiveNoChange: newNoChange,
-                consecutiveErrors: 0,
-                nextFetchAfter: nextFetch,
-              });
-              await clearChangeDetected(source);
+              if (!opts.json) {
+                console.log(
+                  chalk.bold(
+                    `\n${source.name}: ${rawReleases.length} release(s) found ${chalk.dim(`(${elapsedFormatted(startTime)})`)}\n`,
+                  ),
+                );
+                for (const raw of rawReleases) {
+                  const date = raw.publishedAt
+                    ? chalk.gray(raw.publishedAt.toISOString().split("T")[0])
+                    : chalk.gray("no date");
+                  const version = raw.version ? chalk.cyan(`[${raw.version}] `) : "";
+                  console.log(`  ${version}${stripAnsi(raw.title)}  ${date}`);
+                  if (raw.url) console.log(`    ${chalk.dim(stripAnsi(raw.url))}`);
+                }
+              }
+              return;
             }
-            fetchResults.push({ source: source.name, newReleases: 0 });
-            progressSession(`${source.name}: no changes`);
-            return;
-          }
 
-          // ── Dry-run: show results without writing releases to DB ──
-          if (opts.dryRun) {
-            fetchResults.push({ source: source.name, newReleases: rawReleases.length });
-            totalInserted += rawReleases.length;
+            // Filter junk media (avatars, logos, tracking pixels) before storing.
+            // Two-stage: deterministic pre-checks + AI classifier for ambiguous URLs
+            // (classify-media-relevance skill, see src/ai/classify-media.ts).
+            let totalDropped = 0;
+            for (const raw of rawReleases) {
+              if (raw.media && raw.media.length > 0) {
+                const filtered = await filterJunkMedia(raw.media, raw.content, {
+                  releaseTitle: raw.title,
+                  releaseContent: raw.content,
+                  sourceSlug: source.slug,
+                });
+                raw.media = filtered.media;
+                raw.content = filtered.content;
+                totalDropped += filtered.dropped.length;
+                for (const d of filtered.dropped) {
+                  logger.debug(`Filtered junk media: ${d.reason} — ${d.url}`);
+                }
+              }
+            }
+            if (totalDropped > 0) {
+              logger.info(`Filtered ${totalDropped} junk media item(s) for ${source.slug}`);
+            }
+
+            const rows = rawReleases.map((raw) => ({
+              sourceId: source.id,
+              version: raw.version ?? null,
+              type: raw.type ?? "feature",
+              title: raw.title,
+              content: raw.content,
+              url: raw.url ?? null,
+              contentHash: contentHash(raw),
+              publishedAt: raw.publishedAt?.toISOString() ?? null,
+              media: JSON.stringify(raw.media ?? []),
+            }));
+
+            // Upload media to R2 and rewrite URLs (remote mode only)
+            const apiUrl = config.apiUrl();
+            let pendingAssets: Array<
+              import("../../lib/media.js").UploadResult & { sourceId: string }
+            > = [];
+            if (apiUrl) {
+              const parsed = rows.map((row) => {
+                if (!row.media || row.media === "[]") return [];
+                try {
+                  return JSON.parse(row.media) as MediaRef[];
+                } catch {
+                  return [];
+                }
+              });
+              const allMedia = parsed.flat().filter((m) => m.url);
+              if (allMedia.length > 0) {
+                const imageCount = allMedia.filter(
+                  (m) => m.type === "image" || m.type === "gif",
+                ).length;
+                const videoCount = allMedia.filter((m) => m.type === "video").length;
+                const releasesWithMedia = parsed.filter((m) => m.length > 0).length;
+                progressSession(
+                  `${source.name}: found ${imageCount} image${imageCount !== 1 ? "s" : ""}, ${videoCount} video${videoCount !== 1 ? "s" : ""} in ${releasesWithMedia} release${releasesWithMedia !== 1 ? "s" : ""}`,
+                );
+
+                const { uploads: uploadResults, failureReasons } = await processMediaForR2(
+                  allMedia,
+                  source.slug,
+                  (progress: MediaUploadProgress) => {
+                    progressSession(
+                      `${source.name}: uploading ${progress.uploaded}/${progress.total} images to R2...`,
+                    );
+                  },
+                );
+
+                // Emit completion summary
+                const totalBytes = uploadResults.reduce((sum, r) => sum + r.byteSize, 0);
+                const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
+                const failedCount = allMedia.length - uploadResults.length;
+                if (uploadResults.length > 0) {
+                  progressSession(
+                    `${source.name}: uploaded ${uploadResults.length} image${uploadResults.length !== 1 ? "s" : ""} (${totalMB} MB) to R2`,
+                  );
+                }
+                if (failedCount > 0) {
+                  const reasonSummary = Object.entries(failureReasons)
+                    .map(([reason, count]) => `${reason} (${count})`)
+                    .join(", ");
+                  progressSession(
+                    `${source.name}: failed to upload ${failedCount} image${failedCount !== 1 ? "s" : ""}${reasonSummary ? `: ${reasonSummary}` : ""}`,
+                  );
+                }
+
+                for (let i = 0; i < rows.length; i++) {
+                  const media = parsed[i];
+                  if (media.length === 0) continue;
+                  let content = rows[i].content;
+                  for (const m of media) {
+                    if (m.r2Key) content = content.replaceAll(m.url, `${MEDIA_PREFIX}${m.r2Key}`);
+                  }
+                  rows[i].content = content;
+                  rows[i].media = JSON.stringify(media);
+                }
+                pendingAssets = uploadResults.map((r) => ({ ...r, sourceId: source.id }));
+              }
+            }
+
+            // Insert releases and register media assets concurrently
+            const [inserted] = await Promise.all([
+              insertReleases(source, rows),
+              pendingAssets.length > 0
+                ? insertMediaAssets(pendingAssets).then((n) => {
+                    logger.info(`Registered ${n} media asset(s) for ${source.slug}`);
+                  })
+                : Promise.resolve(),
+            ]);
+            totalInserted += inserted;
+
+            // Detect changelog URL for GitHub sources (one-time)
+            if (source.type === "github") {
+              const meta = getSourceMeta(source);
+              if (!meta.changelogUrl && !meta.changelogDetectedAt) {
+                const changelogUrl = await detectChangelogUrl(source);
+                await updateSourceMeta(source, {
+                  changelogUrl: changelogUrl ?? undefined,
+                  changelogDetectedAt: new Date().toISOString(),
+                });
+              }
+            }
+
+            // Refresh canonical CHANGELOG.md for GitHub sources (only in local mode —
+            // the API worker cron handles remote-mode sources). Never fail the
+            // outer fetch if this errors.
+            if (
+              source.type === "github" &&
+              !opts.skipChangelog &&
+              !opts.dryRun &&
+              !isRemoteMode()
+            ) {
+              try {
+                const files = await fetchChangelogFiles(source);
+                for (const file of files) {
+                  const result = await upsertChangelogFile(source.id, file);
+                  if (result.inserted) {
+                    logger.info(
+                      `Fetched ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`,
+                    );
+                  } else if (result.updated) {
+                    logger.info(
+                      `Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`,
+                    );
+                  } else {
+                    logger.debug(`${file.path} for ${source.slug} unchanged (cached)`);
+                  }
+                }
+                const pruned = await deleteChangelogFilesNotIn(
+                  source.id,
+                  files.map((f) => f.path),
+                );
+                if (pruned > 0) {
+                  logger.info(`Pruned ${pruned} stale changelog file(s) for ${source.slug}`);
+                }
+              } catch (err) {
+                logger.warn(
+                  `Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
+                );
+              }
+            }
+
+            fetchResults.push({ source: source.name, newReleases: inserted });
             sessionReleasesFound += rawReleases.length;
+            sessionReleasesInserted += inserted;
+            progressSession(
+              `${source.name}: ${inserted} new releases (${elapsedFormatted(startTime)})`,
+            );
 
-            // Log to fetch_log with dry_run status so stats shows it correctly
             await insertFetchLog({
               sourceId: source.id,
               releasesFound: rawReleases.length,
-              releasesInserted: 0,
+              releasesInserted: inserted,
               durationMs: Math.round(performance.now() - startTime),
-              status: "dry_run",
+              status: inserted > 0 ? "success" : "no_change",
               rawContent: rawContent ?? null,
             });
 
-            if (!opts.json) {
-              console.log(chalk.bold(`\n${source.name}: ${rawReleases.length} release(s) found ${chalk.dim(`(${elapsedFormatted(startTime)})`)}\n`));
-              for (const raw of rawReleases) {
-                const date = raw.publishedAt ? chalk.gray(raw.publishedAt.toISOString().split("T")[0]) : chalk.gray("no date");
-                const version = raw.version ? chalk.cyan(`[${raw.version}] `) : "";
-                console.log(`  ${version}${stripAnsi(raw.title)}  ${date}`);
-                if (raw.url) console.log(`    ${chalk.dim(stripAnsi(raw.url))}`);
-              }
-            }
-            return;
-          }
-
-          // Filter junk media (avatars, logos, tracking pixels) before storing.
-          // Two-stage: deterministic pre-checks + AI classifier for ambiguous URLs
-          // (classify-media-relevance skill, see src/ai/classify-media.ts).
-          let totalDropped = 0;
-          for (const raw of rawReleases) {
-            if (raw.media && raw.media.length > 0) {
-              const filtered = await filterJunkMedia(raw.media, raw.content, {
-                releaseTitle: raw.title,
-                releaseContent: raw.content,
-                sourceSlug: source.slug,
-              });
-              raw.media = filtered.media;
-              raw.content = filtered.content;
-              totalDropped += filtered.dropped.length;
-              for (const d of filtered.dropped) {
-                logger.debug(`Filtered junk media: ${d.reason} — ${d.url}`);
-              }
-            }
-          }
-          if (totalDropped > 0) {
-            logger.info(`Filtered ${totalDropped} junk media item(s) for ${source.slug}`);
-          }
-
-          const rows = rawReleases.map((raw) => ({
-            sourceId: source.id,
-            version: raw.version ?? null,
-            type: raw.type ?? "feature",
-            title: raw.title,
-            content: raw.content,
-            url: raw.url ?? null,
-            contentHash: contentHash(raw),
-            publishedAt: raw.publishedAt?.toISOString() ?? null,
-            media: JSON.stringify(raw.media ?? []),
-          }));
-
-          // Upload media to R2 and rewrite URLs (remote mode only)
-          const apiUrl = config.apiUrl();
-          let pendingAssets: Array<import("../../lib/media.js").UploadResult & { sourceId: string }> = [];
-          if (apiUrl) {
-            const parsed = rows.map((row) => {
-              if (!row.media || row.media === "[]") return [];
-              try { return JSON.parse(row.media) as MediaRef[]; } catch { return []; }
+            await updateSource(source, {
+              lastFetchedAt: new Date().toISOString(),
+              consecutiveNoChange: 0,
+              consecutiveErrors: 0,
+              nextFetchAfter: null,
             });
-            const allMedia = parsed.flat().filter(m => m.url);
-            if (allMedia.length > 0) {
-              const imageCount = allMedia.filter(m => m.type === "image" || m.type === "gif").length;
-              const videoCount = allMedia.filter(m => m.type === "video").length;
-              const releasesWithMedia = parsed.filter(m => m.length > 0).length;
-              progressSession(
-                `${source.name}: found ${imageCount} image${imageCount !== 1 ? "s" : ""}, ${videoCount} video${videoCount !== 1 ? "s" : ""} in ${releasesWithMedia} release${releasesWithMedia !== 1 ? "s" : ""}`,
-              );
+            await clearChangeDetected(source);
 
-              const { uploads: uploadResults, failureReasons } = await processMediaForR2(allMedia, source.slug, (progress: MediaUploadProgress) => {
-                progressSession(
-                  `${source.name}: uploading ${progress.uploaded}/${progress.total} images to R2...`,
-                );
-              });
+            // Generate release summary if enabled
+            if (inserted > 0 && opts.summarize !== false) {
+              try {
+                const org = source.orgId ? await getOrgById(source.orgId) : null;
+                const summarizeEnabled = await isSummarizationEnabled(source, org);
+                if (summarizeEnabled) {
+                  const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
+                  const recentReleases = await getRecentReleases(source.id, cutoff, source.slug);
+                  const orgDescription = org?.description || undefined;
 
-              // Emit completion summary
-              const totalBytes = uploadResults.reduce((sum, r) => sum + r.byteSize, 0);
-              const totalMB = (totalBytes / (1024 * 1024)).toFixed(1);
-              const failedCount = allMedia.length - uploadResults.length;
-              if (uploadResults.length > 0) {
-                progressSession(
-                  `${source.name}: uploaded ${uploadResults.length} image${uploadResults.length !== 1 ? "s" : ""} (${totalMB} MB) to R2`,
-                );
-              }
-              if (failedCount > 0) {
-                const reasonSummary = Object.entries(failureReasons)
-                  .map(([reason, count]) => `${reason} (${count})`)
-                  .join(", ");
-                progressSession(
-                  `${source.name}: failed to upload ${failedCount} image${failedCount !== 1 ? "s" : ""}${reasonSummary ? `: ${reasonSummary}` : ""}`,
-                );
-              }
-
-              for (let i = 0; i < rows.length; i++) {
-                const media = parsed[i];
-                if (media.length === 0) continue;
-                let content = rows[i].content;
-                for (const m of media) {
-                  if (m.r2Key) content = content.replaceAll(m.url, `${MEDIA_PREFIX}${m.r2Key}`);
-                }
-                rows[i].content = content;
-                rows[i].media = JSON.stringify(media);
-              }
-              pendingAssets = uploadResults.map((r) => ({ ...r, sourceId: source.id }));
-            }
-          }
-
-          // Insert releases and register media assets concurrently
-          const [inserted] = await Promise.all([
-            insertReleases(source, rows),
-            pendingAssets.length > 0
-              ? insertMediaAssets(pendingAssets).then((n) => {
-                  logger.info(`Registered ${n} media asset(s) for ${source.slug}`);
-                })
-              : Promise.resolve(),
-          ]);
-          totalInserted += inserted;
-
-          // Detect changelog URL for GitHub sources (one-time)
-          if (source.type === "github") {
-            const meta = getSourceMeta(source);
-            if (!meta.changelogUrl && !meta.changelogDetectedAt) {
-              const changelogUrl = await detectChangelogUrl(source);
-              await updateSourceMeta(source, {
-                changelogUrl: changelogUrl ?? undefined,
-                changelogDetectedAt: new Date().toISOString(),
-              });
-            }
-          }
-
-          // Refresh canonical CHANGELOG.md for GitHub sources (only in local mode —
-          // the API worker cron handles remote-mode sources). Never fail the
-          // outer fetch if this errors.
-          if (
-            source.type === "github" &&
-            !opts.skipChangelog &&
-            !opts.dryRun &&
-            !isRemoteMode()
-          ) {
-            try {
-              const files = await fetchChangelogFiles(source);
-              for (const file of files) {
-                const result = await upsertChangelogFile(source.id, file);
-                if (result.inserted) {
-                  logger.info(`Fetched ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
-                } else if (result.updated) {
-                  logger.info(`Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
-                } else {
-                  logger.debug(`${file.path} for ${source.slug} unchanged (cached)`);
-                }
-              }
-              const pruned = await deleteChangelogFilesNotIn(
-                source.id,
-                files.map((f) => f.path),
-              );
-              if (pruned > 0) {
-                logger.info(`Pruned ${pruned} stale changelog file(s) for ${source.slug}`);
-              }
-            } catch (err) {
-              logger.warn(`Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          }
-
-          fetchResults.push({ source: source.name, newReleases: inserted });
-          sessionReleasesFound += rawReleases.length;
-          sessionReleasesInserted += inserted;
-          progressSession(`${source.name}: ${inserted} new releases (${elapsedFormatted(startTime)})`);
-
-          await insertFetchLog({
-            sourceId: source.id,
-            releasesFound: rawReleases.length,
-            releasesInserted: inserted,
-            durationMs: Math.round(performance.now() - startTime),
-            status: inserted > 0 ? "success" : "no_change",
-            rawContent: rawContent ?? null,
-          });
-
-          await updateSource(source, {
-            lastFetchedAt: new Date().toISOString(),
-            consecutiveNoChange: 0,
-            consecutiveErrors: 0,
-            nextFetchAfter: null,
-          });
-          await clearChangeDetected(source);
-
-          // Generate release summary if enabled
-          if (inserted > 0 && opts.summarize !== false) {
-            try {
-              const org = source.orgId ? await getOrgById(source.orgId) : null;
-              const summarizeEnabled = await isSummarizationEnabled(source, org);
-              if (summarizeEnabled) {
-                const cutoff = daysAgoIso(DEFAULT_WINDOW_DAYS);
-                const recentReleases = await getRecentReleases(source.id, cutoff, source.slug);
-                const orgDescription = org?.description || undefined;
-
-                if (recentReleases.length > 0) {
-                  // Rolling summary
-                  const rolling = await generateSummary({
-                    sourceName: source.name,
-                    sourceSlug: source.slug,
-                    releases: recentReleases,
-                    windowDays: DEFAULT_WINDOW_DAYS,
-                    type: "rolling",
-                    orgDescription,
-                  });
-                  if (rolling) {
-                    await upsertSummary({
-                      sourceId: source.id,
-                      orgId: source.orgId,
-                      type: "rolling",
+                  if (recentReleases.length > 0) {
+                    // Rolling summary
+                    const rolling = await generateSummary({
+                      sourceName: source.name,
+                      sourceSlug: source.slug,
+                      releases: recentReleases,
                       windowDays: DEFAULT_WINDOW_DAYS,
-                      summary: rolling.summary,
-                      releaseCount: rolling.releaseCount,
-                      year: null,
-                      month: null,
+                      type: "rolling",
+                      orgDescription,
                     });
-                  }
-
-                  // Monthly summary — check if last month needs one
-                  const now = new Date();
-                  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-                  const lmYear = lastMonth.getFullYear();
-                  const lmMonth = lastMonth.getMonth() + 1; // 1-indexed
-
-                  const existing = await getMonthlySummary(source.id, lmYear, lmMonth);
-                  if (!existing) {
-                    const monthStart = new Date(lmYear, lmMonth - 1, 1).toISOString();
-                    const monthEnd = new Date(lmYear, lmMonth, 1).toISOString();
-                    const monthlyReleases = recentReleases.filter(
-                      (r) => r.publishedAt && r.publishedAt >= monthStart && r.publishedAt < monthEnd,
-                    );
-                    if (monthlyReleases.length > 0) {
-                      const monthName = lastMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" });
-                      const monthly = await generateSummary({
-                        sourceName: source.name,
-                        sourceSlug: source.slug,
-                        releases: monthlyReleases,
-                        type: "monthly",
-                        period: monthName,
-                        orgDescription,
+                    if (rolling) {
+                      await upsertSummary({
+                        sourceId: source.id,
+                        orgId: source.orgId,
+                        type: "rolling",
+                        windowDays: DEFAULT_WINDOW_DAYS,
+                        summary: rolling.summary,
+                        releaseCount: rolling.releaseCount,
+                        year: null,
+                        month: null,
                       });
-                      if (monthly) {
-                        await upsertSummary({
-                          sourceId: source.id,
-                          orgId: source.orgId,
-                          type: "monthly",
-                          year: lmYear,
-                          month: lmMonth,
-                          summary: monthly.summary,
-                          releaseCount: monthly.releaseCount,
-                          windowDays: null,
+                    }
+
+                    // Monthly summary — check if last month needs one
+                    const now = new Date();
+                    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+                    const lmYear = lastMonth.getFullYear();
+                    const lmMonth = lastMonth.getMonth() + 1; // 1-indexed
+
+                    const existing = await getMonthlySummary(source.id, lmYear, lmMonth);
+                    if (!existing) {
+                      const monthStart = new Date(lmYear, lmMonth - 1, 1).toISOString();
+                      const monthEnd = new Date(lmYear, lmMonth, 1).toISOString();
+                      const monthlyReleases = recentReleases.filter(
+                        (r) =>
+                          r.publishedAt && r.publishedAt >= monthStart && r.publishedAt < monthEnd,
+                      );
+                      if (monthlyReleases.length > 0) {
+                        const monthName = lastMonth.toLocaleDateString("en-US", {
+                          month: "long",
+                          year: "numeric",
                         });
+                        const monthly = await generateSummary({
+                          sourceName: source.name,
+                          sourceSlug: source.slug,
+                          releases: monthlyReleases,
+                          type: "monthly",
+                          period: monthName,
+                          orgDescription,
+                        });
+                        if (monthly) {
+                          await upsertSummary({
+                            sourceId: source.id,
+                            orgId: source.orgId,
+                            type: "monthly",
+                            year: lmYear,
+                            month: lmMonth,
+                            summary: monthly.summary,
+                            releaseCount: monthly.releaseCount,
+                            windowDays: null,
+                          });
+                        }
                       }
                     }
                   }
                 }
+              } catch (err) {
+                // Summary generation is non-critical — log and continue
+                logger.warn(`Summary generation failed for ${source.name}: ${err}`);
               }
-            } catch (err) {
-              // Summary generation is non-critical — log and continue
-              logger.warn(`Summary generation failed for ${source.name}: ${err}`);
+            }
+
+            // Defer knowledge page regeneration until after all sources are processed
+            if (inserted > 0 && source.orgId && opts.summarize !== false && !opts.skipOverview) {
+              orgsNeedingKnowledgeUpdate.add(source.orgId);
+            }
+
+            // Defer ingest-time release_coverage grouping so multiple fetches
+            // against the same org collapse into one agent call on a single
+            // candidate set, rather than N racing calls on overlapping sets.
+            if (inserted > 0 && source.orgId && !opts.dryRun && opts.grouping !== false) {
+              orgsNeedingGrouping.add(source.orgId);
+            }
+
+            if (!opts.json && !showProgress) {
+              console.log(
+                chalk.green(
+                  `Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedFormatted(startTime)})`)}`,
+                ),
+              );
+            }
+          } catch (err) {
+            const errMsg = err instanceof Error ? err.message : String(err);
+            fetchResults.push({ source: source.name, newReleases: 0, error: errMsg });
+            progressSession(`${source.name}: error — ${errMsg.slice(0, 100)}`);
+
+            await insertFetchLog({
+              sourceId: source.id,
+              releasesFound: 0,
+              releasesInserted: 0,
+              durationMs: Math.round(performance.now() - startTime),
+              status: "error",
+              error: errMsg,
+              rawContent: rawContent ?? null,
+            }).catch(() => {}); // don't fail the whole fetch if logging fails
+
+            // Update error backoff counter
+            if (!opts.dryRun) {
+              const newErrors = (source.consecutiveErrors ?? 0) + 1;
+              const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);
+              const nextFetchOnError = new Date(
+                Date.now() + errorBackoffHours * 3600_000,
+              ).toISOString();
+              await updateSource(source, {
+                consecutiveErrors: newErrors,
+                nextFetchAfter: nextFetchOnError,
+              }).catch(() => {});
+            }
+
+            if (!showProgress) {
+              logger.error(
+                `Failed to fetch from ${source.name} (${elapsedFormatted(startTime)}):`,
+                err,
+              );
+            }
+          } finally {
+            active--;
+            completed++;
+            printProgress();
+            if (!opts.dryRun) {
+              sessionSourcesFetched++;
+              progressSession();
             }
           }
+        }
 
-          // Defer knowledge page regeneration until after all sources are processed
-          if (inserted > 0 && source.orgId && opts.summarize !== false && !opts.skipOverview) {
-            orgsNeedingKnowledgeUpdate.add(source.orgId);
-          }
+        // ── Source-level duplicate detection (remote mode) ──
+        if (isRemoteMode() && targetSources.length > 0) {
+          try {
+            const { slugs: rawActiveSlugs, sessionMap: rawSessionMap } =
+              await apiClient.getActiveSources();
 
-          // Defer ingest-time release_coverage grouping so multiple fetches
-          // against the same org collapse into one agent call on a single
-          // candidate set, rather than N racing calls on overlapping sets.
-          if (inserted > 0 && source.orgId && !opts.dryRun && opts.grouping !== false) {
-            orgsNeedingGrouping.add(source.orgId);
-          }
-
-          if (!opts.json && !showProgress) {
-            console.log(
-              chalk.green(`Fetched ${inserted} new releases from ${source.name} ${chalk.dim(`(${elapsedFormatted(startTime)})`)}`),
+            // Normalize any src_… IDs in the active-sources list to slugs so that
+            // sessions registered with IDs (e.g. via --managed-agents) are still
+            // caught by the overlap check. Build a parallel slug→sessionId map
+            // keyed by the resolved slug.
+            const resolvedSlugMap: Record<string, string> = {};
+            const normalizedActiveSlugs: string[] = [];
+            await Promise.all(
+              rawActiveSlugs.map(async (entry) => {
+                if (entry.startsWith("src_")) {
+                  const src = await apiClient.findSource(entry).catch(() => null);
+                  const resolvedSlug = src?.slug ?? entry;
+                  normalizedActiveSlugs.push(resolvedSlug);
+                  if (rawSessionMap[entry]) resolvedSlugMap[resolvedSlug] = rawSessionMap[entry];
+                } else {
+                  normalizedActiveSlugs.push(entry);
+                  if (rawSessionMap[entry]) resolvedSlugMap[entry] = rawSessionMap[entry];
+                }
+              }),
             );
-          }
-        } catch (err) {
-          const errMsg = err instanceof Error ? err.message : String(err);
-          fetchResults.push({ source: source.name, newReleases: 0, error: errMsg });
-          progressSession(`${source.name}: error — ${errMsg.slice(0, 100)}`);
 
-          await insertFetchLog({
-            sourceId: source.id,
-            releasesFound: 0,
-            releasesInserted: 0,
-            durationMs: Math.round(performance.now() - startTime),
-            status: "error",
-            error: errMsg,
-            rawContent: rawContent ?? null,
-          }).catch(() => {}); // don't fail the whole fetch if logging fails
-
-          // Update error backoff counter
-          if (!opts.dryRun) {
-            const newErrors = (source.consecutiveErrors ?? 0) + 1;
-            const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);
-            const nextFetchOnError = new Date(Date.now() + errorBackoffHours * 3600_000).toISOString();
-            await updateSource(source, {
-              consecutiveErrors: newErrors,
-              nextFetchAfter: nextFetchOnError,
-            }).catch(() => {});
-          }
-
-          if (!showProgress) {
-            logger.error(`Failed to fetch from ${source.name} (${elapsedFormatted(startTime)}):`, err);
-          }
-        } finally {
-          active--;
-          completed++;
-          printProgress();
-          if (!opts.dryRun) {
-            sessionSourcesFetched++;
-            progressSession();
-          }
-        }
-      }
-
-      // ── Source-level duplicate detection (remote mode) ──
-      if (isRemoteMode() && targetSources.length > 0) {
-        try {
-          const { slugs: rawActiveSlugs, sessionMap: rawSessionMap } = await apiClient.getActiveSources();
-
-          // Normalize any src_… IDs in the active-sources list to slugs so that
-          // sessions registered with IDs (e.g. via --managed-agents) are still
-          // caught by the overlap check. Build a parallel slug→sessionId map
-          // keyed by the resolved slug.
-          const resolvedSlugMap: Record<string, string> = {};
-          const normalizedActiveSlugs: string[] = [];
-          await Promise.all(rawActiveSlugs.map(async (entry) => {
-            if (entry.startsWith("src_")) {
-              const src = await apiClient.findSource(entry).catch(() => null);
-              const resolvedSlug = src?.slug ?? entry;
-              normalizedActiveSlugs.push(resolvedSlug);
-              if (rawSessionMap[entry]) resolvedSlugMap[resolvedSlug] = rawSessionMap[entry];
-            } else {
-              normalizedActiveSlugs.push(entry);
-              if (rawSessionMap[entry]) resolvedSlugMap[entry] = rawSessionMap[entry];
+            const targetSlugs = targetSources.map((s) => s.slug);
+            const overlapping = targetSlugs.filter((s) => normalizedActiveSlugs.includes(s));
+            if (overlapping.length > 0) {
+              const overlapSessionId = resolvedSlugMap[overlapping[0]];
+              const sourceList =
+                overlapping.length <= 3
+                  ? overlapping.map((s) => `"${s}"`).join(", ")
+                  : `${overlapping.length} sources`;
+              console.error(
+                chalk.red(
+                  `Source ${sourceList} already being fetched in session ${overlapSessionId.slice(0, 8)}.`,
+                ),
+              );
+              console.error(
+                chalk.gray(
+                  `Use 'releases admin discovery task cancel ${overlapSessionId.slice(0, 8)}' to stop it first.`,
+                ),
+              );
+              process.exit(1);
             }
-          }));
-
-          const targetSlugs = targetSources.map((s) => s.slug);
-          const overlapping = targetSlugs.filter((s) => normalizedActiveSlugs.includes(s));
-          if (overlapping.length > 0) {
-            const overlapSessionId = resolvedSlugMap[overlapping[0]];
-            const sourceList = overlapping.length <= 3
-              ? overlapping.map((s) => `"${s}"`).join(", ")
-              : `${overlapping.length} sources`;
-            console.error(chalk.red(`Source ${sourceList} already being fetched in session ${overlapSessionId.slice(0, 8)}.`));
-            console.error(chalk.gray(`Use 'releases admin discovery task cancel ${overlapSessionId.slice(0, 8)}' to stop it first.`));
-            process.exit(1);
-          }
-        } catch {
-          if (!opts.json) {
-            logger.warn("Could not check for overlapping sessions — proceeding anyway.");
-          }
-        }
-      }
-
-      await startSession();
-
-      // Run with concurrency pool
-      if (effectiveConcurrency <= 1) {
-        for (const source of targetSources) {
-          if (stopping) break;
-          if (await checkCancelled()) {
-            stopping = true;
+          } catch {
             if (!opts.json) {
-              process.stderr.write(`\n${chalk.yellow(CANCEL_MSG)}\n`);
+              logger.warn("Could not check for overlapping sessions — proceeding anyway.");
             }
-            break;
           }
-          await fetchOne(source);
         }
-      } else {
-        const queue = [...targetSources];
-        const workers = Array.from({ length: Math.min(effectiveConcurrency, queue.length) }, async () => {
-          while (queue.length > 0 && !stopping) {
+
+        await startSession();
+
+        // Run with concurrency pool
+        if (effectiveConcurrency <= 1) {
+          for (const source of targetSources) {
+            if (stopping) break;
             if (await checkCancelled()) {
               stopping = true;
               if (!opts.json) {
@@ -985,73 +1155,100 @@ Examples:
               }
               break;
             }
-            const source = queue.shift()!;
             await fetchOne(source);
           }
-        });
-        await Promise.all(workers);
-      }
-
-      process.removeListener("SIGINT", onSigint);
-
-      for (const orgId of orgsNeedingKnowledgeUpdate) {
-        try {
-          const org = await getOrgById(orgId);
-          if (!org) continue;
-          const orgSources = await getSourcesByOrg(org.id);
-          await regenerateOrgOverview(org, orgSources);
-        } catch (err) {
-          logger.warn(`Knowledge page update failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`);
-        }
-      }
-
-      for (const orgId of orgsNeedingGrouping) {
-        try {
-          const written = await runIngestTimeGrouping(
-            orgId,
-            `Ingest-time grouping after ${orgId} fetch wave`,
+        } else {
+          const queue = [...targetSources];
+          const workers = Array.from(
+            { length: Math.min(effectiveConcurrency, queue.length) },
+            async () => {
+              while (queue.length > 0 && !stopping) {
+                if (await checkCancelled()) {
+                  stopping = true;
+                  if (!opts.json) {
+                    process.stderr.write(`\n${chalk.yellow(CANCEL_MSG)}\n`);
+                  }
+                  break;
+                }
+                const source = queue.shift()!;
+                await fetchOne(source);
+              }
+            },
           );
-          if (written > 0) progressSession(`Linked ${written} coverage row(s) for org ${orgId}`);
-        } catch (err) {
-          logger.warn(`Ingest-time grouping failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`);
+          await Promise.all(workers);
         }
-      }
 
-      const fetchErrors = fetchResults.filter((r) => r.error);
-      if (stopping && await checkCancelled().catch(() => false)) {
-        await apiClient.postStatusEvent({
-          type: "session:cancelled",
-          sessionId,
-        }).catch(() => {});
-      } else if (fetchErrors.length === fetchResults.length && fetchResults.length > 0) {
-        await endSession(`All ${fetchResults.length} sources failed`);
-      } else {
-        await endSession();
-      }
+        process.removeListener("SIGINT", onSigint);
 
-      // Clear progress line
-      if (showProgress) {
-        process.stderr.write("\r" + "".padEnd(80) + "\r");
-      }
-
-      if (opts.json) {
-        console.log(JSON.stringify(fetchResults, null, 2));
-      } else if (showSummary) {
-        const successful = fetchResults.filter((r) => !r.error);
-        const failed = fetchResults.filter((r) => r.error);
-        const withReleases = successful.filter((r) => r.newReleases > 0);
-
-        const elapsed = elapsedFormatted(fetchStartTime);
-        const label = stopping ? `Fetch stopped early: ${completed}/${total} sources` : `Fetch complete: ${total} sources`;
-        console.log(chalk.bold(`\n${label}`) + chalk.gray(` (${elapsed})\n`));
-        console.log(`  ${chalk.green(`${withReleases.length} with new releases`)} (${totalInserted} total)`);
-        console.log(`  ${chalk.gray(`${successful.length - withReleases.length} unchanged`)}`);
-        if (failed.length > 0) {
-          console.log(`  ${chalk.red(`${failed.length} failed`)}`);
-          for (const f of failed) {
-            console.log(`    ${chalk.dim("•")} ${f.source}: ${chalk.red(stripAnsi(f.error!))}`);
+        for (const orgId of orgsNeedingKnowledgeUpdate) {
+          try {
+            const org = await getOrgById(orgId);
+            if (!org) continue;
+            const orgSources = await getSourcesByOrg(org.id);
+            await regenerateOrgOverview(org, orgSources);
+          } catch (err) {
+            logger.warn(
+              `Knowledge page update failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
           }
         }
-      }
-    });
+
+        for (const orgId of orgsNeedingGrouping) {
+          try {
+            const written = await runIngestTimeGrouping(
+              orgId,
+              `Ingest-time grouping after ${orgId} fetch wave`,
+            );
+            if (written > 0) progressSession(`Linked ${written} coverage row(s) for org ${orgId}`);
+          } catch (err) {
+            logger.warn(
+              `Ingest-time grouping failed for org ${orgId}: ${err instanceof Error ? err.message : String(err)}`,
+            );
+          }
+        }
+
+        const fetchErrors = fetchResults.filter((r) => r.error);
+        if (stopping && (await checkCancelled().catch(() => false))) {
+          await apiClient
+            .postStatusEvent({
+              type: "session:cancelled",
+              sessionId,
+            })
+            .catch(() => {});
+        } else if (fetchErrors.length === fetchResults.length && fetchResults.length > 0) {
+          await endSession(`All ${fetchResults.length} sources failed`);
+        } else {
+          await endSession();
+        }
+
+        // Clear progress line
+        if (showProgress) {
+          process.stderr.write("\r" + "".padEnd(80) + "\r");
+        }
+
+        if (opts.json) {
+          console.log(JSON.stringify(fetchResults, null, 2));
+        } else if (showSummary) {
+          const successful = fetchResults.filter((r) => !r.error);
+          const failed = fetchResults.filter((r) => r.error);
+          const withReleases = successful.filter((r) => r.newReleases > 0);
+
+          const elapsed = elapsedFormatted(fetchStartTime);
+          const label = stopping
+            ? `Fetch stopped early: ${completed}/${total} sources`
+            : `Fetch complete: ${total} sources`;
+          console.log(chalk.bold(`\n${label}`) + chalk.gray(` (${elapsed})\n`));
+          console.log(
+            `  ${chalk.green(`${withReleases.length} with new releases`)} (${totalInserted} total)`,
+          );
+          console.log(`  ${chalk.gray(`${successful.length - withReleases.length} unchanged`)}`);
+          if (failed.length > 0) {
+            console.log(`  ${chalk.red(`${failed.length} failed`)}`);
+            for (const f of failed) {
+              console.log(`    ${chalk.dim("•")} ${f.source}: ${chalk.red(stripAnsi(f.error!))}`);
+            }
+          }
+        }
+      },
+    );
 }

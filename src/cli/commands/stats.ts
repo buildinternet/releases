@@ -11,32 +11,41 @@ export function registerStatsCommand(program: Command) {
     .description("Show index statistics and recent fetch activity")
     .option("--json", "Output as JSON")
     .option("--days <n>", "Period for recent activity (default: 30)", "30")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases stats
   releases stats --days 7
-  releases stats --json`)
+  releases stats --json`,
+    )
     .action(async (opts: { json?: boolean; days?: string }) => {
       const days = parseInt(opts.days ?? "30", 10);
       const data = await getStatsSummary(days);
 
       // ── JSON output ──────────────────────────────────────────
       if (opts.json) {
-        console.log(JSON.stringify({
-          period: data.period,
-          totals: data.totals,
-          sourceHealth: data.sourceHealth,
-          sourceActivity: data.sourceActivity.map((s) => ({
-            name: s.sourceName,
-            slug: s.sourceSlug,
-            type: s.sourceType,
-            org: s.orgName,
-            lastFetched: s.lastFetchedAt,
-            totalReleases: s.totalReleases,
-            recentReleases: s.recentReleases,
-          })),
-          recentActivity: data.recentActivity,
-        }, null, 2));
+        console.log(
+          JSON.stringify(
+            {
+              period: data.period,
+              totals: data.totals,
+              sourceHealth: data.sourceHealth,
+              sourceActivity: data.sourceActivity.map((s) => ({
+                name: s.sourceName,
+                slug: s.sourceSlug,
+                type: s.sourceType,
+                org: s.orgName,
+                lastFetched: s.lastFetchedAt,
+                totalReleases: s.totalReleases,
+                recentReleases: s.recentReleases,
+              })),
+              recentActivity: data.recentActivity,
+            },
+            null,
+            2,
+          ),
+        );
         return;
       }
 
@@ -48,16 +57,22 @@ Examples:
       console.log(`  Last ${days} days:   ${data.totals.releasesInPeriod} releases\n`);
 
       console.log(chalk.bold("Source Health\n"));
-      console.log(`  ${chalk.green(`${data.sourceHealth.upToDate} up to date`)} (fetched in last ${days} days)`);
+      console.log(
+        `  ${chalk.green(`${data.sourceHealth.upToDate} up to date`)} (fetched in last ${days} days)`,
+      );
       if (data.sourceHealth.stale > 0) {
-        console.log(`  ${chalk.yellow(`${data.sourceHealth.stale} stale`)} (fetched, but not recently)`);
+        console.log(
+          `  ${chalk.yellow(`${data.sourceHealth.stale} stale`)} (fetched, but not recently)`,
+        );
       }
       if (data.sourceHealth.neverFetched > 0) {
         console.log(`  ${chalk.red(`${data.sourceHealth.neverFetched} never fetched`)}`);
       }
 
       // Top sources table
-      const activeSources = data.sourceActivity.filter((s) => s.totalReleases > 0 || s.recentReleases > 0);
+      const activeSources = data.sourceActivity.filter(
+        (s) => s.totalReleases > 0 || s.recentReleases > 0,
+      );
       if (activeSources.length > 0) {
         console.log(chalk.bold("\nSources by Activity\n"));
         const sourceTable = new Table({
@@ -99,13 +114,14 @@ Examples:
           ],
         });
         for (const f of data.recentActivity) {
-          const statusLabel = f.status === "dry_run"
-            ? chalk.magenta("dry run")
-            : f.status === "success"
-              ? chalk.green("success")
-              : f.status === "error"
-                ? chalk.red("error")
-                : chalk.dim("no change");
+          const statusLabel =
+            f.status === "dry_run"
+              ? chalk.magenta("dry run")
+              : f.status === "success"
+                ? chalk.green("success")
+                : f.status === "error"
+                  ? chalk.red("error")
+                  : chalk.dim("no change");
           activityTable.push([
             stripAnsi(f.sourceName),
             f.orgName ? stripAnsi(f.orgName) : chalk.dim("—"),
@@ -119,7 +135,11 @@ Examples:
         }
         console.log(activityTable.toString());
       } else {
-        console.log(chalk.dim("\nNo fetch activity recorded yet. Run `releases admin source fetch` to start."));
+        console.log(
+          chalk.dim(
+            "\nNo fetch activity recorded yet. Run `releases admin source fetch` to start.",
+          ),
+        );
       }
     });
 }

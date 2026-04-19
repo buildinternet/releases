@@ -13,7 +13,9 @@ export function highlightDaysForPreset(preset: RangePreset): number | null {
 export function Stat({ label, value, title }: { label: string; value: string; title?: string }) {
   return (
     <span className="inline-flex items-baseline gap-1.5" title={title}>
-      <span className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500">{label}</span>
+      <span className="text-[11px] uppercase tracking-wider text-stone-400 dark:text-stone-500">
+        {label}
+      </span>
       <span className="text-stone-700 dark:text-stone-200 font-medium tabular-nums">{value}</span>
     </span>
   );
@@ -21,7 +23,8 @@ export function Stat({ label, value, title }: { label: string; value: string; ti
 
 const pillBase = "px-2.5 py-1 text-[11px] font-medium rounded transition-all";
 const pillActive = "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm";
-const pillInactive = "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300";
+const pillInactive =
+  "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300";
 
 export function RangePills({
   value,

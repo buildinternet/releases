@@ -26,10 +26,7 @@ import {
   type VectorizeIndex as HybridVectorizeIndex,
 } from "@releases/lib/vector-search.js";
 import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/lib/embeddings.js";
-import {
-  withEmbedCache,
-  type EmbedCacheBinding,
-} from "@releases/lib/embedding-cache.js";
+import { withEmbedCache, type EmbedCacheBinding } from "@releases/lib/embedding-cache.js";
 import { searchReleasesFts } from "../queries/search.js";
 import { buildEmbedConfig } from "./embed-config.js";
 import type { D1Db } from "../db.js";
@@ -199,7 +196,10 @@ async function hydrateReleases(
     FROM releases r
     JOIN sources s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
-    WHERE r.id IN (${sql.join(ids.map((id) => sql`${id}`), sql`, `)})
+    WHERE r.id IN (${sql.join(
+      ids.map((id) => sql`${id}`),
+      sql`, `,
+    )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       ${coverageFilter}
@@ -255,7 +255,10 @@ async function hydrateChunks(
     JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
     JOIN sources s ON s.id = scc.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
-    WHERE scc.vector_id IN (${sql.join(vectorIds.map((id) => sql`${id}`), sql`, `)})
+    WHERE scc.vector_id IN (${sql.join(
+      vectorIds.map((id) => sql`${id}`),
+      sql`, `,
+    )})
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
   `);
 
@@ -327,12 +330,10 @@ export async function runHybridSearch(
 
   // Run the FTS path and shape it as a release-only response. Used both for
   // the explicit lexical mode and for every degraded fallback below.
-  async function lexicalResponse(
-    degradedReason?: string,
-  ): Promise<HybridSearchResponse> {
-    const rows = await searchReleasesFts(db, params.query, topK * 3, 0, { includeCoverage: params.includeCoverage }).catch(
-      () => [],
-    );
+  async function lexicalResponse(degradedReason?: string): Promise<HybridSearchResponse> {
+    const rows = await searchReleasesFts(db, params.query, topK * 3, 0, {
+      includeCoverage: params.includeCoverage,
+    }).catch(() => []);
     const hits = await buildReleaseHits(
       db,
       rows.map((r, i) => ({ id: r.id, score: 1 / (i + 1) })),
@@ -349,14 +350,11 @@ export async function runHybridSearch(
   if (requestedMode === "lexical") return lexicalResponse();
 
   const embedder = await buildEmbedder(env, opts.waitUntil);
-  const hasVectorize =
-    !!env.RELEASES_INDEX && !!env.CHANGELOG_CHUNKS_INDEX && !!embedder;
+  const hasVectorize = !!env.RELEASES_INDEX && !!env.CHANGELOG_CHUNKS_INDEX && !!embedder;
 
   if (!hasVectorize) {
     return lexicalResponse(
-      !embedder
-        ? "embedding provider unavailable or misconfigured"
-        : "vectorize bindings missing",
+      !embedder ? "embedding provider unavailable or misconfigured" : "vectorize bindings missing",
     );
   }
 
@@ -383,7 +381,9 @@ export async function runHybridSearch(
       ? async () => [] as { id: string }[]
       : async (q: string, limit: number) => {
           try {
-            const rows = await searchReleasesFts(db, q, limit, 0, { includeCoverage: params.includeCoverage });
+            const rows = await searchReleasesFts(db, q, limit, 0, {
+              includeCoverage: params.includeCoverage,
+            });
             return rows.map((r) => ({ id: r.id }));
           } catch {
             return [];
@@ -414,7 +414,10 @@ export async function runHybridSearch(
 
   const [releaseHits, chunkMap] = await Promise.all([
     buildReleaseHits(db, releaseEntries, params),
-    hydrateChunks(db, chunkEntries.map((e) => e.id)),
+    hydrateChunks(
+      db,
+      chunkEntries.map((e) => e.id),
+    ),
   ]);
 
   const hitsById = new Map<string, HybridHit>();
@@ -642,4 +645,3 @@ export async function runRegistrySearch(
 
   return { degraded: false, hits };
 }
-

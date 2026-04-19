@@ -1,6 +1,6 @@
 # v3.2.0 — Dark Mode Support
 
-*Released on January 15, 2024*
+_Released on January 15, 2024_
 
 We're excited to announce dark mode support across the entire application.
 

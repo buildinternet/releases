@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { createDb } from "../db.js";
-import { telemetryEvents, TELEMETRY_CLIENT_KINDS, TELEMETRY_SURFACES } from "@releases/core-internal/schema";
+import {
+  telemetryEvents,
+  TELEMETRY_CLIENT_KINDS,
+  TELEMETRY_SURFACES,
+} from "@releases/core-internal/schema";
 import { newTelemetryEventId } from "@releases/core-internal/id";
 import type { Env } from "../index.js";
 

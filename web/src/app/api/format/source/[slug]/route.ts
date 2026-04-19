@@ -6,10 +6,7 @@ import { sourceAtomResponse } from "@/lib/atom-response";
 import { getBaseUrl } from "@/lib/base-url";
 import { getFormat } from "@/lib/request";
 
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ slug: string }> }
-) {
+export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const format = getFormat(request);
   const page = parseInt(request.nextUrl.searchParams.get("page") ?? "1", 10) || 1;
@@ -25,8 +22,12 @@ export async function GET(
 
   if (source.org) {
     return NextResponse.json(
-      { error: "redirect", message: `This source belongs to org "${source.org.slug}"`, path: `/${source.org.slug}/${source.slug}` },
-      { status: 302 }
+      {
+        error: "redirect",
+        message: `This source belongs to org "${source.org.slug}"`,
+        path: `/${source.org.slug}/${source.slug}`,
+      },
+      { status: 302 },
     );
   }
 

@@ -45,30 +45,30 @@ Both `organizations` and `products` gain a nullable `category` text column. Vali
 
 **`tags` table:**
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| id | text | PK, `tag_` prefixed nanoid |
-| name | text | NOT NULL |
-| slug | text | NOT NULL, UNIQUE |
-| createdAt | text | NOT NULL, ISO timestamp |
+| Column    | Type | Constraints                |
+| --------- | ---- | -------------------------- |
+| id        | text | PK, `tag_` prefixed nanoid |
+| name      | text | NOT NULL                   |
+| slug      | text | NOT NULL, UNIQUE           |
+| createdAt | text | NOT NULL, ISO timestamp    |
 
 **`org_tags` join table:**
 
-| Column | Type | Constraints |
-|--------|------|-------------|
-| orgId | text | NOT NULL, FK → organizations(id) ON DELETE CASCADE |
-| tagId | text | NOT NULL, FK → tags(id) ON DELETE CASCADE |
-| createdAt | text | NOT NULL, ISO timestamp |
+| Column    | Type | Constraints                                        |
+| --------- | ---- | -------------------------------------------------- |
+| orgId     | text | NOT NULL, FK → organizations(id) ON DELETE CASCADE |
+| tagId     | text | NOT NULL, FK → tags(id) ON DELETE CASCADE          |
+| createdAt | text | NOT NULL, ISO timestamp                            |
 
 Primary key: `(orgId, tagId)`.
 
 **`product_tags` join table:**
 
-| Column | Type | Constraints |
-|--------|------|-------------|
+| Column    | Type | Constraints                                   |
+| --------- | ---- | --------------------------------------------- |
 | productId | text | NOT NULL, FK → products(id) ON DELETE CASCADE |
-| tagId | text | NOT NULL, FK → tags(id) ON DELETE CASCADE |
-| createdAt | text | NOT NULL, ISO timestamp |
+| tagId     | text | NOT NULL, FK → tags(id) ON DELETE CASCADE     |
+| createdAt | text | NOT NULL, ISO timestamp                       |
 
 Primary key: `(productId, tagId)`.
 
@@ -79,9 +79,11 @@ Tags use **get-or-create** semantics: when tagging an entity with "typescript", 
 ### Schema Changes
 
 **organizations table** — add column:
+
 - `category text` (nullable)
 
 **products table** — add column:
+
 - `category text` (nullable)
 
 **New tables:** `tags`, `org_tags`, `product_tags` as defined above.
@@ -91,6 +93,7 @@ Tags use **get-or-create** semantics: when tagging an entity with "typescript", 
 ### CLI
 
 **Category on existing commands:**
+
 - `org add "Vercel" --category cloud` — set at creation
 - `org edit vercel --category developer-tools` — update
 - `org edit vercel --no-category` — clear
@@ -98,10 +101,12 @@ Tags use **get-or-create** semantics: when tagging an entity with "typescript", 
 - `product edit nextjs --category framework`
 
 **Tags on existing commands (inline at creation):**
+
 - `org add "Vercel" --category cloud --tags typescript,cloud-hosting`
 - `product add --org vercel "Next.js" --category framework --tags react,ssr`
 
 **Tag subcommands:**
+
 - `org tag add vercel typescript cloud-hosting` — add one or more tags (positional args)
 - `org tag remove vercel cloud-hosting` — remove tags
 - `org tag list vercel` — list tags for an org
@@ -110,9 +115,11 @@ Tags use **get-or-create** semantics: when tagging an entity with "typescript", 
 - `product tag list nextjs`
 
 **Filtering:**
+
 - `list --category ai` — filter sources whose org or product matches that category
 
 **New command:**
+
 - `released categories` — print the list of valid categories (supports `--json`)
 
 ### API
@@ -120,10 +127,12 @@ Tags use **get-or-create** semantics: when tagging an entity with "typescript", 
 **Updated endpoints:**
 
 `POST /orgs` and `PATCH /orgs/:slug` accept:
+
 - `category?: string` — validated against CATEGORIES
 - `tags?: string[]` — array of tag names, get-or-create
 
 `GET /orgs` and `GET /orgs/:slug` return:
+
 - `category: string | null`
 - `tags: string[]` (tag names)
 
@@ -137,22 +146,27 @@ The manifest format gains optional `category` and `tags` on both org and product
 
 ```json
 {
-  "organizations": [{
-    "name": "Vercel",
-    "category": "cloud",
-    "tags": ["typescript", "edge-computing"],
-    "products": [{
-      "name": "Next.js",
-      "category": "framework",
-      "tags": ["react", "ssr"]
-    }]
-  }]
+  "organizations": [
+    {
+      "name": "Vercel",
+      "category": "cloud",
+      "tags": ["typescript", "edge-computing"],
+      "products": [
+        {
+          "name": "Next.js",
+          "category": "framework",
+          "tags": ["react", "ssr"]
+        }
+      ]
+    }
+  ]
 }
 ```
 
 ### Query Helpers
 
 In `src/db/queries.ts`:
+
 - `getTagsForOrg(orgId)` → `string[]`
 - `getTagsForProduct(productId)` → `string[]`
 - `setTagsForOrg(orgId, tagNames[])` — replaces all tags (get-or-create each, sync join table)
@@ -181,11 +195,11 @@ The agent uses its judgment based on available signals:
 
 ### Confidence and Actions
 
-| Confidence | Criteria | Agent action |
-|------------|----------|-------------|
-| High | Multiple clear signals (separate repos + separate domains + distinct names) | Auto-create product via CLI, assign sources, set category and tags |
-| Medium | Some signals (different repo names but shared domain, or general knowledge alone) | Record in discovery state as `suggestedProducts[]`, don't auto-create |
-| Low | Ambiguous (different pages but could be same product) | No product suggestion |
+| Confidence | Criteria                                                                          | Agent action                                                          |
+| ---------- | --------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| High       | Multiple clear signals (separate repos + separate domains + distinct names)       | Auto-create product via CLI, assign sources, set category and tags    |
+| Medium     | Some signals (different repo names but shared domain, or general knowledge alone) | Record in discovery state as `suggestedProducts[]`, don't auto-create |
+| Low        | Ambiguous (different pages but could be same product)                             | No product suggestion                                                 |
 
 ### Agent Prompt Changes
 
@@ -194,6 +208,7 @@ The category list is injected into the agent's initial prompt by `run-discovery.
 ### Agent Skill Updates
 
 Light-touch updates to the `finding-changelogs` skill:
+
 - Mention that the product entity exists and when to use it
 - Reference the CLI commands for creating products and managing tags (`product add`, `org tag add`, etc.)
 - No rigid process or decision trees — the agent uses its judgment given the context
@@ -203,23 +218,28 @@ Light-touch updates to the `finding-changelogs` skill:
 The state file (`/tmp/discovery-state.json`) gains:
 
 On the top-level org object:
+
 - `category: string` — assigned category
 - `tags: string[]` — assigned tags
 
 On each source:
+
 - `productSlug?: string` — if assigned to an auto-created product
 
 New field for medium-confidence suggestions:
+
 ```json
 {
-  "suggestedProducts": [{
-    "name": "Next.js",
-    "confidence": "medium",
-    "reason": "Separate GitHub repo vercel/next.js with dedicated changelog",
-    "suggestedSources": ["nextjs-github", "nextjs-blog"],
-    "suggestedCategory": "framework",
-    "suggestedTags": ["react", "ssr"]
-  }]
+  "suggestedProducts": [
+    {
+      "name": "Next.js",
+      "confidence": "medium",
+      "reason": "Separate GitHub repo vercel/next.js with dedicated changelog",
+      "suggestedSources": ["nextjs-github", "nextjs-blog"],
+      "suggestedCategory": "framework",
+      "suggestedTags": ["react", "ssr"]
+    }
+  ]
 }
 ```
 
@@ -228,6 +248,7 @@ New field for medium-confidence suggestions:
 ### D1 Migration
 
 Single migration adding:
+
 1. `category` column to `organizations`
 2. `category` column to `products`
 3. `tags` table

@@ -1,10 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { D1Db } from "../db.js";
-import type {
-  SearchOrgHit,
-  SearchProductHit,
-  RawSourceHit,
-} from "@releases/api/types.js";
+import type { SearchOrgHit, SearchProductHit, RawSourceHit } from "@releases/api/types.js";
 
 /**
  * Raw release row returned by the search queries. `content` and `media`
@@ -28,7 +24,11 @@ export interface RawSearchReleaseRow {
   publishedAt: string | null;
 }
 
-export async function searchOrgs(db: D1Db, pattern: string, limit: number): Promise<SearchOrgHit[]> {
+export async function searchOrgs(
+  db: D1Db,
+  pattern: string,
+  limit: number,
+): Promise<SearchOrgHit[]> {
   return db.all<SearchOrgHit>(sql`
     SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
     FROM organizations o
@@ -39,7 +39,11 @@ export async function searchOrgs(db: D1Db, pattern: string, limit: number): Prom
   `);
 }
 
-export async function searchProducts(db: D1Db, pattern: string, limit: number): Promise<SearchProductHit[]> {
+export async function searchProducts(
+  db: D1Db,
+  pattern: string,
+  limit: number,
+): Promise<SearchProductHit[]> {
   return db.all<SearchProductHit>(sql`
     SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category
     FROM products p
@@ -50,7 +54,11 @@ export async function searchProducts(db: D1Db, pattern: string, limit: number): 
   `);
 }
 
-export async function searchSources(db: D1Db, pattern: string, limit: number): Promise<RawSourceHit[]> {
+export async function searchSources(
+  db: D1Db,
+  pattern: string,
+  limit: number,
+): Promise<RawSourceHit[]> {
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
            p.slug as productSlug, p.name as productName, p.category as productCategory
@@ -68,7 +76,9 @@ export async function searchSources(db: D1Db, pattern: string, limit: number): P
  * `shared.notCoverageFilterSql` (which references `releases.id` unaliased).
  */
 const coverageCondition = (includeCoverage?: boolean) =>
-  includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
+  includeCoverage
+    ? sql``
+    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
 
 export async function searchReleasesFts(
   db: D1Db,
@@ -105,8 +115,20 @@ export async function searchReleasesFromMatchedEntities(
   opts: { includeCoverage?: boolean } = {},
 ): Promise<RawSearchReleaseRow[]> {
   const conditions = [];
-  if (orgSlugs.length > 0) conditions.push(sql`o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})`);
-  if (productSlugs.length > 0) conditions.push(sql`p.slug IN (${sql.join(productSlugs.map((s) => sql`${s}`), sql`, `)})`);
+  if (orgSlugs.length > 0)
+    conditions.push(
+      sql`o.slug IN (${sql.join(
+        orgSlugs.map((s) => sql`${s}`),
+        sql`, `,
+      )})`,
+    );
+  if (productSlugs.length > 0)
+    conditions.push(
+      sql`p.slug IN (${sql.join(
+        productSlugs.map((s) => sql`${s}`),
+        sql`, `,
+      )})`,
+    );
   if (conditions.length === 0) return [];
 
   return db.all<RawSearchReleaseRow>(sql`

@@ -11,17 +11,57 @@ function mkDb() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite);
   migrate(db, { migrationsFolder: "src/db/migrations" });
-  db.insert(organizations).values([
-    { id: "org_a", name: "Org A", slug: "a", category: "developer-tools" },
-    { id: "org_b", name: "Org B", slug: "b", category: "developer-tools" },
-    { id: "org_c", name: "Org C", slug: "c", category: "developer-tools" },
-  ]).run();
-  db.insert(sources).values([
-    { id: "src_1", name: "S1", slug: "s-1", type: "scrape", url: "https://a.com/c", orgId: "org_a", changeDetectedAt: "2026-04-18T00:00:00Z", metadata: "{}" },
-    { id: "src_2", name: "S2", slug: "s-2", type: "scrape", url: "https://a.com/d", orgId: "org_a", changeDetectedAt: "2026-04-18T00:01:00Z", metadata: "{}" },
-    { id: "src_3", name: "S3", slug: "s-3", type: "scrape", url: "https://b.com/c", orgId: "org_b", changeDetectedAt: "2026-04-18T00:02:00Z", metadata: "{}" },
-    { id: "src_4", name: "S4", slug: "s-4", type: "scrape", url: "https://c.com/c", orgId: "org_c", changeDetectedAt: "2026-04-18T00:03:00Z", metadata: "{}" },
-  ]).run();
+  db.insert(organizations)
+    .values([
+      { id: "org_a", name: "Org A", slug: "a", category: "developer-tools" },
+      { id: "org_b", name: "Org B", slug: "b", category: "developer-tools" },
+      { id: "org_c", name: "Org C", slug: "c", category: "developer-tools" },
+    ])
+    .run();
+  db.insert(sources)
+    .values([
+      {
+        id: "src_1",
+        name: "S1",
+        slug: "s-1",
+        type: "scrape",
+        url: "https://a.com/c",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        metadata: "{}",
+      },
+      {
+        id: "src_2",
+        name: "S2",
+        slug: "s-2",
+        type: "scrape",
+        url: "https://a.com/d",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:01:00Z",
+        metadata: "{}",
+      },
+      {
+        id: "src_3",
+        name: "S3",
+        slug: "s-3",
+        type: "scrape",
+        url: "https://b.com/c",
+        orgId: "org_b",
+        changeDetectedAt: "2026-04-18T00:02:00Z",
+        metadata: "{}",
+      },
+      {
+        id: "src_4",
+        name: "S4",
+        slug: "s-4",
+        type: "scrape",
+        url: "https://c.com/c",
+        orgId: "org_c",
+        changeDetectedAt: "2026-04-18T00:03:00Z",
+        metadata: "{}",
+      },
+    ])
+    .run();
   return db;
 }
 
@@ -31,7 +71,9 @@ function mkEnv(overrides: Partial<any> = {}) {
     CRON_ENABLED: "true",
     SCRAPE_AGENT_CRON_ENABLED: "true",
     SCRAPE_AGENT_MAX_SESSIONS: "20",
-    DISCOVERY_WORKER: { fetch: async () => new Response(JSON.stringify({ sessionId: "ma-auto" }), { status: 202 }) },
+    DISCOVERY_WORKER: {
+      fetch: async () => new Response(JSON.stringify({ sessionId: "ma-auto" }), { status: 202 }),
+    },
     RELEASED_API_KEY: "test-key",
     ANTHROPIC_API_KEY: "test-anthropic-key",
     ...overrides,
@@ -58,7 +100,9 @@ describe("scrapeAgentSweep (E2E)", () => {
       DISCOVERY_WORKER: {
         fetch: async () => {
           dispatchCount++;
-          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), { status: 202 });
+          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), {
+            status: 202,
+          });
         },
       },
     });
@@ -72,12 +116,18 @@ describe("scrapeAgentSweep (E2E)", () => {
   });
 
   it("pre-flight auth failure: aborts with no dispatches", async () => {
-    globalThis.fetch = (async () => new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 })) as unknown as typeof fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: "unauthorized" }), {
+        status: 401,
+      })) as unknown as typeof fetch;
     const db = mkDb();
     let dispatchCount = 0;
     const env = mkEnv({
       DISCOVERY_WORKER: {
-        fetch: async () => { dispatchCount++; return new Response("{}", { status: 202 }); },
+        fetch: async () => {
+          dispatchCount++;
+          return new Response("{}", { status: 202 });
+        },
       },
     });
     await scrapeAgentSweep({ ...env, _drizzleOverride: db } as any);
@@ -110,16 +160,39 @@ describe("scrapeAgentSweep (E2E)", () => {
   it("cap enforcement: 25 candidates + cap=20 -> 20 dispatched, skipped=5", async () => {
     const db = mkDb();
     for (let i = 0; i < 21; i++) {
-      db.insert(organizations).values({ id: `org_extra_${i}`, name: `Org ${i}`, slug: `extra-${i}`, category: "developer-tools" }).run();
+      db.insert(organizations)
+        .values({
+          id: `org_extra_${i}`,
+          name: `Org ${i}`,
+          slug: `extra-${i}`,
+          category: "developer-tools",
+        })
+        .run();
       // Pre-date extras so under ASC they drain first. 21 slots starting 24h before base.
       const ts = `2026-04-17T03:${String(i).padStart(2, "0")}:00Z`;
-      db.insert(sources).values({ id: `src_extra_${i}`, name: `S${i}`, slug: `se-${i}`, type: "scrape", url: `https://extra-${i}.com/c`, orgId: `org_extra_${i}`, changeDetectedAt: ts, metadata: "{}" }).run();
+      db.insert(sources)
+        .values({
+          id: `src_extra_${i}`,
+          name: `S${i}`,
+          slug: `se-${i}`,
+          type: "scrape",
+          url: `https://extra-${i}.com/c`,
+          orgId: `org_extra_${i}`,
+          changeDetectedAt: ts,
+          metadata: "{}",
+        })
+        .run();
     }
     let dispatchCount = 0;
     const env = mkEnv({
       SCRAPE_AGENT_MAX_SESSIONS: "20",
       DISCOVERY_WORKER: {
-        fetch: async () => { dispatchCount++; return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), { status: 202 }); },
+        fetch: async () => {
+          dispatchCount++;
+          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), {
+            status: 202,
+          });
+        },
       },
     });
     await scrapeAgentSweep({ ...env, _drizzleOverride: db } as any);
@@ -147,7 +220,10 @@ describe("scrapeAgentSweep (E2E)", () => {
     const env = mkEnv({
       CRON_ENABLED: "false",
       DISCOVERY_WORKER: {
-        fetch: async () => { dispatchCount++; return new Response("{}", { status: 202 }); },
+        fetch: async () => {
+          dispatchCount++;
+          return new Response("{}", { status: 202 });
+        },
       },
     });
     await scrapeAgentSweep({ ...env, _drizzleOverride: db } as any);
@@ -162,7 +238,10 @@ describe("scrapeAgentSweep (E2E)", () => {
     const env = mkEnv({
       SCRAPE_AGENT_CRON_ENABLED: "false",
       DISCOVERY_WORKER: {
-        fetch: async () => { dispatchCount++; return new Response("{}", { status: 202 }); },
+        fetch: async () => {
+          dispatchCount++;
+          return new Response("{}", { status: 202 });
+        },
       },
     });
     await scrapeAgentSweep({ ...env, _drizzleOverride: db } as any);

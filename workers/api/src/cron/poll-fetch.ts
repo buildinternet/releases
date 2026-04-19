@@ -1,6 +1,12 @@
 import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { sources, releases, fetchLog, sourceChangelogFiles, sourceChangelogChunks } from "@releases/core-internal/schema";
+import {
+  sources,
+  releases,
+  fetchLog,
+  sourceChangelogFiles,
+  sourceChangelogChunks,
+} from "@releases/core-internal/schema";
 import { countTokensSafe } from "@releases/core-internal/tokens";
 import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@releases/core-internal/schema";
@@ -38,7 +44,9 @@ const FETCH_CONCURRENCY = 3;
 
 // ── Main entry point ──
 
-export async function pollAndFetch(env: FetchOneEnv & { DB: D1Database; CRON_ENABLED?: string }): Promise<void> {
+export async function pollAndFetch(
+  env: FetchOneEnv & { DB: D1Database; CRON_ENABLED?: string },
+): Promise<void> {
   if (env.CRON_ENABLED === "false") {
     console.log("[cron] Disabled via CRON_ENABLED=false, skipping");
     return;
@@ -81,11 +89,7 @@ export async function pollAndFetch(env: FetchOneEnv & { DB: D1Database; CRON_ENA
   const changedScrape = pollResults
     .filter((r) => r.changed)
     .map((r) => r.source)
-    .filter(
-      (s) =>
-        s.type === "agent" ||
-        (s.type === "scrape" && getSourceMeta(s).feedUrl == null),
-    );
+    .filter((s) => s.type === "agent" || (s.type === "scrape" && getSourceMeta(s).feedUrl == null));
   if (changedScrape.length > 0) {
     console.log(`[cron] ${changedScrape.length} scrape/agent source(s) flagged for pickup`);
   }
@@ -105,21 +109,14 @@ async function queryDueSources(db: ReturnType<typeof drizzle>, now: Date): Promi
     const cutoff = new Date(now.getTime() - hours * 3600_000).toISOString();
     return and(
       sql`${sources.fetchPriority} = ${tier}`,
-      or(
-        isNull(sources.lastPolledAt),
-        sql`${sources.lastPolledAt} < ${cutoff}`,
-      ),
+      or(isNull(sources.lastPolledAt), sql`${sources.lastPolledAt} < ${cutoff}`),
     );
   });
 
-  return db.select().from(sources).where(
-    and(
-      notDisabled,
-      pollable,
-      notPaused,
-      or(...tierConditions),
-    ),
-  );
+  return db
+    .select()
+    .from(sources)
+    .where(and(notDisabled, pollable, notPaused, or(...tierConditions)));
 }
 
 // ── Poll one source ──
@@ -129,14 +126,21 @@ interface PollResult {
   changed: boolean;
 }
 
-async function pollOne(db: ReturnType<typeof drizzle>, source: Source, now: Date): Promise<PollResult> {
+async function pollOne(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  now: Date,
+): Promise<PollResult> {
   const nowIso = now.toISOString();
   const meta = getSourceMeta(source);
 
   // GitHub sources don't have feeds to HEAD-check — mark as changed so
   // the fetch phase always runs (dedup happens at the DB insert level)
   if (source.type === "github") {
-    await db.update(sources).set({ lastPolledAt: nowIso, changeDetectedAt: nowIso }).where(eq(sources.id, source.id));
+    await db
+      .update(sources)
+      .set({ lastPolledAt: nowIso, changeDetectedAt: nowIso })
+      .where(eq(sources.id, source.id));
     return { source, changed: true };
   }
 
@@ -230,16 +234,25 @@ export async function fetchOne(
       if (!meta.feedUrl || !meta.feedType) {
         console.warn(`[cron] Fetch ${source.slug}: missing feedUrl or feedType, skipping`);
         const dur = Date.now() - start;
-        await db.insert(fetchLog).values({
-          sourceId: source.id,
-          sessionId,
+        await db
+          .insert(fetchLog)
+          .values({
+            sourceId: source.id,
+            sessionId,
+            releasesFound: 0,
+            releasesInserted: 0,
+            durationMs: dur,
+            status: "error",
+            error: "Missing feedUrl or feedType in source metadata",
+          })
+          .catch(() => {});
+        return {
           releasesFound: 0,
           releasesInserted: 0,
           durationMs: dur,
           status: "error",
           error: "Missing feedUrl or feedType in source metadata",
-        }).catch(() => {});
-        return { releasesFound: 0, releasesInserted: 0, durationMs: dur, status: "error", error: "Missing feedUrl or feedType in source metadata" };
+        };
       }
       const conditionalHeaders: Record<string, string> = {};
       if (meta.feedEtag) conditionalHeaders["If-None-Match"] = meta.feedEtag;
@@ -260,7 +273,10 @@ export async function fetchOne(
       if (meta.feed4xxStreak) metaUpdates.feed4xxStreak = undefined;
       if (Object.keys(metaUpdates).length > 0) {
         const merged = { ...meta, ...metaUpdates };
-        await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id));
+        await db
+          .update(sources)
+          .set({ metadata: JSON.stringify(merged) })
+          .where(eq(sources.id, source.id));
       }
     }
 
@@ -277,16 +293,24 @@ export async function fetchOne(
           durationMs: Date.now() - start,
           status: "no_change",
         }),
-        db.update(sources).set({
-          consecutiveNoChange: newNoChange,
-          consecutiveErrors: 0,
-          nextFetchAfter: nextFetch,
-          changeDetectedAt: null,
-        }).where(eq(sources.id, source.id)),
+        db
+          .update(sources)
+          .set({
+            consecutiveNoChange: newNoChange,
+            consecutiveErrors: 0,
+            nextFetchAfter: nextFetch,
+            changeDetectedAt: null,
+          })
+          .where(eq(sources.id, source.id)),
       ]);
       const dur = Date.now() - start;
       console.log(`[cron] Fetch ${source.slug}: no changes (${dur}ms)`);
-      return { releasesFound: 0, releasesInserted: 0, durationMs: dur, status: "no_change" as const };
+      return {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: dur,
+        status: "no_change" as const,
+      };
     }
 
     const rows = rawReleases.map((raw) => ({
@@ -312,15 +336,13 @@ export async function fetchOne(
       // Build publish rows from the RETURNING set (not zipped against
       // `chunk`) because onConflictDoNothing skips conflicting rows and
       // RETURNING omits them, so index alignment would drift.
-      const result = await db.insert(releases).values(chunk)
-        .onConflictDoNothing()
-        .returning({
-          id: releases.id,
-          title: releases.title,
-          version: releases.version,
-          publishedAt: releases.publishedAt,
-          media: releases.media,
-        });
+      const result = await db.insert(releases).values(chunk).onConflictDoNothing().returning({
+        id: releases.id,
+        title: releases.title,
+        version: releases.version,
+        publishedAt: releases.publishedAt,
+        media: releases.media,
+      });
       inserted += result.length;
       for (const r of result) publishRows.push(r);
     }
@@ -328,8 +350,15 @@ export async function fetchOne(
 
     if (publishRows.length > 0 && env.RELEASE_HUB) {
       await publishReleaseEvents(
-        { RELEASE_HUB: env.RELEASE_HUB, WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE, DB: env.DB },
-        { src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id }, inserted: publishRows },
+        {
+          RELEASE_HUB: env.RELEASE_HUB,
+          WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
+          DB: env.DB,
+        },
+        {
+          src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id },
+          inserted: publishRows,
+        },
       );
     }
 
@@ -340,7 +369,9 @@ export async function fetchOne(
       try {
         await embedReleasesForSource(db, source, insertedIds, env);
       } catch (err) {
-        console.warn(`[cron] release embed failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(
+          `[cron] release embed failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
@@ -353,13 +384,16 @@ export async function fetchOne(
         durationMs: Date.now() - start,
         status: inserted > 0 ? "success" : "no_change",
       }),
-      db.update(sources).set({
-        lastFetchedAt: new Date().toISOString(),
-        consecutiveNoChange: 0,
-        consecutiveErrors: 0,
-        nextFetchAfter: null,
-        changeDetectedAt: null,
-      }).where(eq(sources.id, source.id)),
+      db
+        .update(sources)
+        .set({
+          lastFetchedAt: new Date().toISOString(),
+          consecutiveNoChange: 0,
+          consecutiveErrors: 0,
+          nextFetchAfter: null,
+          changeDetectedAt: null,
+        })
+        .where(eq(sources.id, source.id)),
     ]);
 
     // Refresh canonical CHANGELOG file for GitHub sources (mirrors CLI fetch step
@@ -368,25 +402,35 @@ export async function fetchOne(
       try {
         await refreshChangelogFile(db, source, env.GITHUB_TOKEN, env);
       } catch (err) {
-        console.warn(`[cron] Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(
+          `[cron] Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
 
     const dur = Date.now() - start;
     console.log(`[cron] Fetch ${source.slug}: ${inserted} new (${dur}ms)`);
-    return { releasesFound: rawReleases.length, releasesInserted: inserted, durationMs: dur, status: inserted > 0 ? "success" as const : "no_change" as const };
+    return {
+      releasesFound: rawReleases.length,
+      releasesInserted: inserted,
+      durationMs: dur,
+      status: inserted > 0 ? ("success" as const) : ("no_change" as const),
+    };
   } catch (err) {
     console.error(`[cron] Fetch error for ${source.slug}: ${err}`);
 
-    await db.insert(fetchLog).values({
-      sourceId: source.id,
-      sessionId,
-      releasesFound: 0,
-      releasesInserted: 0,
-      durationMs: Date.now() - start,
-      status: "error",
-      error: err instanceof Error ? err.message : String(err),
-    }).catch(() => {});
+    await db
+      .insert(fetchLog)
+      .values({
+        sourceId: source.id,
+        sessionId,
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: Date.now() - start,
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      })
+      .catch(() => {});
 
     // 4xx on the stored feedUrl: track it via feed4xxStreak rather than the
     // generic consecutiveErrors backoff. Backoff would push the next retry
@@ -395,29 +439,55 @@ export async function fetchOne(
     if (err instanceof FeedHttpError) {
       const streak = (meta.feed4xxStreak ?? 0) + 1;
       if (streak >= FEED_4XX_INVALIDATE_THRESHOLD) {
-        console.warn(`[cron] Feed URL invalidated for ${source.slug} after ${streak} consecutive 4xx (${err.status}) — clearing for rediscovery`);
+        console.warn(
+          `[cron] Feed URL invalidated for ${source.slug} after ${streak} consecutive 4xx (${err.status}) — clearing for rediscovery`,
+        );
         const cleared = { ...meta, ...CLEARED_FEED_FIELDS, noFeedFound: false };
-        await db.update(sources).set({
-          metadata: JSON.stringify(cleared),
-          consecutiveErrors: 0,
-          nextFetchAfter: null,
-        }).where(eq(sources.id, source.id)).catch(() => {});
+        await db
+          .update(sources)
+          .set({
+            metadata: JSON.stringify(cleared),
+            consecutiveErrors: 0,
+            nextFetchAfter: null,
+          })
+          .where(eq(sources.id, source.id))
+          .catch(() => {});
       } else {
         const merged = { ...meta, feed4xxStreak: streak };
-        await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id)).catch(() => {});
+        await db
+          .update(sources)
+          .set({ metadata: JSON.stringify(merged) })
+          .where(eq(sources.id, source.id))
+          .catch(() => {});
       }
-      return { releasesFound: 0, releasesInserted: 0, durationMs: Date.now() - start, status: "error" as const, error: err.message };
+      return {
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: Date.now() - start,
+        status: "error" as const,
+        error: err.message,
+      };
     }
 
     const newErrors = (source.consecutiveErrors ?? 0) + 1;
     const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);
     const nextFetch = new Date(Date.now() + errorBackoffHours * 3600_000).toISOString();
-    await db.update(sources).set({
-      consecutiveErrors: newErrors,
-      nextFetchAfter: nextFetch,
-    }).where(eq(sources.id, source.id)).catch(() => {});
+    await db
+      .update(sources)
+      .set({
+        consecutiveErrors: newErrors,
+        nextFetchAfter: nextFetch,
+      })
+      .where(eq(sources.id, source.id))
+      .catch(() => {});
 
-    return { releasesFound: 0, releasesInserted: 0, durationMs: Date.now() - start, status: "error" as const, error: err instanceof Error ? err.message : String(err) };
+    return {
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs: Date.now() - start,
+      status: "error" as const,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 
@@ -453,7 +523,11 @@ async function sha256HexWorker(input: string): Promise<string> {
     .join("");
 }
 
-function truncateToByteCap(content: string): { content: string; bytes: number; truncated: boolean } {
+function truncateToByteCap(content: string): {
+  content: string;
+  bytes: number;
+  truncated: boolean;
+} {
   const encoder = new TextEncoder();
   const bytes = encoder.encode(content).length;
   if (bytes <= CHANGELOG_MAX_BYTES) return { content, bytes, truncated: false };
@@ -477,8 +551,14 @@ function parseWorkspaces(pkgJsonText: string): string[] {
     const ws = parsed.workspaces;
     if (!ws) return [];
     if (Array.isArray(ws)) return ws.filter((x): x is string => typeof x === "string");
-    if (typeof ws === "object" && ws !== null && Array.isArray((ws as { packages?: unknown }).packages)) {
-      return ((ws as { packages: unknown[] }).packages).filter((x): x is string => typeof x === "string");
+    if (
+      typeof ws === "object" &&
+      ws !== null &&
+      Array.isArray((ws as { packages?: unknown }).packages)
+    ) {
+      return (ws as { packages: unknown[] }).packages.filter(
+        (x): x is string => typeof x === "string",
+      );
     }
     return [];
   } catch {
@@ -534,17 +614,23 @@ async function fetchOneFile(
   try {
     res = await fetch(rawUrl, { headers: rawHeaders });
   } catch (err) {
-    console.warn(`[cron] refreshChangelogFile(${sourceSlug}): raw fetch failed for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`);
+    console.warn(
+      `[cron] refreshChangelogFile(${sourceSlug}): raw fetch failed for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return null;
   }
   if (!res.ok) {
-    console.warn(`[cron] refreshChangelogFile(${sourceSlug}): raw fetch ${res.status} for ${fullPath}`);
+    console.warn(
+      `[cron] refreshChangelogFile(${sourceSlug}): raw fetch ${res.status} for ${fullPath}`,
+    );
     return null;
   }
   const raw = await res.text();
   const { content, bytes, truncated } = truncateToByteCap(raw);
   if (truncated) {
-    console.warn(`[cron] refreshChangelogFile(${sourceSlug}): ${fullPath} exceeds size cap, truncated to ${bytes} bytes`);
+    console.warn(
+      `[cron] refreshChangelogFile(${sourceSlug}): ${fullPath} exceeds size cap, truncated to ${bytes} bytes`,
+    );
   }
   const contentHashHex = await sha256HexWorker(content);
   return {
@@ -594,7 +680,9 @@ async function refreshChangelogFile(
     try {
       const meta = JSON.parse(source.metadata) as { changelogPaths?: unknown };
       if (Array.isArray(meta.changelogPaths)) {
-        override = (meta.changelogPaths as unknown[]).filter((x): x is string => typeof x === "string");
+        override = (meta.changelogPaths as unknown[]).filter(
+          (x): x is string => typeof x === "string",
+        );
       }
     } catch {
       override = null;
@@ -635,7 +723,10 @@ async function refreshChangelogFile(
     if (hasPkg) {
       let pkgText: string | null = null;
       try {
-        const pr = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/HEAD/package.json`, { headers: rawHeaders });
+        const pr = await fetch(
+          `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/package.json`,
+          { headers: rawHeaders },
+        );
         requestCount++;
         if (pr.ok) pkgText = await pr.text();
       } catch {
@@ -676,7 +767,9 @@ async function refreshChangelogFile(
     }
   }
 
-  console.log(`[cron] refreshChangelogFile(${source.slug}): ${fetched.length} files, ${requestCount} requests`);
+  console.log(
+    `[cron] refreshChangelogFile(${source.slug}): ${fetched.length} files, ${requestCount} requests`,
+  );
 
   const now = new Date().toISOString();
 
@@ -692,28 +785,31 @@ async function refreshChangelogFile(
   for (const file of fetched) {
     const prior = existingByPath.get(file.path);
     if (!prior) {
-      const [row] = await db.insert(sourceChangelogFiles).values({
-        sourceId: source.id,
-        path: file.path,
-        filename: file.filename,
-        url: file.url,
-        rawUrl: file.rawUrl,
-        content: file.content,
-        contentHash: file.contentHashHex,
-        bytes: file.bytes,
-        tokens: countTokensSafe(file.content),
-        fetchedAt: now,
-      }).returning({ id: sourceChangelogFiles.id });
-      if (row) changed.push({ fileId: row.id, content: file.content, contentHash: file.contentHashHex });
-      console.log(`[cron] Inserted ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
+      const [row] = await db
+        .insert(sourceChangelogFiles)
+        .values({
+          sourceId: source.id,
+          path: file.path,
+          filename: file.filename,
+          url: file.url,
+          rawUrl: file.rawUrl,
+          content: file.content,
+          contentHash: file.contentHashHex,
+          bytes: file.bytes,
+          tokens: countTokensSafe(file.content),
+          fetchedAt: now,
+        })
+        .returning({ id: sourceChangelogFiles.id });
+      if (row)
+        changed.push({ fileId: row.id, content: file.content, contentHash: file.contentHashHex });
+      console.log(
+        `[cron] Inserted ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`,
+      );
     } else if (prior.contentHash === file.contentHashHex) {
       // Hash unchanged — short-circuit, no embed needed. Backfill tokens if the prior row predates that column.
       const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
       if (prior.tokens === null) touch.tokens = countTokensSafe(prior.content);
-      await db
-        .update(sourceChangelogFiles)
-        .set(touch)
-        .where(eq(sourceChangelogFiles.id, prior.id));
+      await db.update(sourceChangelogFiles).set(touch).where(eq(sourceChangelogFiles.id, prior.id));
     } else {
       await db
         .update(sourceChangelogFiles)
@@ -729,7 +825,9 @@ async function refreshChangelogFile(
         })
         .where(eq(sourceChangelogFiles.id, prior.id));
       changed.push({ fileId: prior.id, content: file.content, contentHash: file.contentHashHex });
-      console.log(`[cron] Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`);
+      console.log(
+        `[cron] Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`,
+      );
     }
   }
 
@@ -741,7 +839,9 @@ async function refreshChangelogFile(
       try {
         await embedChangelogFileForSource(db, source, file, env);
       } catch (err) {
-        console.warn(`[cron] changelog embed failed for ${source.slug} (${file.fileId}): ${err instanceof Error ? err.message : String(err)}`);
+        console.warn(
+          `[cron] changelog embed failed for ${source.slug} (${file.fileId}): ${err instanceof Error ? err.message : String(err)}`,
+        );
       }
     }
   }
@@ -769,10 +869,9 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`,
-    { headers },
-  );
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
+    headers,
+  });
 
   if (!res.ok) {
     throw new Error(`GitHub API returned ${res.status} for ${owner}/${repo}`);
@@ -828,7 +927,9 @@ async function embedReleasesForSource(
   // Load org category for metadata filtering.
   let category: string | null = null;
   if (source.orgId) {
-    const orgRow = await db.run(sql`SELECT category FROM organizations WHERE id = ${source.orgId} LIMIT 1`);
+    const orgRow = await db.run(
+      sql`SELECT category FROM organizations WHERE id = ${source.orgId} LIMIT 1`,
+    );
     const first = (orgRow.results as Array<{ category: string | null }> | undefined)?.[0];
     category = first?.category ?? null;
   }

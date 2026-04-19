@@ -11,9 +11,7 @@ export function SearchHotkey() {
       if (!(e.metaKey || e.ctrlKey)) return;
       if (e.key !== "k" && e.key !== "K") return;
       e.preventDefault();
-      const input = document.querySelector<HTMLInputElement>(
-        'input[name="q"]',
-      );
+      const input = document.querySelector<HTMLInputElement>('input[name="q"]');
       if (input) {
         input.focus();
         input.select();

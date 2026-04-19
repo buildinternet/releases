@@ -94,11 +94,13 @@ curl -sH "Authorization: Bearer $GITHUB_TOKEN" \
 ```
 
 **Skip a source if:**
+
 - The most recent entry is over 12 months old
 - It's a niche sub-section of a larger docs site with no recent activity (e.g., a conformance or migration changelog that was a one-time effort)
 - The page returns 200 but is a stub or placeholder with no real content
 
 **Keep a source if:**
+
 - It has entries from the last 12 months, even if infrequent
 - It's the primary changelog for a product, even if the cadence is quarterly
 
@@ -154,6 +156,7 @@ bun src/index.ts latest <source-slug> --count 3
 ```
 
 If no releases were fetched, check:
+
 - Is the URL the changelog index page, not an individual entry?
 - Does the source need `--crawl` for multi-page changelogs?
 - Would providing an explicit `--feed-url` help?

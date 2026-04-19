@@ -29,6 +29,7 @@ When crawl mode is **not** enabled, the existing cascade is unchanged: feed → 
 New file: `src/adapters/crawl.ts`
 
 **`startCrawl(url, options)`**
+
 - POST to `https://api.cloudflare.com/client/v4/accounts/{id}/browser-rendering/crawl`
 - Request body:
   - `url`: source URL
@@ -40,6 +41,7 @@ New file: `src/adapters/crawl.ts`
 - Returns: job ID string from `response.result`
 
 **`pollCrawlResults(jobId)`**
+
 - GET `https://api.cloudflare.com/client/v4/accounts/{id}/browser-rendering/crawl/{jobId}`
 - Polls at 2-second intervals
 - Terminates when response body `result.status` is a terminal state: `completed`, `errored`, `cancelled_due_to_timeout`, `cancelled_due_to_limits`, or `cancelled_by_user`
@@ -49,6 +51,7 @@ New file: `src/adapters/crawl.ts`
 - Throws on client-side timeout. For job-level errors (`errored`, `cancelled_*`), throws `CrawlJobError` with the status.
 
 **`parseCrawlResults(pages, sourceSlug, options)`**
+
 - Runs `parseChangelog()` per page in parallel (concurrency limit: 5)
 - Maps the crawl page URL onto each resulting `RawRelease.url`
 - Applies `FetchOptions.since` and `FetchOptions.maxEntries` after aggregation
@@ -98,9 +101,9 @@ export interface SourceMetadata {
 
   // Crawl fields (new)
   crawlEnabled?: boolean;
-  crawlPattern?: string;     // e.g., "https://linear.app/changelog/**"
-  lastCrawlJobId?: string;   // for debugging/status
-  lastCrawlAt?: string;      // ISO timestamp, used for modifiedSince
+  crawlPattern?: string; // e.g., "https://linear.app/changelog/**"
+  lastCrawlJobId?: string; // for debugging/status
+  lastCrawlAt?: string; // ISO timestamp, used for modifiedSince
 }
 ```
 
@@ -114,7 +117,7 @@ Add a `crawl` override to `FetchOptions` in `src/adapters/types.ts`:
 interface FetchOptions {
   since?: Date;
   maxEntries?: number;
-  crawl?: boolean;     // --crawl (true) / --no-crawl (false) / unset (use persisted)
+  crawl?: boolean; // --crawl (true) / --no-crawl (false) / unset (use persisted)
 }
 ```
 
@@ -138,6 +141,7 @@ The `/crawl` endpoint supports `modifiedSince` (unix timestamp).
 ### Enabling Crawl Mode
 
 When `--crawl` is first passed for a source:
+
 1. Persist `crawlEnabled: true` and `crawlPattern` in metadata
 2. Clear `source.lastContentHash` to null — this prevents a stale hash from suppressing the single-page fallback if crawl later fails
 

@@ -20,9 +20,14 @@ describe("CLI source lifecycle", () => {
 
   it("adds a source with --skip-eval", () => {
     const result = cli(dataDir, [
-      "admin", "source", "add", "Acme Changelog",
-      "--url", "https://example.com/changelog",
-      "--org", "acme-corp",
+      "admin",
+      "source",
+      "add",
+      "Acme Changelog",
+      "--url",
+      "https://example.com/changelog",
+      "--org",
+      "acme-corp",
       "--skip-eval",
       "--json",
     ]);
@@ -41,10 +46,11 @@ describe("CLI source lifecycle", () => {
   });
 
   it("shows single source details", () => {
-    const source = cliJson<{ slug: string; url: string; type: string }>(
-      dataDir,
-      ["list", "acme-changelog", "--json"],
-    );
+    const source = cliJson<{ slug: string; url: string; type: string }>(dataDir, [
+      "list",
+      "acme-changelog",
+      "--json",
+    ]);
     expect(source.slug).toBe("acme-changelog");
     expect(source.url).toBe("https://example.com/changelog");
     expect(source.type).toBe("scrape");
@@ -52,8 +58,12 @@ describe("CLI source lifecycle", () => {
 
   it("edits source name", () => {
     const result = cli(dataDir, [
-      "admin", "source", "edit", "acme-changelog",
-      "--name", "Acme Release Notes",
+      "admin",
+      "source",
+      "edit",
+      "acme-changelog",
+      "--name",
+      "Acme Release Notes",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -63,8 +73,12 @@ describe("CLI source lifecycle", () => {
 
   it("edits source URL", () => {
     const result = cli(dataDir, [
-      "admin", "source", "edit", "acme-changelog",
-      "--url", "https://example.com/releases",
+      "admin",
+      "source",
+      "edit",
+      "acme-changelog",
+      "--url",
+      "https://example.com/releases",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -74,9 +88,14 @@ describe("CLI source lifecycle", () => {
 
   it("adds a GitHub source with auto-detected type", () => {
     const result = cli(dataDir, [
-      "admin", "source", "add", "Acme Releases",
-      "--url", "https://github.com/acme/acme",
-      "--org", "acme-corp",
+      "admin",
+      "source",
+      "add",
+      "Acme Releases",
+      "--url",
+      "https://github.com/acme/acme",
+      "--org",
+      "acme-corp",
       "--skip-eval",
       "--json",
     ]);
@@ -87,10 +106,16 @@ describe("CLI source lifecycle", () => {
 
   it("adds a source with explicit type", () => {
     const result = cli(dataDir, [
-      "admin", "source", "add", "Acme Feed",
-      "--url", "https://example.com/feed.xml",
-      "--type", "feed",
-      "--org", "acme-corp",
+      "admin",
+      "source",
+      "add",
+      "Acme Feed",
+      "--url",
+      "https://example.com/feed.xml",
+      "--type",
+      "feed",
+      "--org",
+      "acme-corp",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -100,25 +125,26 @@ describe("CLI source lifecycle", () => {
 
   it("rejects invalid source type", () => {
     const result = cli(dataDir, [
-      "admin", "source", "add", "Bad Source",
-      "--url", "https://example.com",
-      "--type", "invalid",
+      "admin",
+      "source",
+      "add",
+      "Bad Source",
+      "--url",
+      "https://example.com",
+      "--type",
+      "invalid",
       "--json",
     ]);
     expect(result.exitCode).toBe(1);
   });
 
   it("lists sources filtered by org", () => {
-    const sources = cliJson<{ slug: string }[]>(dataDir, [
-      "list", "--org", "acme-corp", "--json",
-    ]);
+    const sources = cliJson<{ slug: string }[]>(dataDir, ["list", "--org", "acme-corp", "--json"]);
     expect(sources.length).toBe(3);
   });
 
   it("lists sources filtered by query", () => {
-    const sources = cliJson<{ slug: string }[]>(dataDir, [
-      "list", "--query", "feed", "--json",
-    ]);
+    const sources = cliJson<{ slug: string }[]>(dataDir, ["list", "--query", "feed", "--json"]);
     expect(sources.length).toBe(1);
     expect(sources[0].slug).toBe("acme-feed");
   });
@@ -127,9 +153,7 @@ describe("CLI source lifecycle", () => {
     const result = cli(dataDir, ["admin", "source", "remove", "acme-feed", "--json"]);
     expect(result.exitCode).toBe(0);
     const removed = JSON.parse(result.stdout);
-    expect(removed).toEqual([
-      expect.objectContaining({ slug: "acme-feed", status: "removed" }),
-    ]);
+    expect(removed).toEqual([expect.objectContaining({ slug: "acme-feed", status: "removed" })]);
   });
 
   it("source is gone after removal", () => {
@@ -150,10 +174,13 @@ describe("CLI source lifecycle", () => {
   });
 
   it("source shows up in org show", () => {
-    const org = cliJson<{ sources: { slug: string }[] }>(
-      dataDir,
-      ["admin", "org", "show", "acme-corp", "--json"],
-    );
+    const org = cliJson<{ sources: { slug: string }[] }>(dataDir, [
+      "admin",
+      "org",
+      "show",
+      "acme-corp",
+      "--json",
+    ]);
     expect(org.sources.length).toBeGreaterThanOrEqual(1);
     const slugs = org.sources.map((s) => s.slug);
     expect(slugs).toContain("acme-changelog");
@@ -161,10 +188,16 @@ describe("CLI source lifecycle", () => {
 
   it("adds a source with feed-url", () => {
     const result = cli(dataDir, [
-      "admin", "source", "add", "Feed Source",
-      "--url", "https://example.com/blog",
-      "--feed-url", "https://example.com/blog/feed.xml",
-      "--org", "acme-corp",
+      "admin",
+      "source",
+      "add",
+      "Feed Source",
+      "--url",
+      "https://example.com/blog",
+      "--feed-url",
+      "https://example.com/blog/feed.xml",
+      "--org",
+      "acme-corp",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -173,14 +206,28 @@ describe("CLI source lifecycle", () => {
   });
 
   it("marks a source as primary", () => {
-    const result = cli(dataDir, ["admin", "source", "edit", "acme-changelog", "--primary", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "source",
+      "edit",
+      "acme-changelog",
+      "--primary",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isPrimary).toBeTruthy();
   });
 
   it("disables a source", () => {
-    const result = cli(dataDir, ["admin", "source", "edit", "acme-changelog", "--disable", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "source",
+      "edit",
+      "acme-changelog",
+      "--disable",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isHidden).toBeTruthy();
@@ -193,15 +240,20 @@ describe("CLI source lifecycle", () => {
   });
 
   it("disabled source included with --include-disabled", () => {
-    const sources = cliJson<{ slug: string }[]>(dataDir, [
-      "list", "--include-disabled", "--json",
-    ]);
+    const sources = cliJson<{ slug: string }[]>(dataDir, ["list", "--include-disabled", "--json"]);
     const slugs = sources.map((s) => s.slug);
     expect(slugs).toContain("acme-changelog");
   });
 
   it("re-enables a source", () => {
-    const result = cli(dataDir, ["admin", "source", "edit", "acme-changelog", "--enable", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "source",
+      "edit",
+      "acme-changelog",
+      "--enable",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const updated = JSON.parse(result.stdout);
     expect(updated.isHidden).toBeFalsy();

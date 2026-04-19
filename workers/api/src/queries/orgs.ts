@@ -27,10 +27,7 @@ export async function getOrgsWithStats(
   `);
 }
 
-export async function getOrgSourcesWithStats(
-  db: D1Db,
-  orgId: string,
-): Promise<SourceWithStats[]> {
+export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<SourceWithStats[]> {
   // Version-by-X columns pack `sort_key || '|' || COALESCE(version, '')` so
   // MAX() surfaces the version of the latest-sorted row; we then split on '|'
   // and NULLIF back to null. Empty-string version becomes null, which matches
@@ -75,10 +72,7 @@ export type OrgSparklineRow = {
   cnt: number;
 };
 
-export async function getOrgSparklines(
-  db: D1Db,
-  cutoff30d: string,
-): Promise<OrgSparklineRow[]> {
+export async function getOrgSparklines(db: D1Db, cutoff30d: string): Promise<OrgSparklineRow[]> {
   return db.all<OrgSparklineRow>(sql`
     SELECT
       s.org_id,
@@ -296,7 +290,9 @@ export async function getOrgReleasesFeed(
   const coverageFilter = opts.includeCoverage
     ? ""
     : "AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)";
-  const stmt = d1.prepare(`
+  const stmt = d1
+    .prepare(
+      `
     SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
            r.published_at, r.fetched_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
@@ -312,7 +308,9 @@ export async function getOrgReleasesFeed(
       r.fetched_at DESC,
       r.id DESC
     LIMIT ?
-  `).bind(orgId, ...cursor.cursorBindings, limit);
+  `,
+    )
+    .bind(orgId, ...cursor.cursorBindings, limit);
 
   const { results } = await stmt.all<OrgReleaseRow>();
   return results;

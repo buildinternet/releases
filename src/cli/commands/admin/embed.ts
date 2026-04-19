@@ -82,9 +82,7 @@ async function runBackfillLoop(
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (opts.json) {
-        console.log(
-          JSON.stringify({ ok: false, label, error: msg, ...summary }, null, 2),
-        );
+        console.log(JSON.stringify({ ok: false, label, error: msg, ...summary }, null, 2));
       } else {
         logger.error(`  Batch ${summary.batches + 1} failed: ${msg}`);
       }
@@ -122,9 +120,7 @@ function printSummary(label: string, summary: LoopSummary, json: boolean): void 
     console.log(JSON.stringify({ ok: true, label, ...summary }, null, 2));
     return;
   }
-  console.log(
-    `Done. Total: ${summary.totalProcessed} processed, ${summary.totalFailed} failed.`,
-  );
+  console.log(`Done. Total: ${summary.totalProcessed} processed, ${summary.totalFailed} failed.`);
   if (summary.remaining > 0) {
     console.log(
       chalk.dim(
@@ -206,18 +202,15 @@ Examples:
     .option("--limit <n>", "Max files to process across all batches", (v) => parseInt(v, 10))
     .option("--dry-run", "Report what would be processed without writing")
     .option("--json", "Machine-readable JSON output")
-    .action(
-      async (opts: { source?: string; limit?: number; dryRun?: boolean; json?: boolean }) => {
-        requireRemote();
-        const summary = await runBackfillLoop(
-          "changelogs",
-          (limit) =>
-            embedChangelogs({ sourceSlug: opts.source, limit, dryRun: opts.dryRun }),
-          opts,
-        );
-        printSummary("changelogs", summary, opts.json === true);
-      },
-    );
+    .action(async (opts: { source?: string; limit?: number; dryRun?: boolean; json?: boolean }) => {
+      requireRemote();
+      const summary = await runBackfillLoop(
+        "changelogs",
+        (limit) => embedChangelogs({ sourceSlug: opts.source, limit, dryRun: opts.dryRun }),
+        opts,
+      );
+      printSummary("changelogs", summary, opts.json === true);
+    });
 
   embed
     .command("status")

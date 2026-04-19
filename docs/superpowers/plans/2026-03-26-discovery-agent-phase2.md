@@ -16,29 +16,29 @@
 
 ### New files: `workers/discovery/`
 
-| File | Responsibility |
-|------|---------------|
-| `workers/discovery/package.json` | Worker-specific dependencies |
-| `workers/discovery/tsconfig.json` | TypeScript config for Worker |
-| `workers/discovery/wrangler.jsonc` | Worker + Sandbox + DO bindings |
-| `workers/discovery/Dockerfile` | Sandbox image: Bun + Released CLI |
-| `workers/discovery/src/index.ts` | Worker entry: HTTP router, re-exports DO + Sandbox |
-| `workers/discovery/src/discovery-session.ts` | DiscoverySession DO: sandbox lifecycle |
-| `workers/discovery/src/types.ts` | Shared request/response types |
+| File                                         | Responsibility                                     |
+| -------------------------------------------- | -------------------------------------------------- |
+| `workers/discovery/package.json`             | Worker-specific dependencies                       |
+| `workers/discovery/tsconfig.json`            | TypeScript config for Worker                       |
+| `workers/discovery/wrangler.jsonc`           | Worker + Sandbox + DO bindings                     |
+| `workers/discovery/Dockerfile`               | Sandbox image: Bun + Released CLI                  |
+| `workers/discovery/src/index.ts`             | Worker entry: HTTP router, re-exports DO + Sandbox |
+| `workers/discovery/src/discovery-session.ts` | DiscoverySession DO: sandbox lifecycle             |
+| `workers/discovery/src/types.ts`             | Shared request/response types                      |
 
 ### New files: main project
 
-| File | Responsibility |
-|------|---------------|
-| `src/agent/run-discovery.ts` | Thin entry point for sandbox (parses args, calls `runDiscovery()`, writes progress) |
-| `src/cli/commands/onboard-apply.ts` | `released onboard apply <state-file>` CLI command |
+| File                                | Responsibility                                                                      |
+| ----------------------------------- | ----------------------------------------------------------------------------------- |
+| `src/agent/run-discovery.ts`        | Thin entry point for sandbox (parses args, calls `runDiscovery()`, writes progress) |
+| `src/cli/commands/onboard-apply.ts` | `released onboard apply <state-file>` CLI command                                   |
 
 ### Modified files
 
-| File | Change |
-|------|--------|
-| `src/cli/commands/onboard.ts` | Register `apply` subcommand |
-| `src/agent/discovery.ts` | Add `"error"` to `DiscoveryState.status` union type |
+| File                          | Change                                              |
+| ----------------------------- | --------------------------------------------------- |
+| `src/cli/commands/onboard.ts` | Register `apply` subcommand                         |
+| `src/agent/discovery.ts`      | Add `"error"` to `DiscoveryState.status` union type |
 
 ---
 
@@ -47,6 +47,7 @@
 This is the script that runs inside the sandbox container. It parses CLI args, calls the existing `runDiscovery()`, writes progress, and handles errors.
 
 **Files:**
+
 - Create: `src/agent/run-discovery.ts`
 - Modify: `src/agent/discovery.ts:27` (add `"error"` to status union)
 
@@ -104,7 +105,12 @@ async function writeProgress(progress: ProgressState): Promise<void> {
   await Bun.write(PROGRESS_FILE, JSON.stringify(progress));
 }
 
-async function writeErrorState(company: string, domain?: string, githubOrg?: string, error?: string): Promise<void> {
+async function writeErrorState(
+  company: string,
+  domain?: string,
+  githubOrg?: string,
+  error?: string,
+): Promise<void> {
   const now = new Date().toISOString();
   const state: DiscoveryState = {
     product: company,
@@ -193,6 +199,7 @@ git commit -m "Add sandbox entry point for discovery agent"
 The `released onboard apply <state-file>` command reads a DiscoveryState JSON and applies approved sources to the real DB.
 
 **Files:**
+
 - Create: `src/cli/commands/onboard-apply.ts`
 - Modify: `src/cli/commands/onboard.ts` (register subcommand)
 
@@ -306,9 +313,7 @@ export function registerOnboardApplyCommand(onboardCmd: Command) {
         const added = results.filter((r) => r.action === "added").length;
         const ignored = results.filter((r) => r.action === "ignored").length;
         const errors = results.filter((r) => r.action === "error").length;
-        logger.info(
-          chalk.bold(`\nApplied: ${added} added, ${ignored} ignored, ${errors} errors`),
-        );
+        logger.info(chalk.bold(`\nApplied: ${added} added, ${ignored} ignored, ${errors} errors`));
       }
 
       if (results.some((r) => r.action === "error")) {
@@ -381,6 +386,7 @@ git commit -m "Add 'released onboard apply' command for applying discovery resul
 Set up the Worker project structure, dependencies, and config files.
 
 **Files:**
+
 - Create: `workers/discovery/package.json`
 - Create: `workers/discovery/tsconfig.json`
 - Create: `workers/discovery/wrangler.jsonc`
@@ -437,22 +443,24 @@ Set up the Worker project structure, dependencies, and config files.
   "name": "released-discovery",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-26",
-  "containers": [{
-    "class_name": "Sandbox",
-    "image": "./Dockerfile",
-    "instance_type": "lite",
-    "max_instances": 5
-  }],
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "./Dockerfile",
+      "instance_type": "lite",
+      "max_instances": 5,
+    },
+  ],
   "durable_objects": {
     "bindings": [
       { "class_name": "Sandbox", "name": "Sandbox" },
-      { "class_name": "DiscoverySession", "name": "DISCOVERY_SESSION" }
-    ]
+      { "class_name": "DiscoverySession", "name": "DISCOVERY_SESSION" },
+    ],
   },
   "migrations": [
     { "new_sqlite_classes": ["Sandbox"], "tag": "v1" },
-    { "new_classes": ["DiscoverySession"], "tag": "v2" }
-  ]
+    { "new_classes": ["DiscoverySession"], "tag": "v2" },
+  ],
 }
 ```
 
@@ -536,6 +544,7 @@ git commit -m "Scaffold workers/discovery project with config and types"
 The thin DO that owns the sandbox lifecycle.
 
 **Files:**
+
 - Create: `workers/discovery/src/discovery-session.ts`
 
 - [ ] **Step 1: Create `workers/discovery/src/discovery-session.ts`**
@@ -659,6 +668,7 @@ git commit -m "Add DiscoverySession Durable Object for sandbox lifecycle"
 The stateless HTTP router.
 
 **Files:**
+
 - Create: `workers/discovery/src/index.ts`
 
 - [ ] **Step 1: Create `workers/discovery/src/index.ts`**
@@ -779,6 +789,7 @@ git commit -m "Add Worker HTTP router for discovery sandbox"
 Before deploying, verify the four unknowns from the spec. Each spike is a focused test.
 
 **Files:**
+
 - No permanent files -- these are throwaway verification scripts
 
 - [ ] **Step 1: Verify Dockerfile base image**
@@ -806,7 +817,9 @@ const envLines = [
   `CLOUDFLARE_ACCOUNT_ID=${this.env.CLOUDFLARE_ACCOUNT_ID}`,
   `CLOUDFLARE_API_TOKEN=${this.env.CLOUDFLARE_API_TOKEN}`,
   this.env.GITHUB_TOKEN ? `GITHUB_TOKEN=${this.env.GITHUB_TOKEN}` : "",
-].filter(Boolean).join("\n");
+]
+  .filter(Boolean)
+  .join("\n");
 await sandbox.writeFile("/app/.env", new TextEncoder().encode(envLines));
 ```
 
@@ -823,6 +836,7 @@ If the DO is garbage collected before completion, switch to `this.ctx.blockConcu
 Run `cd workers/discovery && npx wrangler dev 2>&1 | head -50` and check what directory the Docker build uses as context.
 
 If build context is `workers/discovery/`, the `COPY ../../ /app` line won't work. Fix by either:
+
 1. Moving the Dockerfile to the project root and updating `wrangler.jsonc` to `"image": "../../Dockerfile"`
 2. Adding a build script that copies the project into a staging directory
 
@@ -846,6 +860,7 @@ git commit -m "Complete verification spikes for sandbox deployment"
 Deploy the Worker and run a real discovery session.
 
 **Files:**
+
 - No new files
 
 - [ ] **Step 1: Set secrets**
@@ -890,6 +905,7 @@ curl https://released-discovery.<subdomain>.workers.dev/onboard/<sessionId>/stat
 ```
 
 Expected progression:
+
 1. `{ "status": "running" }` (no progress yet)
 2. `{ "status": "running", "progress": { "step": "discovering", ... } }`
 3. `{ "status": "complete", "result": { "product": "Clerk", "sources": [...] } }`

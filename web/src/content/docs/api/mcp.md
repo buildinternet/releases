@@ -85,28 +85,28 @@ releases admin mcp serve
 
 Read-only tools available on the remote server with no authentication.
 
-| Tool | Description |
-| --- | --- |
-| `search_releases` | Hybrid search across releases and heading-aligned CHANGELOG chunks. Accepts `mode: "lexical" \| "semantic" \| "hybrid"` (default `hybrid`) and filters by product slug, organization, or release `type`. Every hit carries a `kind: "release" \| "changelog_chunk"` discriminator; chunk hits include `chunkOffset` and `chunkLength` so you can chain into `get_source_changelog` for surrounding context. |
-| `search_registry` | Vector-backed search across orgs, products, and sources. Use this for entity lookup instead of `search_releases` when you want organization or product matches. |
-| `get_latest_releases` | Get the most recent releases, optionally filtered by product, organization, or release `type`. |
-| `get_release` | Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid. |
-| `list_sources` | List all indexed changelog sources, optionally filtered to one organization. |
-| `get_source` | Detail for a single source with org/product linkage, release count, last-fetched timestamp, and whether a CHANGELOG file is stored. |
+| Tool                   | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search_releases`      | Hybrid search across releases and heading-aligned CHANGELOG chunks. Accepts `mode: "lexical" \| "semantic" \| "hybrid"` (default `hybrid`) and filters by product slug, organization, or release `type`. Every hit carries a `kind: "release" \| "changelog_chunk"` discriminator; chunk hits include `chunkOffset` and `chunkLength` so you can chain into `get_source_changelog` for surrounding context.                                                                                                                            |
+| `search_registry`      | Vector-backed search across orgs, products, and sources. Use this for entity lookup instead of `search_releases` when you want organization or product matches.                                                                                                                                                                                                                                                                                                                                                                        |
+| `get_latest_releases`  | Get the most recent releases, optionally filtered by product, organization, or release `type`.                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| `get_release`          | Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| `list_sources`         | List all indexed changelog sources, optionally filtered to one organization.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `get_source`           | Detail for a single source with org/product linkage, release count, last-fetched timestamp, and whether a CHANGELOG file is stored.                                                                                                                                                                                                                                                                                                                                                                                                    |
 | `get_source_changelog` | Read the canonical `CHANGELOG.md` tracked for a GitHub source, refreshed on every fetch. Supports heading-aligned slicing by chars (`offset` + `limit`) or by tokens (`tokens`, cl100k_base). Every response includes `totalTokens` for budget planning; token-mode responses also include `sliceTokens` for the returned chunk. Chain successive calls via `nextOffset` to page through large files (e.g. Apollo Client's 700KB CHANGELOG) without blowing out the context window. Recommended token brackets: 2000/5000/10000/20000. |
-| `list_organizations` | List all organizations, searchable by name, slug, domain, or account handle. |
-| `get_organization` | Detailed view of a single organization including accounts, tags, sources, products, and domain aliases. |
-| `list_products` | List products, optionally scoped to one organization. |
-| `get_product` | Detail for a single product with its organization, category, tags, and the sources grouped under it. |
+| `list_organizations`   | List all organizations, searchable by name, slug, domain, or account handle.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `get_organization`     | Detailed view of a single organization including accounts, tags, sources, products, and domain aliases.                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| `list_products`        | List products, optionally scoped to one organization.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `get_product`          | Detail for a single product with its organization, category, tags, and the sources grouped under it.                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
 ### Analysis tools
 
 AI-generated summaries and comparisons. Available on the remote server with no authentication.
 
-| Tool | Description |
-| --- | --- |
+| Tool                | Description                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `summarize_changes` | AI-generated summary of recent releases for a product. Supports custom lookback window and additional instructions. |
-| `compare_products` | Head-to-head AI comparison of releases between two products. |
+| `compare_products`  | Head-to-head AI comparison of releases between two products.                                                        |
 
 <!-- admin:start -->
 
@@ -114,28 +114,28 @@ AI-generated summaries and comparisons. Available on the remote server with no a
 
 Only available on the local server.
 
-| Tool | Description |
-| --- | --- |
-| `add_source` | Add a new changelog source from a URL. |
-| `remove_source` | Remove a source from the index. |
-| `fetch_source` | Fetch new releases from a source. |
-| `add_organization` | Create a new organization. |
-| `link_account` | Link a platform account to an organization. |
+| Tool               | Description                                 |
+| ------------------ | ------------------------------------------- |
+| `add_source`       | Add a new changelog source from a URL.      |
+| `remove_source`    | Remove a source from the index.             |
+| `fetch_source`     | Fetch new releases from a source.           |
+| `add_organization` | Create a new organization.                  |
+| `link_account`     | Link a platform account to an organization. |
 
 ### Curation tools
 
 Only available on the local server.
 
-| Tool | Description |
-| --- | --- |
-| `suppress_release` | Hide a release from queries and search. |
-| `unsuppress_release` | Restore a suppressed release. |
-| `ignore_url` | Add a URL to an org's ignore list. |
-| `unignore_url` | Remove a URL from the ignore list. |
-| `list_ignored_urls` | List ignored URLs for an organization. |
-| `block_url` | Globally block a URL pattern. |
-| `unblock_url` | Remove a global URL block. |
-| `list_blocked_urls` | List all globally blocked URLs. |
+| Tool                 | Description                             |
+| -------------------- | --------------------------------------- |
+| `suppress_release`   | Hide a release from queries and search. |
+| `unsuppress_release` | Restore a suppressed release.           |
+| `ignore_url`         | Add a URL to an org's ignore list.      |
+| `unignore_url`       | Remove a URL from the ignore list.      |
+| `list_ignored_urls`  | List ignored URLs for an organization.  |
+| `block_url`          | Globally block a URL pattern.           |
+| `unblock_url`        | Remove a global URL block.              |
+| `list_blocked_urls`  | List all globally blocked URLs.         |
 
 <!-- admin:end -->
 

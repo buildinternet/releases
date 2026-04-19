@@ -98,45 +98,50 @@ async function insertReleases(
 }
 
 async function updateSourceAfterFetch(env: ScrapeEnv, sourceId: string): Promise<void> {
-  await env.apiFetcher.fetch(
-    `https://api/v1/sources/${encodeURIComponent(sourceId)}`,
-    {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiKey}`,
-      },
-      body: JSON.stringify({
-        lastFetchedAt: new Date().toISOString(),
-        changeDetectedAt: null,
-        consecutiveErrors: 0,
-        consecutiveNoChange: 0,
-      }),
-    },
-  );
-}
-
-async function writeFetchLog(
-  env: ScrapeEnv,
-  sourceId: string,
-  result: { releasesFound: number; releasesInserted: number; durationMs: number; status: string; error?: string },
-): Promise<void> {
-  await env.apiFetcher.fetch("https://api/v1/fetch-log", {
-    method: "POST",
+  await env.apiFetcher.fetch(`https://api/v1/sources/${encodeURIComponent(sourceId)}`, {
+    method: "PATCH",
     headers: {
       "Content-Type": "application/json",
       Authorization: `Bearer ${env.apiKey}`,
     },
     body: JSON.stringify({
-      sourceId,
-      sessionId: env.sessionId ?? null,
-      releasesFound: result.releasesFound,
-      releasesInserted: result.releasesInserted,
-      durationMs: result.durationMs,
-      status: result.status,
-      error: result.error ?? null,
+      lastFetchedAt: new Date().toISOString(),
+      changeDetectedAt: null,
+      consecutiveErrors: 0,
+      consecutiveNoChange: 0,
     }),
-  }).catch(() => {}); // best-effort
+  });
+}
+
+async function writeFetchLog(
+  env: ScrapeEnv,
+  sourceId: string,
+  result: {
+    releasesFound: number;
+    releasesInserted: number;
+    durationMs: number;
+    status: string;
+    error?: string;
+  },
+): Promise<void> {
+  await env.apiFetcher
+    .fetch("https://api/v1/fetch-log", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${env.apiKey}`,
+      },
+      body: JSON.stringify({
+        sourceId,
+        sessionId: env.sessionId ?? null,
+        releasesFound: result.releasesFound,
+        releasesInserted: result.releasesInserted,
+        durationMs: result.durationMs,
+        status: result.status,
+        error: result.error ?? null,
+      }),
+    })
+    .catch(() => {}); // best-effort
 }
 
 // ── Content acquisition for scrape path ───────────────────────────
@@ -190,8 +195,11 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
     const durationMs = Date.now() - start;
     const message = err instanceof Error ? err.message : String(err);
     await writeFetchLog(env, source.id, {
-      releasesFound: 0, releasesInserted: 0, durationMs,
-      status: "error", error: message,
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "error",
+      error: message,
     });
     return `Error: ${message}`;
   }
@@ -242,14 +250,21 @@ async function runScrapePath(
     markdown = await fetchMarkdownUrl(meta.markdownUrl);
   }
   if (!markdown) {
-    markdown = await fetchCloudflareMarkdown(source.url, env.cloudflareAccountId, env.cloudflareApiToken);
+    markdown = await fetchCloudflareMarkdown(
+      source.url,
+      env.cloudflareAccountId,
+      env.cloudflareApiToken,
+    );
   }
 
   if (!markdown) {
     const durationMs = Date.now() - start;
     await writeFetchLog(env, source.id, {
-      releasesFound: 0, releasesInserted: 0, durationMs,
-      status: "error", error: "Cloudflare Browser Rendering returned no content",
+      releasesFound: 0,
+      releasesInserted: 0,
+      durationMs,
+      status: "error",
+      error: "Cloudflare Browser Rendering returned no content",
     });
     return `Error: Cloudflare Browser Rendering returned no content for ${source.url}`;
   }

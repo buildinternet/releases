@@ -1,6 +1,14 @@
 "use client";
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 type Theme = "light" | "dark" | "system";
 
@@ -56,7 +64,9 @@ function syncThemeCookie(theme: Theme) {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(getInitialTheme);
-  const [systemPreference, setSystemPreference] = useState<"light" | "dark">(getInitialResolvedTheme);
+  const [systemPreference, setSystemPreference] = useState<"light" | "dark">(
+    getInitialResolvedTheme,
+  );
   const themeRef = useRef(theme);
 
   const resolved = theme === "system" ? systemPreference : theme;
@@ -102,9 +112,5 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo(() => ({ theme, resolved, setTheme }), [theme, resolved, setTheme]);
 
-  return (
-    <ThemeContext.Provider value={value}>
-      {children}
-    </ThemeContext.Provider>
-  );
+  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
 }

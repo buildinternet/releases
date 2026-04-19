@@ -2,17 +2,25 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import {
-  findOrg, getSourcesByOrg, listOrgs, createOrg, removeOrg,
-  getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
-  getProductsByOrg, addTagsToOrg, removeTagsFromOrg, getTagsForOrg, updateOrg,
-  listDomainAliases, addDomainAlias, removeDomainAlias,
+  findOrg,
+  getSourcesByOrg,
+  listOrgs,
+  createOrg,
+  removeOrg,
+  getOrgAccountsBySlug,
+  linkOrgAccount,
+  unlinkOrgAccount,
+  getProductsByOrg,
+  addTagsToOrg,
+  removeTagsFromOrg,
+  getTagsForOrg,
+  updateOrg,
+  listDomainAliases,
+  addDomainAlias,
+  removeDomainAlias,
   getOrgOverview,
 } from "../../db/queries.js";
-import {
-  regenerateOrgOverview,
-  isActiveSource,
-  OVERVIEW_WINDOW_DAYS,
-} from "../../ai/knowledge.js";
+import { regenerateOrgOverview, isActiveSource, OVERVIEW_WINDOW_DAYS } from "../../ai/knowledge.js";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { orgNotFound } from "../suggest.js";
@@ -40,16 +48,16 @@ function logRegenResult(result: OverviewRegenResult, orgName: string): void {
       `Overview regenerated (${result.chars} chars from ${result.selected} of ${result.totalAvailable} releases, window: ${result.windowDays}d)`,
     );
   } else if (result.status === "no-releases") {
-    logger.warn(`No releases in the last ${result.windowDays} days for ${orgName} — overview not regenerated`);
+    logger.warn(
+      `No releases in the last ${result.windowDays} days for ${orgName} — overview not regenerated`,
+    );
   } else {
     logger.warn(`Overview regeneration failed for ${orgName}`);
   }
 }
 
 export function registerOrgCommand(program: Command) {
-  const org = program
-    .command("org")
-    .description("Manage organizations");
+  const org = program.command("org").description("Manage organizations");
 
   // ── org add ──
   org
@@ -63,41 +71,68 @@ export function registerOrgCommand(program: Command) {
     .option("--tags <tags>", "Comma-separated tags (e.g. typescript,react)")
     .option("--avatar <url>", "Set avatar image URL")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin org add "Acme Corp"
   releases admin org add "Acme Corp" --domain acme.com
   releases admin org add "Acme Corp" --description "Cloud deployment platform for frontend teams"
-  releases admin org add "Acme Corp" --slug acme --json`)
-    .action(async (name: string, opts: { domain?: string; slug?: string; description?: string; category?: string; tags?: string; avatar?: string; json?: boolean }) => {
-      const slug = opts.slug ?? toSlug(name);
+  releases admin org add "Acme Corp" --slug acme --json`,
+    )
+    .action(
+      async (
+        name: string,
+        opts: {
+          domain?: string;
+          slug?: string;
+          description?: string;
+          category?: string;
+          tags?: string;
+          avatar?: string;
+          json?: boolean;
+        },
+      ) => {
+        const slug = opts.slug ?? toSlug(name);
 
-      const existing = await findOrg(slug);
-      if (existing) {
-        console.error(chalk.red(`Organization with slug "${slug}" already exists.`));
-        process.exit(1);
-      }
-
-      if (opts.category && !isValidCategory(opts.category)) {
-        console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
-        process.exit(1);
-      }
-
-      const created = await createOrg(name, { slug, domain: opts.domain, description: opts.description, category: opts.category, avatarUrl: opts.avatar });
-
-      if (opts.tags) {
-        const tagList = opts.tags.split(",").map((t: string) => t.trim()).filter(Boolean);
-        if (tagList.length > 0) {
-          await addTagsToOrg(created.id, tagList);
+        const existing = await findOrg(slug);
+        if (existing) {
+          console.error(chalk.red(`Organization with slug "${slug}" already exists.`));
+          process.exit(1);
         }
-      }
 
-      if (opts.json) {
-        console.log(JSON.stringify(created, null, 2));
-      } else {
-        console.log(chalk.green(`Organization added: ${name} (${slug})`));
-      }
-    });
+        if (opts.category && !isValidCategory(opts.category)) {
+          console.error(
+            chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`),
+          );
+          process.exit(1);
+        }
+
+        const created = await createOrg(name, {
+          slug,
+          domain: opts.domain,
+          description: opts.description,
+          category: opts.category,
+          avatarUrl: opts.avatar,
+        });
+
+        if (opts.tags) {
+          const tagList = opts.tags
+            .split(",")
+            .map((t: string) => t.trim())
+            .filter(Boolean);
+          if (tagList.length > 0) {
+            await addTagsToOrg(created.id, tagList);
+          }
+        }
+
+        if (opts.json) {
+          console.log(JSON.stringify(created, null, 2));
+        } else {
+          console.log(chalk.green(`Organization added: ${name} (${slug})`));
+        }
+      },
+    );
 
   // ── org list ──
   org
@@ -106,14 +141,17 @@ Examples:
     .option("--query <text>", "Filter by name, slug, domain, or account handle")
     .option("--platform <platform>", "Filter to orgs with an account on this platform")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin org list
   releases admin org list --query vercel
   releases admin org list --platform github --json
 
 Note: org list shows a summary view (counts, last activity). Use "admin org show <slug>" to see
-full details including linked accounts, tags, sources, and products.`)
+full details including linked accounts, tags, sources, and products.`,
+    )
     .action(async (opts: { query?: string; platform?: string; json?: boolean }) => {
       const allOrgs = await listOrgs({ query: opts.query, platform: opts.platform });
 
@@ -132,21 +170,11 @@ full details including linked accounts, tags, sources, and products.`)
       }
 
       const table = new Table({
-        head: [
-          chalk.cyan("Name"),
-          chalk.cyan("Slug"),
-          chalk.cyan("Domain"),
-          chalk.cyan("Updated"),
-        ],
+        head: [chalk.cyan("Name"), chalk.cyan("Slug"), chalk.cyan("Domain"), chalk.cyan("Updated")],
       });
 
       for (const o of allOrgs) {
-        table.push([
-          o.name,
-          o.slug,
-          o.domain ?? chalk.dim("—"),
-          o.updatedAt,
-        ]);
+        table.push([o.name, o.slug, o.domain ?? chalk.dim("—"), o.updatedAt]);
       }
 
       console.log(table.toString());
@@ -159,121 +187,151 @@ full details including linked accounts, tags, sources, and products.`)
     .argument("<identifier>", "Org slug, domain, name, or account handle")
     .option("--json", "Output as JSON")
     .option("--regenerate", "Regenerate the AI overview from recent releases")
-    .option("--window <days>", "Window (days) for overview release selection", String(OVERVIEW_WINDOW_DAYS))
-    .addHelpText("after", `
+    .option(
+      "--window <days>",
+      "Window (days) for overview release selection",
+      String(OVERVIEW_WINDOW_DAYS),
+    )
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin org show acme
   releases admin org show acme.com
   releases admin org show acme --json
   releases admin org show acme --regenerate
-  releases admin org show acme --regenerate --window 30`)
-    .action(async (identifier: string, opts: { json?: boolean; regenerate?: boolean; window?: string }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        return orgNotFound(identifier);
-      }
-
-      const [accounts, orgProducts, linkedSources, orgTags, aliases, overview] = await Promise.all([
-        getOrgAccountsBySlug(found.slug, found.id),
-        getProductsByOrg(found.id),
-        getSourcesByOrg(found.id),
-        getTagsForOrg(found.id),
-        listDomainAliases({ orgId: found.id }),
-        getOrgOverview(found.id, found.slug).catch(() => null),
-      ]);
-
-      if (opts.regenerate) {
-        const windowDays = parseWindowDays(opts.window);
-        logger.info(`Regenerating overview for ${found.name} (window: ${windowDays}d)...`);
-        const result = await regenerateOrgOverview(found, linkedSources, { windowDays });
-        logRegenResult(result, found.name);
-        if (result.status === "regenerated") {
-          const updated = await getOrgOverview(found.id, found.slug);
-          if (updated) Object.assign(overview ?? {}, updated);
+  releases admin org show acme --regenerate --window 30`,
+    )
+    .action(
+      async (
+        identifier: string,
+        opts: { json?: boolean; regenerate?: boolean; window?: string },
+      ) => {
+        const found = await findOrg(identifier);
+        if (!found) {
+          return orgNotFound(identifier);
         }
-      }
 
-      if (opts.json) {
-        console.log(JSON.stringify({
-          ...found,
-          accounts,
-          products: orgProducts,
-          sources: linkedSources,
-          tags: orgTags,
-          aliases: aliases.map((a) => a.domain),
-          overview: overview?.content ?? null,
-        }, null, 2));
-        return;
-      }
+        const [accounts, orgProducts, linkedSources, orgTags, aliases, overview] =
+          await Promise.all([
+            getOrgAccountsBySlug(found.slug, found.id),
+            getProductsByOrg(found.id),
+            getSourcesByOrg(found.id),
+            getTagsForOrg(found.id),
+            listDomainAliases({ orgId: found.id }),
+            getOrgOverview(found.id, found.slug).catch(() => null),
+          ]);
 
-      console.log(chalk.bold(found.name));
-      console.log(`  Slug:    ${found.slug}`);
-      console.log(`  Domain:  ${found.domain ?? chalk.dim("—")}`);
-      if (aliases.length > 0) console.log(`  Aliases: ${aliases.map((a) => a.domain).join(", ")}`);
-      if (found.description) console.log(`  About:   ${found.description}`);
-      console.log(`  Created: ${found.createdAt}`);
-      console.log(`  Updated: ${found.updatedAt}`);
-      if (found.category) console.log(`  Category: ${found.category}`);
-      if (orgTags.length > 0) console.log(`  Tags:    ${orgTags.join(", ")}`);
-
-      if (accounts.length > 0) {
-        console.log();
-        console.log(chalk.bold("Accounts:"));
-        for (const a of accounts) {
-          console.log(`  ${chalk.cyan(a.platform)}  ${a.handle}`);
+        if (opts.regenerate) {
+          const windowDays = parseWindowDays(opts.window);
+          logger.info(`Regenerating overview for ${found.name} (window: ${windowDays}d)...`);
+          const result = await regenerateOrgOverview(found, linkedSources, { windowDays });
+          logRegenResult(result, found.name);
+          if (result.status === "regenerated") {
+            const updated = await getOrgOverview(found.id, found.slug);
+            if (updated) Object.assign(overview ?? {}, updated);
+          }
         }
-      }
 
-      if (orgProducts.length > 0) {
-        console.log();
-        console.log(chalk.bold("Products:"));
-        for (const p of orgProducts) {
-          const urlLabel = p.url ? chalk.dim(` ${p.url}`) : "";
-          console.log(`  ${chalk.cyan(p.slug)}  ${p.name}  (${p.sourceCount} sources)${urlLabel}`);
+        if (opts.json) {
+          console.log(
+            JSON.stringify(
+              {
+                ...found,
+                accounts,
+                products: orgProducts,
+                sources: linkedSources,
+                tags: orgTags,
+                aliases: aliases.map((a) => a.domain),
+                overview: overview?.content ?? null,
+              },
+              null,
+              2,
+            ),
+          );
+          return;
         }
-      }
 
-      if (linkedSources.length > 0) {
-        console.log();
-        console.log(chalk.bold("Sources:"));
-        for (const s of linkedSources) {
-          const statusLabel = s.isHidden
-            ? "disabled"
-            : s.consecutiveErrors && s.consecutiveErrors > 0
-              ? "erroring"
-              : "active";
-          const statusColor = s.isHidden ? chalk.red : s.consecutiveErrors ? chalk.yellow : chalk.green;
-          const status = statusColor(statusLabel.padEnd(16));
-          const fetched = s.lastFetchedAt
-            ? chalk.dim(s.lastFetchedAt.replace("T", " ").replace(/\.\d+Z$/, ""))
-            : chalk.dim("never fetched");
-          console.log(`  ${chalk.cyan(s.slug.padEnd(30))} ${status} ${fetched}`);
-          console.log(`  ${" ".repeat(30)} ${chalk.dim(s.url)}`);
+        console.log(chalk.bold(found.name));
+        console.log(`  Slug:    ${found.slug}`);
+        console.log(`  Domain:  ${found.domain ?? chalk.dim("—")}`);
+        if (aliases.length > 0)
+          console.log(`  Aliases: ${aliases.map((a) => a.domain).join(", ")}`);
+        if (found.description) console.log(`  About:   ${found.description}`);
+        console.log(`  Created: ${found.createdAt}`);
+        console.log(`  Updated: ${found.updatedAt}`);
+        if (found.category) console.log(`  Category: ${found.category}`);
+        if (orgTags.length > 0) console.log(`  Tags:    ${orgTags.join(", ")}`);
+
+        if (accounts.length > 0) {
+          console.log();
+          console.log(chalk.bold("Accounts:"));
+          for (const a of accounts) {
+            console.log(`  ${chalk.cyan(a.platform)}  ${a.handle}`);
+          }
         }
-      }
 
-      if (overview?.content) {
-        const preview = overviewPreview(stripAnsi(overview.content));
-        const stale = overview.generatedAt ? isOverviewStale(overview.generatedAt) : false;
-        const generatedHint = overview.generatedAt
-          ? chalk.dim(`generated ${timeAgo(overview.generatedAt) ?? "?"}`)
-          : "";
-
-        console.log();
-        console.log(`${chalk.bold("Overview")}  ${generatedHint}`);
-        if (stale) {
-          console.log(chalk.yellow(`  ⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`));
+        if (orgProducts.length > 0) {
+          console.log();
+          console.log(chalk.bold("Products:"));
+          for (const p of orgProducts) {
+            const urlLabel = p.url ? chalk.dim(` ${p.url}`) : "";
+            console.log(
+              `  ${chalk.cyan(p.slug)}  ${p.name}  (${p.sourceCount} sources)${urlLabel}`,
+            );
+          }
         }
-        console.log(preview);
-      }
 
-      const moreHints = [
-        `"releases org overview ${found.slug}" for the full overview`,
-        `"releases tail --org ${found.slug}" for recent releases`,
-        `"releases show <src-slug>" for a specific source`,
-      ];
-      console.log(chalk.dim(`\n  More: ${moreHints.join(" · ")}`));
-    });
+        if (linkedSources.length > 0) {
+          console.log();
+          console.log(chalk.bold("Sources:"));
+          for (const s of linkedSources) {
+            const statusLabel = s.isHidden
+              ? "disabled"
+              : s.consecutiveErrors && s.consecutiveErrors > 0
+                ? "erroring"
+                : "active";
+            const statusColor = s.isHidden
+              ? chalk.red
+              : s.consecutiveErrors
+                ? chalk.yellow
+                : chalk.green;
+            const status = statusColor(statusLabel.padEnd(16));
+            const fetched = s.lastFetchedAt
+              ? chalk.dim(s.lastFetchedAt.replace("T", " ").replace(/\.\d+Z$/, ""))
+              : chalk.dim("never fetched");
+            console.log(`  ${chalk.cyan(s.slug.padEnd(30))} ${status} ${fetched}`);
+            console.log(`  ${" ".repeat(30)} ${chalk.dim(s.url)}`);
+          }
+        }
+
+        if (overview?.content) {
+          const preview = overviewPreview(stripAnsi(overview.content));
+          const stale = overview.generatedAt ? isOverviewStale(overview.generatedAt) : false;
+          const generatedHint = overview.generatedAt
+            ? chalk.dim(`generated ${timeAgo(overview.generatedAt) ?? "?"}`)
+            : "";
+
+          console.log();
+          console.log(`${chalk.bold("Overview")}  ${generatedHint}`);
+          if (stale) {
+            console.log(
+              chalk.yellow(
+                `  ⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`,
+              ),
+            );
+          }
+          console.log(preview);
+        }
+
+        const moreHints = [
+          `"releases org overview ${found.slug}" for the full overview`,
+          `"releases tail --org ${found.slug}" for recent releases`,
+          `"releases show <src-slug>" for a specific source`,
+        ];
+        console.log(chalk.dim(`\n  More: ${moreHints.join(" · ")}`));
+      },
+    );
 
   // ── org overview ──
   org
@@ -281,10 +339,13 @@ Examples:
     .description("Print the full AI-generated overview for an organization")
     .argument("<identifier>", "Org slug, domain, name, or account handle")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases org overview acme
-  releases org overview acme --json`)
+  releases org overview acme --json`,
+    )
     .action(async (identifier: string, opts: { json?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) return orgNotFound(identifier);
@@ -296,7 +357,9 @@ Examples:
           console.log(JSON.stringify({ org: found.slug, overview: null }, null, 2));
         } else {
           console.log(chalk.yellow(`No overview available for ${found.name}.`));
-          console.log(chalk.dim(`  Generate one with: releases admin org show ${found.slug} --regenerate`));
+          console.log(
+            chalk.dim(`  Generate one with: releases admin org show ${found.slug} --regenerate`),
+          );
         }
         return;
       }
@@ -305,26 +368,40 @@ Examples:
       const ageDays = overview.generatedAt ? overviewAgeDays(overview.generatedAt) : null;
 
       if (opts.json) {
-        console.log(JSON.stringify({
-          org: found.slug,
-          name: found.name,
-          generatedAt: overview.generatedAt,
-          updatedAt: overview.updatedAt,
-          lastContributingReleaseAt: overview.lastContributingReleaseAt,
-          releaseCount: overview.releaseCount,
-          stale,
-          ageDays,
-          content: overview.content,
-        }, null, 2));
+        console.log(
+          JSON.stringify(
+            {
+              org: found.slug,
+              name: found.name,
+              generatedAt: overview.generatedAt,
+              updatedAt: overview.updatedAt,
+              lastContributingReleaseAt: overview.lastContributingReleaseAt,
+              releaseCount: overview.releaseCount,
+              stale,
+              ageDays,
+              content: overview.content,
+            },
+            null,
+            2,
+          ),
+        );
         return;
       }
 
       console.log(chalk.bold(`${found.name} — overview`));
       if (overview.generatedAt) {
-        console.log(chalk.dim(`  generated ${timeAgo(overview.generatedAt) ?? "?"} · ${overview.releaseCount} releases`));
+        console.log(
+          chalk.dim(
+            `  generated ${timeAgo(overview.generatedAt) ?? "?"} · ${overview.releaseCount} releases`,
+          ),
+        );
       }
       if (stale) {
-        console.log(chalk.yellow(`  ⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`));
+        console.log(
+          chalk.yellow(
+            `  ⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`,
+          ),
+        );
       }
       console.log();
       console.log(stripAnsi(overview.content));
@@ -337,130 +414,188 @@ Examples:
     .argument("<identifier>", "Org slug, domain, or name")
     .option("--max <n>", "Maximum releases per source (default: 20)", "20")
     .option("--concurrency <n>", "Parallel fetches (default: 3)")
-    .option("--window <days>", "Window (days) for overview release selection", String(OVERVIEW_WINDOW_DAYS))
+    .option(
+      "--window <days>",
+      "Window (days) for overview release selection",
+      String(OVERVIEW_WINDOW_DAYS),
+    )
     .option("--dry-run", "Show what would be fetched without doing it")
     .option("--skip-overview", "Fetch only, don't regenerate the overview")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin org refresh acme                 Fetch all sources, then regenerate overview
   releases admin org refresh acme --max 50        Pull up to 50 releases per source
   releases admin org refresh acme --dry-run       Preview without fetching
   releases admin org refresh acme --skip-overview Fetch only, skip overview regen
-  releases admin org refresh acme --json          Machine-readable output`)
-    .action(async (identifier: string, opts: { max?: string; concurrency?: string; window?: string; dryRun?: boolean; skipOverview?: boolean; json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) return orgNotFound(identifier);
+  releases admin org refresh acme --json          Machine-readable output`,
+    )
+    .action(
+      async (
+        identifier: string,
+        opts: {
+          max?: string;
+          concurrency?: string;
+          window?: string;
+          dryRun?: boolean;
+          skipOverview?: boolean;
+          json?: boolean;
+        },
+      ) => {
+        const found = await findOrg(identifier);
+        if (!found) return orgNotFound(identifier);
 
-      const orgSources = await getSourcesByOrg(found.id);
-      const activeSources = orgSources.filter(isActiveSource);
+        const orgSources = await getSourcesByOrg(found.id);
+        const activeSources = orgSources.filter(isActiveSource);
 
-      if (activeSources.length === 0) {
-        if (opts.json) {
-          console.log(JSON.stringify({ org: found.slug, sourcesFetched: 0, newReleases: 0, overview: "skipped", reason: "no active sources" }, null, 2));
-        } else {
-          logger.warn(`No active sources for ${found.name} — nothing to refresh`);
+        if (activeSources.length === 0) {
+          if (opts.json) {
+            console.log(
+              JSON.stringify(
+                {
+                  org: found.slug,
+                  sourcesFetched: 0,
+                  newReleases: 0,
+                  overview: "skipped",
+                  reason: "no active sources",
+                },
+                null,
+                2,
+              ),
+            );
+          } else {
+            logger.warn(`No active sources for ${found.name} — nothing to refresh`);
+          }
+          return;
         }
-        return;
-      }
 
-      if (!opts.json) {
-        logger.info(`Refreshing ${found.name}: ${activeSources.length} active source${activeSources.length === 1 ? "" : "s"}`);
-      }
-
-      // Subprocess `admin source fetch` rather than re-enter the command tree
-      // in-process. The in-process path would need either a ~900-line refactor
-      // of fetch.ts to expose its loop, or Commander re-entry which mutates
-      // shared hook state. Subprocess is the simpler boundary.
-      const fetchArgs = [
-        "admin", "source", "fetch",
-        "--org", found.slug,
-        "--skip-overview",
-        "--max", opts.max ?? "20",
-        "--json",
-      ];
-      if (opts.concurrency) fetchArgs.push("--concurrency", opts.concurrency);
-      if (opts.dryRun) fetchArgs.push("--dry-run");
-
-      const isScripted = !!process.argv[1] && /\.(ts|js|mjs|cjs)$/.test(process.argv[1]);
-      const baseCmd = isScripted ? [process.argv[0], process.argv[1]] : [process.argv[0]];
-      const proc = Bun.spawn([...baseCmd, ...fetchArgs], { stdout: "pipe", stderr: "inherit" });
-      const stdout = await new Response(proc.stdout).text();
-      const exitCode = await proc.exited;
-
-      if (exitCode !== 0) {
-        if (opts.json) {
-          console.log(JSON.stringify({ org: found.slug, error: `fetch exited ${exitCode}` }, null, 2));
-        } else {
-          logger.error(`Fetch subprocess failed with exit code ${exitCode}`);
-        }
-        process.exit(exitCode);
-      }
-
-      let fetchResults: Array<{ source: string; newReleases: number; error?: string }>;
-      try {
-        fetchResults = JSON.parse(stdout.trim() || "[]");
-      } catch (err) {
-        logger.error(`Could not parse fetch output: ${err instanceof Error ? err.message : String(err)}`);
-        if (opts.json) {
-          console.log(JSON.stringify({ org: found.slug, error: "fetch output parse failed" }, null, 2));
-        }
-        process.exit(1);
-      }
-
-      const totalInserted = fetchResults.reduce((n, r) => n + (r.newReleases || 0), 0);
-      const errors = fetchResults.filter((r) => r.error);
-
-      const windowDays = parseWindowDays(opts.window);
-      let regen: OverviewRegenResult | null = null;
-      if (!opts.skipOverview && !opts.dryRun) {
         if (!opts.json) {
-          logger.info(`Regenerating overview for ${found.name} (window: ${windowDays}d)...`);
+          logger.info(
+            `Refreshing ${found.name}: ${activeSources.length} active source${activeSources.length === 1 ? "" : "s"}`,
+          );
         }
-        regen = await regenerateOrgOverview(found, activeSources, { windowDays });
-        if (!opts.json) logRegenResult(regen, found.name);
-      }
 
-      if (opts.json) {
-        const overviewKey = opts.skipOverview || opts.dryRun ? "skipped" : regen!.status;
-        console.log(JSON.stringify({
-          org: found.slug,
-          sourcesFetched: fetchResults.length,
-          newReleases: totalInserted,
-          errors: errors.map((e) => ({ source: e.source, error: e.error })),
-          overview: overviewKey,
-          overviewChars: regen?.status === "regenerated" ? regen.chars : undefined,
-          releasesConsidered: regen?.status === "regenerated"
-            ? { selected: regen.selected, total: regen.totalAvailable, windowDays }
-            : undefined,
-          dryRun: !!opts.dryRun,
-        }, null, 2));
-        return;
-      }
+        // Subprocess `admin source fetch` rather than re-enter the command tree
+        // in-process. The in-process path would need either a ~900-line refactor
+        // of fetch.ts to expose its loop, or Commander re-entry which mutates
+        // shared hook state. Subprocess is the simpler boundary.
+        const fetchArgs = [
+          "admin",
+          "source",
+          "fetch",
+          "--org",
+          found.slug,
+          "--skip-overview",
+          "--max",
+          opts.max ?? "20",
+          "--json",
+        ];
+        if (opts.concurrency) fetchArgs.push("--concurrency", opts.concurrency);
+        if (opts.dryRun) fetchArgs.push("--dry-run");
 
-      const headline = opts.dryRun
-        ? chalk.yellow(`[dry-run] Would fetch ${fetchResults.length} source(s) for ${found.name}`)
-        : chalk.bold(`Refresh complete: ${found.name}`);
-      console.log(`\n${headline}`);
-      console.log(`  ${chalk.green(`${fetchResults.length} source${fetchResults.length === 1 ? "" : "s"} fetched`)} · ${chalk.green(`${totalInserted} new release${totalInserted === 1 ? "" : "s"}`)}`);
-      if (errors.length > 0) {
-        console.log(`  ${chalk.red(`${errors.length} source${errors.length === 1 ? "" : "s"} failed`)}`);
-        for (const e of errors) {
-          console.log(`    ${chalk.dim("•")} ${e.source}: ${chalk.red(e.error ?? "unknown error")}`);
+        const isScripted = !!process.argv[1] && /\.(ts|js|mjs|cjs)$/.test(process.argv[1]);
+        const baseCmd = isScripted ? [process.argv[0], process.argv[1]] : [process.argv[0]];
+        const proc = Bun.spawn([...baseCmd, ...fetchArgs], { stdout: "pipe", stderr: "inherit" });
+        const stdout = await new Response(proc.stdout).text();
+        const exitCode = await proc.exited;
+
+        if (exitCode !== 0) {
+          if (opts.json) {
+            console.log(
+              JSON.stringify({ org: found.slug, error: `fetch exited ${exitCode}` }, null, 2),
+            );
+          } else {
+            logger.error(`Fetch subprocess failed with exit code ${exitCode}`);
+          }
+          process.exit(exitCode);
         }
-      }
-      if (opts.skipOverview) {
-        console.log(`  ${chalk.dim("Overview: skipped (--skip-overview)")}`);
-      } else if (opts.dryRun) {
-        console.log(`  ${chalk.dim("Overview: skipped (--dry-run)")}`);
-      } else if (regen?.status === "regenerated") {
-        console.log(`  ${chalk.green("Overview regenerated")} ${chalk.dim(`(${regen.chars} chars, ${regen.selected}/${regen.totalAvailable} releases, ${regen.windowDays}d window)`)}`);
-      } else if (regen?.status === "no-releases") {
-        console.log(`  ${chalk.yellow(`Overview: no releases in ${regen.windowDays}d window`)}`);
-      } else if (regen?.status === "failed") {
-        console.log(`  ${chalk.red("Overview: regeneration failed")}`);
-      }
-    });
+
+        let fetchResults: Array<{ source: string; newReleases: number; error?: string }>;
+        try {
+          fetchResults = JSON.parse(stdout.trim() || "[]");
+        } catch (err) {
+          logger.error(
+            `Could not parse fetch output: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          if (opts.json) {
+            console.log(
+              JSON.stringify({ org: found.slug, error: "fetch output parse failed" }, null, 2),
+            );
+          }
+          process.exit(1);
+        }
+
+        const totalInserted = fetchResults.reduce((n, r) => n + (r.newReleases || 0), 0);
+        const errors = fetchResults.filter((r) => r.error);
+
+        const windowDays = parseWindowDays(opts.window);
+        let regen: OverviewRegenResult | null = null;
+        if (!opts.skipOverview && !opts.dryRun) {
+          if (!opts.json) {
+            logger.info(`Regenerating overview for ${found.name} (window: ${windowDays}d)...`);
+          }
+          regen = await regenerateOrgOverview(found, activeSources, { windowDays });
+          if (!opts.json) logRegenResult(regen, found.name);
+        }
+
+        if (opts.json) {
+          const overviewKey = opts.skipOverview || opts.dryRun ? "skipped" : regen!.status;
+          console.log(
+            JSON.stringify(
+              {
+                org: found.slug,
+                sourcesFetched: fetchResults.length,
+                newReleases: totalInserted,
+                errors: errors.map((e) => ({ source: e.source, error: e.error })),
+                overview: overviewKey,
+                overviewChars: regen?.status === "regenerated" ? regen.chars : undefined,
+                releasesConsidered:
+                  regen?.status === "regenerated"
+                    ? { selected: regen.selected, total: regen.totalAvailable, windowDays }
+                    : undefined,
+                dryRun: !!opts.dryRun,
+              },
+              null,
+              2,
+            ),
+          );
+          return;
+        }
+
+        const headline = opts.dryRun
+          ? chalk.yellow(`[dry-run] Would fetch ${fetchResults.length} source(s) for ${found.name}`)
+          : chalk.bold(`Refresh complete: ${found.name}`);
+        console.log(`\n${headline}`);
+        console.log(
+          `  ${chalk.green(`${fetchResults.length} source${fetchResults.length === 1 ? "" : "s"} fetched`)} · ${chalk.green(`${totalInserted} new release${totalInserted === 1 ? "" : "s"}`)}`,
+        );
+        if (errors.length > 0) {
+          console.log(
+            `  ${chalk.red(`${errors.length} source${errors.length === 1 ? "" : "s"} failed`)}`,
+          );
+          for (const e of errors) {
+            console.log(
+              `    ${chalk.dim("•")} ${e.source}: ${chalk.red(e.error ?? "unknown error")}`,
+            );
+          }
+        }
+        if (opts.skipOverview) {
+          console.log(`  ${chalk.dim("Overview: skipped (--skip-overview)")}`);
+        } else if (opts.dryRun) {
+          console.log(`  ${chalk.dim("Overview: skipped (--dry-run)")}`);
+        } else if (regen?.status === "regenerated") {
+          console.log(
+            `  ${chalk.green("Overview regenerated")} ${chalk.dim(`(${regen.chars} chars, ${regen.selected}/${regen.totalAvailable} releases, ${regen.windowDays}d window)`)}`,
+          );
+        } else if (regen?.status === "no-releases") {
+          console.log(`  ${chalk.yellow(`Overview: no releases in ${regen.windowDays}d window`)}`);
+        } else if (regen?.status === "failed") {
+          console.log(`  ${chalk.red("Overview: regeneration failed")}`);
+        }
+      },
+    );
 
   // ── org edit ──
   org
@@ -476,47 +611,66 @@ Examples:
     .option("--avatar <url>", "Set avatar image URL")
     .option("--no-avatar", "Clear avatar URL")
     .option("--json", "Output as JSON")
-    .action(async (identifier: string, opts: { name?: string; slug?: string; domain?: string; description?: string; category?: string | boolean; avatar?: string | boolean; json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        return orgNotFound(identifier);
-      }
+    .action(
+      async (
+        identifier: string,
+        opts: {
+          name?: string;
+          slug?: string;
+          domain?: string;
+          description?: string;
+          category?: string | boolean;
+          avatar?: string | boolean;
+          json?: boolean;
+        },
+      ) => {
+        const found = await findOrg(identifier);
+        if (!found) {
+          return orgNotFound(identifier);
+        }
 
-      const updates: Record<string, unknown> = {};
-      if (opts.name !== undefined) updates.name = opts.name;
-      if (opts.slug !== undefined) updates.slug = opts.slug;
-      if (opts.domain !== undefined) updates.domain = opts.domain;
-      if (opts.description !== undefined) updates.description = opts.description;
+        const updates: Record<string, unknown> = {};
+        if (opts.name !== undefined) updates.name = opts.name;
+        if (opts.slug !== undefined) updates.slug = opts.slug;
+        if (opts.domain !== undefined) updates.domain = opts.domain;
+        if (opts.description !== undefined) updates.description = opts.description;
 
-      if (opts.category === false) {
-        updates.category = null;
-      } else if (typeof opts.category === "string") {
-        if (!isValidCategory(opts.category)) {
-          console.error(chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`));
+        if (opts.category === false) {
+          updates.category = null;
+        } else if (typeof opts.category === "string") {
+          if (!isValidCategory(opts.category)) {
+            console.error(
+              chalk.red(`Invalid category: "${opts.category}". Valid: ${CATEGORIES.join(", ")}`),
+            );
+            process.exit(1);
+          }
+          updates.category = opts.category;
+        }
+
+        if (opts.avatar === false) {
+          updates.avatarUrl = null;
+        } else if (typeof opts.avatar === "string") {
+          updates.avatarUrl = opts.avatar;
+        }
+
+        if (Object.keys(updates).length === 0) {
+          console.error(
+            chalk.yellow(
+              "No fields to update. Use --name, --slug, --domain, --description, --category, or --avatar.",
+            ),
+          );
           process.exit(1);
         }
-        updates.category = opts.category;
-      }
 
-      if (opts.avatar === false) {
-        updates.avatarUrl = null;
-      } else if (typeof opts.avatar === "string") {
-        updates.avatarUrl = opts.avatar;
-      }
+        const updated = await updateOrg(found, updates);
 
-      if (Object.keys(updates).length === 0) {
-        console.error(chalk.yellow("No fields to update. Use --name, --slug, --domain, --description, --category, or --avatar."));
-        process.exit(1);
-      }
-
-      const updated = await updateOrg(found, updates);
-
-      if (opts.json) {
-        console.log(JSON.stringify(updated, null, 2));
-      } else {
-        console.log(chalk.green(`Updated organization: ${updated.name} (${updated.slug})`));
-      }
-    });
+        if (opts.json) {
+          console.log(JSON.stringify(updated, null, 2));
+        } else {
+          console.log(chalk.green(`Updated organization: ${updated.name} (${updated.slug})`));
+        }
+      },
+    );
 
   // ── org remove ──
   org
@@ -525,11 +679,14 @@ Examples:
     .argument("<identifier>", "Org slug, domain, name, or account handle")
     .option("--dry-run", "Show what would be removed without deleting")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin org remove acme
   releases admin org remove acme --dry-run
-  releases admin org remove acme --json`)
+  releases admin org remove acme --json`,
+    )
     .action(async (identifier: string, opts: { json?: boolean; dryRun?: boolean }) => {
       const found = await findOrg(identifier);
       if (!found) {
@@ -540,7 +697,9 @@ Examples:
         if (opts.json) {
           console.log(JSON.stringify({ wouldRemove: found.slug, name: found.name }, null, 2));
         } else {
-          console.log(chalk.yellow(`[dry-run] Would remove organization: ${found.name} (${found.slug})`));
+          console.log(
+            chalk.yellow(`[dry-run] Would remove organization: ${found.name} (${found.slug})`),
+          );
         }
         return;
       }
@@ -562,24 +721,29 @@ Examples:
     .requiredOption("--platform <platform>", "Platform name (github, x, linkedin, etc.)")
     .requiredOption("--handle <handle>", "Account handle on the platform")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin org link acme --platform github --handle acme-corp
-  releases admin org link acme --platform x --handle acmecorp --json`)
-    .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        return orgNotFound(identifier);
-      }
+  releases admin org link acme --platform x --handle acmecorp --json`,
+    )
+    .action(
+      async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
+        const found = await findOrg(identifier);
+        if (!found) {
+          return orgNotFound(identifier);
+        }
 
-      const created = await linkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
+        const created = await linkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
 
-      if (opts.json) {
-        console.log(JSON.stringify(created, null, 2));
-      } else {
-        console.log(chalk.green(`Linked ${opts.platform}/${opts.handle} to ${found.name}`));
-      }
-    });
+        if (opts.json) {
+          console.log(JSON.stringify(created, null, 2));
+        } else {
+          console.log(chalk.green(`Linked ${opts.platform}/${opts.handle} to ${found.name}`));
+        }
+      },
+    );
 
   // ── org unlink ──
   org
@@ -589,23 +753,28 @@ Examples:
     .requiredOption("--platform <platform>", "Platform name")
     .requiredOption("--handle <handle>", "Account handle")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
-  releases admin org unlink acme --platform github --handle acme-corp`)
-    .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        return orgNotFound(identifier);
-      }
+  releases admin org unlink acme --platform github --handle acme-corp`,
+    )
+    .action(
+      async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
+        const found = await findOrg(identifier);
+        if (!found) {
+          return orgNotFound(identifier);
+        }
 
-      await unlinkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
+        await unlinkOrgAccount(found.id, found.slug, opts.platform, opts.handle);
 
-      if (opts.json) {
-        console.log(JSON.stringify({ unlinked: `${opts.platform}/${opts.handle}` }, null, 2));
-      } else {
-        console.log(chalk.green(`Unlinked ${opts.platform}/${opts.handle} from ${found.name}`));
-      }
-    });
+        if (opts.json) {
+          console.log(JSON.stringify({ unlinked: `${opts.platform}/${opts.handle}` }, null, 2));
+        } else {
+          console.log(chalk.green(`Unlinked ${opts.platform}/${opts.handle} from ${found.name}`));
+        }
+      },
+    );
 
   // ── org tag ──
   const tag = org.command("tag").description("Manage organization tags");
@@ -689,7 +858,11 @@ Examples:
           const created = await addDomainAlias(domain, { orgId: found.id });
           results.push(created);
         } catch (err) {
-          console.error(chalk.red(`Failed to add alias "${domain}": ${err instanceof Error ? err.message : err}`));
+          console.error(
+            chalk.red(
+              `Failed to add alias "${domain}": ${err instanceof Error ? err.message : err}`,
+            ),
+          );
         }
       }
 
@@ -743,7 +916,13 @@ Examples:
       const aliases = await listDomainAliases({ orgId: found.id });
 
       if (opts.json) {
-        console.log(JSON.stringify(aliases.map((a) => a.domain), null, 2));
+        console.log(
+          JSON.stringify(
+            aliases.map((a) => a.domain),
+            null,
+            2,
+          ),
+        );
       } else if (aliases.length === 0) {
         console.log(chalk.yellow(`No domain aliases for ${found.name}`));
       } else {

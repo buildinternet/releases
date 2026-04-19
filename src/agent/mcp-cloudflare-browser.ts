@@ -42,55 +42,73 @@ function errorResult(status: number, body: string) {
   };
 }
 
-server.registerTool("render_markdown", {
-  description: "Render a URL via Cloudflare Browser Rendering and return the page content as markdown. Use this when WebFetch returns empty or skeleton content from JS-rendered pages.",
-  inputSchema: {
-    url: z.url().describe("The URL to render"),
-    waitUntil: z
-      .enum(["load", "networkidle2"])
-      .default("networkidle2")
-      .describe("When to consider the page loaded"),
+server.registerTool(
+  "render_markdown",
+  {
+    description:
+      "Render a URL via Cloudflare Browser Rendering and return the page content as markdown. Use this when WebFetch returns empty or skeleton content from JS-rendered pages.",
+    inputSchema: {
+      url: z.url().describe("The URL to render"),
+      waitUntil: z
+        .enum(["load", "networkidle2"])
+        .default("networkidle2")
+        .describe("When to consider the page loaded"),
+    },
   },
-}, async ({ url, waitUntil }) => {
-  const res = await cfBrowserFetch("markdown", url, waitUntil);
+  async ({ url, waitUntil }) => {
+    const res = await cfBrowserFetch("markdown", url, waitUntil);
 
-  if (!res.ok) return errorResult(res.status, await res.text());
+    if (!res.ok) return errorResult(res.status, await res.text());
 
-  const data = (await res.json()) as { title?: string; markdown?: string; text?: string };
-  const markdown = data.markdown ?? data.text ?? "";
+    const data = (await res.json()) as { title?: string; markdown?: string; text?: string };
+    const markdown = data.markdown ?? data.text ?? "";
 
-  return {
-    content: [{
-      type: "text" as const,
-      text: JSON.stringify({ markdown, title: data.title ?? "", url }),
-    }],
-  };
-});
-
-server.registerTool("render_html", {
-  description: "Render a URL and return the fully-rendered HTML after JavaScript execution. Use when you need to inspect the post-hydration DOM structure.",
-  inputSchema: {
-    url: z.url().describe("The URL to render"),
-    waitUntil: z
-      .enum(["load", "networkidle2"])
-      .default("networkidle2")
-      .describe("When to consider the page loaded"),
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ markdown, title: data.title ?? "", url }),
+        },
+      ],
+    };
   },
-}, async ({ url, waitUntil }) => {
-  const res = await cfBrowserFetch("content", url, waitUntil);
+);
 
-  if (!res.ok) return errorResult(res.status, await res.text());
+server.registerTool(
+  "render_html",
+  {
+    description:
+      "Render a URL and return the fully-rendered HTML after JavaScript execution. Use when you need to inspect the post-hydration DOM structure.",
+    inputSchema: {
+      url: z.url().describe("The URL to render"),
+      waitUntil: z
+        .enum(["load", "networkidle2"])
+        .default("networkidle2")
+        .describe("When to consider the page loaded"),
+    },
+  },
+  async ({ url, waitUntil }) => {
+    const res = await cfBrowserFetch("content", url, waitUntil);
 
-  const html = await res.text();
-  const truncated = html.length > HTML_MAX_LENGTH;
+    if (!res.ok) return errorResult(res.status, await res.text());
 
-  return {
-    content: [{
-      type: "text" as const,
-      text: JSON.stringify({ html: truncated ? html.slice(0, HTML_MAX_LENGTH) : html, url, truncated }),
-    }],
-  };
-});
+    const html = await res.text();
+    const truncated = html.length > HTML_MAX_LENGTH;
+
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            html: truncated ? html.slice(0, HTML_MAX_LENGTH) : html,
+            url,
+            truncated,
+          }),
+        },
+      ],
+    };
+  },
+);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

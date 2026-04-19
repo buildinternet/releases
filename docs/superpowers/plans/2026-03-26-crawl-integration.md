@@ -17,6 +17,7 @@
 This is a prerequisite for all other tasks. Widens the metadata type so crawl fields are valid.
 
 **Files:**
+
 - Modify: `src/adapters/feed.ts` — rename interface + helpers, add crawl fields
 - Modify: `src/adapters/types.ts` — add `crawl` to `FetchOptions`
 
@@ -76,6 +77,7 @@ git commit -m "Rename FeedMetadata to SourceMetadata, add crawl fields and Fetch
 Core crawl logic: start job, poll for results, parse pages in parallel.
 
 **Files:**
+
 - Create: `src/adapters/crawl.ts`
 - Modify: `src/lib/errors.ts` — add `CrawlTimeoutError` and `CrawlJobError`
 
@@ -92,7 +94,10 @@ export class CrawlTimeoutError extends Error {
 }
 
 export class CrawlJobError extends Error {
-  constructor(jobId: string, public jobStatus: string) {
+  constructor(
+    jobId: string,
+    public jobStatus: string,
+  ) {
     super(`Crawl job ${jobId} ended with status: ${jobStatus}`);
     this.name = "CrawlJobError";
   }
@@ -178,7 +183,7 @@ export async function startCrawl(url: string, options: CrawlOptions): Promise<st
     throw new AdapterError("crawl", `Failed to start crawl: ${res.status} ${text}`);
   }
 
-  const data = await res.json() as { success: boolean; result: string };
+  const data = (await res.json()) as { success: boolean; result: string };
   if (!data.success || !data.result) {
     throw new AdapterError("crawl", "Crawl API returned unexpected response");
   }
@@ -196,7 +201,7 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
       throw new AdapterError("crawl", `Failed to poll crawl ${jobId}: ${res.status}`);
     }
 
-    const data = await res.json() as {
+    const data = (await res.json()) as {
       success: boolean;
       result: {
         status: string;
@@ -212,7 +217,9 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
     };
 
     const jobStatus = data.result.status;
-    logger.debug(`Crawl ${jobId}: ${jobStatus} (${data.result.finished ?? 0}/${data.result.total ?? "?"})`);
+    logger.debug(
+      `Crawl ${jobId}: ${jobStatus} (${data.result.finished ?? 0}/${data.result.total ?? "?"})`,
+    );
 
     if (TERMINAL_STATUSES.has(jobStatus)) {
       if (jobStatus !== "completed") {
@@ -256,14 +263,17 @@ export async function parseCrawlPages(
       batch.map(async (page) => {
         logger.debug(`Parsing page: ${page.url} (${page.markdown.length} chars)`);
         const parsed = await parseChangelog(page.markdown, sourceSlug);
-        return parsed.map((entry) => ({
-          version: entry.version,
-          title: entry.title,
-          content: entry.content,
-          url: page.url,
-          publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
-          isBreaking: entry.isBreaking,
-        } as RawRelease));
+        return parsed.map(
+          (entry) =>
+            ({
+              version: entry.version,
+              title: entry.title,
+              content: entry.content,
+              url: page.url,
+              publishedAt: entry.publishedAt ? new Date(entry.publishedAt) : undefined,
+              isBreaking: entry.isBreaking,
+            }) as RawRelease,
+        );
       }),
     );
 
@@ -308,6 +318,7 @@ git commit -m "Add crawl adapter: start, poll, and parallel page parsing"
 Wire the crawl path into the scrape adapter's fetch cascade.
 
 **Files:**
+
 - Modify: `src/adapters/scrape.ts`
 
 - [ ] **Step 1: Update imports in `src/adapters/scrape.ts`**
@@ -412,7 +423,10 @@ async function fetchViaCrawl(
 
   if (pages.length === 0) {
     logger.info(`Crawl returned no pages`);
-    await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
+    await updateSourceMeta(source, {
+      lastCrawlJobId: jobId,
+      lastCrawlAt: new Date().toISOString(),
+    });
     return [];
   }
 
@@ -450,6 +464,7 @@ git commit -m "Integrate crawl path into scrape adapter fetch cascade"
 Wire `--crawl`, `--no-crawl`, `--crawl-pattern` into the fetch command.
 
 **Files:**
+
 - Modify: `src/cli/commands/fetch.ts`
 
 - [ ] **Step 1: Add imports**
@@ -550,6 +565,7 @@ git commit -m "Add --crawl, --no-crawl, --crawl-pattern flags to fetch command"
 ## Task 5: Update docs
 
 **Files:**
+
 - Modify: `README.md`
 - Modify: `CLAUDE.md`
 
@@ -563,9 +579,9 @@ Add a "Crawl mode" section after the "Fetch releases" section:
 For changelogs spread across multiple pages, crawl mode follows links and parses each page individually:
 
 \`\`\`bash
-released fetch linear --crawl                    # enable crawl, auto-detect pattern
+released fetch linear --crawl # enable crawl, auto-detect pattern
 released fetch linear --crawl --crawl-pattern "https://linear.app/changelog/*"
-released fetch linear --no-crawl                 # one-off skip, keeps setting
+released fetch linear --no-crawl # one-off skip, keeps setting
 \`\`\`
 
 Crawl mode persists on the source — subsequent `released fetch linear` calls will automatically crawl. Only works with `scrape` sources.

@@ -29,9 +29,10 @@ export default async function HomePage() {
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "WebSite",
-    "name": "releases.sh",
-    "url": "https://releases.sh",
-    "description": "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
+    name: "releases.sh",
+    url: "https://releases.sh",
+    description:
+      "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
   };
 
   return (
@@ -42,16 +43,31 @@ export default async function HomePage() {
       />
       <Header />
       <div className="pt-12 pb-8 text-center px-6">
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">An agent-friendly API for product changelogs.</h1>
-        <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">A unified registry of product releases, available via CLI, API, or MCP.</p>
-        <SearchBar className="max-w-[480px] mx-auto" sourceCount={stats.sources} />
+        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">
+          An agent-friendly API for product changelogs.
+        </h1>
+        <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">
+          A unified registry of product releases, available via CLI, API, or MCP.
+        </p>
+        <SearchBar className="max-w-[480px] mx-auto" />
         <div className="flex justify-center gap-8 mt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <span><strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs</span>
-          <span><strong className="text-stone-600 dark:text-stone-300">{stats.sources}</strong> sources</span>
-          <span><strong className="text-stone-600 dark:text-stone-300">{stats.releases.toLocaleString()}</strong> releases</span>
+          <span>
+            <strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs
+          </span>
+          <span>
+            <strong className="text-stone-600 dark:text-stone-300">{stats.sources}</strong> sources
+          </span>
+          <span>
+            <strong className="text-stone-600 dark:text-stone-300">
+              {stats.releases.toLocaleString()}
+            </strong>{" "}
+            releases
+          </span>
         </div>
         <div className="mt-8">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">Get Started</div>
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
+            Get Started
+          </div>
           <InstallTabs />
         </div>
       </div>
@@ -63,7 +79,9 @@ export default async function HomePage() {
         )}
         {independentSources.length > 0 && (
           <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">Independent Projects</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
+              Independent Projects
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
               {independentSources.map((source) => (
                 <SourceCard key={source.slug} source={source} />

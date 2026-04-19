@@ -8,9 +8,12 @@ function makeApp() {
   const fakeDoStub = {
     fetch: async (req: Request) => {
       const u = new URL(req.url);
-      return new Response(JSON.stringify({ events: [{ seq: 1 }], head: 1, since: u.searchParams.get("since") }), {
-        headers: { "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ events: [{ seq: 1 }], head: 1, since: u.searchParams.get("since") }),
+        {
+          headers: { "Content-Type": "application/json" },
+        },
+      );
     },
   };
   const env = {
@@ -29,7 +32,7 @@ describe("GET /v1/webhooks/events", () => {
     const app = makeApp();
     const res = await app.fetch(new Request("https://x.test/v1/webhooks/events?since=42"));
     expect(res.status).toBe(200);
-    const body = await res.json() as { since?: string };
+    const body = (await res.json()) as { since?: string };
     expect(body.since).toBe("42");
   });
 

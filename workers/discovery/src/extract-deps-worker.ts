@@ -49,7 +49,7 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
         },
       );
       if (!res.ok) return false;
-      const data = await res.json() as { unchanged?: boolean };
+      const data = (await res.json()) as { unchanged?: boolean };
       return data.unchanged === true;
     },
 
@@ -84,7 +84,7 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
         { headers: headers() },
       );
       if (!res.ok) return null;
-      const page = await res.json() as { notes?: string | null; content?: string | null } | null;
+      const page = (await res.json()) as { notes?: string | null; content?: string | null } | null;
       const notes = page?.notes?.trim();
       if (notes) return notes;
       return page?.content?.trim() ?? null;
@@ -92,26 +92,29 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
 
     async logUsage(entry: UsageEntry): Promise<void> {
       // Fire-and-forget; usage logging shouldn't fail the extraction.
-      env.apiFetcher.fetch("https://api/v1/usage-log", {
-        method: "POST",
-        headers: jsonHeaders(),
-        body: JSON.stringify({
-          operation: entry.operation,
-          model: entry.model,
-          inputTokens: entry.inputTokens,
-          outputTokens: entry.outputTokens,
-          sourceSlug: entry.sourceSlug,
-          releaseCount: entry.releaseCount,
-        }),
-      }).catch(() => {});
+      env.apiFetcher
+        .fetch("https://api/v1/usage-log", {
+          method: "POST",
+          headers: jsonHeaders(),
+          body: JSON.stringify({
+            operation: entry.operation,
+            model: entry.model,
+            inputTokens: entry.inputTokens,
+            outputTokens: entry.outputTokens,
+            sourceSlug: entry.sourceSlug,
+            releaseCount: entry.releaseCount,
+          }),
+        })
+        .catch(() => {});
     },
   };
 }
 
 export function buildWorkerExtractDeps(env: WorkerDepsEnv): ExtractDeps {
-  const cloudflare = env.cloudflareAccountId && env.cloudflareApiToken
-    ? { accountId: env.cloudflareAccountId, apiToken: env.cloudflareApiToken }
-    : null;
+  const cloudflare =
+    env.cloudflareAccountId && env.cloudflareApiToken
+      ? { accountId: env.cloudflareAccountId, apiToken: env.cloudflareApiToken }
+      : null;
 
   // The worker ships its own @anthropic-ai/sdk copy (isolated node_modules);
   // the package types resolve via the root workspace copy. Both are the same

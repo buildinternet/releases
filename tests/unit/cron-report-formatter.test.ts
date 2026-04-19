@@ -21,17 +21,31 @@ describe("formatCronReport", () => {
   });
 
   it("prefixes subject with [failed] when dispatch_failed", () => {
-    const { subject } = formatCronReport({ ...baseReport, status: "dispatch_failed", dispatched: 0, dispatchErrors: 3 });
+    const { subject } = formatCronReport({
+      ...baseReport,
+      status: "dispatch_failed",
+      dispatched: 0,
+      dispatchErrors: 3,
+    });
     expect(subject.startsWith("[failed] ")).toBe(true);
   });
 
   it("prefixes subject with [degraded] when degraded", () => {
-    const { subject } = formatCronReport({ ...baseReport, status: "degraded", dispatched: 2, dispatchErrors: 1 });
+    const { subject } = formatCronReport({
+      ...baseReport,
+      status: "degraded",
+      dispatched: 2,
+      dispatchErrors: 1,
+    });
     expect(subject.startsWith("[degraded] ")).toBe(true);
   });
 
   it("prefixes subject with [aborted] when aborted", () => {
-    const { subject } = formatCronReport({ ...baseReport, status: "aborted", abortReason: "anthropic_credits" });
+    const { subject } = formatCronReport({
+      ...baseReport,
+      status: "aborted",
+      abortReason: "anthropic_credits",
+    });
     expect(subject.startsWith("[aborted] ")).toBe(true);
   });
 
@@ -72,7 +86,10 @@ describe("formatCronReport", () => {
   });
 
   it("includes detail link when adminBaseUrl is provided", () => {
-    const { text, html } = formatCronReport({ ...baseReport, adminBaseUrl: "https://api.releases.sh" });
+    const { text, html } = formatCronReport({
+      ...baseReport,
+      adminBaseUrl: "https://api.releases.sh",
+    });
     expect(text).toContain("https://api.releases.sh/v1/admin/cron-runs/cron_run_01");
     expect(html).toContain("/v1/admin/cron-runs/cron_run_01");
   });
@@ -98,7 +115,11 @@ describe("formatCronReport", () => {
   });
 
   it("includes abort reason in status line", () => {
-    const { text } = formatCronReport({ ...baseReport, status: "aborted", abortReason: "anthropic_credits" });
+    const { text } = formatCronReport({
+      ...baseReport,
+      status: "aborted",
+      abortReason: "anthropic_credits",
+    });
     expect(text).toContain("Status: aborted (anthropic_credits)");
   });
 

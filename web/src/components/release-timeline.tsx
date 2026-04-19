@@ -7,7 +7,13 @@ import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
 import { ReleaseHeatmap } from "@/components/release-heatmap";
 import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
-import { RangePills, Stat, fmtCadence, highlightDaysForPreset, type RangePreset } from "@/components/timeline-chrome";
+import {
+  RangePills,
+  Stat,
+  fmtCadence,
+  highlightDaysForPreset,
+  type RangePreset,
+} from "@/components/timeline-chrome";
 import { groupSourcesByProduct } from "@/lib/sources";
 
 /** Merge multiple bucket arrays into one, summing counts at each week timestamp. */
@@ -50,10 +56,18 @@ function ProductGroupedSources({
     <div className="space-y-6">
       {grouped.map(({ product, sources: srcs }) => (
         <div key={product.slug}>
-          <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">{product.name}</h3>
+          <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">
+            {product.name}
+          </h3>
           <div className="space-y-2">
             {srcs.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} showProductBadge={srcs.length > 1 || source.name !== product.name} />
+              <SourceCard
+                key={source.slug}
+                source={source}
+                orgSlug={orgSlug}
+                cadence={cadenceMap.get(source.slug)}
+                showProductBadge={srcs.length > 1 || source.name !== product.name}
+              />
             ))}
           </div>
         </div>
@@ -61,11 +75,19 @@ function ProductGroupedSources({
       {ungrouped.length > 0 && (
         <div>
           {grouped.length > 0 && (
-            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">Other Sources</h3>
+            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">
+              Other Sources
+            </h3>
           )}
           <div className="space-y-2">
             {ungrouped.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} showProductBadge={false} />
+              <SourceCard
+                key={source.slug}
+                source={source}
+                orgSlug={orgSlug}
+                cadence={cadenceMap.get(source.slug)}
+                showProductBadge={false}
+              />
             ))}
           </div>
         </div>
@@ -74,13 +96,23 @@ function ProductGroupedSources({
   );
 }
 
-export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products, trackingSince }: ReleaseTimelineProps) {
+export function ReleaseTimeline({
+  activity,
+  heatmap,
+  orgSlug,
+  sources,
+  products,
+  trackingSince,
+}: ReleaseTimelineProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(heatmap ? "heatmap" : "chart");
 
   const rangeStart = useMemo(() => new Date(activity.range.from), [activity.range.from]);
   const rangeEnd = useMemo(() => new Date(activity.range.to), [activity.range.to]);
 
-  const aggregateBuckets = useMemo(() => parseBuckets(activity.aggregateWeekly), [activity.aggregateWeekly]);
+  const aggregateBuckets = useMemo(
+    () => parseBuckets(activity.aggregateWeekly),
+    [activity.aggregateWeekly],
+  );
 
   const [rangePreset, setRangePreset] = useState<RangePreset>("90d");
 
@@ -181,7 +213,12 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
     const otherSrcs = groups.get("other");
     if (otherSrcs && otherSrcs.length > 0) {
       const merged = mergeBuckets(otherSrcs.map((s) => s.allBuckets));
-      result.push({ name: "Other", slug: "other", colorIndex: otherSrcs[0].colorIndex, buckets: merged });
+      result.push({
+        name: "Other",
+        slug: "other",
+        colorIndex: otherSrcs[0].colorIndex,
+        buckets: merged,
+      });
     }
 
     return result.length > 1 ? result : null;
@@ -219,7 +256,8 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
         let windowLatestVersion: string | null = null;
         for (const b of completeBuckets) {
           brushedCount += b.count;
-          if (b.earliestVersion && !windowEarliestVersion) windowEarliestVersion = b.earliestVersion;
+          if (b.earliestVersion && !windowEarliestVersion)
+            windowEarliestVersion = b.earliestVersion;
           if (b.latestVersion) windowLatestVersion = b.latestVersion;
         }
 
@@ -296,7 +334,9 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
   const inHeatmapView = viewMode === "heatmap" && !!heatmap;
 
   const toolbar = (
-    <div className={`flex items-center flex-wrap gap-2 ${heatmap ? "justify-between" : "justify-end"}`}>
+    <div
+      className={`flex items-center flex-wrap gap-2 ${heatmap ? "justify-between" : "justify-end"}`}
+    >
       {heatmap && <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />}
       <RangePills value={rangePreset} onChange={setPreset} />
     </div>
@@ -307,7 +347,11 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
       <Stat label="Releases" value={String(summaryStats.totalReleases)} />
       <Stat
         label="Avg Interval"
-        value={summaryStats.avgIntervalDays !== null ? fmtInterval(summaryStats.avgIntervalDays) : "\u2014"}
+        value={
+          summaryStats.avgIntervalDays !== null
+            ? fmtInterval(summaryStats.avgIntervalDays)
+            : "\u2014"
+        }
       />
       <Stat label="Avg Cadence" value={cadenceLabel} />
     </div>
@@ -317,11 +361,14 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
     <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
       {toolbar}
       <div className="mt-4">
-        <ReleaseHeatmap heatmap={heatmap!} trackingSince={trackingSince} highlightDays={heatmapHighlightDays} bare />
+        <ReleaseHeatmap
+          heatmap={heatmap!}
+          trackingSince={trackingSince}
+          highlightDays={heatmapHighlightDays}
+          bare
+        />
       </div>
-      <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">
-        {statsRow}
-      </div>
+      <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">{statsRow}</div>
     </div>
   ) : (
     <div className="mb-2">
@@ -361,12 +408,16 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
         ) : (
           <div className="space-y-2">
             {activeSources.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
+              <SourceCard
+                key={source.slug}
+                source={source}
+                orgSlug={orgSlug}
+                cadence={cadenceMap.get(source.slug)}
+              />
             ))}
           </div>
         )}
       </div>
-
     </div>
   );
 }

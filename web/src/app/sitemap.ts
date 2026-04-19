@@ -35,9 +35,7 @@ const ADMIN_DOCS_ROUTES: StaticRoute[] = [
   { path: "/docs/cli/fetching", changeFrequency: "monthly", priority: 0.6 },
 ];
 
-const STATUS_ROUTES: StaticRoute[] = [
-  { path: "/status", changeFrequency: "daily", priority: 0.4 },
-];
+const STATUS_ROUTES: StaticRoute[] = [{ path: "/status", changeFrequency: "daily", priority: 0.4 }];
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();

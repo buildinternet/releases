@@ -15,18 +15,24 @@ afterEach(() => {
 });
 
 async function seedSource(db: typeof testDb.db) {
-  const [org] = await db.insert(organizations).values({
-    name: "Test Org",
-    slug: "test-org",
-  }).returning();
+  const [org] = await db
+    .insert(organizations)
+    .values({
+      name: "Test Org",
+      slug: "test-org",
+    })
+    .returning();
 
-  const [source] = await db.insert(sources).values({
-    name: "Test Source",
-    slug: "test-source",
-    type: "feed",
-    url: "https://example.com/feed.xml",
-    orgId: org.id,
-  }).returning();
+  const [source] = await db
+    .insert(sources)
+    .values({
+      name: "Test Source",
+      slug: "test-source",
+      type: "feed",
+      url: "https://example.com/feed.xml",
+      orgId: org.id,
+    })
+    .returning();
 
   return { org, source };
 }
@@ -79,10 +85,13 @@ describe("release dedup (UNIQUE constraints)", () => {
     await testDb.db.insert(releases).values(row);
 
     await expect(
-      testDb.db.insert(releases).values({
-        ...row,
-        contentHash: "different-hash",
-      }).execute(),
+      testDb.db
+        .insert(releases)
+        .values({
+          ...row,
+          contentHash: "different-hash",
+        })
+        .execute(),
     ).rejects.toThrow(/UNIQUE/);
   });
 
@@ -116,12 +125,15 @@ describe("release dedup (UNIQUE constraints)", () => {
   it("allows same URL across different sources", async () => {
     const { source } = await seedSource(testDb.db);
 
-    const [source2] = await testDb.db.insert(sources).values({
-      name: "Other Source",
-      slug: "other-source",
-      type: "feed",
-      url: "https://other.com/feed.xml",
-    }).returning();
+    const [source2] = await testDb.db
+      .insert(sources)
+      .values({
+        name: "Other Source",
+        slug: "other-source",
+        type: "feed",
+        url: "https://other.com/feed.xml",
+      })
+      .returning();
 
     const raw = makeRawRelease();
     const sharedRow = {
@@ -134,7 +146,10 @@ describe("release dedup (UNIQUE constraints)", () => {
     };
 
     await testDb.db.insert(releases).values({ sourceId: source.id, ...sharedRow });
-    const result = await testDb.db.insert(releases).values({ sourceId: source2.id, ...sharedRow }).returning();
+    const result = await testDb.db
+      .insert(releases)
+      .values({ sourceId: source2.id, ...sharedRow })
+      .returning();
     expect(result).toHaveLength(1);
   });
 });

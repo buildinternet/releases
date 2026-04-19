@@ -12,21 +12,22 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|---|---|---|
-| `src/db/schema.ts` | Modify | Add `lastPolledAt` column to `sources` table |
-| `src/db/migrations/0003_add_last_polled_at.sql` | Create | Local migration |
-| `workers/api/migrations/0003_add_last_polled_at.sql` | Create | D1 migration |
-| `workers/api/src/cron/poll-fetch.ts` | Create | Core cron logic: query due sources, HEAD check, fetch changed feeds |
-| `workers/api/src/index.ts` | Modify | Register `scheduled` event handler, add `GITHUB_TOKEN` to `Env` |
-| `workers/api/wrangler.jsonc` | Modify | Add cron trigger, add `GITHUB_TOKEN` secret binding |
-| `CLAUDE.md` | Modify | Document cron behavior and tier intervals |
+| File                                                 | Action | Responsibility                                                      |
+| ---------------------------------------------------- | ------ | ------------------------------------------------------------------- |
+| `src/db/schema.ts`                                   | Modify | Add `lastPolledAt` column to `sources` table                        |
+| `src/db/migrations/0003_add_last_polled_at.sql`      | Create | Local migration                                                     |
+| `workers/api/migrations/0003_add_last_polled_at.sql` | Create | D1 migration                                                        |
+| `workers/api/src/cron/poll-fetch.ts`                 | Create | Core cron logic: query due sources, HEAD check, fetch changed feeds |
+| `workers/api/src/index.ts`                           | Modify | Register `scheduled` event handler, add `GITHUB_TOKEN` to `Env`     |
+| `workers/api/wrangler.jsonc`                         | Modify | Add cron trigger, add `GITHUB_TOKEN` secret binding                 |
+| `CLAUDE.md`                                          | Modify | Document cron behavior and tier intervals                           |
 
 ---
 
 ### Task 1: Add `lastPolledAt` Column
 
 **Files:**
+
 - Modify: `src/db/schema.ts:104` (after `changeDetectedAt`)
 - Create: `src/db/migrations/0003_add_last_polled_at.sql`
 - Create: `workers/api/migrations/0003_add_last_polled_at.sql`
@@ -74,6 +75,7 @@ git commit -m "feat: add lastPolledAt column to sources table"
 ### Task 2: Create the Cron Poll-and-Fetch Module
 
 **Files:**
+
 - Create: `workers/api/src/cron/poll-fetch.ts`
 
 This is the core module. It queries D1 for due sources, runs HEAD checks, and fetches changed feed/GitHub sources.
@@ -131,7 +133,10 @@ export async function pollAndFetch(env: { DB: D1Database; GITHUB_TOKEN?: string 
     });
   }
 
-  const changedScrape = pollResults.filter((r) => r.changed).map((r) => r.source).filter((s) => s.type === "scrape" || s.type === "agent");
+  const changedScrape = pollResults
+    .filter((r) => r.changed)
+    .map((r) => r.source)
+    .filter((s) => s.type === "scrape" || s.type === "agent");
   if (changedScrape.length > 0) {
     console.log(`[cron] ${changedScrape.length} scrape/agent source(s) flagged for CLI pickup`);
   }
@@ -151,21 +156,14 @@ async function queryDueSources(db: ReturnType<typeof drizzle>, now: Date): Promi
     const cutoff = new Date(now.getTime() - hours * 3600_000).toISOString();
     return and(
       eq(sources.fetchPriority, tier),
-      or(
-        isNull(sources.lastPolledAt),
-        sql`${sources.lastPolledAt} < ${cutoff}`,
-      ),
+      or(isNull(sources.lastPolledAt), sql`${sources.lastPolledAt} < ${cutoff}`),
     );
   });
 
-  return db.select().from(sources).where(
-    and(
-      notDisabled,
-      pollable,
-      notPaused,
-      or(...tierConditions),
-    ),
-  );
+  return db
+    .select()
+    .from(sources)
+    .where(and(notDisabled, pollable, notPaused, or(...tierConditions)));
 }
 
 // ── Poll one source ──
@@ -175,14 +173,21 @@ interface PollResult {
   changed: boolean;
 }
 
-async function pollOne(db: ReturnType<typeof drizzle>, source: Source, now: Date): Promise<PollResult> {
+async function pollOne(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  now: Date,
+): Promise<PollResult> {
   const nowIso = now.toISOString();
   const meta = getSourceMeta(source);
 
   // GitHub sources don't have feeds to HEAD-check — mark as changed so
   // the fetch phase always runs (dedup happens at the DB insert level)
   if (source.type === "github") {
-    await db.update(sources).set({ lastPolledAt: nowIso, changeDetectedAt: nowIso }).where(eq(sources.id, source.id));
+    await db
+      .update(sources)
+      .set({ lastPolledAt: nowIso, changeDetectedAt: nowIso })
+      .where(eq(sources.id, source.id));
     return { source, changed: true };
   }
 
@@ -265,7 +270,10 @@ async function fetchOne(
       if (result.contentLength) metaUpdates.feedContentLength = result.contentLength;
       if (Object.keys(metaUpdates).length > 0) {
         const merged = { ...meta, ...metaUpdates };
-        await db.update(sources).set({ metadata: JSON.stringify(merged) }).where(eq(sources.id, source.id));
+        await db
+          .update(sources)
+          .set({ metadata: JSON.stringify(merged) })
+          .where(eq(sources.id, source.id));
       }
     }
 
@@ -282,12 +290,15 @@ async function fetchOne(
       const newNoChange = (source.consecutiveNoChange ?? 0) + 1;
       const backoffHours = Math.min(Math.pow(2, newNoChange - 1), 48);
       const nextFetch = new Date(Date.now() + backoffHours * 3600_000).toISOString();
-      await db.update(sources).set({
-        consecutiveNoChange: newNoChange,
-        consecutiveErrors: 0,
-        nextFetchAfter: nextFetch,
-        changeDetectedAt: null,
-      }).where(eq(sources.id, source.id));
+      await db
+        .update(sources)
+        .set({
+          consecutiveNoChange: newNoChange,
+          consecutiveErrors: 0,
+          nextFetchAfter: nextFetch,
+          changeDetectedAt: null,
+        })
+        .where(eq(sources.id, source.id));
 
       console.log(`[cron] Fetch ${source.slug}: no changes (${Date.now() - start}ms)`);
       return;
@@ -309,7 +320,9 @@ async function fetchOne(
     let inserted = 0;
     for (let i = 0; i < rows.length; i += 5) {
       const chunk = rows.slice(i, i + 5);
-      const result = await db.insert(releases).values(chunk)
+      const result = await db
+        .insert(releases)
+        .values(chunk)
         .onConflictDoUpdate({
           target: [releases.sourceId, releases.url],
           set: {
@@ -332,34 +345,44 @@ async function fetchOne(
     });
 
     // Update source state
-    await db.update(sources).set({
-      lastFetchedAt: new Date().toISOString(),
-      consecutiveNoChange: 0,
-      consecutiveErrors: 0,
-      nextFetchAfter: null,
-      changeDetectedAt: null,
-    }).where(eq(sources.id, source.id));
+    await db
+      .update(sources)
+      .set({
+        lastFetchedAt: new Date().toISOString(),
+        consecutiveNoChange: 0,
+        consecutiveErrors: 0,
+        nextFetchAfter: null,
+        changeDetectedAt: null,
+      })
+      .where(eq(sources.id, source.id));
 
     console.log(`[cron] Fetch ${source.slug}: ${inserted} new (${Date.now() - start}ms)`);
   } catch (err) {
     console.error(`[cron] Fetch error for ${source.slug}: ${err}`);
 
-    await db.insert(fetchLog).values({
-      sourceId: source.id,
-      releasesFound: 0,
-      releasesInserted: 0,
-      durationMs: Date.now() - start,
-      status: "error",
-      error: err instanceof Error ? err.message : String(err),
-    }).catch(() => {});
+    await db
+      .insert(fetchLog)
+      .values({
+        sourceId: source.id,
+        releasesFound: 0,
+        releasesInserted: 0,
+        durationMs: Date.now() - start,
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      })
+      .catch(() => {});
 
     const newErrors = (source.consecutiveErrors ?? 0) + 1;
     const errorBackoffHours = Math.min(Math.pow(2, newErrors - 1), 72);
     const nextFetch = new Date(Date.now() + errorBackoffHours * 3600_000).toISOString();
-    await db.update(sources).set({
-      consecutiveErrors: newErrors,
-      nextFetchAfter: nextFetch,
-    }).where(eq(sources.id, source.id)).catch(() => {});
+    await db
+      .update(sources)
+      .set({
+        consecutiveErrors: newErrors,
+        nextFetchAfter: nextFetch,
+      })
+      .where(eq(sources.id, source.id))
+      .catch(() => {});
   }
 }
 
@@ -377,10 +400,9 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 
-  const res = await fetch(
-    `https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`,
-    { headers },
-  );
+  const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/releases?per_page=100`, {
+    headers,
+  });
 
   if (!res.ok) {
     throw new Error(`GitHub API returned ${res.status} for ${owner}/${repo}`);
@@ -440,6 +462,7 @@ git commit -m "feat: add cron poll-and-fetch module for scheduled feed updates"
 ### Task 3: Register the Scheduled Handler and Configure Cron
 
 **Files:**
+
 - Modify: `workers/api/src/index.ts:22-31` (Env type), `workers/api/src/index.ts:91` (export)
 - Modify: `workers/api/wrangler.jsonc`
 
@@ -503,6 +526,7 @@ git commit -m "feat: register scheduled handler and cron trigger for hourly poll
 ### Task 4: Add `lastPolledAt` and `changeDetectedAt` to Source PATCH Route
 
 **Files:**
+
 - Modify: `workers/api/src/routes/sources.ts:650-684`
 
 The existing PATCH `/sources/:slug` route doesn't handle `lastPolledAt` or `changeDetectedAt`, which the CLI needs for remote mode. The cron writes directly to D1 so it doesn't need this, but the CLI's `clearChangeDetected()` and future poll commands in remote mode do.
@@ -519,8 +543,8 @@ In `workers/api/src/routes/sources.ts`, in the PATCH route body type (around lin
 In the updates block (around line 680), add:
 
 ```typescript
-  if (body.changeDetectedAt !== undefined) updates.changeDetectedAt = body.changeDetectedAt;
-  if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
+if (body.changeDetectedAt !== undefined) updates.changeDetectedAt = body.changeDetectedAt;
+if (body.lastPolledAt !== undefined) updates.lastPolledAt = body.lastPolledAt;
 ```
 
 - [ ] **Step 2: Verify type-check passes**
@@ -540,6 +564,7 @@ git commit -m "feat: add changeDetectedAt and lastPolledAt to source PATCH route
 ### Task 5: Update Documentation
 
 **Files:**
+
 - Modify: `CLAUDE.md`
 
 - [ ] **Step 1: Document the cron and tier behavior**

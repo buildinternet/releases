@@ -5,7 +5,6 @@ description: Decide whether an image or video found on a release page is editori
 
 <!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
 
-
 # Classifying Media Relevance
 
 Release pages contain two kinds of media: **editorial content** that belongs in the release (screenshots of the feature, demo videos, diagrams explaining a change) and **site chrome** that doesn't (author avatars, nav logos, tracking pixels, decorative separators). This skill governs which items end up in a release's `media[]` array.
@@ -41,13 +40,15 @@ The one exception: `/favicon.ico` and exact `/favicon*` at the site root are alw
 For each remaining media item, decide **keep** or **drop** based on these signals, in rough order of importance:
 
 **Strong keep signals**
+
 - Image or video appears in the middle of release body content (not header/footer of the page).
 - Alt text describes a feature, UI state, code, or demo ("New dashboard showing filters", "Architecture diagram", "CLI output").
 - Filename suggests editorial content (`screenshot-*`, `demo-*`, `feature-*`, `*-hero.png`, version numbers in name).
 - Dimensions consistent with screenshots/diagrams (wider than 400px, aspect ratio not 1:1 perfect square).
-- Hosted on the org's CDN *under a posts/releases/blog path* (e.g., `cdn.example.com/posts/2026/new-thing.png`).
+- Hosted on the org's CDN _under a posts/releases/blog path_ (e.g., `cdn.example.com/posts/2026/new-thing.png`).
 
 **Strong drop signals**
+
 - Alt text is a person's name, a company name alone, or empty and the URL contains `avatar|profile|author|contributor`.
 - Filename is generic site chrome (`logo.svg`, `wordmark.png`, `header-bg.jpg`, `footer-icon.svg`).
 - Perfect 1:1 square under 200×200 with no contextual link to release content (likely avatar/badge).
@@ -55,6 +56,7 @@ For each remaining media item, decide **keep** or **drop** based on these signal
 - Appears in every release on the source (detectable by callers passing a frequency hint) — site-wide chrome bleeding into parses.
 
 **Weak / context-dependent**
+
 - `/icon`, `/icons/` paths — only chrome if the release isn't about icons; keep if the release announces icon/design updates.
 - `/badge`, `/badges/` — drop if it's a shields.io CI badge, keep if the release is about achievements/credentials.
 - SVGs at the top of the page — usually logos, but can be diagrams. Use surrounding alt text and position.
@@ -65,8 +67,18 @@ Return a JSON array, one entry per input item, in the same order:
 
 ```json
 [
-  { "url": "https://...", "decision": "keep", "confidence": "high", "reason": "screenshot of new dashboard, alt text describes feature" },
-  { "url": "https://...", "decision": "drop", "confidence": "high", "reason": "author avatar, 80x80 square at top of post" }
+  {
+    "url": "https://...",
+    "decision": "keep",
+    "confidence": "high",
+    "reason": "screenshot of new dashboard, alt text describes feature"
+  },
+  {
+    "url": "https://...",
+    "decision": "drop",
+    "confidence": "high",
+    "reason": "author avatar, 80x80 square at top of post"
+  }
 ]
 ```
 

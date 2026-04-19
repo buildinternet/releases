@@ -15,9 +15,11 @@
 ## File Structure
 
 ### New files
+
 - `src/cli/commands/org.ts` — all `released org` subcommands (add, list, show, remove, link, unlink)
 
 ### Modified files
+
 - `src/lib/id.ts` — add `newOrgId()` and `newOrgAccountId()` generators
 - `src/db/schema.ts` — add `organizations` and `orgAccounts` tables, add `orgId` to `sources`
 - `src/db/migrate.ts` — v1→v2 migration block
@@ -37,6 +39,7 @@
 ### Task 1: Add nanoid generators for orgs
 
 **Files:**
+
 - Modify: `src/lib/id.ts`
 
 - [ ] **Step 1: Add org ID generators**
@@ -63,6 +66,7 @@ git commit -m "Add nanoid generators for organizations and org accounts"
 ### Task 2: Add schema tables and update sources
 
 **Files:**
+
 - Modify: `src/db/schema.ts`
 
 - [ ] **Step 1: Add organizations table**
@@ -83,8 +87,12 @@ export const organizations = sqliteTable("organizations", {
   name: text("name").notNull(),
   slug: text("slug").notNull().unique(),
   domain: text("domain").unique(),
-  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
-  updatedAt: text("updated_at").notNull().$defaultFn(() => new Date().toISOString()),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
 });
 ```
 
@@ -100,11 +108,11 @@ export const orgAccounts = sqliteTable(
       .references(() => organizations.id, { onDelete: "cascade" }),
     platform: text("platform").notNull(),
     handle: text("handle").notNull(),
-    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
   },
-  (table) => [
-    uniqueIndex("idx_org_accounts_platform_handle").on(table.platform, table.handle),
-  ],
+  (table) => [uniqueIndex("idx_org_accounts_platform_handle").on(table.platform, table.handle)],
 );
 ```
 
@@ -119,12 +127,14 @@ orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" 
 Add an index in a second argument to `sqliteTable` for sources (convert to the tuple syntax):
 
 ```typescript
-export const sources = sqliteTable("sources", {
-  // ... existing columns ...
-  orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
-}, (table) => [
-  index("idx_sources_org").on(table.orgId),
-]);
+export const sources = sqliteTable(
+  "sources",
+  {
+    // ... existing columns ...
+    orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
+  },
+  (table) => [index("idx_sources_org").on(table.orgId)],
+);
 ```
 
 - [ ] **Step 4: Add type exports**
@@ -153,6 +163,7 @@ git commit -m "Add organizations and org_accounts schema tables"
 ### Task 3: Add v1→v2 migration
 
 **Files:**
+
 - Modify: `src/db/migrate.ts`
 
 - [ ] **Step 1: Add v2 migration block**
@@ -183,10 +194,14 @@ if (user_version < 2) {
     )
   `);
 
-  db.run(sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_org_accounts_platform_handle ON org_accounts(platform, handle)`);
+  db.run(
+    sql`CREATE UNIQUE INDEX IF NOT EXISTS idx_org_accounts_platform_handle ON org_accounts(platform, handle)`,
+  );
 
   try {
-    db.run(sql`ALTER TABLE sources ADD COLUMN org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL`);
+    db.run(
+      sql`ALTER TABLE sources ADD COLUMN org_id TEXT REFERENCES organizations(id) ON DELETE SET NULL`,
+    );
   } catch {
     // Column already exists if migration ran partially
   }
@@ -218,6 +233,7 @@ git commit -m "Add v1-to-v2 migration for organizations tables"
 ### Task 4: Add query helpers
 
 **Files:**
+
 - Modify: `src/db/queries.ts`
 
 - [ ] **Step 1: Add findOrg resolver**
@@ -234,7 +250,10 @@ export async function findOrg(identifier: string): Promise<Organization | null> 
   if (bySlug) return bySlug;
 
   // 2. Domain (exact)
-  const [byDomain] = await db.select().from(organizations).where(eq(organizations.domain, identifier));
+  const [byDomain] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.domain, identifier));
   if (byDomain) return byDomain;
 
   // 3. Name (case-insensitive, oldest first for determinism)
@@ -324,9 +343,7 @@ export async function listOrgs(opts?: {
     const q = opts.query.toLowerCase();
     const accounts = await db.select().from(orgAccounts);
     const orgIdsWithMatchingHandle = new Set(
-      accounts
-        .filter((a) => a.handle.toLowerCase().includes(q))
-        .map((a) => a.orgId),
+      accounts.filter((a) => a.handle.toLowerCase().includes(q)).map((a) => a.orgId),
     );
     allOrgs = allOrgs.filter(
       (o) =>
@@ -349,8 +366,13 @@ Make sure the imports include everything needed:
 import { eq, desc, gte, and, sql } from "drizzle-orm";
 import { getDb } from "./connection.js";
 import {
-  sources, releases, organizations, orgAccounts,
-  type Source, type Release, type Organization,
+  sources,
+  releases,
+  organizations,
+  orgAccounts,
+  type Source,
+  type Release,
+  type Organization,
 } from "./schema.js";
 ```
 
@@ -373,6 +395,7 @@ git commit -m "Add findOrg, getSourcesByOrg, and getRecentReleasesByOrg query he
 ### Task 5: Create org subcommand group
 
 **Files:**
+
 - Create: `src/cli/commands/org.ts`
 - Modify: `src/cli/program.ts`
 
@@ -389,9 +412,7 @@ import { findOrg, getSourcesByOrg, listOrgs } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 
 export function registerOrgCommand(program: Command) {
-  const org = program
-    .command("org")
-    .description("Manage organizations");
+  const org = program.command("org").description("Manage organizations");
 
   // ── org add ──
   org
@@ -412,13 +433,16 @@ export function registerOrgCommand(program: Command) {
       }
 
       const now = new Date().toISOString();
-      const [created] = await db.insert(organizations).values({
-        name,
-        slug,
-        domain: opts.domain ?? null,
-        createdAt: now,
-        updatedAt: now,
-      }).returning();
+      const [created] = await db
+        .insert(organizations)
+        .values({
+          name,
+          slug,
+          domain: opts.domain ?? null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
 
       if (opts.json) {
         console.log(JSON.stringify(created, null, 2));
@@ -452,21 +476,11 @@ export function registerOrgCommand(program: Command) {
       }
 
       const table = new Table({
-        head: [
-          chalk.cyan("Name"),
-          chalk.cyan("Slug"),
-          chalk.cyan("Domain"),
-          chalk.cyan("Updated"),
-        ],
+        head: [chalk.cyan("Name"), chalk.cyan("Slug"), chalk.cyan("Domain"), chalk.cyan("Updated")],
       });
 
       for (const o of allOrgs) {
-        table.push([
-          o.name,
-          o.slug,
-          o.domain ?? chalk.dim("—"),
-          o.updatedAt,
-        ]);
+        table.push([o.name, o.slug, o.domain ?? chalk.dim("—"), o.updatedAt]);
       }
 
       console.log(table.toString());
@@ -486,10 +500,7 @@ export function registerOrgCommand(program: Command) {
       }
 
       const db = getDb();
-      const accounts = await db
-        .select()
-        .from(orgAccounts)
-        .where(eq(orgAccounts.orgId, found.id));
+      const accounts = await db.select().from(orgAccounts).where(eq(orgAccounts.orgId, found.id));
       const linkedSources = await getSourcesByOrg(found.id);
 
       if (opts.json) {
@@ -551,31 +562,36 @@ export function registerOrgCommand(program: Command) {
     .requiredOption("--platform <platform>", "Platform name (github, x, linkedin, etc.)")
     .requiredOption("--handle <handle>", "Account handle on the platform")
     .option("--json", "Output as JSON")
-    .action(async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
-      const found = await findOrg(identifier);
-      if (!found) {
-        console.error(chalk.red(`Organization not found: ${identifier}`));
-        process.exit(1);
-      }
+    .action(
+      async (identifier: string, opts: { platform: string; handle: string; json?: boolean }) => {
+        const found = await findOrg(identifier);
+        if (!found) {
+          console.error(chalk.red(`Organization not found: ${identifier}`));
+          process.exit(1);
+        }
 
-      const db = getDb();
-      const [created] = await db.insert(orgAccounts).values({
-        orgId: found.id,
-        platform: opts.platform,
-        handle: opts.handle,
-      }).returning();
+        const db = getDb();
+        const [created] = await db
+          .insert(orgAccounts)
+          .values({
+            orgId: found.id,
+            platform: opts.platform,
+            handle: opts.handle,
+          })
+          .returning();
 
-      await db
-        .update(organizations)
-        .set({ updatedAt: new Date().toISOString() })
-        .where(eq(organizations.id, found.id));
+        await db
+          .update(organizations)
+          .set({ updatedAt: new Date().toISOString() })
+          .where(eq(organizations.id, found.id));
 
-      if (opts.json) {
-        console.log(JSON.stringify(created, null, 2));
-      } else {
-        console.log(chalk.green(`Linked ${opts.platform}/${opts.handle} to ${found.name}`));
-      }
-    });
+        if (opts.json) {
+          console.log(JSON.stringify(created, null, 2));
+        } else {
+          console.log(chalk.green(`Linked ${opts.platform}/${opts.handle} to ${found.name}`));
+        }
+      },
+    );
 
   // ── org unlink ──
   org
@@ -655,6 +671,7 @@ git commit -m "Add org CLI subcommands: add, list, show, remove, link, unlink"
 ### Task 6: Add --org flag to `released add` with auto-association
 
 **Files:**
+
 - Modify: `src/cli/commands/add.ts`
 
 - [ ] **Step 1: Rewrite add.ts with --org flag and GitHub auto-association**
@@ -692,64 +709,71 @@ export function registerAddCommand(program: Command) {
     .requiredOption("--url <url>", "URL of the source")
     .option("--slug <slug>", "Custom slug (auto-derived from name if omitted)")
     .option("--org <org>", "Organization name or slug (creates if not found)")
-    .action(async (name: string, opts: { type: string; url: string; slug?: string; org?: string }) => {
-      if (!isValidType(opts.type)) {
-        console.error(chalk.red(`Invalid type "${opts.type}". Must be one of: ${VALID_TYPES.join(", ")}`));
-        process.exit(1);
-      }
+    .action(
+      async (name: string, opts: { type: string; url: string; slug?: string; org?: string }) => {
+        if (!isValidType(opts.type)) {
+          console.error(
+            chalk.red(`Invalid type "${opts.type}". Must be one of: ${VALID_TYPES.join(", ")}`),
+          );
+          process.exit(1);
+        }
 
-      const slug = opts.slug ?? toSlug(name);
-      const db = getDb();
-      let orgId: string | null = null;
+        const slug = opts.slug ?? toSlug(name);
+        const db = getDb();
+        let orgId: string | null = null;
 
-      // Resolve or create org if --org provided
-      if (opts.org) {
-        let org = await findOrg(opts.org);
-        if (!org) {
-          const orgSlug = toSlug(opts.org);
-          org = await findOrg(orgSlug);
+        // Resolve or create org if --org provided
+        if (opts.org) {
+          let org = await findOrg(opts.org);
           if (!org) {
-            const now = new Date().toISOString();
-            const [created] = await db.insert(organizations).values({
-              name: opts.org,
-              slug: orgSlug,
-              createdAt: now,
-              updatedAt: now,
-            }).returning();
-            org = created;
-            logger.info(`Created organization: ${org.name} (${org.slug})`);
+            const orgSlug = toSlug(opts.org);
+            org = await findOrg(orgSlug);
+            if (!org) {
+              const now = new Date().toISOString();
+              const [created] = await db
+                .insert(organizations)
+                .values({
+                  name: opts.org,
+                  slug: orgSlug,
+                  createdAt: now,
+                  updatedAt: now,
+                })
+                .returning();
+              org = created;
+              logger.info(`Created organization: ${org.name} (${org.slug})`);
+            }
+          }
+          orgId = org.id;
+        }
+
+        // Auto-association for GitHub sources (only if no --org specified)
+        if (!opts.org && opts.type === "github") {
+          const owner = parseGitHubOwner(opts.url);
+          if (owner) {
+            const [account] = await db
+              .select()
+              .from(orgAccounts)
+              .where(and(eq(orgAccounts.platform, "github"), eq(orgAccounts.handle, owner)));
+            if (account) {
+              orgId = account.orgId;
+              const org = await findOrg(account.orgId);
+              logger.info(`Auto-linked to organization "${org?.name ?? account.orgId}"`);
+            }
           }
         }
-        orgId = org.id;
-      }
 
-      // Auto-association for GitHub sources (only if no --org specified)
-      if (!opts.org && opts.type === "github") {
-        const owner = parseGitHubOwner(opts.url);
-        if (owner) {
-          const [account] = await db
-            .select()
-            .from(orgAccounts)
-            .where(and(eq(orgAccounts.platform, "github"), eq(orgAccounts.handle, owner)));
-          if (account) {
-            orgId = account.orgId;
-            const org = await findOrg(account.orgId);
-            logger.info(`Auto-linked to organization "${org?.name ?? account.orgId}"`);
-          }
-        }
-      }
+        await db.insert(sources).values({
+          name,
+          slug,
+          type: opts.type,
+          url: opts.url,
+          orgId,
+        });
 
-      await db.insert(sources).values({
-        name,
-        slug,
-        type: opts.type,
-        url: opts.url,
-        orgId,
-      });
-
-      const orgLabel = orgId ? ` [org: ${opts.org}]` : "";
-      console.log(chalk.green(`Source added: ${name} (${slug})${orgLabel}`));
-    });
+        const orgLabel = orgId ? ` [org: ${opts.org}]` : "";
+        console.log(chalk.green(`Source added: ${name} (${slug})${orgLabel}`));
+      },
+    );
 }
 ```
 
@@ -785,6 +809,7 @@ git commit -m "Add --org flag and GitHub auto-association to source add command"
 ### Task 7: Add --org filter to latest command
 
 **Files:**
+
 - Modify: `src/cli/commands/latest.ts`
 
 - [ ] **Step 1: Add --org option**
@@ -809,7 +834,10 @@ if (opts.org) {
     console.error(chalk.red(`Organization not found: ${opts.org}`));
     process.exit(1);
   }
-  const orgSources = await db.select({ id: sources.id }).from(sources).where(eq(sources.orgId, org.id));
+  const orgSources = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(eq(sources.orgId, org.id));
   orgSourceIds = orgSources.map((s) => s.id);
 }
 ```
@@ -833,6 +861,7 @@ git commit -m "Add --org filter to latest command"
 ### Task 8: Add --org filter to search command
 
 **Files:**
+
 - Modify: `src/cli/commands/search.ts`
 
 - [ ] **Step 1: Add --org option**
@@ -864,6 +893,7 @@ git commit -m "Add --org filter to search command"
 ### Task 9: Add --org filter to summary command
 
 **Files:**
+
 - Modify: `src/cli/commands/summary.ts`
 
 - [ ] **Step 1: Add --org as alternative to slug argument**
@@ -893,6 +923,7 @@ git commit -m "Add --org filter to summary command"
 ### Task 10: Show org name in source list
 
 **Files:**
+
 - Modify: `src/cli/commands/list.ts`
 
 - [ ] **Step 1: Join organizations in list query**
@@ -940,6 +971,7 @@ git commit -m "Show organization name in source list output"
 ### Task 11: Add list_organizations MCP tool and org filters to existing tools
 
 **Files:**
+
 - Modify: `src/mcp/server.ts`
 
 - [ ] **Step 1: Add list_organizations tool**
@@ -947,29 +979,34 @@ git commit -m "Show organization name in source list output"
 After the existing `list_products` tool registration, add:
 
 ```typescript
-server.registerTool("list_organizations", {
-  description: "List all indexed organizations, optionally filtered",
-  inputSchema: {
-    query: z.string().optional().describe("Search across org name, slug, domain, and account handles"),
-    platform: z.string().optional().describe("Filter to orgs with an account on this platform"),
+server.registerTool(
+  "list_organizations",
+  {
+    description: "List all indexed organizations, optionally filtered",
+    inputSchema: {
+      query: z
+        .string()
+        .optional()
+        .describe("Search across org name, slug, domain, and account handles"),
+      platform: z.string().optional().describe("Filter to orgs with an account on this platform"),
+    },
   },
-}, async ({ query, platform }) => {
-  const allOrgs = await listOrgs({ query, platform });
+  async ({ query, platform }) => {
+    const allOrgs = await listOrgs({ query, platform });
 
-  if (allOrgs.length === 0) {
-    return textResult("No organizations found.");
-  }
+    if (allOrgs.length === 0) {
+      return textResult("No organizations found.");
+    }
 
-  const text = allOrgs
-    .map((o) => [
-      `**${o.name}**`,
-      `  Slug: ${o.slug}`,
-      `  Domain: ${o.domain ?? "N/A"}`,
-    ].join("\n"))
-    .join("\n\n");
+    const text = allOrgs
+      .map((o) =>
+        [`**${o.name}**`, `  Slug: ${o.slug}`, `  Domain: ${o.domain ?? "N/A"}`].join("\n"),
+      )
+      .join("\n\n");
 
-  return textResult(text);
-});
+    return textResult(text);
+  },
+);
 ```
 
 - [ ] **Step 2: Add organization parameter to list_products**

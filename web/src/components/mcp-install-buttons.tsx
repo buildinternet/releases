@@ -8,9 +8,7 @@ const stdioConfig = {
 const cursorConfigB64 = Buffer.from(JSON.stringify(stdioConfig)).toString("base64");
 const cursorHref = `cursor://anysphere.cursor-deeplink/mcp/install?name=releases&config=${cursorConfigB64}`;
 
-const vscodePayload = encodeURIComponent(
-  JSON.stringify({ name: "releases", ...stdioConfig }),
-);
+const vscodePayload = encodeURIComponent(JSON.stringify({ name: "releases", ...stdioConfig }));
 const vscodeHref = `vscode:mcp/install?${vscodePayload}`;
 const vscodeInsidersHref = `vscode-insiders:mcp/install?${vscodePayload}`;
 

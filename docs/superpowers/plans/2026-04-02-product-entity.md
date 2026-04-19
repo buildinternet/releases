@@ -13,6 +13,7 @@
 ### Task 1: Schema and ID generator
 
 **Files:**
+
 - Modify: `src/lib/id.ts`
 - Modify: `src/db/schema.ts`
 
@@ -31,19 +32,23 @@ In `src/db/schema.ts`, add the `products` table after the `orgAccounts` table de
 Add this table:
 
 ```typescript
-export const products = sqliteTable("products", {
-  id: text("id").primaryKey().$defaultFn(newProductId),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  orgId: text("org_id")
-    .notNull()
-    .references(() => organizations.id, { onDelete: "cascade" }),
-  url: text("url"),
-  description: text("description"),
-  createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
-}, (table) => [
-  index("idx_products_org").on(table.orgId),
-]);
+export const products = sqliteTable(
+  "products",
+  {
+    id: text("id").primaryKey().$defaultFn(newProductId),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    url: text("url"),
+    description: text("description"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [index("idx_products_org").on(table.orgId)],
+);
 ```
 
 Add to the `sources` table definition, after the `orgId` column:
@@ -82,6 +87,7 @@ git commit -m "feat: add products table and productId to sources schema"
 ### Task 2: D1 migration
 
 **Files:**
+
 - Create: `workers/api/migrations/0013_products.sql`
 
 - [ ] **Step 1: Write the D1 migration**
@@ -124,6 +130,7 @@ git commit -m "feat: add D1 and local migrations for products table"
 ### Task 3: Query layer — product CRUD
 
 **Files:**
+
 - Modify: `src/db/queries.ts`
 
 - [ ] **Step 1: Add product CRUD queries**
@@ -132,9 +139,27 @@ Add the `products` import to the schema import line at the top of `src/db/querie
 
 ```typescript
 import {
-  sources, releases, organizations, orgAccounts, ignoredUrls, blockedUrls, fetchLog, usageLog, releaseSummaries, mediaAssets, products,
-  type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
-  type ReleaseSummary, type NewReleaseSummary, type MediaAsset, type Product,
+  sources,
+  releases,
+  organizations,
+  orgAccounts,
+  ignoredUrls,
+  blockedUrls,
+  fetchLog,
+  usageLog,
+  releaseSummaries,
+  mediaAssets,
+  products,
+  type Source,
+  type Release,
+  type Organization,
+  type OrgAccount,
+  type IgnoredUrl,
+  type BlockedUrl,
+  type ReleaseSummary,
+  type NewReleaseSummary,
+  type MediaAsset,
+  type Product,
 } from "./schema.js";
 ```
 
@@ -151,13 +176,16 @@ export async function createProduct(
   if (isRemoteMode()) return apiClient.createProduct(orgId, name, opts);
   const db = getDb();
   const slug = opts?.slug ?? toSlug(name);
-  const [created] = await db.insert(products).values({
-    name,
-    slug,
-    orgId,
-    url: opts?.url ?? null,
-    description: opts?.description ?? null,
-  }).returning();
+  const [created] = await db
+    .insert(products)
+    .values({
+      name,
+      slug,
+      orgId,
+      url: opts?.url ?? null,
+      description: opts?.description ?? null,
+    })
+    .returning();
   return created;
 }
 
@@ -174,7 +202,9 @@ export async function findProduct(identifier: string): Promise<Product | null> {
   return null;
 }
 
-export async function getProductsByOrg(orgId: string): Promise<Array<Product & { sourceCount: number }>> {
+export async function getProductsByOrg(
+  orgId: string,
+): Promise<Array<Product & { sourceCount: number }>> {
   if (isRemoteMode()) return apiClient.getProductsByOrg(orgId);
   const db = getDb();
   const rows = await db
@@ -194,10 +224,17 @@ export async function getProductsByOrg(orgId: string): Promise<Array<Product & {
   return rows;
 }
 
-export async function updateProduct(product: Product, data: Record<string, unknown>): Promise<Product> {
+export async function updateProduct(
+  product: Product,
+  data: Record<string, unknown>,
+): Promise<Product> {
   if (isRemoteMode()) return apiClient.updateProduct(product.slug, data);
   const db = getDb();
-  const [updated] = await db.update(products).set(data).where(eq(products.id, product.id)).returning();
+  const [updated] = await db
+    .update(products)
+    .set(data)
+    .where(eq(products.id, product.id))
+    .returning();
   return updated;
 }
 
@@ -213,6 +250,7 @@ export async function deleteProduct(productId: string): Promise<void> {
 In `src/db/queries.ts`, modify the `createSource` function's parameter type and insert logic:
 
 Change the parameter type from:
+
 ```typescript
 export async function createSource(data: {
   name: string;
@@ -225,6 +263,7 @@ export async function createSource(data: {
 ```
 
 To:
+
 ```typescript
 export async function createSource(data: {
   name: string;
@@ -240,7 +279,9 @@ export async function createSource(data: {
 And in the insert values, add `productId`:
 
 ```typescript
-  const [created] = await db.insert(sources).values({
+const [created] = await db
+  .insert(sources)
+  .values({
     name: data.name,
     slug: data.slug,
     type: data.type as "github" | "scrape" | "feed" | "agent",
@@ -248,7 +289,8 @@ And in the insert values, add `productId`:
     orgId: data.orgId ?? null,
     productId: data.productId ?? null,
     metadata: data.metadata,
-  }).returning();
+  })
+  .returning();
 ```
 
 - [ ] **Step 3: Update listSourcesWithOrg to include product info**
@@ -275,24 +317,24 @@ export interface SourceWithOrg {
 Update the `listSourcesWithOrg` function's select to include product fields and add a second left join:
 
 ```typescript
-  const query = db
-    .select({
-      id: sources.id,
-      name: sources.name,
-      slug: sources.slug,
-      type: sources.type,
-      url: sources.url,
-      lastFetchedAt: sources.lastFetchedAt,
-      orgName: organizations.name,
-      productName: products.name,
-      productSlug: products.slug,
-      metadata: sources.metadata,
-      isPrimary: sql<boolean>`coalesce(${sources.isPrimary}, 0)`.as("isPrimary"),
-      isHidden: sources.isHidden,
-    })
-    .from(sources)
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .leftJoin(products, eq(sources.productId, products.id));
+const query = db
+  .select({
+    id: sources.id,
+    name: sources.name,
+    slug: sources.slug,
+    type: sources.type,
+    url: sources.url,
+    lastFetchedAt: sources.lastFetchedAt,
+    orgName: organizations.name,
+    productName: products.name,
+    productSlug: products.slug,
+    metadata: sources.metadata,
+    isPrimary: sql<boolean>`coalesce(${sources.isPrimary}, 0)`.as("isPrimary"),
+    isHidden: sources.isHidden,
+  })
+  .from(sources)
+  .leftJoin(organizations, eq(sources.orgId, organizations.id))
+  .leftJoin(products, eq(sources.productId, products.id));
 ```
 
 Add support for a `productSlug` filter in the opts and conditions:
@@ -311,11 +353,11 @@ export async function listSourcesWithOrg(opts?: {
 And inside the conditions block, after the orgSlug condition:
 
 ```typescript
-  if (opts?.productSlug) {
-    const product = await findProduct(opts.productSlug);
-    if (!product) return [];
-    conditions.push(eq(sources.productId, product.id));
-  }
+if (opts?.productSlug) {
+  const product = await findProduct(opts.productSlug);
+  if (!product) return [];
+  conditions.push(eq(sources.productId, product.id));
+}
 ```
 
 - [ ] **Step 4: Run type check**
@@ -335,6 +377,7 @@ git commit -m "feat: add product CRUD queries and update source queries for prod
 ### Task 4: API client — product functions for remote mode
 
 **Files:**
+
 - Modify: `src/api/client.ts`
 
 - [ ] **Step 1: Add Product type import and product API functions**
@@ -343,8 +386,15 @@ Add `Product` to the type import at the top of `src/api/client.ts`:
 
 ```typescript
 import type {
-  Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
-  ReleaseSummary, NewReleaseSummary, Product,
+  Source,
+  Release,
+  Organization,
+  OrgAccount,
+  IgnoredUrl,
+  BlockedUrl,
+  ReleaseSummary,
+  NewReleaseSummary,
+  Product,
 } from "../db/schema.js";
 ```
 
@@ -360,7 +410,13 @@ export async function createProduct(
 ): Promise<Product> {
   return apiFetch<Product>(`/api/products`, {
     method: "POST",
-    body: JSON.stringify({ orgId, name, slug: opts?.slug, url: opts?.url, description: opts?.description }),
+    body: JSON.stringify({
+      orgId,
+      name,
+      slug: opts?.slug,
+      url: opts?.url,
+      description: opts?.description,
+    }),
   });
 }
 
@@ -368,7 +424,9 @@ export async function findProduct(identifier: string): Promise<Product | null> {
   return apiFetch<Product | null>(`/api/products/${identifier}`);
 }
 
-export async function getProductsByOrg(orgId: string): Promise<Array<Product & { sourceCount: number }>> {
+export async function getProductsByOrg(
+  orgId: string,
+): Promise<Array<Product & { sourceCount: number }>> {
   return apiFetch<Array<Product & { sourceCount: number }>>(`/api/products?orgId=${orgId}`);
 }
 
@@ -410,11 +468,13 @@ Update `listSourcesWithOrg` to accept `productSlug` and pass it to the API, and 
 In the opts type, add `productSlug?: string;`.
 
 In the params block, add:
+
 ```typescript
-  if (opts?.productSlug) params.set("productSlug", opts.productSlug);
+if (opts?.productSlug) params.set("productSlug", opts.productSlug);
 ```
 
 In the mapping, add:
+
 ```typescript
     productName: (r as any).productName ?? null,
     productSlug: (r as any).productSlug ?? null,
@@ -458,6 +518,7 @@ git commit -m "feat: add product API client functions for remote mode"
 ### Task 5: API routes — product endpoints
 
 **Files:**
+
 - Create: `workers/api/src/routes/products.ts`
 - Modify: `workers/api/src/index.ts`
 - Modify: `workers/api/src/routes/stats.ts`
@@ -509,14 +570,23 @@ productRoutes.get("/products/:identifier", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
 
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(
+      identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+    );
 
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const productSources = await db
-    .select({ id: sources.id, slug: sources.slug, name: sources.name, type: sources.type, url: sources.url })
+    .select({
+      id: sources.id,
+      slug: sources.slug,
+      name: sources.name,
+      type: sources.type,
+      url: sources.url,
+    })
     .from(sources)
     .where(eq(sources.productId, product.id))
     .orderBy(sources.name);
@@ -527,7 +597,13 @@ productRoutes.get("/products/:identifier", async (c) => {
 // Create product
 productRoutes.post("/products", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json<{ orgId: string; name: string; slug?: string; url?: string; description?: string }>();
+  const body = await c.req.json<{
+    orgId: string;
+    name: string;
+    slug?: string;
+    url?: string;
+    description?: string;
+  }>();
 
   if (!body.orgId || !body.name) {
     return c.json({ error: "bad_request", message: "Missing required fields: orgId, name" }, 400);
@@ -553,7 +629,10 @@ productRoutes.post("/products", async (c) => {
     return c.json(created, 201);
   } catch (err) {
     if (isConflictError(err)) {
-      return c.json({ error: "conflict", message: `Product with slug "${slug}" already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Product with slug "${slug}" already exists` },
+        409,
+      );
     }
     throw err;
   }
@@ -563,7 +642,11 @@ productRoutes.post("/products", async (c) => {
 productRoutes.patch("/products/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
-  const body = await c.req.json<{ name?: string; url?: string | null; description?: string | null }>();
+  const body = await c.req.json<{
+    name?: string;
+    url?: string | null;
+    description?: string | null;
+  }>();
 
   const [product] = await db.select().from(products).where(eq(products.slug, slug));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
@@ -577,7 +660,11 @@ productRoutes.patch("/products/:slug", async (c) => {
     return c.json(product);
   }
 
-  const [updated] = await db.update(products).set(updates).where(eq(products.id, product.id)).returning();
+  const [updated] = await db
+    .update(products)
+    .set(updates)
+    .where(eq(products.id, product.id))
+    .returning();
   return c.json(updated);
 });
 
@@ -586,9 +673,12 @@ productRoutes.delete("/products/:identifier", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
 
-  const [product] = await db.select().from(products).where(
-    identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
-  );
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(
+      identifier.startsWith("prod_") ? eq(products.id, identifier) : eq(products.slug, identifier),
+    );
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   await db.delete(products).where(eq(products.id, product.id));
@@ -607,15 +697,32 @@ productRoutes.post("/products/adopt", async (c) => {
   }>();
 
   if (!body.sourceOrgSlug || !body.targetOrgSlug) {
-    return c.json({ error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" }, 400);
+    return c.json(
+      { error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" },
+      400,
+    );
   }
 
   // Resolve both orgs
-  const [sourceOrg] = await db.select().from(organizations).where(eq(organizations.slug, body.sourceOrgSlug));
-  if (!sourceOrg) return c.json({ error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` }, 404);
+  const [sourceOrg] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.slug, body.sourceOrgSlug));
+  if (!sourceOrg)
+    return c.json(
+      { error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` },
+      404,
+    );
 
-  const [targetOrg] = await db.select().from(organizations).where(eq(organizations.slug, body.targetOrgSlug));
-  if (!targetOrg) return c.json({ error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` }, 404);
+  const [targetOrg] = await db
+    .select()
+    .from(organizations)
+    .where(eq(organizations.slug, body.targetOrgSlug));
+  if (!targetOrg)
+    return c.json(
+      { error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` },
+      404,
+    );
 
   // Gather sources to move
   const sourcesToMove = await db.select().from(sources).where(eq(sources.orgId, sourceOrg.id));
@@ -626,24 +733,33 @@ productRoutes.post("/products/adopt", async (c) => {
   if (body.dryRun) {
     return c.json({
       dryRun: true,
-      product: { name: sourceOrg.name, slug: productSlug, url: productUrl, orgSlug: targetOrg.slug },
+      product: {
+        name: sourceOrg.name,
+        slug: productSlug,
+        url: productUrl,
+        orgSlug: targetOrg.slug,
+      },
       sourcesToMove: sourcesToMove.map((s) => s.slug),
       sourceOrgToDelete: sourceOrg.slug,
     });
   }
 
   // Create product under target org
-  const [product] = await db.insert(products).values({
-    name: sourceOrg.name,
-    slug: productSlug,
-    orgId: targetOrg.id,
-    url: productUrl,
-    description: sourceOrg.description,
-  }).returning();
+  const [product] = await db
+    .insert(products)
+    .values({
+      name: sourceOrg.name,
+      slug: productSlug,
+      orgId: targetOrg.id,
+      url: productUrl,
+      description: sourceOrg.description,
+    })
+    .returning();
 
   // Move sources: update orgId to target, set productId
   if (sourcesToMove.length > 0) {
-    await db.update(sources)
+    await db
+      .update(sources)
       .set({ orgId: targetOrg.id, productId: product.id })
       .where(eq(sources.orgId, sourceOrg.id));
   }
@@ -697,7 +813,12 @@ statsRoutes.get("/stats", async (c) => {
   const [sourceCount] = await db.select({ n: count() }).from(sources);
   const [releaseCount] = await db.select({ n: count() }).from(releases);
   const [productCount] = await db.select({ n: count() }).from(products);
-  return c.json({ orgs: orgCount.n, sources: sourceCount.n, releases: releaseCount.n, products: productCount.n });
+  return c.json({
+    orgs: orgCount.n,
+    sources: sourceCount.n,
+    releases: releaseCount.n,
+    products: productCount.n,
+  });
 });
 ```
 
@@ -706,18 +827,25 @@ statsRoutes.get("/stats", async (c) => {
 In `workers/api/src/routes/sources.ts`, add `products` to the schema import:
 
 ```typescript
-import { sources, releases, organizations, fetchLog, releaseSummaries, products } from "../../../../src/db/schema.js";
+import {
+  sources,
+  releases,
+  organizations,
+  fetchLog,
+  releaseSummaries,
+  products,
+} from "../../../../src/db/schema.js";
 ```
 
 In the `GET /sources` handler, after the `orgSlug` block (~line 46-49), add `productSlug` resolution:
 
 ```typescript
-  const productSlug = c.req.query("productSlug");
-  if (productSlug) {
-    const [product] = await db.select().from(products).where(eq(products.slug, productSlug));
-    if (!product) return c.json([]);
-    conditions.push(eq(sources.productId, product.id));
-  }
+const productSlug = c.req.query("productSlug");
+if (productSlug) {
+  const [product] = await db.select().from(products).where(eq(products.slug, productSlug));
+  if (!product) return c.json([]);
+  conditions.push(eq(sources.productId, product.id));
+}
 ```
 
 Also add `eq` import — it's already imported on line 2.
@@ -739,6 +867,7 @@ git commit -m "feat: add product API routes and update stats/sources endpoints"
 ### Task 6: CLI — product command
 
 **Files:**
+
 - Create: `src/cli/commands/product.ts`
 - Modify: `src/cli/program.ts`
 
@@ -751,16 +880,22 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import {
-  findOrg, findProduct, getProductsByOrg, createProduct, updateProduct, deleteProduct,
-  getSourcesByOrg, getOrgAccountsBySlug, updateSource, removeOrg,
+  findOrg,
+  findProduct,
+  getProductsByOrg,
+  createProduct,
+  updateProduct,
+  deleteProduct,
+  getSourcesByOrg,
+  getOrgAccountsBySlug,
+  updateSource,
+  removeOrg,
 } from "../../db/queries.js";
 import { toSlug } from "../../lib/slug.js";
 import { logger } from "../../lib/logger.js";
 
 export function registerProductCommand(program: Command) {
-  const product = program
-    .command("product")
-    .description("Manage products within organizations");
+  const product = program.command("product").description("Manage products within organizations");
 
   // ── product list ──
   product
@@ -768,11 +903,14 @@ export function registerProductCommand(program: Command) {
     .description("List products, optionally filtered by organization")
     .argument("[org-slug]", "Filter by organization slug")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   released product list
   released product list vercel
-  released product list --json`)
+  released product list --json`,
+    )
     .action(async (orgSlug: string | undefined, opts: { json?: boolean }) => {
       if (orgSlug) {
         const org = await findOrg(orgSlug);
@@ -798,21 +936,11 @@ Examples:
         }
 
         const table = new Table({
-          head: [
-            chalk.cyan("Name"),
-            chalk.cyan("Slug"),
-            chalk.cyan("URL"),
-            chalk.cyan("Sources"),
-          ],
+          head: [chalk.cyan("Name"), chalk.cyan("Slug"), chalk.cyan("URL"), chalk.cyan("Sources")],
         });
 
         for (const p of prods) {
-          table.push([
-            p.name,
-            p.slug,
-            p.url ?? chalk.dim("—"),
-            String(p.sourceCount),
-          ]);
+          table.push([p.name, p.slug, p.url ?? chalk.dim("—"), String(p.sourceCount)]);
         }
 
         console.log(chalk.bold(`Products for ${org.name}:`));
@@ -836,37 +964,45 @@ Examples:
     .option("--url <url>", "Canonical product URL (e.g., https://nextjs.org)")
     .option("--description <text>", "Brief product description")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   released product add "Next.js" --org vercel --url https://nextjs.org
   released product add "Turborepo" --org vercel --slug turborepo
-  released product add "AI SDK" --org vercel --description "TypeScript toolkit for AI apps" --json`)
-    .action(async (name: string, opts: { org: string; slug?: string; url?: string; description?: string; json?: boolean }) => {
-      const org = await findOrg(opts.org);
-      if (!org) {
-        console.error(chalk.red(`Organization not found: ${opts.org}`));
-        process.exit(1);
-      }
+  released product add "AI SDK" --org vercel --description "TypeScript toolkit for AI apps" --json`,
+    )
+    .action(
+      async (
+        name: string,
+        opts: { org: string; slug?: string; url?: string; description?: string; json?: boolean },
+      ) => {
+        const org = await findOrg(opts.org);
+        if (!org) {
+          console.error(chalk.red(`Organization not found: ${opts.org}`));
+          process.exit(1);
+        }
 
-      const slug = opts.slug ?? toSlug(name);
-      const existing = await findProduct(slug);
-      if (existing) {
-        console.error(chalk.red(`Product with slug "${slug}" already exists.`));
-        process.exit(1);
-      }
+        const slug = opts.slug ?? toSlug(name);
+        const existing = await findProduct(slug);
+        if (existing) {
+          console.error(chalk.red(`Product with slug "${slug}" already exists.`));
+          process.exit(1);
+        }
 
-      const created = await createProduct(org.id, name, {
-        slug,
-        url: opts.url,
-        description: opts.description,
-      });
+        const created = await createProduct(org.id, name, {
+          slug,
+          url: opts.url,
+          description: opts.description,
+        });
 
-      if (opts.json) {
-        console.log(JSON.stringify(created, null, 2));
-      } else {
-        console.log(chalk.green(`Product added: ${name} (${slug}) under ${org.name}`));
-      }
-    });
+        if (opts.json) {
+          console.log(JSON.stringify(created, null, 2));
+        } else {
+          console.log(chalk.green(`Product added: ${name} (${slug}) under ${org.name}`));
+        }
+      },
+    );
 
   // ── product edit ──
   product
@@ -877,40 +1013,57 @@ Examples:
     .option("--url <url>", "Update canonical URL")
     .option("--description <text>", "Update description")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   released product edit nextjs --url https://nextjs.org
-  released product edit nextjs --name "Next.js" --json`)
-    .action(async (slug: string, opts: { name?: string; url?: string; description?: string; json?: boolean }) => {
-      const prod = await findProduct(slug);
-      if (!prod) {
-        console.error(chalk.red(`Product not found: ${slug}`));
-        process.exit(1);
-      }
-
-      const updates: Record<string, unknown> = {};
-      const changes: string[] = [];
-
-      if (opts.name) { updates.name = opts.name; changes.push(`name → ${opts.name}`); }
-      if (opts.url !== undefined) { updates.url = opts.url; changes.push(`url → ${opts.url}`); }
-      if (opts.description !== undefined) { updates.description = opts.description; changes.push(`description updated`); }
-
-      if (changes.length === 0) {
-        console.log(chalk.yellow("No changes specified. Use --help to see options."));
-        return;
-      }
-
-      const updated = await updateProduct(prod, updates);
-
-      if (opts.json) {
-        console.log(JSON.stringify(updated, null, 2));
-      } else {
-        console.log(chalk.green(`Updated product ${prod.name} (${slug}):`));
-        for (const change of changes) {
-          console.log(`  ${change}`);
+  released product edit nextjs --name "Next.js" --json`,
+    )
+    .action(
+      async (
+        slug: string,
+        opts: { name?: string; url?: string; description?: string; json?: boolean },
+      ) => {
+        const prod = await findProduct(slug);
+        if (!prod) {
+          console.error(chalk.red(`Product not found: ${slug}`));
+          process.exit(1);
         }
-      }
-    });
+
+        const updates: Record<string, unknown> = {};
+        const changes: string[] = [];
+
+        if (opts.name) {
+          updates.name = opts.name;
+          changes.push(`name → ${opts.name}`);
+        }
+        if (opts.url !== undefined) {
+          updates.url = opts.url;
+          changes.push(`url → ${opts.url}`);
+        }
+        if (opts.description !== undefined) {
+          updates.description = opts.description;
+          changes.push(`description updated`);
+        }
+
+        if (changes.length === 0) {
+          console.log(chalk.yellow("No changes specified. Use --help to see options."));
+          return;
+        }
+
+        const updated = await updateProduct(prod, updates);
+
+        if (opts.json) {
+          console.log(JSON.stringify(updated, null, 2));
+        } else {
+          console.log(chalk.green(`Updated product ${prod.name} (${slug}):`));
+          for (const change of changes) {
+            console.log(`  ${change}`);
+          }
+        }
+      },
+    );
 
   // ── product remove ──
   product
@@ -919,10 +1072,13 @@ Examples:
     .argument("<slug>", "Product slug")
     .option("--dry-run", "Show what would be removed without deleting")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   released product remove nextjs
-  released product remove nextjs --dry-run`)
+  released product remove nextjs --dry-run`,
+    )
     .action(async (slug: string, opts: { dryRun?: boolean; json?: boolean }) => {
       const prod = await findProduct(slug);
       if (!prod) {
@@ -935,7 +1091,11 @@ Examples:
           console.log(JSON.stringify({ wouldRemove: prod.slug, name: prod.name }, null, 2));
         } else {
           console.log(chalk.yellow(`[dry-run] Would remove product: ${prod.name} (${prod.slug})`));
-          console.log(chalk.dim("  Sources linked to this product would have their product association cleared."));
+          console.log(
+            chalk.dim(
+              "  Sources linked to this product would have their product association cleared.",
+            ),
+          );
         }
         return;
       }
@@ -959,86 +1119,111 @@ Examples:
     .option("--url <url>", "Override product URL (defaults to source org domain)")
     .option("--dry-run", "Show what would happen without making changes")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   released product adopt nextjs --into vercel
   released product adopt nextjs --into vercel --dry-run
-  released product adopt nextjs --into vercel --url https://nextjs.org --json`)
-    .action(async (sourceOrgSlug: string, opts: { into: string; slug?: string; url?: string; dryRun?: boolean; json?: boolean }) => {
-      const sourceOrg = await findOrg(sourceOrgSlug);
-      if (!sourceOrg) {
-        console.error(chalk.red(`Source organization not found: ${sourceOrgSlug}`));
-        process.exit(1);
-      }
+  released product adopt nextjs --into vercel --url https://nextjs.org --json`,
+    )
+    .action(
+      async (
+        sourceOrgSlug: string,
+        opts: { into: string; slug?: string; url?: string; dryRun?: boolean; json?: boolean },
+      ) => {
+        const sourceOrg = await findOrg(sourceOrgSlug);
+        if (!sourceOrg) {
+          console.error(chalk.red(`Source organization not found: ${sourceOrgSlug}`));
+          process.exit(1);
+        }
 
-      const targetOrg = await findOrg(opts.into);
-      if (!targetOrg) {
-        console.error(chalk.red(`Target organization not found: ${opts.into}`));
-        process.exit(1);
-      }
+        const targetOrg = await findOrg(opts.into);
+        if (!targetOrg) {
+          console.error(chalk.red(`Target organization not found: ${opts.into}`));
+          process.exit(1);
+        }
 
-      if (sourceOrg.id === targetOrg.id) {
-        console.error(chalk.red("Source and target organizations cannot be the same."));
-        process.exit(1);
-      }
+        if (sourceOrg.id === targetOrg.id) {
+          console.error(chalk.red("Source and target organizations cannot be the same."));
+          process.exit(1);
+        }
 
-      const sourcesToMove = await getSourcesByOrg(sourceOrg.id);
-      const productSlug = opts.slug ?? sourceOrg.slug;
-      const productUrl = opts.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
+        const sourcesToMove = await getSourcesByOrg(sourceOrg.id);
+        const productSlug = opts.slug ?? sourceOrg.slug;
+        const productUrl = opts.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
 
-      if (opts.dryRun) {
-        const summary = {
-          product: { name: sourceOrg.name, slug: productSlug, url: productUrl, parentOrg: targetOrg.slug },
-          sourcesToMove: sourcesToMove.map((s) => s.slug),
-          sourceOrgToDelete: sourceOrg.slug,
-        };
+        if (opts.dryRun) {
+          const summary = {
+            product: {
+              name: sourceOrg.name,
+              slug: productSlug,
+              url: productUrl,
+              parentOrg: targetOrg.slug,
+            },
+            sourcesToMove: sourcesToMove.map((s) => s.slug),
+            sourceOrgToDelete: sourceOrg.slug,
+          };
+
+          if (opts.json) {
+            console.log(JSON.stringify({ dryRun: true, ...summary }, null, 2));
+          } else {
+            console.log(
+              chalk.bold(
+                `[dry-run] Would adopt "${sourceOrg.name}" as a product under "${targetOrg.name}":`,
+              ),
+            );
+            console.log(`  Product: ${summary.product.name} (${summary.product.slug})`);
+            if (summary.product.url) console.log(`  URL: ${summary.product.url}`);
+            console.log(`  Sources to move: ${summary.sourcesToMove.length}`);
+            for (const s of summary.sourcesToMove) {
+              console.log(`    ${chalk.dim("→")} ${s}`);
+            }
+            console.log(`  Would delete org: ${sourceOrg.name} (${sourceOrg.slug})`);
+          }
+          return;
+        }
+
+        // Create product
+        const created = await createProduct(targetOrg.id, sourceOrg.name, {
+          slug: productSlug,
+          url: productUrl,
+          description: sourceOrg.description ?? undefined,
+        });
+
+        // Move sources — update orgId and productId
+        let moved = 0;
+        for (const src of sourcesToMove) {
+          await updateSource(src, { orgId: targetOrg.id, productId: created.id });
+          moved++;
+        }
+
+        // Delete the now-empty source org
+        await removeOrg(sourceOrg.id, sourceOrg.slug);
 
         if (opts.json) {
-          console.log(JSON.stringify({ dryRun: true, ...summary }, null, 2));
+          console.log(
+            JSON.stringify(
+              {
+                product: created,
+                sourcesMoved: moved,
+                sourceOrgDeleted: sourceOrg.slug,
+              },
+              null,
+              2,
+            ),
+          );
         } else {
-          console.log(chalk.bold(`[dry-run] Would adopt "${sourceOrg.name}" as a product under "${targetOrg.name}":`));
-          console.log(`  Product: ${summary.product.name} (${summary.product.slug})`);
-          if (summary.product.url) console.log(`  URL: ${summary.product.url}`);
-          console.log(`  Sources to move: ${summary.sourcesToMove.length}`);
-          for (const s of summary.sourcesToMove) {
-            console.log(`    ${chalk.dim("→")} ${s}`);
-          }
-          console.log(`  Would delete org: ${sourceOrg.name} (${sourceOrg.slug})`);
+          console.log(
+            chalk.green(`Adopted "${sourceOrg.name}" as product under "${targetOrg.name}"`),
+          );
+          console.log(`  Product: ${created.name} (${created.slug})`);
+          if (created.url) console.log(`  URL: ${created.url}`);
+          console.log(`  Sources moved: ${moved}`);
+          console.log(`  Deleted org: ${sourceOrg.slug}`);
         }
-        return;
-      }
-
-      // Create product
-      const created = await createProduct(targetOrg.id, sourceOrg.name, {
-        slug: productSlug,
-        url: productUrl,
-        description: sourceOrg.description ?? undefined,
-      });
-
-      // Move sources — update orgId and productId
-      let moved = 0;
-      for (const src of sourcesToMove) {
-        await updateSource(src, { orgId: targetOrg.id, productId: created.id });
-        moved++;
-      }
-
-      // Delete the now-empty source org
-      await removeOrg(sourceOrg.id, sourceOrg.slug);
-
-      if (opts.json) {
-        console.log(JSON.stringify({
-          product: created,
-          sourcesMoved: moved,
-          sourceOrgDeleted: sourceOrg.slug,
-        }, null, 2));
-      } else {
-        console.log(chalk.green(`Adopted "${sourceOrg.name}" as product under "${targetOrg.name}"`));
-        console.log(`  Product: ${created.name} (${created.slug})`);
-        if (created.url) console.log(`  URL: ${created.url}`);
-        console.log(`  Sources moved: ${moved}`);
-        console.log(`  Deleted org: ${sourceOrg.slug}`);
-      }
-    });
+      },
+    );
 }
 ```
 
@@ -1059,10 +1244,13 @@ registerProductCommand(program);
 Update the help text to include Products:
 
 Change:
+
 ```
   Organizations: org (add, list, show, remove, link, unlink)
 ```
+
 To:
+
 ```
   Organizations: org (add, list, show, remove, link, unlink)
   Products:      product (list, add, edit, remove, adopt)
@@ -1085,6 +1273,7 @@ git commit -m "feat: add product CLI command with list, add, edit, remove, adopt
 ### Task 7: CLI updates — add --product to existing commands
 
 **Files:**
+
 - Modify: `src/cli/commands/add.ts`
 - Modify: `src/cli/commands/edit.ts`
 - Modify: `src/cli/commands/list.ts`
@@ -1116,32 +1305,39 @@ interface AddSourceInput {
 In `addSingleSource`, after the org resolution block (around line 68, after `orgName = org.name;`), add product resolution:
 
 ```typescript
-  let productId: string | null = null;
-  if (input.product) {
-    const prod = await findProduct(input.product);
-    if (!prod) {
-      return { name, slug: input.slug ?? toSlug(name), type: "scrape", url, status: "error", error: `Product not found: "${input.product}"` };
-    }
-    productId = prod.id;
-    // If product has an org and no org was specified, inherit it
-    if (!orgId) {
-      orgId = prod.orgId;
-    }
+let productId: string | null = null;
+if (input.product) {
+  const prod = await findProduct(input.product);
+  if (!prod) {
+    return {
+      name,
+      slug: input.slug ?? toSlug(name),
+      type: "scrape",
+      url,
+      status: "error",
+      error: `Product not found: "${input.product}"`,
+    };
   }
+  productId = prod.id;
+  // If product has an org and no org was specified, inherit it
+  if (!orgId) {
+    orgId = prod.orgId;
+  }
+}
 ```
 
 In the `createSource` call (around line 139), add `productId`:
 
 ```typescript
-    await createSource({
-      name,
-      slug,
-      type: sourceType,
-      url,
-      orgId,
-      productId,
-      metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : undefined,
-    });
+await createSource({
+  name,
+  slug,
+  type: sourceType,
+  url,
+  orgId,
+  productId,
+  metadata: Object.keys(metadata).length > 0 ? JSON.stringify(metadata) : undefined,
+});
 ```
 
 In `registerAddCommand`, add the option (after `--org`):
@@ -1153,16 +1349,16 @@ In `registerAddCommand`, add the option (after `--org`):
 Pass it through in both single-add and batch paths. In the single-add action (around line 255):
 
 ```typescript
-      const result = await addSingleSource({
-        name: effectiveName,
-        url: opts.url,
-        type: opts.type,
-        slug: opts.slug,
-        org: opts.org,
-        product: opts.product,
-        feedUrl: opts.feedUrl,
-        skipEval: opts.skipEval,
-      });
+const result = await addSingleSource({
+  name: effectiveName,
+  url: opts.url,
+  type: opts.type,
+  slug: opts.slug,
+  org: opts.org,
+  product: opts.product,
+  feedUrl: opts.feedUrl,
+  skipEval: opts.skipEval,
+});
 ```
 
 Also update the opts type in the action to include `product?: string`.
@@ -1172,7 +1368,13 @@ Also update the opts type in the action to include `product?: string`.
 In `src/cli/commands/edit.ts`, add `findProduct` to the import:
 
 ```typescript
-import { findSourceBySlug, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
+import {
+  findSourceBySlug,
+  findOrg,
+  createOrg,
+  updateSource,
+  findProduct,
+} from "../../db/queries.js";
 ```
 
 Add the option (after `--no-org`):
@@ -1187,19 +1389,19 @@ In the action, add `product` to the opts type: `product?: string | boolean;`
 Add this handling block after the `--org / --no-org` block (around line 109):
 
 ```typescript
-      // Handle --product / --no-product
-      if (opts.product === false) {
-        updates.productId = null;
-        changes.push("product removed");
-      } else if (typeof opts.product === "string") {
-        const prod = await findProduct(opts.product);
-        if (!prod) {
-          console.error(chalk.red(`Product not found: ${opts.product}`));
-          process.exit(1);
-        }
-        updates.productId = prod.id;
-        changes.push(`product → ${prod.name}`);
-      }
+// Handle --product / --no-product
+if (opts.product === false) {
+  updates.productId = null;
+  changes.push("product removed");
+} else if (typeof opts.product === "string") {
+  const prod = await findProduct(opts.product);
+  if (!prod) {
+    console.error(chalk.red(`Product not found: ${opts.product}`));
+    process.exit(1);
+  }
+  updates.productId = prod.id;
+  changes.push(`product → ${prod.name}`);
+}
 ```
 
 - [ ] **Step 3: Add --product filter to list command and show product column**
@@ -1215,40 +1417,40 @@ Update the opts type to include `product?: string`.
 Pass it through to `listSourcesWithOrg`:
 
 ```typescript
-      const allSources = await listSourcesWithOrg({
-        orgSlug: opts.org,
-        productSlug: opts.product,
-        hasFeed: opts.hasFeed,
-        enrichable: opts.enrichable,
-        query: opts.query,
-        includeHidden: opts.includeHidden,
-      });
+const allSources = await listSourcesWithOrg({
+  orgSlug: opts.org,
+  productSlug: opts.product,
+  hasFeed: opts.hasFeed,
+  enrichable: opts.enrichable,
+  query: opts.query,
+  includeHidden: opts.includeHidden,
+});
 ```
 
 Update the table header to include Product (add after "Org"):
 
 ```typescript
-      const table = new Table({
-        head: ["Name", "Slug", "Type", "Method", "URL", "Org", "Product", "Last Fetched"],
-      });
+const table = new Table({
+  head: ["Name", "Slug", "Type", "Method", "URL", "Org", "Product", "Last Fetched"],
+});
 ```
 
 Update the table row push to include the product name:
 
 ```typescript
-      for (const row of allSources) {
-        const method = getFetchMethod(row.type, row.metadata);
-        table.push([
-          row.isPrimary ? `${row.name} ${chalk.yellow("\u2605")}` : row.name,
-          row.slug,
-          row.type,
-          method,
-          row.url,
-          row.orgName ?? chalk.dim("\u2014"),
-          row.productName ?? chalk.dim("\u2014"),
-          row.lastFetchedAt ?? chalk.dim("never"),
-        ]);
-      }
+for (const row of allSources) {
+  const method = getFetchMethod(row.type, row.metadata);
+  table.push([
+    row.isPrimary ? `${row.name} ${chalk.yellow("\u2605")}` : row.name,
+    row.slug,
+    row.type,
+    method,
+    row.url,
+    row.orgName ?? chalk.dim("\u2014"),
+    row.productName ?? chalk.dim("\u2014"),
+    row.lastFetchedAt ?? chalk.dim("never"),
+  ]);
+}
 ```
 
 - [ ] **Step 4: Run type check**
@@ -1279,6 +1481,7 @@ git commit -m "feat: add --product flag to add, edit, and list commands"
 ### Task 8: Update import command to support products in manifest
 
 **Files:**
+
 - Modify: `src/cli/commands/import.ts`
 
 - [ ] **Step 1: Add product types and processing to import command**
@@ -1339,34 +1542,36 @@ Initialize `products: 0` in the report creation.
 In `validateManifest`, add validation for products (after the accounts validation, around line 93):
 
 ```typescript
-      if (org.products) {
-        for (const [k, prod] of org.products.entries()) {
-          if (!prod.name) {
-            throw new Error(`organizations[${i}].products[${k}] is missing required 'name' field`);
-          }
-          if (prod.sources) {
-            for (const [j, src] of prod.sources.entries()) {
-              if (!src.name || !src.url) {
-                throw new Error(`organizations[${i}].products[${k}].sources[${j}] is missing required 'name' or 'url' field`);
-              }
-            }
-          }
+if (org.products) {
+  for (const [k, prod] of org.products.entries()) {
+    if (!prod.name) {
+      throw new Error(`organizations[${i}].products[${k}] is missing required 'name' field`);
+    }
+    if (prod.sources) {
+      for (const [j, src] of prod.sources.entries()) {
+        if (!src.name || !src.url) {
+          throw new Error(
+            `organizations[${i}].products[${k}].sources[${j}] is missing required 'name' or 'url' field`,
+          );
         }
       }
+    }
+  }
+}
 ```
 
 In `collectAllUrls`, add product source URLs (after org sources):
 
 ```typescript
-      if (org.products) {
-        for (const prod of org.products) {
-          if (prod.sources) {
-            for (const src of prod.sources) {
-              urls.push(src.url);
-            }
-          }
-        }
+if (org.products) {
+  for (const prod of org.products) {
+    if (prod.sources) {
+      for (const src of prod.sources) {
+        urls.push(src.url);
       }
+    }
+  }
+}
 ```
 
 In the org processing loop (after accounts handling, before org sources), add product processing. This goes after the accounts block and before the `if (orgEntry.sources)` block. For both dry-run and real modes:
@@ -1374,119 +1579,129 @@ In the org processing loop (after accounts handling, before org sources), add pr
 **Dry-run product handling** (inside the `if (opts.dryRun)` block, after accounts):
 
 ```typescript
-            // Products
-            if (orgEntry.products) {
-              for (const prodEntry of orgEntry.products) {
-                report.created.products++;
-                if (!opts.json) {
-                  logger.info(chalk.green(`[dry-run] Would create product: ${prodEntry.name} -> ${orgSlug}`));
-                }
-                if (prodEntry.sources) {
-                  for (const srcEntry of prodEntry.sources) {
-                    if (existingUrlSet.has(srcEntry.url)) {
-                      report.skipped++;
-                      if (!opts.json) {
-                        logger.info(chalk.yellow(`[dry-run] Source URL already exists, would skip: ${srcEntry.url}`));
-                      }
-                    } else {
-                      report.created.sources++;
-                      const srcType = resolveSourceType(srcEntry);
-                      if (!opts.json) {
-                        logger.info(chalk.green(`[dry-run] Would create source: ${srcEntry.name} [${srcType}] -> ${prodEntry.name}`));
-                      }
-                    }
-                  }
-                }
-              }
-            }
+// Products
+if (orgEntry.products) {
+  for (const prodEntry of orgEntry.products) {
+    report.created.products++;
+    if (!opts.json) {
+      logger.info(chalk.green(`[dry-run] Would create product: ${prodEntry.name} -> ${orgSlug}`));
+    }
+    if (prodEntry.sources) {
+      for (const srcEntry of prodEntry.sources) {
+        if (existingUrlSet.has(srcEntry.url)) {
+          report.skipped++;
+          if (!opts.json) {
+            logger.info(
+              chalk.yellow(`[dry-run] Source URL already exists, would skip: ${srcEntry.url}`),
+            );
+          }
+        } else {
+          report.created.sources++;
+          const srcType = resolveSourceType(srcEntry);
+          if (!opts.json) {
+            logger.info(
+              chalk.green(
+                `[dry-run] Would create source: ${srcEntry.name} [${srcType}] -> ${prodEntry.name}`,
+              ),
+            );
+          }
+        }
+      }
+    }
+  }
+}
 ```
 
 **Real product handling** (in the non-dry-run path, after accounts, before org sources):
 
 ```typescript
-          // Create products and their sources
-          if (orgEntry.products) {
-            for (const prodEntry of orgEntry.products) {
-              const prodSlug = prodEntry.slug ?? toSlug(prodEntry.name);
-              let prod = await findProduct(prodSlug);
+// Create products and their sources
+if (orgEntry.products) {
+  for (const prodEntry of orgEntry.products) {
+    const prodSlug = prodEntry.slug ?? toSlug(prodEntry.name);
+    let prod = await findProduct(prodSlug);
 
-              if (prod) {
-                if (!opts.json) {
-                  logger.info(chalk.yellow(`Product already exists: ${prod.name} (${prod.slug})`));
-                }
-              } else {
-                try {
-                  prod = await createProduct(org.id, prodEntry.name, {
-                    slug: prodSlug,
-                    url: prodEntry.url,
-                    description: prodEntry.description,
-                  });
-                  report.created.products++;
-                  if (!opts.json) {
-                    logger.info(chalk.green(`Created product: ${prod.name} (${prod.slug}) -> ${org.slug}`));
-                  }
-                } catch (err) {
-                  const msg = `Failed to create product "${prodEntry.name}": ${err instanceof Error ? err.message : String(err)}`;
-                  report.errors.push(msg);
-                  if (!opts.json) {
-                    logger.error(chalk.red(msg));
-                  }
-                  continue;
-                }
-              }
+    if (prod) {
+      if (!opts.json) {
+        logger.info(chalk.yellow(`Product already exists: ${prod.name} (${prod.slug})`));
+      }
+    } else {
+      try {
+        prod = await createProduct(org.id, prodEntry.name, {
+          slug: prodSlug,
+          url: prodEntry.url,
+          description: prodEntry.description,
+        });
+        report.created.products++;
+        if (!opts.json) {
+          logger.info(chalk.green(`Created product: ${prod.name} (${prod.slug}) -> ${org.slug}`));
+        }
+      } catch (err) {
+        const msg = `Failed to create product "${prodEntry.name}": ${err instanceof Error ? err.message : String(err)}`;
+        report.errors.push(msg);
+        if (!opts.json) {
+          logger.error(chalk.red(msg));
+        }
+        continue;
+      }
+    }
 
-              // Insert product sources
-              if (prodEntry.sources) {
-                for (const srcEntry of prodEntry.sources) {
-                  if (existingUrlSet.has(srcEntry.url)) {
-                    report.skipped++;
-                    if (opts.skipExisting) {
-                      if (!opts.json) {
-                        logger.info(chalk.yellow(`Skipped existing source: ${srcEntry.url}`));
-                      }
-                    } else {
-                      const msg = `Source URL already exists: ${srcEntry.url}`;
-                      report.errors.push(msg);
-                      if (!opts.json) {
-                        logger.error(chalk.red(msg));
-                      }
-                    }
-                    continue;
-                  }
-
-                  const srcSlug = srcEntry.slug ?? toSlug(srcEntry.name);
-                  const srcType = resolveSourceType(srcEntry);
-
-                  try {
-                    await createSource({
-                      name: srcEntry.name,
-                      slug: srcSlug,
-                      type: srcType,
-                      url: srcEntry.url,
-                      orgId: org.id,
-                      productId: prod.id,
-                    });
-                    report.created.sources++;
-                    if (!opts.json) {
-                      logger.info(chalk.green(`Created source: ${srcEntry.name} (${srcSlug}) [${srcType}] -> ${prod.slug}`));
-                    }
-                  } catch (err) {
-                    const msg = `Failed to create source "${srcEntry.name}": ${err instanceof Error ? err.message : String(err)}`;
-                    report.errors.push(msg);
-                    if (!opts.json) {
-                      logger.error(chalk.red(msg));
-                    }
-                  }
-                }
-              }
+    // Insert product sources
+    if (prodEntry.sources) {
+      for (const srcEntry of prodEntry.sources) {
+        if (existingUrlSet.has(srcEntry.url)) {
+          report.skipped++;
+          if (opts.skipExisting) {
+            if (!opts.json) {
+              logger.info(chalk.yellow(`Skipped existing source: ${srcEntry.url}`));
+            }
+          } else {
+            const msg = `Source URL already exists: ${srcEntry.url}`;
+            report.errors.push(msg);
+            if (!opts.json) {
+              logger.error(chalk.red(msg));
             }
           }
+          continue;
+        }
+
+        const srcSlug = srcEntry.slug ?? toSlug(srcEntry.name);
+        const srcType = resolveSourceType(srcEntry);
+
+        try {
+          await createSource({
+            name: srcEntry.name,
+            slug: srcSlug,
+            type: srcType,
+            url: srcEntry.url,
+            orgId: org.id,
+            productId: prod.id,
+          });
+          report.created.sources++;
+          if (!opts.json) {
+            logger.info(
+              chalk.green(
+                `Created source: ${srcEntry.name} (${srcSlug}) [${srcType}] -> ${prod.slug}`,
+              ),
+            );
+          }
+        } catch (err) {
+          const msg = `Failed to create source "${srcEntry.name}": ${err instanceof Error ? err.message : String(err)}`;
+          report.errors.push(msg);
+          if (!opts.json) {
+            logger.error(chalk.red(msg));
+          }
+        }
+      }
+    }
+  }
+}
 ```
 
 Update the summary output to include products:
 
 ```typescript
-        console.log(`  Products created:      ${report.created.products}`);
+console.log(`  Products created:      ${report.created.products}`);
 ```
 
 - [ ] **Step 2: Run type check**
@@ -1506,6 +1721,7 @@ git commit -m "feat: add product support to import manifest"
 ### Task 9: Update org show to display products
 
 **Files:**
+
 - Modify: `src/cli/commands/org.ts`
 
 - [ ] **Step 1: Update org show to include products**
@@ -1514,8 +1730,14 @@ In `src/cli/commands/org.ts`, add `getProductsByOrg` to the import:
 
 ```typescript
 import {
-  findOrg, getSourcesByOrg, listOrgs, createOrg, removeOrg,
-  getOrgAccountsBySlug, linkOrgAccount, unlinkOrgAccount,
+  findOrg,
+  getSourcesByOrg,
+  listOrgs,
+  createOrg,
+  removeOrg,
+  getOrgAccountsBySlug,
+  linkOrgAccount,
+  unlinkOrgAccount,
   getProductsByOrg,
 } from "../../db/queries.js";
 ```
@@ -1523,26 +1745,28 @@ import {
 In the `org show` action (around line 117), after fetching accounts and sources, fetch products:
 
 ```typescript
-      const orgProducts = await getProductsByOrg(found.id);
+const orgProducts = await getProductsByOrg(found.id);
 ```
 
 In the JSON output, include products:
 
 ```typescript
-        console.log(JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources }, null, 2));
+console.log(
+  JSON.stringify({ ...found, accounts, products: orgProducts, sources: linkedSources }, null, 2),
+);
 ```
 
 In the text output, after the accounts block and before the sources block, add:
 
 ```typescript
-      if (orgProducts.length > 0) {
-        console.log();
-        console.log(chalk.bold("Products:"));
-        for (const p of orgProducts) {
-          const urlLabel = p.url ? chalk.dim(` ${p.url}`) : "";
-          console.log(`  ${chalk.cyan(p.slug)}  ${p.name}  (${p.sourceCount} sources)${urlLabel}`);
-        }
-      }
+if (orgProducts.length > 0) {
+  console.log();
+  console.log(chalk.bold("Products:"));
+  for (const p of orgProducts) {
+    const urlLabel = p.url ? chalk.dim(` ${p.url}`) : "";
+    console.log(`  ${chalk.cyan(p.slug)}  ${p.name}  (${p.sourceCount} sources)${urlLabel}`);
+  }
+}
 ```
 
 - [ ] **Step 2: Run type check**
@@ -1567,6 +1791,7 @@ git commit -m "feat: display products in org show output"
 ### Task 10: Update org detail API to include products
 
 **Files:**
+
 - Modify: `workers/api/src/routes/orgs.ts`
 
 - [ ] **Step 1: Add products to org detail response**
@@ -1574,24 +1799,30 @@ git commit -m "feat: display products in org show output"
 In `workers/api/src/routes/orgs.ts`, add `products` to the schema import:
 
 ```typescript
-import { organizations, orgAccounts, sources, releases, products } from "../../../../src/db/schema.js";
+import {
+  organizations,
+  orgAccounts,
+  sources,
+  releases,
+  products,
+} from "../../../../src/db/schema.js";
 ```
 
 In the `GET /orgs/:slug` handler, after fetching `sourceRows` (around line 87), add a products query:
 
 ```typescript
-  const productRows = await db
-    .select({
-      id: products.id,
-      slug: products.slug,
-      name: products.name,
-      url: products.url,
-      description: products.description,
-      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources WHERE sources.product_id = ${products.id})`,
-    })
-    .from(products)
-    .where(eq(products.orgId, org.id))
-    .orderBy(products.name);
+const productRows = await db
+  .select({
+    id: products.id,
+    slug: products.slug,
+    name: products.name,
+    url: products.url,
+    description: products.description,
+    sourceCount: sql<number>`(SELECT COUNT(*) FROM sources WHERE sources.product_id = ${products.id})`,
+  })
+  .from(products)
+  .where(eq(products.orgId, org.id))
+  .orderBy(products.name);
 ```
 
 Include it in the response JSON (add after `accounts`, before `sources`):

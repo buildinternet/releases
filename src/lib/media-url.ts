@@ -108,7 +108,10 @@ export function normalizeMediaUrl(url: string): string {
  * Returns a plain URL without Image Transforms — gallery images go through
  * next/image which handles its own optimization.
  */
-export function resolveR2Url(r2Key: string | undefined | null, mediaOrigin: string): string | undefined {
+export function resolveR2Url(
+  r2Key: string | undefined | null,
+  mediaOrigin: string,
+): string | undefined {
   if (!r2Key) return undefined;
   return `${mediaOrigin}/${r2Key}`;
 }

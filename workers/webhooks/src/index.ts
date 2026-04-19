@@ -45,7 +45,10 @@ export default {
         console.warn(
           `[webhook-dlq] sub=${msg.body.subscriptionId} release=${msg.body.event.release.id} attempts=${msg.attempts}`,
         );
-        writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, syntheticAttempt(msg.body, msg.attempts, "dlq"));
+        writeDeliveryAttempt(
+          env.WEBHOOK_DELIVERIES_AE,
+          syntheticAttempt(msg.body, msg.attempts, "dlq"),
+        );
         msg.ack();
       }
       return;
@@ -112,7 +115,10 @@ export default {
             false,
             `auto-disabled after ${fresh.consecutiveFailures} consecutive failures`,
           );
-          writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, syntheticAttempt(body, msg.attempts, "auto_disabled"));
+          writeDeliveryAttempt(
+            env.WEBHOOK_DELIVERIES_AE,
+            syntheticAttempt(body, msg.attempts, "auto_disabled"),
+          );
         }
         if (result.outcome === "perm_fail") {
           msg.ack();

@@ -9,12 +9,7 @@ import type { ExtractDeps, ExtractRepo } from "@releases/adapters/extract/types"
 import { config } from "@releases/lib/config";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { getAnthropicClient } from "../ai/client.js";
-import {
-  checkContentHash,
-  recordContentHash,
-  findOrg,
-  getPlaybookForOrg,
-} from "../db/queries.js";
+import { checkContentHash, recordContentHash, findOrg, getPlaybookForOrg } from "../db/queries.js";
 import { updateSourceMeta as updateSourceMetaLocal } from "./feed.js";
 import { logUsage } from "../lib/usage.js";
 import { extractNotesFromLegacyPlaybook } from "../ai/playbook.js";
@@ -53,9 +48,8 @@ export function buildLocalExtractDeps(): ExtractDeps {
 
   const cfAccountId = config.cloudflareAccountId();
   const cfApiToken = config.cloudflareApiToken();
-  const cloudflare = cfAccountId && cfApiToken
-    ? { accountId: cfAccountId, apiToken: cfApiToken }
-    : null;
+  const cloudflare =
+    cfAccountId && cfApiToken ? { accountId: cfAccountId, apiToken: cfApiToken } : null;
 
   return {
     anthropicClient: getAnthropicClient(),

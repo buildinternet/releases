@@ -51,11 +51,16 @@ export function registerTailCommand(program: Command) {
     .argument("[slug]", "Source slug to filter by")
     .option("-c, --count <n>", "Number of releases to show", "10")
     .option("--org <identifier>", "Filter to an organization")
-    .option("--include-coverage", "Include releases that are coverage of another (hidden by default)")
+    .option(
+      "--include-coverage",
+      "Include releases that are coverage of another (hidden by default)",
+    )
     .option("-f, --follow", "Poll for new releases and stream them as they arrive")
     .option("--interval <seconds>", "Poll interval in seconds when following (min 5)", "60")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases tail                         Latest releases across all sources
   releases tail my-source               Latest releases from one source
@@ -63,86 +68,93 @@ Examples:
   releases tail -f                      Follow new releases as they arrive (60s interval)
   releases tail -f --interval 30        Follow with a 30s poll interval
   releases tail --json                  Output as JSON
-  releases latest                       Alias for the one-shot listing`)
-    .action(async (
-      slug: string | undefined,
-      opts: {
-        count: string;
-        org?: string;
-        includeCoverage?: boolean;
-        follow?: boolean;
-        interval: string;
-        json?: boolean;
-      },
-    ) => {
-      const count = parseInt(opts.count, 10);
-      const intervalSeconds = Math.max(5, parseInt(opts.interval, 10) || 60);
+  releases latest                       Alias for the one-shot listing`,
+    )
+    .action(
+      async (
+        slug: string | undefined,
+        opts: {
+          count: string;
+          org?: string;
+          includeCoverage?: boolean;
+          follow?: boolean;
+          interval: string;
+          json?: boolean;
+        },
+      ) => {
+        const count = parseInt(opts.count, 10);
+        const intervalSeconds = Math.max(5, parseInt(opts.interval, 10) || 60);
 
-      if (slug) {
-        const source = await findSource(slug);
-        if (!source) return sourceNotFound(slug);
-      }
-
-      let orgSlug: string | undefined;
-      if (opts.org) {
-        const org = await findOrg(opts.org);
-        if (!org) return orgNotFound(opts.org);
-        orgSlug = org.slug;
-      }
-
-      const fetchOpts = { slug, orgSlug, count, includeCoverage: opts.includeCoverage };
-      const rows = await getLatestReleases(fetchOpts);
-
-      if (opts.json) {
-        console.log(JSON.stringify(rows, null, 2));
-      } else if (rows.length === 0) {
-        console.log(chalk.yellow("No releases found."));
-      } else if (opts.follow) {
-        for (const row of rows.slice().toReversed()) {
-          console.log(renderStreamLine(row));
+        if (slug) {
+          const source = await findSource(slug);
+          if (!source) return sourceNotFound(slug);
         }
-      } else {
-        console.log(renderLatestReleasesTable(rows, { withSummary: true }));
-        console.log(
-          chalk.dim(
-            `\n  More: "releases show <rel_id>" for full content · "releases tail <source-slug>" to filter by source`,
-          ),
+
+        let orgSlug: string | undefined;
+        if (opts.org) {
+          const org = await findOrg(opts.org);
+          if (!org) return orgNotFound(opts.org);
+          orgSlug = org.slug;
+        }
+
+        const fetchOpts = { slug, orgSlug, count, includeCoverage: opts.includeCoverage };
+        const rows = await getLatestReleases(fetchOpts);
+
+        if (opts.json) {
+          console.log(JSON.stringify(rows, null, 2));
+        } else if (rows.length === 0) {
+          console.log(chalk.yellow("No releases found."));
+        } else if (opts.follow) {
+          for (const row of rows.slice().toReversed()) {
+            console.log(renderStreamLine(row));
+          }
+        } else {
+          console.log(renderLatestReleasesTable(rows, { withSummary: true }));
+          console.log(
+            chalk.dim(
+              `\n  More: "releases show <rel_id>" for full content · "releases tail <source-slug>" to filter by source`,
+            ),
+          );
+        }
+
+        if (!opts.follow) return;
+
+        const seen = new Set<string>();
+        rememberSeen(
+          seen,
+          rows.map((r) => r.id),
         );
-      }
 
-      if (!opts.follow) return;
+        // Try live streaming first in remote mode. On snapshot_gap or transport
+        // failure, fall through to polling using the same seen-id dedup set so
+        // transport transitions don't double-print.
+        const wsUrl = streamUrl();
+        const streamed = wsUrl
+          ? await tryStream(wsUrl, fetchOpts, seen, opts.json === true)
+          : false;
 
-      const seen = new Set<string>();
-      rememberSeen(seen, rows.map((r) => r.id));
+        if (!streamed) {
+          console.error(chalk.dim(`\n  Following (every ${intervalSeconds}s). Ctrl-C to stop.`));
+          while (true) {
+            await sleep(intervalSeconds * 1000);
+            const fresh = await getLatestReleases(fetchOpts);
+            const novel = fresh.filter((r) => !seen.has(r.id));
+            if (novel.length === 0) continue;
 
-      // Try live streaming first in remote mode. On snapshot_gap or transport
-      // failure, fall through to polling using the same seen-id dedup set so
-      // transport transitions don't double-print.
-      const wsUrl = streamUrl();
-      const streamed = wsUrl
-        ? await tryStream(wsUrl, fetchOpts, seen, opts.json === true)
-        : false;
-
-      if (!streamed) {
-        console.error(
-          chalk.dim(`\n  Following (every ${intervalSeconds}s). Ctrl-C to stop.`),
-        );
-        while (true) {
-          await sleep(intervalSeconds * 1000);
-          const fresh = await getLatestReleases(fetchOpts);
-          const novel = fresh.filter((r) => !seen.has(r.id));
-          if (novel.length === 0) continue;
-
-          rememberSeen(seen, novel.map((r) => r.id));
-          const ordered = novel.slice().toReversed();
-          if (opts.json) {
-            for (const row of ordered) console.log(JSON.stringify(row));
-          } else {
-            for (const row of ordered) console.log(renderStreamLine(row));
+            rememberSeen(
+              seen,
+              novel.map((r) => r.id),
+            );
+            const ordered = novel.slice().toReversed();
+            if (opts.json) {
+              for (const row of ordered) console.log(JSON.stringify(row));
+            } else {
+              for (const row of ordered) console.log(renderStreamLine(row));
+            }
           }
         }
-      }
-    });
+      },
+    );
 }
 
 /**

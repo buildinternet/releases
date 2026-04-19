@@ -23,11 +23,12 @@ export async function matchWebhookSubscriptions(
   orgIds: string[],
 ): Promise<WebhookSubscription[]> {
   if (orgIds.length === 0) return [];
-  return db.select().from(webhookSubscriptions)
-    .where(and(
-      eq(webhookSubscriptions.enabled, true),
-      inArray(webhookSubscriptions.orgId, orgIds),
-    ));
+  return db
+    .select()
+    .from(webhookSubscriptions)
+    .where(
+      and(eq(webhookSubscriptions.enabled, true), inArray(webhookSubscriptions.orgId, orgIds)),
+    );
 }
 
 /**
@@ -52,7 +53,11 @@ export async function getWebhookSubscriptionById(
   db: D1Db,
   id: string,
 ): Promise<WebhookSubscription | null> {
-  const rows = await db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).limit(1);
+  const rows = await db
+    .select()
+    .from(webhookSubscriptions)
+    .where(eq(webhookSubscriptions.id, id))
+    .limit(1);
   return rows[0] ?? null;
 }
 
@@ -67,7 +72,9 @@ export async function listWebhookSubscriptionsByOrg(
   opts?: { enabledOnly?: boolean },
 ): Promise<WebhookSubscription[]> {
   if (opts?.enabledOnly) {
-    return db.select().from(webhookSubscriptions)
+    return db
+      .select()
+      .from(webhookSubscriptions)
       .where(and(eq(webhookSubscriptions.orgId, orgId), eq(webhookSubscriptions.enabled, true)));
   }
   return db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.orgId, orgId));
@@ -101,7 +108,8 @@ export async function bumpWebhookSecretVersion(db: D1Db, id: string): Promise<nu
   const cur = await getWebhookSubscriptionById(db, id);
   if (!cur) return null;
   const newVersion = cur.secretVersion + 1;
-  await db.update(webhookSubscriptions)
+  await db
+    .update(webhookSubscriptions)
     .set({ secretVersion: newVersion })
     .where(eq(webhookSubscriptions.id, id));
   return newVersion;

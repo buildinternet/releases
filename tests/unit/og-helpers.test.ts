@@ -127,15 +127,11 @@ describe("isJunkMediaUrl", () => {
   });
 
   it("accepts full-size media URLs", () => {
+    expect(isJunkMediaUrl("https://media.releases.sh/sources/vercel/e8e2541d89c3a4cf.png")).toBe(
+      false,
+    );
     expect(
-      isJunkMediaUrl(
-        "https://media.releases.sh/sources/vercel/e8e2541d89c3a4cf.png",
-      ),
-    ).toBe(false);
-    expect(
-      isJunkMediaUrl(
-        "https://assets.vercel.com/image/upload/contentful/image/flags-ga-light.png",
-      ),
+      isJunkMediaUrl("https://assets.vercel.com/image/upload/contentful/image/flags-ga-light.png"),
     ).toBe(false);
   });
 

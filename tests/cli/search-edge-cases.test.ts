@@ -12,9 +12,10 @@ describe("CLI search with empty database", () => {
   afterAll(() => cleanup());
 
   it("search returns empty results gracefully (JSON)", () => {
-    const results = cliJson<{ orgs: unknown[]; products: unknown[]; releases: unknown[] }>(dataDir, [
-      "search", "anything", "--json",
-    ]);
+    const results = cliJson<{ orgs: unknown[]; products: unknown[]; releases: unknown[] }>(
+      dataDir,
+      ["search", "anything", "--json"],
+    );
     expect(results.orgs).toEqual([]);
     expect(results.products).toEqual([]);
     expect(results.releases).toEqual([]);
@@ -49,25 +50,33 @@ describe("CLI category validation", () => {
 
   it("rejects invalid category on org add", () => {
     const result = cli(dataDir, [
-      "admin", "org", "add", "Bad Category Org", "--category", "fake-category",
+      "admin",
+      "org",
+      "add",
+      "Bad Category Org",
+      "--category",
+      "fake-category",
     ]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Invalid category");
   });
 
   it("rejects invalid category on org edit", () => {
-    const result = cli(dataDir, [
-      "admin", "org", "edit", "test-org", "--category", "not-real",
-    ]);
+    const result = cli(dataDir, ["admin", "org", "edit", "test-org", "--category", "not-real"]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Invalid category");
   });
 
   it("rejects invalid category on product add", () => {
     const result = cli(dataDir, [
-      "admin", "product", "add", "Bad Product",
-      "--org", "test-org",
-      "--category", "bogus",
+      "admin",
+      "product",
+      "add",
+      "Bad Product",
+      "--org",
+      "test-org",
+      "--category",
+      "bogus",
     ]);
     expect(result.exitCode).toBe(1);
     expect(result.stderr).toContain("Invalid category");
@@ -88,9 +97,14 @@ describe("CLI org link/unlink", () => {
 
   it("links a platform account", () => {
     const result = cli(dataDir, [
-      "admin", "org", "link", "acme-corp",
-      "--platform", "github",
-      "--handle", "acme-corp",
+      "admin",
+      "org",
+      "link",
+      "acme-corp",
+      "--platform",
+      "github",
+      "--handle",
+      "acme-corp",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -100,10 +114,13 @@ describe("CLI org link/unlink", () => {
   });
 
   it("linked account appears in org show", () => {
-    const org = cliJson<{ accounts: { platform: string; handle: string }[] }>(
-      dataDir,
-      ["admin", "org", "show", "acme-corp", "--json"],
-    );
+    const org = cliJson<{ accounts: { platform: string; handle: string }[] }>(dataDir, [
+      "admin",
+      "org",
+      "show",
+      "acme-corp",
+      "--json",
+    ]);
     expect(org.accounts.length).toBe(1);
     expect(org.accounts[0].platform).toBe("github");
     expect(org.accounts[0].handle).toBe("acme-corp");
@@ -111,9 +128,14 @@ describe("CLI org link/unlink", () => {
 
   it("unlinks a platform account", () => {
     const result = cli(dataDir, [
-      "admin", "org", "unlink", "acme-corp",
-      "--platform", "github",
-      "--handle", "acme-corp",
+      "admin",
+      "org",
+      "unlink",
+      "acme-corp",
+      "--platform",
+      "github",
+      "--handle",
+      "acme-corp",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -122,10 +144,13 @@ describe("CLI org link/unlink", () => {
   });
 
   it("account is gone after unlinking", () => {
-    const org = cliJson<{ accounts: unknown[] }>(
-      dataDir,
-      ["admin", "org", "show", "acme-corp", "--json"],
-    );
+    const org = cliJson<{ accounts: unknown[] }>(dataDir, [
+      "admin",
+      "org",
+      "show",
+      "acme-corp",
+      "--json",
+    ]);
     expect(org.accounts.length).toBe(0);
   });
 });
@@ -143,9 +168,7 @@ describe("CLI org remove dry-run", () => {
   afterAll(() => cleanup());
 
   it("dry-run shows what would be removed", () => {
-    const result = cli(dataDir, [
-      "admin", "org", "remove", "ephemeral-org", "--dry-run", "--json",
-    ]);
+    const result = cli(dataDir, ["admin", "org", "remove", "ephemeral-org", "--dry-run", "--json"]);
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed.wouldRemove).toBe("ephemeral-org");
@@ -167,7 +190,17 @@ describe("CLI product adopt", () => {
     for (const args of [
       ["admin", "org", "add", "Vercel", "--category", "cloud"],
       ["admin", "org", "add", "Next.js", "--domain", "nextjs.org"],
-      ["admin", "source", "add", "Next.js Blog", "--url", "https://nextjs.org/blog", "--org", "next-js", "--skip-eval"],
+      [
+        "admin",
+        "source",
+        "add",
+        "Next.js Blog",
+        "--url",
+        "https://nextjs.org/blog",
+        "--org",
+        "next-js",
+        "--skip-eval",
+      ],
     ]) {
       const r = cli(dataDir, args);
       if (r.exitCode !== 0) throw new Error(`Seed failed: ${r.stderr}`);
@@ -178,8 +211,12 @@ describe("CLI product adopt", () => {
 
   it("dry-run shows adoption plan", () => {
     const result = cli(dataDir, [
-      "admin", "product", "adopt", "next-js",
-      "--into", "vercel",
+      "admin",
+      "product",
+      "adopt",
+      "next-js",
+      "--into",
+      "vercel",
       "--dry-run",
       "--json",
     ]);
@@ -193,8 +230,12 @@ describe("CLI product adopt", () => {
 
   it("adopts org as product", () => {
     const result = cli(dataDir, [
-      "admin", "product", "adopt", "next-js",
-      "--into", "vercel",
+      "admin",
+      "product",
+      "adopt",
+      "next-js",
+      "--into",
+      "vercel",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -212,14 +253,21 @@ describe("CLI product adopt", () => {
 
   it("product exists under target org", () => {
     const products = cliJson<{ slug: string }[]>(dataDir, [
-      "admin", "product", "list", "vercel", "--json",
+      "admin",
+      "product",
+      "list",
+      "vercel",
+      "--json",
     ]);
     expect(products.some((p) => p.slug === "next-js")).toBe(true);
   });
 
   it("source was moved to target org", () => {
     const sources = cliJson<{ slug: string; orgName: string }[]>(dataDir, [
-      "list", "--org", "vercel", "--json",
+      "list",
+      "--org",
+      "vercel",
+      "--json",
     ]);
     expect(sources.some((s) => s.slug === "next-js-blog")).toBe(true);
   });
@@ -233,7 +281,17 @@ describe("CLI remove with --ignore", () => {
     ({ dataDir, cleanup } = createTempDataDir());
     for (const args of [
       ["admin", "org", "add", "Acme Corp"],
-      ["admin", "source", "add", "Acme Blog", "--url", "https://acme.com/blog", "--org", "acme-corp", "--skip-eval"],
+      [
+        "admin",
+        "source",
+        "add",
+        "Acme Blog",
+        "--url",
+        "https://acme.com/blog",
+        "--org",
+        "acme-corp",
+        "--skip-eval",
+      ],
     ]) {
       const r = cli(dataDir, args);
       if (r.exitCode !== 0) throw new Error(`Seed failed: ${r.stderr}`);
@@ -244,9 +302,13 @@ describe("CLI remove with --ignore", () => {
 
   it("removes source and adds URL to ignored list", () => {
     const result = cli(dataDir, [
-      "admin", "source", "remove", "acme-blog",
+      "admin",
+      "source",
+      "remove",
+      "acme-blog",
       "--ignore",
-      "--reason", "not a changelog",
+      "--reason",
+      "not a changelog",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
@@ -257,7 +319,13 @@ describe("CLI remove with --ignore", () => {
 
   it("URL appears in ignored list", () => {
     const rows = cliJson<{ url: string }[]>(dataDir, [
-      "admin", "policy", "ignore", "list", "--org", "acme-corp", "--json",
+      "admin",
+      "policy",
+      "ignore",
+      "list",
+      "--org",
+      "acme-corp",
+      "--json",
     ]);
     expect(rows.some((r) => r.url === "https://acme.com/blog")).toBe(true);
   });

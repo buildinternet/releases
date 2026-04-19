@@ -5,7 +5,6 @@ description: How the Released fetch and parse pipeline works — covers feed vs 
 
 <!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
 
-
 # Parsing Changelogs
 
 How the Released fetch pipeline converts changelog pages into structured release data.
@@ -20,6 +19,7 @@ The fetch pipeline follows this priority order:
 4. **Cloudflare rendering** — for JS-heavy pages (React SPAs, Notion, etc.), use Cloudflare's browser rendering API to get the fully-rendered HTML. Fallback when fast fetch returns no content.
 
 After fetching content, the pipeline parses it:
+
 - **Incremental parsing** — if the source already has releases in the database, extract only new ones by comparing against known releases. This is the default for subsequent fetches.
 - **Bulk parsing** — parse the entire page into releases. Used on first fetch or when `--full` is specified.
 
@@ -28,6 +28,7 @@ After fetching content, the pipeline parses it:
 Trigger a fetch for a source by ID or slug. CLI: `releases admin source fetch <slug> [--dry-run] [--max <n>]`. Typed tool: `fetch_source` with identifier (ID or slug) param.
 
 Key CLI flags (not available via typed tool — the typed tool always does a full server-side fetch):
+
 - `--dry-run` — parse but don't persist. Essential for validation.
 - `--max <n>` — limit releases to extract (default: 200).
 - `--full` — bypass incremental parsing, force full re-parse.
@@ -75,11 +76,13 @@ Do NOT fetch release URLs in the parent agent — always delegate to a subagent 
 **What to do based on the result:**
 
 If pages are richer than feed content (more text, images, videos, or code examples):
+
 1. Record the assessment and enable crawl mode. CLI: `releases admin source edit <identifier> --metadata '{"feedContentDepth":"summary-only","crawlEnabled":true}'`. Typed tool: `edit_source` with the same metadata. Subsequent fetches will follow links to per-release pages and extract full content in one pass.
 2. Re-fetch the source once to backfill. CLI: `releases admin source fetch <slug> --full`. Typed tool: `fetch_source`.
 3. Verify results. CLI: `releases list <slug> --json` or `releases tail <slug>`. Typed tool: `get_latest_releases` — check content is richer after the re-fetch.
 
 If feed already provides full content with no meaningful additions on the page:
+
 1. Record `feedContentDepth: "full"` so future sessions skip the sampling step.
 
 Once `feedContentDepth` is set, skip the sampling step on future encounters. Crawl mode handles the rest during normal fetches — there is no separate enrichment phase.
@@ -93,11 +96,13 @@ Engineering blogs and news pages mix product announcements with educational cont
 **Before working with blog sources:** Check the org's playbook (`releases admin content playbook <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
 
 **When to add a blog source:**
+
 - The org's primary changelogs don't cover major product announcements (new models, new services)
 - The blog has engineering/product content not found elsewhere
 - The blog is a secondary signal source — primary coverage should come from dedicated changelogs
 
 **How to configure:**
+
 1. Add as `--type scrape` with `--priority low` (blog pages change infrequently)
 2. Set `parseInstructions` that tell the AI what to include and — more importantly — what to skip
 3. Always dry-run first: `releases admin source fetch <slug> --dry-run` to check signal-to-noise ratio
@@ -112,6 +117,7 @@ Engineering blogs and news pages mix product announcements with educational cont
 - For corporate news pages: skip partnerships, MOUs, office openings, funding, acquisitions, research papers, safety reports
 
 **Example parseInstructions for an engineering blog:**
+
 ```
 ONLY extract posts that announce a NEW product, feature, tool, service, or capability.
 Signals: titles containing "Introducing", "launching", or describing something new.
@@ -120,6 +126,7 @@ technical deep-dives, and educational content. When in doubt, skip.
 ```
 
 **Example parseInstructions for a corporate news page:**
+
 ```
 ONLY extract posts about: (1) new model launches, (2) major new product features or services,
 (3) significant platform capability announcements. Skip all: partnerships, MOUs, policy statements,

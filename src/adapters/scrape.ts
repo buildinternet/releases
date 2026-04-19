@@ -9,14 +9,21 @@ import { logger } from "@buildinternet/releases-lib/logger";
 import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";
 import { fetchViaFeed, getSourceMeta, updateSourceMeta } from "./feed.js";
-import { fetchCloudflareMarkdown, fetchCloudflareMarkdownFast } from "@releases/adapters/cloudflare";
+import {
+  fetchCloudflareMarkdown,
+  fetchCloudflareMarkdownFast,
+} from "@releases/adapters/cloudflare";
 import { startCrawl, pollCrawlResults } from "@releases/adapters/crawl";
 import { parseCrawlPages } from "../ai/parse-crawl.js";
 import { shouldUseFastFetch } from "../lib/render-hint.js";
 
 function toFragmentUrl(baseUrl: string, version: string | undefined, title: string): string {
   const raw = version ?? title;
-  const fragment = raw.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 60);
+  const fragment = raw
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 60);
   return `${baseUrl}#${fragment}`;
 }
 
@@ -129,14 +136,23 @@ async function fetchViaCrawl(
     // wrong for single-page fallback).
     logger.info(`Crawl only returned the index page, parsing it directly`);
     const parsed = await parseCrawlPages(allPages, source.slug, options, meta.parseInstructions);
-    const releases = parsed.map((r) => ({ ...r, url: toFragmentUrl(source.url, r.version, r.title) }));
-    await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
+    const releases = parsed.map((r) => ({
+      ...r,
+      url: toFragmentUrl(source.url, r.version, r.title),
+    }));
+    await updateSourceMeta(source, {
+      lastCrawlJobId: jobId,
+      lastCrawlAt: new Date().toISOString(),
+    });
     return { releases, rawContent: buildRawContent(allPages) };
   }
 
   if (pages.length === 0) {
     logger.info(`Crawl returned no pages`);
-    await updateSourceMeta(source, { lastCrawlJobId: jobId, lastCrawlAt: new Date().toISOString() });
+    await updateSourceMeta(source, {
+      lastCrawlJobId: jobId,
+      lastCrawlAt: new Date().toISOString(),
+    });
     return { releases: [] };
   }
 
@@ -184,7 +200,13 @@ async function fetchViaMarkdown(
   // Use the same parsing pipeline as Cloudflare-rendered content
   const knownReleases = await getKnownReleasesForSource(source.id, source.slug);
   if (knownReleases.length > 0 && !options?.full) {
-    const incremental = await parseIncremental(markdown, source.id, source.slug, knownReleases, meta.parseInstructions);
+    const incremental = await parseIncremental(
+      markdown,
+      source.id,
+      source.slug,
+      knownReleases,
+      meta.parseInstructions,
+    );
     if (incremental.boundaryFound) {
       if (!options?.dryRun) await recordContentHash(source, contentHash);
       return {
@@ -221,7 +243,11 @@ async function fetchViaMarkdown(
   };
 }
 
-async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSourceMeta>, options?: FetchOptions): Promise<FetchResult> {
+async function fetchViaSinglePage(
+  source: Source,
+  meta: ReturnType<typeof getSourceMeta>,
+  options?: FetchOptions,
+): Promise<FetchResult> {
   const accountId = config.cloudflareAccountId();
   const apiToken = config.cloudflareApiToken();
 
@@ -236,7 +262,9 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
   let markdown: string | null = null;
 
   if (useFastFetch) {
-    logger.info(`Fetching page without rendering (static provider: ${meta.provider ?? "override"})...`);
+    logger.info(
+      `Fetching page without rendering (static provider: ${meta.provider ?? "override"})...`,
+    );
     markdown = await fetchCloudflareMarkdownFast(source.url);
     if (markdown) {
       logger.info(`Fast fetch returned ${markdown.length.toLocaleString()} chars`);
@@ -265,7 +293,9 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
     // Only meaningful when poll has stored HEAD headers — tracks how many renders could be avoided
     if (meta.pageEtag || meta.pageLastModified) {
       const skips = (meta.headCheckSkips ?? 0) + 1;
-      logger.info(`HEAD pre-check could have saved this render for ${source.slug} (${skips} skippable renders so far)`);
+      logger.info(
+        `HEAD pre-check could have saved this render for ${source.slug} (${skips} skippable renders so far)`,
+      );
       await updateSourceMeta(source, { headCheckSkips: skips });
     }
     return { releases: [] };
@@ -281,7 +311,13 @@ async function fetchViaSinglePage(source: Source, meta: ReturnType<typeof getSou
     if (knownReleases.length > 0) {
       logger.info("Source has existing releases — trying incremental parse...");
       try {
-        const result = await parseIncremental(markdown, source.id, source.slug, knownReleases, meta.parseInstructions);
+        const result = await parseIncremental(
+          markdown,
+          source.id,
+          source.slug,
+          knownReleases,
+          meta.parseInstructions,
+        );
 
         if (result.boundaryFound) {
           if (result.releases.length > 0) {

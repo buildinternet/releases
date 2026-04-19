@@ -12,29 +12,30 @@ Add an `organizations` concept that groups sources under a company identity. Org
 
 ### `organizations` table
 
-| Column       | Type   | Constraints              |
-|-------------|--------|--------------------------|
-| `id`        | TEXT   | PK, `org_` nanoid prefix |
-| `name`      | TEXT   | NOT NULL                 |
-| `slug`      | TEXT   | NOT NULL, UNIQUE         |
-| `domain`    | TEXT   | UNIQUE (when non-null)   |
-| `created_at` | TEXT   | NOT NULL                 |
-| `updated_at` | TEXT   | NOT NULL                 |
+| Column       | Type | Constraints              |
+| ------------ | ---- | ------------------------ |
+| `id`         | TEXT | PK, `org_` nanoid prefix |
+| `name`       | TEXT | NOT NULL                 |
+| `slug`       | TEXT | NOT NULL, UNIQUE         |
+| `domain`     | TEXT | UNIQUE (when non-null)   |
+| `created_at` | TEXT | NOT NULL                 |
+| `updated_at` | TEXT | NOT NULL                 |
 
 ### `org_accounts` table
 
-| Column       | Type   | Constraints                                    |
-|-------------|--------|------------------------------------------------|
-| `id`        | TEXT   | PK, `oa_` nanoid prefix                       |
-| `org_id`    | TEXT   | NOT NULL, FK → organizations.id, CASCADE DELETE |
-| `platform`  | TEXT   | NOT NULL (github, x, linkedin, website, etc.)  |
-| `handle`    | TEXT   | NOT NULL                                       |
-| `created_at`| TEXT   | NOT NULL                                       |
-| UNIQUE      |        | `(platform, handle)`                           |
+| Column       | Type | Constraints                                     |
+| ------------ | ---- | ----------------------------------------------- |
+| `id`         | TEXT | PK, `oa_` nanoid prefix                         |
+| `org_id`     | TEXT | NOT NULL, FK → organizations.id, CASCADE DELETE |
+| `platform`   | TEXT | NOT NULL (github, x, linkedin, website, etc.)   |
+| `handle`     | TEXT | NOT NULL                                        |
+| `created_at` | TEXT | NOT NULL                                        |
+| UNIQUE       |      | `(platform, handle)`                            |
 
 ### `sources` table changes
 
 Add column:
+
 - `org_id` TEXT, FK → organizations.id, SET NULL on delete
 
 Index: `idx_sources_org` on `sources.org_id` — supports the common query pattern of filtering sources by organization.
@@ -76,6 +77,7 @@ All org commands support `--json` for machine-readable output.
 ### Source command changes
 
 `released add` gains an optional `--org <name-or-slug>` flag:
+
 - Resolves via `findOrg()`. If found, links the source to it.
 - If not found, derives a slug via `toSlug()` and checks for slug collision. If a slug collision occurs, falls back to finding the existing org by that slug instead of erroring. If no collision, creates a stub org (name + slug only, no domain) and links.
 
@@ -103,6 +105,7 @@ Existing commands gain an optional `--org <identifier>` filter, resolved via `fi
 ### New tool: `list_organizations`
 
 Parameters:
+
 - `query` (optional, string) — substring search across org name, slug, domain, and account handles
 - `platform` (optional, string) — filter to orgs with an account on that platform
 
@@ -129,6 +132,7 @@ The `organization` parameter on all MCP tools accepts any org identifier (slug, 
 ## ID Conventions
 
 Following the established nanoid pattern:
+
 - Organizations: `org_` prefix
 - Org accounts: `oa_` prefix
 - Sources: `src_` prefix (existing)

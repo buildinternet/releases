@@ -45,8 +45,13 @@ describe("runIngestTimeGrouping", () => {
     let linkCalls = 0;
     const written = await runIngestTimeGrouping(ORG_ID, "ctx", {
       fetchCandidates: async () => [row("rel_a")],
-      groupReleases: async () => { groupingCalls++; return fakeGrouping([]); },
-      linkCoverage: async () => { linkCalls++; },
+      groupReleases: async () => {
+        groupingCalls++;
+        return fakeGrouping([]);
+      },
+      linkCoverage: async () => {
+        linkCalls++;
+      },
     });
     expect(written).toBe(0);
     expect(groupingCalls).toBe(0);
@@ -57,11 +62,14 @@ describe("runIngestTimeGrouping", () => {
     const linked: Array<{ canonicalId: string; coverageId: string }> = [];
     const written = await runIngestTimeGrouping(ORG_ID, "ctx", {
       fetchCandidates: async () => [row("rel_a"), row("rel_b"), row("rel_c"), row("rel_d")],
-      groupReleases: async () => fakeGrouping([
-        { canonicalId: "rel_a", coverageIds: ["rel_b", "rel_c"], reason: "bundle" },
-        { canonicalId: "rel_d", coverageIds: [], reason: "" },
-      ]),
-      linkCoverage: async (r) => { linked.push({ canonicalId: r.canonicalId, coverageId: r.coverageId }); },
+      groupReleases: async () =>
+        fakeGrouping([
+          { canonicalId: "rel_a", coverageIds: ["rel_b", "rel_c"], reason: "bundle" },
+          { canonicalId: "rel_d", coverageIds: [], reason: "" },
+        ]),
+      linkCoverage: async (r) => {
+        linked.push({ canonicalId: r.canonicalId, coverageId: r.coverageId });
+      },
     });
     expect(written).toBe(2);
     expect(linked).toHaveLength(2);
@@ -73,8 +81,12 @@ describe("runIngestTimeGrouping", () => {
     let linkCalls = 0;
     const promise = runIngestTimeGrouping(ORG_ID, "ctx", {
       fetchCandidates: async () => [row("rel_a"), row("rel_b")],
-      groupReleases: async () => { throw new Error("haiku exploded"); },
-      linkCoverage: async () => { linkCalls++; },
+      groupReleases: async () => {
+        throw new Error("haiku exploded");
+      },
+      linkCoverage: async () => {
+        linkCalls++;
+      },
     });
     await expect(promise).rejects.toThrow(/haiku exploded/);
     expect(linkCalls).toBe(0);
@@ -84,9 +96,8 @@ describe("runIngestTimeGrouping", () => {
     let linkAttempts = 0;
     const promise = runIngestTimeGrouping(ORG_ID, "ctx", {
       fetchCandidates: async () => [row("rel_a"), row("rel_b"), row("rel_c")],
-      groupReleases: async () => fakeGrouping([
-        { canonicalId: "rel_a", coverageIds: ["rel_b", "rel_c"], reason: "bundle" },
-      ]),
+      groupReleases: async () =>
+        fakeGrouping([{ canonicalId: "rel_a", coverageIds: ["rel_b", "rel_c"], reason: "bundle" }]),
       linkCoverage: async () => {
         linkAttempts++;
         if (linkAttempts === 2) throw new Error("d1 timeout");
@@ -100,10 +111,13 @@ describe("runIngestTimeGrouping", () => {
     let captured: { reason?: string | null; decidedBy?: string } = {};
     await runIngestTimeGrouping(ORG_ID, "ctx", {
       fetchCandidates: async () => [row("rel_a"), row("rel_b")],
-      groupReleases: async () => fakeGrouping([
-        { canonicalId: "rel_a", coverageIds: ["rel_b"], reason: "blog mirrors changelog" },
-      ]),
-      linkCoverage: async (r) => { captured = { reason: r.reason, decidedBy: r.decidedBy }; },
+      groupReleases: async () =>
+        fakeGrouping([
+          { canonicalId: "rel_a", coverageIds: ["rel_b"], reason: "blog mirrors changelog" },
+        ]),
+      linkCoverage: async (r) => {
+        captured = { reason: r.reason, decidedBy: r.decidedBy };
+      },
     });
     expect(captured.reason).toBe("blog mirrors changelog");
     expect(captured.decidedBy).toBe("agent:fake-model");
@@ -113,11 +127,14 @@ describe("runIngestTimeGrouping", () => {
     let linkCalls = 0;
     const written = await runIngestTimeGrouping(ORG_ID, "ctx", {
       fetchCandidates: async () => [row("rel_a"), row("rel_b")],
-      groupReleases: async () => fakeGrouping([
-        { canonicalId: "rel_a", coverageIds: [], reason: "" },
-        { canonicalId: "rel_b", coverageIds: [], reason: "" },
-      ]),
-      linkCoverage: async () => { linkCalls++; },
+      groupReleases: async () =>
+        fakeGrouping([
+          { canonicalId: "rel_a", coverageIds: [], reason: "" },
+          { canonicalId: "rel_b", coverageIds: [], reason: "" },
+        ]),
+      linkCoverage: async () => {
+        linkCalls++;
+      },
     });
     expect(written).toBe(0);
     expect(linkCalls).toBe(0);

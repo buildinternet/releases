@@ -59,10 +59,11 @@ const CONTENT_FALLBACK_CHARS = 4_000;
 function buildReleaseText(row: EmbedReleaseInput): string {
   const parts: string[] = [row.title];
   if (row.version) parts.push(row.version);
-  const body =
-    (row.contentSummary && row.contentSummary.trim().length > 0
+  const body = (
+    row.contentSummary && row.contentSummary.trim().length > 0
       ? row.contentSummary
-      : row.content ?? "").slice(0, CONTENT_FALLBACK_CHARS);
+      : (row.content ?? "")
+  ).slice(0, CONTENT_FALLBACK_CHARS);
   if (body.length > 0) parts.push(body);
   return parts.join("\n");
 }
@@ -85,9 +86,7 @@ function buildMetadata(row: EmbedReleaseInput): Record<string, VectorMetadataVal
  * error internally — callers never need to wrap this in try/catch. Returns
  * silently on any failure; inspect the logger output for diagnostics.
  */
-export async function embedAndUpsertReleases(
-  opts: EmbedAndUpsertReleasesOptions,
-): Promise<void> {
+export async function embedAndUpsertReleases(opts: EmbedAndUpsertReleasesOptions): Promise<void> {
   const { releases, vectorIndex, embedConfig, onPersisted } = opts;
   const logger = opts.logger ?? console;
 
@@ -142,9 +141,7 @@ export async function embedAndUpsertReleases(
     }
   } catch (err) {
     logger.warn(
-      `[embed-releases] embed pipeline failed: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
+      `[embed-releases] embed pipeline failed: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 }

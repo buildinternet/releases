@@ -56,13 +56,19 @@ const STATUS_LABELS: Record<FetchLogEntry["status"], string> = {
 };
 
 export function FetchStatusBadge({ status }: { status: FetchLogEntry["status"] }) {
-  return <span className={STATUS_STYLES[status] ?? "text-stone-400"}>{STATUS_LABELS[status] ?? status}</span>;
+  return (
+    <span className={STATUS_STYLES[status] ?? "text-stone-400"}>
+      {STATUS_LABELS[status] ?? status}
+    </span>
+  );
 }
 
 export function FetchLogResultCell({ log }: { log: FetchLogEntry }) {
   if (log.status === "no_change") return <span className="text-stone-400">no changes</span>;
-  if (log.status === "error") return <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>;
-  if (log.releasesInserted > 0) return <span className="text-green-600">+{log.releasesInserted}</span>;
+  if (log.status === "error")
+    return <span className="text-red-500">{log.error?.slice(0, 40) ?? "failed"}</span>;
+  if (log.releasesInserted > 0)
+    return <span className="text-green-600">+{log.releasesInserted}</span>;
   if (log.releasesFound > 0) return <span>{log.releasesFound} found</span>;
   return <span className="text-stone-400">—</span>;
 }
@@ -71,11 +77,23 @@ export function FetchLogDetail({ log }: { log: FetchLogEntry }) {
   return (
     <div className="bg-stone-900 text-stone-300 px-4 py-3 max-h-64 overflow-y-auto font-mono text-xs leading-relaxed border-b border-stone-200 dark:border-stone-800">
       <div className="grid grid-cols-2 gap-x-8 gap-y-1 mb-2">
-        <div><span className="text-stone-500">Source ID:</span> {log.sourceId}</div>
-        <div><span className="text-stone-500">Duration:</span> {formatFetchDuration(log.durationMs)}</div>
-        <div><span className="text-stone-500">Releases found:</span> {log.releasesFound}</div>
-        <div><span className="text-stone-500">Releases inserted:</span> {log.releasesInserted}</div>
-        {log.orgName && <div><span className="text-stone-500">Organization:</span> {log.orgName}</div>}
+        <div>
+          <span className="text-stone-500">Source ID:</span> {log.sourceId}
+        </div>
+        <div>
+          <span className="text-stone-500">Duration:</span> {formatFetchDuration(log.durationMs)}
+        </div>
+        <div>
+          <span className="text-stone-500">Releases found:</span> {log.releasesFound}
+        </div>
+        <div>
+          <span className="text-stone-500">Releases inserted:</span> {log.releasesInserted}
+        </div>
+        {log.orgName && (
+          <div>
+            <span className="text-stone-500">Organization:</span> {log.orgName}
+          </div>
+        )}
       </div>
       {log.error && (
         <div className="mt-2">
@@ -86,7 +104,10 @@ export function FetchLogDetail({ log }: { log: FetchLogEntry }) {
       {log.rawContent && (
         <div className="mt-2">
           <div className="text-stone-500 mb-1">Raw content preview:</div>
-          <div className="max-h-48 overflow-y-auto text-stone-400 whitespace-pre-wrap">{log.rawContent.slice(0, 2000)}{log.rawContent.length > 2000 ? "\n..." : ""}</div>
+          <div className="max-h-48 overflow-y-auto text-stone-400 whitespace-pre-wrap">
+            {log.rawContent.slice(0, 2000)}
+            {log.rawContent.length > 2000 ? "\n..." : ""}
+          </div>
         </div>
       )}
       {!log.error && !log.rawContent && (

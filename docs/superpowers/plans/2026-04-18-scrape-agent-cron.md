@@ -67,6 +67,7 @@
 ## Task 1: ID helper — `newCronRunId()`
 
 **Files:**
+
 - Modify: `packages/core/src/id.ts`
 - Test: `tests/unit/id.test.ts`
 
@@ -138,6 +139,7 @@ EOF
 ## Task 2: Schema — `cron_runs` Drizzle definition
 
 **Files:**
+
 - Create: `workers/api/src/db/schema-cron.ts`
 
 - [ ] **Step 2.1: Read the comparable existing schema**
@@ -167,7 +169,9 @@ export const cronRuns = sqliteTable(
     startedAt: text("started_at").notNull(),
     endedAt: text("ended_at"),
     durationMs: integer("duration_ms"),
-    status: text("status", { enum: ["running", "done", "degraded", "dispatch_failed", "aborted"] }).notNull(),
+    status: text("status", {
+      enum: ["running", "done", "degraded", "dispatch_failed", "aborted"],
+    }).notNull(),
     candidates: integer("candidates").notNull().default(0),
     dispatched: integer("dispatched").notNull().default(0),
     skippedOverCap: integer("skipped_over_cap").notNull().default(0),
@@ -177,9 +181,7 @@ export const cronRuns = sqliteTable(
     abortReason: text("abort_reason"),
     notes: text("notes"),
   },
-  (table) => [
-    index("idx_cron_runs_name_started").on(table.cronName, table.startedAt),
-  ],
+  (table) => [index("idx_cron_runs_name_started").on(table.cronName, table.startedAt)],
 );
 
 export type CronRun = typeof cronRuns.$inferSelect;
@@ -209,6 +211,7 @@ EOF
 ## Task 3: Migration pair
 
 **Files:**
+
 - Create: `workers/api/migrations/YYYYMMDDHHMMSS_cron_runs.sql` (timestamp from step 3.1)
 - Auto-generate: `src/db/migrations/YYYYMMDDHHMMSS_cron_runs.sql` + meta snapshot
 
@@ -303,6 +306,7 @@ EOF
 ## Task 4: Migration integration test
 
 **Files:**
+
 - Create: `tests/api/cron-runs-migration.test.ts`
 
 - [ ] **Step 4.1: Write the test**
@@ -321,21 +325,33 @@ describe("cron_runs migration", () => {
     const db = drizzle(sqlite);
     migrate(db, { migrationsFolder: "src/db/migrations" });
 
-    const tables = sqlite.query("SELECT name FROM sqlite_master WHERE type='table' AND name='cron_runs'").all();
+    const tables = sqlite
+      .query("SELECT name FROM sqlite_master WHERE type='table' AND name='cron_runs'")
+      .all();
     expect(tables.length).toBe(1);
 
-    const indexes = sqlite.query("SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='cron_runs' AND name='idx_cron_runs_name_started'").all();
+    const indexes = sqlite
+      .query(
+        "SELECT name FROM sqlite_master WHERE type='index' AND tbl_name='cron_runs' AND name='idx_cron_runs_name_started'",
+      )
+      .all();
     expect(indexes.length).toBe(1);
 
     // Round-trip a row to confirm the column set matches the Drizzle schema
-    db.insert(cronRuns).values({
-      id: "crun_testfixture",
-      cronName: "scrape-agent-sweep",
-      startedAt: "2026-04-18T01:00:00Z",
-      status: "running",
-    }).run();
+    db.insert(cronRuns)
+      .values({
+        id: "crun_testfixture",
+        cronName: "scrape-agent-sweep",
+        startedAt: "2026-04-18T01:00:00Z",
+        status: "running",
+      })
+      .run();
 
-    const [row] = db.select().from(cronRuns).where(sql`${cronRuns.id} = 'crun_testfixture'`).all();
+    const [row] = db
+      .select()
+      .from(cronRuns)
+      .where(sql`${cronRuns.id} = 'crun_testfixture'`)
+      .all();
     expect(row.cronName).toBe("scrape-agent-sweep");
     expect(row.status).toBe("running");
     expect(row.candidates).toBe(0);
@@ -366,6 +382,7 @@ EOF
 ## Task 5: Bind-budget guardrail
 
 **Files:**
+
 - Create: `tests/api/cron-runs-bind-budget.test.ts`
 
 - [ ] **Step 5.1: Write the test**
@@ -382,30 +399,37 @@ const db = drizzle(new Database(":memory:"));
 
 describe("cron_runs bind budget", () => {
   it("INSERT (initial running row) stays well under D1's 100-bind cap", () => {
-    const q = db.insert(cronRuns).values({
-      id: "crun_x",
-      cronName: "scrape-agent-sweep",
-      startedAt: "2026-04-18T01:00:00Z",
-      status: "running",
-    }).toSQL();
+    const q = db
+      .insert(cronRuns)
+      .values({
+        id: "crun_x",
+        cronName: "scrape-agent-sweep",
+        startedAt: "2026-04-18T01:00:00Z",
+        status: "running",
+      })
+      .toSQL();
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
     expect(q.params.length).toBeLessThan(10);
   });
 
   it("UPDATE (final row with all observability columns set) stays under cap", () => {
-    const q = db.update(cronRuns).set({
-      endedAt: "2026-04-18T01:00:02Z",
-      durationMs: 2000,
-      status: "done",
-      candidates: 14,
-      dispatched: 14,
-      skippedOverCap: 0,
-      dispatchErrors: 0,
-      sessionsStarted: JSON.stringify(["ma-1", "ma-2"]),
-      dispatchErrorDetail: null,
-      abortReason: null,
-      notes: "ok",
-    }).where(eq(cronRuns.id, "crun_x")).toSQL();
+    const q = db
+      .update(cronRuns)
+      .set({
+        endedAt: "2026-04-18T01:00:02Z",
+        durationMs: 2000,
+        status: "done",
+        candidates: 14,
+        dispatched: 14,
+        skippedOverCap: 0,
+        dispatchErrors: 0,
+        sessionsStarted: JSON.stringify(["ma-1", "ma-2"]),
+        dispatchErrorDetail: null,
+        abortReason: null,
+        notes: "ok",
+      })
+      .where(eq(cronRuns.id, "crun_x"))
+      .toSQL();
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
     expect(q.params.length).toBeLessThan(20);
   });
@@ -435,6 +459,7 @@ EOF
 ## Task 6: Extract `runWithConcurrency`
 
 **Files:**
+
 - Create: `workers/api/src/lib/concurrency.ts`
 - Modify: `workers/api/src/cron/poll-fetch.ts`
 
@@ -477,6 +502,7 @@ export async function runWithConcurrency<T, R>(
 In `workers/api/src/cron/poll-fetch.ts`:
 
 1. Add an import near the top (next to other local imports):
+
    ```ts
    import { runWithConcurrency } from "../lib/concurrency.js";
    ```
@@ -506,6 +532,7 @@ EOF
 ## Task 7: Pure helper — `classifyPreflightResponse`
 
 **Files:**
+
 - Create: `workers/api/src/cron/scrape-agent-sweep.ts` (partial — add more exports in later tasks)
 - Test: `tests/unit/scrape-agent-preflight.test.ts`
 
@@ -521,20 +548,32 @@ describe("classifyPreflightResponse", () => {
   });
 
   it("aborts on 401 with anthropic_auth", () => {
-    expect(classifyPreflightResponse({ status: 401, body: "" })).toEqual({ action: "abort", abortReason: "anthropic_auth" });
+    expect(classifyPreflightResponse({ status: 401, body: "" })).toEqual({
+      action: "abort",
+      abortReason: "anthropic_auth",
+    });
   });
 
   it("aborts on 403 with anthropic_auth", () => {
-    expect(classifyPreflightResponse({ status: 403, body: "" })).toEqual({ action: "abort", abortReason: "anthropic_auth" });
+    expect(classifyPreflightResponse({ status: 403, body: "" })).toEqual({
+      action: "abort",
+      abortReason: "anthropic_auth",
+    });
   });
 
   it("aborts on 402 with anthropic_credits", () => {
-    expect(classifyPreflightResponse({ status: 402, body: "" })).toEqual({ action: "abort", abortReason: "anthropic_credits" });
+    expect(classifyPreflightResponse({ status: 402, body: "" })).toEqual({
+      action: "abort",
+      abortReason: "anthropic_credits",
+    });
   });
 
   it("aborts on 429 with credit_balance_too_low body", () => {
     const body = JSON.stringify({ error: { type: "credit_balance_too_low", message: "…" } });
-    expect(classifyPreflightResponse({ status: 429, body })).toEqual({ action: "abort", abortReason: "anthropic_credits" });
+    expect(classifyPreflightResponse({ status: 429, body })).toEqual({
+      action: "abort",
+      abortReason: "anthropic_credits",
+    });
   });
 
   it("warns (proceed) on 429 with unrelated body", () => {
@@ -543,7 +582,9 @@ describe("classifyPreflightResponse", () => {
   });
 
   it("warns (proceed) on 429 with non-JSON body", () => {
-    expect(classifyPreflightResponse({ status: 429, body: "<html>…</html>" })).toEqual({ action: "warn" });
+    expect(classifyPreflightResponse({ status: 429, body: "<html>…</html>" })).toEqual({
+      action: "warn",
+    });
   });
 
   it("warns (proceed) on 5xx", () => {
@@ -579,7 +620,10 @@ export type PreflightAction =
  * truth for the preflight matrix in the design spec. Pure function — no
  * fetch, no side effects.
  */
-export function classifyPreflightResponse(input: { status: number; body: string }): PreflightAction {
+export function classifyPreflightResponse(input: {
+  status: number;
+  body: string;
+}): PreflightAction {
   const { status, body } = input;
   if (status === 200) return { action: "proceed" };
   if (status === 401 || status === 403) return { action: "abort", abortReason: "anthropic_auth" };
@@ -626,6 +670,7 @@ EOF
 ## Task 8: Pure helper — `deriveSweepStatus`
 
 **Files:**
+
 - Modify: `workers/api/src/cron/scrape-agent-sweep.ts`
 - Create: `tests/unit/scrape-agent-status-derivation.test.ts`
 
@@ -758,6 +803,7 @@ EOF
 ## Task 9: Pure helper — `groupByOrg`
 
 **Files:**
+
 - Modify: `workers/api/src/cron/scrape-agent-sweep.ts`
 - Create: `tests/unit/scrape-agent-candidates.test.ts`
 
@@ -877,6 +923,7 @@ EOF
 ## Task 10: `cron_runs` DAO — insert + update
 
 **Files:**
+
 - Create: `workers/api/src/db/cron-runs-dao.ts`
 - Create: `tests/api/cron-runs-dao.test.ts`
 
@@ -901,7 +948,10 @@ function makeDb() {
 describe("cron_runs DAO", () => {
   it("inserts a running row and returns its id", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     expect(id.startsWith("crun_")).toBe(true);
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, id)).all();
     expect(row.status).toBe("running");
@@ -910,7 +960,10 @@ describe("cron_runs DAO", () => {
 
   it("finalizes a running row with computed duration_ms", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     await finalizeRunRow(db, id, {
       endedAt: "2026-04-18T01:00:02.500Z",
       status: "done",
@@ -931,7 +984,10 @@ describe("cron_runs DAO", () => {
 
   it("writes dispatchErrorDetail as JSON when non-empty", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     await finalizeRunRow(db, id, {
       endedAt: "2026-04-18T01:00:01Z",
       status: "degraded",
@@ -944,12 +1000,17 @@ describe("cron_runs DAO", () => {
       notes: null,
     });
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, id)).all();
-    expect(JSON.parse(row.dispatchErrorDetail!)).toEqual([{ orgSlug: "bad-org", error: "500 boom" }]);
+    expect(JSON.parse(row.dispatchErrorDetail!)).toEqual([
+      { orgSlug: "bad-org", error: "500 boom" },
+    ]);
   });
 
   it("truncates dispatchErrorDetail and sessionsStarted arrays to 20 entries", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     const sessions = Array.from({ length: 30 }, (_, i) => `ma-${i}`);
     const errors = Array.from({ length: 30 }, (_, i) => ({ orgSlug: `o-${i}`, error: "e" }));
     await finalizeRunRow(db, id, {
@@ -995,17 +1056,21 @@ export async function insertRunningRow(
   params: { cronName: string; startedAt: string },
 ): Promise<string> {
   const id = newCronRunId();
-  await (db as any).insert(cronRuns).values({
-    id,
-    cronName: params.cronName,
-    startedAt: params.startedAt,
-    status: "running",
-  }).run?.() ?? await (db as any).insert(cronRuns).values({
-    id,
-    cronName: params.cronName,
-    startedAt: params.startedAt,
-    status: "running",
-  });
+  (await (db as any)
+    .insert(cronRuns)
+    .values({
+      id,
+      cronName: params.cronName,
+      startedAt: params.startedAt,
+      status: "running",
+    })
+    .run?.()) ??
+    (await (db as any).insert(cronRuns).values({
+      id,
+      cronName: params.cronName,
+      startedAt: params.startedAt,
+      status: "running",
+    }));
   return id;
 }
 
@@ -1018,7 +1083,12 @@ export type FinalizeRunParams = {
   dispatchErrors: number;
   sessionsStarted: string[];
   dispatchErrorDetail: Array<{ orgSlug: string; error: string }>;
-  abortReason?: "anthropic_auth" | "anthropic_credits" | "stale_running" | "cron_disabled" | "config_missing";
+  abortReason?:
+    | "anthropic_auth"
+    | "anthropic_credits"
+    | "stale_running"
+    | "cron_disabled"
+    | "config_missing";
   notes: string | null;
 };
 
@@ -1028,7 +1098,13 @@ export async function finalizeRunRow(
   params: FinalizeRunParams,
 ): Promise<void> {
   // Compute duration from the running row's startedAt to avoid trusting callers.
-  const [row] = await db.select({ startedAt: cronRuns.startedAt }).from(cronRuns).where(eq(cronRuns.id, id)).all?.() ?? await db.select({ startedAt: cronRuns.startedAt }).from(cronRuns).where(eq(cronRuns.id, id));
+  const [row] =
+    (await db
+      .select({ startedAt: cronRuns.startedAt })
+      .from(cronRuns)
+      .where(eq(cronRuns.id, id))
+      .all?.()) ??
+    (await db.select({ startedAt: cronRuns.startedAt }).from(cronRuns).where(eq(cronRuns.id, id)));
   const durationMs = row
     ? new Date(params.endedAt).getTime() - new Date(row.startedAt).getTime()
     : null;
@@ -1036,19 +1112,22 @@ export async function finalizeRunRow(
   const sessionsArr = params.sessionsStarted.slice(0, CRON_RUNS_JSON_ARRAY_CAP);
   const errorsArr = params.dispatchErrorDetail.slice(0, CRON_RUNS_JSON_ARRAY_CAP);
 
-  await db.update(cronRuns).set({
-    endedAt: params.endedAt,
-    durationMs,
-    status: params.status,
-    candidates: params.candidates,
-    dispatched: params.dispatched,
-    skippedOverCap: params.skippedOverCap,
-    dispatchErrors: params.dispatchErrors,
-    sessionsStarted: sessionsArr.length > 0 ? JSON.stringify(sessionsArr) : null,
-    dispatchErrorDetail: errorsArr.length > 0 ? JSON.stringify(errorsArr) : null,
-    abortReason: params.abortReason ?? null,
-    notes: params.notes,
-  }).where(eq(cronRuns.id, id));
+  await db
+    .update(cronRuns)
+    .set({
+      endedAt: params.endedAt,
+      durationMs,
+      status: params.status,
+      candidates: params.candidates,
+      dispatched: params.dispatched,
+      skippedOverCap: params.skippedOverCap,
+      dispatchErrors: params.dispatchErrors,
+      sessionsStarted: sessionsArr.length > 0 ? JSON.stringify(sessionsArr) : null,
+      dispatchErrorDetail: errorsArr.length > 0 ? JSON.stringify(errorsArr) : null,
+      abortReason: params.abortReason ?? null,
+      notes: params.notes,
+    })
+    .where(eq(cronRuns.id, id));
 }
 ```
 
@@ -1077,6 +1156,7 @@ EOF
 ## Task 11: Stale-running reconciler
 
 **Files:**
+
 - Modify: `workers/api/src/db/cron-runs-dao.ts`
 - Create: `tests/api/stale-running-reconciler.test.ts`
 
@@ -1104,14 +1184,21 @@ describe("reconcileStaleRunning", () => {
     const now = new Date("2026-04-18T01:00:00Z");
     const staleStart = new Date(now.getTime() - 20 * 60 * 1000).toISOString();
 
-    await db.insert(cronRuns).values({
-      id: "crun_stale",
-      cronName: "scrape-agent-sweep",
-      startedAt: staleStart,
-      status: "running",
-    }).run();
+    await db
+      .insert(cronRuns)
+      .values({
+        id: "crun_stale",
+        cronName: "scrape-agent-sweep",
+        startedAt: staleStart,
+        status: "running",
+      })
+      .run();
 
-    const reconciled = await reconcileStaleRunning(db, { cronName: "scrape-agent-sweep", now, thresholdMs: 10 * 60 * 1000 });
+    const reconciled = await reconcileStaleRunning(db, {
+      cronName: "scrape-agent-sweep",
+      now,
+      thresholdMs: 10 * 60 * 1000,
+    });
     expect(reconciled).toBe(1);
 
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, "crun_stale")).all();
@@ -1125,14 +1212,21 @@ describe("reconcileStaleRunning", () => {
     const now = new Date("2026-04-18T01:00:00Z");
     const freshStart = new Date(now.getTime() - 2 * 60 * 1000).toISOString();
 
-    await db.insert(cronRuns).values({
-      id: "crun_fresh",
-      cronName: "scrape-agent-sweep",
-      startedAt: freshStart,
-      status: "running",
-    }).run();
+    await db
+      .insert(cronRuns)
+      .values({
+        id: "crun_fresh",
+        cronName: "scrape-agent-sweep",
+        startedAt: freshStart,
+        status: "running",
+      })
+      .run();
 
-    const reconciled = await reconcileStaleRunning(db, { cronName: "scrape-agent-sweep", now, thresholdMs: 10 * 60 * 1000 });
+    const reconciled = await reconcileStaleRunning(db, {
+      cronName: "scrape-agent-sweep",
+      now,
+      thresholdMs: 10 * 60 * 1000,
+    });
     expect(reconciled).toBe(0);
 
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, "crun_fresh")).all();
@@ -1144,14 +1238,21 @@ describe("reconcileStaleRunning", () => {
     const now = new Date("2026-04-18T01:00:00Z");
     const staleStart = new Date(now.getTime() - 20 * 60 * 1000).toISOString();
 
-    await db.insert(cronRuns).values({
-      id: "crun_other",
-      cronName: "retier",
-      startedAt: staleStart,
-      status: "running",
-    }).run();
+    await db
+      .insert(cronRuns)
+      .values({
+        id: "crun_other",
+        cronName: "retier",
+        startedAt: staleStart,
+        status: "running",
+      })
+      .run();
 
-    const reconciled = await reconcileStaleRunning(db, { cronName: "scrape-agent-sweep", now, thresholdMs: 10 * 60 * 1000 });
+    const reconciled = await reconcileStaleRunning(db, {
+      cronName: "scrape-agent-sweep",
+      now,
+      thresholdMs: 10 * 60 * 1000,
+    });
     expect(reconciled).toBe(0);
 
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, "crun_other")).all();
@@ -1178,16 +1279,22 @@ export async function reconcileStaleRunning(
   params: { cronName: string; now: Date; thresholdMs: number },
 ): Promise<number> {
   const cutoff = new Date(params.now.getTime() - params.thresholdMs).toISOString();
-  const result = await db.update(cronRuns).set({
-    status: "aborted",
-    abortReason: "stale_running",
-    endedAt: params.now.toISOString(),
-    notes: "reconciled by next sweep",
-  }).where(and(
-    eq(cronRuns.cronName, params.cronName),
-    eq(cronRuns.status, "running"),
-    lt(cronRuns.startedAt, cutoff),
-  )).returning({ id: cronRuns.id });
+  const result = await db
+    .update(cronRuns)
+    .set({
+      status: "aborted",
+      abortReason: "stale_running",
+      endedAt: params.now.toISOString(),
+      notes: "reconciled by next sweep",
+    })
+    .where(
+      and(
+        eq(cronRuns.cronName, params.cronName),
+        eq(cronRuns.status, "running"),
+        lt(cronRuns.startedAt, cutoff),
+      ),
+    )
+    .returning({ id: cronRuns.id });
   return Array.isArray(result) ? result.length : 0;
 }
 ```
@@ -1217,6 +1324,7 @@ EOF
 ## Task 12: Candidate query
 
 **Files:**
+
 - Modify: `workers/api/src/cron/scrape-agent-sweep.ts` (add `queryCandidates` function)
 - Create: `tests/api/scrape-agent-candidate-query.test.ts`
 
@@ -1235,28 +1343,106 @@ function seed() {
   const db = drizzle(sqlite);
   migrate(db, { migrationsFolder: "src/db/migrations" });
 
-  db.insert(organizations).values([
-    { id: "org_a", name: "Org A", slug: "a", category: "developer-tools" },
-    { id: "org_b", name: "Org B", slug: "b", category: "developer-tools" },
-  ]).run();
+  db.insert(organizations)
+    .values([
+      { id: "org_a", name: "Org A", slug: "a", category: "developer-tools" },
+      { id: "org_b", name: "Org B", slug: "b", category: "developer-tools" },
+    ])
+    .run();
 
-  db.insert(sources).values([
-    // Eligible: scrape, flagged, no feedUrl, not paused, not hidden
-    { id: "src_1", name: "S1", slug: "s-1", type: "scrape", url: "https://a.com/changelog", orgId: "org_a", changeDetectedAt: "2026-04-18T00:00:00Z", metadata: JSON.stringify({ noFeedFound: true }) },
-    { id: "src_2", name: "S2", slug: "s-2", type: "scrape", url: "https://b.com/changelog", orgId: "org_b", changeDetectedAt: "2026-04-17T00:00:00Z", metadata: "{}" },
-    // Ineligible: has feedUrl
-    { id: "src_3", name: "S3", slug: "s-3", type: "scrape", url: "https://a.com/releases", orgId: "org_a", changeDetectedAt: "2026-04-18T00:00:00Z", metadata: JSON.stringify({ feedUrl: "https://a.com/rss.xml", feedType: "rss" }) },
-    // Ineligible: paused
-    { id: "src_4", name: "S4", slug: "s-4", type: "scrape", url: "https://a.com/notes", orgId: "org_a", changeDetectedAt: "2026-04-18T00:00:00Z", fetchPriority: "paused", metadata: "{}" },
-    // Ineligible: not flagged
-    { id: "src_5", name: "S5", slug: "s-5", type: "scrape", url: "https://a.com/news", orgId: "org_a", changeDetectedAt: null, metadata: "{}" },
-    // Ineligible: github type
-    { id: "src_6", name: "S6", slug: "s-6", type: "github", url: "https://github.com/a/b", orgId: "org_a", changeDetectedAt: "2026-04-18T00:00:00Z", metadata: "{}" },
-    // Ineligible: hidden
-    { id: "src_7", name: "S7", slug: "s-7", type: "scrape", url: "https://a.com/hidden", orgId: "org_a", changeDetectedAt: "2026-04-18T00:00:00Z", isHidden: true, metadata: "{}" },
-    // Ineligible: no org
-    { id: "src_8", name: "S8", slug: "s-8", type: "scrape", url: "https://orphan.com", orgId: null, changeDetectedAt: "2026-04-18T00:00:00Z", metadata: "{}" },
-  ]).run();
+  db.insert(sources)
+    .values([
+      // Eligible: scrape, flagged, no feedUrl, not paused, not hidden
+      {
+        id: "src_1",
+        name: "S1",
+        slug: "s-1",
+        type: "scrape",
+        url: "https://a.com/changelog",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        metadata: JSON.stringify({ noFeedFound: true }),
+      },
+      {
+        id: "src_2",
+        name: "S2",
+        slug: "s-2",
+        type: "scrape",
+        url: "https://b.com/changelog",
+        orgId: "org_b",
+        changeDetectedAt: "2026-04-17T00:00:00Z",
+        metadata: "{}",
+      },
+      // Ineligible: has feedUrl
+      {
+        id: "src_3",
+        name: "S3",
+        slug: "s-3",
+        type: "scrape",
+        url: "https://a.com/releases",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        metadata: JSON.stringify({ feedUrl: "https://a.com/rss.xml", feedType: "rss" }),
+      },
+      // Ineligible: paused
+      {
+        id: "src_4",
+        name: "S4",
+        slug: "s-4",
+        type: "scrape",
+        url: "https://a.com/notes",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        fetchPriority: "paused",
+        metadata: "{}",
+      },
+      // Ineligible: not flagged
+      {
+        id: "src_5",
+        name: "S5",
+        slug: "s-5",
+        type: "scrape",
+        url: "https://a.com/news",
+        orgId: "org_a",
+        changeDetectedAt: null,
+        metadata: "{}",
+      },
+      // Ineligible: github type
+      {
+        id: "src_6",
+        name: "S6",
+        slug: "s-6",
+        type: "github",
+        url: "https://github.com/a/b",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        metadata: "{}",
+      },
+      // Ineligible: hidden
+      {
+        id: "src_7",
+        name: "S7",
+        slug: "s-7",
+        type: "scrape",
+        url: "https://a.com/hidden",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        isHidden: true,
+        metadata: "{}",
+      },
+      // Ineligible: no org
+      {
+        id: "src_8",
+        name: "S8",
+        slug: "s-8",
+        type: "scrape",
+        url: "https://orphan.com",
+        orgId: null,
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        metadata: "{}",
+      },
+    ])
+    .run();
 
   return db;
 }
@@ -1315,7 +1501,8 @@ export async function queryCandidates(
   db: any,
   params: { cap: number },
 ): Promise<CandidateQueryResult> {
-  const rows = await db.all?.(sql`
+  const rows =
+    (await db.all?.(sql`
     SELECT
       s.id AS id, s.slug AS slug, s.org_id AS org_id,
       o.slug AS org_slug, o.name AS org_name,
@@ -1330,7 +1517,7 @@ export async function queryCandidates(
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
     ORDER BY s.change_detected_at ASC
     LIMIT ${params.cap + 1}
-  `) ?? [];
+  `)) ?? [];
 
   let skippedOverCap = 0;
   let sliced: typeof rows = rows;
@@ -1387,6 +1574,7 @@ EOF
 ## Task 13: Anthropic pre-flight fetcher + dispatcher + `scrapeAgentSweep` composition
 
 **Files:**
+
 - Modify: `workers/api/src/cron/scrape-agent-sweep.ts` (add main `scrapeAgentSweep` function + private fetchers)
 - Create: `tests/api/scrape-agent-sweep.test.ts`
 
@@ -1406,17 +1594,57 @@ function mkDb() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite);
   migrate(db, { migrationsFolder: "src/db/migrations" });
-  db.insert(organizations).values([
-    { id: "org_a", name: "Org A", slug: "a", category: "developer-tools" },
-    { id: "org_b", name: "Org B", slug: "b", category: "developer-tools" },
-    { id: "org_c", name: "Org C", slug: "c", category: "developer-tools" },
-  ]).run();
-  db.insert(sources).values([
-    { id: "src_1", name: "S1", slug: "s-1", type: "scrape", url: "https://a.com/c", orgId: "org_a", changeDetectedAt: "2026-04-18T00:00:00Z", metadata: "{}" },
-    { id: "src_2", name: "S2", slug: "s-2", type: "scrape", url: "https://a.com/d", orgId: "org_a", changeDetectedAt: "2026-04-18T00:01:00Z", metadata: "{}" },
-    { id: "src_3", name: "S3", slug: "s-3", type: "scrape", url: "https://b.com/c", orgId: "org_b", changeDetectedAt: "2026-04-18T00:02:00Z", metadata: "{}" },
-    { id: "src_4", name: "S4", slug: "s-4", type: "scrape", url: "https://c.com/c", orgId: "org_c", changeDetectedAt: "2026-04-18T00:03:00Z", metadata: "{}" },
-  ]).run();
+  db.insert(organizations)
+    .values([
+      { id: "org_a", name: "Org A", slug: "a", category: "developer-tools" },
+      { id: "org_b", name: "Org B", slug: "b", category: "developer-tools" },
+      { id: "org_c", name: "Org C", slug: "c", category: "developer-tools" },
+    ])
+    .run();
+  db.insert(sources)
+    .values([
+      {
+        id: "src_1",
+        name: "S1",
+        slug: "s-1",
+        type: "scrape",
+        url: "https://a.com/c",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:00:00Z",
+        metadata: "{}",
+      },
+      {
+        id: "src_2",
+        name: "S2",
+        slug: "s-2",
+        type: "scrape",
+        url: "https://a.com/d",
+        orgId: "org_a",
+        changeDetectedAt: "2026-04-18T00:01:00Z",
+        metadata: "{}",
+      },
+      {
+        id: "src_3",
+        name: "S3",
+        slug: "s-3",
+        type: "scrape",
+        url: "https://b.com/c",
+        orgId: "org_b",
+        changeDetectedAt: "2026-04-18T00:02:00Z",
+        metadata: "{}",
+      },
+      {
+        id: "src_4",
+        name: "S4",
+        slug: "s-4",
+        type: "scrape",
+        url: "https://c.com/c",
+        orgId: "org_c",
+        changeDetectedAt: "2026-04-18T00:03:00Z",
+        metadata: "{}",
+      },
+    ])
+    .run();
   return db;
 }
 
@@ -1426,7 +1654,9 @@ function mkEnv(overrides: Partial<Parameters<typeof scrapeAgentSweep>[0]> = {}) 
     CRON_ENABLED: "true",
     SCRAPE_AGENT_CRON_ENABLED: "true",
     SCRAPE_AGENT_MAX_SESSIONS: "20",
-    DISCOVERY_WORKER: { fetch: async () => new Response(JSON.stringify({ sessionId: "ma-auto" }), { status: 202 }) },
+    DISCOVERY_WORKER: {
+      fetch: async () => new Response(JSON.stringify({ sessionId: "ma-auto" }), { status: 202 }),
+    },
     RELEASED_API_KEY: "test-key",
     ANTHROPIC_API_KEY: "test-anthropic-key",
     ...overrides,
@@ -1441,7 +1671,9 @@ describe("scrapeAgentSweep (E2E)", () => {
       DISCOVERY_WORKER: {
         fetch: async () => {
           dispatchCount++;
-          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), { status: 202 });
+          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), {
+            status: 202,
+          });
         },
       },
     });
@@ -1466,11 +1698,15 @@ describe("scrapeAgentSweep (E2E)", () => {
     let dispatchCount = 0;
     const env = mkEnv({
       DISCOVERY_WORKER: {
-        fetch: async () => { dispatchCount++; return new Response("{}", { status: 202 }); },
+        fetch: async () => {
+          dispatchCount++;
+          return new Response("{}", { status: 202 });
+        },
       },
     });
     const realFetch = globalThis.fetch;
-    globalThis.fetch = async () => new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
+    globalThis.fetch = async () =>
+      new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 });
     try {
       await scrapeAgentSweep({ ...env, _drizzleOverride: db } as any);
     } finally {
@@ -1512,14 +1748,37 @@ describe("scrapeAgentSweep (E2E)", () => {
     const db = mkDb();
     // Add 21 more single-source orgs
     for (let i = 0; i < 21; i++) {
-      db.insert(organizations).values({ id: `org_extra_${i}`, name: `Org ${i}`, slug: `extra-${i}`, category: "developer-tools" }).run();
-      db.insert(sources).values({ id: `src_extra_${i}`, name: `S${i}`, slug: `se-${i}`, type: "scrape", url: `https://extra-${i}.com/c`, orgId: `org_extra_${i}`, changeDetectedAt: `2026-04-18T01:${String(i).padStart(2, "0")}:00Z`, metadata: "{}" }).run();
+      db.insert(organizations)
+        .values({
+          id: `org_extra_${i}`,
+          name: `Org ${i}`,
+          slug: `extra-${i}`,
+          category: "developer-tools",
+        })
+        .run();
+      db.insert(sources)
+        .values({
+          id: `src_extra_${i}`,
+          name: `S${i}`,
+          slug: `se-${i}`,
+          type: "scrape",
+          url: `https://extra-${i}.com/c`,
+          orgId: `org_extra_${i}`,
+          changeDetectedAt: `2026-04-18T01:${String(i).padStart(2, "0")}:00Z`,
+          metadata: "{}",
+        })
+        .run();
     }
     let dispatchCount = 0;
     const env = mkEnv({
       SCRAPE_AGENT_MAX_SESSIONS: "20",
       DISCOVERY_WORKER: {
-        fetch: async () => { dispatchCount++; return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), { status: 202 }); },
+        fetch: async () => {
+          dispatchCount++;
+          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), {
+            status: 202,
+          });
+        },
       },
     });
     const realFetch = globalThis.fetch;
@@ -1605,7 +1864,11 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   const sweepCorrelationId = crypto.randomUUID();
   const cap = parseMaxSessions(env.SCRAPE_AGENT_MAX_SESSIONS);
 
-  await reconcileStaleRunning(db, { cronName: CRON_NAME, now, thresholdMs: STALE_RUNNING_THRESHOLD_MS });
+  await reconcileStaleRunning(db, {
+    cronName: CRON_NAME,
+    now,
+    thresholdMs: STALE_RUNNING_THRESHOLD_MS,
+  });
 
   const runId = await insertRunningRow(db, { cronName: CRON_NAME, startedAt: now.toISOString() });
 
@@ -1615,7 +1878,9 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     const preflight = await runPreflight(env.ANTHROPIC_API_KEY);
     if (preflight.action === "abort") aborted = preflight;
   } else {
-    console.warn("[scrape-agent-cron] ANTHROPIC_API_KEY missing — skipping pre-flight; sessions may fail");
+    console.warn(
+      "[scrape-agent-cron] ANTHROPIC_API_KEY missing — skipping pre-flight; sessions may fail",
+    );
   }
 
   if (aborted) {
@@ -1644,8 +1909,14 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   );
 
   const derived = deriveSweepStatus({ candidates: rows.length, dispatchResults });
-  const sessionsStarted = dispatchResults.filter((r) => r.ok).map((r) => (r as any).sessionId as string);
-  const dispatchErrors = dispatchResults.filter((r) => !r.ok) as Array<{ orgSlug: string; ok: false; error: string }>;
+  const sessionsStarted = dispatchResults
+    .filter((r) => r.ok)
+    .map((r) => (r as any).sessionId as string);
+  const dispatchErrors = dispatchResults.filter((r) => !r.ok) as Array<{
+    orgSlug: string;
+    ok: false;
+    error: string;
+  }>;
 
   await finalizeRunRow(db, runId, {
     endedAt: new Date().toISOString(),
@@ -1660,14 +1931,18 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     notes: derived.notes ?? null,
   });
 
-  console.log(`[scrape-agent-cron] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`);
+  console.log(
+    `[scrape-agent-cron] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`,
+  );
 }
 
 function parseMaxSessions(raw: string | undefined): number {
   if (!raw) return DEFAULT_MAX_SESSIONS;
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) {
-    console.warn(`[scrape-agent-cron] invalid SCRAPE_AGENT_MAX_SESSIONS=${raw}; using default ${DEFAULT_MAX_SESSIONS}`);
+    console.warn(
+      `[scrape-agent-cron] invalid SCRAPE_AGENT_MAX_SESSIONS=${raw}; using default ${DEFAULT_MAX_SESSIONS}`,
+    );
     return DEFAULT_MAX_SESSIONS;
   }
   return n;
@@ -1685,7 +1960,9 @@ async function runPreflight(apiKey: string): Promise<PreflightAction> {
     return classifyPreflightResponse({ status: res.status, body });
   } catch (err) {
     // Timeout or network error → warn (proceed anyway).
-    console.warn(`[scrape-agent-cron] preflight failed: ${err instanceof Error ? err.message : err}`);
+    console.warn(
+      `[scrape-agent-cron] preflight failed: ${err instanceof Error ? err.message : err}`,
+    );
     return { action: "warn" };
   } finally {
     clearTimeout(timeout);
@@ -1718,7 +1995,11 @@ async function dispatchOne(
     const { sessionId } = (await res.json()) as { sessionId: string };
     return { orgSlug: group.orgSlug, ok: true, sessionId };
   } catch (err) {
-    return { orgSlug: group.orgSlug, ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      orgSlug: group.orgSlug,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 ```
@@ -1752,6 +2033,7 @@ EOF
 ## Task 14: Wrangler config
 
 **Files:**
+
 - Modify: `workers/api/wrangler.jsonc`
 
 - [ ] **Step 14.1: Read current config**
@@ -1765,6 +2047,7 @@ Note the `"triggers"` block (has `crons` array), the `"vars"` block, and the exi
 Edit `workers/api/wrangler.jsonc`:
 
 1. In `triggers.crons`, add the new pattern with an explanatory comment:
+
    ```jsonc
    "crons": [
      "0 * * * *",     // hourly: poll + fetch feed/github
@@ -1774,10 +2057,12 @@ Edit `workers/api/wrangler.jsonc`:
    ```
 
 2. In `vars`, add:
+
    ```jsonc
    "SCRAPE_AGENT_CRON_ENABLED": "true",
    "SCRAPE_AGENT_MAX_SESSIONS": "5"
    ```
+
    (start at 5 for the bounded-blast-radius initial deploy; the PR body notes to bump to 20 after 2-3 healthy sweeps)
 
 3. In `secrets_store_secrets`, add a binding for `ANTHROPIC_API_KEY` pointing at the same store/key used by the discovery worker. Inspect `workers/discovery/wrangler.jsonc` first to get the exact `store_id`/`secret_name` shape to mirror.
@@ -1811,6 +2096,7 @@ EOF
 ## Task 15: Scheduled-handler dispatch
 
 **Files:**
+
 - Modify: `workers/api/src/index.ts`
 
 - [ ] **Step 15.1: Read the current handler**
@@ -1831,15 +2117,17 @@ Then in the `scheduled(event, env, ctx)` function, add the new branch BEFORE the
 
 ```ts
 if (event.cron === "0 1 * * *") {
-  ctx.waitUntil(scrapeAgentSweep({
-    DB: env.DB,
-    CRON_ENABLED: env.CRON_ENABLED,
-    SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
-    SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    RELEASED_API_KEY: await env.RELEASED_API_KEY.get(),
-    ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
-  }));
+  ctx.waitUntil(
+    scrapeAgentSweep({
+      DB: env.DB,
+      CRON_ENABLED: env.CRON_ENABLED,
+      SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
+      SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
+      DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+      RELEASED_API_KEY: await env.RELEASED_API_KEY.get(),
+      ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
+    }),
+  );
   return;
 }
 ```
@@ -1869,6 +2157,7 @@ EOF
 ## Task 16: Admin API — `GET /v1/admin/cron-runs` list
 
 **Files:**
+
 - Create: `workers/api/src/routes/admin-cron-runs.ts`
 - Modify: `workers/api/src/index.ts` (mount the route)
 - Create: `tests/api/admin-cron-runs-list.test.ts`
@@ -1893,7 +2182,10 @@ function mkDb() {
 
 function mkApp(db: any) {
   const app = new Hono();
-  app.use("*", async (c, next) => { c.set("db", db); await next(); });
+  app.use("*", async (c, next) => {
+    c.set("db", db);
+    await next();
+  });
   app.route("/v1/admin", adminCronRunsRoutes);
   return app;
 }
@@ -1901,30 +2193,63 @@ function mkApp(db: any) {
 describe("GET /v1/admin/cron-runs", () => {
   it("returns rows for the named cron ordered by startedAt desc", async () => {
     const db = mkDb();
-    db.insert(cronRuns).values([
-      { id: "crun_1", cronName: "scrape-agent-sweep", startedAt: "2026-04-17T01:00:00Z", status: "done", candidates: 5, dispatched: 5 },
-      { id: "crun_2", cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z", status: "done", candidates: 3, dispatched: 3 },
-      { id: "crun_3", cronName: "retier", startedAt: "2026-04-18T03:00:00Z", status: "done" },
-    ]).run();
+    db.insert(cronRuns)
+      .values([
+        {
+          id: "crun_1",
+          cronName: "scrape-agent-sweep",
+          startedAt: "2026-04-17T01:00:00Z",
+          status: "done",
+          candidates: 5,
+          dispatched: 5,
+        },
+        {
+          id: "crun_2",
+          cronName: "scrape-agent-sweep",
+          startedAt: "2026-04-18T01:00:00Z",
+          status: "done",
+          candidates: 3,
+          dispatched: 3,
+        },
+        { id: "crun_3", cronName: "retier", startedAt: "2026-04-18T03:00:00Z", status: "done" },
+      ])
+      .run();
 
     const app = mkApp(db);
     const res = await app.request("/v1/admin/cron-runs?cron=scrape-agent-sweep&limit=50");
     expect(res.status).toBe(200);
-    const body = await res.json() as Array<{ id: string }>;
+    const body = (await res.json()) as Array<{ id: string }>;
     expect(body.map((r) => r.id)).toEqual(["crun_2", "crun_1"]);
   });
 
   it("filters by status CSV", async () => {
     const db = mkDb();
-    db.insert(cronRuns).values([
-      { id: "crun_1", cronName: "scrape-agent-sweep", startedAt: "2026-04-17T01:00:00Z", status: "done" },
-      { id: "crun_2", cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z", status: "degraded" },
-      { id: "crun_3", cronName: "scrape-agent-sweep", startedAt: "2026-04-18T02:00:00Z", status: "aborted" },
-    ]).run();
+    db.insert(cronRuns)
+      .values([
+        {
+          id: "crun_1",
+          cronName: "scrape-agent-sweep",
+          startedAt: "2026-04-17T01:00:00Z",
+          status: "done",
+        },
+        {
+          id: "crun_2",
+          cronName: "scrape-agent-sweep",
+          startedAt: "2026-04-18T01:00:00Z",
+          status: "degraded",
+        },
+        {
+          id: "crun_3",
+          cronName: "scrape-agent-sweep",
+          startedAt: "2026-04-18T02:00:00Z",
+          status: "aborted",
+        },
+      ])
+      .run();
 
     const app = mkApp(db);
     const res = await app.request("/v1/admin/cron-runs?status=degraded,aborted");
-    const body = await res.json() as Array<{ status: string }>;
+    const body = (await res.json()) as Array<{ status: string }>;
     expect(body.map((r) => r.status).sort()).toEqual(["aborted", "degraded"]);
   });
 });
@@ -1959,7 +2284,10 @@ adminCronRunsRoutes.get("/cron-runs", async (c) => {
   const conditions: any[] = [];
   if (cron) conditions.push(eq(cronRuns.cronName, cron));
   if (statusCsv) {
-    const statuses = statusCsv.split(",").map((s) => s.trim()).filter(Boolean);
+    const statuses = statusCsv
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean);
     if (statuses.length > 0) conditions.push(inArray(cronRuns.status, statuses as any));
   }
   if (since) conditions.push(gt(cronRuns.startedAt, since));
@@ -1968,7 +2296,9 @@ adminCronRunsRoutes.get("/cron-runs", async (c) => {
     conditions.push(gt(cronRuns.startedAt, thirtyDaysAgo));
   }
 
-  const rows = await db.select().from(cronRuns)
+  const rows = await db
+    .select()
+    .from(cronRuns)
     .where(conditions.length > 0 ? and(...conditions) : undefined)
     .orderBy(desc(cronRuns.startedAt))
     .limit(limit);
@@ -1980,11 +2310,13 @@ adminCronRunsRoutes.get("/cron-runs", async (c) => {
 - [ ] **Step 16.4: Mount the route in `workers/api/src/index.ts`**
 
 Add import:
+
 ```ts
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 ```
 
 Mount under the same admin auth group as `admin-embed`:
+
 ```ts
 // ... after existing admin-gated mounts
 v1.route("/admin", adminCronRunsRoutes);
@@ -2015,6 +2347,7 @@ EOF
 ## Task 17: Admin API — `GET /v1/admin/cron-runs/:id` drill-down
 
 **Files:**
+
 - Modify: `workers/api/src/routes/admin-cron-runs.ts`
 - Create: `tests/api/admin-cron-runs-detail.test.ts`
 
@@ -2038,7 +2371,10 @@ function mkDb() {
 }
 function mkApp(db: any) {
   const app = new Hono();
-  app.use("*", async (c, next) => { c.set("db", db); await next(); });
+  app.use("*", async (c, next) => {
+    c.set("db", db);
+    await next();
+  });
   app.route("/v1/admin", adminCronRunsRoutes);
   return app;
 }
@@ -2053,27 +2389,59 @@ describe("GET /v1/admin/cron-runs/:id", () => {
 
   it("inlines fetch-log status breakdown per session", async () => {
     const db = mkDb();
-    db.insert(cronRuns).values({
-      id: "crun_1",
-      cronName: "scrape-agent-sweep",
-      startedAt: "2026-04-18T01:00:00Z",
-      endedAt: "2026-04-18T01:00:02Z",
-      durationMs: 2000,
-      status: "done",
-      candidates: 2, dispatched: 2, skippedOverCap: 0, dispatchErrors: 0,
-      sessionsStarted: JSON.stringify(["ma-1", "ma-2"]),
-      dispatchErrorDetail: null,
-    }).run();
-    db.insert(fetchLog).values([
-      { sourceId: "src_1", sessionId: "ma-1", status: "success", releasesFound: 3, releasesInserted: 3, durationMs: 500 },
-      { sourceId: "src_2", sessionId: "ma-1", status: "error", releasesFound: 0, releasesInserted: 0, durationMs: 800, error: "boom" },
-      { sourceId: "src_3", sessionId: "ma-2", status: "no_change", releasesFound: 0, releasesInserted: 0, durationMs: 400 },
-    ] as any).run();
+    db.insert(cronRuns)
+      .values({
+        id: "crun_1",
+        cronName: "scrape-agent-sweep",
+        startedAt: "2026-04-18T01:00:00Z",
+        endedAt: "2026-04-18T01:00:02Z",
+        durationMs: 2000,
+        status: "done",
+        candidates: 2,
+        dispatched: 2,
+        skippedOverCap: 0,
+        dispatchErrors: 0,
+        sessionsStarted: JSON.stringify(["ma-1", "ma-2"]),
+        dispatchErrorDetail: null,
+      })
+      .run();
+    db.insert(fetchLog)
+      .values([
+        {
+          sourceId: "src_1",
+          sessionId: "ma-1",
+          status: "success",
+          releasesFound: 3,
+          releasesInserted: 3,
+          durationMs: 500,
+        },
+        {
+          sourceId: "src_2",
+          sessionId: "ma-1",
+          status: "error",
+          releasesFound: 0,
+          releasesInserted: 0,
+          durationMs: 800,
+          error: "boom",
+        },
+        {
+          sourceId: "src_3",
+          sessionId: "ma-2",
+          status: "no_change",
+          releasesFound: 0,
+          releasesInserted: 0,
+          durationMs: 400,
+        },
+      ] as any)
+      .run();
 
     const app = mkApp(db);
     const res = await app.request("/v1/admin/cron-runs/crun_1");
     expect(res.status).toBe(200);
-    const body = await res.json() as { run: any; sessionBreakdown: Record<string, Record<string, number>> };
+    const body = (await res.json()) as {
+      run: any;
+      sessionBreakdown: Record<string, Record<string, number>>;
+    };
     expect(body.run.id).toBe("crun_1");
     expect(body.sessionBreakdown["ma-1"]).toEqual({ success: 1, error: 1 });
     expect(body.sessionBreakdown["ma-2"]).toEqual({ no_change: 1 });
@@ -2105,11 +2473,13 @@ adminCronRunsRoutes.get("/cron-runs/:id", async (c) => {
   const sessionBreakdown: Record<string, Record<string, number>> = {};
 
   if (sessionIds.length > 0) {
-    const logs = await db.select({
-      sessionId: fetchLog.sessionId,
-      status: fetchLog.status,
-      count: sql<number>`count(*)`,
-    }).from(fetchLog)
+    const logs = await db
+      .select({
+        sessionId: fetchLog.sessionId,
+        status: fetchLog.status,
+        count: sql<number>`count(*)`,
+      })
+      .from(fetchLog)
       .where(inArray(fetchLog.sessionId, sessionIds))
       .groupBy(fetchLog.sessionId, fetchLog.status);
     for (const row of logs) {
@@ -2145,6 +2515,7 @@ EOF
 ## Task 18: Dashboard Cron tab
 
 **Files:**
+
 - Create: `web/src/app/status/cron-runs-tab.tsx`
 - Modify: `web/src/app/status/dashboard.tsx`
 
@@ -2191,14 +2562,18 @@ export function CronRunsTab({ apiUrl, apiKey }: { apiUrl: string; apiKey?: strin
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     fetch(`${apiUrl}/v1/admin/cron-runs?limit=50`, { headers })
-      .then(async (r) => { if (!r.ok) throw new Error(`${r.status}`); return r.json(); })
+      .then(async (r) => {
+        if (!r.ok) throw new Error(`${r.status}`);
+        return r.json();
+      })
       .then((data: CronRun[]) => setRows(data))
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
   }, [apiUrl, apiKey]);
 
   if (err) return <div className="text-red-500 text-xs">Error loading cron runs: {err}</div>;
   if (!rows) return <div className="text-stone-500 text-xs">Loading...</div>;
-  if (rows.length === 0) return <div className="text-stone-500 text-xs">No cron runs recorded yet.</div>;
+  if (rows.length === 0)
+    return <div className="text-stone-500 text-xs">No cron runs recorded yet.</div>;
 
   return (
     <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
@@ -2217,21 +2592,34 @@ export function CronRunsTab({ apiUrl, apiKey }: { apiUrl: string; apiKey?: strin
 }
 
 function CronRunRow({ row }: { row: CronRun }) {
-  const statusBadgeKind = row.status === "done" ? "success"
-    : row.status === "running" ? "running"
-    : row.status === "degraded" ? "no_change"
-    : "error";
-  const outcome = row.status === "aborted" && row.abortReason
-    ? row.abortReason
-    : `${row.dispatched}/${row.candidates}${row.skippedOverCap > 0 ? ` · +${row.skippedOverCap} skipped` : ""}${row.dispatchErrors > 0 ? ` · ${row.dispatchErrors} err` : ""}`;
+  const statusBadgeKind =
+    row.status === "done"
+      ? "success"
+      : row.status === "running"
+        ? "running"
+        : row.status === "degraded"
+          ? "no_change"
+          : "error";
+  const outcome =
+    row.status === "aborted" && row.abortReason
+      ? row.abortReason
+      : `${row.dispatched}/${row.candidates}${row.skippedOverCap > 0 ? ` · +${row.skippedOverCap} skipped` : ""}${row.dispatchErrors > 0 ? ` · ${row.dispatchErrors} err` : ""}`;
 
   return (
     <div className="grid grid-cols-[1.5fr_1.5fr_0.8fr_1fr_1.5fr] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 items-center">
       <div className="text-stone-900 dark:text-stone-100 truncate">{row.cronName}</div>
-      <div className="text-stone-500"><LocalTimestamp ts={row.startedAt} /></div>
-      <div className="text-stone-500">{row.durationMs != null ? formatFetchDuration(row.durationMs) : "—"}</div>
-      <div><FetchStatusBadge status={statusBadgeKind as any} /></div>
-      <div className="text-stone-500" title={row.notes ?? undefined}>{outcome}</div>
+      <div className="text-stone-500">
+        <LocalTimestamp ts={row.startedAt} />
+      </div>
+      <div className="text-stone-500">
+        {row.durationMs != null ? formatFetchDuration(row.durationMs) : "—"}
+      </div>
+      <div>
+        <FetchStatusBadge status={statusBadgeKind as any} />
+      </div>
+      <div className="text-stone-500" title={row.notes ?? undefined}>
+        {outcome}
+      </div>
     </div>
   );
 }
@@ -2275,6 +2663,7 @@ EOF
 ## Task 19: Docs — AGENTS.md runbook + `.env.example`
 
 **Files:**
+
 - Modify: `AGENTS.md`
 - Modify: `.env.example`
 
@@ -2415,6 +2804,7 @@ Watch the wrangler logs for `[scrape-agent-cron] done: run=... status=...`.
 - [ ] **Step 22.5: Verify the `cron_runs` row**
 
 Run:
+
 ```bash
 bunx wrangler d1 execute released-db --remote --command "SELECT id, status, candidates, dispatched, skipped_over_cap, abort_reason, notes FROM cron_runs ORDER BY started_at DESC LIMIT 1;"
 ```

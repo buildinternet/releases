@@ -145,9 +145,10 @@ export function sliceChangelog(
   let snappedEnd: number;
 
   if (tokenBudget !== undefined) {
-    snappedEnd = snappedStart >= totalChars
-      ? totalChars
-      : findTokenSliceEnd(content, snappedStart, tokenBudget, headings, totalChars);
+    snappedEnd =
+      snappedStart >= totalChars
+        ? totalChars
+        : findTokenSliceEnd(content, snappedStart, tokenBudget, headings, totalChars);
   } else {
     const requestedEnd = snappedStart + limit;
     if (requestedEnd >= totalChars) {
@@ -191,7 +192,11 @@ export function sliceChangelog(
   return result;
 }
 
-export function hasRangeParams(params: { offset?: string | null; limit?: string | null; tokens?: string | null }): boolean {
+export function hasRangeParams(params: {
+  offset?: string | null;
+  limit?: string | null;
+  tokens?: string | null;
+}): boolean {
   return params.offset != null || params.limit != null || params.tokens != null;
 }
 
@@ -288,14 +293,18 @@ export type ChangelogResponse = Omit<ChangelogFileRow, "tokens"> &
  * caller requested a token budget and whether more content follows.
  */
 export function formatChangelogSliceLine(
-  response: Pick<ChangelogResponse, "offset" | "content" | "totalChars" | "totalTokens" | "sliceTokens" | "nextOffset">,
+  response: Pick<
+    ChangelogResponse,
+    "offset" | "content" | "totalChars" | "totalTokens" | "sliceTokens" | "nextOffset"
+  >,
 ): string {
   const end = response.offset + response.content.length;
   const tail = response.nextOffset != null ? `next: offset=${response.nextOffset}` : "end of file";
   const charPart = `chars ${response.offset}–${end} of ${response.totalChars}`;
-  const head = response.sliceTokens !== undefined
-    ? `${response.sliceTokens} tokens (${charPart} / ${response.totalTokens} total tokens)`
-    : `${charPart} (${response.totalTokens} total tokens)`;
+  const head =
+    response.sliceTokens !== undefined
+      ? `${response.sliceTokens} tokens (${charPart} / ${response.totalTokens} total tokens)`
+      : `${charPart} (${response.totalTokens} total tokens)`;
   return `Slice: ${head} — ${tail}`;
 }
 

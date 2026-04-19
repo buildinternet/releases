@@ -42,7 +42,6 @@ export interface SessionParams {
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 
 export class ManagedAgentsSession extends DurableObject<Env> {
-
   async startSession(params: SessionParams): Promise<void> {
     await this.ctx.storage.put("params", params);
     await this.ctx.storage.put("status", "running");
@@ -114,25 +113,28 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         this.env.CLOUDFLARE_API_TOKEN?.get().catch(() => ""),
       ]);
 
-      const scrapeHandler = (cfAccountId && cfApiToken)
-        ? async (sourceIdentifier: string) => {
-            return scrapeFetch({
-              cloudflareAccountId: cfAccountId,
-              cloudflareApiToken: cfApiToken,
-              anthropicApiKey: anthropicApiKey,
-              apiFetcher: fetcher,
-              apiKey: releasedApiKey,
-              sessionId,
-            }, sourceIdentifier);
-          }
-        : undefined;
+      const scrapeHandler =
+        cfAccountId && cfApiToken
+          ? async (sourceIdentifier: string) => {
+              return scrapeFetch(
+                {
+                  cloudflareAccountId: cfAccountId,
+                  cloudflareApiToken: cfApiToken,
+                  anthropicApiKey: anthropicApiKey,
+                  apiFetcher: fetcher,
+                  apiKey: releasedApiKey,
+                  sessionId,
+                },
+                sourceIdentifier,
+              );
+            }
+          : undefined;
 
       const { default: Anthropic } = await import("@anthropic-ai/sdk");
       const client = new Anthropic({ apiKey: anthropicApiKey });
 
-      const sessionTitle = mode === "update"
-        ? `Update: ${params.company}`
-        : `Discovery: ${params.company}`;
+      const sessionTitle =
+        mode === "update" ? `Update: ${params.company}` : `Discovery: ${params.company}`;
 
       const vaultId = this.env.ANTHROPIC_VAULT_ID;
       const session = await (client.beta.sessions as any).create({
@@ -142,25 +144,28 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         title: sessionTitle,
       });
 
-      await this.notifyStatusHub({
-        type: "session:start",
-        sessionId,
-        company: params.company,
-        sessionType: mode,
-        agent: useWorker ? "haiku" : "sonnet",
-        anthropicSessionId: session.id,
-        ...(params.correlationId ? { correlationId: params.correlationId } : {}),
-        // Register source identifiers so the CLI overlap check can detect
-        // in-flight managed-agent sessions. These may be IDs (src_…) or slugs;
-        // fetch.ts normalises them to slugs before comparing.
-        ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
-          ? { activeSources: params.sourceIdentifiers }
-          : {}),
-      }, releasedApiKey);
+      await this.notifyStatusHub(
+        {
+          type: "session:start",
+          sessionId,
+          company: params.company,
+          sessionType: mode,
+          agent: useWorker ? "haiku" : "sonnet",
+          anthropicSessionId: session.id,
+          ...(params.correlationId ? { correlationId: params.correlationId } : {}),
+          // Register source identifiers so the CLI overlap check can detect
+          // in-flight managed-agent sessions. These may be IDs (src_…) or slugs;
+          // fetch.ts normalises them to slugs before comparing.
+          ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
+            ? { activeSources: params.sourceIdentifiers }
+            : {}),
+        },
+        releasedApiKey,
+      );
 
       let prompt: string;
       if (mode === "update") {
-        const idList = (params.sourceIdentifiers ?? []).map(s => `- ${s}`).join("\n");
+        const idList = (params.sourceIdentifiers ?? []).map((s) => `- ${s}`).join("\n");
         const guideStep = params.orgId
           ? `\n\nFirst, call get_playbook with organization "${params.orgId}" to understand how each source works — extraction patterns, known quirks, and what to expect. Then call`
           : `\n\nCall`;
@@ -189,7 +194,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       let lastAgentMessage = "";
       const deadline = Date.now() + SESSION_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
-        try { stream.controller.abort(); } catch { /* closed */ }
+        try {
+          stream.controller.abort();
+        } catch {
+          /* closed */
+        }
       }, SESSION_TIMEOUT_MS);
 
       try {
@@ -202,11 +211,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               const sendResult = async (toolUseId: string, text: string) => {
                 if (text.startsWith("Error")) toolErrors++;
                 await (client.beta.sessions.events as any).send(session.id, {
-                  events: [{
-                    type: "user.custom_tool_result",
-                    custom_tool_use_id: toolUseId,
-                    content: [{ type: "text", text }],
-                  }],
+                  events: [
+                    {
+                      type: "user.custom_tool_result",
+                      custom_tool_use_id: toolUseId,
+                      content: [{ type: "text", text }],
+                    },
+                  ],
                 });
               };
               const wasStateReport = await handleCustomToolUse(
@@ -215,7 +226,9 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   sendResult,
                   executor,
                   onScrapeFetch: scrapeHandler,
-                  onStateCapture: (state) => { capturedState = state; },
+                  onStateCapture: (state) => {
+                    capturedState = state;
+                  },
                   onToolCall: (toolName) => {
                     toolCallCount++;
                     this.ctx.storage.put("progress", {
@@ -234,11 +247,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                 if (block.type === "text" && block.text) {
                   const text = truncate(block.text, 500);
                   lastAgentMessage = block.text;
-                  await this.notifyStatusHub({
-                    type: "session:progress",
-                    sessionId,
-                    logLine: text,
-                  }, releasedApiKey);
+                  await this.notifyStatusHub(
+                    {
+                      type: "session:progress",
+                      sessionId,
+                      logLine: text,
+                    },
+                    releasedApiKey,
+                  );
                 }
               }
               break;
@@ -248,11 +264,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             case "agent.mcp_tool_use": {
               const toolName = (event as any).name;
               if (toolName) {
-                await this.notifyStatusHub({
-                  type: "session:progress",
-                  sessionId,
-                  currentAction: toolName,
-                }, releasedApiKey);
+                await this.notifyStatusHub(
+                  {
+                    type: "session:progress",
+                    sessionId,
+                    currentAction: toolName,
+                  },
+                  releasedApiKey,
+                );
               }
               break;
             }
@@ -262,11 +281,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               for (const block of (event as any).content ?? []) {
                 if (block.type === "text" && block.text) {
                   const text = truncate(block.text, 200);
-                  await this.notifyStatusHub({
-                    type: "session:progress",
-                    sessionId,
-                    logLine: text,
-                  }, releasedApiKey);
+                  await this.notifyStatusHub(
+                    {
+                      type: "session:progress",
+                      sessionId,
+                      logLine: text,
+                    },
+                    releasedApiKey,
+                  );
                   break; // only forward first text block
                 }
               }
@@ -285,7 +307,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             case "session.error": {
               const errDetail = (event as any).error ?? JSON.stringify(event);
               console.error(`[managed-agents] Session error: ${errDetail}`);
-              await this.fail(sessionId, params.company, `Session error: ${errDetail}`, releasedApiKey);
+              await this.fail(
+                sessionId,
+                params.company,
+                `Session error: ${errDetail}`,
+                releasedApiKey,
+              );
               done = true;
               break;
             }
@@ -295,7 +322,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         }
       } finally {
         clearTimeout(timeoutId);
-        try { stream.controller.abort(); } catch { /* closed */ }
+        try {
+          stream.controller.abort();
+        } catch {
+          /* closed */
+        }
       }
 
       // Retrieve final session for usage tracking (also logged in CLI's managed-discovery.ts)
@@ -318,45 +349,65 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // NOTE: Worker agent (Haiku) sessions show as "terminated" in the Anthropic
       // console while discovery agent sessions do not — possibly a timing/state
       // difference. Both paths call archive identically. Monitor if this causes issues.
-      try { await (client.beta.sessions as any).archive(session.id); } catch { /* non-critical */ }
+      try {
+        await (client.beta.sessions as any).archive(session.id);
+      } catch {
+        /* non-critical */
+      }
 
       if (capturedState) {
         capturedState["agentSessionId"] = session.id;
         await this.ctx.storage.put("result", capturedState);
         await this.ctx.storage.put("status", "complete");
 
-        await this.notifyStatusHub({
-          type: "session:complete",
-          sessionId,
-          company: params.company,
-          sourcesFound: Array.isArray(capturedState["sources"]) ? (capturedState["sources"] as unknown[]).length : 0,
-          result: capturedState,
-          ...(sessionUsage ? { usage: sessionUsage } : {}),
-        }, releasedApiKey);
+        await this.notifyStatusHub(
+          {
+            type: "session:complete",
+            sessionId,
+            company: params.company,
+            sourcesFound: Array.isArray(capturedState["sources"])
+              ? (capturedState["sources"] as unknown[]).length
+              : 0,
+            result: capturedState,
+            ...(sessionUsage ? { usage: sessionUsage } : {}),
+          },
+          releasedApiKey,
+        );
         return;
       }
 
       // Update sessions don't require a state report — but must have done useful work
       if (mode === "update") {
         if (toolCallCount === 0 || (toolErrors > 0 && toolErrors >= toolCallCount)) {
-          const reason = toolCallCount === 0
-            ? "Agent completed without calling any tools"
-            : `All ${toolErrors} tool call(s) failed`;
-          const detail = lastAgentMessage ? `${reason}: ${truncate(lastAgentMessage, 120)}` : reason;
+          const reason =
+            toolCallCount === 0
+              ? "Agent completed without calling any tools"
+              : `All ${toolErrors} tool call(s) failed`;
+          const detail = lastAgentMessage
+            ? `${reason}: ${truncate(lastAgentMessage, 120)}`
+            : reason;
           await this.fail(sessionId, params.company, detail, releasedApiKey, sessionUsage);
           return;
         }
         await this.ctx.storage.put("status", "complete");
-        await this.notifyStatusHub({
-          type: "session:complete",
-          sessionId,
-          company: params.company,
-          ...(sessionUsage ? { usage: sessionUsage } : {}),
-        }, releasedApiKey);
+        await this.notifyStatusHub(
+          {
+            type: "session:complete",
+            sessionId,
+            company: params.company,
+            ...(sessionUsage ? { usage: sessionUsage } : {}),
+          },
+          releasedApiKey,
+        );
         return;
       }
 
-      await this.fail(sessionId, params.company, "Agent did not report discovery state", releasedApiKey);
+      await this.fail(
+        sessionId,
+        params.company,
+        "Agent did not report discovery state",
+        releasedApiKey,
+      );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this.fail(sessionId, params.company, message);
@@ -372,18 +423,24 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   ): Promise<void> {
     await this.ctx.storage.put("status", "error");
     await this.ctx.storage.put("error", error);
-    await this.notifyStatusHub({
-      type: "session:error",
-      sessionId,
-      company,
-      error,
-      ...(usage ? { usage } : {}),
-    }, cachedApiKey);
+    await this.notifyStatusHub(
+      {
+        type: "session:error",
+        sessionId,
+        company,
+        error,
+        ...(usage ? { usage } : {}),
+      },
+      cachedApiKey,
+    );
   }
 
-  private async notifyStatusHub(event: Record<string, unknown>, cachedApiKey?: string): Promise<void> {
+  private async notifyStatusHub(
+    event: Record<string, unknown>,
+    cachedApiKey?: string,
+  ): Promise<void> {
     try {
-      const apiKey = cachedApiKey ?? await this.env.RELEASED_API_KEY.get();
+      const apiKey = cachedApiKey ?? (await this.env.RELEASED_API_KEY.get());
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
@@ -391,12 +448,18 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       const body = JSON.stringify(event);
 
       if (this.env.API_WORKER) {
-        await this.env.API_WORKER.fetch(new Request("https://api/v1/status/event", {
-          method: "POST", headers, body,
-        }));
+        await this.env.API_WORKER.fetch(
+          new Request("https://api/v1/status/event", {
+            method: "POST",
+            headers,
+            body,
+          }),
+        );
       } else {
         await fetch(`${this.env.RELEASED_API_URL}/v1/status/event`, {
-          method: "POST", headers, body,
+          method: "POST",
+          headers,
+          body,
         });
       }
     } catch (err) {

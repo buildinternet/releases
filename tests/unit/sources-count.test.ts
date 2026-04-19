@@ -24,10 +24,39 @@ beforeAll(async () => {
   ]);
 
   await db.insert(sources).values([
-    { id: "src_1", orgId: "org_a", name: "A1", slug: "a1", type: "github", url: "https://a.example/1" },
-    { id: "src_2", orgId: "org_a", name: "A2", slug: "a2", type: "feed", url: "https://a.example/2" },
-    { id: "src_3", orgId: "org_a", name: "A3", slug: "a3", type: "scrape", url: "https://a.example/3", isHidden: true },
-    { id: "src_4", orgId: "org_b", name: "B1", slug: "b1", type: "github", url: "https://b.example/1" },
+    {
+      id: "src_1",
+      orgId: "org_a",
+      name: "A1",
+      slug: "a1",
+      type: "github",
+      url: "https://a.example/1",
+    },
+    {
+      id: "src_2",
+      orgId: "org_a",
+      name: "A2",
+      slug: "a2",
+      type: "feed",
+      url: "https://a.example/2",
+    },
+    {
+      id: "src_3",
+      orgId: "org_a",
+      name: "A3",
+      slug: "a3",
+      type: "scrape",
+      url: "https://a.example/3",
+      isHidden: true,
+    },
+    {
+      id: "src_4",
+      orgId: "org_b",
+      name: "B1",
+      slug: "b1",
+      type: "github",
+      url: "https://b.example/1",
+    },
   ]);
 });
 

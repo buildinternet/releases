@@ -39,7 +39,22 @@ function deliveryMsg(subId = "whk_1") {
     subscriptionId: subId,
     url: "https://hook.example/u",
     secretVersion: 1,
-    event: { id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1", title: "t", version: null, publishedAt: null, sourceName: "s", sourceSlug: "s", contentSummary: null, media: [] } as any },
+    event: {
+      id: "evt_1",
+      seq: 1,
+      ts: 1,
+      type: "release.created",
+      release: {
+        id: "rel_1",
+        title: "t",
+        version: null,
+        publishedAt: null,
+        sourceName: "s",
+        sourceSlug: "s",
+        contentSummary: null,
+        media: [],
+      } as any,
+    },
     attempt: 1,
   };
 }

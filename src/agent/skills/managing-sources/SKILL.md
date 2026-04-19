@@ -11,31 +11,32 @@ Operational guide for managing changelog sources.
 
 Operations can be performed via CLI commands or typed MCP/agent tools. Use whichever interface is available in your context.
 
-| Operation | CLI | Typed tool |
-|-----------|-----|------------|
-| List sources | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>] [--compact] [--limit <n>] [--page <n>]` | `list_sources` with query, organization, category, has_feed params |
-| Add source | `releases admin source add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]` | `add_source` with name, url, type, organization, feed_url params |
-| Edit source | `releases admin source edit <identifier> [--primary] [--priority <p>]` | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
-| Remove source | `releases admin source remove <slug> [--ignore --reason <reason>]` | `remove_source` with identifier (ID or slug) param |
-| Fetch releases | `releases admin source fetch <slug> [--dry-run] [--max <n>]` | `fetch_source` with identifier (ID or slug) param |
-| Get latest releases | `releases tail [slug] --json [--org <org>]` | `get_latest_releases` with source, organization, limit params |
-| Search releases | `releases search <query> --json` | `search_releases` with query, limit params |
-| Evaluate URL | `releases admin discovery evaluate <url> --json` | `evaluate_url` with url param |
-| Add org | `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` | `manage_org` action "add" with name, domain, description, category, tags |
-| Edit org | `releases admin org edit <slug> [--category <c>]` | `manage_org` action "edit" with identifier, category |
-| Show org | `releases admin org show <slug> --json` | `get_organization` with identifier |
-| Add tags to org | `releases admin org tag add <slug> <tags...>` | `manage_org` action "tag_add" with identifier, tags |
-| Link account | `releases admin org link <slug> --platform <p> --handle <h>` | `manage_org` action "link_account" with identifier, platform, handle |
-| Add product | `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]` | `manage_product` action "add" with name, organization, category, tags |
-| Ignore URL | `releases admin policy ignore add --org <org> <url>` | `exclude_url` action "ignore" with url, organization |
-| Block URL | `releases admin policy block add <url>` | `exclude_url` action "block" with url |
-| List categories | `releases categories --json` | `list_categories` |
-| Get playbook | `releases admin content playbook <org>` | `get_playbook` with organization param |
-| Update playbook notes | `releases admin content playbook <org> --notes "..."` | `update_playbook_notes` with organization, notes params |
+| Operation             | CLI                                                                                                                               | Typed tool                                                                    |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
+| List sources          | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>] [--compact] [--limit <n>] [--page <n>]` | `list_sources` with query, organization, category, has_feed params            |
+| Add source            | `releases admin source add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]`                                   | `add_source` with name, url, type, organization, feed_url params              |
+| Edit source           | `releases admin source edit <identifier> [--primary] [--priority <p>]`                                                            | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
+| Remove source         | `releases admin source remove <slug> [--ignore --reason <reason>]`                                                                | `remove_source` with identifier (ID or slug) param                            |
+| Fetch releases        | `releases admin source fetch <slug> [--dry-run] [--max <n>]`                                                                      | `fetch_source` with identifier (ID or slug) param                             |
+| Get latest releases   | `releases tail [slug] --json [--org <org>]`                                                                                       | `get_latest_releases` with source, organization, limit params                 |
+| Search releases       | `releases search <query> --json`                                                                                                  | `search_releases` with query, limit params                                    |
+| Evaluate URL          | `releases admin discovery evaluate <url> --json`                                                                                  | `evaluate_url` with url param                                                 |
+| Add org               | `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]`                              | `manage_org` action "add" with name, domain, description, category, tags      |
+| Edit org              | `releases admin org edit <slug> [--category <c>]`                                                                                 | `manage_org` action "edit" with identifier, category                          |
+| Show org              | `releases admin org show <slug> --json`                                                                                           | `get_organization` with identifier                                            |
+| Add tags to org       | `releases admin org tag add <slug> <tags...>`                                                                                     | `manage_org` action "tag_add" with identifier, tags                           |
+| Link account          | `releases admin org link <slug> --platform <p> --handle <h>`                                                                      | `manage_org` action "link_account" with identifier, platform, handle          |
+| Add product           | `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]`                                                     | `manage_product` action "add" with name, organization, category, tags         |
+| Ignore URL            | `releases admin policy ignore add --org <org> <url>`                                                                              | `exclude_url` action "ignore" with url, organization                          |
+| Block URL             | `releases admin policy block add <url>`                                                                                           | `exclude_url` action "block" with url                                         |
+| List categories       | `releases categories --json`                                                                                                      | `list_categories`                                                             |
+| Get playbook          | `releases admin content playbook <org>`                                                                                           | `get_playbook` with organization param                                        |
+| Update playbook notes | `releases admin content playbook <org> --notes "..."`                                                                             | `update_playbook_notes` with organization, notes params                       |
 
 ## Listing Sources
 
 Search for existing sources with optional filters:
+
 - **query** — filter by name, slug, or URL
 - **organization** — filter by org ID or slug
 - **product** — filter by product ID or slug
@@ -114,18 +115,21 @@ Write notes like a **skill for the agent that will fetch from this org** — imp
 Organize notes under these headings:
 
 **`### Fetch instructions`** — One paragraph per source. Use imperative voice:
+
 - What to do: "Set version=null", "Parse `<h2>` elements as version boundaries", "No filtering needed"
 - What to expect: cadence, content quality, whether rendering is needed
 - When to skip or deprioritize: "Only fetch when looking for launch announcements specifically"
 - Cite version format examples where useful (e.g., "semver like 2.1.98")
 
 **`### Traps`** — Concise warnings with **bolded trigger labels**:
+
 - Each trap is a bullet with a bold label and a one-sentence explanation
 - Example: `**Doubled paths on Platform**: Relative doc links get prefixed with the source URL, producing doubled paths.`
 - Include disabled sources with "Don't re-discover" warnings so agents don't re-evaluate them
 - Only include traps that would cause wasted work or bad data — skip informational notes
 
 **`### Coverage`** — Two or three sentences max:
+
 - Which sources are canonical vs supplementary
 - Whether active sources cover the org's full release surface
 - Any known gaps worth noting
@@ -162,6 +166,7 @@ Write notes during onboarding after you've fetched and validated sources. Update
 The scrape adapter can fetch pages with or without a headless browser. Static-site providers (Docusaurus, VitePress, WordPress, Ghost, Mintlify) are fetched without rendering by default — this is ~10-30x faster.
 
 To override the default for a specific source:
+
 - `releases admin source edit <identifier> --no-render` — force fast fetch (no headless browser)
 - `releases admin source edit <identifier> --render` — force headless browser rendering
 
@@ -174,6 +179,7 @@ After adding a new scrape source with an unknown provider, check the first fetch
 Before adding sources, search for overlapping URLs.
 
 Common duplicates:
+
 - Same repo via GitHub URL vs changelog page (the GitHub source is usually better)
 - RSS feed URL vs the page it feeds from (keep the feed)
 - With and without trailing slash or `www.` prefix

@@ -1,6 +1,6 @@
 /** Sanitize URLs from user-generated markdown to prevent XSS via javascript: and other dangerous schemes. */
 
-const SAFE_LINK_PATTERN = /^(https?:\/\/|mailto:|\/(?!\/))/ ;
+const SAFE_LINK_PATTERN = /^(https?:\/\/|mailto:|\/(?!\/))/;
 const SAFE_IMG_PATTERN = /^https?:\/\//;
 
 /** Returns true if the href is safe for use in an <a> tag. */
@@ -17,5 +17,10 @@ export function isSafeImgSrc(src: string | undefined | null): src is string {
 
 /** Returns true if the image URL can be optimized via next/image (matches our remotePatterns). */
 export function isOptimizableImage(url: string): boolean {
-  return url.includes("githubusercontent.com") || url.includes("media.releases.sh") || url.includes("/v1/media/") || url.includes("github.com/");
+  return (
+    url.includes("githubusercontent.com") ||
+    url.includes("media.releases.sh") ||
+    url.includes("/v1/media/") ||
+    url.includes("github.com/")
+  );
 }

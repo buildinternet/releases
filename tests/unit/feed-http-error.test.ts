@@ -1,11 +1,17 @@
 import { describe, it, expect, afterEach, mock } from "bun:test";
-import { fetchAndParseFeed, FEED_4XX_INVALIDATE_THRESHOLD, CLEARED_FEED_FIELDS } from "../../src/adapters/feed.js";
+import {
+  fetchAndParseFeed,
+  FEED_4XX_INVALIDATE_THRESHOLD,
+  CLEARED_FEED_FIELDS,
+} from "../../src/adapters/feed.js";
 import { FeedHttpError } from "@releases/lib/errors";
 
 const realFetch = globalThis.fetch;
 
 function stubFetch(status: number, statusText = ""): void {
-  globalThis.fetch = mock(async () => new Response("", { status, statusText })) as unknown as typeof fetch;
+  globalThis.fetch = mock(
+    async () => new Response("", { status, statusText }),
+  ) as unknown as typeof fetch;
 }
 
 afterEach(() => {

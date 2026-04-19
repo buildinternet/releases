@@ -12,23 +12,24 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|---------------|
-| `src/api/types.ts` | Modify | Add unified search response types |
-| `workers/api/src/routes/search.ts` | Modify | Replace single FTS query with multi-type search |
-| `src/api/client.ts` | Modify | Update `searchReleasesRemote` → `unifiedSearch` |
-| `src/db/queries.ts` | Modify | Update remote search function to return new shape |
-| `src/db/fts.ts` | Modify | Update `searchReleasesForApi` return type |
-| `src/cli/commands/search.ts` | Modify | Display multi-type results, add `--type` flag |
-| `web/src/lib/api.ts` | Modify | Update `api.search` return type |
-| `web/src/app/search/page.tsx` | Modify | Render org/product/source matches above releases |
-| `tests/cli/search-unified.test.ts` | Create | CLI roundtrip tests for unified search |
+| File                               | Action | Responsibility                                    |
+| ---------------------------------- | ------ | ------------------------------------------------- |
+| `src/api/types.ts`                 | Modify | Add unified search response types                 |
+| `workers/api/src/routes/search.ts` | Modify | Replace single FTS query with multi-type search   |
+| `src/api/client.ts`                | Modify | Update `searchReleasesRemote` → `unifiedSearch`   |
+| `src/db/queries.ts`                | Modify | Update remote search function to return new shape |
+| `src/db/fts.ts`                    | Modify | Update `searchReleasesForApi` return type         |
+| `src/cli/commands/search.ts`       | Modify | Display multi-type results, add `--type` flag     |
+| `web/src/lib/api.ts`               | Modify | Update `api.search` return type                   |
+| `web/src/app/search/page.tsx`      | Modify | Render org/product/source matches above releases  |
+| `tests/cli/search-unified.test.ts` | Create | CLI roundtrip tests for unified search            |
 
 ---
 
 ### Task 1: Define unified search types
 
 **Files:**
+
 - Modify: `src/api/types.ts:141-156`
 
 - [ ] **Step 1: Replace SearchResult and SearchResponse types**
@@ -107,6 +108,7 @@ git commit -m "feat(search): define unified multi-type search response types"
 ### Task 2: Update the API worker search endpoint
 
 **Files:**
+
 - Modify: `workers/api/src/routes/search.ts`
 
 - [ ] **Step 1: Rewrite the search route handler**
@@ -130,10 +132,7 @@ export const searchRoutes = new Hono<Env>();
 searchRoutes.get("/search", async (c) => {
   const q = c.req.query("q") ?? "";
   if (!q) {
-    return c.json(
-      { error: "bad_request", message: "Missing required query parameter: q" },
-      400,
-    );
+    return c.json({ error: "bad_request", message: "Missing required query parameter: q" }, 400);
   }
 
   const limit = parseInt(c.req.query("limit") ?? "20", 10);
@@ -226,7 +225,10 @@ searchRoutes.get("/search", async (c) => {
         LEFT JOIN products p ON p.id = s.product_id
         WHERE (r.suppressed IS NULL OR r.suppressed = 0)
           AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-          AND (o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})
+          AND (o.slug IN (${sql.join(
+            orgSlugs.map((s) => sql`${s}`),
+            sql`, `,
+          )})
                OR p.slug IN (${sql.join(productSlugs.length > 0 ? productSlugs.map((s) => sql`${s}`) : [sql`''`], sql`, `)}))
         ORDER BY r.published_at DESC
         LIMIT ${limit}
@@ -256,6 +258,7 @@ git commit -m "feat(search): unified multi-type search endpoint with cascading e
 ### Task 3: Update the CLI API client
 
 **Files:**
+
 - Modify: `src/api/client.ts:197-206`
 - Modify: `src/db/queries.ts:942-952`
 
@@ -308,6 +311,7 @@ git commit -m "feat(search): add unified search client and query wrapper"
 ### Task 4: Update the local FTS path
 
 **Files:**
+
 - Modify: `src/db/fts.ts:42-79`
 
 The local-mode FTS function `searchReleasesForApi` is used by the local API server (`src/api/routes/search.ts`). Update it to return the unified shape.
@@ -318,13 +322,44 @@ In `src/db/fts.ts`, replace the `searchReleasesForApi` function and its `SearchA
 
 ```typescript
 export interface LocalUnifiedSearchResult {
-  orgs: Array<{ slug: string; name: string; domain: string | null; avatarUrl: string | null; category: string | null }>;
-  products: Array<{ slug: string; name: string; orgSlug: string | null; orgName: string | null; category: string | null }>;
-  sources: Array<{ slug: string; name: string; type: string; orgSlug: string | null; orgName: string | null; productSlug: string | null }>;
-  releases: Array<{ sourceSlug: string; sourceName: string; orgSlug: string | null; version: string | null; title: string; summary: string; publishedAt: string | null }>;
+  orgs: Array<{
+    slug: string;
+    name: string;
+    domain: string | null;
+    avatarUrl: string | null;
+    category: string | null;
+  }>;
+  products: Array<{
+    slug: string;
+    name: string;
+    orgSlug: string | null;
+    orgName: string | null;
+    category: string | null;
+  }>;
+  sources: Array<{
+    slug: string;
+    name: string;
+    type: string;
+    orgSlug: string | null;
+    orgName: string | null;
+    productSlug: string | null;
+  }>;
+  releases: Array<{
+    sourceSlug: string;
+    sourceName: string;
+    orgSlug: string | null;
+    version: string | null;
+    title: string;
+    summary: string;
+    publishedAt: string | null;
+  }>;
 }
 
-export function unifiedSearchLocal(query: string, limit: number, offset: number): LocalUnifiedSearchResult {
+export function unifiedSearchLocal(
+  query: string,
+  limit: number,
+  offset: number,
+): LocalUnifiedSearchResult {
   if (isRemoteMode()) {
     throw new Error("unifiedSearchLocal() is not available in remote mode");
   }
@@ -393,7 +428,10 @@ export function unifiedSearchLocal(query: string, limit: number, offset: number)
           LEFT JOIN products p ON p.id = s.product_id
           WHERE (r.suppressed IS NULL OR r.suppressed = 0)
             AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-            AND (o.slug IN (${sql.join(orgSlugs.map((s) => sql`${s}`), sql`, `)})
+            AND (o.slug IN (${sql.join(
+              orgSlugs.map((s) => sql`${s}`),
+              sql`, `,
+            )})
                  OR p.slug IN (${sql.join(productSlugs.length > 0 ? productSlugs.map((s) => sql`${s}`) : [sql`''`], sql`, `)}))
           ORDER BY r.published_at DESC LIMIT ${limit}
         `) as LocalUnifiedSearchResult["releases"];
@@ -436,6 +474,7 @@ git commit -m "feat(search): unified local search with entity matching and casca
 ### Task 5: Update the CLI search command
 
 **Files:**
+
 - Modify: `src/cli/commands/search.ts`
 
 - [ ] **Step 1: Rewrite the search command for unified results**
@@ -459,11 +498,14 @@ export function registerSearchCommand(program: Command) {
     .option("-l, --limit <n>", "Max results per type", "10")
     .option("--type <type>", "Limit to a result type: orgs, products, sources, releases")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   released search "vercel"
   released search "breaking change" --type releases
-  released search "authentication" --limit 5 --json`)
+  released search "authentication" --limit 5 --json`,
+    )
     .action(async (query: string, opts: { limit: string; type?: string; json?: boolean }) => {
       const limit = parseInt(opts.limit, 10);
 
@@ -528,7 +570,11 @@ Examples:
         console.log(chalk.bold.underline("Releases"));
         for (const r of response.releases) {
           console.log(`  ${chalk.cyan.bold(stripAnsi(r.title))}`);
-          console.log(chalk.dim(`  Source: ${stripAnsi(r.sourceName)}  |  Published: ${r.publishedAt ?? "No date"}`));
+          console.log(
+            chalk.dim(
+              `  Source: ${stripAnsi(r.sourceName)}  |  Published: ${r.publishedAt ?? "No date"}`,
+            ),
+          );
           const summary = stripAnsi(r.summary);
           console.log(`  ${summary}${summary.length >= 150 ? "..." : ""}`);
           console.log();
@@ -567,6 +613,7 @@ git commit -m "feat(search): CLI displays unified search results across entity t
 ### Task 6: Update the web app
 
 **Files:**
+
 - Modify: `web/src/lib/api.ts`
 - Modify: `web/src/app/search/page.tsx`
 
@@ -576,9 +623,18 @@ In `web/src/lib/api.ts`, update the import to include `UnifiedSearchResponse`:
 
 ```typescript
 import type {
-  Stats, OrgListItem, OrgDetail, SourceListItem, SourceDetail,
-  SearchResponse, UnifiedSearchResponse, SourceActivity, OrgActivity,
-  OrgReleasesResponse, ReleaseDetail, ProductDetail,
+  Stats,
+  OrgListItem,
+  OrgDetail,
+  SourceListItem,
+  SourceDetail,
+  SearchResponse,
+  UnifiedSearchResponse,
+  SourceActivity,
+  OrgActivity,
+  OrgReleasesResponse,
+  ReleaseDetail,
+  ProductDetail,
 } from "@shared/api/types";
 ```
 
@@ -804,6 +860,7 @@ git commit -m "feat(search): web app renders unified search with org/product/sou
 ### Task 7: CLI roundtrip tests
 
 **Files:**
+
 - Create: `tests/cli/search-unified.test.ts`
 
 - [ ] **Step 1: Write the test file**
@@ -825,7 +882,15 @@ describe("unified search", () => {
       ["org", "add", "Vercel", "--category", "cloud"],
       ["org", "add", "Anthropic", "--category", "ai"],
       ["product", "add", "Next.js", "--org", "vercel"],
-      ["add", "Vercel Blog", "--url", "https://vercel.com/changelog", "--org", "vercel", "--skip-eval"],
+      [
+        "add",
+        "Vercel Blog",
+        "--url",
+        "https://vercel.com/changelog",
+        "--org",
+        "vercel",
+        "--skip-eval",
+      ],
     ]) {
       const r = cli(dataDir, args);
       if (r.exitCode !== 0) throw new Error(`Seed failed (${args.join(" ")}): ${r.stderr}`);
@@ -835,24 +900,22 @@ describe("unified search", () => {
   afterAll(() => cleanup());
 
   it("returns orgs matching by name", () => {
-    const result = cliJson<{ orgs: { slug: string }[] }>(dataDir, [
-      "search", "vercel", "--json",
-    ]);
+    const result = cliJson<{ orgs: { slug: string }[] }>(dataDir, ["search", "vercel", "--json"]);
     expect(result.orgs.length).toBeGreaterThan(0);
     expect(result.orgs[0].slug).toBe("vercel");
   });
 
   it("returns products matching by name", () => {
-    const result = cliJson<{ products: { slug: string }[] }>(dataDir, [
-      "search", "next", "--json",
-    ]);
+    const result = cliJson<{ products: { slug: string }[] }>(dataDir, ["search", "next", "--json"]);
     expect(result.products.length).toBeGreaterThan(0);
     expect(result.products[0].slug).toBe("next-js");
   });
 
   it("returns sources matching by name", () => {
     const result = cliJson<{ sources: { slug: string }[] }>(dataDir, [
-      "search", "vercel blog", "--json",
+      "search",
+      "vercel blog",
+      "--json",
     ]);
     expect(result.sources.length).toBeGreaterThan(0);
     expect(result.sources[0].slug).toBe("vercel-blog");
@@ -860,7 +923,11 @@ describe("unified search", () => {
 
   it("filters to a single type with --type", () => {
     const result = cliJson<Record<string, unknown>>(dataDir, [
-      "search", "vercel", "--type", "orgs", "--json",
+      "search",
+      "vercel",
+      "--type",
+      "orgs",
+      "--json",
     ]);
     expect(result.orgs).toBeDefined();
     expect(result.products).toBeUndefined();
@@ -868,10 +935,12 @@ describe("unified search", () => {
   });
 
   it("returns empty gracefully", () => {
-    const result = cliJson<{ orgs: unknown[]; products: unknown[]; sources: unknown[]; releases: unknown[] }>(
-      dataDir,
-      ["search", "zzzznonexistent", "--json"],
-    );
+    const result = cliJson<{
+      orgs: unknown[];
+      products: unknown[];
+      sources: unknown[];
+      releases: unknown[];
+    }>(dataDir, ["search", "zzzznonexistent", "--json"]);
     expect(result.orgs).toEqual([]);
     expect(result.products).toEqual([]);
     expect(result.sources).toEqual([]);
@@ -910,6 +979,7 @@ git commit -m "test: add CLI roundtrip tests for unified search"
 ### Task 8: Clean up deprecated code paths
 
 **Files:**
+
 - Modify: `src/db/fts.ts` (remove old `SearchApiResult` interface if no longer imported)
 - Modify: `src/db/queries.ts` (remove `searchReleasesRemote` if no longer called)
 
@@ -934,13 +1004,15 @@ Expected: All tests pass, including the existing `search-edge-cases.test.ts` (th
 In `tests/cli/search-edge-cases.test.ts`, update the first test (line 14-18):
 
 ```typescript
-  it("search returns empty results gracefully (JSON)", () => {
-    const results = cliJson<{ orgs: unknown[]; releases: unknown[] }>(dataDir, [
-      "search", "anything", "--json",
-    ]);
-    expect(results.orgs).toEqual([]);
-    expect(results.releases).toEqual([]);
-  });
+it("search returns empty results gracefully (JSON)", () => {
+  const results = cliJson<{ orgs: unknown[]; releases: unknown[] }>(dataDir, [
+    "search",
+    "anything",
+    "--json",
+  ]);
+  expect(results.orgs).toEqual([]);
+  expect(results.releases).toEqual([]);
+});
 ```
 
 - [ ] **Step 5: Run full test suite again**

@@ -66,9 +66,27 @@ function seedData() {
 
   db.insert(sources)
     .values([
-      { name: "Acme CLI", slug: "acme-cli", type: "github", url: "https://github.com/acme/cli", orgId: acme.id },
-      { name: "Acme Web", slug: "acme-web", type: "feed", url: "https://acme.com/changelog.xml", orgId: acme.id },
-      { name: "Beta API", slug: "beta-api", type: "github", url: "https://github.com/beta/api", orgId: beta.id },
+      {
+        name: "Acme CLI",
+        slug: "acme-cli",
+        type: "github",
+        url: "https://github.com/acme/cli",
+        orgId: acme.id,
+      },
+      {
+        name: "Acme Web",
+        slug: "acme-web",
+        type: "feed",
+        url: "https://acme.com/changelog.xml",
+        orgId: acme.id,
+      },
+      {
+        name: "Beta API",
+        slug: "beta-api",
+        type: "github",
+        url: "https://github.com/beta/api",
+        orgId: beta.id,
+      },
     ])
     .run();
 
@@ -99,16 +117,11 @@ function seedData() {
   const allProducts = db.select().from(products).all();
   const acmeCliPro = allProducts.find((p) => p.slug === "acme-cli-pro")!;
 
-  db.update(sources)
-    .set({ productId: acmeCliPro.id })
-    .where(eq(sources.id, acmeCli.id))
-    .run();
+  db.update(sources).set({ productId: acmeCliPro.id }).where(eq(sources.id, acmeCli.id)).run();
 
   db.insert(tags).values({ name: "cli", slug: "cli" }).run();
   const cliTag = db.select().from(tags).where(eq(tags.slug, "cli")).all()[0]!;
-  db.insert(productTags)
-    .values({ productId: acmeCliPro.id, tagId: cliTag.id })
-    .run();
+  db.insert(productTags).values({ productId: acmeCliPro.id, tagId: cliTag.id }).run();
 
   db.insert(sourceChangelogFiles)
     .values({
@@ -426,7 +439,11 @@ describe("getOrganization", () => {
   it("includes tags when present", async () => {
     const { acme } = seedData();
     const db = getDb();
-    const [tag] = db.insert(tags).values({ name: "typescript", slug: "typescript" }).returning().all();
+    const [tag] = db
+      .insert(tags)
+      .values({ name: "typescript", slug: "typescript" })
+      .returning()
+      .all();
     db.insert(orgTags).values({ orgId: acme.id, tagId: tag.id }).run();
 
     const result = await getOrganization(db as any, { identifier: "acme" });

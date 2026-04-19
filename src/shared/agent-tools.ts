@@ -132,8 +132,7 @@ export const AGENT_TOOLS = [
   {
     type: "custom",
     name: "list_categories",
-    description:
-      "List valid category values for organizations and products.",
+    description: "List valid category values for organizations and products.",
     input_schema: {
       type: "object" as const,
       properties: {},
@@ -162,7 +161,11 @@ export const AGENT_TOOLS = [
       type: "object" as const,
       properties: {
         organization: { type: "string", description: "Organization ID (org_...) or slug" },
-        notes: { type: "string", description: "Complete markdown content for the agent notes section. Replaces existing notes entirely." },
+        notes: {
+          type: "string",
+          description:
+            "Complete markdown content for the agent notes section. Replaces existing notes entirely.",
+        },
       },
       required: ["organization", "notes"],
     },
@@ -180,7 +183,11 @@ export const AGENT_TOOLS = [
       properties: {
         name: { type: "string", description: "Display name for the source" },
         url: { type: "string", description: "URL of the changelog source" },
-        type: { type: "string", enum: ["github", "scrape", "feed", "agent"], description: "Source type (auto-detected if omitted)" },
+        type: {
+          type: "string",
+          enum: ["github", "scrape", "feed", "agent"],
+          description: "Source type (auto-detected if omitted)",
+        },
         organization: { type: "string", description: "Organization ID (org_...) or slug" },
         feed_url: { type: "string", description: "Direct feed URL if known" },
       },
@@ -190,17 +197,24 @@ export const AGENT_TOOLS = [
   {
     type: "custom",
     name: "edit_source",
-    description:
-      "Edit an existing changelog source's configuration.",
+    description: "Edit an existing changelog source's configuration.",
     input_schema: {
       type: "object" as const,
       properties: {
         identifier: { type: "string", description: "Source ID (src_...) or slug" },
         is_primary: { type: "boolean", description: "Mark as primary source for its org" },
-        fetch_priority: { type: "string", enum: ["normal", "low", "paused"], description: "Fetch priority tier" },
+        fetch_priority: {
+          type: "string",
+          enum: ["normal", "low", "paused"],
+          description: "Fetch priority tier",
+        },
         name: { type: "string", description: "New display name" },
         url: { type: "string", description: "New URL" },
-        type: { type: "string", enum: ["github", "scrape", "feed", "agent"], description: "New source type" },
+        type: {
+          type: "string",
+          enum: ["github", "scrape", "feed", "agent"],
+          description: "New source type",
+        },
       },
       required: ["identifier"],
     },
@@ -208,8 +222,7 @@ export const AGENT_TOOLS = [
   {
     type: "custom",
     name: "remove_source",
-    description:
-      "Remove a changelog source and all its releases.",
+    description: "Remove a changelog source and all its releases.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -239,14 +252,24 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        action: { type: "string", enum: ["add", "edit", "tag_add", "link_account"], description: "Operation to perform" },
+        action: {
+          type: "string",
+          enum: ["add", "edit", "tag_add", "link_account"],
+          description: "Operation to perform",
+        },
         name: { type: "string", description: "Org name (required for add)" },
-        identifier: { type: "string", description: "Organization ID (org_...), slug, domain, or name" },
+        identifier: {
+          type: "string",
+          description: "Organization ID (org_...), slug, domain, or name",
+        },
         domain: { type: "string", description: "Primary domain (e.g. vercel.com)" },
         description: { type: "string", description: "Brief one-sentence product description" },
         category: { type: "string", description: "Category slug" },
         tags: { type: "array", items: { type: "string" }, description: "Tags to add" },
-        platform: { type: "string", description: "Platform name for link_account (github, x, linkedin, etc.)" },
+        platform: {
+          type: "string",
+          description: "Platform name for link_account (github, x, linkedin, etc.)",
+        },
         handle: { type: "string", description: "Account handle for link_account" },
       },
       required: ["action"],
@@ -260,10 +283,20 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        action: { type: "string", enum: ["add", "edit", "tag_add"], description: "Operation to perform" },
+        action: {
+          type: "string",
+          enum: ["add", "edit", "tag_add"],
+          description: "Operation to perform",
+        },
         name: { type: "string", description: "Product name (required for add)" },
-        organization: { type: "string", description: "Organization ID (org_...) or slug (required for add)" },
-        identifier: { type: "string", description: "Product ID (prod_...) or slug (required for edit, tag_add)" },
+        organization: {
+          type: "string",
+          description: "Organization ID (org_...) or slug (required for add)",
+        },
+        identifier: {
+          type: "string",
+          description: "Product ID (prod_...) or slug (required for edit, tag_add)",
+        },
         url: { type: "string", description: "Canonical product URL" },
         description: { type: "string", description: "Brief product description" },
         category: { type: "string", description: "Category slug" },
@@ -296,11 +329,19 @@ export const AGENT_TOOLS = [
     input_schema: {
       type: "object" as const,
       properties: {
-        action: { type: "string", enum: ["ignore", "block"], description: "ignore = org-scoped, block = global" },
+        action: {
+          type: "string",
+          enum: ["ignore", "block"],
+          description: "ignore = org-scoped, block = global",
+        },
         url: { type: "string", description: "URL or domain to exclude" },
         organization: { type: "string", description: "Org slug (required for ignore)" },
         reason: { type: "string", description: "Why this URL is being excluded" },
-        block_type: { type: "string", enum: ["exact", "domain"], description: "For block: exact URL or entire domain (default: exact)" },
+        block_type: {
+          type: "string",
+          enum: ["exact", "domain"],
+          description: "For block: exact URL or entire domain (default: exact)",
+        },
       },
       required: ["action", "url"],
     },
@@ -318,7 +359,8 @@ export const AGENT_TOOLS = [
       properties: {
         state: {
           type: "object",
-          description: "The complete discovery state JSON object with product, domain, sources, etc.",
+          description:
+            "The complete discovery state JSON object with product, domain, sources, etc.",
         },
       },
       required: ["state"],
@@ -327,8 +369,9 @@ export const AGENT_TOOLS = [
 ] as const;
 
 /** Names of tools that are dispatched via the API (everything except report_state). */
-export const API_TOOL_NAMES: string[] = AGENT_TOOLS
-  .filter((t): t is Extract<typeof t, { type: "custom" }> => t.type === "custom")
+export const API_TOOL_NAMES: string[] = AGENT_TOOLS.filter(
+  (t): t is Extract<typeof t, { type: "custom" }> => t.type === "custom",
+)
   .map((t) => t.name)
   .filter((n) => n !== "releases_report_state");
 
@@ -410,7 +453,9 @@ export function createTypedExecutor(opts: APIClientOptions) {
         const org = String(input.organization ?? "");
         if (!org) return "Error: organization is required";
         if (input.notes === undefined) return "Error: notes is required";
-        return api("PATCH", `/playbook/notes?slug=${encodeURIComponent(org)}`, { notes: String(input.notes) });
+        return api("PATCH", `/playbook/notes?slug=${encodeURIComponent(org)}`, {
+          notes: String(input.notes),
+        });
       }
 
       // ── Write tools ──
@@ -428,7 +473,10 @@ export function createTypedExecutor(opts: APIClientOptions) {
         }
         const result = await api("POST", "/sources", body);
         if (input.organization && !result.startsWith("Error")) {
-          return result + `\n\n[Playbook for "${input.organization}" has been auto-regenerated. Use get_playbook to review.]`;
+          return (
+            result +
+            `\n\n[Playbook for "${input.organization}" has been auto-regenerated. Use get_playbook to review.]`
+          );
         }
         return result;
       }
@@ -515,7 +563,8 @@ export function createTypedExecutor(opts: APIClientOptions) {
         const action = String(input.action ?? "");
 
         if (action === "add") {
-          if (!input.name || !input.organization) return "Error: name and organization are required for add";
+          if (!input.name || !input.organization)
+            return "Error: name and organization are required for add";
           const body: Record<string, unknown> = { orgSlug: input.organization, name: input.name };
           if (input.identifier) body.slug = input.identifier;
           if (input.url) body.url = input.url;
@@ -540,7 +589,9 @@ export function createTypedExecutor(opts: APIClientOptions) {
           const identifier = String(input.identifier ?? "");
           if (!identifier) return "Error: identifier is required for tag_add";
           if (!input.tags || !Array.isArray(input.tags)) return "Error: tags array is required";
-          return api("PUT", `/products/${encodeURIComponent(identifier)}/tags`, { tags: input.tags });
+          return api("PUT", `/products/${encodeURIComponent(identifier)}/tags`, {
+            tags: input.tags,
+          });
         }
 
         return `Error: unknown action "${action}"`;
@@ -640,7 +691,13 @@ export async function handleCustomToolUse(
     // When fetch_source returns "flagged" and a scrape handler is available,
     // run the actual scrape pipeline instead of just reporting the flag.
     if (toolName === "fetch_source" && ctx.onScrapeFetch) {
-      const isFlagged = (() => { try { return JSON.parse(result ?? "{}").type === "flagged"; } catch { return false; } })();
+      const isFlagged = (() => {
+        try {
+          return JSON.parse(result ?? "{}").type === "flagged";
+        } catch {
+          return false;
+        }
+      })();
       if (isFlagged) {
         const identifier = String(toolInput.identifier ?? "");
         try {
@@ -653,9 +710,10 @@ export async function handleCustomToolUse(
     }
 
     const output = result ?? "(no output)";
-    const truncated = output.length > MAX_TOOL_OUTPUT
-      ? output.slice(0, MAX_TOOL_OUTPUT) + `\n\n[output truncated — ${output.length} total chars]`
-      : output;
+    const truncated =
+      output.length > MAX_TOOL_OUTPUT
+        ? output.slice(0, MAX_TOOL_OUTPUT) + `\n\n[output truncated — ${output.length} total chars]`
+        : output;
     await ctx.sendResult(toolUseId, truncated);
     return false;
   }

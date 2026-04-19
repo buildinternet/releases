@@ -6,7 +6,13 @@ import { DAY_MS, WEEK_MS, parseBuckets, fmtVersion } from "@/lib/cadence";
 import { RangeNavigator } from "@/components/range-navigator";
 import { ReleaseHeatmap, type HeatmapData } from "@/components/release-heatmap";
 import { ViewModeToggle, type ViewMode } from "@/components/view-mode-toggle";
-import { RangePills, Stat, fmtCadence, highlightDaysForPreset, type RangePreset } from "@/components/timeline-chrome";
+import {
+  RangePills,
+  Stat,
+  fmtCadence,
+  highlightDaysForPreset,
+  type RangePreset,
+} from "@/components/timeline-chrome";
 
 interface SourceTimelineProps {
   activity: SourceActivity;
@@ -28,9 +34,11 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
     for (const b of rawBuckets) {
       bucketMap.set(b.weekStart.getTime(), b);
     }
-    const firstWeek = rawBuckets.length > 0 ? rawBuckets[0].weekStart.getTime() : rangeStart.getTime();
+    const firstWeek =
+      rawBuckets.length > 0 ? rawBuckets[0].weekStart.getTime() : rangeStart.getTime();
     const overshoot = firstWeek - rangeStart.getTime();
-    const gridStart = overshoot <= 0 ? firstWeek : firstWeek - Math.ceil(overshoot / WEEK_MS) * WEEK_MS;
+    const gridStart =
+      overshoot <= 0 ? firstWeek : firstWeek - Math.ceil(overshoot / WEEK_MS) * WEEK_MS;
     const result: typeof rawBuckets = [];
     for (let ts = gridStart; ts < rangeEnd.getTime(); ts += WEEK_MS) {
       const existing = bucketMap.get(ts);
@@ -82,14 +90,36 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
       if (b.latestVersion) windowLatestVersion = b.latestVersion;
     }
 
-    let versionRange: { from: string; to: string; rawFrom: string; rawTo: string; collapsed: boolean } | null = null;
-    if (windowEarliestVersion && windowLatestVersion && windowEarliestVersion !== windowLatestVersion) {
+    let versionRange: {
+      from: string;
+      to: string;
+      rawFrom: string;
+      rawTo: string;
+      collapsed: boolean;
+    } | null = null;
+    if (
+      windowEarliestVersion &&
+      windowLatestVersion &&
+      windowEarliestVersion !== windowLatestVersion
+    ) {
       const from = fmtVersion(windowEarliestVersion);
       const to = fmtVersion(windowLatestVersion);
-      versionRange = { from, to, rawFrom: windowEarliestVersion, rawTo: windowLatestVersion, collapsed: from === to };
+      versionRange = {
+        from,
+        to,
+        rawFrom: windowEarliestVersion,
+        rawTo: windowLatestVersion,
+        collapsed: from === to,
+      };
     } else if (windowLatestVersion) {
       const v = fmtVersion(windowLatestVersion);
-      versionRange = { from: v, to: v, rawFrom: windowLatestVersion, rawTo: windowLatestVersion, collapsed: true };
+      versionRange = {
+        from: v,
+        to: v,
+        rawFrom: windowLatestVersion,
+        rawTo: windowLatestVersion,
+        collapsed: true,
+      };
     }
 
     return { totalReleases, avgPerWeek, avgPerMonth, versionRange };
@@ -102,7 +132,9 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
   const inHeatmapView = viewMode === "heatmap" && !!heatmap;
 
   const toolbar = (
-    <div className={`flex items-center flex-wrap gap-2 ${heatmap ? "justify-between" : "justify-end"}`}>
+    <div
+      className={`flex items-center flex-wrap gap-2 ${heatmap ? "justify-between" : "justify-end"}`}
+    >
       {heatmap && <ViewModeToggle viewMode={viewMode} onViewModeChange={setViewMode} />}
       <RangePills value={rangePreset} onChange={setPreset} />
     </div>
@@ -135,11 +167,14 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
       <div className="bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-lg px-5 py-4 mb-5">
         {toolbar}
         <div className="mt-4">
-          <ReleaseHeatmap heatmap={heatmap!} trackingSince={trackingSince} highlightDays={heatmapHighlightDays} bare />
+          <ReleaseHeatmap
+            heatmap={heatmap!}
+            trackingSince={trackingSince}
+            highlightDays={heatmapHighlightDays}
+            bare
+          />
         </div>
-        <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">
-          {statsRow}
-        </div>
+        <div className="mt-3 pt-3 border-t border-stone-200 dark:border-stone-800">{statsRow}</div>
       </div>
     );
   }
@@ -165,4 +200,3 @@ export function SourceTimeline({ activity, heatmap, trackingSince }: SourceTimel
     </div>
   );
 }
-

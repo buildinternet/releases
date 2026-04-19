@@ -82,9 +82,9 @@ describe("fetchAndParseFeed (HTTP integration)", () => {
   });
 
   it("throws on server error", async () => {
-    await expect(
-      fetchAndParseFeed(`${server.url}/error`, "rss"),
-    ).rejects.toThrow("Feed fetch failed: 500");
+    await expect(fetchAndParseFeed(`${server.url}/error`, "rss")).rejects.toThrow(
+      "Feed fetch failed: 500",
+    );
   });
 
   it("respects since filter", async () => {

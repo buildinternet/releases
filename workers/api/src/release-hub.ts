@@ -6,11 +6,7 @@ import {
   oldestSeq,
   type EventStore,
 } from "./events/buffer.js";
-import {
-  EVENT_BUFFER_SIZE,
-  type ReleaseEvent,
-  type ReleaseEventPayload,
-} from "./events/types.js";
+import { EVENT_BUFFER_SIZE, type ReleaseEvent, type ReleaseEventPayload } from "./events/types.js";
 
 /** Adapt DurableObjectStorage to our EventStore interface. */
 function storageAsEventStore(storage: DurableObjectStorage): EventStore {
@@ -68,7 +64,13 @@ export class ReleaseHub extends DurableObject {
         const oldest = await oldestSeq(store);
         if (oldest > 0 && since < oldest - 1) {
           // Caller's cursor is beyond our buffer — they must REST backfill.
-          pair[1].send(JSON.stringify({ type: "snapshot_gap", since, oldestSeq: oldest } satisfies ServerMessage));
+          pair[1].send(
+            JSON.stringify({
+              type: "snapshot_gap",
+              since,
+              oldestSeq: oldest,
+            } satisfies ServerMessage),
+          );
         } else if (since < head) {
           // Replay buffered events they missed.
           const replay = await replayEvents(store, since);
@@ -120,13 +122,22 @@ export class ReleaseHub extends DurableObject {
   }
 
   async webSocketMessage(_ws: WebSocket, _message: string | ArrayBuffer): Promise<void> {}
-  async webSocketClose(_ws: WebSocket, _code: number, _reason: string, _wasClean: boolean): Promise<void> {}
+  async webSocketClose(
+    _ws: WebSocket,
+    _code: number,
+    _reason: string,
+    _wasClean: boolean,
+  ): Promise<void> {}
   async webSocketError(_ws: WebSocket, _error: unknown): Promise<void> {}
 
   private broadcast(event: ReleaseEvent): void {
     const payload = JSON.stringify(event);
     for (const ws of this.ctx.getWebSockets()) {
-      try { ws.send(payload); } catch { /* disconnected */ }
+      try {
+        ws.send(payload);
+      } catch {
+        /* disconnected */
+      }
     }
   }
 }

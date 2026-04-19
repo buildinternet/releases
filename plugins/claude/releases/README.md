@@ -28,42 +28,55 @@ This skips the MCP connection, agents, and `/releases` command that the full plu
 ## Available MCP Tools
 
 ### search_releases
+
 Full-text search across all indexed release notes. Filter by product, organization, or release `type`.
 
 ### get_latest_releases
+
 Get the most recent releases, optionally filtered by product, organization, or release `type`.
 
 ### get_release
+
 Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid.
 
 ### list_sources
+
 List all indexed changelog sources, optionally scoped to one organization.
 
 ### get_source
+
 Detail for a single source including org/product linkage, release count, last-fetched timestamp, and whether a CHANGELOG file is stored.
 
 ### get_source_changelog
+
 Return the canonical `CHANGELOG.md` (or `CHANGES`/`HISTORY`/`RELEASES`/`NEWS`) stored for a GitHub source. The file is refreshed on every fetch. Supports heading-aligned slicing by chars (`offset` + `limit`) or tokens (`tokens`, cl100k_base). Every response includes `totalTokens` for budget planning; token-mode calls also return `sliceTokens`. Chain successive calls via the returned `nextOffset` to page through large files without blowing out the context window. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
 
 ### list_organizations
+
 List all indexed organizations, with optional search.
 
 ### get_organization
+
 Get detailed information about a single organization. Includes a short preview of the AI-generated overview when one exists, with a stale warning if it's older than 30 days.
 
 ### get_organization_overview
+
 Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections.
 
 ### list_products
+
 List products, optionally scoped to one organization.
 
 ### get_product
+
 Detail for a single product with its organization, category, tags, and the sources grouped under it.
 
 ### summarize_changes
+
 AI-generated summary of recent changes for a product.
 
 ### compare_products
+
 Compare recent release activity between two products.
 
 ## Usage Examples

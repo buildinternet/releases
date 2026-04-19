@@ -34,7 +34,10 @@ export class CrawlTimeoutError extends Error {
 }
 
 export class CrawlJobError extends Error {
-  constructor(jobId: string, public jobStatus: string) {
+  constructor(
+    jobId: string,
+    public jobStatus: string,
+  ) {
     super(`Crawl job ${jobId} ended with status: ${jobStatus}`);
     this.name = "CrawlJobError";
   }

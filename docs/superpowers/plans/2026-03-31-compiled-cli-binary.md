@@ -15,6 +15,7 @@
 ### Task 1: Update build scripts in package.json
 
 **Files:**
+
 - Modify: `package.json`
 
 - [ ] **Step 1: Replace the build script and add build:linux**
@@ -63,6 +64,7 @@ git commit -m "feat: add compiled binary build scripts"
 ### Task 2: Replace agent CLI path with binary name
 
 **Files:**
+
 - Modify: `src/agent/released.ts`
 
 - [ ] **Step 1: Replace the CLI command construction**
@@ -114,6 +116,7 @@ git commit -m "feat: agent references compiled binary instead of source paths"
 ### Task 3: Replace skills path resolution with conventional paths
 
 **Files:**
+
 - Modify: `src/agent/released.ts`
 
 - [ ] **Step 1: Add a skills directory resolver function**
@@ -201,6 +204,7 @@ git commit -m "feat: resolve agent skills from conventional paths"
 ### Task 4: Simplify the Dockerfile
 
 **Files:**
+
 - Modify: `workers/discovery/Dockerfile`
 
 - [ ] **Step 1: Replace the Dockerfile**

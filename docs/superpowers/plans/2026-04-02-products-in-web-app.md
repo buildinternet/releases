@@ -12,14 +12,14 @@
 
 ## File Map
 
-| File | Action | Responsibility |
-|------|--------|---------------|
-| `src/api/types.ts` | Modify | Add `products` to `OrgDetail`, add `productSlug`/`productName` to `OrgActivitySource` |
-| `web/src/lib/api.ts` | Modify | Import `ProductListItem`, add `productDetail()` method |
-| `web/src/app/[orgSlug]/page.tsx` | Modify | Group sources by product when products exist |
-| `web/src/components/source-card.tsx` | Modify | Show product badge when `productName` is present |
-| `web/src/components/release-timeline.tsx` | Modify | Group source cards by product in the activity view |
-| `web/src/app/[orgSlug]/product/[productSlug]/page.tsx` | Create | Product detail page showing product info + its sources |
+| File                                                   | Action | Responsibility                                                                        |
+| ------------------------------------------------------ | ------ | ------------------------------------------------------------------------------------- |
+| `src/api/types.ts`                                     | Modify | Add `products` to `OrgDetail`, add `productSlug`/`productName` to `OrgActivitySource` |
+| `web/src/lib/api.ts`                                   | Modify | Import `ProductListItem`, add `productDetail()` method                                |
+| `web/src/app/[orgSlug]/page.tsx`                       | Modify | Group sources by product when products exist                                          |
+| `web/src/components/source-card.tsx`                   | Modify | Show product badge when `productName` is present                                      |
+| `web/src/components/release-timeline.tsx`              | Modify | Group source cards by product in the activity view                                    |
+| `web/src/app/[orgSlug]/product/[productSlug]/page.tsx` | Create | Product detail page showing product info + its sources                                |
 
 ---
 
@@ -28,6 +28,7 @@
 The API already returns a `products` array on `GET /api/orgs/:slug` (see `workers/api/src/routes/orgs.ts:161-178`), but the shared type doesn't declare it. The `OrgActivitySource` type also lacks product affiliation.
 
 **Files:**
+
 - Modify: `src/api/types.ts:40-53` (OrgDetail interface)
 - Modify: `src/api/types.ts:165-174` (OrgActivitySource interface)
 
@@ -79,6 +80,7 @@ git commit -m "feat(types): add products array to OrgDetail interface"
 The web needs to fetch product details for the product detail page. The endpoint `GET /api/products/:identifier` already exists.
 
 **Files:**
+
 - Modify: `web/src/lib/api.ts`
 
 - [ ] **Step 1: Import ProductDetail and add productDetail method**
@@ -139,6 +141,7 @@ git commit -m "feat(web): add productDetail to API client"
 When an org has products, sources should be grouped under product headings. Orgs without products continue to show a flat source list.
 
 **Files:**
+
 - Modify: `web/src/app/[orgSlug]/page.tsx`
 
 - [ ] **Step 1: Update the SourceList component to group by product**
@@ -172,6 +175,7 @@ ORDER BY s.name
 Update the row type to include `product_slug: string | null` and `product_name: string | null`.
 
 Update `sourcesWithStats` mapping (line 114-124) to include:
+
 ```typescript
 productSlug: row.product_slug ?? null,
 productName: row.product_name ?? null,
@@ -222,9 +226,7 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
   }
 
   // Order: products first (alphabetical by name), then ungrouped sources
-  const productOrder = org.products
-    .map((p) => p.slug)
-    .filter((slug) => productSources.has(slug));
+  const productOrder = org.products.map((p) => p.slug).filter((slug) => productSources.has(slug));
   const ungrouped = productSources.get(null) ?? [];
 
   return (
@@ -257,7 +259,9 @@ function SourceList({ org, orgSlug }: { org: OrgDetail; orgSlug: string }) {
       })}
       {ungrouped.length > 0 && productOrder.length > 0 && (
         <div>
-          <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">Other Sources</h3>
+          <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">
+            Other Sources
+          </h3>
           <div className="space-y-2">
             {ungrouped.map((source) => (
               <SourceCard key={source.slug} source={source} orgSlug={orgSlug} />
@@ -288,7 +292,9 @@ const sidebarSections = [
   {
     items: [
       ...(org.domain ? [{ label: "Domain", value: org.domain }] : []),
-      ...(org.products.length > 0 ? [{ label: "Products", value: org.products.length, large: true }] : []),
+      ...(org.products.length > 0
+        ? [{ label: "Products", value: org.products.length, large: true }]
+        : []),
       { label: "Sources", value: org.sourceCount, large: true },
       { label: "Total Releases", value: org.releaseCount, large: true },
     ],
@@ -316,6 +322,7 @@ git commit -m "feat(web): group sources by product on org detail page"
 The `ReleaseTimeline` component renders source cards in the activity view. When products exist, it should group them the same way.
 
 **Files:**
+
 - Modify: `web/src/components/release-timeline.tsx`
 
 - [ ] **Step 1: Accept products prop and group cards**
@@ -334,20 +341,27 @@ interface ReleaseTimelineProps {
 Then update the render section (line 179-183) to group by product when products exist. The grouping logic is the same as Task 3 — build a map of `productSlug -> sources`, render product headings:
 
 ```tsx
-{products.length > 0 ? (
-  <ProductGroupedSources
-    sources={sortedSources}
-    products={products}
-    orgSlug={orgSlug}
-    cadenceMap={cadenceMap}
-  />
-) : (
-  <div className="space-y-2">
-    {sortedSources.map((source) => (
-      <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
-    ))}
-  </div>
-)}
+{
+  products.length > 0 ? (
+    <ProductGroupedSources
+      sources={sortedSources}
+      products={products}
+      orgSlug={orgSlug}
+      cadenceMap={cadenceMap}
+    />
+  ) : (
+    <div className="space-y-2">
+      {sortedSources.map((source) => (
+        <SourceCard
+          key={source.slug}
+          source={source}
+          orgSlug={orgSlug}
+          cadence={cadenceMap.get(source.slug)}
+        />
+      ))}
+    </div>
+  );
+}
 ```
 
 Add a `ProductGroupedSources` helper component within the same file:
@@ -371,9 +385,7 @@ function ProductGroupedSources({
     productSources.get(key)!.push(source);
   }
 
-  const productOrder = products
-    .map((p) => p.slug)
-    .filter((slug) => productSources.has(slug));
+  const productOrder = products.map((p) => p.slug).filter((slug) => productSources.has(slug));
   const ungrouped = productSources.get(null) ?? [];
 
   return (
@@ -383,10 +395,17 @@ function ProductGroupedSources({
         const srcs = productSources.get(productSlug) ?? [];
         return (
           <div key={productSlug}>
-            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">{product.name}</h3>
+            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">
+              {product.name}
+            </h3>
             <div className="space-y-2">
               {srcs.map((source) => (
-                <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
+                <SourceCard
+                  key={source.slug}
+                  source={source}
+                  orgSlug={orgSlug}
+                  cadence={cadenceMap.get(source.slug)}
+                />
               ))}
             </div>
           </div>
@@ -395,11 +414,18 @@ function ProductGroupedSources({
       {ungrouped.length > 0 && (
         <div>
           {productOrder.length > 0 && (
-            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">Other Sources</h3>
+            <h3 className="text-sm font-semibold text-stone-700 dark:text-stone-300 mb-2">
+              Other Sources
+            </h3>
           )}
           <div className="space-y-2">
             {ungrouped.map((source) => (
-              <SourceCard key={source.slug} source={source} orgSlug={orgSlug} cadence={cadenceMap.get(source.slug)} />
+              <SourceCard
+                key={source.slug}
+                source={source}
+                orgSlug={orgSlug}
+                cadence={cadenceMap.get(source.slug)}
+              />
             ))}
           </div>
         </div>
@@ -414,7 +440,12 @@ function ProductGroupedSources({
 In `web/src/app/[orgSlug]/page.tsx`, update the `ReleaseTimeline` usage to pass `products`:
 
 ```tsx
-<ReleaseTimeline activity={activity} orgSlug={org.slug} sources={org.sources} products={org.products} />
+<ReleaseTimeline
+  activity={activity}
+  orgSlug={org.slug}
+  sources={org.sources}
+  products={org.products}
+/>
 ```
 
 - [ ] **Step 3: Verify type-check passes**
@@ -436,6 +467,7 @@ git commit -m "feat(web): group timeline sources by product"
 Create a page at `/:orgSlug/product/:productSlug` that shows the product's sources and basic info. This follows the same pattern as the existing source detail page at `/:orgSlug/:sourceSlug`.
 
 **Files:**
+
 - Create: `web/src/app/[orgSlug]/product/[productSlug]/page.tsx`
 
 - [ ] **Step 1: Create the product detail page**
@@ -495,9 +527,7 @@ export default async function ProductPage({
     {
       items: [
         { label: "Sources", value: product.sources.length, large: true },
-        ...(product.category
-          ? [{ label: "Category", value: product.category }]
-          : []),
+        ...(product.category ? [{ label: "Category", value: product.category }] : []),
       ],
     },
     ...(product.tags.length > 0
@@ -510,32 +540,22 @@ export default async function ProductPage({
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link
-            href="/"
-            className="hover:text-stone-600 dark:hover:text-stone-300"
-          >
+          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
             Home
           </Link>
           <span className="mx-1.5">/</span>
-          <Link
-            href={`/${orgSlug}`}
-            className="hover:text-stone-600 dark:hover:text-stone-300"
-          >
+          <Link href={`/${orgSlug}`} className="hover:text-stone-600 dark:hover:text-stone-300">
             {orgSlug}
           </Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-600 dark:text-stone-300 font-medium">
-            {product.name}
-          </span>
+          <span className="text-stone-600 dark:text-stone-300 font-medium">{product.name}</span>
         </div>
 
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
           {product.name}
         </h1>
         {product.description && (
-          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-            {product.description}
-          </p>
+          <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">{product.description}</p>
         )}
 
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
@@ -565,10 +585,7 @@ export default async function ProductPage({
               ))}
             </div>
           </div>
-          <Sidebar
-            sections={sidebarSections}
-            formatPath={`/${orgSlug}/product/${productSlug}`}
-          />
+          <Sidebar sections={sidebarSections} formatPath={`/${orgSlug}/product/${productSlug}`} />
         </div>
       </div>
     </div>
@@ -599,6 +616,7 @@ git commit -m "feat(web): add product detail page"
 When a source belongs to a product and is displayed outside the product context (e.g., in search results or the independent sources list), show the product name as a subtle badge.
 
 **Files:**
+
 - Modify: `web/src/components/source-card.tsx`
 
 - [ ] **Step 1: Add product badge to SourceCard**
@@ -606,11 +624,13 @@ When a source belongs to a product and is displayed outside the product context 
 In `web/src/components/source-card.tsx`, add a product name badge next to the source name, after the "Primary" badge (line 90-92):
 
 ```tsx
-{source.productName && (
-  <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded">
-    {source.productName}
-  </span>
-)}
+{
+  source.productName && (
+    <span className="text-[10px] font-medium text-stone-400 dark:text-stone-500 bg-stone-50 dark:bg-stone-800 px-1.5 py-0.5 rounded">
+      {source.productName}
+    </span>
+  );
+}
 ```
 
 This badge only renders when `productName` is present on the source — which happens when the API populates it (after Task 3, step 1a).

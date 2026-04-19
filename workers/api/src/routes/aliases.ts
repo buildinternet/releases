@@ -18,7 +18,10 @@ aliasRoutes.get("/aliases", async (c) => {
     return c.json(rows);
   }
   if (productId) {
-    const rows = await db.select().from(domainAliases).where(eq(domainAliases.productId, productId));
+    const rows = await db
+      .select()
+      .from(domainAliases)
+      .where(eq(domainAliases.productId, productId));
     return c.json(rows);
   }
   return c.json({ error: "bad_request", message: "Provide orgId or productId query param" }, 400);
@@ -29,9 +32,12 @@ aliasRoutes.post("/aliases", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ domain: string; orgId?: string; productId?: string }>();
 
-  if (!body.domain) return c.json({ error: "bad_request", message: "Missing required field: domain" }, 400);
-  if (!body.orgId && !body.productId) return c.json({ error: "bad_request", message: "Provide orgId or productId" }, 400);
-  if (body.orgId && body.productId) return c.json({ error: "bad_request", message: "Provide orgId or productId, not both" }, 400);
+  if (!body.domain)
+    return c.json({ error: "bad_request", message: "Missing required field: domain" }, 400);
+  if (!body.orgId && !body.productId)
+    return c.json({ error: "bad_request", message: "Provide orgId or productId" }, 400);
+  if (body.orgId && body.productId)
+    return c.json({ error: "bad_request", message: "Provide orgId or productId, not both" }, 400);
 
   try {
     const [created] = await db
@@ -46,7 +52,10 @@ aliasRoutes.post("/aliases", async (c) => {
     return c.json(created, 201);
   } catch (err) {
     if (isConflictError(err)) {
-      return c.json({ error: "conflict", message: `Domain alias "${body.domain}" already exists` }, 409);
+      return c.json(
+        { error: "conflict", message: `Domain alias "${body.domain}" already exists` },
+        409,
+      );
     }
     throw err;
   }
@@ -56,7 +65,10 @@ aliasRoutes.post("/aliases", async (c) => {
 aliasRoutes.delete("/aliases/:domain", async (c) => {
   const db = createDb(c.env.DB);
   const domain = decodeURIComponent(c.req.param("domain"));
-  const deleted = await db.delete(domainAliases).where(eq(domainAliases.domain, domain)).returning();
+  const deleted = await db
+    .delete(domainAliases)
+    .where(eq(domainAliases.domain, domain))
+    .returning();
   if (deleted.length === 0) return c.json({ error: "not_found", message: "Alias not found" }, 404);
   return c.json({ deleted: true });
 });

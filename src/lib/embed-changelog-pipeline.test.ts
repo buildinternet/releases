@@ -1,10 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { embedAndUpsertChangelogFile } from "./embed-changelog-pipeline";
-import {
-  chunkChangelog,
-  buildVectorId,
-  type ExistingChunkRow,
-} from "./embed-changelogs";
+import { chunkChangelog, buildVectorId, type ExistingChunkRow } from "./embed-changelogs";
 import type { VectorizeIndex } from "./vector-search";
 
 /**
@@ -31,8 +27,7 @@ function fakeVoyageFetch() {
 
 /** Fail every fetch with a 400 so embed throws after retries. */
 function failingFetch(): typeof fetch {
-  return (async () =>
-    new Response("nope", { status: 400 })) as unknown as typeof fetch;
+  return (async () => new Response("nope", { status: 400 })) as unknown as typeof fetch;
 }
 
 function fakeVectorize(opts: { upsertThrows?: boolean } = {}) {
@@ -68,10 +63,7 @@ function captureLogger() {
  * Build ExistingChunkRow rows from current content as if it had been
  * previously embedded — every chunk gets a vectorId so deletes are realistic.
  */
-function existingFromContent(
-  fileId: string,
-  content: string,
-): ExistingChunkRow[] {
+function existingFromContent(fileId: string, content: string): ExistingChunkRow[] {
   return chunkChangelog(content).map((c, i) => ({
     id: `row_${i}`,
     offset: c.offset,
@@ -85,9 +77,7 @@ const SOURCE_ID = "src_1";
 
 // Long enough to chunk into multiple pieces (CHUNK_CHAR_BUDGET is 2000).
 function bigDoc(sections: string[]): string {
-  return sections
-    .map((title, i) => `## ${title}\n\n${"x".repeat(800)} entry ${i}\n`)
-    .join("\n");
+  return sections.map((title, i) => `## ${title}\n\n${"x".repeat(800)} entry ${i}\n`).join("\n");
 }
 
 describe("embedAndUpsertChangelogFile", () => {
@@ -254,9 +244,7 @@ describe("embedAndUpsertChangelogFile", () => {
     });
     expect(diffs[0].embedded).toEqual([]);
     expect(diffs[0].diff.toInsert.length).toBeGreaterThan(0);
-    expect(
-      logger.warns.some((w) => w.includes("Vectorize upsert failed")),
-    ).toBe(true);
+    expect(logger.warns.some((w) => w.includes("Vectorize upsert failed"))).toBe(true);
   });
 
   test("onDiff callback failure is caught and logged", async () => {
@@ -275,8 +263,6 @@ describe("embedAndUpsertChangelogFile", () => {
       },
       logger,
     });
-    expect(
-      logger.warns.some((w) => w.includes("onDiff callback failed")),
-    ).toBe(true);
+    expect(logger.warns.some((w) => w.includes("onDiff callback failed"))).toBe(true);
   });
 });

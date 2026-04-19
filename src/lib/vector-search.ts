@@ -33,7 +33,11 @@ export interface VectorizeIndex {
     matches: Array<{ id: string; score: number; metadata?: Record<string, VectorMetadataValue> }>;
   }>;
   upsert(
-    vectors: Array<{ id: string; values: number[]; metadata?: Record<string, VectorMetadataValue> }>,
+    vectors: Array<{
+      id: string;
+      values: number[];
+      metadata?: Record<string, VectorMetadataValue>;
+    }>,
   ): Promise<{ mutationId: string }>;
   deleteByIds(ids: string[]): Promise<{ mutationId: string }>;
 }
@@ -159,43 +163,35 @@ interface InternalHit {
  * an embedding API call for a query that can't produce a meaningful
  * vector anyway.
  */
-export async function hybridSearch(
-  params: HybridSearchParams,
-): Promise<HybridSearchResult[]> {
+export async function hybridSearch(params: HybridSearchParams): Promise<HybridSearchResult[]> {
   const topK = params.topK ?? 20;
   const trimmed = params.query.trim();
   const skipVector = trimmed.length === 0;
 
-  const ftsPromise: Promise<HybridFtsHit[]> = params
-    .ftsSearch(params.query, topK)
-    .catch(() => []);
+  const ftsPromise: Promise<HybridFtsHit[]> = params.ftsSearch(params.query, topK).catch(() => []);
 
-  const vectorPromises: Array<
-    Promise<{ name: string; kind: string; matches: HybridFtsHit[] }>
-  > = skipVector
-    ? []
-    : params.vectorIndexes.map(async (vi) => {
-        try {
-          const vector = await params.embed(params.query);
-          const result = await vi.index.query(vector, {
-            topK,
-            returnMetadata: "none",
-            filter: params.filter,
-          });
-          return {
-            name: vi.name,
-            kind: vi.kind,
-            matches: result.matches.map((m) => ({ id: m.id, score: m.score })),
-          };
-        } catch {
-          return { name: vi.name, kind: vi.kind, matches: [] };
-        }
-      });
+  const vectorPromises: Array<Promise<{ name: string; kind: string; matches: HybridFtsHit[] }>> =
+    skipVector
+      ? []
+      : params.vectorIndexes.map(async (vi) => {
+          try {
+            const vector = await params.embed(params.query);
+            const result = await vi.index.query(vector, {
+              topK,
+              returnMetadata: "none",
+              filter: params.filter,
+            });
+            return {
+              name: vi.name,
+              kind: vi.kind,
+              matches: result.matches.map((m) => ({ id: m.id, score: m.score })),
+            };
+          } catch {
+            return { name: vi.name, kind: vi.kind, matches: [] };
+          }
+        });
 
-  const [ftsHits, ...vectorResults] = await Promise.all([
-    ftsPromise,
-    ...vectorPromises,
-  ]);
+  const [ftsHits, ...vectorResults] = await Promise.all([ftsPromise, ...vectorPromises]);
 
   // Build ranked lists for RRF, each entry tagged with provenance.
   const lists: Array<Array<RankedEntry<InternalHit>>> = [];

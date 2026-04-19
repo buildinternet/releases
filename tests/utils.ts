@@ -12,7 +12,7 @@ export function runCli(
   // Set RELEASED_API_KEY to "test" so admin commands are available.
   // Callers can still override explicitly.
   const safeEnv: Record<string, string> = {
-    ...process.env as Record<string, string>,
+    ...(process.env as Record<string, string>),
     RELEASED_API_URL: "",
     RELEASED_API_KEY: "test",
     ...options?.env,

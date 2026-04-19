@@ -22,21 +22,22 @@ organizations
 
 ### New table: `products`
 
-| Column | Type | Constraints | Notes |
-|--------|------|-------------|-------|
-| id | text | PK | `newProductId()` prefixed ID |
-| name | text | NOT NULL | Display name ("Next.js") |
-| slug | text | NOT NULL, UNIQUE | URL-safe identifier ("nextjs") |
-| orgId | text | NOT NULL, FK → organizations (cascade) | Parent org |
-| url | text | nullable | Canonical product URL (e.g., `https://nextjs.org`) |
-| description | text | nullable | Brief description |
-| createdAt | text | NOT NULL | ISO timestamp |
+| Column      | Type | Constraints                            | Notes                                              |
+| ----------- | ---- | -------------------------------------- | -------------------------------------------------- |
+| id          | text | PK                                     | `newProductId()` prefixed ID                       |
+| name        | text | NOT NULL                               | Display name ("Next.js")                           |
+| slug        | text | NOT NULL, UNIQUE                       | URL-safe identifier ("nextjs")                     |
+| orgId       | text | NOT NULL, FK → organizations (cascade) | Parent org                                         |
+| url         | text | nullable                               | Canonical product URL (e.g., `https://nextjs.org`) |
+| description | text | nullable                               | Brief description                                  |
+| createdAt   | text | NOT NULL                               | ISO timestamp                                      |
 
 Indexes: `idx_products_org` on `(orgId)`.
 
 ### Modified table: `sources`
 
 Add column:
+
 - `productId text` — nullable FK → products (set null on delete)
 - Index: `idx_sources_product` on `(productId)`
 
@@ -90,14 +91,14 @@ CREATE INDEX idx_sources_product ON sources(product_id);
 
 ### New: `workers/api/src/routes/products.ts`
 
-| Method | Path | Description |
-|--------|------|-------------|
-| GET | `/orgs/:slug/products` | List products for org (with source counts) |
-| GET | `/products/:slug` | Get product by slug |
-| POST | `/orgs/:slug/products` | Create product under org |
-| PATCH | `/products/:slug` | Update product |
-| DELETE | `/products/:slug` | Delete product |
-| POST | `/products/:slug/adopt` | Adopt org-as-product migration |
+| Method | Path                    | Description                                |
+| ------ | ----------------------- | ------------------------------------------ |
+| GET    | `/orgs/:slug/products`  | List products for org (with source counts) |
+| GET    | `/products/:slug`       | Get product by slug                        |
+| POST   | `/orgs/:slug/products`  | Create product under org                   |
+| PATCH  | `/products/:slug`       | Update product                             |
+| DELETE | `/products/:slug`       | Delete product                             |
+| POST   | `/products/:slug/adopt` | Adopt org-as-product migration             |
 
 ### Modified routes
 
@@ -108,6 +109,7 @@ CREATE INDEX idx_sources_product ON sources(product_id);
 ## API Client (`src/api/client.ts`)
 
 Mirror new product endpoints for remote mode:
+
 - `createProduct(orgSlug, name, opts)`
 - `findProduct(slug)`
 - `getProductsByOrg(orgSlug)`
@@ -126,6 +128,7 @@ Mirror new product endpoints for remote mode:
 **`product remove <slug>`** — Delete product. Sources become unlinked (productId → null), not deleted.
 
 **`product adopt <source-org-slug> --into <target-org-slug>`** — Migrate an org that should be a product:
+
 1. Create a new product under the target org, using the source org's name/slug/description. If the source org has a `domain`, use it as the product's `url` (e.g., `nextjs.org` → `https://nextjs.org`). Override with `--url`.
 2. Move all sources from the source org to the target org, linking them to the new product.
 3. Move org accounts from the source org to the target org (skip duplicates).
@@ -160,6 +163,7 @@ interface ManifestOrg {
 ```
 
 Sources can appear at three levels:
+
 1. `org.sources[]` — org-level, no product
 2. `org.products[].sources[]` — product-level
 3. Top-level `manifest.sources[]` — independent, no org or product
@@ -179,8 +183,17 @@ The product entity maps into the registry schema discussed previously:
       "slug": "nextjs",
       "url": "https://nextjs.org",
       "sources": [
-        { "name": "Next.js GitHub Releases", "url": "https://github.com/vercel/next.js/releases", "type": "github" },
-        { "name": "Next.js Blog", "url": "https://nextjs.org/blog", "type": "scrape", "isPrimary": true }
+        {
+          "name": "Next.js GitHub Releases",
+          "url": "https://github.com/vercel/next.js/releases",
+          "type": "github"
+        },
+        {
+          "name": "Next.js Blog",
+          "url": "https://nextjs.org/blog",
+          "type": "scrape",
+          "isPrimary": true
+        }
       ]
     },
     {
@@ -188,12 +201,21 @@ The product entity maps into the registry schema discussed previously:
       "slug": "turborepo",
       "url": "https://turbo.build",
       "sources": [
-        { "name": "Turborepo Releases", "url": "https://github.com/vercel/turborepo/releases", "type": "github" }
+        {
+          "name": "Turborepo Releases",
+          "url": "https://github.com/vercel/turborepo/releases",
+          "type": "github"
+        }
       ]
     }
   ],
   "sources": [
-    { "name": "Vercel Changelog", "url": "https://vercel.com/changelog", "type": "feed", "isPrimary": true }
+    {
+      "name": "Vercel Changelog",
+      "url": "https://vercel.com/changelog",
+      "type": "feed",
+      "isPrimary": true
+    }
   ]
 }
 ```
@@ -212,6 +234,7 @@ Org-level `sources` (no product) and product-level `sources` coexist. The Vercel
 ## Migration Path
 
 Existing data requires no backfill. All sources start with `productId = NULL`. Products are added incrementally via:
+
 1. `product add` for new products
 2. `product adopt` to migrate orgs that should be products
 3. `import` with product-aware manifests

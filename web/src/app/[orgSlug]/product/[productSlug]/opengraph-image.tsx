@@ -33,9 +33,7 @@ export default async function Image({
       description: product.description ?? undefined,
       metrics: [
         { label: "Sources", value: formatCount(product.sources.length) },
-        ...(product.category
-          ? [{ label: "Category", value: product.category }]
-          : []),
+        ...(product.category ? [{ label: "Category", value: product.category }] : []),
       ],
       avatarUrl,
     });

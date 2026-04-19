@@ -12,19 +12,20 @@
 
 ## File Structure
 
-| Action | File | Responsibility |
-|--------|------|----------------|
-| Create | `src/agent/discovery.ts` | Discovery agent: system prompt, tool config, Agent SDK `query()` call, message streaming, state file output |
+| Action | File                                  | Responsibility                                                                                                           |
+| ------ | ------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Create | `src/agent/discovery.ts`              | Discovery agent: system prompt, tool config, Agent SDK `query()` call, message streaming, state file output              |
 | Create | `src/agent/mcp-cloudflare-browser.ts` | MCP server: wraps CF Browser Rendering `/markdown` and `/content` endpoints as `render_markdown` and `render_html` tools |
-| Create | `src/cli/commands/onboard.ts` | CLI command: `released onboard <company>` — parses options, invokes discovery agent, streams progress, prints summary |
-| Modify | `src/cli/program.ts` | Register the new `onboard` command |
-| Modify | `package.json` | Add `@anthropic-ai/claude-agent-sdk` dependency |
+| Create | `src/cli/commands/onboard.ts`         | CLI command: `released onboard <company>` — parses options, invokes discovery agent, streams progress, prints summary    |
+| Modify | `src/cli/program.ts`                  | Register the new `onboard` command                                                                                       |
+| Modify | `package.json`                        | Add `@anthropic-ai/claude-agent-sdk` dependency                                                                          |
 
 ---
 
 ## Task 1: Add Agent SDK dependency
 
 **Files:**
+
 - Modify: `package.json`
 
 - [ ] **Step 1: Install the Agent SDK**
@@ -53,6 +54,7 @@ git commit -m "Add @anthropic-ai/claude-agent-sdk dependency"
 ## Task 2: Cloudflare Browser Rendering MCP server
 
 **Files:**
+
 - Create: `src/agent/mcp-cloudflare-browser.ts`
 
 This MCP server runs as a stdio subprocess. The Agent SDK spawns it via `mcpServers` config. It exposes two tools: `render_markdown` and `render_html`.
@@ -199,6 +201,7 @@ git commit -m "Add Cloudflare Browser Rendering MCP server for discovery agent"
 ## Task 3: Discovery agent module
 
 **Files:**
+
 - Create: `src/agent/discovery.ts`
 
 This is the core agent module. It wraps the Agent SDK `query()` call with the system prompt, tool configuration, subagent definition, and streaming logic.
@@ -381,7 +384,7 @@ Report back with: slug, release count, quality assessment (good/partial/bad), an
         } else if (block.type === "tool_use") {
           const command =
             block.name === "Bash" && typeof block.input === "object" && block.input !== null
-              ? (block.input as Record<string, unknown>).command as string | undefined
+              ? ((block.input as Record<string, unknown>).command as string | undefined)
               : undefined;
           options.onToolUse?.(block.name, command);
         }
@@ -434,6 +437,7 @@ git commit -m "Add discovery agent module wrapping Agent SDK"
 ## Task 4: CLI onboard command
 
 **Files:**
+
 - Create: `src/cli/commands/onboard.ts`
 - Modify: `src/cli/program.ts`
 
@@ -455,10 +459,7 @@ export function registerOnboardCommand(program: Command) {
     .option("--github-org <org>", "Seed the agent with the company's GitHub organization")
     .option("--json", "Output results as JSON")
     .action(
-      async (
-        company: string,
-        opts: { domain?: string; githubOrg?: string; json?: boolean },
-      ) => {
+      async (company: string, opts: { domain?: string; githubOrg?: string; json?: boolean }) => {
         if (!opts.json) {
           process.stderr.write(
             chalk.bold(`Onboarding "${company}"`) +
@@ -566,6 +567,7 @@ cd /Users/zachdunn/Code/released && bun src/index.ts onboard --help
 ```
 
 Expected output should show:
+
 ```
 Usage: released onboard [options] <company>
 

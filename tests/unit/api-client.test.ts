@@ -60,16 +60,12 @@ describe("apiFetch 404 handling", () => {
 
   it("throws on DELETE 404", async () => {
     mockFetch(404, { message: "Not Found" });
-    await expect(client.deleteRelease("rel_123")).rejects.toThrow(
-      /API error \(404\) on DELETE/,
-    );
+    await expect(client.deleteRelease("rel_123")).rejects.toThrow(/API error \(404\) on DELETE/);
   });
 
   it("throws on non-404 errors for GET", async () => {
     mockFetch(500, { message: "Internal Server Error" });
-    await expect(client.findSource("test")).rejects.toThrow(
-      /API error \(500\)/,
-    );
+    await expect(client.findSource("test")).rejects.toThrow(/API error \(500\)/);
   });
 });
 

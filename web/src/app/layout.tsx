@@ -18,7 +18,8 @@ export const metadata: Metadata = {
     default: "releases.sh — An agent-friendly API for product changelogs",
     template: "%s — releases.sh",
   },
-  description: "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
+  description:
+    "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
   metadataBase: new URL("https://releases.sh"),
   openGraph: {
     type: "website",
@@ -54,9 +55,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <style dangerouslySetInnerHTML={{ __html: THEME_STYLE }} />
       </head>
       <body className="font-sans bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 antialiased">
-        <ThemeProvider>
-          {children}
-        </ThemeProvider>
+        <ThemeProvider>{children}</ThemeProvider>
         <WebMcpProvider apiBaseUrl={PUBLIC_API_URL} />
       </body>
     </html>

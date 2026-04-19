@@ -19,10 +19,13 @@ export function registerUsageCommand(program: Command) {
     .command("usage")
     .description("Show API token usage summary")
     .option("--days <n>", "Number of days to look back", "7")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin stats usage
-  releases admin stats usage --days 30`)
+  releases admin stats usage --days 30`,
+    )
     .action(async (opts: { days: string }) => {
       const days = parseInt(opts.days, 10) || 7;
       const stats = await getUsageStats(days);

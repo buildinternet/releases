@@ -6,7 +6,7 @@ import { getFormat } from "@/lib/request";
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: Promise<{ orgSlug: string }> }
+  { params }: { params: Promise<{ orgSlug: string }> },
 ) {
   const { orgSlug } = await params;
   const format = getFormat(request);
@@ -15,14 +15,17 @@ export async function GET(
   try {
     org = await api.orgDetail(orgSlug);
   } catch {
-    return NextResponse.json({ error: "not_found", message: "Organization not found" }, { status: 404 });
+    return NextResponse.json(
+      { error: "not_found", message: "Organization not found" },
+      { status: 404 },
+    );
   }
 
   const overview = org.overview ?? org.knowledgePage;
   if (!overview) {
     return NextResponse.json(
       { error: "not_found", message: "No overview page exists for this organization" },
-      { status: 404 }
+      { status: 404 },
     );
   }
 

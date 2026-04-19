@@ -24,9 +24,11 @@ function fakeVoyageFetch() {
   return { fetchImpl, calls };
 }
 
-function fakeVectorize(opts: {
-  upsertThrows?: boolean;
-} = {}) {
+function fakeVectorize(
+  opts: {
+    upsertThrows?: boolean;
+  } = {},
+) {
   const upserted: any[] = [];
   const deleted: string[] = [];
   const index: VectorizeIndex = {
@@ -123,9 +125,7 @@ describe("embedAndUpsertReleases", () => {
     const vec = fakeVectorize();
     const longBody = "x".repeat(5000);
     await embedAndUpsertReleases({
-      releases: [
-        { ...baseRelease, contentSummary: null, content: longBody, version: null },
-      ],
+      releases: [{ ...baseRelease, contentSummary: null, content: longBody, version: null }],
       vectorIndex: vec.index,
       embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
     });

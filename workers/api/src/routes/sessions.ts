@@ -44,7 +44,9 @@ sessionRoutes.get("/sessions/:sessionId/logs", async (c) => {
 
 sessionRoutes.get("/sessions/:sessionId/stdout", async (c) => {
   const sessionId = c.req.param("sessionId");
-  const res = await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}/stdout`));
+  const res = await getStatusHub(c.env).fetch(
+    new Request(`https://do/sessions/${sessionId}/stdout`),
+  );
   const lines = await res.json();
   return c.json(lines);
 });
@@ -64,6 +66,8 @@ sessionRoutes.post("/sessions/:sessionId/cancel", async (c) => {
 
 sessionRoutes.delete("/sessions/:sessionId", async (c) => {
   const sessionId = c.req.param("sessionId");
-  await getStatusHub(c.env).fetch(new Request(`https://do/sessions/${sessionId}`, { method: "DELETE" }));
+  await getStatusHub(c.env).fetch(
+    new Request(`https://do/sessions/${sessionId}`, { method: "DELETE" }),
+  );
   return c.json({ ok: true });
 });

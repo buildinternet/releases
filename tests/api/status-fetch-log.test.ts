@@ -17,7 +17,12 @@ async function seed(
 ) {
   await db.insert(organizations).values({ id: "org_1", name: "Acme", slug: "acme" });
   await db.insert(sources).values({
-    id: "src_1", name: "S", slug: "s", type: "feed", url: "https://x", orgId: "org_1",
+    id: "src_1",
+    name: "S",
+    slug: "s",
+    type: "feed",
+    url: "https://x",
+    orgId: "org_1",
   });
   const rows = Array.from({ length: count }, (_, i) => ({
     id: `fl_${String(i).padStart(4, "0")}`,
@@ -80,15 +85,44 @@ describe("GET /v1/status/fetch-log", () => {
     const db = mkDb();
     await db.insert(organizations).values({ id: "org_1", name: "A", slug: "a" });
     await db.insert(sources).values({
-      id: "src_1", name: "S", slug: "s", type: "feed", url: "https://x", orgId: "org_1",
+      id: "src_1",
+      name: "S",
+      slug: "s",
+      type: "feed",
+      url: "https://x",
+      orgId: "org_1",
     });
     await db.insert(fetchLog).values([
-      { id: "fl_1", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:00Z" },
-      { id: "fl_2", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:01Z" },
-      { id: "fl_3", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "error", createdAt: "2026-04-01T00:00:02Z", error: "boom" },
+      {
+        id: "fl_1",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:00Z",
+      },
+      {
+        id: "fl_2",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:01Z",
+      },
+      {
+        id: "fl_3",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "error",
+        createdAt: "2026-04-01T00:00:02Z",
+        error: "boom",
+      },
     ]);
     const app = mkApp(db);
-    const res = (await (await app.request("/v1/status/fetch-log?status=error&limit=10")).json()) as Envelope;
+    const res = (await (
+      await app.request("/v1/status/fetch-log?status=error&limit=10")
+    ).json()) as Envelope;
     expect(res.entries.length).toBe(1);
     expect(res.entries[0].status).toBe("error");
     expect(res.totalCount).toBe(3);
@@ -118,9 +152,30 @@ describe("GET /v1/status/fetch-log", () => {
       { id: "src_2", name: "S2", slug: "s2", type: "feed", url: "https://b", orgId: "org_2" },
     ]);
     await db.insert(fetchLog).values([
-      { id: "fl_1", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:00Z" },
-      { id: "fl_2", sourceId: "src_2", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:01Z" },
-      { id: "fl_3", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "error", createdAt: "2026-03-01T00:00:00Z" },
+      {
+        id: "fl_1",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:00Z",
+      },
+      {
+        id: "fl_2",
+        sourceId: "src_2",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:01Z",
+      },
+      {
+        id: "fl_3",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "error",
+        createdAt: "2026-03-01T00:00:00Z",
+      },
     ]);
     const app = mkApp(db);
     const body = (await (

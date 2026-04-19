@@ -382,7 +382,7 @@ describe("orgToMarkdown", () => {
     expect(md).toContain('latest-date="2024-06-15"');
   });
 
-  it("Source tags include primary=\"true\" for primary sources", () => {
+  it('Source tags include primary="true" for primary sources', () => {
     const md = orgToMarkdown(fullOrg);
     // Next.js is primary
     expect(md).toContain('primary="true"');

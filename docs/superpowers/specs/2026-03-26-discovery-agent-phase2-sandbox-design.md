@@ -130,6 +130,7 @@ Progress file shape:
 `released onboard apply <state-file-or-json>`
 
 Reads a DiscoveryState, applies approved sources to the real DB:
+
 - Sources with `approved: true` -> runs add with the source's URL, label, and type
 - Sources with `approved: false` -> adds to ignore list with the validation error as reason
 - Prints summary of actions taken
@@ -143,22 +144,24 @@ Works the same whether called locally by a human or programmatically by the Work
   "name": "released-discovery",
   "main": "src/index.ts",
   "compatibility_date": "2026-03-26",
-  "containers": [{
-    "class_name": "Sandbox",
-    "image": "./Dockerfile",
-    "instance_type": "lite",
-    "max_instances": 5
-  }],
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "./Dockerfile",
+      "instance_type": "lite",
+      "max_instances": 5,
+    },
+  ],
   "durable_objects": {
     "bindings": [
       { "class_name": "Sandbox", "name": "Sandbox" },
-      { "class_name": "DiscoverySession", "name": "DISCOVERY_SESSION" }
-    ]
+      { "class_name": "DiscoverySession", "name": "DISCOVERY_SESSION" },
+    ],
   },
   "migrations": [
     { "new_sqlite_classes": ["Sandbox"], "tag": "v1" },
-    { "new_classes": ["DiscoverySession"], "tag": "v2" }
-  ]
+    { "new_classes": ["DiscoverySession"], "tag": "v2" },
+  ],
 }
 ```
 
@@ -166,12 +169,12 @@ Works the same whether called locally by a human or programmatically by the Work
 
 Set via `wrangler secret put`, not in config files:
 
-| Secret | Purpose |
-|--------|---------|
-| `ANTHROPIC_API_KEY` | Agent SDK authentication |
-| `CLOUDFLARE_ACCOUNT_ID` | Browser Rendering API |
-| `CLOUDFLARE_API_TOKEN` | Browser Rendering API |
-| `GITHUB_TOKEN` | GitHub API rate limits (optional) |
+| Secret                  | Purpose                           |
+| ----------------------- | --------------------------------- |
+| `ANTHROPIC_API_KEY`     | Agent SDK authentication          |
+| `CLOUDFLARE_ACCOUNT_ID` | Browser Rendering API             |
+| `CLOUDFLARE_API_TOKEN`  | Browser Rendering API             |
+| `GITHUB_TOKEN`          | GitHub API rate limits (optional) |
 
 **Open verification item:** Do Worker secrets propagate into sandbox containers automatically, or must they be written explicitly (e.g., via writing a .env file into the sandbox)? Test during implementation. If explicit, the DO writes them before running the agent.
 
@@ -212,18 +215,18 @@ Each onboard run gets: unique sessionId -> unique DO instance -> unique sandbox.
 
 ## Cost and Performance
 
-| Component | Cost |
-|-----------|------|
-| Agent (Sonnet + Haiku, ~17 turns) | ~$0.40 |
-| Sandbox compute (~5 min) | ~$0.05 |
-| CF Browser Rendering | minor |
-| **Total per run** | **~$0.50** |
+| Component                         | Cost       |
+| --------------------------------- | ---------- |
+| Agent (Sonnet + Haiku, ~17 turns) | ~$0.40     |
+| Sandbox compute (~5 min)          | ~$0.05     |
+| CF Browser Rendering              | minor      |
+| **Total per run**                 | **~$0.50** |
 
-| Phase | Time |
-|-------|------|
-| Container boot (pre-built image) | ~10-15s |
-| Agent run | ~3 min |
-| **Total** | **~3.5 min** |
+| Phase                            | Time         |
+| -------------------------------- | ------------ |
+| Container boot (pre-built image) | ~10-15s      |
+| Agent run                        | ~3 min       |
+| **Total**                        | **~3.5 min** |
 
 Budget cap: $2.00/run, 30 turns. Safety limits unchanged from Phase 1.
 

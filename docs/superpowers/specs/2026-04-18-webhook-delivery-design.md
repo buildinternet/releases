@@ -23,17 +23,17 @@ The feature ships in two consumer phases. Both are addressed by the v1 design; p
 
 Quick index of the choices that shape this design (decided in the brainstorm; rationale in the relevant sections below):
 
-| Area | Choice |
-|---|---|
-| Scope | Webhooks only; web live view split out |
-| Identity | Org-scoped under shared `RELEASED_API_KEY` |
-| Durability | Best-effort + 7-day `seq`-based replay endpoint |
-| Replay store | Ring buffer in `ReleaseHub` DO storage |
-| Delivery telemetry | Cloudflare Analytics Engine + summary cols on subscription row |
-| HMAC secrets | Master in Secrets Store + per-sub keys derived |
-| Consumer Worker | New `workers/webhooks/` (matches `workers/discovery/`, `workers/mcp/`) |
-| Queue topology | One global queue, one message per (event × subscription) |
-| Filter dimensions v1 | Required `orgId`, optional `sourceId` |
+| Area                 | Choice                                                                 |
+| -------------------- | ---------------------------------------------------------------------- |
+| Scope                | Webhooks only; web live view split out                                 |
+| Identity             | Org-scoped under shared `RELEASED_API_KEY`                             |
+| Durability           | Best-effort + 7-day `seq`-based replay endpoint                        |
+| Replay store         | Ring buffer in `ReleaseHub` DO storage                                 |
+| Delivery telemetry   | Cloudflare Analytics Engine + summary cols on subscription row         |
+| HMAC secrets         | Master in Secrets Store + per-sub keys derived                         |
+| Consumer Worker      | New `workers/webhooks/` (matches `workers/discovery/`, `workers/mcp/`) |
+| Queue topology       | One global queue, one message per (event × subscription)               |
+| Filter dimensions v1 | Required `orgId`, optional `sourceId`                                  |
 
 ## Architecture
 
@@ -283,6 +283,7 @@ User-Agent: releases-webhooks/1
 ```
 
 **Subscriber semantics:**
+
 - Respond `2xx` to ack. Anything else triggers retry (5xx) or terminal failure (4xx).
 - Verify signature with `HMAC-SHA256(signingKey, timestamp + "." + raw_body)`. Reject if mismatch.
 - Reject timestamps older than 5 minutes to prevent replay attacks.
@@ -296,16 +297,16 @@ All admin commands ship in the OSS-distributed binary (`src/cli/` compiles via `
 
 Source: `src/cli/commands/admin/webhook.ts`. Modeled after the multi-level pattern in `src/cli/commands/admin/source.ts` with org-scoped CRUD ergonomics from `ignore.ts`.
 
-| Command | Purpose |
-|---|---|
-| `webhook add --org <slug> --url <url> [--source <slug>] [--description <text>]` | Create subscription. Prints derived signing key **once**. Re-running prints "see rotate-secret to regenerate." |
-| `webhook list [--org <slug>] [--enabled\|--disabled] [--json]` | List subscriptions; default groups by org. |
-| `webhook show <id>` | Full row + last 10 deliveries from AE + current `consecutive_failures`. |
-| `webhook edit <id> --url <new>` / `--enable` / `--disable` / `--description <text>` | Mutations. URL change does **not** rotate the signing key. |
-| `webhook remove <id>` | Hard delete. Cascades nothing (deliveries are AE-only). |
-| `webhook deliveries <id> [--failed] [--since <iso>] [--limit N]` | AE query, paged. Outputs status, latency, error per attempt. |
-| `webhook test <id>` | Sends a synthetic `release.created` event. Useful before handing the URL to a customer. |
-| `webhook rotate-secret <id>` | Bumps `secret_version`. Old key invalidated; new key printed. |
+| Command                                                                             | Purpose                                                                                                        |
+| ----------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `webhook add --org <slug> --url <url> [--source <slug>] [--description <text>]`     | Create subscription. Prints derived signing key **once**. Re-running prints "see rotate-secret to regenerate." |
+| `webhook list [--org <slug>] [--enabled\|--disabled] [--json]`                      | List subscriptions; default groups by org.                                                                     |
+| `webhook show <id>`                                                                 | Full row + last 10 deliveries from AE + current `consecutive_failures`.                                        |
+| `webhook edit <id> --url <new>` / `--enable` / `--disable` / `--description <text>` | Mutations. URL change does **not** rotate the signing key.                                                     |
+| `webhook remove <id>`                                                               | Hard delete. Cascades nothing (deliveries are AE-only).                                                        |
+| `webhook deliveries <id> [--failed] [--since <iso>] [--limit N]`                    | AE query, paged. Outputs status, latency, error per attempt.                                                   |
+| `webhook test <id>`                                                                 | Sends a synthetic `release.created` event. Useful before handing the URL to a customer.                        |
+| `webhook rotate-secret <id>`                                                        | Bumps `secret_version`. Old key invalidated; new key printed.                                                  |
 
 ### Subscriber-facing utility (`releases webhook verify`)
 

@@ -1,6 +1,6 @@
 # v1.5.0 — New Visual Editor
 
-*Published: March 20, 2024*
+_Published: March 20, 2024_
 
 We're thrilled to introduce our brand new visual editor, completely rebuilt from the ground up.
 

@@ -72,7 +72,13 @@ sitemapRoutes.get("/sitemap", async (c) => {
   const sourcesOut = sourceRows.flatMap((s) =>
     s.isHidden || !s.orgId
       ? []
-      : [{ orgSlug: orgIdToSlug.get(s.orgId)!, slug: s.slug, latestDate: latestBySource.get(s.id) ?? null }],
+      : [
+          {
+            orgSlug: orgIdToSlug.get(s.orgId)!,
+            slug: s.slug,
+            latestDate: latestBySource.get(s.id) ?? null,
+          },
+        ],
   );
 
   const productsOut = productRows.flatMap((p) =>

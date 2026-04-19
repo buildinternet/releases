@@ -16,7 +16,10 @@ function makeDb() {
 describe("cron_runs DAO", () => {
   it("inserts a running row and returns its id", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     expect(id.startsWith("crun_")).toBe(true);
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, id)).all();
     expect(row.status).toBe("running");
@@ -25,7 +28,10 @@ describe("cron_runs DAO", () => {
 
   it("finalizes a running row with computed duration_ms", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     await finalizeRunRow(db, id, {
       endedAt: "2026-04-18T01:00:02.500Z",
       status: "done",
@@ -46,7 +52,10 @@ describe("cron_runs DAO", () => {
 
   it("writes dispatchErrorDetail as JSON when non-empty", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     await finalizeRunRow(db, id, {
       endedAt: "2026-04-18T01:00:01Z",
       status: "degraded",
@@ -59,12 +68,17 @@ describe("cron_runs DAO", () => {
       notes: null,
     });
     const [row] = db.select().from(cronRuns).where(eq(cronRuns.id, id)).all();
-    expect(JSON.parse(row.dispatchErrorDetail!)).toEqual([{ orgSlug: "bad-org", error: "500 boom" }]);
+    expect(JSON.parse(row.dispatchErrorDetail!)).toEqual([
+      { orgSlug: "bad-org", error: "500 boom" },
+    ]);
   });
 
   it("truncates dispatchErrorDetail and sessionsStarted arrays to 20 entries", async () => {
     const { db } = makeDb();
-    const id = await insertRunningRow(db, { cronName: "scrape-agent-sweep", startedAt: "2026-04-18T01:00:00Z" });
+    const id = await insertRunningRow(db, {
+      cronName: "scrape-agent-sweep",
+      startedAt: "2026-04-18T01:00:00Z",
+    });
     const sessions = Array.from({ length: 30 }, (_, i) => `ma-${i}`);
     const errors = Array.from({ length: 30 }, (_, i) => ({ orgSlug: `o-${i}`, error: "e" }));
     await finalizeRunRow(db, id, {

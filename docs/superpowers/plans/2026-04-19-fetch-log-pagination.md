@@ -15,18 +15,21 @@
 ## File Structure
 
 **Create:**
+
 - `workers/api/src/routes/fetch-log-cursor.ts` — cursor encode/decode helpers, pure functions; testable without a DB.
 - `tests/api/status-fetch-log.test.ts` — worker-side integration tests against an in-memory D1.
 - `tests/api/status-fetch-log-helpers.ts` — test harness for the status route (mirrors `admin-cron-runs-helpers.ts`).
 - `web/src/components/use-fetch-log.ts` — `useFetchLog` hook shared by the dashboard and org views.
 
 **Modify:**
+
 - `workers/api/src/routes/status.ts` — rewrite the `GET /v1/status/fetch-log` handler to return the envelope, accept `status`/`cursor`, and run count queries only when no cursor is present.
 - `web/src/components/fetch-log-shared.tsx` — export the `FetchLogResponse` envelope type.
 - `web/src/app/status/dashboard.tsx` — replace the hand-rolled `fetchLogs` state and `FetchLogTable` pagination with the new hook + load-more UX; keep WebSocket handler but make it bump counts optimistically.
 - `web/src/components/org-fetch-log-view.tsx` — swap its bespoke `fetch()` for `useFetchLog` and adopt the same load-more UX.
 
 **Untouched (explicitly):**
+
 - `workers/api/src/routes/fetch-log.ts` — keeps its bare-array shape. This is the CLI-facing endpoint.
 - `src/api/client.ts` — unchanged for the same reason.
 - `tests/integration/fetch-log.test.ts` — CLI integration tests, unrelated.
@@ -36,6 +39,7 @@
 ## Task 1: Cursor helpers (pure functions, test-first)
 
 **Files:**
+
 - Create: `workers/api/src/routes/fetch-log-cursor.ts`
 - Create: `tests/api/fetch-log-cursor.test.ts`
 
@@ -136,6 +140,7 @@ git commit -m "feat(api): cursor encode/decode helpers for fetch-log pagination"
 ## Task 2: Test harness for the status fetch-log route
 
 **Files:**
+
 - Create: `tests/api/status-fetch-log-helpers.ts`
 
 Mirrors `tests/api/admin-cron-runs-helpers.ts`. Exposes `mkDb()` (in-memory SQLite with migrations applied) and `mkApp(db)` (a Hono app with `statusRoutes` mounted).
@@ -189,6 +194,7 @@ git commit -m "test(api): harness for status fetch-log route"
 ## Task 3: Status fetch-log envelope — failing test
 
 **Files:**
+
 - Create: `tests/api/status-fetch-log.test.ts`
 - Modify: `workers/api/src/db.ts` (if `createDb` needs to accept pre-built drizzle handles)
 
@@ -229,9 +235,15 @@ type Envelope = {
   statusCounts?: { success: number; error: number; no_change: number; dry_run: number };
 };
 
-async function seed(db: any, count: number, status: "success" | "error" | "no_change" | "dry_run" = "success") {
+async function seed(
+  db: any,
+  count: number,
+  status: "success" | "error" | "no_change" | "dry_run" = "success",
+) {
   await db.insert(organizations).values({ id: "org_1", name: "Acme", slug: "acme" });
-  await db.insert(sources).values({ id: "src_1", name: "S", slug: "s", type: "feed", url: "https://x", orgId: "org_1" });
+  await db
+    .insert(sources)
+    .values({ id: "src_1", name: "S", slug: "s", type: "feed", url: "https://x", orgId: "org_1" });
   const rows = Array.from({ length: count }, (_, i) => ({
     id: `fl_${String(i).padStart(4, "0")}`,
     sourceId: "src_1",
@@ -250,7 +262,7 @@ describe("GET /v1/status/fetch-log", () => {
     const app = mkApp(db);
     const res = await app.request("/v1/status/fetch-log?limit=3");
     expect(res.status).toBe(200);
-    const body = await res.json() as Envelope;
+    const body = (await res.json()) as Envelope;
     expect(body.entries.length).toBe(3);
     expect(body.totalCount).toBe(5);
     expect(body.statusCounts).toEqual({ success: 5, error: 0, no_change: 0, dry_run: 0 });
@@ -261,11 +273,13 @@ describe("GET /v1/status/fetch-log", () => {
     const db = mkDb();
     await seed(db, 5);
     const app = mkApp(db);
-    const first = await (await app.request("/v1/status/fetch-log?limit=3")).json() as Envelope;
+    const first = (await (await app.request("/v1/status/fetch-log?limit=3")).json()) as Envelope;
     expect(first.nextCursor).not.toBeNull();
-    const second = await (await app.request(
-      `/v1/status/fetch-log?limit=3&cursor=${encodeURIComponent(first.nextCursor!)}`,
-    )).json() as Envelope;
+    const second = (await (
+      await app.request(
+        `/v1/status/fetch-log?limit=3&cursor=${encodeURIComponent(first.nextCursor!)}`,
+      )
+    ).json()) as Envelope;
     expect(second.entries.length).toBe(2);
     expect(second.nextCursor).toBeNull();
     // No overlap between pages.
@@ -278,10 +292,12 @@ describe("GET /v1/status/fetch-log", () => {
     const db = mkDb();
     await seed(db, 5);
     const app = mkApp(db);
-    const first = await (await app.request("/v1/status/fetch-log?limit=3")).json() as Envelope;
-    const second = await (await app.request(
-      `/v1/status/fetch-log?limit=3&cursor=${encodeURIComponent(first.nextCursor!)}`,
-    )).json() as Envelope;
+    const first = (await (await app.request("/v1/status/fetch-log?limit=3")).json()) as Envelope;
+    const second = (await (
+      await app.request(
+        `/v1/status/fetch-log?limit=3&cursor=${encodeURIComponent(first.nextCursor!)}`,
+      )
+    ).json()) as Envelope;
     expect(second.totalCount).toBeUndefined();
     expect(second.statusCounts).toBeUndefined();
   });
@@ -289,14 +305,45 @@ describe("GET /v1/status/fetch-log", () => {
   it("filters entries by status but totalCount/statusCounts reflect full scope", async () => {
     const db = mkDb();
     await db.insert(organizations).values({ id: "org_1", name: "A", slug: "a" });
-    await db.insert(sources).values({ id: "src_1", name: "S", slug: "s", type: "feed", url: "https://x", orgId: "org_1" });
+    await db.insert(sources).values({
+      id: "src_1",
+      name: "S",
+      slug: "s",
+      type: "feed",
+      url: "https://x",
+      orgId: "org_1",
+    });
     await db.insert(fetchLog).values([
-      { id: "fl_1", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:00Z" },
-      { id: "fl_2", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:01Z" },
-      { id: "fl_3", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "error", createdAt: "2026-04-01T00:00:02Z", error: "boom" },
+      {
+        id: "fl_1",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:00Z",
+      },
+      {
+        id: "fl_2",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:01Z",
+      },
+      {
+        id: "fl_3",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "error",
+        createdAt: "2026-04-01T00:00:02Z",
+        error: "boom",
+      },
     ]);
     const app = mkApp(db);
-    const res = await (await app.request("/v1/status/fetch-log?status=error&limit=10")).json() as Envelope;
+    const res = (await (
+      await app.request("/v1/status/fetch-log?status=error&limit=10")
+    ).json()) as Envelope;
     expect(res.entries.length).toBe(1);
     expect(res.entries[0].status).toBe("error");
     expect(res.totalCount).toBe(3); // full scope, not filtered
@@ -307,7 +354,7 @@ describe("GET /v1/status/fetch-log", () => {
     const db = mkDb();
     await seed(db, 3);
     const app = mkApp(db);
-    const body = await (await app.request("/v1/status/fetch-log?limit=2")).json() as Envelope;
+    const body = (await (await app.request("/v1/status/fetch-log?limit=2")).json()) as Envelope;
     const decoded = decodeCursor(body.nextCursor!);
     expect(decoded).not.toBeNull();
     const last = body.entries[body.entries.length - 1];
@@ -326,12 +373,35 @@ describe("GET /v1/status/fetch-log", () => {
       { id: "src_2", name: "S2", slug: "s2", type: "feed", url: "https://b", orgId: "org_2" },
     ]);
     await db.insert(fetchLog).values([
-      { id: "fl_1", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:00Z" },
-      { id: "fl_2", sourceId: "src_2", releasesFound: 0, releasesInserted: 0, status: "success", createdAt: "2026-04-01T00:00:01Z" },
-      { id: "fl_3", sourceId: "src_1", releasesFound: 0, releasesInserted: 0, status: "error", createdAt: "2026-03-01T00:00:00Z" },
+      {
+        id: "fl_1",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:00Z",
+      },
+      {
+        id: "fl_2",
+        sourceId: "src_2",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "success",
+        createdAt: "2026-04-01T00:00:01Z",
+      },
+      {
+        id: "fl_3",
+        sourceId: "src_1",
+        releasesFound: 0,
+        releasesInserted: 0,
+        status: "error",
+        createdAt: "2026-03-01T00:00:00Z",
+      },
     ]);
     const app = mkApp(db);
-    const body = await (await app.request("/v1/status/fetch-log?org=acme&after=2026-03-15T00:00:00Z")).json() as Envelope;
+    const body = (await (
+      await app.request("/v1/status/fetch-log?org=acme&after=2026-03-15T00:00:00Z")
+    ).json()) as Envelope;
     expect(body.totalCount).toBe(1);
     expect(body.entries.map((e) => e.id)).toEqual(["fl_1"]);
   });
@@ -355,6 +425,7 @@ git commit -m "test(api): failing tests for status fetch-log envelope + paginati
 ## Task 4: Status fetch-log envelope — make tests pass
 
 **Files:**
+
 - Modify: `workers/api/src/routes/status.ts`
 
 Rewrite the `GET /v1/status/fetch-log` handler.
@@ -394,7 +465,9 @@ statusRoutes.get("/status/fetch-log", async (c) => {
   if (status) pagePredicates.push(eq(fetchLog.status, status));
   if (cursor) {
     // (createdAt, id) < (cursor.createdAt, cursor.id) — lexicographic tuple compare.
-    pagePredicates.push(sql`(${fetchLog.createdAt}, ${fetchLog.id}) < (${cursor.createdAt}, ${cursor.id})`);
+    pagePredicates.push(
+      sql`(${fetchLog.createdAt}, ${fetchLog.id}) < (${cursor.createdAt}, ${cursor.id})`,
+    );
   }
 
   const rows = await db
@@ -424,7 +497,8 @@ statusRoutes.get("/status/fetch-log", async (c) => {
   const hasMore = rows.length > limit;
   const entries = hasMore ? rows.slice(0, limit) : rows;
   const last = entries[entries.length - 1];
-  const nextCursor = hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
+  const nextCursor =
+    hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
 
   // Count queries run only on the first page (no cursor).
   let totalCount: number | undefined;
@@ -479,6 +553,7 @@ git commit -m "feat(api): status fetch-log returns envelope with pagination + co
 ## Task 5: Shared response type and hook skeleton
 
 **Files:**
+
 - Modify: `web/src/components/fetch-log-shared.tsx`
 - Create: `web/src/components/use-fetch-log.ts`
 
@@ -510,7 +585,12 @@ Create `web/src/components/use-fetch-log.ts`:
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { FetchLogEntry, FetchLogResponse, FetchLogStatusCounts, FetchLogStatusFilter } from "./fetch-log-shared";
+import type {
+  FetchLogEntry,
+  FetchLogResponse,
+  FetchLogStatusCounts,
+  FetchLogStatusFilter,
+} from "./fetch-log-shared";
 
 interface Params {
   apiUrl: string;
@@ -541,7 +621,12 @@ function buildUrl(base: string, params: Record<string, string | null | undefined
 
 export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSize = 25 }: Params) {
   const [state, setState] = useState<State>({
-    entries: [], nextCursor: null, totalCount: 0, statusCounts: EMPTY_COUNTS, loading: true, error: null,
+    entries: [],
+    nextCursor: null,
+    totalCount: 0,
+    statusCounts: EMPTY_COUNTS,
+    loading: true,
+    error: null,
   });
   const reqId = useRef(0);
 
@@ -576,7 +661,11 @@ export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSi
         }));
       } catch (e) {
         if (reqId.current !== id) return;
-        setState((s) => ({ ...s, loading: false, error: e instanceof Error ? e.message : String(e) }));
+        setState((s) => ({
+          ...s,
+          loading: false,
+          error: e instanceof Error ? e.message : String(e),
+        }));
       }
     },
     [apiUrl, headers, after, before, org, status, pageSize],
@@ -596,20 +685,23 @@ export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSi
   }, [fetchPage]);
 
   // Optimistic live-tail prepend. Bumps counts if the event is in scope.
-  const prepend = useCallback((entry: FetchLogEntry) => {
-    setState((s) => {
-      const inScope = isInScope(entry, { after, before, org });
-      const matchesFilter = status === "all" || entry.status === status;
-      return {
-        ...s,
-        entries: inScope && matchesFilter ? [entry, ...s.entries] : s.entries,
-        totalCount: inScope ? s.totalCount + 1 : s.totalCount,
-        statusCounts: inScope
-          ? { ...s.statusCounts, [entry.status]: (s.statusCounts[entry.status] ?? 0) + 1 }
-          : s.statusCounts,
-      };
-    });
-  }, [after, before, org, status]);
+  const prepend = useCallback(
+    (entry: FetchLogEntry) => {
+      setState((s) => {
+        const inScope = isInScope(entry, { after, before, org });
+        const matchesFilter = status === "all" || entry.status === status;
+        return {
+          ...s,
+          entries: inScope && matchesFilter ? [entry, ...s.entries] : s.entries,
+          totalCount: inScope ? s.totalCount + 1 : s.totalCount,
+          statusCounts: inScope
+            ? { ...s.statusCounts, [entry.status]: (s.statusCounts[entry.status] ?? 0) + 1 }
+            : s.statusCounts,
+        };
+      });
+    },
+    [after, before, org, status],
+  );
 
   return {
     entries: state.entries,
@@ -652,6 +744,7 @@ git commit -m "feat(web): useFetchLog hook + FetchLogResponse envelope type"
 ## Task 6: Rewire the status dashboard
 
 **Files:**
+
 - Modify: `web/src/app/status/dashboard.tsx`
 
 Replace the dashboard's bespoke `fetchLogs` state and `FetchLogTable` pagination with `useFetchLog`.
@@ -675,23 +768,26 @@ In `web/src/app/status/dashboard.tsx`:
      safeFetch(`${apiUrl}/v1/sessions`),
      safeFetch(fetchLogUrl),
      safeFetch(`${apiUrl}/v1/status/usage`),
-   ]).then(([s, f, u]) => {
-     if (s) setSessions(s as SessionState[]);
-     if (f) setFetchLogs(f as FetchLogEntry[]);
-     if (u) setUsage(u as UsageEntry[]);
-     return s as SessionState[] | null;
-   }).catch(() => null);
+   ])
+     .then(([s, f, u]) => {
+       if (s) setSessions(s as SessionState[]);
+       if (f) setFetchLogs(f as FetchLogEntry[]);
+       if (u) setUsage(u as UsageEntry[]);
+       return s as SessionState[] | null;
+     })
+     .catch(() => null);
    ```
+
    with:
+
    ```ts
-   return Promise.all([
-     safeFetch(`${apiUrl}/v1/sessions`),
-     safeFetch(`${apiUrl}/v1/status/usage`),
-   ]).then(([s, u]) => {
-     if (s) setSessions(s as SessionState[]);
-     if (u) setUsage(u as UsageEntry[]);
-     return s as SessionState[] | null;
-   }).catch(() => null);
+   return Promise.all([safeFetch(`${apiUrl}/v1/sessions`), safeFetch(`${apiUrl}/v1/status/usage`)])
+     .then(([s, u]) => {
+       if (s) setSessions(s as SessionState[]);
+       if (u) setUsage(u as UsageEntry[]);
+       return s as SessionState[] | null;
+     })
+     .catch(() => null);
    ```
 
 4. In the `fetch:complete` WebSocket handler (lines ~271–285), replace the `setFetchLogs((prev) => [...])` block with a call to the hook's `prepend` — but the hook lives in the `FetchLogTable` child. Pass a ref up instead: declare a ref at the dashboard level:
@@ -721,10 +817,13 @@ In `web/src/app/status/dashboard.tsx`:
    ```
 
 5. Remove the `setSessionPage(0); setFetchLogPage(0);` side-effects in the date-range pill click; they referred to removed state:
+
    ```ts
    onClick={() => { setDateRange(range); setSessionPage(0); setFetchLogPage(0); }}
    ```
+
    becomes
+
    ```ts
    onClick={() => { setDateRange(range); setSessionPage(0); }}
    ```
@@ -907,6 +1006,7 @@ git commit -m "feat(web): status dashboard uses useFetchLog + load-more"
 ## Task 7: Rewire the org-scoped fetch-log view
 
 **Files:**
+
 - Modify: `web/src/components/org-fetch-log-view.tsx`
 
 - [ ] **Step 1: Replace the component body**
@@ -1074,6 +1174,7 @@ Expected: Next.js dev server starts, usually on `http://localhost:3000`.
 Visit `http://localhost:3000/status`. Go to the Fetch Log tab. Select "This Week" date range.
 
 Verify:
+
 - Header reads `Showing 25 of N entries` where N is the real weekly count (not capped at 200).
 - Pill counts add up to N.
 - "Load 25 more" appears and, when clicked, appends the next page without duplicates.
@@ -1100,6 +1201,7 @@ Expected: clean or only the plan-file changes.
 ## Task 9: Update the spec with any refinements and PR prep
 
 **Files:**
+
 - Possibly modify: `docs/superpowers/specs/2026-04-19-fetch-log-pagination-design.md`
 
 - [ ] **Step 1: Re-read the spec against the final implementation**
@@ -1145,12 +1247,14 @@ First write `/tmp/fetch-log-pr-body.md`:
 
 ```markdown
 ## Summary
+
 - `GET /v1/status/fetch-log` now returns `{ entries, nextCursor, totalCount, statusCounts }`. Cursor-based pagination replaces the 200-row cap.
 - Status filter pills on the dashboard and org pages use server-side counts — "42 errors this week" actually means 42 errors this week.
 - "Load 25 more" replaces the client-only Prev/Next. Live `fetch:complete` events still prepend into the visible list.
 - CLI endpoint `/v1/fetch-log` is unchanged.
 
 ## Test plan
+
 - [ ] `bun test tests/api/status-fetch-log.test.ts` passes
 - [ ] `bun test tests/api/fetch-log-cursor.test.ts` passes
 - [ ] `bun test tests/integration/fetch-log.test.ts` still green
@@ -1168,6 +1272,7 @@ Spec: [docs/superpowers/specs/2026-04-19-fetch-log-pagination-design.md](docs/su
 ## Self-Review Notes
 
 **Spec coverage check:** Each spec section maps to tasks —
+
 - API envelope / params → Tasks 3–4.
 - Cursor semantics → Task 1, exercised in Task 4.
 - Count-query scoping → Task 3 (tests), Task 4 (impl).

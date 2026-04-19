@@ -50,6 +50,7 @@ Adds the `webhook_subscriptions` D1 table, its Drizzle definition, and the helpe
 ### Task 1: Add `webhookSubscriptions` Drizzle table + ID generator + types
 
 **Files:**
+
 - Modify: `packages/core/src/schema.ts` (add table at the end of the file, after `release_coverage`)
 - Modify: `packages/core/src/id.ts` (add `newWebhookSubscriptionId`)
 
@@ -68,26 +69,32 @@ Adds the `webhook_subscriptions` D1 table, its Drizzle definition, and the helpe
   Open `packages/core/src/schema.ts`. Add the import for `newWebhookSubscriptionId` to the existing import block from `./id.js`. Then append at the end of the file (after the last existing table):
 
   ```ts
-  export const webhookSubscriptions = sqliteTable("webhook_subscriptions", {
-    id: text("id").primaryKey().$defaultFn(newWebhookSubscriptionId),
-    orgId: text("org_id")
-      .notNull()
-      .references(() => organizations.id, { onDelete: "cascade" }),
-    url: text("url").notNull(),
-    sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
-    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
-    description: text("description"),
-    secretVersion: integer("secret_version").notNull().default(1),
-    createdAt: text("created_at").notNull().$defaultFn(() => new Date().toISOString()),
-    lastSuccessAt: text("last_success_at"),
-    lastErrorAt: text("last_error_at"),
-    lastErrorMsg: text("last_error_msg"),
-    consecutiveFailures: integer("consecutive_failures").notNull().default(0),
-    disabledReason: text("disabled_reason"),
-  }, (table) => [
-    index("idx_webhook_subs_org_enabled").on(table.orgId, table.enabled),
-    index("idx_webhook_subs_org_source").on(table.orgId, table.sourceId),
-  ]);
+  export const webhookSubscriptions = sqliteTable(
+    "webhook_subscriptions",
+    {
+      id: text("id").primaryKey().$defaultFn(newWebhookSubscriptionId),
+      orgId: text("org_id")
+        .notNull()
+        .references(() => organizations.id, { onDelete: "cascade" }),
+      url: text("url").notNull(),
+      sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
+      enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+      description: text("description"),
+      secretVersion: integer("secret_version").notNull().default(1),
+      createdAt: text("created_at")
+        .notNull()
+        .$defaultFn(() => new Date().toISOString()),
+      lastSuccessAt: text("last_success_at"),
+      lastErrorAt: text("last_error_at"),
+      lastErrorMsg: text("last_error_msg"),
+      consecutiveFailures: integer("consecutive_failures").notNull().default(0),
+      disabledReason: text("disabled_reason"),
+    },
+    (table) => [
+      index("idx_webhook_subs_org_enabled").on(table.orgId, table.enabled),
+      index("idx_webhook_subs_org_source").on(table.orgId, table.sourceId),
+    ],
+  );
 
   export type WebhookSubscription = typeof webhookSubscriptions.$inferSelect;
   export type NewWebhookSubscription = typeof webhookSubscriptions.$inferInsert;
@@ -110,6 +117,7 @@ Adds the `webhook_subscriptions` D1 table, its Drizzle definition, and the helpe
 ### Task 2: D1 migration for the new table
 
 **Files:**
+
 - Create: `workers/api/migrations/<timestamp>_webhook_subscriptions.sql` (use the current UTC timestamp in `YYYYMMDDHHMMSS` format; recent migrations use this convention — see `20260418152523_cron_runs.sql`)
 
 - [ ] **Step 2.1: Generate the timestamp**
@@ -166,6 +174,7 @@ Adds the `webhook_subscriptions` D1 table, its Drizzle definition, and the helpe
 These helpers serve both the publisher (in `workers/api`) and the admin endpoints. They live in `src/db/queries.ts` alongside existing helpers like `findOrg`, `listIgnoredUrls`.
 
 **Files:**
+
 - Modify: `src/db/queries.ts` (add functions at the end of the file)
 - Create: `src/db/queries.webhooks.test.ts`
 
@@ -207,19 +216,23 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
       const made = makeDb();
       db = made.db;
       // Seed an org and a source for FK satisfaction
-      db.insert(organizations).values({
-        id: "org_test1",
-        slug: "acme",
-        name: "Acme",
-      }).run();
-      db.insert(sources).values({
-        id: "src_test1",
-        slug: "acme-blog",
-        name: "Acme Blog",
-        url: "https://acme.example/blog",
-        type: "scrape",
-        orgId: "org_test1",
-      }).run();
+      db.insert(organizations)
+        .values({
+          id: "org_test1",
+          slug: "acme",
+          name: "Acme",
+        })
+        .run();
+      db.insert(sources)
+        .values({
+          id: "src_test1",
+          slug: "acme-blog",
+          name: "Acme Blog",
+          url: "https://acme.example/blog",
+          type: "scrape",
+          orgId: "org_test1",
+        })
+        .run();
     });
 
     it("inserts and retrieves a subscription", async () => {
@@ -263,7 +276,10 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
         sourceId: null,
         description: null,
       });
-      await updateWebhookSubscriptionSummary(db, sub.id, { kind: "success", at: "2026-04-18T00:00:00Z" });
+      await updateWebhookSubscriptionSummary(db, sub.id, {
+        kind: "success",
+        at: "2026-04-18T00:00:00Z",
+      });
       const after = await getWebhookSubscriptionById(db, sub.id);
       expect(after?.lastSuccessAt).toBe("2026-04-18T00:00:00Z");
       expect(after?.consecutiveFailures).toBe(0);
@@ -276,8 +292,16 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
         sourceId: null,
         description: null,
       });
-      await updateWebhookSubscriptionSummary(db, sub.id, { kind: "error", at: "2026-04-18T00:00:01Z", message: "boom" });
-      await updateWebhookSubscriptionSummary(db, sub.id, { kind: "error", at: "2026-04-18T00:00:02Z", message: "boom2" });
+      await updateWebhookSubscriptionSummary(db, sub.id, {
+        kind: "error",
+        at: "2026-04-18T00:00:01Z",
+        message: "boom",
+      });
+      await updateWebhookSubscriptionSummary(db, sub.id, {
+        kind: "error",
+        at: "2026-04-18T00:00:02Z",
+        message: "boom2",
+      });
       const after = await getWebhookSubscriptionById(db, sub.id);
       expect(after?.consecutiveFailures).toBe(2);
       expect(after?.lastErrorMsg).toBe("boom2");
@@ -324,7 +348,11 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
   // Webhook subscriptions
   // ---------------------------------------------------------------------------
 
-  import { webhookSubscriptions, type WebhookSubscription, type NewWebhookSubscription } from "@buildinternet/releases-core/schema";
+  import {
+    webhookSubscriptions,
+    type WebhookSubscription,
+    type NewWebhookSubscription,
+  } from "@buildinternet/releases-core/schema";
   // (place this import near the existing schema imports at the top of the file
   //  rather than mid-file; shown here for clarity)
 
@@ -340,7 +368,11 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
     db: AnyDb,
     id: string,
   ): Promise<WebhookSubscription | null> {
-    const rows = await db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.id, id)).limit(1);
+    const rows = await db
+      .select()
+      .from(webhookSubscriptions)
+      .where(eq(webhookSubscriptions.id, id))
+      .limit(1);
     return rows[0] ?? null;
   }
 
@@ -350,7 +382,9 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
     opts?: { enabledOnly?: boolean },
   ): Promise<WebhookSubscription[]> {
     if (opts?.enabledOnly) {
-      return db.select().from(webhookSubscriptions)
+      return db
+        .select()
+        .from(webhookSubscriptions)
         .where(and(eq(webhookSubscriptions.orgId, orgId), eq(webhookSubscriptions.enabled, true)));
     }
     return db.select().from(webhookSubscriptions).where(eq(webhookSubscriptions.orgId, orgId));
@@ -366,11 +400,12 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
     orgIds: string[],
   ): Promise<WebhookSubscription[]> {
     if (orgIds.length === 0) return [];
-    return db.select().from(webhookSubscriptions)
-      .where(and(
-        eq(webhookSubscriptions.enabled, true),
-        inArray(webhookSubscriptions.orgId, orgIds),
-      ));
+    return db
+      .select()
+      .from(webhookSubscriptions)
+      .where(
+        and(eq(webhookSubscriptions.enabled, true), inArray(webhookSubscriptions.orgId, orgIds)),
+      );
   }
 
   export type SummaryUpdate =
@@ -383,14 +418,16 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
     update: SummaryUpdate,
   ): Promise<void> {
     if (update.kind === "success") {
-      await db.update(webhookSubscriptions)
+      await db
+        .update(webhookSubscriptions)
         .set({ lastSuccessAt: update.at, consecutiveFailures: 0 })
         .where(eq(webhookSubscriptions.id, id));
     } else {
       // Read current value, increment, write back. Two queries; acceptable at v1 volume.
       const cur = await getWebhookSubscriptionById(db, id);
       if (!cur) return;
-      await db.update(webhookSubscriptions)
+      await db
+        .update(webhookSubscriptions)
         .set({
           lastErrorAt: update.at,
           lastErrorMsg: update.message,
@@ -406,7 +443,8 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
     enabled: boolean,
     reason: string | null,
   ): Promise<void> {
-    await db.update(webhookSubscriptions)
+    await db
+      .update(webhookSubscriptions)
       .set({ enabled, disabledReason: enabled ? null : reason })
       .where(eq(webhookSubscriptions.id, id));
   }
@@ -419,7 +457,8 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
     const cur = await getWebhookSubscriptionById(db, id);
     if (!cur) throw new Error(`subscription not found: ${id}`);
     const newVersion = cur.secretVersion + 1;
-    await db.update(webhookSubscriptions)
+    await db
+      .update(webhookSubscriptions)
       .set({ secretVersion: newVersion })
       .where(eq(webhookSubscriptions.id, id));
     return newVersion;
@@ -452,6 +491,7 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
 ### Task 4: Webhook types module
 
 **Files:**
+
 - Create: `workers/api/src/webhooks/types.ts`
 
 - [ ] **Step 4.1: Create the types module**
@@ -494,6 +534,7 @@ These helpers serve both the publisher (in `workers/api`) and the admin endpoint
 Maps `(events, subscriptions) → DeliveryMessage[]` by matching `orgId` (always) and `sourceId` (when subscription has one set).
 
 **Files:**
+
 - Create: `workers/api/src/webhooks/expand.ts`
 - Create: `workers/api/src/webhooks/expand.test.ts`
 
@@ -506,7 +547,9 @@ Maps `(events, subscriptions) → DeliveryMessage[]` by matching `orgId` (always
   import type { ReleaseEvent } from "../events/types.js";
   import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 
-  function evt(overrides: Partial<ReleaseEvent["release"]> & { orgId: string; sourceId: string }): ReleaseEvent {
+  function evt(
+    overrides: Partial<ReleaseEvent["release"]> & { orgId: string; sourceId: string },
+  ): ReleaseEvent {
     return {
       id: "evt_x",
       seq: 1,
@@ -584,7 +627,9 @@ Maps `(events, subscriptions) → DeliveryMessage[]` by matching `orgId` (always
 
     it("captures url and secretVersion from the subscription at fan-out time", () => {
       const events = [evt({ orgId: "org_a", sourceId: "src_a" })];
-      const subs = [sub({ id: "whk_1", orgId: "org_a", url: "https://x.test/u", secretVersion: 7 })];
+      const subs = [
+        sub({ id: "whk_1", orgId: "org_a", url: "https://x.test/u", secretVersion: 7 }),
+      ];
       const out = expand(events, subs, eventOwner);
       expect(out[0].url).toBe("https://x.test/u");
       expect(out[0].secretVersion).toBe(7);
@@ -663,6 +708,7 @@ Maps `(events, subscriptions) → DeliveryMessage[]` by matching `orgId` (always
 Lives in `packages/core` so both `workers/webhooks` (signs) and `src/cli/commands/webhook-verify.ts` (verifies) can import it. No DB or Worker dependencies — only Web Crypto.
 
 **Files:**
+
 - Create: `packages/core/src/webhook-sign.ts`
 - Create: `packages/core/src/webhook-sign.test.ts`
 
@@ -696,21 +742,26 @@ Lives in `packages/core` so both `workers/webhooks` (signs) and `src/cli/command
 
     it("signPayload produces a hex SHA256 HMAC", async () => {
       const key = await deriveSigningKey(master, "whk_abc", 1);
-      const sig = await signPayload(key, 1729281234, "{\"hello\":\"world\"}");
+      const sig = await signPayload(key, 1729281234, '{"hello":"world"}');
       expect(sig).toMatch(/^sha256=[0-9a-f]{64}$/);
     });
 
     it("verifySignature accepts a matching signature", async () => {
       const key = await deriveSigningKey(master, "whk_abc", 1);
       const ts = 1729281234;
-      const body = "{\"hello\":\"world\"}";
+      const body = '{"hello":"world"}';
       const sig = await signPayload(key, ts, body);
       expect(await verifySignature(key, ts, body, sig)).toBe(true);
     });
 
     it("verifySignature rejects a mismatched signature", async () => {
       const key = await deriveSigningKey(master, "whk_abc", 1);
-      const ok = await verifySignature(key, 1729281234, "{\"hello\":\"world\"}", "sha256=00".padEnd(71, "0"));
+      const ok = await verifySignature(
+        key,
+        1729281234,
+        '{"hello":"world"}',
+        "sha256=00".padEnd(71, "0"),
+      );
       expect(ok).toBe(false);
     });
 
@@ -737,13 +788,9 @@ Lives in `packages/core` so both `workers/webhooks` (signs) and `src/cli/command
 
   async function importHmacKey(rawHex: string): Promise<CryptoKey> {
     const bytes = hexToBytes(rawHex);
-    return crypto.subtle.importKey(
-      "raw",
-      bytes,
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
+    return crypto.subtle.importKey("raw", bytes, { name: "HMAC", hash: "SHA-256" }, false, [
+      "sign",
+    ]);
   }
 
   function hexToBytes(hex: string): Uint8Array {
@@ -852,6 +899,7 @@ Lives in `packages/core` so both `workers/webhooks` (signs) and `src/cli/command
 The DO already has the buffer; this widens it and exposes the existing `replayEvents` over HTTP for the new public endpoint.
 
 **Files:**
+
 - Modify: `workers/api/src/events/types.ts` (one constant)
 - Modify: `workers/api/src/release-hub.ts` (add new path)
 - Create: `workers/api/test/release-hub-replay.test.ts`
@@ -885,8 +933,13 @@ The DO already has the buffer; this widens it and exposes the existing `replayEv
     const map = new Map<string, unknown>();
     const storage = {
       get: async (k: string) => map.get(k) ?? null,
-      put: async (k: string, v: unknown) => { map.set(k, v); },
-      delete: async (keys: string[]) => { for (const k of keys) map.delete(k); return undefined; },
+      put: async (k: string, v: unknown) => {
+        map.set(k, v);
+      },
+      delete: async (keys: string[]) => {
+        for (const k of keys) map.delete(k);
+        return undefined;
+      },
       list: async (opts: { prefix: string; startAfter?: string }) => {
         const out = new Map<string, unknown>();
         const keys = [...map.keys()].filter((k) => k.startsWith(opts.prefix)).sort();
@@ -911,15 +964,23 @@ The DO already has the buffer; this widens it and exposes the existing `replayEv
     const events = [];
     for (let i = 0; i < n; i++) {
       events.push({
-        id: `rel_${i}`, title: `r${i}`, version: null, publishedAt: null,
-        sourceName: "s", sourceSlug: "s", contentSummary: null, media: [],
+        id: `rel_${i}`,
+        title: `r${i}`,
+        version: null,
+        publishedAt: null,
+        sourceName: "s",
+        sourceSlug: "s",
+        contentSummary: null,
+        media: [],
       });
     }
-    await hub.fetch(new Request("https://do/publish", {
-      method: "POST",
-      body: JSON.stringify({ events }),
-      headers: { "Content-Type": "application/json" },
-    }));
+    await hub.fetch(
+      new Request("https://do/publish", {
+        method: "POST",
+        body: JSON.stringify({ events }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
   }
 
   describe("ReleaseHub /replay", () => {
@@ -928,7 +989,7 @@ The DO already has the buffer; this widens it and exposes the existing `replayEv
       await publish(hub, 5);
       const res = await hub.fetch(new Request("https://do/replay?since=2"));
       expect(res.status).toBe(200);
-      const body = await res.json() as { events: { seq: number }[]; head: number; gap?: unknown };
+      const body = (await res.json()) as { events: { seq: number }[]; head: number; gap?: unknown };
       expect(body.events.map((e) => e.seq)).toEqual([3, 4, 5]);
       expect(body.head).toBe(5);
       expect(body.gap).toBeUndefined();
@@ -943,7 +1004,7 @@ The DO already has the buffer; this widens it and exposes the existing `replayEv
       // Manually patch oldest-seq to simulate a trimmed buffer.
       await (hub.ctx.storage as any).put("oldest-seq", 100);
       const res = await hub.fetch(new Request("https://do/replay?since=10"));
-      const body = await res.json() as { gap?: { oldestSeq: number } };
+      const body = (await res.json()) as { gap?: { oldestSeq: number } };
       expect(body.gap).toEqual({ oldestSeq: 100 });
     });
 
@@ -951,7 +1012,7 @@ The DO already has the buffer; this widens it and exposes the existing `replayEv
       const hub = makeHub();
       await publish(hub, 600);
       const res = await hub.fetch(new Request("https://do/replay?since=0"));
-      const body = await res.json() as { events: unknown[] };
+      const body = (await res.json()) as { events: unknown[] };
       expect(body.events.length).toBe(500);
     });
 
@@ -959,7 +1020,7 @@ The DO already has the buffer; this widens it and exposes the existing `replayEv
       const hub = makeHub();
       await publish(hub, 50);
       const res = await hub.fetch(new Request("https://do/replay?since=0&limit=10"));
-      const body = await res.json() as { events: unknown[] };
+      const body = (await res.json()) as { events: unknown[] };
       expect(body.events.length).toBe(10);
     });
   });
@@ -1028,6 +1089,7 @@ The DO already has the buffer; this widens it and exposes the existing `replayEv
 Thin proxy from the API worker to the DO's new `/replay` path.
 
 **Files:**
+
 - Create: `workers/api/src/routes/webhooks-replay.ts`
 - Modify: `workers/api/src/index.ts` (mount route)
 - Create: `workers/api/test/webhooks-replay.route.test.ts`
@@ -1045,9 +1107,12 @@ Thin proxy from the API worker to the DO's new `/replay` path.
     const fakeDoStub = {
       fetch: async (req: Request) => {
         const u = new URL(req.url);
-        return new Response(JSON.stringify({ events: [{ seq: 1 }], head: 1, since: u.searchParams.get("since") }), {
-          headers: { "Content-Type": "application/json" },
-        });
+        return new Response(
+          JSON.stringify({ events: [{ seq: 1 }], head: 1, since: u.searchParams.get("since") }),
+          {
+            headers: { "Content-Type": "application/json" },
+          },
+        );
       },
     };
     const env = {
@@ -1065,7 +1130,7 @@ Thin proxy from the API worker to the DO's new `/replay` path.
       const app = makeApp();
       const res = await app.fetch(new Request("https://x.test/v1/webhooks/events?since=42"));
       expect(res.status).toBe(200);
-      const body = await res.json() as { since?: string };
+      const body = (await res.json()) as { since?: string };
       expect(body.since).toBe("42");
     });
 
@@ -1089,7 +1154,10 @@ Thin proxy from the API worker to the DO's new `/replay` path.
   import type { Hono } from "hono";
   import { getReleaseHub } from "../utils.js";
 
-  export function mountWebhooksReplay(app: Hono, getEnv: (c: any) => { RELEASE_HUB: DurableObjectNamespace }) {
+  export function mountWebhooksReplay(
+    app: Hono,
+    getEnv: (c: any) => { RELEASE_HUB: DurableObjectNamespace },
+  ) {
     app.get("/v1/webhooks/events", async (c) => {
       const sinceRaw = c.req.query("since");
       const limitRaw = c.req.query("limit");
@@ -1144,6 +1212,7 @@ Thin proxy from the API worker to the DO's new `/replay` path.
 ### Task 9: Add the queue producer binding to `workers/api`
 
 **Files:**
+
 - Modify: `workers/api/wrangler.jsonc` (add `queues.producers`)
 
 - [ ] **Step 9.1: Add the producer binding**
@@ -1175,6 +1244,7 @@ Thin proxy from the API worker to the DO's new `/replay` path.
 D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limit).
 
 **Files:**
+
 - Create: `workers/api/src/webhooks/expand-and-enqueue.ts`
 - Create: `workers/api/src/webhooks/expand-and-enqueue.test.ts`
 
@@ -1207,7 +1277,9 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
     it("no-ops when no subscriptions match", async () => {
       const sendBatch = mock(async (_: any[]) => {});
       await expandAndEnqueue({
-        events: [{ id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1" } as any }],
+        events: [
+          { id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1" } as any },
+        ],
         eventOwners: new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]),
         loadSubscriptions: async () => [],
         queue: { sendBatch } as any,
@@ -1220,11 +1292,27 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
       const sendBatch = mock(async (msgs: { body: DeliveryMessage }[]) => {
         for (const m of msgs) sent.push(m.body);
       });
-      const events = [{ id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1" } as any }];
+      const events = [
+        { id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1" } as any },
+      ];
       const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]);
       const subs = [
-        { id: "whk_1", orgId: "org_a", sourceId: null, url: "https://h1", secretVersion: 1, enabled: true } as any,
-        { id: "whk_2", orgId: "org_b", sourceId: null, url: "https://h2", secretVersion: 1, enabled: true } as any,
+        {
+          id: "whk_1",
+          orgId: "org_a",
+          sourceId: null,
+          url: "https://h1",
+          secretVersion: 1,
+          enabled: true,
+        } as any,
+        {
+          id: "whk_2",
+          orgId: "org_b",
+          sourceId: null,
+          url: "https://h2",
+          secretVersion: 1,
+          enabled: true,
+        } as any,
       ];
       await expandAndEnqueue({
         events,
@@ -1238,13 +1326,30 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
 
     it("chunks sendBatch calls at 100 messages each", async () => {
       const calls: number[] = [];
-      const sendBatch = mock(async (msgs: any[]) => { calls.push(msgs.length); });
+      const sendBatch = mock(async (msgs: any[]) => {
+        calls.push(msgs.length);
+      });
       // 250 events × 1 sub = 250 messages → 3 batches: 100, 100, 50.
       const events = Array.from({ length: 250 }, (_, i) => ({
-        id: `evt_${i}`, seq: i + 1, ts: 1, type: "release.created", release: { id: `rel_${i}` } as any,
+        id: `evt_${i}`,
+        seq: i + 1,
+        ts: 1,
+        type: "release.created",
+        release: { id: `rel_${i}` } as any,
       }));
-      const owners = new Map(events.map((e) => [(e.release as any).id, { orgId: "org_a", sourceId: "src_a" }]));
-      const subs = [{ id: "whk_1", orgId: "org_a", sourceId: null, url: "https://h", secretVersion: 1, enabled: true } as any];
+      const owners = new Map(
+        events.map((e) => [(e.release as any).id, { orgId: "org_a", sourceId: "src_a" }]),
+      );
+      const subs = [
+        {
+          id: "whk_1",
+          orgId: "org_a",
+          sourceId: null,
+          url: "https://h",
+          secretVersion: 1,
+          enabled: true,
+        } as any,
+      ];
       await expandAndEnqueue({
         events,
         eventOwners: owners,
@@ -1255,12 +1360,30 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
     });
 
     it("swallows queue errors with a warn — never throws", async () => {
-      const sendBatch = mock(async (_: any[]) => { throw new Error("queue down"); });
-      const events = [{ id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1" } as any }];
+      const sendBatch = mock(async (_: any[]) => {
+        throw new Error("queue down");
+      });
+      const events = [
+        { id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1" } as any },
+      ];
       const owners = new Map([["rel_1", { orgId: "org_a", sourceId: "src_a" }]]);
-      const subs = [{ id: "whk_1", orgId: "org_a", sourceId: null, url: "https://h", secretVersion: 1, enabled: true } as any];
+      const subs = [
+        {
+          id: "whk_1",
+          orgId: "org_a",
+          sourceId: null,
+          url: "https://h",
+          secretVersion: 1,
+          enabled: true,
+        } as any,
+      ];
       // Should not throw.
-      await expandAndEnqueue({ events, eventOwners: owners, loadSubscriptions: async () => subs, queue: { sendBatch } as any });
+      await expandAndEnqueue({
+        events,
+        eventOwners: owners,
+        loadSubscriptions: async () => subs,
+        queue: { sendBatch } as any,
+      });
     });
   });
   ```
@@ -1296,9 +1419,13 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
   export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void> {
     if (args.events.length === 0) return;
     try {
-      const orgIds = [...new Set(
-        args.events.map((e) => args.eventOwners.get(e.release.id)?.orgId).filter((x): x is string => !!x),
-      )];
+      const orgIds = [
+        ...new Set(
+          args.events
+            .map((e) => args.eventOwners.get(e.release.id)?.orgId)
+            .filter((x): x is string => !!x),
+        ),
+      ];
       if (orgIds.length === 0) return;
       const subs = await args.loadSubscriptions(orgIds);
       if (subs.length === 0) return;
@@ -1314,7 +1441,9 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
         await args.queue.sendBatch(chunk.map((body) => ({ body })));
       }
     } catch (err) {
-      console.warn(`[webhooks] expandAndEnqueue failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(
+        `[webhooks] expandAndEnqueue failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
   }
   ```
@@ -1334,6 +1463,7 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
 ### Task 11: Wire `expandAndEnqueue` into `publishReleaseEvents`
 
 **Files:**
+
 - Modify: `workers/api/src/events/publish.ts`
 - Modify: `workers/api/src/events/build-event.ts` (likely — to expose owner info)
 - Modify: `workers/api/src/routes/sources.ts` (call site already wraps in waitUntil; just confirm env binding is passed)
@@ -1374,10 +1504,7 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
    * Both branches are fire-and-forget. Caller already wraps this in
    * ctx.waitUntil(). Errors are logged, never thrown.
    */
-  export async function publishReleaseEvents(
-    env: PublishEnv,
-    ctx: PublishContext,
-  ): Promise<void> {
+  export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext): Promise<void> {
     if (ctx.inserted.length === 0) return;
     const events: ReleaseEvent[] = []; // populated below
     const eventOwners = new Map<string, { orgId: string; sourceId: string }>();
@@ -1389,13 +1516,17 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
     let hubEvents: ReleaseEvent[] = [];
     try {
       const payloads = buildReleaseEventPayloads(ctx);
-      const res = await getReleaseHub(env).fetch(new Request("https://do/publish", {
-        method: "POST",
-        body: JSON.stringify({ events: payloads }),
-        headers: { "Content-Type": "application/json" },
-      }));
+      const res = await getReleaseHub(env).fetch(
+        new Request("https://do/publish", {
+          method: "POST",
+          body: JSON.stringify({ events: payloads }),
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
       if (!res.ok) {
-        console.warn(`[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`);
+        console.warn(
+          `[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`,
+        );
       } else {
         // The DO returns { published: N } today; we want the assigned ReleaseEvents.
         // Fetch them by replaying since=last-known. Acceptable: replay since head-N.
@@ -1411,7 +1542,9 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
         }));
       }
     } catch (err) {
-      console.warn(`[events] hub publish failed: ${err instanceof Error ? err.message : String(err)}`);
+      console.warn(
+        `[events] hub publish failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
     }
 
     // (2) Webhook fan-out. Independent of hub publish success.
@@ -1428,7 +1561,6 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
   **Note on ReleaseEvent.seq parity:** the local `seq: 0` placeholder is acceptable for v1 because the consumer doesn't use `seq` from the queue message — it uses `release.id` for idempotency (`X-Released-Event-Id` header) and `event.id` (assigned locally here). If a future requirement needs the DO-assigned `seq` in the webhook payload (for resume cursor handoff), extend the DO `/publish` response to return assigned events and use those.
 
 - [ ] **Step 11.3: Update the `PublishContext` shape at all call sites**
-
   - In `workers/api/src/routes/sources.ts:318`, the `publishReleaseEvents` call needs `ctx.src.orgId` and `ctx.src.sourceId`. Read the surrounding lines to confirm `source.orgId` and `source.id` are in scope; pass them.
   - In `workers/api/src/cron/poll-fetch.ts:329`, same. The `source` row should have these.
   - Also: ensure both call sites' `env` includes `WEBHOOK_DELIVERY_QUEUE` and `DB`. The Hono context's `c.env` should already match the Worker's env (which now has the binding from Task 9).
@@ -1459,6 +1591,7 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
 ### Task 12: Bootstrap the new Worker
 
 **Files:**
+
 - Create: `workers/webhooks/package.json`
 - Create: `workers/webhooks/tsconfig.json`
 - Create: `workers/webhooks/wrangler.jsonc`
@@ -1479,13 +1612,13 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
       "dev": "wrangler dev",
       "deploy": "wrangler deploy",
       "test": "bun test",
-      "typecheck": "tsc --noEmit"
+      "typecheck": "tsc --noEmit",
     },
     "devDependencies": {
       "@cloudflare/workers-types": "^4.20240620.0",
       "typescript": "^5.4.0",
-      "wrangler": "^3.60.0"
-    }
+      "wrangler": "^3.60.0",
+    },
   }
   ```
 
@@ -1503,21 +1636,21 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
     "name": "releases-webhooks",
     "main": "src/index.ts",
     "alias": {
-      "@releases": "../../src"
+      "@releases": "../../src",
     },
     "compatibility_date": "2026-03-27",
     "compatibility_flags": ["nodejs_compat"],
     "observability": { "enabled": true },
     "vars": {
       "DELIVERY_TIMEOUT_MS": "10000",
-      "AUTO_DISABLE_THRESHOLD": "50"
+      "AUTO_DISABLE_THRESHOLD": "50",
     },
     "d1_databases": [
       {
         "binding": "DB",
         "database_name": "released-db",
-        "database_id": "73be1562-d900-4e25-a62b-650ab74488b7"
-      }
+        "database_id": "73be1562-d900-4e25-a62b-650ab74488b7",
+      },
     ],
     "queues": {
       "consumers": [
@@ -1526,21 +1659,25 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
           "max_batch_size": 10,
           "max_batch_timeout": 5,
           "max_retries": 6,
-          "dead_letter_queue": "webhook-dlq"
+          "dead_letter_queue": "webhook-dlq",
         },
         {
           "queue": "webhook-dlq",
           "max_batch_size": 10,
           "max_batch_timeout": 5,
-          "max_retries": 0
-        }
-      ]
+          "max_retries": 0,
+        },
+      ],
     },
     "analytics_engine_datasets": [
-      { "binding": "WEBHOOK_DELIVERIES_AE", "dataset": "webhook_deliveries" }
+      { "binding": "WEBHOOK_DELIVERIES_AE", "dataset": "webhook_deliveries" },
     ],
     "secrets_store_secrets": [
-      { "binding": "WEBHOOK_HMAC_MASTER", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "WEBHOOK_HMAC_MASTER" }
+      {
+        "binding": "WEBHOOK_HMAC_MASTER",
+        "store_id": "a887a71cab084105b79706df23380723",
+        "secret_name": "WEBHOOK_HMAC_MASTER",
+      },
     ],
     "unsafe": {
       "bindings": [
@@ -1548,10 +1685,10 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
           "name": "PER_SUB_RATE_LIMITER",
           "type": "ratelimit",
           "namespace_id": "1002",
-          "simple": { "limit": 600, "period": 60 }
-        }
-      ]
-    }
+          "simple": { "limit": 600, "period": 60 },
+        },
+      ],
+    },
   }
   ```
 
@@ -1623,6 +1760,7 @@ D1 lookup + pure expand + queue sendBatch (chunked at 100 per Queues' batch limi
 The consumer needs read access to `webhook_subscriptions` and write access to summary cols + enabled flag. Reuses the helpers from Task 3 by importing from `@releases/db/queries`. Also adds a thin Drizzle binding for D1.
 
 **Files:**
+
 - Create: `workers/webhooks/src/db.ts`
 
 - [ ] **Step 13.1: Create the helper**
@@ -1662,6 +1800,7 @@ The consumer needs read access to `webhook_subscriptions` and write access to su
 ### Task 14: Analytics Engine writer
 
 **Files:**
+
 - Create: `workers/webhooks/src/ae.ts`
 - Create: `workers/webhooks/src/ae.test.ts`
 
@@ -1675,7 +1814,11 @@ The consumer needs read access to `webhook_subscriptions` and write access to su
   function fakeAE() {
     const written: any[] = [];
     return {
-      ds: { writeDataPoint: (point: any) => { written.push(point); } } as any,
+      ds: {
+        writeDataPoint: (point: any) => {
+          written.push(point);
+        },
+      } as any,
       written,
     };
   }
@@ -1748,10 +1891,7 @@ The consumer needs read access to `webhook_subscriptions` and write access to su
    *   blobs:   [event_id, error_message, error_code, outcome]
    *   doubles: [http_status, latency_ms, attempt_number]
    */
-  export function writeDeliveryAttempt(
-    ds: AnalyticsEngineDataset,
-    attempt: DeliveryAttempt,
-  ): void {
+  export function writeDeliveryAttempt(ds: AnalyticsEngineDataset, attempt: DeliveryAttempt): void {
     ds.writeDataPoint({
       indexes: [attempt.subscriptionId],
       blobs: [
@@ -1782,6 +1922,7 @@ The consumer needs read access to `webhook_subscriptions` and write access to su
 Performs one HTTP POST: signs, sends with timeout, classifies the response into one of `{ success, retry, perm_fail }`. Returns a `DeliveryResult` for the orchestration layer to act on. Pure-ish — no DB or AE writes here; the caller does those.
 
 **Files:**
+
 - Create: `workers/webhooks/src/deliver.ts`
 - Create: `workers/webhooks/src/deliver.test.ts`
 
@@ -1799,9 +1940,20 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
       url: "https://hook.example/u",
       secretVersion: 1,
       event: {
-        id: "evt_1", seq: 1, ts: 1, type: "release.created",
-        release: { id: "rel_1", title: "t", version: null, publishedAt: null,
-          sourceName: "s", sourceSlug: "s", contentSummary: null, media: [] } as any,
+        id: "evt_1",
+        seq: 1,
+        ts: 1,
+        type: "release.created",
+        release: {
+          id: "rel_1",
+          title: "t",
+          version: null,
+          publishedAt: null,
+          sourceName: "s",
+          sourceSlug: "s",
+          contentSummary: null,
+          media: [],
+        } as any,
       },
       attempt: 1,
     };
@@ -1823,35 +1975,69 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
 
     it("returns perm_fail on 4xx", async () => {
       const fetch = async () => new Response("bad", { status: 400 });
-      const r = await deliver(msg(), { masterKey: "deadbeef".repeat(8), timeoutMs: 1000, fetchImpl: fetch as any, now: () => 1 });
+      const r = await deliver(msg(), {
+        masterKey: "deadbeef".repeat(8),
+        timeoutMs: 1000,
+        fetchImpl: fetch as any,
+        now: () => 1,
+      });
       expect(r.outcome).toBe("perm_fail");
       expect(r.httpStatus).toBe(400);
     });
 
     it("returns retry on 5xx", async () => {
       const fetch = async () => new Response("err", { status: 503 });
-      const r = await deliver(msg(), { masterKey: "deadbeef".repeat(8), timeoutMs: 1000, fetchImpl: fetch as any, now: () => 1 });
+      const r = await deliver(msg(), {
+        masterKey: "deadbeef".repeat(8),
+        timeoutMs: 1000,
+        fetchImpl: fetch as any,
+        now: () => 1,
+      });
       expect(r.outcome).toBe("retry");
     });
 
     it("returns retry on network error", async () => {
-      const fetch = async () => { throw new TypeError("network"); };
-      const r = await deliver(msg(), { masterKey: "deadbeef".repeat(8), timeoutMs: 1000, fetchImpl: fetch as any, now: () => 1 });
+      const fetch = async () => {
+        throw new TypeError("network");
+      };
+      const r = await deliver(msg(), {
+        masterKey: "deadbeef".repeat(8),
+        timeoutMs: 1000,
+        fetchImpl: fetch as any,
+        now: () => 1,
+      });
       expect(r.outcome).toBe("retry");
       expect(r.errorCode).toBe("network");
     });
 
     it("returns retry on timeout (AbortError)", async () => {
-      const fetch = async () => { const e: any = new Error("aborted"); e.name = "AbortError"; throw e; };
-      const r = await deliver(msg(), { masterKey: "deadbeef".repeat(8), timeoutMs: 1, fetchImpl: fetch as any, now: () => 1 });
+      const fetch = async () => {
+        const e: any = new Error("aborted");
+        e.name = "AbortError";
+        throw e;
+      };
+      const r = await deliver(msg(), {
+        masterKey: "deadbeef".repeat(8),
+        timeoutMs: 1,
+        fetchImpl: fetch as any,
+        now: () => 1,
+      });
       expect(r.outcome).toBe("retry");
       expect(r.errorCode).toBe("timeout");
     });
 
     it("sends the expected headers", async () => {
       let captured: Request | null = null;
-      const fetch = async (req: Request) => { captured = req; return new Response("ok", { status: 200 }); };
-      await deliver(msg(), { masterKey: "deadbeef".repeat(8), timeoutMs: 1000, fetchImpl: fetch as any, now: () => 1729281234 });
+      const fetch = async (req: Request) => {
+        captured = req;
+        return new Response("ok", { status: 200 });
+      };
+      await deliver(msg(), {
+        masterKey: "deadbeef".repeat(8),
+        timeoutMs: 1000,
+        fetchImpl: fetch as any,
+        now: () => 1729281234,
+      });
       expect(captured).not.toBeNull();
       const r = captured!;
       expect(r.headers.get("X-Released-Version")).toBe("1");
@@ -1879,7 +2065,7 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
 
   export interface DeliveryResult {
     outcome: Extract<Outcome, "success" | "retry" | "perm_fail">;
-    httpStatus: number;       // 0 if no response (network/timeout)
+    httpStatus: number; // 0 if no response (network/timeout)
     latencyMs: number;
     errorMessage: string | null;
     errorCode: string | null; // "network", "timeout", "subscriber_5xx", "subscriber_4xx", or null on success
@@ -1892,12 +2078,19 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
     now?: () => number; // unix seconds
   }
 
-  export async function deliver(message: DeliveryMessage, opts: DeliverOptions): Promise<DeliveryResult> {
+  export async function deliver(
+    message: DeliveryMessage,
+    opts: DeliverOptions,
+  ): Promise<DeliveryResult> {
     const fetchImpl = opts.fetchImpl ?? fetch;
     const now = opts.now ?? (() => Math.floor(Date.now() / 1000));
     const ts = now();
     const body = JSON.stringify(message.event);
-    const signingKey = await deriveSigningKey(opts.masterKey, message.subscriptionId, message.secretVersion);
+    const signingKey = await deriveSigningKey(
+      opts.masterKey,
+      message.subscriptionId,
+      message.secretVersion,
+    );
     const signature = await signPayload(signingKey, ts, body);
 
     const controller = new AbortController();
@@ -1920,19 +2113,52 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
       });
       const latencyMs = Date.now() - start;
       if (res.status >= 200 && res.status < 300) {
-        return { outcome: "success", httpStatus: res.status, latencyMs, errorMessage: null, errorCode: null };
+        return {
+          outcome: "success",
+          httpStatus: res.status,
+          latencyMs,
+          errorMessage: null,
+          errorCode: null,
+        };
       }
       if (res.status >= 400 && res.status < 500) {
-        const excerpt = await res.text().then((t) => t.slice(0, 200)).catch(() => "");
-        return { outcome: "perm_fail", httpStatus: res.status, latencyMs, errorMessage: excerpt, errorCode: "subscriber_4xx" };
+        const excerpt = await res
+          .text()
+          .then((t) => t.slice(0, 200))
+          .catch(() => "");
+        return {
+          outcome: "perm_fail",
+          httpStatus: res.status,
+          latencyMs,
+          errorMessage: excerpt,
+          errorCode: "subscriber_4xx",
+        };
       }
-      return { outcome: "retry", httpStatus: res.status, latencyMs, errorMessage: `subscriber returned ${res.status}`, errorCode: "subscriber_5xx" };
+      return {
+        outcome: "retry",
+        httpStatus: res.status,
+        latencyMs,
+        errorMessage: `subscriber returned ${res.status}`,
+        errorCode: "subscriber_5xx",
+      };
     } catch (err: any) {
       const latencyMs = Date.now() - start;
       if (err?.name === "AbortError") {
-        return { outcome: "retry", httpStatus: 0, latencyMs, errorMessage: "timeout", errorCode: "timeout" };
+        return {
+          outcome: "retry",
+          httpStatus: 0,
+          latencyMs,
+          errorMessage: "timeout",
+          errorCode: "timeout",
+        };
       }
-      return { outcome: "retry", httpStatus: 0, latencyMs, errorMessage: err?.message ?? String(err), errorCode: "network" };
+      return {
+        outcome: "retry",
+        httpStatus: 0,
+        latencyMs,
+        errorMessage: err?.message ?? String(err),
+        errorCode: "network",
+      };
     } finally {
       clearTimeout(timeout);
     }
@@ -1954,6 +2180,7 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
 ### Task 16: Wire `queue()` and `dlq()` handlers; add auto-disable + rate limiting
 
 **Files:**
+
 - Modify: `workers/webhooks/src/index.ts`
 - Create: `workers/webhooks/src/index.test.ts`
 
@@ -2002,7 +2229,22 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
       subscriptionId: subId,
       url: "https://hook.example/u",
       secretVersion: 1,
-      event: { id: "evt_1", seq: 1, ts: 1, type: "release.created", release: { id: "rel_1", title: "t", version: null, publishedAt: null, sourceName: "s", sourceSlug: "s", contentSummary: null, media: [] } as any },
+      event: {
+        id: "evt_1",
+        seq: 1,
+        ts: 1,
+        type: "release.created",
+        release: {
+          id: "rel_1",
+          title: "t",
+          version: null,
+          publishedAt: null,
+          sourceName: "s",
+          sourceSlug: "s",
+          contentSummary: null,
+          media: [],
+        } as any,
+      },
       attempt: 1,
     };
   }
@@ -2140,7 +2382,12 @@ Performs one HTTP POST: signs, sends with timeout, classifies the response into 
           // Auto-disable check (read-then-write; idempotent).
           const fresh = await getWebhookSubscriptionById(db, body.subscriptionId);
           if (fresh && fresh.consecutiveFailures >= threshold) {
-            await setWebhookSubscriptionEnabled(db, body.subscriptionId, false, `auto-disabled after ${fresh.consecutiveFailures} consecutive failures`);
+            await setWebhookSubscriptionEnabled(
+              db,
+              body.subscriptionId,
+              false,
+              `auto-disabled after ${fresh.consecutiveFailures} consecutive failures`,
+            );
             writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, {
               subscriptionId: body.subscriptionId,
               eventId: body.event.id,
@@ -2194,6 +2441,7 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
 ### Task 17: Admin webhooks routes — create / list / show
 
 **Files:**
+
 - Create: `workers/api/src/routes/admin-webhooks.ts`
 - Create: `workers/api/test/admin-webhooks.test.ts`
 - Modify: `workers/api/src/index.ts` (mount under admin auth)
@@ -2211,43 +2459,55 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
   describe("POST /admin/webhooks", () => {
     it("creates a subscription and returns the signing key once", async () => {
       // Seed an org and admin auth.
-      const res = await testApp.fetch(new Request("https://x.test/admin/webhooks", {
-        method: "POST",
-        headers: { "Authorization": "Bearer admin-key", "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "https://hook/u", description: "first hook" }),
-      }));
+      const res = await testApp.fetch(
+        new Request("https://x.test/admin/webhooks", {
+          method: "POST",
+          headers: { Authorization: "Bearer admin-key", "Content-Type": "application/json" },
+          body: JSON.stringify({
+            orgId: "org_test",
+            url: "https://hook/u",
+            description: "first hook",
+          }),
+        }),
+      );
       expect(res.status).toBe(201);
-      const body = await res.json() as { id: string; signingKey: string };
+      const body = (await res.json()) as { id: string; signingKey: string };
       expect(body.id).toMatch(/^whk_/);
       expect(body.signingKey).toMatch(/^[0-9a-f]{64}$/);
     });
 
     it("rejects non-https URLs", async () => {
-      const res = await testApp.fetch(new Request("https://x.test/admin/webhooks", {
-        method: "POST",
-        headers: { "Authorization": "Bearer admin-key", "Content-Type": "application/json" },
-        body: JSON.stringify({ orgId: "org_test", url: "http://insecure/u" }),
-      }));
+      const res = await testApp.fetch(
+        new Request("https://x.test/admin/webhooks", {
+          method: "POST",
+          headers: { Authorization: "Bearer admin-key", "Content-Type": "application/json" },
+          body: JSON.stringify({ orgId: "org_test", url: "http://insecure/u" }),
+        }),
+      );
       expect(res.status).toBe(400);
     });
   });
 
   describe("GET /admin/webhooks", () => {
     it("lists subscriptions for an org", async () => {
-      const res = await testApp.fetch(new Request("https://x.test/admin/webhooks?org=org_test", {
-        headers: { "Authorization": "Bearer admin-key" },
-      }));
+      const res = await testApp.fetch(
+        new Request("https://x.test/admin/webhooks?org=org_test", {
+          headers: { Authorization: "Bearer admin-key" },
+        }),
+      );
       expect(res.status).toBe(200);
-      const body = await res.json() as { subscriptions: any[] };
+      const body = (await res.json()) as { subscriptions: any[] };
       expect(Array.isArray(body.subscriptions)).toBe(true);
     });
   });
 
   describe("GET /admin/webhooks/:id", () => {
     it("returns 404 on unknown id", async () => {
-      const res = await testApp.fetch(new Request("https://x.test/admin/webhooks/whk_nonexistent", {
-        headers: { "Authorization": "Bearer admin-key" },
-      }));
+      const res = await testApp.fetch(
+        new Request("https://x.test/admin/webhooks/whk_nonexistent", {
+          headers: { Authorization: "Bearer admin-key" },
+        }),
+      );
       expect(res.status).toBe(404);
     });
   });
@@ -2279,12 +2539,19 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
   export function mountAdminWebhooks(app: Hono) {
     app.post("/admin/webhooks", async (c) => {
       const env = c.env as AdminWebhooksEnv;
-      const body = await c.req.json().catch(() => null) as null | {
-        orgId?: string; url?: string; sourceId?: string | null; description?: string | null;
+      const body = (await c.req.json().catch(() => null)) as null | {
+        orgId?: string;
+        url?: string;
+        sourceId?: string | null;
+        description?: string | null;
       };
       if (!body?.orgId || !body.url) return c.json({ error: "orgId and url required" }, 400);
       let parsed: URL;
-      try { parsed = new URL(body.url); } catch { return c.json({ error: "invalid url" }, 400); }
+      try {
+        parsed = new URL(body.url);
+      } catch {
+        return c.json({ error: "invalid url" }, 400);
+      }
       if (parsed.protocol !== "https:") return c.json({ error: "url must be https" }, 400);
 
       const db = drizzle(env.DB);
@@ -2306,9 +2573,11 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
       const enabledOnly = c.req.query("enabled") === "true";
       const disabledOnly = c.req.query("enabled") === "false";
       const all = await listWebhookSubscriptionsByOrg(db, orgId);
-      const filtered = enabledOnly ? all.filter((s) => s.enabled)
-        : disabledOnly ? all.filter((s) => !s.enabled)
-        : all;
+      const filtered = enabledOnly
+        ? all.filter((s) => s.enabled)
+        : disabledOnly
+          ? all.filter((s) => !s.enabled)
+          : all;
       return c.json({ subscriptions: filtered });
     });
 
@@ -2347,6 +2616,7 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
 ### Task 18: Admin webhooks — edit + delete + test + rotate-secret + deliveries
 
 **Files:**
+
 - Modify: `workers/api/src/routes/admin-webhooks.ts`
 - Modify: `workers/api/test/admin-webhooks.test.ts`
 
@@ -2358,12 +2628,14 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
   describe("POST /admin/webhooks/:id/rotate-secret", () => {
     it("bumps secret_version and returns new signing key", async () => {
       // Seed sub with version=1.
-      const res = await testApp.fetch(new Request("https://x.test/admin/webhooks/whk_existing/rotate-secret", {
-        method: "POST",
-        headers: { "Authorization": "Bearer admin-key" },
-      }));
+      const res = await testApp.fetch(
+        new Request("https://x.test/admin/webhooks/whk_existing/rotate-secret", {
+          method: "POST",
+          headers: { Authorization: "Bearer admin-key" },
+        }),
+      );
       expect(res.status).toBe(200);
-      const body = await res.json() as { secretVersion: number; signingKey: string };
+      const body = (await res.json()) as { secretVersion: number; signingKey: string };
       expect(body.secretVersion).toBe(2);
       expect(body.signingKey).toMatch(/^[0-9a-f]{64}$/);
     });
@@ -2388,12 +2660,19 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
     const id = c.req.param("id");
     const sub = await getWebhookSubscriptionById(db, id);
     if (!sub) return c.json({ error: "not found" }, 404);
-    const body = await c.req.json().catch(() => ({})) as Partial<{
-      url: string; description: string | null; enabled: boolean; disabledReason: string | null;
+    const body = (await c.req.json().catch(() => ({}))) as Partial<{
+      url: string;
+      description: string | null;
+      enabled: boolean;
+      disabledReason: string | null;
     }>;
     if (body.url) {
-      try { const u = new URL(body.url); if (u.protocol !== "https:") return c.json({ error: "url must be https" }, 400); }
-      catch { return c.json({ error: "invalid url" }, 400); }
+      try {
+        const u = new URL(body.url);
+        if (u.protocol !== "https:") return c.json({ error: "url must be https" }, 400);
+      } catch {
+        return c.json({ error: "invalid url" }, 400);
+      }
     }
     // Apply patch via direct update (helpers are CRUD-only; here we hand-roll to keep PATCH thin).
     const { webhookSubscriptions } = await import("@buildinternet/releases-core/schema");
@@ -2425,7 +2704,11 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
     const db = drizzle(env.DB);
     const { bumpWebhookSecretVersion } = await import("@releases/db/queries.js");
     const newVersion = await bumpWebhookSecretVersion(db, c.req.param("id"));
-    const signingKey = await deriveSigningKey(env.WEBHOOK_HMAC_MASTER, c.req.param("id"), newVersion);
+    const signingKey = await deriveSigningKey(
+      env.WEBHOOK_HMAC_MASTER,
+      c.req.param("id"),
+      newVersion,
+    );
     return c.json({ secretVersion: newVersion, signingKey });
   });
 
@@ -2470,13 +2753,18 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
     // a NotImplemented placeholder if the token isn't available, and the CLI
     // gracefully degrades to a "set CF_API_TOKEN to query deliveries" message).
     if (!env.CF_API_TOKEN || !env.CF_ACCOUNT_ID) {
-      return c.json({ error: "AE query disabled — set CF_API_TOKEN + CF_ACCOUNT_ID to enable" }, 501);
+      return c.json(
+        { error: "AE query disabled — set CF_API_TOKEN + CF_ACCOUNT_ID to enable" },
+        501,
+      );
     }
-    const where = `index1 = '${id}'` + (failedOnly ? ` AND blob4 IN ('retry','perm_fail','dlq','auto_disabled')` : "");
+    const where =
+      `index1 = '${id}'` +
+      (failedOnly ? ` AND blob4 IN ('retry','perm_fail','dlq','auto_disabled')` : "");
     const sql = `SELECT timestamp, blob1 AS event_id, blob2 AS error_message, blob3 AS error_code, blob4 AS outcome, double1 AS http_status, double2 AS latency_ms, double3 AS attempt FROM webhook_deliveries WHERE ${where} ORDER BY timestamp DESC LIMIT ${limit}`;
     const res = await fetch(
       `https://api.cloudflare.com/client/v4/accounts/${env.CF_ACCOUNT_ID}/analytics_engine/sql`,
-      { method: "POST", headers: { "Authorization": `Bearer ${env.CF_API_TOKEN}` }, body: sql },
+      { method: "POST", headers: { Authorization: `Bearer ${env.CF_API_TOKEN}` }, body: sql },
     );
     if (!res.ok) return c.json({ error: `AE query failed: ${res.status}` }, 502);
     const data = await res.json();
@@ -2505,6 +2793,7 @@ Mounted under the existing admin auth middleware in `workers/api/src/index.ts`.
 Single file with all eight admin commands.
 
 **Files:**
+
 - Create: `src/cli/commands/admin/webhook.ts`
 - Modify: `src/cli/commands/admin/index.ts` (or wherever admin subgroups register) to register
 
@@ -2528,7 +2817,8 @@ Single file with all eight admin commands.
   export function registerWebhookAdminCommand(parent: Command) {
     const webhook = parent.command("webhook").description("Manage webhook subscriptions");
 
-    webhook.command("add")
+    webhook
+      .command("add")
       .requiredOption("--org <slug>", "Organization slug or ID")
       .requiredOption("--url <url>", "HTTPS endpoint to deliver to")
       .option("--source <slug>", "Restrict to a single source (omit for org-wide)")
@@ -2536,17 +2826,28 @@ Single file with all eight admin commands.
       .option("--json", "JSON output")
       .action(async (opts) => {
         const res = await apiAdmin.post("/admin/webhooks", {
-          orgId: opts.org, url: opts.url, sourceId: opts.source ?? null, description: opts.description ?? null,
+          orgId: opts.org,
+          url: opts.url,
+          sourceId: opts.source ?? null,
+          description: opts.description ?? null,
         });
-        if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
+        if (opts.json) {
+          console.log(JSON.stringify(res, null, 2));
+          return;
+        }
         logger.info(chalk.green(`Created ${res.id}`));
         logger.info(`URL: ${res.url}`);
         logger.info(chalk.bold(`Signing key (shown once — save it now):`));
         logger.info(chalk.yellow(res.signingKey));
-        logger.info(chalk.gray(`Re-running 'add' generates a new subscription. Use 'rotate-secret' to regenerate.`));
+        logger.info(
+          chalk.gray(
+            `Re-running 'add' generates a new subscription. Use 'rotate-secret' to regenerate.`,
+          ),
+        );
       });
 
-    webhook.command("list")
+    webhook
+      .command("list")
       .option("--org <slug>", "Filter by org")
       .option("--enabled", "Show enabled only")
       .option("--disabled", "Show disabled only")
@@ -2557,8 +2858,14 @@ Single file with all eight admin commands.
         if (opts.enabled) qs.set("enabled", "true");
         if (opts.disabled) qs.set("enabled", "false");
         const res = await apiAdmin.get(`/admin/webhooks?${qs}`);
-        if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
-        if (res.subscriptions.length === 0) { logger.info("No subscriptions."); return; }
+        if (opts.json) {
+          console.log(JSON.stringify(res, null, 2));
+          return;
+        }
+        if (res.subscriptions.length === 0) {
+          logger.info("No subscriptions.");
+          return;
+        }
         for (const s of res.subscriptions) {
           const status = s.enabled ? chalk.green("●") : chalk.red("●");
           const desc = s.description ? chalk.gray(` — ${s.description}`) : "";
@@ -2566,15 +2873,20 @@ Single file with all eight admin commands.
         }
       });
 
-    webhook.command("show <id>")
+    webhook
+      .command("show <id>")
       .option("--json", "JSON output")
       .action(async (id, opts) => {
         const res = await apiAdmin.get(`/admin/webhooks/${id}`);
-        if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
+        if (opts.json) {
+          console.log(JSON.stringify(res, null, 2));
+          return;
+        }
         for (const [k, v] of Object.entries(res)) logger.info(`${chalk.gray(k)}: ${v ?? ""}`);
       });
 
-    webhook.command("edit <id>")
+    webhook
+      .command("edit <id>")
       .option("--url <url>", "New URL")
       .option("--description <text>", "New description")
       .option("--enable", "Enable subscription")
@@ -2589,27 +2901,25 @@ Single file with all eight admin commands.
         logger.info(chalk.green(`Updated ${res.id}`));
       });
 
-    webhook.command("remove <id>")
-      .action(async (id) => {
-        await apiAdmin.delete(`/admin/webhooks/${id}`);
-        logger.info(chalk.yellow(`Removed ${id}`));
-      });
+    webhook.command("remove <id>").action(async (id) => {
+      await apiAdmin.delete(`/admin/webhooks/${id}`);
+      logger.info(chalk.yellow(`Removed ${id}`));
+    });
 
-    webhook.command("test <id>")
-      .action(async (id) => {
-        const res = await apiAdmin.post(`/admin/webhooks/${id}/test`, {});
-        logger.info(chalk.green(`Enqueued test event ${res.eventId} for ${id}`));
-      });
+    webhook.command("test <id>").action(async (id) => {
+      const res = await apiAdmin.post(`/admin/webhooks/${id}/test`, {});
+      logger.info(chalk.green(`Enqueued test event ${res.eventId} for ${id}`));
+    });
 
-    webhook.command("rotate-secret <id>")
-      .action(async (id) => {
-        const res = await apiAdmin.post(`/admin/webhooks/${id}/rotate-secret`, {});
-        logger.info(chalk.green(`Rotated to v${res.secretVersion}`));
-        logger.info(chalk.bold(`New signing key (shown once — save it now):`));
-        logger.info(chalk.yellow(res.signingKey));
-      });
+    webhook.command("rotate-secret <id>").action(async (id) => {
+      const res = await apiAdmin.post(`/admin/webhooks/${id}/rotate-secret`, {});
+      logger.info(chalk.green(`Rotated to v${res.secretVersion}`));
+      logger.info(chalk.bold(`New signing key (shown once — save it now):`));
+      logger.info(chalk.yellow(res.signingKey));
+    });
 
-    webhook.command("deliveries <id>")
+    webhook
+      .command("deliveries <id>")
       .option("--failed", "Failed attempts only")
       .option("--limit <n>", "Max rows", "20")
       .option("--json", "JSON output")
@@ -2617,13 +2927,22 @@ Single file with all eight admin commands.
         const qs = new URLSearchParams({ limit: opts.limit });
         if (opts.failed) qs.set("failed", "true");
         const res = await apiAdmin.get(`/admin/webhooks/${id}/deliveries?${qs}`);
-        if (opts.json) { console.log(JSON.stringify(res, null, 2)); return; }
+        if (opts.json) {
+          console.log(JSON.stringify(res, null, 2));
+          return;
+        }
         // Render rows as a table-ish list.
         const rows = (res.data?.[0]?.rows ?? res.rows ?? []) as any[];
-        if (rows.length === 0) { logger.info("No deliveries found."); return; }
+        if (rows.length === 0) {
+          logger.info("No deliveries found.");
+          return;
+        }
         for (const row of rows) {
-          const status = row.outcome === "success" ? chalk.green(row.outcome) : chalk.red(row.outcome);
-          logger.info(`[${row.timestamp}] ${status} ${row.event_id} ${row.http_status}/${row.latency_ms}ms${row.error_message ? ` — ${row.error_message}` : ""}`);
+          const status =
+            row.outcome === "success" ? chalk.green(row.outcome) : chalk.red(row.outcome);
+          logger.info(
+            `[${row.timestamp}] ${status} ${row.event_id} ${row.http_status}/${row.latency_ms}ms${row.error_message ? ` — ${row.error_message}` : ""}`,
+          );
         }
       });
   }
@@ -2666,6 +2985,7 @@ Single file with all eight admin commands.
 ### Task 20: Subscriber-facing `releases webhook verify`
 
 **Files:**
+
 - Create: `src/cli/commands/webhook-verify.ts`
 - Create: `src/cli/commands/webhook-verify.test.ts`
 - Modify: `src/cli/index.ts` (register top-level webhook group)
@@ -2682,7 +3002,7 @@ Single file with all eight admin commands.
     it("returns ok=true on a matching signature", async () => {
       const key = "deadbeef".repeat(8);
       const ts = 1729281234;
-      const body = "{\"hello\":\"world\"}";
+      const body = '{"hello":"world"}';
       const sig = await signPayload(key, ts, body);
       const result = await verifySignatureCli({ secret: key, timestamp: ts, signature: sig, body });
       expect(result.ok).toBe(true);
@@ -2729,11 +3049,21 @@ Single file with all eight admin commands.
   export function registerWebhookCommand(program: Command) {
     const webhook = program.command("webhook").description("Webhook utilities");
 
-    webhook.command("verify")
+    webhook
+      .command("verify")
       .description("Verify an X-Released-Signature locally against a captured payload")
-      .requiredOption("--secret <key>", "Signing key (hex) — the value 'releases admin webhook add' printed at creation")
-      .requiredOption("--signature <header>", "Value of the X-Released-Signature header (e.g. sha256=...)")
-      .requiredOption("--timestamp <unix>", "Value of the X-Released-Timestamp header (unix seconds)")
+      .requiredOption(
+        "--secret <key>",
+        "Signing key (hex) — the value 'releases admin webhook add' printed at creation",
+      )
+      .requiredOption(
+        "--signature <header>",
+        "Value of the X-Released-Signature header (e.g. sha256=...)",
+      )
+      .requiredOption(
+        "--timestamp <unix>",
+        "Value of the X-Released-Timestamp header (unix seconds)",
+      )
       .requiredOption("--body-file <path>", "Path to the raw request body")
       .action(async (opts) => {
         const body = readFileSync(opts.bodyFile, "utf8");
@@ -2788,6 +3118,7 @@ Single file with all eight admin commands.
 ### Task 21: Public integration docs
 
 **Files:**
+
 - Create: `docs/webhooks.md`
 - Modify: `docs/architecture/events.md`
 - Modify: `README.md`
@@ -2918,6 +3249,7 @@ Single file with all eight admin commands.
 ### Task 22: Echo subscriber Worker for e2e + GitHub Actions deploy + e2e job
 
 **Files:**
+
 - Create: `workers/webhooks/test/echo-subscriber/wrangler.jsonc`
 - Create: `workers/webhooks/test/echo-subscriber/src/index.ts`
 - Create: `.github/workflows/deploy-webhooks.yml`
@@ -2932,7 +3264,7 @@ Single file with all eight admin commands.
     "name": "releases-webhook-echo",
     "main": "src/index.ts",
     "compatibility_date": "2026-03-27",
-    "vars": { "EXPECTED_VERSION": "1" }
+    "vars": { "EXPECTED_VERSION": "1" },
   }
   ```
 
@@ -2943,7 +3275,9 @@ Single file with all eight admin commands.
       const body = await req.text();
       const headers = Object.fromEntries(req.headers.entries());
       console.log(JSON.stringify({ kind: "echo", method: req.method, headers, body }));
-      return new Response(JSON.stringify({ ok: true }), { headers: { "Content-Type": "application/json" } });
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { "Content-Type": "application/json" },
+      });
     },
   };
   ```
@@ -2959,10 +3293,10 @@ Single file with all eight admin commands.
     push:
       branches: [main]
       paths:
-        - 'workers/webhooks/**'
-        - 'packages/core/**'
-        - 'src/db/**'
-        - '.github/workflows/deploy-webhooks.yml'
+        - "workers/webhooks/**"
+        - "packages/core/**"
+        - "src/db/**"
+        - ".github/workflows/deploy-webhooks.yml"
 
   jobs:
     deploy:

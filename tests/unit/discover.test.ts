@@ -194,7 +194,11 @@ describe("parseWellKnownJson", () => {
     const json = JSON.stringify({
       version: 1,
       changelogs: [
-        { name: "Product A", url: "https://example.com/a/changelog", feed: "https://example.com/a/feed.xml" },
+        {
+          name: "Product A",
+          url: "https://example.com/a/changelog",
+          feed: "https://example.com/a/feed.xml",
+        },
         { name: "Product B", url: "https://example.com/b/changelog" },
       ],
     });
@@ -288,9 +292,24 @@ describe("extractPathLabel", () => {
 describe("dedup", () => {
   it("removes duplicate URLs, keeping highest confidence", () => {
     const sources: DiscoveredSource[] = [
-      { url: "https://example.com/changelog", type: "scrape", method: "sitemap", confidence: "low" },
-      { url: "https://example.com/changelog", type: "scrape", method: "html-link", confidence: "high" },
-      { url: "https://example.com/releases", type: "scrape", method: "sitemap", confidence: "medium" },
+      {
+        url: "https://example.com/changelog",
+        type: "scrape",
+        method: "sitemap",
+        confidence: "low",
+      },
+      {
+        url: "https://example.com/changelog",
+        type: "scrape",
+        method: "html-link",
+        confidence: "high",
+      },
+      {
+        url: "https://example.com/releases",
+        type: "scrape",
+        method: "sitemap",
+        confidence: "medium",
+      },
     ];
     const result = dedup(sources);
     expect(result).toHaveLength(2);
@@ -314,9 +333,24 @@ describe("dedup", () => {
 describe("collapseChildren", () => {
   it("removes child URLs when parent exists", () => {
     const sources: DiscoveredSource[] = [
-      { url: "https://example.com/changelog", type: "scrape", method: "sitemap", confidence: "high" },
-      { url: "https://example.com/changelog/2024-01", type: "scrape", method: "sitemap", confidence: "high" },
-      { url: "https://example.com/changelog/2024-02", type: "scrape", method: "sitemap", confidence: "high" },
+      {
+        url: "https://example.com/changelog",
+        type: "scrape",
+        method: "sitemap",
+        confidence: "high",
+      },
+      {
+        url: "https://example.com/changelog/2024-01",
+        type: "scrape",
+        method: "sitemap",
+        confidence: "high",
+      },
+      {
+        url: "https://example.com/changelog/2024-02",
+        type: "scrape",
+        method: "sitemap",
+        confidence: "high",
+      },
     ];
     const result = collapseChildren(sources);
     expect(result).toHaveLength(1);
@@ -325,8 +359,18 @@ describe("collapseChildren", () => {
 
   it("keeps URLs without parents", () => {
     const sources: DiscoveredSource[] = [
-      { url: "https://example.com/changelog", type: "scrape", method: "sitemap", confidence: "high" },
-      { url: "https://example.com/releases", type: "scrape", method: "sitemap", confidence: "high" },
+      {
+        url: "https://example.com/changelog",
+        type: "scrape",
+        method: "sitemap",
+        confidence: "high",
+      },
+      {
+        url: "https://example.com/releases",
+        type: "scrape",
+        method: "sitemap",
+        confidence: "high",
+      },
     ];
     const result = collapseChildren(sources);
     expect(result).toHaveLength(2);

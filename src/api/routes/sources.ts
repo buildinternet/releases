@@ -1,9 +1,17 @@
 import { eq, desc, count, and, sql, isNull } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { sources, releases, organizations, sourceChangelogFiles } from "@releases/core-internal/schema";
+import {
+  sources,
+  releases,
+  organizations,
+  sourceChangelogFiles,
+} from "@releases/core-internal/schema";
 import { getSourceMetrics } from "../metrics.js";
 import type { SourceChangelogResponse } from "../types.js";
-import { buildChangelogResponse, selectChangelogFile } from "@releases/core-internal/changelog-slice";
+import {
+  buildChangelogResponse,
+  selectChangelogFile,
+} from "@releases/core-internal/changelog-slice";
 
 export function handleSourceActivity(slug: string, searchParams: URLSearchParams) {
   const db = getDb();
@@ -69,9 +77,15 @@ export function handleSourceActivity(slug: string, searchParams: URLSearchParams
   let orgSlug: string | null = null;
   let orgName: string | null = null;
   if (src.orgId) {
-    const [org] = db.select({ slug: organizations.slug, name: organizations.name })
-      .from(organizations).where(eq(organizations.id, src.orgId)).all();
-    if (org) { orgSlug = org.slug; orgName = org.name; }
+    const [org] = db
+      .select({ slug: organizations.slug, name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, src.orgId))
+      .all();
+    if (org) {
+      orgSlug = org.slug;
+      orgName = org.name;
+    }
   }
 
   return {
@@ -97,22 +111,36 @@ export function handleSources(searchParams: URLSearchParams) {
   const rows = query.orderBy(sources.name).all();
 
   return rows.map((src) => {
-    const [relCount] = db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id)).all();
+    const [relCount] = db
+      .select({ n: count() })
+      .from(releases)
+      .where(eq(releases.sourceId, src.id))
+      .all();
 
-    const [latest] = db.select({ version: releases.version, publishedAt: releases.publishedAt })
+    const [latest] = db
+      .select({ version: releases.version, publishedAt: releases.publishedAt })
       .from(releases)
       .where(and(eq(releases.sourceId, src.id), sql`${releases.publishedAt} IS NOT NULL`))
-      .orderBy(desc(releases.publishedAt)).limit(1).all();
+      .orderBy(desc(releases.publishedAt))
+      .limit(1)
+      .all();
 
     let orgSlug: string | null = null;
     if (src.orgId) {
-      const [org] = db.select({ slug: organizations.slug }).from(organizations)
-        .where(eq(organizations.id, src.orgId)).all();
+      const [org] = db
+        .select({ slug: organizations.slug })
+        .from(organizations)
+        .where(eq(organizations.id, src.orgId))
+        .all();
       orgSlug = org?.slug ?? null;
     }
 
     return {
-      slug: src.slug, name: src.name, type: src.type, url: src.url, orgSlug,
+      slug: src.slug,
+      name: src.name,
+      type: src.type,
+      url: src.url,
+      orgSlug,
       releaseCount: relCount.n,
       latestVersion: latest?.version ?? null,
       latestDate: latest?.publishedAt ?? null,
@@ -128,17 +156,28 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
 
   let org: { slug: string; name: string } | null = null;
   if (src.orgId) {
-    const [orgRow] = db.select({ slug: organizations.slug, name: organizations.name })
-      .from(organizations).where(eq(organizations.id, src.orgId)).all();
+    const [orgRow] = db
+      .select({ slug: organizations.slug, name: organizations.name })
+      .from(organizations)
+      .where(eq(organizations.id, src.orgId))
+      .all();
     org = orgRow ?? null;
   }
 
-  const [relCount] = db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id)).all();
+  const [relCount] = db
+    .select({ n: count() })
+    .from(releases)
+    .where(eq(releases.sourceId, src.id))
+    .all();
 
   const offset = (page - 1) * pageSize;
   const releaseRows = db.all<{
-    version: string | null; title: string; content_summary: string | null;
-    content: string; published_at: string | null; url: string | null;
+    version: string | null;
+    title: string;
+    content_summary: string | null;
+    content: string;
+    published_at: string | null;
+    url: string | null;
   }>(sql`
     SELECT version, title, content_summary, content, published_at, url
     FROM releases WHERE source_id = ${src.id}
@@ -149,29 +188,43 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   `);
 
   const releasesFormatted = releaseRows.map((r) => ({
-    version: r.version, title: r.title,
-    summary: r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    version: r.version,
+    title: r.title,
+    summary:
+      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     content: r.content.length > 800 ? r.content.slice(0, 800) + "..." : r.content,
-    publishedAt: r.published_at, url: r.url,
+    publishedAt: r.published_at,
+    url: r.url,
   }));
 
-  const [latest] = db.select({ version: releases.version, publishedAt: releases.publishedAt })
+  const [latest] = db
+    .select({ version: releases.version, publishedAt: releases.publishedAt })
     .from(releases)
     .where(and(eq(releases.sourceId, src.id), sql`${releases.publishedAt} IS NOT NULL`))
-    .orderBy(desc(releases.publishedAt)).limit(1).all();
+    .orderBy(desc(releases.publishedAt))
+    .limit(1)
+    .all();
 
-  const latestVersion = latest?.version ?? (() => {
-    const [fallback] = db.select({ version: releases.version }).from(releases)
-      .where(eq(releases.sourceId, src.id)).orderBy(desc(releases.fetchedAt)).limit(1).all();
-    return fallback?.version ?? null;
-  })();
+  const latestVersion =
+    latest?.version ??
+    (() => {
+      const [fallback] = db
+        .select({ version: releases.version })
+        .from(releases)
+        .where(eq(releases.sourceId, src.id))
+        .orderBy(desc(releases.fetchedAt))
+        .limit(1)
+        .all();
+      return fallback?.version ?? null;
+    })();
 
   const metrics = getSourceMetrics(src.id);
   const totalPages = Math.ceil(relCount.n / pageSize);
 
   const meta = JSON.parse(src.metadata || "{}");
 
-  const changelogExistsRows = db.select({ one: sql<number>`1` })
+  const changelogExistsRows = db
+    .select({ one: sql<number>`1` })
     .from(sourceChangelogFiles)
     .where(eq(sourceChangelogFiles.sourceId, src.id))
     .limit(1)
@@ -179,14 +232,18 @@ export function handleSourceDetail(slug: string, page: number, pageSize: number)
   const hasChangelogFile = changelogExistsRows.length > 0;
 
   return {
-    slug: src.slug, name: src.name, type: src.type, url: src.url,
+    slug: src.slug,
+    name: src.name,
+    type: src.type,
+    url: src.url,
     changelogUrl: meta.changelogUrl ?? null,
     hasChangelogFile,
     org,
     releaseCount: relCount.n,
     releasesLast30Days: metrics.releasesLast30Days,
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,
-    latestVersion, latestDate: latest?.publishedAt ?? null,
+    latestVersion,
+    latestDate: latest?.publishedAt ?? null,
     lastFetchedAt: src.lastFetchedAt,
     trackingSince: metrics.oldestPublishedAt ?? src.createdAt,
     releases: releasesFormatted,

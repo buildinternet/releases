@@ -16,10 +16,12 @@ Combined chronological release feed across all sources in an organization, acces
 Returns a combined, chronological feed of all releases across the org's sources.
 
 **Query params:**
+
 - `cursor` — ISO 8601 timestamp (`publishedAt` of last item from previous page). Omit for first page.
 - `limit` — items per page. Default 20, max 100.
 
 **Response shape:**
+
 ```json
 {
   "releases": [
@@ -59,12 +61,14 @@ Returns a combined, chronological feed of all releases across the org's sources.
 ### API client addition
 
 Add to `web/src/lib/api.ts`:
+
 ```typescript
 orgReleases: (slug: string, cursor?: string, limit?: number) =>
-  fetchApi<OrgReleasesResponse>(`/api/orgs/${slug}/releases?...`)
+  fetchApi<OrgReleasesResponse>(`/api/orgs/${slug}/releases?...`);
 ```
 
 New type:
+
 ```typescript
 export interface OrgReleaseItem extends ReleaseItem {
   source: { slug: string; name: string; type: string };
@@ -81,6 +85,7 @@ export interface OrgReleasesResponse {
 ### Org page tabs
 
 Add an `OrgTabs` component to the org page, following the same pattern as the existing `SourceTabs`:
+
 - Two tabs: "Sources" (default) and "Releases"
 - Driven by `?tab=` query param
 - "Sources" tab renders the existing content (timeline + source cards)
@@ -89,6 +94,7 @@ Add an `OrgTabs` component to the org page, following the same pattern as the ex
 ### Combined feed component (`OrgReleaseList`)
 
 Client component that manages the "Load more" state:
+
 - First page of releases fetched server-side (SSR)
 - "Load more" button at the bottom fetches the next cursor client-side and appends
 - Reuses the existing `ReleaseListItem` component
@@ -96,6 +102,7 @@ Client component that manages the "Load more" state:
 ### Source attribution on `ReleaseListItem`
 
 Add an optional `sourceByline` prop to `ReleaseListItem`:
+
 ```typescript
 sourceByline?: { name: string; slug: string }
 ```

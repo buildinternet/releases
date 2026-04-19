@@ -20,7 +20,10 @@ export * from "@releases/adapters/feed";
 // ── Source metadata helpers (DB-coupled) ────────────────────────────
 
 /** Merge partial source metadata into the source's metadata JSON column. */
-export async function updateSourceMeta(source: Source, meta: Partial<SourceMetadata>): Promise<void> {
+export async function updateSourceMeta(
+  source: Source,
+  meta: Partial<SourceMetadata>,
+): Promise<void> {
   const existing = getSourceMeta(source);
   const merged = { ...existing, ...meta };
   const serialized = JSON.stringify(merged);
@@ -155,7 +158,9 @@ export async function fetchViaFeed(
   // scrape adapter falls through to crawl/single-page (#234).
   if (releases.length > 0) {
     const MIN_CONTENT_LENGTH = 20;
-    const allEmpty = releases.every((r) => !r.content || r.content.trim().length < MIN_CONTENT_LENGTH);
+    const allEmpty = releases.every(
+      (r) => !r.content || r.content.trim().length < MIN_CONTENT_LENGTH,
+    );
     if (allEmpty) {
       logger.warn(
         `Feed returned ${releases.length} items but all have empty/trivial content — marking as summary-only`,

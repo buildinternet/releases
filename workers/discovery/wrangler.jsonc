@@ -6,10 +6,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "alias": {
     "@releases": "../../src",
-    "bun:sqlite": "./src/stubs/bun-sqlite.ts"
+    "bun:sqlite": "./src/stubs/bun-sqlite.ts",
   },
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
   "vars": {
     "RELEASED_API_URL": "https://api.releases.sh",
@@ -17,42 +17,62 @@
     "ANTHROPIC_AGENT_ID": "agent_011CZtWpasPtsYjF3aysf2ZH",
     "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU",
     "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB",
-    "ANTHROPIC_WORKER_AGENT_ID": "agent_011CZvdgPKDQ2eRs8gTrLnNA"
+    "ANTHROPIC_WORKER_AGENT_ID": "agent_011CZvdgPKDQ2eRs8gTrLnNA",
   },
-  "containers": [{
-    "class_name": "Sandbox",
-    "image": "./Dockerfile",
-    "image_build_context": "../../",
-    "instance_type": "basic",
-    "max_instances": 5
-  }],
+  "containers": [
+    {
+      "class_name": "Sandbox",
+      "image": "./Dockerfile",
+      "image_build_context": "../../",
+      "instance_type": "basic",
+      "max_instances": 5,
+    },
+  ],
   "d1_databases": [
     {
       "binding": "DB",
       "database_name": "released-db",
-      "database_id": "73be1562-d900-4e25-a62b-650ab74488b7"
-    }
+      "database_id": "73be1562-d900-4e25-a62b-650ab74488b7",
+    },
   ],
-  "services": [
-    { "binding": "API_WORKER", "service": "releases-api" }
-  ],
+  "services": [{ "binding": "API_WORKER", "service": "releases-api" }],
   "durable_objects": {
     "bindings": [
       { "class_name": "Sandbox", "name": "Sandbox" },
       { "class_name": "DiscoverySession", "name": "DISCOVERY_SESSION" },
-      { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" }
-    ]
+      { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
+    ],
   },
   "migrations": [
     { "new_sqlite_classes": ["Sandbox"], "tag": "v1" },
     { "new_classes": ["DiscoverySession"], "tag": "v2" },
-    { "new_classes": ["ManagedAgentsSession"], "tag": "v3" }
+    { "new_classes": ["ManagedAgentsSession"], "tag": "v3" },
   ],
   "secrets_store_secrets": [
-    { "binding": "RELEASED_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "RELEASED_API_KEY" },
-    { "binding": "GITHUB_TOKEN", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "GITHUB_TOKEN" },
-    { "binding": "ANTHROPIC_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "ANTHROPIC_API_KEY" },
-    { "binding": "CLOUDFLARE_ACCOUNT_ID", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "CLOUDFLARE_ACCOUNT_ID" },
-    { "binding": "CLOUDFLARE_API_TOKEN", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "CLOUDFLARE_API_TOKEN" }
-  ]
+    {
+      "binding": "RELEASED_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "RELEASED_API_KEY",
+    },
+    {
+      "binding": "GITHUB_TOKEN",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "GITHUB_TOKEN",
+    },
+    {
+      "binding": "ANTHROPIC_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "ANTHROPIC_API_KEY",
+    },
+    {
+      "binding": "CLOUDFLARE_ACCOUNT_ID",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "CLOUDFLARE_ACCOUNT_ID",
+    },
+    {
+      "binding": "CLOUDFLARE_API_TOKEN",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "CLOUDFLARE_API_TOKEN",
+    },
+  ],
 }

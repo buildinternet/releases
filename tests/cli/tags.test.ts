@@ -19,7 +19,16 @@ describe("CLI org tags", () => {
   });
 
   it("adds tags to an org", () => {
-    const result = cli(dataDir, ["admin", "org", "tag", "add", "acme-corp", "typescript", "react", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "org",
+      "tag",
+      "add",
+      "acme-corp",
+      "typescript",
+      "react",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed.tags).toContain("typescript");
@@ -46,14 +55,31 @@ describe("CLI org tags", () => {
   });
 
   it("adds more tags", () => {
-    const result = cli(dataDir, ["admin", "org", "tag", "add", "acme-corp", "serverless", "edge", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "org",
+      "tag",
+      "add",
+      "acme-corp",
+      "serverless",
+      "edge",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed.tags.length).toBe(3);
   });
 
   it("removes multiple tags", () => {
-    const result = cli(dataDir, ["admin", "org", "tag", "remove", "acme-corp", "serverless", "edge"]);
+    const result = cli(dataDir, [
+      "admin",
+      "org",
+      "tag",
+      "remove",
+      "acme-corp",
+      "serverless",
+      "edge",
+    ]);
     expect(result.exitCode).toBe(0);
     const tags = cliJson<string[]>(dataDir, ["admin", "org", "tag", "list", "acme-corp", "--json"]);
     expect(tags).toEqual(["typescript"]);
@@ -67,13 +93,24 @@ describe("CLI org tags", () => {
 
   it("org add with --tags creates org and tags together", () => {
     const result = cli(dataDir, [
-      "admin", "org", "add", "Tagged Org",
-      "--tags", "golang,rust",
+      "admin",
+      "org",
+      "add",
+      "Tagged Org",
+      "--tags",
+      "golang,rust",
       "--json",
     ]);
     expect(result.exitCode).toBe(0);
 
-    const tags = cliJson<string[]>(dataDir, ["admin", "org", "tag", "list", "tagged-org", "--json"]);
+    const tags = cliJson<string[]>(dataDir, [
+      "admin",
+      "org",
+      "tag",
+      "list",
+      "tagged-org",
+      "--json",
+    ]);
     expect(tags).toContain("golang");
     expect(tags).toContain("rust");
   });
@@ -94,12 +131,28 @@ describe("CLI product tags", () => {
   afterAll(() => cleanup());
 
   it("starts with no product tags", () => {
-    const tags = cliJson<string[]>(dataDir, ["admin", "product", "tag", "list", "next-js", "--json"]);
+    const tags = cliJson<string[]>(dataDir, [
+      "admin",
+      "product",
+      "tag",
+      "list",
+      "next-js",
+      "--json",
+    ]);
     expect(tags).toEqual([]);
   });
 
   it("adds tags to a product", () => {
-    const result = cli(dataDir, ["admin", "product", "tag", "add", "next-js", "react", "ssr", "--json"]);
+    const result = cli(dataDir, [
+      "admin",
+      "product",
+      "tag",
+      "add",
+      "next-js",
+      "react",
+      "ssr",
+      "--json",
+    ]);
     expect(result.exitCode).toBe(0);
     const parsed = JSON.parse(result.stdout);
     expect(parsed.tags).toContain("react");
@@ -107,13 +160,27 @@ describe("CLI product tags", () => {
   });
 
   it("lists product tags", () => {
-    const tags = cliJson<string[]>(dataDir, ["admin", "product", "tag", "list", "next-js", "--json"]);
+    const tags = cliJson<string[]>(dataDir, [
+      "admin",
+      "product",
+      "tag",
+      "list",
+      "next-js",
+      "--json",
+    ]);
     expect(tags.length).toBe(2);
   });
 
   it("removes a product tag", () => {
     cli(dataDir, ["admin", "product", "tag", "remove", "next-js", "ssr"]);
-    const tags = cliJson<string[]>(dataDir, ["admin", "product", "tag", "list", "next-js", "--json"]);
+    const tags = cliJson<string[]>(dataDir, [
+      "admin",
+      "product",
+      "tag",
+      "list",
+      "next-js",
+      "--json",
+    ]);
     expect(tags).toEqual(["react"]);
   });
 
@@ -125,11 +192,23 @@ describe("CLI product tags", () => {
 
   it("product add with --tags creates product and tags together", () => {
     cli(dataDir, [
-      "admin", "product", "add", "Turborepo",
-      "--org", "vercel",
-      "--tags", "monorepo,build",
+      "admin",
+      "product",
+      "add",
+      "Turborepo",
+      "--org",
+      "vercel",
+      "--tags",
+      "monorepo,build",
     ]);
-    const tags = cliJson<string[]>(dataDir, ["admin", "product", "tag", "list", "turborepo", "--json"]);
+    const tags = cliJson<string[]>(dataDir, [
+      "admin",
+      "product",
+      "tag",
+      "list",
+      "turborepo",
+      "--json",
+    ]);
     expect(tags).toContain("monorepo");
     expect(tags).toContain("build");
   });

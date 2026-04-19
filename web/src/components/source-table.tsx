@@ -41,9 +41,7 @@ function StateBadge({ label, title }: { label: string; title: string }) {
   );
 }
 
-function getSourceState(
-  source: SourceListItem,
-): { label: string; title: string } | null {
+function getSourceState(source: SourceListItem): { label: string; title: string } | null {
   if (source.isHidden) {
     return { label: "Ignored", title: "This source is hidden from public listings" };
   }
@@ -54,11 +52,7 @@ function getSourceState(
 }
 
 function isInactive(source: SourceListItem): boolean {
-  return (
-    Boolean(source.isHidden) ||
-    source.fetchPriority === "paused" ||
-    source.releaseCount === 0
-  );
+  return Boolean(source.isHidden) || source.fetchPriority === "paused" || source.releaseCount === 0;
 }
 
 export function SourceTable({
@@ -120,7 +114,7 @@ export function SourceTable({
         </td>
         {hasProducts && (
           <td className="px-3 py-3 text-stone-500 dark:text-stone-400 text-[13px] hidden sm:table-cell whitespace-nowrap">
-            {source.productSlug ? productMap.get(source.productSlug) ?? "—" : "—"}
+            {source.productSlug ? (productMap.get(source.productSlug) ?? "—") : "—"}
           </td>
         )}
         <td className="px-3 py-3 text-right font-mono tabular-nums text-stone-700 dark:text-stone-300 whitespace-nowrap">
@@ -157,13 +151,19 @@ export function SourceTable({
               <th className={`text-left ${HEADER_CELL_CLASS}`}>Source</th>
               <th className={`text-left w-[84px] ${HEADER_CELL_CLASS}`}>Type</th>
               {hasProducts && (
-                <th className={`text-left hidden sm:table-cell w-[120px] ${HEADER_CELL_CLASS}`}>Product</th>
+                <th className={`text-left hidden sm:table-cell w-[120px] ${HEADER_CELL_CLASS}`}>
+                  Product
+                </th>
               )}
               <th className={`text-right w-[72px] ${HEADER_CELL_CLASS}`}>Releases</th>
               {sourceSparklines && (
-                <th className="px-3 py-2.5 hidden lg:table-cell w-[72px]"><span className="sr-only">Activity</span></th>
+                <th className="px-3 py-2.5 hidden lg:table-cell w-[72px]">
+                  <span className="sr-only">Activity</span>
+                </th>
               )}
-              <th className={`text-right hidden sm:table-cell w-[96px] ${HEADER_CELL_CLASS}`}>Last update</th>
+              <th className={`text-right hidden sm:table-cell w-[96px] ${HEADER_CELL_CLASS}`}>
+                Last update
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-stone-100 dark:divide-stone-800/50">

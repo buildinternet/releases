@@ -13,8 +13,12 @@ let logSocket: WebSocket | null = null;
 try {
   logSocket = new WebSocket("ws://localhost:8081");
   logSocket.onopen = () => console.error("[discovery] Connected to log socket");
-  logSocket.onerror = () => { logSocket = null; };
-} catch { /* WS not available — file-based polling still works */ }
+  logSocket.onerror = () => {
+    logSocket = null;
+  };
+} catch {
+  /* WS not available — file-based polling still works */
+}
 
 function emit(payload: object): void {
   if (logSocket?.readyState === WebSocket.OPEN) {
@@ -149,8 +153,7 @@ async function main(): Promise<void> {
           else if (command.includes("add")) {
             progress.step = "adding";
             progress.sourcesFound++;
-          }
-          else if (command.includes("fetch") && command.includes("dry-run")) {
+          } else if (command.includes("fetch") && command.includes("dry-run")) {
             progress.step = "validating";
             progress.sourcesValidated++;
           }

@@ -15,7 +15,10 @@ function stripLeadingTitle(content: string, title: string | null): string {
   if (!title || !content) return content;
   const firstNewline = content.indexOf("\n");
   if (firstNewline === -1) return content;
-  const firstLine = content.slice(0, firstNewline).replace(/^#+\s+/, "").trim();
+  const firstLine = content
+    .slice(0, firstNewline)
+    .replace(/^#+\s+/, "")
+    .trim();
   if (firstLine.toLowerCase() === title.toLowerCase()) {
     content = content.slice(firstNewline + 1).trimStart();
   }
@@ -25,15 +28,11 @@ function stripLeadingTitle(content: string, title: string | null): string {
   return content;
 }
 
-function MediaGallery({
-  media,
-  content,
-}: {
-  media: MediaItem[];
-  content: string;
-}) {
+function MediaGallery({ media, content }: { media: MediaItem[]; content: string }) {
   if (!media || media.length === 0) return null;
-  const extra = media.filter((m) => !content.includes(m.url) && !(m.r2Url && content.includes(m.r2Url)));
+  const extra = media.filter(
+    (m) => !content.includes(m.url) && !(m.r2Url && content.includes(m.r2Url)),
+  );
   if (extra.length === 0) return null;
 
   return (
@@ -71,7 +70,11 @@ export function ReleaseContent({
 
   return (
     <div className="prose prose-stone dark:prose-invert max-w-none text-[15px] leading-relaxed [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-4 [&_h1]:mb-2 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-4 [&_h2]:mb-2 [&_h3]:text-[15px] [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_ul]:my-2 [&_ul]:pl-5 [&_li]:my-0.5 [&_p]:my-2 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-sm [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={[rehypeShikiPlugin]} components={detailMarkdownComponents}>
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeShikiPlugin]}
+        components={detailMarkdownComponents}
+      >
         {markdownContent}
       </ReactMarkdown>
       <MediaGallery media={media} content={markdownContent} />

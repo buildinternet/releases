@@ -91,9 +91,12 @@ async function pollSource(source: Source): Promise<PollResult | null> {
 
 function statusLabel(status: ChangeStatus): string {
   switch (status) {
-    case "changed": return chalk.yellow("changed");
-    case "unchanged": return chalk.green("unchanged");
-    case "unknown": return chalk.dim("unknown");
+    case "changed":
+      return chalk.yellow("changed");
+    case "unchanged":
+      return chalk.green("unchanged");
+    case "unknown":
+      return chalk.dim("unknown");
   }
 }
 
@@ -108,95 +111,105 @@ export function registerPollCommand(program: Command) {
     .option("--json", "Output as JSON")
     .option("--changed", "Only show sources with detected changes")
     .option("--scrape-only", "Only poll scrape sources (page HEAD check)")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin source poll                      Poll all feed and scrape sources
   releases admin source poll my-source            Poll a specific source
   releases admin source poll --changed            Show only sources with changes
   releases admin source poll --scrape-only        Poll only scrape sources
-  releases admin source poll --json               Output as JSON`)
-    .action(async (slug: string | undefined, opts: { json?: boolean; changed?: boolean; scrapeOnly?: boolean }) => {
-      let sourcesToPoll: Source[];
+  releases admin source poll --json               Output as JSON`,
+    )
+    .action(
+      async (
+        slug: string | undefined,
+        opts: { json?: boolean; changed?: boolean; scrapeOnly?: boolean },
+      ) => {
+        let sourcesToPoll: Source[];
 
-      if (slug) {
-        const source = await findSource(slug);
-        if (!source) {
-          console.error(`Source not found: ${slug}`);
-          process.exit(1);
-        }
-        sourcesToPoll = [source];
-      } else {
-        const [feedSources, scrapeSources] = await Promise.all([
-          opts.scrapeOnly ? Promise.resolve([]) : listFeedSources().then(r => r ?? []),
-          listScrapeSources().then(r => r ?? []),
-        ]);
-        sourcesToPoll = [...feedSources, ...scrapeSources];
-        if (sourcesToPoll.length === 0) {
-          if (opts.json) {
-            console.log(JSON.stringify([], null, 2));
-          } else {
-            console.log("No pollable sources found.");
+        if (slug) {
+          const source = await findSource(slug);
+          if (!source) {
+            console.error(`Source not found: ${slug}`);
+            process.exit(1);
           }
+          sourcesToPoll = [source];
+        } else {
+          const [feedSources, scrapeSources] = await Promise.all([
+            opts.scrapeOnly ? Promise.resolve([]) : listFeedSources().then((r) => r ?? []),
+            listScrapeSources().then((r) => r ?? []),
+          ]);
+          sourcesToPoll = [...feedSources, ...scrapeSources];
+          if (sourcesToPoll.length === 0) {
+            if (opts.json) {
+              console.log(JSON.stringify([], null, 2));
+            } else {
+              console.log("No pollable sources found.");
+            }
+            return;
+          }
+        }
+
+        // Run polls with concurrency limit of 5
+        const CONCURRENCY = 5;
+        const results: PollResult[] = [];
+        for (let i = 0; i < sourcesToPoll.length; i += CONCURRENCY) {
+          const batch = sourcesToPoll.slice(i, i + CONCURRENCY);
+          const batchResults = await Promise.all(batch.map(pollSource));
+          for (const r of batchResults) {
+            if (r) results.push(r);
+          }
+        }
+
+        // Filter to changed-only if requested
+        const display = opts.changed
+          ? results.filter((r) => r.status === "changed" || r.status === "unknown")
+          : results;
+
+        if (opts.json) {
+          console.log(JSON.stringify(display, null, 2));
           return;
         }
-      }
 
-      // Run polls with concurrency limit of 5
-      const CONCURRENCY = 5;
-      const results: PollResult[] = [];
-      for (let i = 0; i < sourcesToPoll.length; i += CONCURRENCY) {
-        const batch = sourcesToPoll.slice(i, i + CONCURRENCY);
-        const batchResults = await Promise.all(batch.map(pollSource));
-        for (const r of batchResults) {
-          if (r) results.push(r);
+        if (display.length === 0) {
+          console.log("No changes detected.");
+          return;
         }
-      }
 
-      // Filter to changed-only if requested
-      const display = opts.changed
-        ? results.filter((r) => r.status === "changed" || r.status === "unknown")
-        : results;
+        const table = new Table({
+          head: [
+            chalk.cyan("Source"),
+            chalk.cyan("Type"),
+            chalk.cyan("Status"),
+            chalk.cyan("Response"),
+            chalk.cyan("Last Fetch"),
+          ],
+        });
 
-      if (opts.json) {
-        console.log(JSON.stringify(display, null, 2));
-        return;
-      }
+        for (const r of display) {
+          table.push([
+            stripAnsi(r.name),
+            typeLabel(r.type),
+            statusLabel(r.status),
+            chalk.dim(`${r.responseMs}ms`),
+            r.lastFetchedAt ? timeAgo(r.lastFetchedAt) : chalk.dim("never"),
+          ]);
+        }
 
-      if (display.length === 0) {
-        console.log("No changes detected.");
-        return;
-      }
+        console.log(table.toString());
 
-      const table = new Table({
-        head: [
-          chalk.cyan("Source"),
-          chalk.cyan("Type"),
-          chalk.cyan("Status"),
-          chalk.cyan("Response"),
-          chalk.cyan("Last Fetch"),
-        ],
-      });
-
-      for (const r of display) {
-        table.push([
-          stripAnsi(r.name),
-          typeLabel(r.type),
-          statusLabel(r.status),
-          chalk.dim(`${r.responseMs}ms`),
-          r.lastFetchedAt ? timeAgo(r.lastFetchedAt) : chalk.dim("never"),
-        ]);
-      }
-
-      console.log(table.toString());
-
-      const feedResults = results.filter((r) => r.type === "feed");
-      const pageResults = results.filter((r) => r.type === "page");
-      const changed = results.filter((r) => r.status === "changed").length;
-      const unchanged = results.filter((r) => r.status === "unchanged").length;
-      const unknown = results.filter((r) => r.status === "unknown").length;
-      const parts = [`${results.length} polled`];
-      if (feedResults.length > 0) parts.push(`${feedResults.length} feed`);
-      if (pageResults.length > 0) parts.push(`${pageResults.length} page`);
-      console.log(`\n${parts.join(", ")}: ${chalk.yellow(`${changed} changed`)}, ${chalk.green(`${unchanged} unchanged`)}, ${chalk.dim(`${unknown} unknown`)}`);
-    });
+        const feedResults = results.filter((r) => r.type === "feed");
+        const pageResults = results.filter((r) => r.type === "page");
+        const changed = results.filter((r) => r.status === "changed").length;
+        const unchanged = results.filter((r) => r.status === "unchanged").length;
+        const unknown = results.filter((r) => r.status === "unknown").length;
+        const parts = [`${results.length} polled`];
+        if (feedResults.length > 0) parts.push(`${feedResults.length} feed`);
+        if (pageResults.length > 0) parts.push(`${pageResults.length} page`);
+        console.log(
+          `\n${parts.join(", ")}: ${chalk.yellow(`${changed} changed`)}, ${chalk.green(`${unchanged} unchanged`)}, ${chalk.dim(`${unknown} unknown`)}`,
+        );
+      },
+    );
 }

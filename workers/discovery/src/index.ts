@@ -1,4 +1,10 @@
-import type { Env, OnboardRequest, OnboardResponse, StatusResponse, UpdateRequest } from "./types.js";
+import type {
+  Env,
+  OnboardRequest,
+  OnboardResponse,
+  StatusResponse,
+  UpdateRequest,
+} from "./types.js";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { DiscoverySession } from "./discovery-session.js";
@@ -26,9 +32,14 @@ function getAnthropicConfig(env: Env): AnthropicConfig | Response {
   const agentId = env.ANTHROPIC_AGENT_ID;
   const environmentId = env.ANTHROPIC_ENVIRONMENT_ID;
   if (!agentId || !environmentId) {
-    return jsonResponse({ error: "ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured" }, 500);
+    return jsonResponse(
+      { error: "ANTHROPIC_AGENT_ID and ANTHROPIC_ENVIRONMENT_ID must be configured" },
+      500,
+    );
   }
-  const agentVersion = env.ANTHROPIC_AGENT_VERSION ? parseInt(env.ANTHROPIC_AGENT_VERSION, 10) : undefined;
+  const agentVersion = env.ANTHROPIC_AGENT_VERSION
+    ? parseInt(env.ANTHROPIC_AGENT_VERSION, 10)
+    : undefined;
   return { agentId, agentVersion, environmentId };
 }
 
@@ -82,27 +93,29 @@ export default {
           : {};
         // Use service binding (Worker-to-Worker) when available, public URL as fallback
         const guardRes = env.API_WORKER
-          ? await env.API_WORKER.fetch(new Request(`https://api${guardPath}`, { headers: guardHeaders }))
-          : await fetch(`${env.RELEASED_API_URL.replace(/\/+$/, "")}${guardPath}`, { headers: guardHeaders });
+          ? await env.API_WORKER.fetch(
+              new Request(`https://api${guardPath}`, { headers: guardHeaders }),
+            )
+          : await fetch(`${env.RELEASED_API_URL.replace(/\/+$/, "")}${guardPath}`, {
+              headers: guardHeaders,
+            });
         if (guardRes.ok) {
           const sessions = (await guardRes.json()) as {
             sessionId: string;
             company: string;
           }[];
           const companyLower = body.company.toLowerCase();
-          const existing = sessions.find(
-            (s) => s.company.toLowerCase() === companyLower
-          );
+          const existing = sessions.find((s) => s.company.toLowerCase() === companyLower);
           if (existing) {
             return errorResponse(
               `Discovery already running for "${body.company}" (session ${existing.sessionId.slice(0, 8)})`,
-              409
+              409,
             );
           }
           if (sessions.length >= 5) {
             return errorResponse(
               `Maximum concurrent discovery sessions reached (${sessions.length}/5). Try again later.`,
-              429
+              429,
             );
           }
         }
@@ -117,7 +130,10 @@ export default {
       if (engine === "managed-agents") {
         const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
         if (!anthropicKey) {
-          return errorResponse("ANTHROPIC_API_KEY not configured — cannot use managed-agents engine", 500);
+          return errorResponse(
+            "ANTHROPIC_API_KEY not configured — cannot use managed-agents engine",
+            500,
+          );
         }
 
         const config = getAnthropicConfig(env);
@@ -183,7 +199,10 @@ export default {
         return errorResponse("sourceIdentifiers must be a non-empty array", 400);
       }
       if (identifiers.length > MAX_UPDATE_SOURCES) {
-        return errorResponse(`Too many sources (${identifiers.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`, 400);
+        return errorResponse(
+          `Too many sources (${identifiers.length}/${MAX_UPDATE_SOURCES} max). Split into multiple requests.`,
+          400,
+        );
       }
 
       const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
@@ -228,11 +247,13 @@ export default {
         try {
           const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
           const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
-          const maStatus = await (maStub as any).getStatus() as Record<string, unknown>;
+          const maStatus = (await (maStub as any).getStatus()) as Record<string, unknown>;
           if (maStatus.status && maStatus.status !== "idle") {
             return jsonResponse(maStatus as unknown as StatusResponse);
           }
-        } catch { /* fall through */ }
+        } catch {
+          /* fall through */
+        }
       } else {
         try {
           const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
@@ -241,7 +262,9 @@ export default {
           if (status.status !== "idle") {
             return jsonResponse(status);
           }
-        } catch { /* fall through */ }
+        } catch {
+          /* fall through */
+        }
       }
 
       return jsonResponse({ status: "running" } as StatusResponse);

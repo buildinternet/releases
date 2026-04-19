@@ -12,10 +12,7 @@ export interface RenderOptions {
   withSummary?: boolean;
 }
 
-export function renderLatestReleasesTable(
-  rows: LatestRelease[],
-  opts: RenderOptions = {},
-): string {
+export function renderLatestReleasesTable(rows: LatestRelease[], opts: RenderOptions = {}): string {
   const table = new Table({
     head: [
       chalk.cyan("ID"),
@@ -28,19 +25,18 @@ export function renderLatestReleasesTable(
 
   for (const row of rows) {
     const titleCell = opts.withSummary
-      ? stripAnsi(row.title) + (row.contentSummary
-          ? `\n${chalk.dim(truncate(row.contentSummary, 120))}`
-          : "")
+      ? stripAnsi(row.title) +
+        (row.contentSummary ? `\n${chalk.dim(truncate(row.contentSummary, 120))}` : "")
       : truncate(stripAnsi(row.title), 50);
     const publishedCell = opts.withSummary
-      ? row.publishedAt ?? "-"
+      ? (row.publishedAt ?? "-")
       : (row.publishedAt?.slice(0, 10) ?? chalk.dim("—"));
 
     table.push([
       chalk.dim(row.id.slice(0, 12)),
       `${stripAnsi(row.sourceName)} ${chalk.dim(`(${row.sourceSlug})`)}`,
       titleCell,
-      row.version ? stripAnsi(row.version) : (opts.withSummary ? "-" : chalk.dim("—")),
+      row.version ? stripAnsi(row.version) : opts.withSummary ? "-" : chalk.dim("—"),
       publishedCell,
     ]);
   }

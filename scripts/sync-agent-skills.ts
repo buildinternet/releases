@@ -101,7 +101,9 @@ function getApiKey(): string {
       const envFile = readFileSync(resolve(PROJECT_ROOT, ".env"), "utf8");
       const match = envFile.match(/^ANTHROPIC_API_KEY=(.+)$/m);
       if (match) return match[1].trim();
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     throw new Error("ANTHROPIC_API_KEY not found in environment or .env");
   }
   return key;
@@ -115,7 +117,9 @@ function readWranglerVar(varName: string): string | null {
     );
     const match = wrangler.match(new RegExp(`"${varName}":\\s*"([^"]+)"`));
     if (match) return match[1];
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return null;
 }
 
@@ -176,11 +180,7 @@ async function createSkill(
 ): Promise<ApiSkill> {
   const form = new FormData();
   form.append("display_title", displayTitle);
-  form.append(
-    "files[]",
-    new Blob([skillFile]),
-    `${dirName}/SKILL.md`,
-  );
+  form.append("files[]", new Blob([skillFile]), `${dirName}/SKILL.md`);
 
   const res = await fetch(`${ANTHROPIC_API}/v1/skills`, {
     method: "POST",
@@ -188,9 +188,7 @@ async function createSkill(
     body: form,
   });
   if (!res.ok) {
-    throw new Error(
-      `Failed to create skill "${displayTitle}": ${res.status} ${await res.text()}`,
-    );
+    throw new Error(`Failed to create skill "${displayTitle}": ${res.status} ${await res.text()}`);
   }
   return (await res.json()) as ApiSkill;
 }
@@ -202,11 +200,7 @@ async function createSkillVersion(
   dirName: string,
 ): Promise<{ version: string }> {
   const form = new FormData();
-  form.append(
-    "files[]",
-    new Blob([skillFile]),
-    `${dirName}/SKILL.md`,
-  );
+  form.append("files[]", new Blob([skillFile]), `${dirName}/SKILL.md`);
 
   const res = await fetch(`${ANTHROPIC_API}/v1/skills/${skillId}/versions`, {
     method: "POST",
@@ -214,9 +208,7 @@ async function createSkillVersion(
     body: form,
   });
   if (!res.ok) {
-    throw new Error(
-      `Failed to create version for ${skillId}: ${res.status} ${await res.text()}`,
-    );
+    throw new Error(`Failed to create version for ${skillId}: ${res.status} ${await res.text()}`);
   }
   return (await res.json()) as { version: string };
 }
@@ -224,16 +216,26 @@ async function createSkillVersion(
 async function getAgent(
   apiKey: string,
   agentId: string,
-): Promise<{ version: number; skills: unknown[]; system: string; tools: unknown[]; model: { id: string; speed?: string } }> {
+): Promise<{
+  version: number;
+  skills: unknown[];
+  system: string;
+  tools: unknown[];
+  model: { id: string; speed?: string };
+}> {
   const res = await fetch(`${ANTHROPIC_API}/v1/agents/${agentId}`, {
     headers: { ...AGENT_HEADERS, "x-api-key": apiKey },
   });
   if (!res.ok) {
-    throw new Error(
-      `Failed to get agent ${agentId}: ${res.status} ${await res.text()}`,
-    );
+    throw new Error(`Failed to get agent ${agentId}: ${res.status} ${await res.text()}`);
   }
-  return (await res.json()) as { version: number; skills: unknown[]; system: string; tools: unknown[]; model: { id: string; speed?: string } };
+  return (await res.json()) as {
+    version: number;
+    skills: unknown[];
+    system: string;
+    tools: unknown[];
+    model: { id: string; speed?: string };
+  };
 }
 
 async function createAgent(
@@ -252,9 +254,7 @@ async function createAgent(
     body: JSON.stringify(payload),
   });
   if (!res.ok) {
-    throw new Error(
-      `Failed to create agent: ${res.status} ${await res.text()}`,
-    );
+    throw new Error(`Failed to create agent: ${res.status} ${await res.text()}`);
   }
   return (await res.json()) as { id: string; version: number };
 }
@@ -279,9 +279,7 @@ async function updateAgent(
     }),
   });
   if (!res.ok) {
-    throw new Error(
-      `Failed to update agent: ${res.status} ${await res.text()}`,
-    );
+    throw new Error(`Failed to update agent: ${res.status} ${await res.text()}`);
   }
   return (await res.json()) as { version: number };
 }
@@ -392,8 +390,22 @@ async function main() {
 
   /** Diff an agent's prompt/tools/model/skills against remote and apply updates. */
   async function syncAgentConfig(params: AgentSyncParams): Promise<void> {
-    const { label, agentId: id, prompt, promptHash, cachedPromptHash, model, remoteAgent, onSuccess } = params;
-    const payload: { skills?: typeof skillIds; system?: string; tools?: unknown[]; model?: string } = {};
+    const {
+      label,
+      agentId: id,
+      prompt,
+      promptHash,
+      cachedPromptHash,
+      model,
+      remoteAgent,
+      onSuccess,
+    } = params;
+    const payload: {
+      skills?: typeof skillIds;
+      system?: string;
+      tools?: unknown[];
+      model?: string;
+    } = {};
     const changes: string[] = [];
 
     if (skillsChanged > 0) {

@@ -41,15 +41,15 @@ export async function getLatestReleasesAcross(
   }
 
   if (!f.includeCoverage) {
-    wheres.push(
-      "NOT EXISTS (SELECT 1 FROM release_coverage rc WHERE rc.coverage_id = r.id)",
-    );
+    wheres.push("NOT EXISTS (SELECT 1 FROM release_coverage rc WHERE rc.coverage_id = r.id)");
   }
 
   const whereSql = wheres.join(" AND ");
   bindings.push(f.limit);
 
-  const stmt = d1.prepare(`
+  const stmt = d1
+    .prepare(
+      `
     SELECT r.id, r.version, r.title, r.content_summary, r.type,
            r.published_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
@@ -62,7 +62,9 @@ export async function getLatestReleasesAcross(
       r.fetched_at DESC,
       r.id DESC
     LIMIT ?
-  `).bind(...bindings);
+  `,
+    )
+    .bind(...bindings);
 
   const { results } = await stmt.all<LatestReleaseRow>();
   return results;

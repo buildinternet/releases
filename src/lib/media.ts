@@ -143,7 +143,12 @@ export interface FilterResult {
 export type AmbiguousMediaClassifier = (
   items: Array<{ url: string; alt?: string; type: MediaRef["type"] }>,
   ctx: { releaseTitle?: string; releaseContent?: string; sourceSlug?: string },
-) => Promise<Array<{ url: string; decision: "keep" | "drop"; confidence: "high" | "low"; reason: string }> | null>;
+) => Promise<Array<{
+  url: string;
+  decision: "keep" | "drop";
+  confidence: "high" | "low";
+  reason: string;
+}> | null>;
 
 export interface FilterMediaOptions {
   /** Release title for classifier context. */
@@ -221,10 +226,7 @@ export async function filterJunkMedia(
   let cleanContent = normalizedContent;
   for (const { url } of dropped) {
     const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    cleanContent = cleanContent.replace(
-      new RegExp(`!\\[[^\\]]*\\]\\(${escaped}\\)`, "g"),
-      "",
-    );
+    cleanContent = cleanContent.replace(new RegExp(`!\\[[^\\]]*\\]\\(${escaped}\\)`, "g"), "");
   }
 
   // Clean up empty lines left by removed images
@@ -309,7 +311,7 @@ export function extractFilename(url: string): string | null {
  */
 export async function uploadToR2(
   mediaUrl: string,
-  sourceSlug: string
+  sourceSlug: string,
 ): Promise<UploadResult | UploadSkipped> {
   const apiUrl = config.apiUrl();
   const apiKey = config.apiKey();
@@ -360,7 +362,7 @@ export async function uploadToR2(
         "uploadToR2: skipping — content-length",
         declared,
         "exceeds 10 MB for",
-        mediaUrl
+        mediaUrl,
       );
       return { skipped: true, reason: "too large (>10MB)" };
     }
@@ -380,18 +382,13 @@ export async function uploadToR2(
       "uploadToR2: skipping — body size",
       body.byteLength,
       "exceeds 10 MB for",
-      mediaUrl
+      mediaUrl,
     );
     return { skipped: true, reason: "too large (>10MB)" };
   }
 
   if (body.byteLength < MIN_BYTES) {
-    logger.debug(
-      "uploadToR2: skipping — body size",
-      body.byteLength,
-      "under 5 KB for",
-      mediaUrl
-    );
+    logger.debug("uploadToR2: skipping — body size", body.byteLength, "under 5 KB for", mediaUrl);
     return { skipped: true, reason: "too small (<5KB)" };
   }
 
@@ -416,12 +413,7 @@ export async function uploadToR2(
     });
 
     if (!putRes.ok) {
-      logger.warn(
-        "uploadToR2: PUT failed with status",
-        putRes.status,
-        "for key",
-        key
-      );
+      logger.warn("uploadToR2: PUT failed with status", putRes.status, "for key", key);
       return { skipped: true, reason: `upload HTTP ${putRes.status}` };
     }
 
@@ -478,9 +470,7 @@ export async function processMediaForR2(
   const BATCH_SIZE = 5;
   for (let i = 0; i < uploadable.length; i += BATCH_SIZE) {
     const batch = uploadable.slice(i, i + BATCH_SIZE);
-    const results = await Promise.allSettled(
-      batch.map((m) => uploadToR2(m.url, sourceSlug))
-    );
+    const results = await Promise.allSettled(batch.map((m) => uploadToR2(m.url, sourceSlug)));
 
     for (let j = 0; j < batch.length; j++) {
       const result = results[j];

@@ -31,7 +31,13 @@ import cl100k_base from "js-tiktoken/ranks/cl100k_base";
 import { eq, and, sql } from "drizzle-orm";
 
 import { logger } from "@buildinternet/releases-lib/logger";
-import { isRemoteMode, getApiUrl, getApiKey, isAdminMode, validateRemoteMode } from "../src/lib/mode.js";
+import {
+  isRemoteMode,
+  getApiUrl,
+  getApiKey,
+  isAdminMode,
+  validateRemoteMode,
+} from "../src/lib/mode.js";
 
 // Matches LIVE_ENCODE_MAX_CHARS in src/lib/tokens.ts. Kept as a local
 // constant so the script doesn't depend on an internal export.
@@ -139,9 +145,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 async function runLocal(args: ParsedArgs): Promise<BackfillRow[]> {
   const { getDb } = await import("../src/db/connection.js");
-  const { sourceChangelogFiles, sources } = await import(
-    "@releases/core-internal/schema"
-  );
+  const { sourceChangelogFiles, sources } = await import("@releases/core-internal/schema");
   const db = getDb();
 
   const baseWhere = sql`length(${sourceChangelogFiles.content}) > ${LIVE_ENCODE_MAX_CHARS}`;
@@ -284,10 +288,10 @@ async function runRemote(args: ParsedArgs): Promise<BackfillRow[]> {
         `bytes=${row.bytes} old=${oldTokens ?? "null"} new=${newTokens} delta=${delta >= 0 ? "+" : ""}${delta}`,
     );
     if (args.apply) {
-      await apiPatch(
-        `/v1/sources/${encodeURIComponent(row.sourceSlug)}/changelog/tokens`,
-        { tokens: newTokens, path: row.path },
-      );
+      await apiPatch(`/v1/sources/${encodeURIComponent(row.sourceSlug)}/changelog/tokens`, {
+        tokens: newTokens,
+        path: row.path,
+      });
     }
   }
   return out;
@@ -332,6 +336,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  logger.error(err instanceof Error ? err.stack ?? err.message : String(err));
+  logger.error(err instanceof Error ? (err.stack ?? err.message) : String(err));
   process.exit(1);
 });

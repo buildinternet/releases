@@ -26,21 +26,29 @@ type TestBody = {
   body?: string;
 };
 
-const VALID_STATUSES: CronReportStatus[] = new Set(["done", "degraded", "dispatch_failed", "aborted"]);
+const VALID_STATUSES: CronReportStatus[] = new Set([
+  "done",
+  "degraded",
+  "dispatch_failed",
+  "aborted",
+]);
 
 adminNotificationsRoutes.post("/admin/notifications/test", async (c) => {
-  const body = await c.req.json<TestBody>().catch(() => ({} as TestBody));
+  const body = await c.req.json<TestBody>().catch(() => ({}) as TestBody);
 
   if (body.plain) {
     const result = await sendEmail(c.env, {
       subject: body.subject ?? "[test] releases notifications",
-      text: body.body ?? "Test email from the releases API. If you got this, the send_email binding is wired correctly.",
+      text:
+        body.body ??
+        "Test email from the releases API. If you got this, the send_email binding is wired correctly.",
       to: body.to,
     });
     return c.json({ ok: result.sent, result }, result.sent ? 200 : 202);
   }
 
-  const status: CronReportStatus = body.status && VALID_STATUSES.has(body.status) ? body.status : "done";
+  const status: CronReportStatus =
+    body.status && VALID_STATUSES.has(body.status) ? body.status : "done";
   const now = new Date();
   const startedAt = new Date(now.getTime() - 7500).toISOString();
   const endedAt = now.toISOString();
@@ -60,11 +68,14 @@ adminNotificationsRoutes.post("/admin/notifications/test", async (c) => {
     notes: `Ad-hoc test email triggered via /v1/admin/notifications/test`,
     sessionsStarted: status === "done" || status === "degraded" ? ["ma_test_1", "ma_test_2"] : [],
     dispatchErrorDetail:
-      status === "degraded" ? [{ orgSlug: "example-org", error: "502 Bad Gateway (fabricated)" }] :
-      status === "dispatch_failed" ? [
-        { orgSlug: "example-org-a", error: "timeout (fabricated)" },
-        { orgSlug: "example-org-b", error: "502 Bad Gateway (fabricated)" },
-      ] : [],
+      status === "degraded"
+        ? [{ orgSlug: "example-org", error: "502 Bad Gateway (fabricated)" }]
+        : status === "dispatch_failed"
+          ? [
+              { orgSlug: "example-org-a", error: "timeout (fabricated)" },
+              { orgSlug: "example-org-b", error: "502 Bad Gateway (fabricated)" },
+            ]
+          : [],
     adminBaseUrl: c.env.ADMIN_BASE_URL,
   };
 

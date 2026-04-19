@@ -18,7 +18,11 @@ import Link from "next/link";
 
 const getSource = cache((slug: string, page = 1) => api.sourceDetail(slug, page));
 
-export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ slug: string }>;
+}): Promise<Metadata> {
   const { slug } = await params;
   try {
     const source = await getSource(slug);
@@ -101,7 +105,9 @@ export default async function IndependentSourcePage({
       items: [
         { label: "Latest", value: source.latestVersion, subtitle: formatDate(source.latestDate) },
         sourceUrlSidebarItem(source),
-        ...(source.changelogUrl ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }] : []),
+        ...(source.changelogUrl
+          ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }]
+          : []),
         { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
     },
@@ -110,9 +116,9 @@ export default async function IndependentSourcePage({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "SoftwareApplication",
-    "name": source.name,
-    "softwareVersion": source.latestVersion ?? undefined,
-    "url": `https://releases.sh/source/${slug}`,
+    name: source.name,
+    softwareVersion: source.latestVersion ?? undefined,
+    url: `https://releases.sh/source/${slug}`,
   };
 
   return (
@@ -124,18 +130,20 @@ export default async function IndependentSourcePage({
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">Home</Link>
+          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
+            Home
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{source.name}</span>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{source.name}</h1>
+          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+            {source.name}
+          </h1>
           <SourceTypeIcon type={source.type} size={18} />
         </div>
         <CliCommand identifier={source.slug} />
-        {activity && (
-          <SourceTimeline activity={activity} />
-        )}
+        {activity && <SourceTimeline activity={activity} />}
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
           <div className="flex-1 min-w-0">
             <SourceTabs
@@ -164,7 +172,14 @@ export default async function IndependentSourcePage({
               </>
             )}
           </div>
-          <Sidebar sections={sidebarSections} formatPath={`/source/${slug}`} footnote={source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null} footnoteTitle={source.lastFetchedAt} />
+          <Sidebar
+            sections={sidebarSections}
+            formatPath={`/source/${slug}`}
+            footnote={
+              source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null
+            }
+            footnoteTitle={source.lastFetchedAt}
+          />
         </div>
       </div>
     </div>

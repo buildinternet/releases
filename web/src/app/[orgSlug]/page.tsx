@@ -18,7 +18,11 @@ import { CliCommand } from "@/components/cli-command";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
 
-export async function generateMetadata({ params }: { params: Promise<{ orgSlug: string }> }): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: {
+  params: Promise<{ orgSlug: string }>;
+}): Promise<Metadata> {
   const { orgSlug } = await params;
   try {
     const org = await getOrg(orgSlug);
@@ -28,9 +32,7 @@ export async function generateMetadata({ params }: { params: Promise<{ orgSlug: 
       openGraph: { type: "website" },
       alternates: {
         types: {
-          "application/atom+xml": [
-            { url: `/${orgSlug}.atom`, title: `${org.name} release notes` },
-          ],
+          "application/atom+xml": [{ url: `/${orgSlug}.atom`, title: `${org.name} release notes` }],
         },
       },
     };
@@ -41,7 +43,12 @@ export async function generateMetadata({ params }: { params: Promise<{ orgSlug: 
 
 function formatDate(iso: string | null) {
   if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" });
+  return new Date(iso).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
 }
 
 export default async function OrgPage({
@@ -108,8 +115,8 @@ export default async function OrgPage({
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
-    "name": org.name,
-    "url": `https://releases.sh/${orgSlug}`,
+    name: org.name,
+    url: `https://releases.sh/${orgSlug}`,
   };
 
   return (
@@ -121,29 +128,35 @@ export default async function OrgPage({
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">
-          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">Home</Link>
+          <Link href="/" className="hover:text-stone-600 dark:hover:text-stone-300">
+            Home
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{org.name}</span>
         </div>
-        {org.avatarUrl || org.accounts.some(a => a.platform === "github") ? (
+        {org.avatarUrl || org.accounts.some((a) => a.platform === "github") ? (
           <div className="flex items-center gap-3 mt-4">
             <OrgAvatar
               avatarUrl={org.avatarUrl}
-              githubHandle={org.accounts.find(a => a.platform === "github")?.handle ?? null}
+              githubHandle={org.accounts.find((a) => a.platform === "github")?.handle ?? null}
               name={org.name}
               size={40}
             />
-            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">{org.name}</h1>
+            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+              {org.name}
+            </h1>
           </div>
         ) : (
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">{org.name}</h1>
+          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
+            {org.name}
+          </h1>
         )}
         <CliCommand identifier={org.slug} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
             <OrgTabs
-              hasPlaybook={process.env.NODE_ENV === 'development' && !!org.playbook}
-              hasFetchLog={process.env.NODE_ENV === 'development'}
+              hasPlaybook={process.env.NODE_ENV === "development" && !!org.playbook}
+              hasFetchLog={process.env.NODE_ENV === "development"}
             />
 
             {activeTab === "releases" ? (
@@ -160,18 +173,25 @@ export default async function OrgPage({
                 </div>
               )
             ) : activeTab === "sources" ? (
-              <SourceTable sources={org.sources} products={org.products} orgSlug={orgSlug} sourceSparklines={(() => {
-                const map: Record<string, number[]> = {};
-                if (sparklines) {
-                  for (const s of sparklines.sources) {
-                    map[s.slug] = s.sparkline;
+              <SourceTable
+                sources={org.sources}
+                products={org.products}
+                orgSlug={orgSlug}
+                sourceSparklines={(() => {
+                  const map: Record<string, number[]> = {};
+                  if (sparklines) {
+                    for (const s of sparklines.sources) {
+                      map[s.slug] = s.sparkline;
+                    }
                   }
-                }
-                return Object.keys(map).length > 0 ? map : undefined;
-              })()} />
-            ) : activeTab === "playbook" && process.env.NODE_ENV === 'development' && org.playbook ? (
+                  return Object.keys(map).length > 0 ? map : undefined;
+                })()}
+              />
+            ) : activeTab === "playbook" &&
+              process.env.NODE_ENV === "development" &&
+              org.playbook ? (
               <PlaybookView playbook={org.playbook} />
-            ) : activeTab === "fetch-log" && process.env.NODE_ENV === 'development' ? (
+            ) : activeTab === "fetch-log" && process.env.NODE_ENV === "development" ? (
               <OrgFetchLogView
                 apiUrl={process.env.RELEASED_API_URL ?? "http://localhost:3456"}
                 apiKey={process.env.RELEASED_API_KEY}
@@ -180,13 +200,26 @@ export default async function OrgPage({
             ) : (
               <>
                 {activity && (
-                  <ReleaseTimeline activity={activity} heatmap={heatmap} orgSlug={orgSlug} sources={org.sources} products={org.products} trackingSince={org.trackingSince} />
+                  <ReleaseTimeline
+                    activity={activity}
+                    heatmap={heatmap}
+                    orgSlug={orgSlug}
+                    sources={org.sources}
+                    products={org.products}
+                    trackingSince={org.trackingSince}
+                  />
                 )}
                 {org.overview && <OverviewView page={org.overview} />}
               </>
             )}
           </div>
-          <Sidebar sections={sidebarSections} accounts={org.accounts} formatPath={`/${orgSlug}`} footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null} footnoteTitle={org.lastFetchedAt} />
+          <Sidebar
+            sections={sidebarSections}
+            accounts={org.accounts}
+            formatPath={`/${orgSlug}`}
+            footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null}
+            footnoteTitle={org.lastFetchedAt}
+          />
         </div>
       </div>
     </div>

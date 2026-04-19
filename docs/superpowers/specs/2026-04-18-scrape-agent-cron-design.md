@@ -43,6 +43,7 @@ No polling on session completion. No within-sweep retries. Sweep wall time is bo
 ### Why reuse discovery worker's `/update`
 
 The discovery worker already exposes `POST /update` that:
+
 - Validates `ANTHROPIC_API_KEY` and agent config
 - Spins up a `ManagedAgentsSession` Durable Object per call
 - Invokes the worker agent (`claude-haiku-4-5`) in `mode: "update"`
@@ -57,15 +58,15 @@ One `GET https://api.anthropic.com/v1/models` call per sweep before any dispatch
 
 Classifications (this is the single source of truth for the preflight matrix — the code and the status-derivation tests reference this table):
 
-| response | action | `abort_reason` |
-|---|---|---|
-| 200 | proceed | — |
-| 401 / 403 | abort | `anthropic_auth` |
-| 402 | abort | `anthropic_credits` |
-| 429 with `error.type === 'credit_balance_too_low'` | abort | `anthropic_credits` |
-| 429 (other) | warn + proceed | — |
-| 5xx | warn + proceed | — |
-| timeout (3s) | warn + proceed | — |
+| response                                           | action         | `abort_reason`      |
+| -------------------------------------------------- | -------------- | ------------------- |
+| 200                                                | proceed        | —                   |
+| 401 / 403                                          | abort          | `anthropic_auth`    |
+| 402                                                | abort          | `anthropic_credits` |
+| 429 with `error.type === 'credit_balance_too_low'` | abort          | `anthropic_credits` |
+| 429 (other)                                        | warn + proceed | —                   |
+| 5xx                                                | warn + proceed | —                   |
+| timeout (3s)                                       | warn + proceed | —                   |
 
 The 429-credits check reads response body (cap 1 KB, JSON.parse in try/catch; malformed body falls through to warn).
 
@@ -75,22 +76,22 @@ The 429-credits check reads response body (cap 1 KB, JSON.parse in try/catch; ma
 
 Defined in `workers/api/src/db/schema-cron.ts` (worker-scoped, following the `src/db/schema-coverage.ts` precedent). Not added to `@buildinternet/releases-core`; the CLI has no reason to read or write it.
 
-| column | type | notes |
-|---|---|---|
-| `id` | TEXT PK | `crun_<nanoid>`. New `newCronRunId()` helper in `@buildinternet/releases-core/id`. |
-| `cron_name` | TEXT NOT NULL | Discriminator. Starts as `'scrape-agent-sweep'`; schema supports future crons reusing the table. |
-| `started_at` | TEXT NOT NULL | ISO |
-| `ended_at` | TEXT | Null while running |
-| `duration_ms` | INTEGER | Cached on final write |
-| `status` | TEXT NOT NULL | `'running' \| 'done' \| 'degraded' \| 'dispatch_failed' \| 'aborted'` |
-| `candidates` | INTEGER NOT NULL DEFAULT 0 | Rows returned by candidate query |
-| `dispatched` | INTEGER NOT NULL DEFAULT 0 | `/update` calls that returned 202 |
-| `skipped_over_cap` | INTEGER NOT NULL DEFAULT 0 | Dropped by `SCRAPE_AGENT_MAX_SESSIONS` |
-| `dispatch_errors` | INTEGER NOT NULL DEFAULT 0 | Count of failed per-org dispatches |
-| `sessions_started` | TEXT | JSON array of session IDs (cap 20 entries) |
-| `dispatch_error_detail` | TEXT | JSON `[{orgSlug, error}]` (cap 20 entries) |
-| `abort_reason` | TEXT | Null unless `status='aborted'`. Values: `'anthropic_auth' \| 'anthropic_credits' \| 'stale_running' \| 'cron_disabled' \| 'config_missing'` |
-| `notes` | TEXT | Free-form human-readable summary |
+| column                  | type                       | notes                                                                                                                                       |
+| ----------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`                    | TEXT PK                    | `crun_<nanoid>`. New `newCronRunId()` helper in `@buildinternet/releases-core/id`.                                                          |
+| `cron_name`             | TEXT NOT NULL              | Discriminator. Starts as `'scrape-agent-sweep'`; schema supports future crons reusing the table.                                            |
+| `started_at`            | TEXT NOT NULL              | ISO                                                                                                                                         |
+| `ended_at`              | TEXT                       | Null while running                                                                                                                          |
+| `duration_ms`           | INTEGER                    | Cached on final write                                                                                                                       |
+| `status`                | TEXT NOT NULL              | `'running' \| 'done' \| 'degraded' \| 'dispatch_failed' \| 'aborted'`                                                                       |
+| `candidates`            | INTEGER NOT NULL DEFAULT 0 | Rows returned by candidate query                                                                                                            |
+| `dispatched`            | INTEGER NOT NULL DEFAULT 0 | `/update` calls that returned 202                                                                                                           |
+| `skipped_over_cap`      | INTEGER NOT NULL DEFAULT 0 | Dropped by `SCRAPE_AGENT_MAX_SESSIONS`                                                                                                      |
+| `dispatch_errors`       | INTEGER NOT NULL DEFAULT 0 | Count of failed per-org dispatches                                                                                                          |
+| `sessions_started`      | TEXT                       | JSON array of session IDs (cap 20 entries)                                                                                                  |
+| `dispatch_error_detail` | TEXT                       | JSON `[{orgSlug, error}]` (cap 20 entries)                                                                                                  |
+| `abort_reason`          | TEXT                       | Null unless `status='aborted'`. Values: `'anthropic_auth' \| 'anthropic_credits' \| 'stale_running' \| 'cron_disabled' \| 'config_missing'` |
+| `notes`                 | TEXT                       | Free-form human-readable summary                                                                                                            |
 
 Index: `idx_cron_runs_name_started ON (cron_name, started_at DESC)`.
 
@@ -153,12 +154,20 @@ async function dispatchOne(group: OrgGroup, ctx: SweepContext): Promise<Dispatch
       }),
     });
     if (!res.ok) {
-      return { orgSlug: group.orgSlug, ok: false, error: `${res.status} ${await res.text().catch(() => "")}` };
+      return {
+        orgSlug: group.orgSlug,
+        ok: false,
+        error: `${res.status} ${await res.text().catch(() => "")}`,
+      };
     }
-    const { sessionId } = await res.json() as { sessionId: string };
+    const { sessionId } = (await res.json()) as { sessionId: string };
     return { orgSlug: group.orgSlug, ok: true, sessionId };
   } catch (err) {
-    return { orgSlug: group.orgSlug, ok: false, error: err instanceof Error ? err.message : String(err) };
+    return {
+      orgSlug: group.orgSlug,
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    };
   }
 }
 ```
@@ -167,13 +176,13 @@ Concurrency: `runWithConcurrency(groups, 3, dispatchOne)`. **Extract** the exist
 
 ### Status derivation
 
-| case | `status` | `abort_reason` |
-|---|---|---|
-| pre-flight aborted | `aborted` | `anthropic_auth` \| `anthropic_credits` |
-| 0 candidates | `done` | — |
-| all dispatches 200 | `done` | — |
-| some dispatches failed | `degraded` | — |
-| all dispatches failed | `dispatch_failed` | — |
+| case                   | `status`          | `abort_reason`                          |
+| ---------------------- | ----------------- | --------------------------------------- |
+| pre-flight aborted     | `aborted`         | `anthropic_auth` \| `anthropic_credits` |
+| 0 candidates           | `done`            | —                                       |
+| all dispatches 200     | `done`            | —                                       |
+| some dispatches failed | `degraded`        | —                                       |
+| all dispatches failed  | `dispatch_failed` | —                                       |
 
 ### Idempotency
 
@@ -234,11 +243,11 @@ secret; `anthropic_credits` means top up the account. Stale-running rows
 
 ### Environment variables (in `workers/api/wrangler.jsonc`)
 
-| var | default | effect |
-|---|---|---|
-| `CRON_ENABLED` | `"true"` | Existing; `"false"` disables every cron. |
-| `SCRAPE_AGENT_CRON_ENABLED` | `"true"` | New; per-cron toggle. Both must be truthy. |
-| `SCRAPE_AGENT_MAX_SESSIONS` | `"20"` | Cap (Q3). Invalid values fall back to `20` with a warning. Code comment notes this could differentiate by `fetchPriority` in a future iteration. |
+| var                         | default  | effect                                                                                                                                           |
+| --------------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CRON_ENABLED`              | `"true"` | Existing; `"false"` disables every cron.                                                                                                         |
+| `SCRAPE_AGENT_CRON_ENABLED` | `"true"` | New; per-cron toggle. Both must be truthy.                                                                                                       |
+| `SCRAPE_AGENT_MAX_SESSIONS` | `"20"`   | Cap (Q3). Invalid values fall back to `20` with a warning. Code comment notes this could differentiate by `fetchPriority` in a future iteration. |
 
 ### Cron trigger (in `workers/api/wrangler.jsonc`)
 
@@ -254,15 +263,17 @@ secret; `anthropic_credits` means top up the account. Stale-running rows
 
 ```ts
 if (event.cron === "0 1 * * *") {
-  ctx.waitUntil(scrapeAgentSweep({
-    DB: env.DB,
-    CRON_ENABLED: env.CRON_ENABLED,
-    SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
-    SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    RELEASED_API_KEY: await env.RELEASED_API_KEY.get(),
-    ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
-  }));
+  ctx.waitUntil(
+    scrapeAgentSweep({
+      DB: env.DB,
+      CRON_ENABLED: env.CRON_ENABLED,
+      SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
+      SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
+      DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+      RELEASED_API_KEY: await env.RELEASED_API_KEY.get(),
+      ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
+    }),
+  );
   return;
 }
 ```
@@ -308,6 +319,7 @@ Mirrors `tests/api/retier-binds.test.ts` from #322. Locks `INSERT` and `UPDATE` 
 Mocks only two boundaries: Anthropic pre-flight (`fetch`) and discovery worker (`env.DISCOVERY_WORKER.fetch`). Everything else runs against in-memory D1.
 
 Cases:
+
 - Happy path: 5 candidates / 3 orgs → 3 dispatches → `status='done'`.
 - Pre-flight auth failure: 401 → 0 dispatches → `aborted(anthropic_auth)`.
 - Mixed dispatch: 2 ok, 1 fails → `degraded`, `dispatch_errors=1`.
@@ -339,6 +351,7 @@ Cases:
 ## File inventory
 
 ### New files
+
 - `workers/api/src/cron/scrape-agent-sweep.ts`
 - `workers/api/src/db/schema-cron.ts`
 - `workers/api/src/routes/admin-cron-runs.ts`
@@ -357,6 +370,7 @@ Cases:
 - `tests/api/scrape-agent-sweep.test.ts`
 
 ### Modified files
+
 - `workers/api/src/index.ts` (new scheduled-handler branch)
 - `workers/api/src/cron/poll-fetch.ts` (import `runWithConcurrency` from new shared location)
 - `workers/api/wrangler.jsonc` (new cron trigger, vars, binding for ANTHROPIC_API_KEY)

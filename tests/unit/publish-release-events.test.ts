@@ -48,7 +48,11 @@ describe("publishReleaseEvents", () => {
   it("swallows errors from the hub (ingestion must not fail on publish errors)", async () => {
     const namespace = {
       idFromName: (n: string) => n,
-      get: () => ({ fetch: async () => { throw new Error("hub down"); } }),
+      get: () => ({
+        fetch: async () => {
+          throw new Error("hub down");
+        },
+      }),
     };
     const result = await publishReleaseEvents(
       { RELEASE_HUB: namespace as any },

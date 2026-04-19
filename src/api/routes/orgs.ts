@@ -1,6 +1,12 @@
 import { eq, desc, count, max, sql, and, inArray } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { organizations, orgAccounts, sources, releases, products } from "@releases/core-internal/schema";
+import {
+  organizations,
+  orgAccounts,
+  sources,
+  releases,
+  products,
+} from "@releases/core-internal/schema";
 import { getOrgMetrics } from "../metrics.js";
 import type { SitemapPayload } from "../types.js";
 
@@ -21,20 +27,31 @@ export function handleOrgs() {
     .all();
 
   // Batch-fetch all GitHub handles to avoid N+1
-  const ghAccounts = db.select({ orgId: orgAccounts.orgId, handle: orgAccounts.handle })
+  const ghAccounts = db
+    .select({ orgId: orgAccounts.orgId, handle: orgAccounts.handle })
     .from(orgAccounts)
     .where(eq(orgAccounts.platform, "github"))
     .all();
-  const ghByOrgId = new Map(ghAccounts.map(a => [a.orgId, a.handle]));
+  const ghByOrgId = new Map(ghAccounts.map((a) => [a.orgId, a.handle]));
 
   return rows.map((org) => {
-    const [srcCount] = db.select({ n: count() }).from(sources).where(eq(sources.orgId, org.id)).all();
-    const [relCount] = db.select({ n: count() }).from(releases)
+    const [srcCount] = db
+      .select({ n: count() })
+      .from(sources)
+      .where(eq(sources.orgId, org.id))
+      .all();
+    const [relCount] = db
+      .select({ n: count() })
+      .from(releases)
       .innerJoin(sources, eq(releases.sourceId, sources.id))
-      .where(eq(sources.orgId, org.id)).all();
-    const [latest] = db.select({ maxDate: max(releases.publishedAt) }).from(releases)
+      .where(eq(sources.orgId, org.id))
+      .all();
+    const [latest] = db
+      .select({ maxDate: max(releases.publishedAt) })
+      .from(releases)
       .innerJoin(sources, eq(releases.sourceId, sources.id))
-      .where(and(eq(sources.orgId, org.id), sql`${releases.publishedAt} IS NOT NULL`)).all();
+      .where(and(eq(sources.orgId, org.id), sql`${releases.publishedAt} IS NOT NULL`))
+      .all();
 
     return {
       slug: org.slug,
@@ -107,7 +124,13 @@ export function handleSitemap(): SitemapPayload {
     sources: sourceRows.flatMap((s) =>
       s.isHidden || !s.orgId
         ? []
-        : [{ orgSlug: orgIdToSlug.get(s.orgId)!, slug: s.slug, latestDate: latestBySource.get(s.id) ?? null }],
+        : [
+            {
+              orgSlug: orgIdToSlug.get(s.orgId)!,
+              slug: s.slug,
+              latestDate: latestBySource.get(s.id) ?? null,
+            },
+          ],
     ),
     products: productRows.flatMap((p) =>
       !p.orgId ? [] : [{ orgSlug: orgIdToSlug.get(p.orgId)!, slug: p.slug }],
@@ -121,45 +144,85 @@ export function handleOrgDetail(slug: string) {
   const [org] = db.select().from(organizations).where(eq(organizations.slug, slug)).all();
   if (!org) return null;
 
-  const accounts = db.select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
-    .from(orgAccounts).where(eq(orgAccounts.orgId, org.id)).all();
+  const accounts = db
+    .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
+    .from(orgAccounts)
+    .where(eq(orgAccounts.orgId, org.id))
+    .all();
 
-  const orgSources = db.select().from(sources).where(eq(sources.orgId, org.id)).orderBy(sources.name).all();
+  const orgSources = db
+    .select()
+    .from(sources)
+    .where(eq(sources.orgId, org.id))
+    .orderBy(sources.name)
+    .all();
 
   const sourcesWithStats = orgSources.map((src) => {
-    const [relCount] = db.select({ n: count() }).from(releases).where(eq(releases.sourceId, src.id)).all();
+    const [relCount] = db
+      .select({ n: count() })
+      .from(releases)
+      .where(eq(releases.sourceId, src.id))
+      .all();
 
-    const [latest] = db.select({ version: releases.version, publishedAt: releases.publishedAt })
+    const [latest] = db
+      .select({ version: releases.version, publishedAt: releases.publishedAt })
       .from(releases)
       .where(and(eq(releases.sourceId, src.id), sql`${releases.publishedAt} IS NOT NULL`))
-      .orderBy(desc(releases.publishedAt)).limit(1).all();
+      .orderBy(desc(releases.publishedAt))
+      .limit(1)
+      .all();
 
-    const latestVersion = latest?.version ?? (() => {
-      const [fallback] = db.select({ version: releases.version }).from(releases)
-        .where(eq(releases.sourceId, src.id)).orderBy(desc(releases.fetchedAt)).limit(1).all();
-      return fallback?.version ?? null;
-    })();
+    const latestVersion =
+      latest?.version ??
+      (() => {
+        const [fallback] = db
+          .select({ version: releases.version })
+          .from(releases)
+          .where(eq(releases.sourceId, src.id))
+          .orderBy(desc(releases.fetchedAt))
+          .limit(1)
+          .all();
+        return fallback?.version ?? null;
+      })();
 
     return {
-      slug: src.slug, name: src.name, type: src.type, url: src.url,
-      releaseCount: relCount.n, latestVersion, latestDate: latest?.publishedAt ?? null,
+      slug: src.slug,
+      name: src.name,
+      type: src.type,
+      url: src.url,
+      releaseCount: relCount.n,
+      latestVersion,
+      latestDate: latest?.publishedAt ?? null,
     };
   });
 
   const metrics = getOrgMetrics(org.id);
-  const [totalReleases] = db.select({ n: count() }).from(releases)
+  const [totalReleases] = db
+    .select({ n: count() })
+    .from(releases)
     .innerJoin(sources, eq(releases.sourceId, sources.id))
-    .where(eq(sources.orgId, org.id)).all();
+    .where(eq(sources.orgId, org.id))
+    .all();
 
-  const [latestFetch] = db.select({ maxFetch: max(sources.lastFetchedAt) })
-    .from(sources).where(eq(sources.orgId, org.id)).all();
+  const [latestFetch] = db
+    .select({ maxFetch: max(sources.lastFetchedAt) })
+    .from(sources)
+    .where(eq(sources.orgId, org.id))
+    .all();
 
   return {
-    slug: org.slug, name: org.name, domain: org.domain, avatarUrl: org.avatarUrl ?? null, description: org.description,
-    sourceCount: orgSources.length, releaseCount: totalReleases.n,
+    slug: org.slug,
+    name: org.name,
+    domain: org.domain,
+    avatarUrl: org.avatarUrl ?? null,
+    description: org.description,
+    sourceCount: orgSources.length,
+    releaseCount: totalReleases.n,
     releasesLast30Days: metrics.releasesLast30Days,
     avgReleasesPerWeek: metrics.avgReleasesPerWeek,
     lastFetchedAt: latestFetch.maxFetch ?? null,
-    trackingSince: metrics.oldestPublishedAt ?? org.createdAt, accounts, sources: sourcesWithStats,
+    trackingSince: metrics.oldestPublishedAt ?? org.createdAt,
+    accounts,
+    sources: sourcesWithStats,
   };
 }

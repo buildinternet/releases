@@ -12,7 +12,12 @@ import { sha256Hex } from "@releases/core-internal/hash";
 import { AdapterError } from "@releases/lib/errors";
 import type { Source } from "@releases/core-internal/schema";
 import { extractFromBody } from "./extract-from-body.js";
-import { DIRECT_FETCH_SYSTEM_PROMPT, mapEntries, type ExtractionGuidance, type MappedEntry } from "./shared.js";
+import {
+  DIRECT_FETCH_SYSTEM_PROMPT,
+  mapEntries,
+  type ExtractionGuidance,
+  type MappedEntry,
+} from "./shared.js";
 import type { ExtractDeps } from "./types.js";
 
 export interface DirectFetchOptions {
@@ -62,7 +67,10 @@ export async function runDirectFetchExtraction(
     return { releases: [], unchanged: true };
   }
   if (!res.ok) {
-    throw new AdapterError("agent", `Direct-fetch returned ${res.status} ${res.statusText} for ${opts.fetchUrl}`);
+    throw new AdapterError(
+      "agent",
+      `Direct-fetch returned ${res.status} ${res.statusText} for ${opts.fetchUrl}`,
+    );
   }
 
   const body = await res.text();
@@ -95,12 +103,15 @@ export async function runDirectFetchExtraction(
     return { releases: [], unchanged: true };
   }
 
-  const result = await extractFromBody({
-    body,
-    systemPrompt: DIRECT_FETCH_SYSTEM_PROMPT,
-    userMessage: `Extract all changelog/release entries from this content (canonical source URL: ${source.url}, fetched from: ${opts.fetchUrl}):`,
-    guidance: opts.guidance,
-  }, deps);
+  const result = await extractFromBody(
+    {
+      body,
+      systemPrompt: DIRECT_FETCH_SYSTEM_PROMPT,
+      userMessage: `Extract all changelog/release entries from this content (canonical source URL: ${source.url}, fetched from: ${opts.fetchUrl}):`,
+      guidance: opts.guidance,
+    },
+    deps,
+  );
 
   await repo.logUsage({
     operation: "agent-ingest",
@@ -111,7 +122,9 @@ export async function runDirectFetchExtraction(
     releaseCount: result.entries.length,
   });
 
-  logger.info(`Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`);
+  logger.info(
+    `Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`,
+  );
 
   // Commit content hash only when extraction completed cleanly. On
   // max_tokens exhaustion we leave it unset so a fixed prompt can re-attempt

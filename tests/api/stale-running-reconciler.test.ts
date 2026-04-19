@@ -26,7 +26,11 @@ describe("reconcileStaleRunning", () => {
       status: "running",
     });
 
-    const reconciled = await reconcileStaleRunning(db, { cronName: "scrape-agent-sweep", now, thresholdMs: 10 * 60 * 1000 });
+    const reconciled = await reconcileStaleRunning(db, {
+      cronName: "scrape-agent-sweep",
+      now,
+      thresholdMs: 10 * 60 * 1000,
+    });
     expect(reconciled).toBe(1);
 
     const [row] = await db.select().from(cronRuns).where(eq(cronRuns.id, "crun_stale"));
@@ -47,7 +51,11 @@ describe("reconcileStaleRunning", () => {
       status: "running",
     });
 
-    const reconciled = await reconcileStaleRunning(db, { cronName: "scrape-agent-sweep", now, thresholdMs: 10 * 60 * 1000 });
+    const reconciled = await reconcileStaleRunning(db, {
+      cronName: "scrape-agent-sweep",
+      now,
+      thresholdMs: 10 * 60 * 1000,
+    });
     expect(reconciled).toBe(0);
 
     const [row] = await db.select().from(cronRuns).where(eq(cronRuns.id, "crun_fresh"));
@@ -66,7 +74,11 @@ describe("reconcileStaleRunning", () => {
       status: "running",
     });
 
-    const reconciled = await reconcileStaleRunning(db, { cronName: "scrape-agent-sweep", now, thresholdMs: 10 * 60 * 1000 });
+    const reconciled = await reconcileStaleRunning(db, {
+      cronName: "scrape-agent-sweep",
+      now,
+      thresholdMs: 10 * 60 * 1000,
+    });
     expect(reconciled).toBe(0);
 
     const [row] = await db.select().from(cronRuns).where(eq(cronRuns.id, "crun_other"));

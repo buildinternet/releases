@@ -29,10 +29,7 @@ export type SourceListRow = {
   latest_date: string | null;
 };
 
-export async function countSourcesForList(
-  db: D1Db,
-  whereClause?: SQL,
-): Promise<number> {
+export async function countSourcesForList(db: D1Db, whereClause?: SQL): Promise<number> {
   const rows = await db.all<{ total: number }>(sql`
     SELECT COUNT(*) AS total
     FROM sources

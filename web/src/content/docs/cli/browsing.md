@@ -28,17 +28,17 @@ Also available as `releases admin source list` for discoverability within admin 
 
 ### Filters
 
-| Flag | Description |
-| --- | --- |
-| `--org <slug>` | Filter by organization |
-| `--product <slug>` | Filter by product |
-| `--has-feed` | Only sources with a discovered feed URL |
-| `--query <text>` | Substring match on name, slug, or URL |
-| `--category <cat>` | Filter by org or product category |
-| `--include-disabled` | Include disabled sources |
-| `--compact` | Lightweight fields only (with `--json`) |
-| `--limit <n>` | Limit results (with `--json`) |
-| `--page <n>` | Page number (with `--limit`) |
+| Flag                 | Description                             |
+| -------------------- | --------------------------------------- |
+| `--org <slug>`       | Filter by organization                  |
+| `--product <slug>`   | Filter by product                       |
+| `--has-feed`         | Only sources with a discovered feed URL |
+| `--query <text>`     | Substring match on name, slug, or URL   |
+| `--category <cat>`   | Filter by org or product category       |
+| `--include-disabled` | Include disabled sources                |
+| `--compact`          | Lightweight fields only (with `--json`) |
+| `--limit <n>`        | Limit results (with `--json`)           |
+| `--page <n>`         | Page number (with `--limit`)            |
 
 ## Latest releases
 
@@ -65,11 +65,11 @@ releases search "vercel" --json
 
 ### Options
 
-| Flag | Description |
-| --- | --- |
+| Flag            | Description                                                   |
+| --------------- | ------------------------------------------------------------- |
 | `--type <type>` | Limit results to `orgs`, `products`, `sources`, or `releases` |
-| `--limit <n>` | Max results per type (default 10) |
-| `--json` | Machine-readable output |
+| `--limit <n>`   | Max results per type (default 10)                             |
+| `--json`        | Machine-readable output                                       |
 
 ## Categories
 

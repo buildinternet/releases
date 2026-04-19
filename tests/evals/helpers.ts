@@ -231,7 +231,12 @@ export function gradeFixture(
     if (!match) {
       // Missing release — all fields fail
       const fields: FieldResult[] = [
-        { field: "release_found", passed: false, expected: exp.version ?? `release #${i}`, actual: "missing" },
+        {
+          field: "release_found",
+          passed: false,
+          expected: exp.version ?? `release #${i}`,
+          actual: "missing",
+        },
       ];
       releaseResults.push({ index: i, passed: false, fields });
       totalFields++;
@@ -266,23 +271,34 @@ export function printResults(results: FixtureResult[], label = "Evals"): void {
   const avgScore = results.reduce((sum, r) => sum + r.score, 0) / results.length;
 
   console.error(`\n${"=".repeat(60)}`);
-  console.error(`${label}: ${passed}/${results.length} passed (${(avgScore * 100).toFixed(1)}% field accuracy)`);
+  console.error(
+    `${label}: ${passed}/${results.length} passed (${(avgScore * 100).toFixed(1)}% field accuracy)`,
+  );
   console.error("=".repeat(60));
 
   for (const result of results) {
     const status = result.passed ? "PASS" : "FAIL";
     const fieldTotal = result.releases.reduce((s, r) => s + r.fields.length, 0);
-    const fieldPassed = result.releases.reduce((s, r) => s + r.fields.filter((f) => f.passed).length, 0);
-    const countNote = result.releaseCountMatch ? "" : ` [count: expected ${result.expectedCount}, got ${result.actualCount}]`;
+    const fieldPassed = result.releases.reduce(
+      (s, r) => s + r.fields.filter((f) => f.passed).length,
+      0,
+    );
+    const countNote = result.releaseCountMatch
+      ? ""
+      : ` [count: expected ${result.expectedCount}, got ${result.actualCount}]`;
 
-    console.error(`  ${status}  ${result.fixture} (${fieldPassed}/${fieldTotal} fields)${countNote}`);
+    console.error(
+      `  ${status}  ${result.fixture} (${fieldPassed}/${fieldTotal} fields)${countNote}`,
+    );
 
     // Show failed fields
     if (!result.passed) {
       for (const release of result.releases) {
         for (const field of release.fields) {
           if (!field.passed) {
-            console.error(`        release #${release.index} ${field.field}: expected=${JSON.stringify(field.expected)}, actual=${JSON.stringify(field.actual)}`);
+            console.error(
+              `        release #${release.index} ${field.field}: expected=${JSON.stringify(field.expected)}, actual=${JSON.stringify(field.actual)}`,
+            );
           }
         }
       }

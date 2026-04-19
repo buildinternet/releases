@@ -64,7 +64,10 @@ export function SourceMainContent({
         <ReleaseListItem
           key={i}
           release={release}
-          hideDate={i > 0 && release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)}
+          hideDate={
+            i > 0 &&
+            release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)
+          }
         />
       ))}
       <Pagination

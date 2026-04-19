@@ -146,7 +146,10 @@ function stripLeadingTitle(content: string, title: string | null): string {
   if (!title || !content) return content;
   const firstNewline = content.indexOf("\n");
   if (firstNewline === -1) return content;
-  const firstLine = content.slice(0, firstNewline).replace(/^#+\s+/, "").trim();
+  const firstLine = content
+    .slice(0, firstNewline)
+    .replace(/^#+\s+/, "")
+    .trim();
   if (firstLine.toLowerCase() === title.toLowerCase()) {
     return content.slice(firstNewline + 1).trimStart();
   }
@@ -252,9 +255,7 @@ function ResultCard({
         )}
       </div>
       <div className="flex gap-3">
-        <div className="flex-1 min-w-0 max-h-[4.5em] overflow-hidden">
-          {children}
-        </div>
+        <div className="flex-1 min-w-0 max-h-[4.5em] overflow-hidden">{children}</div>
         {thumbnail && (
           <FallbackImage
             src={thumbnail.src}
@@ -342,10 +343,7 @@ export function SearchResults({
   );
 
   const hasResults =
-    results &&
-    (results.orgs.length > 0 ||
-      results.products.length > 0 ||
-      rankedHits.length > 0);
+    results && (results.orgs.length > 0 || results.products.length > 0 || rankedHits.length > 0);
 
   const showOrgs = filter === "all" || filter === "orgs";
   const showProducts = filter === "all" || filter === "products";
@@ -423,9 +421,14 @@ export function SearchResults({
               </h2>
               <div className="space-y-2">
                 {results.products.map((p: SearchProductHit) => {
-                  const href = p.kind === "source" && p.sourceSlug
-                    ? (p.orgSlug ? `/${p.orgSlug}/${p.sourceSlug}` : `/source/${p.sourceSlug}`)
-                    : (p.orgSlug ? `/${p.orgSlug}/product/${p.slug}` : `/product/${p.slug}`);
+                  const href =
+                    p.kind === "source" && p.sourceSlug
+                      ? p.orgSlug
+                        ? `/${p.orgSlug}/${p.sourceSlug}`
+                        : `/source/${p.sourceSlug}`
+                      : p.orgSlug
+                        ? `/${p.orgSlug}/product/${p.slug}`
+                        : `/product/${p.slug}`;
                   return (
                     <Link
                       key={p.slug}
@@ -459,12 +462,7 @@ export function SearchResults({
                     return <ReleaseResultCard key={`release:${r.id}:${i}`} hit={r} />;
                   }
                   const c = entry.hit;
-                  return (
-                    <ChunkResultCard
-                      key={`chunk:${c.sourceSlug}:${c.offset}:${i}`}
-                      hit={c}
-                    />
-                  );
+                  return <ChunkResultCard key={`chunk:${c.sourceSlug}:${c.offset}:${i}`} hit={c} />;
                 })}
               </div>
             </section>

@@ -122,9 +122,18 @@ mountWebhooksReplay(v1, (c) => c.env);
 
 // Public-read routes: GET is open, writes require auth
 const publicReadRoutes = [
-  "stats", "orgs", "sources", "search", "releases",
-  "products", "summaries", "knowledge", "overview", "tags",
-  "related", "sitemap",
+  "stats",
+  "orgs",
+  "sources",
+  "search",
+  "releases",
+  "products",
+  "summaries",
+  "knowledge",
+  "overview",
+  "tags",
+  "related",
+  "sitemap",
 ];
 for (const r of publicReadRoutes) {
   v1.use(`/${r}`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
@@ -135,10 +144,23 @@ for (const r of publicReadRoutes) {
 // Playbook content (auto-generated header + agent notes) is internal —
 // only authenticated CLI/agent callers should be able to read it.
 const adminRoutes = [
-  "sessions", "fetch-log", "usage-log", "blocked-urls",
-  "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
-  "admin/embed", "admin/cron-runs", "admin/webhooks", "admin/notifications",
-  "admin/summaries", "admin/compare", "playbook",
+  "sessions",
+  "fetch-log",
+  "usage-log",
+  "blocked-urls",
+  "discover",
+  "evaluate",
+  "aliases",
+  "status/fetch-log",
+  "status/usage",
+  "status/event",
+  "admin/embed",
+  "admin/cron-runs",
+  "admin/webhooks",
+  "admin/notifications",
+  "admin/summaries",
+  "admin/compare",
+  "playbook",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -148,17 +170,33 @@ for (const r of adminRoutes) {
 // Cache-Control for read-heavy GET endpoints
 v1.use("/stats", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/orgs", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
-v1.use("/orgs/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use(
+  "/orgs/:slug",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+  varyOnAccept(),
+);
 v1.use("/orgs/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
-v1.use("/orgs/:slug/releases", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use(
+  "/orgs/:slug/releases",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+  varyOnAccept(),
+);
 v1.use("/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/sources", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/sources/fetchable", cacheControl(15));
-v1.use("/sources/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
+v1.use(
+  "/sources/:slug",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+  varyOnAccept(),
+);
 v1.use("/sources/:slug/activity", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/search", cacheControl(30, { staleWhileRevalidate: 30, isPublic: true }), varyOnAccept());
 v1.use("/related/*", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
-v1.use("/releases/:id", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }), varyOnAccept());
+v1.use(
+  "/releases/:id",
+  cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }),
+  varyOnAccept(),
+);
 v1.use("/status/fetch-log", cacheControl(15));
 v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
@@ -199,8 +237,16 @@ v1.get("/categories", (c) => {
   // Import would create a circular dep, so we inline the list here.
   // Must stay in sync with src/lib/categories.ts.
   return c.json([
-    "ai", "cloud", "database", "design", "developer-tools",
-    "devops", "framework", "infrastructure", "observability", "security",
+    "ai",
+    "cloud",
+    "database",
+    "design",
+    "developer-tools",
+    "devops",
+    "framework",
+    "infrastructure",
+    "observability",
+    "security",
   ]);
 });
 
@@ -212,10 +258,12 @@ export default {
     // Daily retier job runs at 03:00 UTC; scrape-no-feed agent sweep at 01:00 UTC;
     // poll-and-fetch runs every other hour.
     if (event.cron === "0 3 * * *") {
-      ctx.waitUntil(retierSources({
-        DB: env.DB,
-        CRON_ENABLED: env.CRON_ENABLED,
-      }));
+      ctx.waitUntil(
+        retierSources({
+          DB: env.DB,
+          CRON_ENABLED: env.CRON_ENABLED,
+        }),
+      );
       return;
     }
     if (event.cron === "0 1 * * *") {
@@ -228,33 +276,37 @@ export default {
         console.warn("[scrape-agent-cron] RELEASED_API_KEY secret missing; skipping");
         return;
       }
-      ctx.waitUntil(scrapeAgentSweep({
-        DB: env.DB,
-        CRON_ENABLED: env.CRON_ENABLED,
-        SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
-        SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
-        DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-        RELEASED_API_KEY: releasedApiKey,
-        ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
-        SEND_EMAIL: env.SEND_EMAIL,
-        EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
-        EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
-        EMAIL_FROM: env.EMAIL_FROM,
-        ADMIN_BASE_URL: env.ADMIN_BASE_URL,
-      }));
+      ctx.waitUntil(
+        scrapeAgentSweep({
+          DB: env.DB,
+          CRON_ENABLED: env.CRON_ENABLED,
+          SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
+          SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
+          DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+          RELEASED_API_KEY: releasedApiKey,
+          ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
+          SEND_EMAIL: env.SEND_EMAIL,
+          EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
+          EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
+          EMAIL_FROM: env.EMAIL_FROM,
+          ADMIN_BASE_URL: env.ADMIN_BASE_URL,
+        }),
+      );
       return;
     }
     const githubToken = await env.GITHUB_TOKEN?.get();
-    ctx.waitUntil(pollAndFetch({
-      DB: env.DB,
-      GITHUB_TOKEN: githubToken,
-      CRON_ENABLED: env.CRON_ENABLED,
-      RELEASES_INDEX: env.RELEASES_INDEX,
-      CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
-      EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
-      VOYAGE_API_KEY: env.VOYAGE_API_KEY,
-      OPENAI_API_KEY: env.OPENAI_API_KEY,
-      RELEASE_HUB: env.RELEASE_HUB,
-    }));
+    ctx.waitUntil(
+      pollAndFetch({
+        DB: env.DB,
+        GITHUB_TOKEN: githubToken,
+        CRON_ENABLED: env.CRON_ENABLED,
+        RELEASES_INDEX: env.RELEASES_INDEX,
+        CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
+        EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
+        VOYAGE_API_KEY: env.VOYAGE_API_KEY,
+        OPENAI_API_KEY: env.OPENAI_API_KEY,
+        RELEASE_HUB: env.RELEASE_HUB,
+      }),
+    );
   },
 };

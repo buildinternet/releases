@@ -113,9 +113,7 @@ export async function classifyAmbiguousMedia(
   const ctxBlock = [
     ctx.releaseTitle ? `Release title: ${ctx.releaseTitle}` : null,
     ctx.sourceSlug ? `Source: ${ctx.sourceSlug}` : null,
-    ctx.releaseContent
-      ? `Release content excerpt:\n${ctx.releaseContent.slice(0, 1500)}`
-      : null,
+    ctx.releaseContent ? `Release content excerpt:\n${ctx.releaseContent.slice(0, 1500)}` : null,
   ]
     .filter(Boolean)
     .join("\n\n");
@@ -170,7 +168,11 @@ export async function classifyAmbiguousMedia(
 
 function parseDecisions(text: string): MediaClassification[] | null {
   // Strip markdown fences if the model wrapped the array.
-  const cleaned = text.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/i, "").trim();
+  const cleaned = text
+    .trim()
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/```\s*$/i, "")
+    .trim();
   const firstBracket = cleaned.indexOf("[");
   const lastBracket = cleaned.lastIndexOf("]");
   if (firstBracket === -1 || lastBracket === -1 || lastBracket < firstBracket) return null;

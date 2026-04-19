@@ -24,21 +24,26 @@ describe("webhook signing", () => {
 
   it("signPayload produces a hex SHA256 HMAC", async () => {
     const key = await deriveSigningKey(master, "whk_abc", 1);
-    const sig = await signPayload(key, 1729281234, "{\"hello\":\"world\"}");
+    const sig = await signPayload(key, 1729281234, '{"hello":"world"}');
     expect(sig).toMatch(/^sha256=[0-9a-f]{64}$/);
   });
 
   it("verifySignature accepts a matching signature", async () => {
     const key = await deriveSigningKey(master, "whk_abc", 1);
     const ts = 1729281234;
-    const body = "{\"hello\":\"world\"}";
+    const body = '{"hello":"world"}';
     const sig = await signPayload(key, ts, body);
     expect(await verifySignature(key, ts, body, sig)).toBe(true);
   });
 
   it("verifySignature rejects a mismatched signature", async () => {
     const key = await deriveSigningKey(master, "whk_abc", 1);
-    const ok = await verifySignature(key, 1729281234, "{\"hello\":\"world\"}", "sha256=00".padEnd(71, "0"));
+    const ok = await verifySignature(
+      key,
+      1729281234,
+      '{"hello":"world"}',
+      "sha256=00".padEnd(71, "0"),
+    );
     expect(ok).toBe(false);
   });
 

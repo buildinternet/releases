@@ -6,7 +6,8 @@ interface ViewModeToggleProps {
 }
 
 const activeCls = "bg-white dark:bg-stone-700 text-stone-900 dark:text-stone-100 shadow-sm";
-const inactiveCls = "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300";
+const inactiveCls =
+  "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-300";
 
 export function ViewModeToggle({ viewMode, onViewModeChange }: ViewModeToggleProps) {
   return (

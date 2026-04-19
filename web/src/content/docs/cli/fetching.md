@@ -93,20 +93,20 @@ releases admin source poll --json         # Machine-readable output
 
 ## Options reference
 
-| Flag | Description |
-| --- | --- |
-| `--source <slug>` | Source slug (alternative to positional arg) |
-| `--max <n>` | Max releases per source (default 200) |
-| `--all` | No limit on releases |
-| `--since <date>` | Only fetch after this ISO date |
-| `--stale <hours>` | Only sources older than N hours |
-| `--unfetched` | Only never-fetched sources |
-| `--changed` | Only sources with detected changes |
-| `--retry-errors` | Only sources that errored |
-| `--crawl` | Enable multi-page crawl |
-| `--dry-run` | Preview without writing |
-| `--force` | Delete and re-fetch |
-| `--full` | Force full re-parse |
-| `--no-summarize` | Skip post-fetch summary |
-| `--concurrency <n>` | Parallel sources (default 1, max 5) |
-| `--json` | Machine-readable output |
+| Flag                | Description                                 |
+| ------------------- | ------------------------------------------- |
+| `--source <slug>`   | Source slug (alternative to positional arg) |
+| `--max <n>`         | Max releases per source (default 200)       |
+| `--all`             | No limit on releases                        |
+| `--since <date>`    | Only fetch after this ISO date              |
+| `--stale <hours>`   | Only sources older than N hours             |
+| `--unfetched`       | Only never-fetched sources                  |
+| `--changed`         | Only sources with detected changes          |
+| `--retry-errors`    | Only sources that errored                   |
+| `--crawl`           | Enable multi-page crawl                     |
+| `--dry-run`         | Preview without writing                     |
+| `--force`           | Delete and re-fetch                         |
+| `--full`            | Force full re-parse                         |
+| `--no-summarize`    | Skip post-fetch summary                     |
+| `--concurrency <n>` | Parallel sources (default 1, max 5)         |
+| `--json`            | Machine-readable output                     |

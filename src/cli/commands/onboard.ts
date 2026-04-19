@@ -45,7 +45,9 @@ export function registerOnboardCommand(program: Command) {
     .option("--managed-agents", "Use the managed-agents discovery engine (default)")
     .option("--sandbox", "Use the legacy sandbox discovery engine")
     .option("--json", "Output results as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Engine selection (RELEASED_DISCOVERY_ENGINE env var, default: managed-agents):
   releases admin discovery onboard "Acme"                   # uses managed agents (default)
   releases admin discovery onboard "Acme" --sandbox         # uses the sandbox engine
@@ -55,7 +57,8 @@ Examples:
   releases admin discovery onboard "Vercel"
   releases admin discovery onboard "Stripe" --domain stripe.com --github-org stripe
   releases admin discovery onboard "Acme" --remote
-  releases admin discovery onboard "Acme" --local --json`)
+  releases admin discovery onboard "Acme" --local --json`,
+    )
     .action(async (company: string, opts: OnboardOpts) => {
       if (opts.remote && opts.local) {
         logger.error("Cannot specify both --remote and --local");
@@ -90,9 +93,7 @@ async function runDiscoveryWithUI(
   toolPrefix: string,
 ): Promise<void> {
   if (!opts.json) {
-    process.stderr.write(
-      chalk.bold(`Onboarding "${company}"`) + chalk.gray(` — ${label}...\n\n`),
-    );
+    process.stderr.write(chalk.bold(`Onboarding "${company}"`) + chalk.gray(` — ${label}...\n\n`));
   }
 
   let lastToolName = "";
@@ -101,18 +102,22 @@ async function runDiscoveryWithUI(
     company,
     domain: opts.domain,
     githubOrg: opts.githubOrg,
-    onProgress: opts.json ? undefined : (text) => {
-      process.stderr.write(chalk.dim(text));
-    },
-    onToolUse: opts.json ? undefined : (toolName, command) => {
-      if (toolName === toolDisplayName && command) {
-        const display = command.length > 120 ? command.slice(0, 117) + "..." : command;
-        process.stderr.write(chalk.gray(`  $ ${toolPrefix}${display}\n`));
-      } else if (toolName !== lastToolName) {
-        process.stderr.write(chalk.gray(`  [${toolName}]\n`));
-      }
-      lastToolName = toolName;
-    },
+    onProgress: opts.json
+      ? undefined
+      : (text) => {
+          process.stderr.write(chalk.dim(text));
+        },
+    onToolUse: opts.json
+      ? undefined
+      : (toolName, command) => {
+          if (toolName === toolDisplayName && command) {
+            const display = command.length > 120 ? command.slice(0, 117) + "..." : command;
+            process.stderr.write(chalk.gray(`  $ ${toolPrefix}${display}\n`));
+          } else if (toolName !== lastToolName) {
+            process.stderr.write(chalk.gray(`  [${toolName}]\n`));
+          }
+          lastToolName = toolName;
+        },
   });
 
   if (opts.json) {
@@ -124,14 +129,32 @@ async function runDiscoveryWithUI(
 }
 
 async function runLocalDiscovery(company: string, opts: OnboardOpts): Promise<void> {
-  return runDiscoveryWithUI(company, opts, "discovery agent is running locally", runDiscovery, "Bash", "");
+  return runDiscoveryWithUI(
+    company,
+    opts,
+    "discovery agent is running locally",
+    runDiscovery,
+    "Bash",
+    "",
+  );
 }
 
 async function runManagedAgentsDiscovery(company: string, opts: OnboardOpts): Promise<void> {
-  return runDiscoveryWithUI(company, opts, "using Anthropic Managed Agents", runManagedDiscovery, "", "");
+  return runDiscoveryWithUI(
+    company,
+    opts,
+    "using Anthropic Managed Agents",
+    runManagedDiscovery,
+    "",
+    "",
+  );
 }
 
-async function runRemoteDiscovery(company: string, opts: OnboardOpts, engine: DiscoveryEngine = "managed-agents"): Promise<void> {
+async function runRemoteDiscovery(
+  company: string,
+  opts: OnboardOpts,
+  engine: DiscoveryEngine = "managed-agents",
+): Promise<void> {
   const apiUrl = process.env.RELEASED_API_URL;
   if (!apiUrl) {
     logger.error("RELEASED_API_URL is not set. Required for remote discovery.");
@@ -157,9 +180,10 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts, engine: Di
     });
     if (!res.ok) {
       const body = await res.json().catch(() => ({ message: res.statusText }));
-      const msg = (body as { message?: string; error?: string }).message
-        ?? (body as { error?: string }).error
-        ?? res.statusText;
+      const msg =
+        (body as { message?: string; error?: string }).message ??
+        (body as { error?: string }).error ??
+        res.statusText;
       throw new Error(`Discovery API error (${res.status}): ${msg}`);
     }
     return res.json();
@@ -180,7 +204,9 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts, engine: Di
     });
     sessionId = result.sessionId;
   } catch (err) {
-    logger.error(`Failed to start remote discovery: ${err instanceof Error ? err.message : String(err)}`);
+    logger.error(
+      `Failed to start remote discovery: ${err instanceof Error ? err.message : String(err)}`,
+    );
     process.exit(1);
   }
 
@@ -198,7 +224,12 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts, engine: Di
 
     let status: {
       status: "running" | "complete" | "error" | "idle";
-      progress?: { step: string; sourcesFound: number; sourcesValidated: number; currentAction: string };
+      progress?: {
+        step: string;
+        sourcesFound: number;
+        sourcesValidated: number;
+        currentAction: string;
+      };
       result?: object;
       error?: string;
     };
@@ -227,9 +258,7 @@ async function runRemoteDiscovery(company: string, opts: OnboardOpts, engine: Di
           // Result is a progress object (state file wasn't available)
           const found = result.sourcesFound ?? 0;
           const validated = result.sourcesValidated ?? 0;
-          process.stderr.write(
-            chalk.gray(`  ${found} source(s) found, ${validated} validated\n`),
-          );
+          process.stderr.write(chalk.gray(`  ${found} source(s) found, ${validated} validated\n`));
           process.stderr.write(
             chalk.dim("  Full results not available — check the status dashboard for details.\n"),
           );

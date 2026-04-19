@@ -20,7 +20,7 @@ Add to the existing `SessionState` interface (in both `dashboard.tsx` and `statu
 interface SessionState {
   sessionId: string;
   company: string;
-  type: "onboard" | "update";           // NEW — defaults to "onboard"
+  type: "onboard" | "update"; // NEW — defaults to "onboard"
   status: "running" | "complete" | "error";
   step?: string;
   // Onboard-specific
@@ -42,14 +42,17 @@ interface SessionState {
 ### Dashboard Rendering by Type
 
 **Step badge** (`StepBadge` component):
+
 - Onboard: discovering | adding | validating | Complete | Error
 - Update: fetching | Complete | Error
 
 **State column (while running)**:
+
 - Onboard: "3 found, 1 validated" (unchanged)
 - Update: "2/6 sources, 8 new releases"
 
 **State column (complete)**:
+
 - Onboard: "6 sources added" (unchanged)
 - Update: "6 sources fetched, 12 new releases"
 
@@ -76,12 +79,12 @@ In `handleEvent` for `session:progress`: persist `totalSources`, `sourcesFetched
 
 ## Files to Modify
 
-| File | Change |
-|---|---|
-| `web/src/app/status/dashboard.tsx` | Add `type` to SessionState, update StepBadge and state rendering |
-| `workers/api/src/status-hub.ts` | Add `type` to SessionState, persist update-specific fields in progress handler |
-| `src/cli/commands/fetch.ts` | Emit session start/progress/complete events in remote mode |
-| `src/api/client.ts` | Add `postStatusEvent()` helper |
+| File                               | Change                                                                         |
+| ---------------------------------- | ------------------------------------------------------------------------------ |
+| `web/src/app/status/dashboard.tsx` | Add `type` to SessionState, update StepBadge and state rendering               |
+| `workers/api/src/status-hub.ts`    | Add `type` to SessionState, persist update-specific fields in progress handler |
+| `src/cli/commands/fetch.ts`        | Emit session start/progress/complete events in remote mode                     |
+| `src/api/client.ts`                | Add `postStatusEvent()` helper                                                 |
 
 ## Backward Compatibility
 

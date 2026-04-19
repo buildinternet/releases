@@ -13,7 +13,10 @@ export function mkDb() {
 
 export function mkApp(db: any) {
   const app = new Hono();
-  app.use("*", async (c, next) => { (c as any).set("db", db); await next(); });
+  app.use("*", async (c, next) => {
+    (c as any).set("db", db);
+    await next();
+  });
   app.route("/", adminCronRunsRoutes);
   return app;
 }

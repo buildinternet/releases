@@ -58,31 +58,30 @@ async function fetchReleasesWithMedia(): Promise<BackfillRelease[]> {
     })
     .from(releases)
     .where(
-      and(
-        isNotNull(releases.media),
-        sql`${releases.media} != '[]'`,
-        sql`${releases.media} != ''`,
-      )
+      and(isNotNull(releases.media), sql`${releases.media} != '[]'`, sql`${releases.media} != ''`),
     );
 
   return rows.filter((r): r is BackfillRelease => r.media !== null);
 }
 
 export function registerMediaCommand(program: Command) {
-  const media = program
-    .command("media")
-    .description("Manage media assets");
+  const media = program.command("media").description("Manage media assets");
 
   media
     .command("backfill")
-    .description("Register existing media references from release content into the media asset index")
+    .description(
+      "Register existing media references from release content into the media asset index",
+    )
     .option("--dry-run", "Show what would be registered without writing")
     .option("--json", "Output as JSON")
-    .addHelpText("after", `
+    .addHelpText(
+      "after",
+      `
 Examples:
   releases admin content media backfill
   releases admin content media backfill --dry-run
-  releases admin content media backfill --json`)
+  releases admin content media backfill --json`,
+    )
     .action(async (opts: { dryRun?: boolean; json?: boolean }) => {
       logger.info("Scanning releases for media with R2 keys...");
 
@@ -137,18 +136,24 @@ Examples:
 
       if (opts.dryRun) {
         if (opts.json) {
-          console.log(JSON.stringify({
-            dryRun: true,
-            releasesScanned: releasesWithMedia.length,
-            assetsFound: assets.length,
-            skipped,
-            assets: assets.map((a) => ({
-              r2Key: a.r2Key,
-              sourceUrl: a.sourceUrl,
-              contentType: a.contentType,
-              releaseId: a.releaseId,
-            })),
-          }, null, 2));
+          console.log(
+            JSON.stringify(
+              {
+                dryRun: true,
+                releasesScanned: releasesWithMedia.length,
+                assetsFound: assets.length,
+                skipped,
+                assets: assets.map((a) => ({
+                  r2Key: a.r2Key,
+                  sourceUrl: a.sourceUrl,
+                  contentType: a.contentType,
+                  releaseId: a.releaseId,
+                })),
+              },
+              null,
+              2,
+            ),
+          );
         } else {
           console.log(chalk.yellow(`[dry-run] Would register ${assets.length} media asset(s)`));
           console.log(`  Releases scanned: ${releasesWithMedia.length}`);
@@ -165,7 +170,13 @@ Examples:
 
       if (assets.length === 0) {
         if (opts.json) {
-          console.log(JSON.stringify({ releasesScanned: releasesWithMedia.length, registered: 0, skipped }, null, 2));
+          console.log(
+            JSON.stringify(
+              { releasesScanned: releasesWithMedia.length, registered: 0, skipped },
+              null,
+              2,
+            ),
+          );
         } else {
           console.log(chalk.yellow("No media assets with R2 keys found to register."));
         }
@@ -175,13 +186,19 @@ Examples:
       const inserted = await insertMediaAssets(assets);
 
       if (opts.json) {
-        console.log(JSON.stringify({
-          releasesScanned: releasesWithMedia.length,
-          assetsFound: assets.length,
-          registered: inserted,
-          duplicatesSkipped: assets.length - inserted,
-          skipped,
-        }, null, 2));
+        console.log(
+          JSON.stringify(
+            {
+              releasesScanned: releasesWithMedia.length,
+              assetsFound: assets.length,
+              registered: inserted,
+              duplicatesSkipped: assets.length - inserted,
+              skipped,
+            },
+            null,
+            2,
+          ),
+        );
       } else {
         console.log(chalk.green(`Registered ${inserted} media asset(s).`));
         if (assets.length - inserted > 0) {

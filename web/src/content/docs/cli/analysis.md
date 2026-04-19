@@ -20,12 +20,12 @@ releases summary --json
 
 ### Options
 
-| Flag | Description |
-| --- | --- |
-| `--days <n>` | Look-back window in days (default 30) |
-| `--org <slug>` | Summarize across all sources in an org |
+| Flag                    | Description                            |
+| ----------------------- | -------------------------------------- |
+| `--days <n>`            | Look-back window in days (default 30)  |
+| `--org <slug>`          | Summarize across all sources in an org |
 | `--instructions <text>` | Additional guidance for the summarizer |
-| `--json` | Structured output |
+| `--json`                | Structured output                      |
 
 ## Compare
 

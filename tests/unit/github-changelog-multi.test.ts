@@ -77,9 +77,9 @@ describe("parseWorkspaces", () => {
   });
 
   it("parses { packages: [] } form", () => {
-    expect(
-      parseWorkspaces(JSON.stringify({ workspaces: { packages: ["libs/*"] } })),
-    ).toEqual(["libs/*"]);
+    expect(parseWorkspaces(JSON.stringify({ workspaces: { packages: ["libs/*"] } }))).toEqual([
+      "libs/*",
+    ]);
   });
 
   it("returns [] on malformed json", () => {
@@ -112,9 +112,7 @@ describe("pickChangelogInDir", () => {
   });
 
   it("ignores dir entries named like CHANGELOG", () => {
-    expect(
-      pickChangelogInDir([{ name: "CHANGELOG.md", type: "dir" }]),
-    ).toBeNull();
+    expect(pickChangelogInDir([{ name: "CHANGELOG.md", type: "dir" }])).toBeNull();
   });
 });
 

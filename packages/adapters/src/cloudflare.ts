@@ -36,7 +36,11 @@ async function fetchCloudflareRendered(
   return data.result;
 }
 
-export function fetchCloudflareMarkdown(url: string, accountId: string, apiToken: string): Promise<string | null> {
+export function fetchCloudflareMarkdown(
+  url: string,
+  accountId: string,
+  apiToken: string,
+): Promise<string | null> {
   return fetchCloudflareRendered(url, accountId, apiToken, "markdown");
 }
 

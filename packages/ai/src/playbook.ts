@@ -45,14 +45,20 @@ export function generatePlaybookHeader(input: PlaybookInput): string {
   const lines: string[] = [];
   lines.push(`# ${orgName} — Playbook`);
   lines.push("");
-  lines.push(`> Agent reference for fetching and maintaining **${orgName}** (\`${orgSlug}\`) changelog sources.`);
+  lines.push(
+    `> Agent reference for fetching and maintaining **${orgName}** (\`${orgSlug}\`) changelog sources.`,
+  );
   lines.push("");
 
   // Summary
   const summaryParts: string[] = [];
-  summaryParts.push(`**${active.length}** active source${active.length === 1 ? "" : "s"}${disabled.length > 0 ? `, ${disabled.length} disabled` : ""}`);
+  summaryParts.push(
+    `**${active.length}** active source${active.length === 1 ? "" : "s"}${disabled.length > 0 ? `, ${disabled.length} disabled` : ""}`,
+  );
   if (hasProducts) {
-    summaryParts.push(`**${productMap.size}** product${productMap.size === 1 ? "" : "s"}: ${[...productMap.values()].map((p) => p.name).join(", ")}`);
+    summaryParts.push(
+      `**${productMap.size}** product${productMap.size === 1 ? "" : "s"}: ${[...productMap.values()].map((p) => p.name).join(", ")}`,
+    );
   }
   if (input.domain) {
     summaryParts.push(`domain: ${input.domain}`);
@@ -102,7 +108,9 @@ export function generatePlaybookHeader(input: PlaybookInput): string {
     lines.push(`> To update, use \`edit_source\` with metadata — do not edit the playbook header.`);
     lines.push("");
     for (const { source, meta } of sourcesWithInstructions) {
-      lines.push(`**${source.name}** (\`${source.slug}\`): ${meta.parseInstructions!.replace(/\n/g, " ")}`);
+      lines.push(
+        `**${source.name}** (\`${source.slug}\`): ${meta.parseInstructions!.replace(/\n/g, " ")}`,
+      );
       lines.push("");
     }
   }
@@ -110,11 +118,15 @@ export function generatePlaybookHeader(input: PlaybookInput): string {
   return lines.join("\n");
 }
 
-function formatSourceRow(source: Source, productMap: Map<string, ProductInfo>, showProduct: boolean): string {
+function formatSourceRow(
+  source: Source,
+  productMap: Map<string, ProductInfo>,
+  showProduct: boolean,
+): string {
   const priority = source.fetchPriority ?? "normal";
   const type = priority !== "normal" ? `${source.type} · ${priority}` : source.type;
   const fetched = formatShortDate(source.lastFetchedAt);
-  const product = source.productId ? productMap.get(source.productId)?.name ?? "—" : "—";
+  const product = source.productId ? (productMap.get(source.productId)?.name ?? "—") : "—";
 
   if (showProduct) {
     return `| ${source.name} | \`${source.id}\` | ${type} | ${source.url} | ${product} | ${fetched} |`;
@@ -126,7 +138,20 @@ function formatShortDate(iso: string | null): string {
   if (!iso) return "never";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso;
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   return `${months[d.getMonth()]} ${d.getDate()}`;
 }
 
