@@ -32,6 +32,7 @@ import { registerRefreshChangelogCommand, registerChangelogCommand } from "./com
 import { registerPlaybookCommand } from "./commands/playbook.js";
 import { registerShowCommand } from "./commands/show.js";
 import { registerEmbedCommand } from "./commands/admin/embed.js";
+import { registerWebhookAdminCommand } from "./commands/admin/webhook.js";
 import { registerTelemetryCommand } from "./commands/telemetry.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { isAdminMode } from "../lib/mode.js";
@@ -195,6 +196,7 @@ registerChangelogCommand(sourceAdmin);
 registerOrgCommand(admin);
 registerProductCommand(admin);
 registerReleaseCommand(admin);
+registerWebhookAdminCommand(admin);
 
 const discoveryAdmin = admin
   .command("discovery")

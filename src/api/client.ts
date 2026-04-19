@@ -5,6 +5,7 @@ import type {
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
 } from "@buildinternet/releases-core/schema";
+import type { WebhookSubscription } from "@releases/core/schema";
 import type { ReleaseCoverage } from "../db/schema-coverage.js";
 import type {
   SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse,
@@ -35,6 +36,7 @@ async function apiFetch<T>(path: string, opts?: RequestInit): Promise<T> {
   });
 
   if (res.status === 404 && (!opts?.method || opts.method === "GET")) return null as T;
+  if (res.status === 204) return undefined as T;
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({ message: res.statusText }));
@@ -745,6 +747,78 @@ export async function updatePlaybookNotes(orgSlug: string, notes: string): Promi
     method: "PATCH",
     body: JSON.stringify({ notes }),
   });
+}
+
+// ── Media Assets ──
+
+// ── Webhook Subscriptions (admin-only) ──
+
+export type { WebhookSubscription };
+
+export type WebhookSubscriptionWithKey = WebhookSubscription & { signingKey: string };
+
+export async function createWebhookSubscription(data: {
+  orgId: string;
+  url: string;
+  sourceId?: string;
+  description?: string;
+}): Promise<WebhookSubscriptionWithKey> {
+  return apiFetch<WebhookSubscriptionWithKey>("/v1/admin/webhooks", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function listWebhookSubscriptions(opts: {
+  org: string;
+  enabled?: boolean;
+}): Promise<{ subscriptions: WebhookSubscription[] }> {
+  const params = new URLSearchParams({ org: opts.org });
+  if (opts.enabled !== undefined) params.set("enabled", String(opts.enabled));
+  return apiFetch<{ subscriptions: WebhookSubscription[] }>(`/v1/admin/webhooks?${params}`);
+}
+
+export async function getWebhookSubscription(id: string): Promise<WebhookSubscription | null> {
+  return apiFetch<WebhookSubscription | null>(`/v1/admin/webhooks/${id}`);
+}
+
+export async function updateWebhookSubscription(
+  id: string,
+  data: { url?: string; description?: string; enabled?: boolean },
+): Promise<WebhookSubscription> {
+  return apiFetch<WebhookSubscription>(`/v1/admin/webhooks/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteWebhookSubscription(id: string): Promise<void> {
+  await apiFetch(`/v1/admin/webhooks/${id}`, { method: "DELETE" });
+}
+
+export async function testWebhookSubscription(id: string): Promise<{ enqueued: boolean; eventId: string }> {
+  return apiFetch<{ enqueued: boolean; eventId: string }>(`/v1/admin/webhooks/${id}/test`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function rotateWebhookSecret(id: string): Promise<{ secretVersion: number; signingKey: string }> {
+  return apiFetch<{ secretVersion: number; signingKey: string }>(`/v1/admin/webhooks/${id}/rotate-secret`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export async function getWebhookDeliveries(
+  id: string,
+  opts?: { failed?: boolean; limit?: number },
+): Promise<unknown> {
+  const params = new URLSearchParams();
+  if (opts?.failed) params.set("failed", "true");
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  const qs = params.toString();
+  return apiFetch<unknown>(`/v1/admin/webhooks/${id}/deliveries${qs ? `?${qs}` : ""}`);
 }
 
 // ── Media Assets ──
