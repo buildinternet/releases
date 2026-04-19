@@ -10,6 +10,7 @@ import {
   formatFetchDuration,
   FETCH_LOG_FILTER_BUTTONS,
 } from "@/components/fetch-log-shared";
+import { useFetchLog } from "@/components/use-fetch-log";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
 
@@ -139,7 +140,6 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const [tab, setTab] = useState<Tab>("sessions");
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
-  const [fetchLogs, setFetchLogs] = useState<FetchLogEntry[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
   const [connected, setConnected] = useState(false);
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
@@ -147,8 +147,8 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const [sessionStdout, setSessionStdout] = useState<Record<string, string[]>>({});
   const [allSources, setAllSources] = useState<SourceEntry[]>([]);
   const [sessionPage, setSessionPage] = useState(0);
-  const [fetchLogPage, setFetchLogPage] = useState(0);
   const pageSize = 25;
+  const fetchLogPrependRef = useRef<((entry: FetchLogEntry) => void) | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
   const reconnectDelay = useRef(1000);
@@ -169,20 +169,15 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
     const headers: Record<string, string> = {};
     if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
     const safeFetch = (url: string) => fetch(url, { headers }).then((r) => r.ok ? r.json() : null);
-    const fetchLogUrl = after
-      ? `${apiUrl}/v1/status/fetch-log?after=${encodeURIComponent(after)}`
-      : `${apiUrl}/v1/status/fetch-log`;
     return Promise.all([
       safeFetch(`${apiUrl}/v1/sessions`),
-      safeFetch(fetchLogUrl),
       safeFetch(`${apiUrl}/v1/status/usage`),
-    ]).then(([s, f, u]) => {
+    ]).then(([s, u]) => {
       if (s) setSessions(s as SessionState[]);
-      if (f) setFetchLogs(f as FetchLogEntry[]);
       if (u) setUsage(u as UsageEntry[]);
       return s as SessionState[] | null;
     }).catch(() => null);
-  }, [apiUrl, after, apiKey]);
+  }, [apiUrl, apiKey]);
 
   useEffect(() => { hydrate(); }, [hydrate]);
 
@@ -269,7 +264,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
     } else if (msg.type === "session:dismissed") {
       setSessions((prev) => prev.filter((s) => s.sessionId !== (msg.sessionId as string)));
     } else if (msg.type === "fetch:complete") {
-      setFetchLogs((prev) => [{
+      fetchLogPrependRef.current?.({
         id: msg.id as string,
         sourceId: msg.sourceId as string,
         sessionId: msg.sessionId as string | undefined,
@@ -281,7 +276,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
         status: msg.status as FetchLogEntry["status"],
         error: msg.error as string | undefined,
         createdAt: msg.createdAt as string,
-      }, ...prev]);
+      });
     }
   }, []);
 
@@ -455,7 +450,7 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
             <button
               key={range}
-              onClick={() => { setDateRange(range); setSessionPage(0); setFetchLogPage(0); }}
+              onClick={() => { setDateRange(range); setSessionPage(0); }}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 dateRange === range
                   ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
@@ -491,7 +486,14 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         />
       )}
-      {tab === "fetch-log" && <FetchLogTable logs={fetchLogs} page={fetchLogPage} perPage={pageSize} onPageChange={setFetchLogPage} />}
+      {tab === "fetch-log" && (
+        <FetchLogTable
+          apiUrl={apiUrl}
+          apiKey={apiKey}
+          after={after}
+          prependRef={fetchLogPrependRef}
+        />
+      )}
       {tab === "sources" && <SourcesTable sources={allSources} apiUrl={apiUrl} apiKey={apiKey} />}
       {tab === "cron" && <CronRunsTab apiUrl={apiUrl} apiKey={apiKey} />}
     </div>
@@ -778,29 +780,51 @@ function SessionLogPanel({ sessionId, correlationId, anthropicSessionId, logs, s
   );
 }
 
-function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEntry[]; page: number; perPage: number; onPageChange: (p: number) => void }) {
+function FetchLogTable({
+  apiUrl,
+  apiKey,
+  after,
+  prependRef,
+}: {
+  apiUrl: string;
+  apiKey?: string;
+  after: string | null;
+  prependRef: React.RefObject<((entry: FetchLogEntry) => void) | null>;
+}) {
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore, prepend } = useFetchLog({
+    apiUrl, apiKey, after, status: filter,
+  });
 
-  const filtered = filter === "all" ? logs : logs.filter((l) => l.status === filter);
+  useEffect(() => {
+    prependRef.current = prepend;
+    return () => { prependRef.current = null; };
+  }, [prepend, prependRef]);
 
-  if (logs.length === 0) {
+  if (loading && entries.length === 0) {
+    return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">Loading fetch log…</div>;
+  }
+  if (error && entries.length === 0) {
+    return <div className="text-sm text-red-500 py-8 text-center">Failed to load fetch log: {error}</div>;
+  }
+  if (!loading && totalCount === 0) {
     return <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">No fetch log entries yet.</div>;
   }
 
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
+  const activeTotal = filter === "all" ? totalCount : statusCounts[filter];
+  const totalLabel = filter === "all" ? "entries" : filter.replace("_", " ");
 
   return (
     <div>
       <div className="flex gap-1 mb-3">
         {FETCH_LOG_FILTER_BUTTONS.map((f) => {
-          const count = f.value === "all" ? logs.length : logs.filter((l) => l.status === f.value).length;
+          const count = f.value === "all" ? totalCount : statusCounts[f.value];
           if (count === 0 && f.value !== "all") return null;
           return (
             <button
               key={f.value}
-              onClick={() => { setFilter(f.value); onPageChange(0); }}
+              onClick={() => setFilter(f.value)}
               className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
                 filter === f.value
                   ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
@@ -821,7 +845,7 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
           <div>Result</div>
           <div className="text-right">Duration</div>
         </div>
-        {paginated.map((log) => {
+        {entries.map((log) => {
           const isExpanded = expandedIds.has(log.id);
           return (
             <div key={log.id}>
@@ -866,28 +890,20 @@ function FetchLogTable({ logs, page, perPage, onPageChange }: { logs: FetchLogEn
           );
         })}
       </div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
-          <span>{filtered.length} entries</span>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => onPageChange(page - 1)}
-              disabled={page === 0}
-              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
-            >
-              Prev
-            </button>
-            <span>{page + 1} / {totalPages}</span>
-            <button
-              onClick={() => onPageChange(page + 1)}
-              disabled={page >= totalPages - 1}
-              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
-            >
-              Next
-            </button>
-          </div>
-        </div>
-      )}
+      <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
+        <span>
+          Showing {entries.length} of {activeTotal.toLocaleString()} {totalLabel}
+        </span>
+        {hasMore && (
+          <button
+            onClick={loadMore}
+            disabled={loading}
+            className="px-3 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-40 disabled:cursor-default"
+          >
+            {loading ? "Loading…" : "Load 25 more"}
+          </button>
+        )}
+      </div>
     </div>
   );
 }
