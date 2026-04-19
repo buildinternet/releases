@@ -33,19 +33,14 @@ releases admin webhook add \
 
 The command prints the subscription ID (`whk_...`). Copy it.
 
-### 3. Register the ID in GitHub Actions
+### 3. Register the secrets in GitHub Actions
 
-Add the ID as a repository secret named `WEBHOOK_E2E_SUBSCRIPTION_ID`:
+Add two repository secrets (`Settings → Secrets and variables → Actions`):
 
-```
-Settings → Secrets and variables → Actions → New repository secret
-Name:  WEBHOOK_E2E_SUBSCRIPTION_ID
-Value: whk_...
-```
+- `WEBHOOK_E2E_SUBSCRIPTION_ID` — the `whk_...` ID from step 2.
+- `RELEASED_API_KEY` — a production admin key; the CLI uses it to call the admin webhook commands.
 
-The CI live e2e step in `.github/workflows/deploy-workers.yml` is gated on this secret. Until it is set, the step is skipped cleanly.
-
-You also need a production admin API key available as `RELEASED_API_KEY` in the same secrets store — this is what the CLI uses to call the admin webhook commands.
+The CI live e2e step in `.github/workflows/deploy-workers.yml` is gated on `WEBHOOK_E2E_SUBSCRIPTION_ID`. Until it is set, the step is skipped cleanly.
 
 ### If the subscription ID ever changes
 

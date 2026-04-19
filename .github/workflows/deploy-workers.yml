@@ -191,7 +191,12 @@ jobs:
         run: |
           set -euo pipefail
           bun src/index.ts admin webhook test "$SUBSCRIPTION_ID" || echo "[e2e] webhook test call failed (non-fatal)"
-          sleep 5
+          # Queue max_batch_timeout is 5s, so a plain sleep races the flush. Poll up to ~14s.
+          for _ in 1 2 3 4 5 6 7; do
+            ROWS=$(bun src/index.ts admin webhook deliveries "$SUBSCRIPTION_ID" --limit 1 --json 2>/dev/null || true)
+            if echo "$ROWS" | grep -q '"event_id"'; then break; fi
+            sleep 2
+          done
           bun src/index.ts admin webhook deliveries "$SUBSCRIPTION_ID" --limit 5 --json || echo "[e2e] deliveries call failed (non-fatal)"
 
   publish-mcp-registry:

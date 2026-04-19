@@ -85,7 +85,7 @@ func verify(secret, ts, body, sig string) bool {
 
 ## Idempotency
 
-Cloudflare Queues guarantees at-least-once delivery. Use `X-Released-Event-Id` as an idempotency key — store recently-seen IDs and skip duplicates.
+Cloudflare Queues guarantees at-least-once delivery, so the same event may arrive more than once (typically after a transient failure on your side). Use `X-Released-Event-Id` as the dedup key and persist it in durable storage — e.g. a `processed_event_ids` table with a unique index, checked before you act on the event. An in-memory set or TTL cache is not sufficient: a process restart between delivery and ack will cause replays to be reprocessed.
 
 ## Retry behavior
 
@@ -99,6 +99,8 @@ Cloudflare Queues guarantees at-least-once delivery. Use `X-Released-Event-Id` a
 ```
 GET https://api.releases.sh/v1/webhooks/events?since=<seq>&limit=<1-500>
 ```
+
+Public endpoint — no authentication required.
 
 Response:
 
