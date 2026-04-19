@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach, mock } from "bun:test";
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 
 mock.module("../../src/lib/mode.js", () => ({
   getApiUrl: () => "https://test.example.com",

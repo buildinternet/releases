@@ -17,11 +17,11 @@ import {
   sourceChangelogFiles,
   knowledgePages,
   type ReleaseType,
-} from "@buildinternet/releases-core/schema";
-import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
-import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
-import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
-import { OVERVIEW_STALE_DAYS, isOverviewStale, overviewPreview } from "@buildinternet/releases-core/overview";
+} from "@releases/core-internal/schema";
+import { daysAgoIso, timeAgo } from "@releases/core-internal/dates";
+import { getEntityType, normalizeReleaseId } from "@releases/core-internal/id";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@releases/core-internal/changelog-slice";
+import { OVERVIEW_STALE_DAYS, isOverviewStale, overviewPreview } from "@releases/core-internal/overview";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 

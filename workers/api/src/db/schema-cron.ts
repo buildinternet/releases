@@ -1,5 +1,5 @@
 import { sqliteTable, text, integer, index } from "drizzle-orm/sqlite-core";
-import { newCronRunId } from "@buildinternet/releases-core/id";
+import { newCronRunId } from "@releases/core-internal/id";
 
 /**
  * Records one row per scheduled-event execution. Generic over `cronName` so

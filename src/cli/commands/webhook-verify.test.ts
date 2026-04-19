@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { verifySignatureCli } from "./webhook-verify.js";
-import { signPayload } from "@releases/core/webhook-sign";
+import { signPayload } from "@releases/core-internal/webhook-sign";
 
 describe("webhook verify CLI helper", () => {
   it("returns ok=true on a matching signature", async () => {

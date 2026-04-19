@@ -1,4 +1,4 @@
-import { countTokens } from "@releases/core/tokens";
+import { countTokens } from "@releases/core-internal/tokens";
 import { MarkdownDoc } from "@/components/markdown-doc";
 import { TerminalCompare } from "@/components/terminal-compare";
 import { loadDoc } from "@/lib/docs";

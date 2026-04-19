@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq, inArray, max, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, sources, products, releases } from "@buildinternet/releases-core/schema";
+import { organizations, sources, products, releases } from "@releases/core-internal/schema";
 import type { Env } from "../index.js";
 
 export const sitemapRoutes = new Hono<Env>();

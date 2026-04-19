@@ -1,10 +1,10 @@
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 import { checkContentHash, recordContentHash, getKnownReleasesForSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
 import { CrawlTimeoutError, CrawlJobError } from "@releases/lib/errors";
-import { sha256Hex } from "@releases/core/hash";
+import { sha256Hex } from "@releases/core-internal/hash";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { parseChangelog } from "../ai/ingest.js";
 import { parseIncremental } from "../ai/incremental.js";

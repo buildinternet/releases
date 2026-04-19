@@ -4,7 +4,7 @@ import { findSource, getRecentReleases, upsertSummary, getOrgById } from "../../
 import { sourceNotFound } from "../suggest.js";
 import { generateSummary, DEFAULT_WINDOW_DAYS } from "../../ai/summarize.js";
 import { isSummarizationEnabled } from "../../ai/summarize-check.js";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { daysAgoIso } from "@releases/core-internal/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
 import { logger } from "@buildinternet/releases-lib/logger";
 

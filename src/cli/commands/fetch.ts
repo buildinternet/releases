@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import os from "node:os";
 import chalk from "chalk";
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 import { sourceNotFound } from "../suggest.js";
 import type { FetchOptions } from "@releases/adapters/types";
 import { getSourceMeta, updateSourceMeta } from "../../adapters/feed.js";
@@ -25,10 +25,10 @@ import { logger } from "@buildinternet/releases-lib/logger";
 import { processMediaForR2, filterJunkMedia, type MediaRef, type MediaUploadProgress } from "../../lib/media.js";
 import { MEDIA_PREFIX } from "../../lib/media-url.js";
 import { config } from "@releases/lib/config";
-import { elapsedFormatted, daysAgoIso } from "@buildinternet/releases-core/dates";
+import { elapsedFormatted, daysAgoIso } from "@releases/core-internal/dates";
 import { isRemoteMode } from "../../lib/mode.js";
 import { runIngestTimeGrouping } from "../../lib/ingest-grouping.js";
-import { newCorrelationId } from "@buildinternet/releases-core/id";
+import { newCorrelationId } from "@releases/core-internal/id";
 import { stripAnsi } from "../../lib/sanitize.js";
 import * as apiClient from "../../api/client.js";
 

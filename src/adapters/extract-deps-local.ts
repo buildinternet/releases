@@ -4,7 +4,7 @@
  * + `src/api/client.ts`, so this shim just threads those calls through.
  */
 
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 import type { ExtractDeps, ExtractRepo } from "@releases/adapters/extract/types";
 import { config } from "@releases/lib/config";
 import { logger } from "@buildinternet/releases-lib/logger";

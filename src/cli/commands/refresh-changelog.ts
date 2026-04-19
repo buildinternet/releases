@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { findSource, upsertChangelogFile, deleteChangelogFilesNotIn, getChangelogFile, listChangelogFiles } from "../../db/queries.js";
 import { fetchChangelogFiles } from "@releases/adapters/github";
-import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams } from "@buildinternet/releases-core/changelog-slice";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams } from "@releases/core-internal/changelog-slice";
 import { sourceChangelog as sourceChangelogRemote } from "../../api/client.js";
 import { sourceNotFound } from "../suggest.js";
 import { logger } from "@buildinternet/releases-lib/logger";

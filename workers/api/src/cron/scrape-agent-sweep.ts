@@ -6,7 +6,7 @@
 
 import { and, eq, isNotNull, ne, or, isNull, sql, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { sources, organizations } from "@buildinternet/releases-core/schema";
+import { sources, organizations } from "@releases/core-internal/schema";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import { insertRunningRow, finalizeRunRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
 

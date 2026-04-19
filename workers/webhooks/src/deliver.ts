@@ -1,4 +1,4 @@
-import { deriveSigningKey, signPayload } from "@buildinternet/releases-core/webhook-sign";
+import { deriveSigningKey, signPayload } from "@releases/core-internal/webhook-sign";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import type { ErrorCode, Outcome } from "./ae.js";
 

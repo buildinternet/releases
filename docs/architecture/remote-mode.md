@@ -47,7 +47,7 @@ Unauthenticated public reads can be throttled per-IP via `publicRateLimitMiddlew
 
 ## Schema + deployment
 
-The API Worker lives at `workers/api/` and shares the Drizzle schema from `@buildinternet/releases-core/schema` (`packages/core/src/schema.ts`). D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
+The API Worker lives at `workers/api/` and shares the Drizzle schema from `@releases/core-internal/schema` (`packages/core/src/schema.ts`). D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
 
 ## Migrations
 
@@ -71,7 +71,7 @@ A second daily cron at 03:00 UTC (`workers/api/src/cron/retier.ts`) recomputes `
 
 ## List endpoints
 
-`GET /v1/sources` supports `?limit=<n>` (default 100, hard cap 500) and either `?offset=<n>` or `?page=<n>` (1-indexed). Returns a bare `SourceWithOrg[]` by default for backward compatibility. Pass `?envelope=true` to get a paginated shape: `{ items, pagination: { page, pageSize, returned, totalItems, totalPages, hasMore } }`. The envelope path runs one extra COUNT query against the same `whereClause`, so it's cheap but not free — callers that only need one page's data can stick with the bare array. The CLI's shared `@buildinternet/releases-core/cli-contracts` types (`ListResponse<T>`, `Pagination`) match this shape.
+`GET /v1/sources` supports `?limit=<n>` (default 100, hard cap 500) and either `?offset=<n>` or `?page=<n>` (1-indexed). Returns a bare `SourceWithOrg[]` by default for backward compatibility. Pass `?envelope=true` to get a paginated shape: `{ items, pagination: { page, pageSize, returned, totalItems, totalPages, hasMore } }`. The envelope path runs one extra COUNT query against the same `whereClause`, so it's cheap but not free — callers that only need one page's data can stick with the bare array. The OSS CLI's published `@buildinternet/releases-core/cli-contracts` types (`ListResponse<T>`, `Pagination`) match this shape.
 
 ## Discovery guardrails
 

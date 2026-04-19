@@ -1,10 +1,10 @@
 import { Hono } from "hono";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases, knowledgePages } from "@buildinternet/releases-core/schema";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { isValidCategory } from "@buildinternet/releases-core/categories";
-import { toSlug } from "@buildinternet/releases-core/slug";
+import { organizations, orgAccounts, sources, releases, products, tags, orgTags, domainAliases, knowledgePages } from "@releases/core-internal/schema";
+import { daysAgoIso } from "@releases/core-internal/dates";
+import { isValidCategory } from "@releases/core-internal/categories";
+import { toSlug } from "@releases/core-internal/slug";
 import { isConflictError, computeAvgPerWeek, getOrCreateTagsD1, orgWhere, heatmapDateRange, hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";

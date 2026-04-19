@@ -6,7 +6,7 @@
  */
 
 import type { Adapter, FetchOptions, FetchResult } from "@releases/adapters/types";
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta";
 import { runDirectFetchExtraction, runAgentExtraction } from "@releases/adapters/extract";
 import { buildLocalExtractDeps, loadGuidance } from "./extract-deps-local.js";

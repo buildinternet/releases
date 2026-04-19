@@ -1,7 +1,7 @@
 import { logger } from "@buildinternet/releases-lib/logger";
 import { detectProvider, type DetectedProvider } from "../lib/providers.js";
 import { discoverFeed, updateSourceMeta } from "../adapters/feed.js";
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 
 // ── Types ──────────────────────────────────────────────────────────
 

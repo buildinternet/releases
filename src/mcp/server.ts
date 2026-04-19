@@ -9,8 +9,8 @@ import { eq, desc, inArray, and, sql } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
 import { unifiedSearchLocal } from "../db/fts.js";
 import { runMigrations } from "../db/migrate.js";
-import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "@buildinternet/releases-core/schema";
-import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
+import { sources, releases, organizations, orgAccounts, fetchLog, sourceChangelogFiles, type Source } from "@releases/core-internal/schema";
+import { buildChangelogResponse, formatChangelogSliceLine, resolveChangelogRangeParams, selectChangelogFile } from "@releases/core-internal/changelog-slice";
 import { searchReleases } from "../db/fts.js";
 import {
   findSource, getRecentReleases, findOrg, getSourcesByOrg, listOrgs,
@@ -20,9 +20,9 @@ import {
   suppressRelease, unsuppressRelease, createOrg, getOrgOverview,
 } from "../db/queries.js";
 import { summarizeReleases, compareProducts, toReleaseInput } from "../ai/query.js";
-import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
-import { OVERVIEW_STALE_DAYS, isOverviewStale, overviewPreview } from "@releases/core/overview";
-import { toSlug } from "@buildinternet/releases-core/slug";
+import { daysAgoIso, timeAgo } from "@releases/core-internal/dates";
+import { OVERVIEW_STALE_DAYS, isOverviewStale, overviewPreview } from "@releases/core-internal/overview";
+import { toSlug } from "@releases/core-internal/slug";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { isAdminMode } from "../lib/mode.js";
 import { recordEvent } from "../lib/telemetry.js";

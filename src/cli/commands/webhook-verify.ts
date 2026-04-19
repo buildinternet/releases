@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import { readFileSync } from "node:fs";
 import chalk from "chalk";
-import { verifySignature } from "@releases/core/webhook-sign";
+import { verifySignature } from "@releases/core-internal/webhook-sign";
 
 export interface VerifyArgs {
   secret: string;

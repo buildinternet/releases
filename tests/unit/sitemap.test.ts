@@ -10,7 +10,7 @@
 
 import { describe, test, expect, beforeEach, afterAll, beforeAll, mock } from "bun:test";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { organizations, sources, products, releases } from "@buildinternet/releases-core/schema";
+import { organizations, sources, products, releases } from "@releases/core-internal/schema";
 
 let testDatabase: TestDatabase;
 

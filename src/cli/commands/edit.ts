@@ -2,7 +2,7 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { findSource, findOrg, createOrg, updateSource, findProduct } from "../../db/queries.js";
 import { sourceNotFound } from "../suggest.js";
-import { toSlug } from "@buildinternet/releases-core/slug";
+import { toSlug } from "@releases/core-internal/slug";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { updateSourceMeta, CLEARED_FEED_FIELDS } from "../../adapters/feed.js";
 

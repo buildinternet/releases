@@ -8,17 +8,17 @@ import {
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type Product, type Tag, type DomainAlias,
   type KnowledgePage, type SourceChangelogFile,
-} from "@buildinternet/releases-core/schema";
+} from "@releases/core-internal/schema";
 import {
   webhookSubscriptions,
   type WebhookSubscription,
-} from "@releases/core/schema";
+} from "@releases/core-internal/schema";
 import { releaseCoverage, type ReleaseCoverage } from "./schema-coverage.js";
-import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core/release-upsert";
+import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core-internal/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { toSlug } from "@buildinternet/releases-core/slug";
-import { countTokensSafe } from "@releases/core/tokens";
+import { daysAgoIso } from "@releases/core-internal/dates";
+import { toSlug } from "@releases/core-internal/slug";
+import { countTokensSafe } from "@releases/core-internal/tokens";
 import * as apiClient from "../api/client.js";
 import type {
   SourceWithOrg, SourcePatchInput, ReleaseWithSource,
@@ -474,12 +474,8 @@ export async function listSourcesWithOrg(opts?: {
       consecutiveNoChange: sources.consecutiveNoChange,
       consecutiveErrors: sources.consecutiveErrors,
       nextFetchAfter: sources.nextFetchAfter,
-      // Columns added in workers/api/migrations/20260418134132; the
-      // published @buildinternet/releases-core schema doesn't know about
-      // them yet, so reference by raw column name. Safe: local DBs get
-      // both columns from the matching Drizzle migration.
-      medianGapDays: sql<number | null>`median_gap_days`.as("medianGapDays"),
-      lastRetieredAt: sql<string | null>`last_retiered_at`.as("lastRetieredAt"),
+      medianGapDays: sources.medianGapDays,
+      lastRetieredAt: sources.lastRetieredAt,
       orgName: organizations.name,
       orgSlug: organizations.slug,
       productName: products.name,

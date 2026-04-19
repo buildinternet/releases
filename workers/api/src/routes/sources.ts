@@ -1,11 +1,11 @@
 import { Hono } from "hono";
 import { eq, desc, count, and, or, like, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { sources, releases, organizations, releaseSummaries, products, sourceChangelogFiles, type ReleaseType } from "@buildinternet/releases-core/schema";
-import { RELEASE_URL_UPSERT } from "@releases/core/release-upsert";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { toSlug } from "@buildinternet/releases-core/slug";
-import { buildChangelogResponse, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
+import { sources, releases, organizations, releaseSummaries, products, sourceChangelogFiles, type ReleaseType } from "@releases/core-internal/schema";
+import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
+import { daysAgoIso } from "@releases/core-internal/dates";
+import { toSlug } from "@releases/core-internal/slug";
+import { buildChangelogResponse, selectChangelogFile } from "@releases/core-internal/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@releases/api/types.js";
 import { getStatusHub, sourceWhere, orgWhere, productWhere, isConflictError, computeAvgPerWeek, heatmapDateRange, hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
@@ -151,7 +151,7 @@ sourceRoutes.get("/sources", async (c) => {
     lastRetieredAt: src.last_retiered_at ?? null,
   }));
 
-  // TODO: share with `@buildinternet/releases-core/cli-contracts` once
+  // TODO: share with `@releases/core-internal/cli-contracts` once
   // `cli-contracts.ts` is carved into the monorepo's `packages/core/`.
   if (wantsEnvelope && totalItems != null) {
     return c.json({

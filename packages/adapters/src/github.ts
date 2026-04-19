@@ -1,9 +1,9 @@
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
 import { logger } from "@buildinternet/releases-lib/logger";
-import { sha256Hex } from "@releases/core/hash";
+import { sha256Hex } from "@releases/core-internal/hash";
 
 function parseOwnerRepo(url: string): { owner: string; repo: string } {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);

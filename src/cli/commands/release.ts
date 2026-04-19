@@ -10,8 +10,8 @@ import {
 import { DECIDED_BY_CLI, decidedByAgent } from "../../db/schema-coverage.js";
 import { groupReleases, rowsToCandidates, writeCoverageClusters } from "../../ai/grouping.js";
 import { stripAnsi } from "../../lib/sanitize.js";
-import { normalizeReleaseId } from "@buildinternet/releases-core/id";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { normalizeReleaseId } from "@releases/core-internal/id";
+import { daysAgoIso } from "@releases/core-internal/dates";
 function releaseNotFound(id: string): never {
   console.error(chalk.red(`Release not found: ${id}`));
   console.error(chalk.dim(`Make sure you're using the fully-resolved ID (e.g. rel_abc123…).`));

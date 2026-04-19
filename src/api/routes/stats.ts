@@ -1,6 +1,6 @@
 import { count } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { organizations, sources, releases } from "@releases/core-internal/schema";
 
 export function handleStats() {
   const db = getDb();

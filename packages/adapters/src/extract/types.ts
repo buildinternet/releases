@@ -4,7 +4,7 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
-import type { ReleaseType, Source } from "@buildinternet/releases-core/schema";
+import type { ReleaseType, Source } from "@releases/core-internal/schema";
 
 export interface ExtractedEntry {
   version?: string;

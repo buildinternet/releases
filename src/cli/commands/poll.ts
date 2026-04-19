@@ -4,10 +4,10 @@ import Table from "cli-table3";
 import { findSource, listFeedSources, listScrapeSources, updateSource } from "../../db/queries.js";
 import { getSourceMeta, updateSourceMeta, headCheckFeed } from "../../adapters/feed.js";
 import type { ChangeStatus, SourceMetadata } from "../../adapters/feed.js";
-import { timeAgo } from "@buildinternet/releases-core/dates";
+import { timeAgo } from "@releases/core-internal/dates";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { stripAnsi } from "../../lib/sanitize.js";
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 
 interface PollResult {
   name: string;

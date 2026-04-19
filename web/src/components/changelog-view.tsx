@@ -6,7 +6,7 @@ import { api } from "@/lib/api";
 import { formatRelativeDate } from "@/lib/formatters";
 import { ChangelogStream } from "./changelog-stream";
 import { ChangelogFilePicker } from "./changelog-file-picker";
-import { DEFAULT_CHANGELOG_SLICE_LIMIT } from "@releases/core/changelog-range";
+import { DEFAULT_CHANGELOG_SLICE_LIMIT } from "@releases/core-internal/changelog-range";
 
 const markdownClasses = "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13px] leading-relaxed [&_h1]:text-sm [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1 [&_h2]:text-sm [&_h2]:font-semibold [&_h2]:mt-3 [&_h2]:mb-1 [&_h3]:text-[13px] [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-0.5 [&_ul]:my-1 [&_ul]:pl-4 [&_li]:my-0 [&_p]:my-1 [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none";
 

@@ -1,4 +1,4 @@
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { daysAgoIso } from "@releases/core-internal/dates";
 import { getRecentReleasesByOrg, linkReleaseCoverage } from "../db/queries.js";
 import {
   groupReleases,
