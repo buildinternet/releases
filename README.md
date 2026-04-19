@@ -16,7 +16,6 @@ The user-facing CLI (`@buildinternet/releases`) lives in [buildinternet/releases
 - `web/` — Next.js frontend for releases.sh.
 - `packages/` — In-tree shared code (`core`, `lib`, `adapters`, `ai`). The public subset is mirrored to the OSS repo and published as `@buildinternet/releases-*`.
 - `src/agent/` — Managed-agents discovery + worker harness (invoked by the discovery worker's Durable Object).
-- `src/api/types.ts` — Shared API response types imported by `web/` and workers (pinned in worker tsconfig `files[]`).
 - `plugins/claude/releases/` — Claude Code plugin (committed copy; skill source of truth is OSS `@buildinternet/releases-skills`).
 
 ## Development Setup

@@ -30,7 +30,7 @@ import {
   buildChangelogResponse,
   selectChangelogFile,
 } from "@releases/core-internal/changelog-slice";
-import type { SourceWithOrg, SourcePatchInput } from "@releases/api/types.js";
+import type { SourceWithOrg, SourcePatchInput } from "@releases/lib/api-types";
 import {
   getStatusHub,
   sourceWhere,

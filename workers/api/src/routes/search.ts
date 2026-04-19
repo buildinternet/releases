@@ -1,9 +1,9 @@
 import { Hono } from "hono";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { searchToMarkdown } from "@releases/lib/formatters.js";
-import { foldSourcesIntoProducts } from "@releases/api/types.js";
+import { foldSourcesIntoProducts } from "@releases/lib/api-types";
 import type { Env } from "../index.js";
-import type { SearchReleaseHit, MediaItem } from "@releases/api/types.js";
+import type { SearchReleaseHit, MediaItem } from "@releases/lib/api-types";
 import { createDb } from "../db.js";
 import {
   searchOrgs,

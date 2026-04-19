@@ -20,7 +20,6 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@shared/api/*": ["../src/api/*"],
       "@releases/lib/*": ["../packages/lib/src/*"]
     }
   },

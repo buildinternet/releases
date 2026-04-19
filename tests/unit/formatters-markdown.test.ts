@@ -4,7 +4,7 @@ import {
   orgReleaseFeedToMarkdown,
   searchToMarkdown,
 } from "@releases/lib/formatters";
-import type { ReleaseDetail, OrgReleaseItem, UnifiedSearchResponse } from "../../src/api/types.js";
+import type { ReleaseDetail, OrgReleaseItem, UnifiedSearchResponse } from "@releases/lib/api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 

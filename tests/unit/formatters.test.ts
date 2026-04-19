@@ -6,7 +6,7 @@ import {
   type FormatSourceDetail,
   type FormatOrgDetail,
 } from "@releases/lib/formatters";
-import type { KnowledgePageItem } from "../../src/api/types.js";
+import type { KnowledgePageItem } from "@releases/lib/api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 

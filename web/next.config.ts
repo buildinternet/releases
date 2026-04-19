@@ -23,14 +23,12 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, ".."),
     resolveAlias: {
-      "@shared/api/*": "../src/api/*",
       "@releases/lib/*": "../packages/lib/src/*",
     },
   },
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@shared/api": path.resolve(__dirname, "../src/api"),
       "@releases/lib": path.resolve(__dirname, "../packages/lib/src"),
     };
     return config;
