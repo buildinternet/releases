@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
+import { Database } from "bun:sqlite";
+import { drizzle } from "drizzle-orm/bun-sqlite";
+import { desc, eq } from "drizzle-orm";
+import { join } from "path";
 import { createTempDataDir, cli } from "../cli/roundtrip-helper.js";
+import { fetchLog, sources } from "@releases/core-internal/schema";
 import {
   startSubprocessFixtureServer,
   readFeedFixture,
@@ -20,6 +25,22 @@ beforeAll(() => {
 });
 
 afterAll(() => server.stop());
+
+function readFetchLogs(dataDir: string, slug: string) {
+  const sqlite = new Database(join(dataDir, "releases.db"), { readonly: true });
+  try {
+    const db = drizzle(sqlite);
+    return db.select()
+      .from(fetchLog)
+      .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
+      .where(eq(sources.slug, slug))
+      .orderBy(desc(fetchLog.createdAt))
+      .all()
+      .map((row) => row.fetch_log);
+  } finally {
+    sqlite.close();
+  }
+}
 
 describe("fetch-log tracking", () => {
   let dataDir: string;
@@ -44,9 +65,7 @@ describe("fetch-log tracking", () => {
     const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
     expect(fetchResult.exitCode).toBe(0);
 
-    const logResult = cli(dataDir, ["admin", "source", "fetch-log", "log-source", "--json"]);
-    expect(logResult.exitCode).toBe(0);
-    const logs = JSON.parse(logResult.stdout);
+    const logs = readFetchLogs(dataDir, "log-source");
     expect(logs.length).toBeGreaterThanOrEqual(1);
     const lastLog = logs[0];
     expect(lastLog.status).toBe("success");
@@ -58,9 +77,7 @@ describe("fetch-log tracking", () => {
     const fetchResult = cli(dataDir, ["admin", "source", "fetch", "log-source", "--no-summarize"], { timeout: 15_000 });
     expect(fetchResult.exitCode).toBe(0);
 
-    const logResult = cli(dataDir, ["admin", "source", "fetch-log", "log-source", "--json"]);
-    const logs = JSON.parse(logResult.stdout);
-    // Most recent log should be no_change (releases already in DB, dedup)
+    const logs = readFetchLogs(dataDir, "log-source");
     expect(logs[0].status).toMatch(/no_change|success/);
   }, 20_000);
 
@@ -76,8 +93,7 @@ describe("fetch-log tracking", () => {
     const fetchResult = cli(dataDir, ["admin", "source", "fetch", "dry-log-source", "--dry-run", "--no-summarize"], { timeout: 15_000 });
     expect(fetchResult.exitCode).toBe(0);
 
-    const logResult = cli(dataDir, ["admin", "source", "fetch-log", "dry-log-source", "--json"]);
-    const logs = JSON.parse(logResult.stdout);
+    const logs = readFetchLogs(dataDir, "dry-log-source");
     expect(logs.length).toBeGreaterThanOrEqual(1);
     expect(logs[0].status).toBe("dry_run");
     expect(logs[0].releasesFound).toBe(2);

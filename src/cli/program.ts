@@ -13,23 +13,19 @@ import { registerServeCommand } from "./commands/serve.js";
 import { registerUsageCommand } from "./commands/usage.js";
 import { registerOrgCommand } from "./commands/org.js";
 import { registerProductCommand } from "./commands/product.js";
-import { registerDiscoverCommand } from "./commands/discover.js";
 import { registerStatsCommand } from "./commands/stats.js";
 import { registerApiCommand } from "./commands/api.js";
 import { registerReleaseCommand } from "./commands/release.js";
 import { registerCheckCommand } from "./commands/check.js";
-import { registerFetchLogCommand } from "./commands/fetch-log.js";
 import { registerOnboardCommand } from "./commands/onboard.js";
 import { registerIgnoreCommand } from "./commands/ignore.js";
 import { registerBlockCommand } from "./commands/block.js";
 import { registerImportCommand } from "./commands/import.js";
-import { registerEvaluateCommand } from "./commands/evaluate.js";
 import { registerSummarizeCommand } from "./commands/summarize.js";
 import { registerMediaCommand } from "./commands/media.js";
 import { registerTaskCommand } from "./commands/task.js";
 import { registerPollCommand } from "./commands/poll.js";
 import { registerRefreshChangelogCommand, registerChangelogCommand } from "./commands/refresh-changelog.js";
-import { registerPlaybookCommand } from "./commands/playbook.js";
 import { registerShowCommand } from "./commands/show.js";
 import { registerEmbedCommand } from "./commands/admin/embed.js";
 import { registerWebhookAdminCommand } from "./commands/admin/webhook.js";
@@ -189,7 +185,6 @@ registerEditCommand(sourceAdmin);
 registerRemoveCommand(sourceAdmin);
 registerImportCommand(sourceAdmin);
 registerFetchCommand(sourceAdmin);
-registerFetchLogCommand(sourceAdmin);
 registerCheckCommand(sourceAdmin);
 registerPollCommand(sourceAdmin);
 registerRefreshChangelogCommand(sourceAdmin);
@@ -202,9 +197,7 @@ registerWebhookAdminCommand(admin);
 
 const discoveryAdmin = admin
   .command("discovery")
-  .description("Run onboarding, evaluation, and remote session workflows");
-registerDiscoverCommand(discoveryAdmin);
-registerEvaluateCommand(discoveryAdmin);
+  .description("Run onboarding and remote session workflows");
 registerOnboardCommand(discoveryAdmin);
 registerTaskCommand(discoveryAdmin);
 
@@ -216,9 +209,8 @@ registerBlockCommand(policyAdmin);
 
 const contentAdmin = admin
   .command("content")
-  .description("Manage generated summaries, playbooks, and media backfills");
+  .description("Manage generated summaries and media backfills");
 registerMediaCommand(contentAdmin);
-registerPlaybookCommand(contentAdmin);
 const contentSummaryAdmin = contentAdmin
   .command("summary")
   .description("Generate persisted summaries");
