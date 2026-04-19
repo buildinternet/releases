@@ -3,7 +3,7 @@ import {
   generatePlaybookHeader,
   assemblePlaybook,
   extractNotesFromLegacyPlaybook,
-} from "../../src/ai/playbook.js";
+} from "@releases/ai-internal/playbook";
 import type { Source } from "@releases/core-internal/schema";
 
 function makeSource(overrides: Partial<Source> = {}): Source {

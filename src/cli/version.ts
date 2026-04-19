@@ -1,1 +1,1 @@
-export const VERSION = "0.10.0";
+export { VERSION } from "../lib/version.js";

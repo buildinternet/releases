@@ -621,7 +621,7 @@ To use the Cloudflare worker API locally with the web frontend, set `RELEASED_AP
 
 Workers live in `workers/api/` (Hono API backed by D1), `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery), and `workers/mcp/` (remote MCP server). All three share the same D1 database.
 
-The discovery worker supports two engines: **managed agents** (default, Anthropic-hosted) and **sandbox** (Cloudflare container). Managed agents sessions run as Durable Objects that stream events from the Anthropic API. The sandbox path runs compiled binaries in a container — build with `bun run build:all:linux` before deploying.
+The discovery worker runs **managed agents** (Anthropic-hosted) by default. Sessions are Durable Objects that stream events from the Anthropic API via typed executor tools — no sandbox, no compiled binaries. A legacy `sandbox` engine branch remains in code but is gated behind `RELEASED_DISCOVERY_ENGINE=sandbox`; its runtime harness is not currently deployable (see #370 / #377).
 
 After changing agent tools, system prompt, or skills, run `bun run deploy:agents` to sync both Anthropic-hosted agent definitions. Use `deploy:agents:discovery` or `deploy:agents:worker` to target a single agent. The script tracks content hashes for prompt and tools to avoid unnecessary updates. State is stored in `scripts/agent-skills.json`.
 
@@ -642,7 +642,7 @@ npx tsc --noEmit             # type-check (CLI)
 cd web && npx tsc --noEmit   # type-check (frontend)
 bun run db:generate          # generate migration after schema change
 bun run build                # compile CLI binary (current platform)
-bun run build:all:linux      # compile CLI + MCP server for sandbox container
+bun run build:linux          # cross-compile CLI binary for Linux
 ```
 
 ### Testing

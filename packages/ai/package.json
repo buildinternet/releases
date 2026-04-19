@@ -1,0 +1,15 @@
+{
+  "name": "@releases/ai-internal",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./evaluate": "./src/evaluate.ts",
+    "./playbook": "./src/playbook.ts",
+    "./providers": "./src/providers.ts"
+  },
+  "dependencies": {
+    "@releases/adapters": "workspace:*",
+    "@releases/core-internal": "workspace:*"
+  }
+}

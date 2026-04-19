@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync, existsSync, chmodSync, unlinkSync } from "
 import { join } from "path";
 import { randomUUID } from "crypto";
 import { getDataDir } from "@releases/lib/config";
-import { VERSION } from "../cli/version.js";
+import { VERSION } from "./version.js";
 import type { TelemetryClientKind, TelemetrySurface } from "@releases/core-internal/schema";
 
 const ANON_ID_FILE = "telemetry-id";
