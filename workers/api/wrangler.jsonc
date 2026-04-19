@@ -106,6 +106,7 @@
     { "binding": "RELEASED_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "RELEASED_API_KEY" },
     { "binding": "GITHUB_TOKEN", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "GITHUB_TOKEN" },
     { "binding": "VOYAGE_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "VOYAGER_API_KEY" },
-    { "binding": "ANTHROPIC_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "ANTHROPIC_API_KEY" }
+    { "binding": "ANTHROPIC_API_KEY", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "ANTHROPIC_API_KEY" },
+    { "binding": "WEBHOOK_HMAC_MASTER", "store_id": "a887a71cab084105b79706df23380723", "secret_name": "WEBHOOK_HMAC_MASTER" }
   ]
 }
