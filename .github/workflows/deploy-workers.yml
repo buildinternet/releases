@@ -179,7 +179,8 @@ jobs:
         run: bunx wrangler deploy --config workers/webhooks/wrangler.jsonc
       # Live e2e: enqueue a synthetic event through the echo subscriber and tail
       # deliveries. Only runs on push to main when WEBHOOK_E2E_SUBSCRIPTION_ID is set.
-      # Failures are non-blocking — surfaced in the log only.
+      # continue-on-error keeps the job green; the `|| echo` lines print a named
+      # diagnostic before the per-command failure is swallowed.
       - name: Live e2e — webhook delivery smoke test
         if: github.event_name == 'push' && secrets.WEBHOOK_E2E_SUBSCRIPTION_ID != ''
         continue-on-error: true
@@ -188,7 +189,7 @@ jobs:
           RELEASED_API_KEY: ${{ secrets.RELEASED_API_KEY }}
           SUBSCRIPTION_ID: ${{ secrets.WEBHOOK_E2E_SUBSCRIPTION_ID }}
         run: |
-          set -uo pipefail
+          set -euo pipefail
           bun src/index.ts admin webhook test "$SUBSCRIPTION_ID" || echo "[e2e] webhook test call failed (non-fatal)"
           sleep 5
           bun src/index.ts admin webhook deliveries "$SUBSCRIPTION_ID" --limit 5 --json || echo "[e2e] deliveries call failed (non-fatal)"
