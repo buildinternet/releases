@@ -44,7 +44,7 @@ export default async function HomePage() {
       <div className="pt-12 pb-8 text-center px-6">
         <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mb-2">An agent-friendly API for product changelogs.</h1>
         <p className="text-[15px] text-stone-500 dark:text-stone-400 mb-6">A unified registry of product releases, available via CLI, API, or MCP.</p>
-        <SearchBar className="max-w-[480px] mx-auto" />
+        <SearchBar className="max-w-[480px] mx-auto" sourceCount={stats.sources} />
         <div className="flex justify-center gap-8 mt-5 text-[13px] text-stone-400 dark:text-stone-500">
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.orgs}</strong> orgs</span>
           <span><strong className="text-stone-600 dark:text-stone-300">{stats.sources}</strong> sources</span>
