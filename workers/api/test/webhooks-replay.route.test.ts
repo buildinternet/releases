@@ -4,6 +4,7 @@ import { mountWebhooksReplay } from "../src/routes/webhooks-replay.js";
 
 function makeApp() {
   const app = new Hono();
+  const v1 = new Hono();
   const fakeDoStub = {
     fetch: async (req: Request) => {
       const u = new URL(req.url);
@@ -18,7 +19,8 @@ function makeApp() {
       get: () => fakeDoStub,
     },
   };
-  mountWebhooksReplay(app, () => env as any);
+  mountWebhooksReplay(v1, () => env as any);
+  app.route("/v1", v1);
   return app;
 }
 
