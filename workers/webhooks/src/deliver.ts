@@ -1,21 +1,26 @@
 import { deriveSigningKey, signPayload } from "@buildinternet/releases-core/webhook-sign";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
-import type { Outcome } from "./ae.js";
+import type { ErrorCode, Outcome } from "./ae.js";
 
 export interface DeliveryResult {
   outcome: Extract<Outcome, "success" | "retry" | "perm_fail">;
-  httpStatus: number;       // 0 if no response (network/timeout)
+  httpStatus: number; // 0 if no response (network/timeout)
   latencyMs: number;
   errorMessage: string | null;
-  errorCode: string | null; // "network", "timeout", "subscriber_5xx", "subscriber_4xx", or null on success
+  errorCode: ErrorCode | null;
 }
 
 export interface DeliverOptions {
   masterKey: string;
   timeoutMs: number;
   fetchImpl?: typeof fetch;
-  now?: () => number; // unix seconds
+  /** Returns current time as unix seconds. Used for HMAC timestamp + header. */
+  now?: () => number;
 }
+
+const WEBHOOK_VERSION = "1";
+// AE blob budget — keep error bodies short.
+const BODY_EXCERPT_BYTES = 200;
 
 export async function deliver(message: DeliveryMessage, opts: DeliverOptions): Promise<DeliveryResult> {
   const fetchImpl = opts.fetchImpl ?? fetch;
@@ -25,24 +30,21 @@ export async function deliver(message: DeliveryMessage, opts: DeliverOptions): P
   const signingKey = await deriveSigningKey(opts.masterKey, message.subscriptionId, message.secretVersion);
   const signature = await signPayload(signingKey, ts, body);
 
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), opts.timeoutMs);
-  const start = Date.now();
-
   const request = new Request(message.url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "X-Released-Version": "1",
+      "X-Released-Version": WEBHOOK_VERSION,
       "X-Released-Event-Id": message.event.id,
       "X-Released-Timestamp": String(ts),
       "X-Released-Signature": signature,
-      "User-Agent": "releases-webhooks/1",
+      "User-Agent": `releases-webhooks/${WEBHOOK_VERSION}`,
     },
     body,
-    signal: controller.signal,
+    signal: AbortSignal.timeout(opts.timeoutMs),
   });
 
+  const start = Date.now();
   try {
     const res = await fetchImpl(request);
     const latencyMs = Date.now() - start;
@@ -50,17 +52,16 @@ export async function deliver(message: DeliveryMessage, opts: DeliverOptions): P
       return { outcome: "success", httpStatus: res.status, latencyMs, errorMessage: null, errorCode: null };
     }
     if (res.status >= 400 && res.status < 500) {
-      const excerpt = await res.text().then((t) => t.slice(0, 200)).catch(() => "");
+      const excerpt = await res.text().then((t) => t.slice(0, BODY_EXCERPT_BYTES)).catch(() => "");
       return { outcome: "perm_fail", httpStatus: res.status, latencyMs, errorMessage: excerpt, errorCode: "subscriber_4xx" };
     }
     return { outcome: "retry", httpStatus: res.status, latencyMs, errorMessage: `subscriber returned ${res.status}`, errorCode: "subscriber_5xx" };
   } catch (err: any) {
     const latencyMs = Date.now() - start;
-    if (err?.name === "AbortError") {
+    // AbortSignal.timeout() throws TimeoutError; guard against legacy AbortError too.
+    if (err?.name === "TimeoutError" || err?.name === "AbortError") {
       return { outcome: "retry", httpStatus: 0, latencyMs, errorMessage: "timeout", errorCode: "timeout" };
     }
     return { outcome: "retry", httpStatus: 0, latencyMs, errorMessage: err?.message ?? String(err), errorCode: "network" };
-  } finally {
-    clearTimeout(timeout);
   }
 }

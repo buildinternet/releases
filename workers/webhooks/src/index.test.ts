@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import worker from "./index.js";
+import worker, { DLQ_QUEUE } from "./index.js";
 
 // Minimal MessageBatch fake.
 function batch(messages: any[], queue = "webhook-delivery") {
@@ -46,7 +46,7 @@ function deliveryMsg(subId = "whk_1") {
 
 describe("queue handler", () => {
   it("acks messages routed to the dlq", async () => {
-    const b = batch([deliveryMsg()], "webhook-dlq");
+    const b = batch([deliveryMsg()], DLQ_QUEUE);
     await worker.queue(b as any, fakeEnv() as any);
     expect(b.acked.length).toBe(1);
   });

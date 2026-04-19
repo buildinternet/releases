@@ -1,5 +1,7 @@
 export type Outcome = "success" | "retry" | "perm_fail" | "skipped" | "dlq" | "auto_disabled";
 
+export type ErrorCode = "network" | "timeout" | "subscriber_4xx" | "subscriber_5xx";
+
 export interface DeliveryAttempt {
   subscriptionId: string;
   eventId: string;
@@ -8,7 +10,7 @@ export interface DeliveryAttempt {
   latencyMs: number;
   attempt: number;
   errorMessage: string | null;
-  errorCode: string | null;
+  errorCode: ErrorCode | null;
 }
 
 /**
