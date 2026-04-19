@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import type { SourceDetail, OrgDetail, OrgReleasesResponse } from "@/lib/api";
 import { sourceToAtom, orgReleasesToAtom } from "@/lib/atom";
-import { atomEtag, formatLastModified, shouldReturn304 } from "@shared/atom-http";
+import { atomEtag, formatLastModified, shouldReturn304 } from "@releases/lib/atom-http";
 import { getBaseUrl } from "@/lib/base-url";
 
 /**

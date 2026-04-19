@@ -28,14 +28,14 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 - `packages/core/` → imported as **`@releases/core-internal`**. Private superset: DB schema (source of truth), `release-upsert`, `tokens`, `changelog-range`, `hash`, `webhook-sign`, and the monorepo copies of `categories`, `dates`, `changelog-slice`, `overview`, `id`, `slug`. The OSS CLI independently publishes `@buildinternet/releases-core` — a **narrower, curated** subset for thin-client use. The two are intentional forks; **do not import `@buildinternet/releases-core` inside this monorepo**.
 - `packages/adapters/` — adapter primitives (`types`, `source-meta`, `content-hash`), the `github`, `cloudflare`, `crawl`, and `feed` adapters. All pure / worker-safe now that the DB-coupled wrappers are gone.
 - `packages/ai/` → imported as **`@releases/ai-internal`**. `evaluate` (URL recommendation + `buildMetadataFromEvaluation`), `playbook` (deterministic markdown generation), `providers` (provider-detection table). Worker-safe.
-- `packages/lib/` — `@releases/lib/{config,errors}` private. `logger` is published as `@buildinternet/releases-lib/logger`.
+- `packages/lib/` — `@releases/lib/{config,errors,atom,atom-http}` private. `logger` is published as `@buildinternet/releases-lib/logger`.
 
 Worker tsconfigs map `@releases/lib/*` first to `packages/lib/src/*` (published carve-outs) and fall through to `src/lib/*` for files not yet carved out (formatters, embed helpers, media helpers, vector search).
 
 ## Surviving `src/` tree
 
 - `src/api/types.ts` — shared API types, imported by `web/` and all workers (pinned in worker tsconfig `files[]`).
-- `src/lib/` — web + worker shared helpers still in flight for carve-out: `formatters`, `atom`, `atom-http`, `embed-*`, `embedding-cache`, `embeddings`, `media`, `media-url`, `source-edit`, `vector-search`.
+- `src/lib/` — web + worker shared helpers still in flight for carve-out: `formatters`, `embed-*`, `embedding-cache`, `embeddings`, `media`, `media-url`, `source-edit`, `vector-search`.
 - `src/db/schema-coverage.ts`, `src/db/migrations/` — release_coverage schema + drizzle-kit migration output.
 - `src/agent/` — managed-agents harness (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `released.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`workers/discovery/`) is the only production entrypoint.
 - `src/shared/` — shared prompts and typed tools used by both agents and the API worker.
