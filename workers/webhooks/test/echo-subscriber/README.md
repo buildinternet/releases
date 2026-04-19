@@ -1,0 +1,47 @@
+# releases-webhook-echo
+
+A minimal Cloudflare Worker that accepts any HTTP request, logs the headers and body, and returns `{"ok":true}`. It acts as a stable sink for the CI live e2e test — one subscription, one URL, reused on every deploy.
+
+> **Security note:** this Worker logs every request header (including the `X-Released-Signature` HMAC) and the full JSON body to Cloudflare Workers logs. Use it only for the dedicated CI test subscription. Do not reuse the same Worker URL for subscriptions carrying sensitive org data — any operator with log access would see verbatim webhook bodies and the signature that attests to them.
+
+## One-time setup
+
+This Worker is **not deployed by CI**. Deploy it once, then leave it running.
+
+### 1. Deploy the Worker
+
+```sh
+cd workers/webhooks/test/echo-subscriber
+bunx wrangler login   # skip if already authenticated
+bunx wrangler deploy
+```
+
+Wrangler will print the Worker URL:
+
+```
+https://releases-webhook-echo.<account>.workers.dev
+```
+
+### 2. Create the subscription
+
+```sh
+releases admin webhook add \
+  --org releases \
+  --url https://releases-webhook-echo.<account>.workers.dev \
+  --description "CI e2e echo"
+```
+
+The command prints the subscription ID (`whk_...`). Copy it.
+
+### 3. Register the secrets in GitHub Actions
+
+Add two repository secrets (`Settings → Secrets and variables → Actions`):
+
+- `WEBHOOK_E2E_SUBSCRIPTION_ID` — the `whk_...` ID from step 2.
+- `RELEASED_API_KEY` — a production admin key; the CLI uses it to call the admin webhook commands.
+
+The CI live e2e step in `.github/workflows/deploy-workers.yml` is gated on `WEBHOOK_E2E_SUBSCRIPTION_ID`. Until it is set, the step is skipped cleanly.
+
+### If the subscription ID ever changes
+
+Update `WEBHOOK_E2E_SUBSCRIPTION_ID` in GitHub secrets. No YAML edits needed.

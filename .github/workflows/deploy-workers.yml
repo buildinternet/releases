@@ -8,7 +8,7 @@ on:
       worker:
         description: Which worker to deploy (manual run)
         type: choice
-        options: [all, api, mcp, discovery]
+        options: [all, api, mcp, discovery, webhooks]
         default: all
 
 concurrency:
@@ -27,6 +27,7 @@ jobs:
       mcp: ${{ steps.filter.outputs.mcp }}
       mcp_registry: ${{ steps.filter.outputs.mcp_registry }}
       discovery: ${{ steps.filter.outputs.discovery }}
+      webhooks: ${{ steps.filter.outputs.webhooks }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,6 +56,9 @@ jobs:
               - *shared
               - 'workers/discovery/**'
               - 'src/**'
+            webhooks:
+              - *shared
+              - 'workers/webhooks/**'
 
   deploy-api:
     name: Deploy API worker
@@ -144,6 +148,56 @@ jobs:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: bunx wrangler deploy --config workers/discovery/wrangler.jsonc
+
+  deploy-webhooks:
+    name: Deploy webhooks worker
+    needs: changes
+    if: |
+      (github.event_name == 'push' && needs.changes.outputs.webhooks == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'webhooks'))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+      - uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock', 'workers/webhooks/bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - run: bun install --frozen-lockfile
+      # workers/webhooks is intentionally excluded from root workspaces (cloudflare:workers
+      # imports break Bun's eager workspace resolution). Install its deps locally.
+      - name: Install webhooks worker deps
+        working-directory: workers/webhooks
+        run: bun install --frozen-lockfile
+      - name: Deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: bunx wrangler deploy --config workers/webhooks/wrangler.jsonc
+      # Live e2e: enqueue a synthetic event through the echo subscriber and tail
+      # deliveries. Only runs on push to main when WEBHOOK_E2E_SUBSCRIPTION_ID is set.
+      # continue-on-error keeps the job green; the `|| echo` lines print a named
+      # diagnostic before the per-command failure is swallowed.
+      - name: Live e2e — webhook delivery smoke test
+        if: github.event_name == 'push' && secrets.WEBHOOK_E2E_SUBSCRIPTION_ID != ''
+        continue-on-error: true
+        env:
+          RELEASED_API_URL: https://api.releases.sh
+          RELEASED_API_KEY: ${{ secrets.RELEASED_API_KEY }}
+          SUBSCRIPTION_ID: ${{ secrets.WEBHOOK_E2E_SUBSCRIPTION_ID }}
+        run: |
+          set -euo pipefail
+          bun src/index.ts admin webhook test "$SUBSCRIPTION_ID" || echo "[e2e] webhook test call failed (non-fatal)"
+          # Queue max_batch_timeout is 5s, so a plain sleep races the flush. Poll up to ~14s.
+          for _ in 1 2 3 4 5 6 7; do
+            ROWS=$(bun src/index.ts admin webhook deliveries "$SUBSCRIPTION_ID" --limit 1 --json 2>/dev/null || true)
+            if echo "$ROWS" | grep -q '"event_id"'; then break; fi
+            sleep 2
+          done
+          bun src/index.ts admin webhook deliveries "$SUBSCRIPTION_ID" --limit 5 --json || echo "[e2e] deliveries call failed (non-fatal)"
 
   publish-mcp-registry:
     name: Publish MCP registry metadata

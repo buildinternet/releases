@@ -73,3 +73,19 @@ free; the buffer is bounded at 1000 events so DO storage stays flat.
 See `docs/architecture/remote-mode.md` for how this relates to the
 cached `/v1/releases/latest` endpoint (which remains the REST fallback
 and the backfill path after `snapshot_gap`).
+
+## Consumers
+
+### CLI tail (`releases tail -f`)
+
+Connects to `/v1/releases/stream` over WebSocket. Falls back to polling
+on disconnect. See `src/cli/commands/tail.ts`.
+
+### Webhooks (`workers/webhooks`)
+
+Per-subscription HTTPS POST consumer. The publisher in
+`workers/api/src/events/publish.ts` calls `expandAndEnqueue` alongside
+`ReleaseHub.publish`; the consumer Worker drains `webhook-delivery`,
+signs payloads, retries on transient failures, and DLQs on retry
+exhaustion. See [docs/webhooks.md](../webhooks.md) for the public
+subscriber contract.
