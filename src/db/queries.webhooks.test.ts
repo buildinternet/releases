@@ -4,7 +4,7 @@ import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { organizations, sources } from "@buildinternet/releases-core/schema";
+import { organizations, sources } from "@releases/core-internal/schema";
 import {
   insertWebhookSubscription,
   getWebhookSubscriptionById,

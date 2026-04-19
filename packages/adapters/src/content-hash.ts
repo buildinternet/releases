@@ -1,4 +1,4 @@
-import { sha256Hex } from "@releases/core/hash";
+import { sha256Hex } from "@releases/core-internal/hash";
 import type { RawRelease } from "./types.js";
 
 export function contentHash(raw: RawRelease): string {

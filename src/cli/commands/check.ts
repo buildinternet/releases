@@ -2,9 +2,9 @@ import { Command } from "commander";
 import chalk from "chalk";
 import Table from "cli-table3";
 import { findSource, listAllSources } from "../../db/queries.js";
-import { timeAgo } from "@buildinternet/releases-core/dates";
+import { timeAgo } from "@releases/core-internal/dates";
 import { stripAnsi } from "../../lib/sanitize.js";
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 
 interface CheckResult {
   name: string;

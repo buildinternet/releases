@@ -1,4 +1,4 @@
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 import { updateSource } from "../db/queries.js";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { logger } from "@buildinternet/releases-lib/logger";

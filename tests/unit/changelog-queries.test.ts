@@ -5,8 +5,8 @@ import {
   organizations,
   sources,
   sourceChangelogFiles,
-} from "@buildinternet/releases-core/schema";
-import { isTruncated } from "@buildinternet/releases-core/changelog-slice";
+} from "@releases/core-internal/schema";
+import { isTruncated } from "@releases/core-internal/changelog-slice";
 
 let testDatabase: TestDatabase;
 testDatabase = createTestDb();

@@ -4,7 +4,7 @@ import { logger } from "@buildinternet/releases-lib/logger";
 import { logUsage } from "../lib/usage.js";
 import { getAnthropicClient } from "./client.js";
 import { sanitizeVersion, releaseItemProperties, releaseItemRequired, withParseInstructions } from "./shared.js";
-import type { ReleaseType } from "@buildinternet/releases-core/schema";
+import type { ReleaseType } from "@releases/core-internal/schema";
 
 export interface ParsedRelease {
   version?: string;

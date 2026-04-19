@@ -4,7 +4,7 @@
  * feed adapter (and transitively, bun:sqlite via queries.ts).
  */
 
-import type { Source } from "@buildinternet/releases-core/schema";
+import type { Source } from "@releases/core-internal/schema";
 
 type FeedType = "rss" | "atom" | "jsonfeed";
 

@@ -3,7 +3,7 @@ import { buildReleaseEventPayloads, type InsertedReleaseRow } from "./build-even
 import { expandAndEnqueue } from "../webhooks/expand-and-enqueue.js";
 import { matchWebhookSubscriptions } from "../webhooks/queries.js";
 import { createDb } from "../db.js";
-import { newLocalEventId } from "@buildinternet/releases-core/id";
+import { newLocalEventId } from "@releases/core-internal/id";
 import type { ReleaseEvent } from "./types.js";
 
 export interface PublishContext {

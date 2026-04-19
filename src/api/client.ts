@@ -4,8 +4,8 @@ import type {
   Source, Release, Organization, OrgAccount, IgnoredUrl, BlockedUrl,
   ReleaseSummary, NewReleaseSummary, Product, Tag, DomainAlias, KnowledgePage,
   ReleaseType,
-} from "@buildinternet/releases-core/schema";
-import type { WebhookSubscription } from "@releases/core/schema";
+} from "@releases/core-internal/schema";
+import type { WebhookSubscription } from "@releases/core-internal/schema";
 import type { ReleaseCoverage } from "../db/schema-coverage.js";
 import type {
   SourceWithOrg, Stats, UnifiedSearchResponse, SourceChangelogResponse,

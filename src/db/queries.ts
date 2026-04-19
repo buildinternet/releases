@@ -8,17 +8,17 @@ import {
   type Source, type Release, type Organization, type OrgAccount, type IgnoredUrl, type BlockedUrl,
   type ReleaseSummary, type NewReleaseSummary, type Product, type Tag, type DomainAlias,
   type KnowledgePage, type SourceChangelogFile,
-} from "@buildinternet/releases-core/schema";
+} from "@releases/core-internal/schema";
 import {
   webhookSubscriptions,
   type WebhookSubscription,
-} from "@releases/core/schema";
+} from "@releases/core-internal/schema";
 import { releaseCoverage, type ReleaseCoverage } from "./schema-coverage.js";
-import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core/release-upsert";
+import { RELEASE_URL_UPSERT, type ReleaseUpsertRow } from "@releases/core-internal/release-upsert";
 import { isRemoteMode } from "../lib/mode.js";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { toSlug } from "@buildinternet/releases-core/slug";
-import { countTokensSafe } from "@releases/core/tokens";
+import { daysAgoIso } from "@releases/core-internal/dates";
+import { toSlug } from "@releases/core-internal/slug";
+import { countTokensSafe } from "@releases/core-internal/tokens";
 import * as apiClient from "../api/client.js";
 import type {
   SourceWithOrg, SourcePatchInput, ReleaseWithSource,

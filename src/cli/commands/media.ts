@@ -1,7 +1,7 @@
 import { Command } from "commander";
 import chalk from "chalk";
 import { getDb } from "../../db/connection.js";
-import { releases } from "@buildinternet/releases-core/schema";
+import { releases } from "@releases/core-internal/schema";
 import { insertMediaAssets, type MediaAssetInput } from "../../db/queries.js";
 import { isRemoteMode } from "../../lib/mode.js";
 import * as apiClient from "../../api/client.js";

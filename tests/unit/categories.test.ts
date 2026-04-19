@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { CATEGORIES, isValidCategory } from "@buildinternet/releases-core/categories";
+import { CATEGORIES, isValidCategory } from "@releases/core-internal/categories";
 
 describe("CATEGORIES", () => {
   it("is a non-empty array", () => {

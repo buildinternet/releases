@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { selectReleasesForOverview } from "../../src/ai/knowledge";
-import type { Release, Source } from "@buildinternet/releases-core/schema";
+import type { Release, Source } from "@releases/core-internal/schema";
 
 function makeRelease(id: string, publishedAt: string): Release {
   return {

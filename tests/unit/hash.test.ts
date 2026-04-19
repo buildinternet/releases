@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { sha256Hex } from "@releases/core/hash";
+import { sha256Hex } from "@releases/core-internal/hash";
 
 describe("sha256Hex", () => {
   it("returns a 64-char hex string", () => {

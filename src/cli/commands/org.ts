@@ -16,15 +16,15 @@ import {
 import { stripAnsi } from "../../lib/sanitize.js";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { orgNotFound } from "../suggest.js";
-import { toSlug } from "@buildinternet/releases-core/slug";
-import { isValidCategory, CATEGORIES } from "@buildinternet/releases-core/categories";
-import { timeAgo } from "@buildinternet/releases-core/dates";
+import { toSlug } from "@releases/core-internal/slug";
+import { isValidCategory, CATEGORIES } from "@releases/core-internal/categories";
+import { timeAgo } from "@releases/core-internal/dates";
 import {
   OVERVIEW_STALE_DAYS,
   isOverviewStale,
   overviewAgeDays,
   overviewPreview,
-} from "@releases/core/overview";
+} from "@releases/core-internal/overview";
 import type { OverviewRegenResult } from "../../ai/knowledge.js";
 
 function parseWindowDays(raw: string | undefined): number {

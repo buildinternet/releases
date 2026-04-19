@@ -2,8 +2,8 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { inArray } from "drizzle-orm";
-import { releases } from "@buildinternet/releases-core/schema";
-import { RELEASE_URL_UPSERT } from "@releases/core/release-upsert";
+import { releases } from "@releases/core-internal/schema";
+import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import {
   D1_MAX_BINDINGS,
   RELEASES_BATCH_CHUNK_SIZE,

@@ -61,11 +61,10 @@
   "license": "ISC",
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.112",
-    "@buildinternet/releases-core": "^0.13.2",
     "@buildinternet/releases-lib": "^0.13.2",
     "@buildinternet/releases-skills": "^0.13.2",
     "@releases/adapters": "workspace:*",
-    "@releases/core": "workspace:*",
+    "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
     "@anthropic-ai/sdk": "^0.88.0",
     "@modelcontextprotocol/sdk": "^1.29.0",

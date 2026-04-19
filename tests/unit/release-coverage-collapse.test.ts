@@ -12,7 +12,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach, mock } from "bun:test";
 import { sql } from "drizzle-orm";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { organizations, sources, releases } from "@releases/core-internal/schema";
 
 let testDatabase: TestDatabase;
 

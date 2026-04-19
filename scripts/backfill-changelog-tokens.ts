@@ -140,7 +140,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 async function runLocal(args: ParsedArgs): Promise<BackfillRow[]> {
   const { getDb } = await import("../src/db/connection.js");
   const { sourceChangelogFiles, sources } = await import(
-    "@buildinternet/releases-core/schema"
+    "@releases/core-internal/schema"
   );
   const db = getDb();
 

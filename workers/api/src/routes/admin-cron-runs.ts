@@ -4,7 +4,7 @@
  */
 import { Hono } from "hono";
 import { and, desc, eq, gt, inArray, sql } from "drizzle-orm";
-import { fetchLog } from "@buildinternet/releases-core/schema";
+import { fetchLog } from "@releases/core-internal/schema";
 import { cronRuns } from "../db/schema-cron.js";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";

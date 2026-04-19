@@ -3,7 +3,7 @@
  * via the `admin/webhooks` entry in workers/api/src/index.ts.
  */
 import { Hono } from "hono";
-import { deriveSigningKey } from "@buildinternet/releases-core/webhook-sign";
+import { deriveSigningKey } from "@releases/core-internal/webhook-sign";
 import { createDb } from "../db.js";
 import {
   insertWebhookSubscription,

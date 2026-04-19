@@ -35,7 +35,7 @@ import { registerEmbedCommand } from "./commands/admin/embed.js";
 import { registerWebhookAdminCommand } from "./commands/admin/webhook.js";
 import { registerWebhookCommand } from "./commands/webhook-verify.js";
 import { registerTelemetryCommand } from "./commands/telemetry.js";
-import { CATEGORIES } from "@buildinternet/releases-core/categories";
+import { CATEGORIES } from "@releases/core-internal/categories";
 import { isAdminMode } from "../lib/mode.js";
 import { VERSION } from "./version.js";
 

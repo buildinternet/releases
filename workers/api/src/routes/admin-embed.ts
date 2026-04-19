@@ -23,7 +23,7 @@ import {
   products,
   sourceChangelogFiles,
   sourceChangelogChunks,
-} from "@buildinternet/releases-core/schema";
+} from "@releases/core-internal/schema";
 import type { Env } from "../index.js";
 import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/lib/embed-releases.js";
 import { embedAndUpsertEntities, type EmbedEntityInput, type EntityKind } from "@releases/lib/embed-entities.js";

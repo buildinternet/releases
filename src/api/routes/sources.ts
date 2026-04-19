@@ -1,9 +1,9 @@
 import { eq, desc, count, and, sql, isNull } from "drizzle-orm";
 import { getDb } from "../../db/connection.js";
-import { sources, releases, organizations, sourceChangelogFiles } from "@buildinternet/releases-core/schema";
+import { sources, releases, organizations, sourceChangelogFiles } from "@releases/core-internal/schema";
 import { getSourceMetrics } from "../metrics.js";
 import type { SourceChangelogResponse } from "../types.js";
-import { buildChangelogResponse, selectChangelogFile } from "@buildinternet/releases-core/changelog-slice";
+import { buildChangelogResponse, selectChangelogFile } from "@releases/core-internal/changelog-slice";
 
 export function handleSourceActivity(slug: string, searchParams: URLSearchParams) {
   const db = getDb();

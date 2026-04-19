@@ -1,7 +1,7 @@
 import { eq, min, and, sql } from "drizzle-orm";
 import { getDb } from "../db/connection.js";
-import { releases, sources } from "@buildinternet/releases-core/schema";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { releases, sources } from "@releases/core-internal/schema";
+import { daysAgoIso } from "@releases/core-internal/dates";
 
 interface ActivityMetrics {
   releasesLast30Days: number;

@@ -2,10 +2,10 @@ import { Command } from "commander";
 import chalk from "chalk";
 import { readFileSync } from "fs";
 import { existsSync } from "fs";
-import { toSlug } from "@buildinternet/releases-core/slug";
+import { toSlug } from "@releases/core-internal/slug";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { isGitHubUrl } from "./add.js";
-import { isValidCategory } from "@buildinternet/releases-core/categories";
+import { isValidCategory } from "@releases/core-internal/categories";
 import {
   findOrg,
   createOrg,
