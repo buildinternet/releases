@@ -13,12 +13,13 @@ import {
   deleteWebhookSubscription,
   bumpWebhookSecretVersion,
 } from "../webhooks/queries.js";
+import { newEventId } from "../events/types.js";
+import type { DeliveryMessage } from "../webhooks/types.js";
 import type { Env } from "../index.js";
 
-/** Subscription ID safe-pattern for AE SQL: whk_ followed by alphanumeric/underscore. */
+/** AE SQL doesn't support bound parameters; this validates id before string interpolation. */
 const SUBSCRIPTION_ID_RE = /^whk_[a-zA-Z0-9_]+$/;
 
-/** Validate that a URL string is parseable and uses HTTPS. Returns an error message or null. */
 function validateUrl(url: string): string | null {
   let parsed: URL;
   try {
@@ -38,11 +39,18 @@ function getDb(c: any): any {
   return c.get("db") ?? createDb(c.env.DB);
 }
 
-adminWebhooksRoutes.post("/v1/admin/webhooks", async (c) => {
+/** Returns the master HMAC key, or a 503 Response when the binding is missing. */
+async function requireMasterKey(c: any): Promise<string | Response> {
   const masterKey: string | undefined = await c.env.WEBHOOK_HMAC_MASTER?.get();
   if (!masterKey) {
     return c.json({ error: "webhook_unavailable", message: "WEBHOOK_HMAC_MASTER not configured" }, 503);
   }
+  return masterKey;
+}
+
+adminWebhooksRoutes.post("/v1/admin/webhooks", async (c) => {
+  const masterKey = await requireMasterKey(c);
+  if (masterKey instanceof Response) return masterKey;
 
   let body: unknown;
   try {
@@ -159,22 +167,13 @@ adminWebhooksRoutes.delete("/v1/admin/webhooks/:id", async (c) => {
 });
 
 adminWebhooksRoutes.post("/v1/admin/webhooks/:id/rotate-secret", async (c) => {
-  const masterKey: string | undefined = await c.env.WEBHOOK_HMAC_MASTER?.get();
-  if (!masterKey) {
-    return c.json({ error: "webhook_unavailable", message: "WEBHOOK_HMAC_MASTER not configured" }, 503);
-  }
+  const masterKey = await requireMasterKey(c);
+  if (masterKey instanceof Response) return masterKey;
 
   const id = c.req.param("id");
-  const db = getDb(c);
+  const newVersion = await bumpWebhookSecretVersion(getDb(c), id);
+  if (newVersion === null) return c.json({ error: "not_found" }, 404);
 
-  // Verify existence before bumping — bumpWebhookSecretVersion throws if missing,
-  // but we want a clean 404 JSON response.
-  const existing = await getWebhookSubscriptionById(db, id);
-  if (!existing) {
-    return c.json({ error: "not_found" }, 404);
-  }
-
-  const newVersion = await bumpWebhookSecretVersion(db, id);
   const signingKey = await deriveSigningKey(masterKey, id, newVersion);
   return c.json({ secretVersion: newVersion, signingKey });
 });
@@ -192,15 +191,15 @@ adminWebhooksRoutes.post("/v1/admin/webhooks/:id/test", async (c) => {
     return c.json({ error: "not_found" }, 404);
   }
 
-  const synthetic = {
+  const synthetic: DeliveryMessage = {
     subscriptionId: sub.id,
     url: sub.url,
     secretVersion: sub.secretVersion,
     event: {
-      id: `test_${Date.now()}`,
+      id: newEventId(),
       seq: 0,
       ts: Date.now(),
-      type: "release.created" as const,
+      type: "release.created",
       release: {
         id: "rel_synthetic",
         title: "Webhook test",
@@ -231,9 +230,6 @@ adminWebhooksRoutes.get("/v1/admin/webhooks/:id/deliveries", async (c) => {
   }
 
   const id = c.req.param("id");
-  // Validate id against safe pattern before using in SQL.
-  // AE SQL API does not support bound parameters — we build the query string,
-  // so we must ensure id contains only safe characters.
   if (!SUBSCRIPTION_ID_RE.test(id)) {
     return c.json({ error: "bad_request", message: "invalid subscription id format" }, 400);
   }
@@ -242,7 +238,6 @@ adminWebhooksRoutes.get("/v1/admin/webhooks/:id/deliveries", async (c) => {
   const limitParam = parseInt(c.req.query("limit") ?? "20", 10);
   const limit = isNaN(limitParam) || limitParam < 1 ? 20 : Math.min(100, limitParam);
 
-  // Build SQL with validated, safe values only (id is regex-checked, limit is an integer).
   const failedFilter = failedOnly
     ? ` AND blob4 IN ('retry','perm_fail','dlq','auto_disabled')`
     : "";

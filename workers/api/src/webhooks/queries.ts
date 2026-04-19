@@ -74,35 +74,32 @@ export async function listWebhookSubscriptionsByOrg(
 }
 
 /**
- * Worker-local partial update for a webhook subscription.
- * Returns the updated subscription row, or null if id not found before update.
+ * Worker-local partial update. Returns null when id matches no row.
+ * D1 UPDATE on a missing row is a no-op, so re-fetching tells us both
+ * "current state" and "did the row exist" in one round-trip.
  */
 export async function updateWebhookSubscription(
   db: D1Db,
   id: string,
   updates: WebhookSubscriptionUpdates,
 ): Promise<WebhookSubscription | null> {
-  const existing = await getWebhookSubscriptionById(db, id);
-  if (!existing) return null;
   await db.update(webhookSubscriptions).set(updates).where(eq(webhookSubscriptions.id, id));
-  // D1 update() doesn't support RETURNING; re-fetch to surface the new state.
   return getWebhookSubscriptionById(db, id);
 }
 
-/**
- * Worker-local delete for a webhook subscription. Idempotent — no error if id missing.
- */
+/** Worker-local delete. Idempotent — no error if id missing. */
 export async function deleteWebhookSubscription(db: D1Db, id: string): Promise<void> {
   await db.delete(webhookSubscriptions).where(eq(webhookSubscriptions.id, id));
 }
 
 /**
- * Worker-local bump of secret_version. Throws if subscription not found.
- * Returns the new version number.
+ * Bump secret_version via read-modify-write. Returns the new version, or
+ * null when the subscription is missing. Not atomic — concurrent rotations
+ * could collide on the same version (admin endpoint, low contention).
  */
-export async function bumpWebhookSecretVersion(db: D1Db, id: string): Promise<number> {
+export async function bumpWebhookSecretVersion(db: D1Db, id: string): Promise<number | null> {
   const cur = await getWebhookSubscriptionById(db, id);
-  if (!cur) throw new Error(`subscription not found: ${id}`);
+  if (!cur) return null;
   const newVersion = cur.secretVersion + 1;
   await db.update(webhookSubscriptions)
     .set({ secretVersion: newVersion })

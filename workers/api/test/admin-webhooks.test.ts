@@ -77,7 +77,7 @@ mock.module("../src/webhooks/queries.js", () => ({
   },
   bumpWebhookSecretVersion: async (_db: unknown, id: string) => {
     const sub = store.find((s) => s.id === id);
-    if (!sub) throw new Error(`subscription not found: ${id}`);
+    if (!sub) return null;
     sub.secretVersion += 1;
     return sub.secretVersion;
   },
@@ -541,7 +541,7 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
     expect(res.status).toBe(200);
     const body = await res.json() as { enqueued: boolean; eventId: string };
     expect(body.enqueued).toBe(true);
-    expect(body.eventId).toMatch(/^test_/);
+    expect(body.eventId).toMatch(/^evt_/);
 
     // Verify the message was actually enqueued
     expect(queueMessages).toHaveLength(1);
