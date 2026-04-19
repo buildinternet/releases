@@ -9,7 +9,6 @@ import {
   testWebhookSubscription,
   rotateWebhookSecret,
   getWebhookDeliveries,
-  type WebhookSubscription,
 } from "../../../api/client.js";
 
 export function registerWebhookAdminCommand(parent: Command): void {
