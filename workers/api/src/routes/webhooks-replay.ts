@@ -2,7 +2,7 @@ import type { Hono } from "hono";
 import { getReleaseHub } from "../utils.js";
 
 export function mountWebhooksReplay(app: Hono<any, any, any>, getEnv: (c: any) => { RELEASE_HUB: DurableObjectNamespace }) {
-  app.get("/v1/webhooks/events", async (c) => {
+  app.get("/webhooks/events", async (c) => {
     const sinceRaw = c.req.query("since");
     const limitRaw = c.req.query("limit");
     const sinceParsed = sinceRaw === undefined ? 0 : parseInt(sinceRaw, 10);
