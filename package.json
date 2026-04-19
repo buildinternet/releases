@@ -68,6 +68,7 @@
     "@buildinternet/releases-lib": "^0.13.2",
     "@buildinternet/releases-skills": "^0.13.2",
     "@releases/adapters": "workspace:*",
+    "@releases/ai-internal": "workspace:*",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
     "@anthropic-ai/sdk": "^0.88.0",
