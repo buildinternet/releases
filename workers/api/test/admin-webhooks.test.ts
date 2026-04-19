@@ -567,9 +567,8 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
       }),
     );
-    // We don't have a queue, so we need to look up the sub directly since
-    // the POST also fails without a queue (but the sub is in the store from mock)
-    const id = store[0]?.id ?? "whk_test0001";
+    // POST creates the sub regardless of queue binding; only the /test endpoint needs the queue.
+    const id = store[0].id;
 
     const res = await fetch(
       new Request(`https://x.test/v1/admin/webhooks/${id}/test`, {

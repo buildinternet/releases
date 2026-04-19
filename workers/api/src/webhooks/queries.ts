@@ -85,7 +85,7 @@ export async function updateWebhookSubscription(
   const existing = await getWebhookSubscriptionById(db, id);
   if (!existing) return null;
   await db.update(webhookSubscriptions).set(updates).where(eq(webhookSubscriptions.id, id));
-  // Re-fetch fresh to return the updated state.
+  // D1 update() doesn't support RETURNING; re-fetch to surface the new state.
   return getWebhookSubscriptionById(db, id);
 }
 

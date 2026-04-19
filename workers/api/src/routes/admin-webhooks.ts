@@ -109,13 +109,6 @@ adminWebhooksRoutes.get("/v1/admin/webhooks/:id", async (c) => {
 });
 
 adminWebhooksRoutes.patch("/v1/admin/webhooks/:id", async (c) => {
-  const id = c.req.param("id");
-  const db = getDb(c);
-  const sub = await getWebhookSubscriptionById(db, id);
-  if (!sub) {
-    return c.json({ error: "not_found" }, 404);
-  }
-
   let body: Partial<{
     url: string;
     description: string | null;
@@ -125,7 +118,7 @@ adminWebhooksRoutes.patch("/v1/admin/webhooks/:id", async (c) => {
   try {
     body = (await c.req.json()) as typeof body;
   } catch {
-    body = {};
+    return c.json({ error: "bad_request", message: "invalid JSON body" }, 400);
   }
 
   if (body.url !== undefined) {
@@ -152,7 +145,9 @@ adminWebhooksRoutes.patch("/v1/admin/webhooks/:id", async (c) => {
     return c.json({ error: "bad_request", message: "no recognized fields to update" }, 400);
   }
 
-  const fresh = await updateWebhookSubscription(db, id, updates);
+  const id = c.req.param("id");
+  const fresh = await updateWebhookSubscription(getDb(c), id, updates);
+  if (!fresh) return c.json({ error: "not_found" }, 404);
   return c.json(fresh);
 });
 
