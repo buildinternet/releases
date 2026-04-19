@@ -1,7 +1,14 @@
 import { Hono } from "hono";
 import { and, desc, eq, sql, gte, lte } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { fetchLog, sources, organizations, usageLog } from "@releases/core-internal/schema";
+import {
+  FETCH_LOG_STATUSES,
+  type FetchLogStatus,
+  fetchLog,
+  sources,
+  organizations,
+  usageLog,
+} from "@releases/core-internal/schema";
 import type { Env } from "../index.js";
 import { getStatusHub } from "../utils.js";
 import { encodeCursor, decodeCursor } from "./fetch-log-cursor.js";
@@ -14,9 +21,6 @@ statusRoutes.get("/status/ws", async (c) => {
   }
   return getStatusHub(c.env).fetch(c.req.raw);
 });
-
-const FETCH_LOG_STATUSES = ["success", "error", "no_change", "dry_run"] as const;
-type FetchLogStatus = (typeof FETCH_LOG_STATUSES)[number];
 
 statusRoutes.get("/status/fetch-log", async (c) => {
   const db = createDb(c.env.DB);
@@ -77,18 +81,11 @@ statusRoutes.get("/status/fetch-log", async (c) => {
   const nextCursor =
     hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
 
-  // Count queries run only on the first page (no cursor).
+  // Count query runs only on the first page (no cursor). The grouped
+  // rollup gives us both the per-status counts and the scope-wide total.
   let totalCount: number | undefined;
   let statusCounts: Record<FetchLogStatus, number> | undefined;
   if (!cursor) {
-    const totalRows = await db
-      .select({ n: sql<number>`count(*)` })
-      .from(fetchLog)
-      .leftJoin(sources, sql`${fetchLog.sourceId} = ${sources.id}`)
-      .leftJoin(organizations, sql`${sources.orgId} = ${organizations.id}`)
-      .where(scope.length > 0 ? and(...scope) : undefined);
-    totalCount = Number(totalRows[0]?.n ?? 0);
-
     const grouped = await db
       .select({ status: fetchLog.status, n: sql<number>`count(*)` })
       .from(fetchLog)
@@ -97,10 +94,14 @@ statusRoutes.get("/status/fetch-log", async (c) => {
       .where(scope.length > 0 ? and(...scope) : undefined)
       .groupBy(fetchLog.status);
 
-    statusCounts = { success: 0, error: 0, no_change: 0, dry_run: 0 };
+    statusCounts = Object.fromEntries(
+      FETCH_LOG_STATUSES.map((s) => [s, 0]),
+    ) as Record<FetchLogStatus, number>;
+    totalCount = 0;
     for (const row of grouped) {
-      const s = row.status as FetchLogStatus;
-      if (s in statusCounts) statusCounts[s] = Number(row.n);
+      const n = Number(row.n);
+      totalCount += n;
+      statusCounts[row.status as FetchLogStatus] = n;
     }
   }
 
