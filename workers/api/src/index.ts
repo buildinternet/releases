@@ -32,6 +32,7 @@ import { adminEmbedRoutes } from "./routes/admin-embed.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
 import { adminNotificationsRoutes } from "./routes/admin-notifications.js";
+import { adminAiRoutes } from "./routes/admin-ai.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch } from "./cron/poll-fetch.js";
 import { retierSources } from "./cron/retier.js";
@@ -136,7 +137,8 @@ for (const r of publicReadRoutes) {
 const adminRoutes = [
   "sessions", "fetch-log", "usage-log", "blocked-urls",
   "discover", "evaluate", "aliases", "status/fetch-log", "status/usage", "status/event",
-  "admin/embed", "admin/cron-runs", "admin/webhooks", "admin/notifications", "playbook",
+  "admin/embed", "admin/cron-runs", "admin/webhooks", "admin/notifications",
+  "admin/summaries", "admin/compare", "playbook",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -189,6 +191,7 @@ v1.route("/", adminEmbedRoutes);
 v1.route("/", adminCronRunsRoutes);
 v1.route("/", adminWebhooksRoutes);
 v1.route("/", adminNotificationsRoutes);
+v1.route("/", adminAiRoutes);
 v1.route("/", telemetryRoutes);
 
 // Static endpoint — categories are defined in code, not DB
