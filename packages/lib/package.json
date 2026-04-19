@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./atom": "./src/atom.ts",
+    "./atom-http": "./src/atom-http.ts",
     "./config": "./src/config.ts",
     "./errors": "./src/errors.ts",
     "./logger": "./src/logger.ts"
