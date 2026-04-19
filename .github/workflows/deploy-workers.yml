@@ -182,7 +182,7 @@ jobs:
       # continue-on-error keeps the job green; the `|| echo` lines print a named
       # diagnostic before the per-command failure is swallowed.
       - name: Live e2e — webhook delivery smoke test
-        if: github.event_name == 'push' && secrets.WEBHOOK_E2E_SUBSCRIPTION_ID != ''
+        if: github.event_name == 'push'
         continue-on-error: true
         env:
           RELEASED_API_URL: https://api.releases.sh
@@ -190,6 +190,10 @@ jobs:
           SUBSCRIPTION_ID: ${{ secrets.WEBHOOK_E2E_SUBSCRIPTION_ID }}
         run: |
           set -euo pipefail
+          if [ -z "${SUBSCRIPTION_ID:-}" ]; then
+            echo "[e2e] WEBHOOK_E2E_SUBSCRIPTION_ID not set — skipping"
+            exit 0
+          fi
           bun src/index.ts admin webhook test "$SUBSCRIPTION_ID" || echo "[e2e] webhook test call failed (non-fatal)"
           # Queue max_batch_timeout is 5s, so a plain sleep races the flush. Poll up to ~14s.
           for _ in 1 2 3 4 5 6 7; do
