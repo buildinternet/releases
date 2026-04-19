@@ -12,7 +12,7 @@ The status page fetch-log tab (`web/src/app/status/dashboard.tsx`) fetches at mo
 
 There is no way to paginate past the cap and no signal for the true shape of the dataset.
 
-The org-scoped view (`web/src/components/org-fetch-log-view.tsx`), which uses the separate `GET /v1/fetch-log?source=...&limit=20` endpoint, has the same structural problem.
+The org-scoped view (`web/src/components/org-fetch-log-view.tsx`) has the same structural problem: it hits `/v1/status/fetch-log?org=<slug>` with no limit (server default of 200) and filters client-side.
 
 ## Goals
 
@@ -23,7 +23,7 @@ The org-scoped view (`web/src/components/org-fetch-log-view.tsx`), which uses th
 
 ## Non-goals
 
-- Changing the CLI's `admin source fetch-log` command. It talks to the database directly via drizzle and is unaffected.
+- Changing the CLI's `admin source fetch-log` command or the `GET /v1/fetch-log` endpoint it consumes. The CLI's bare-array shape stays as-is.
 - Exporting logs (CSV / JSON download).
 - Source-slug search within the dashboard.
 
@@ -73,9 +73,9 @@ New query parameters:
 
 Existing parameters (`after`, `before`, `org`) are unchanged.
 
-**`GET /v1/fetch-log`** (source/org-scoped, used by org pages) — same envelope and parameter additions. Default `limit` raised from 20 to 25 for consistency.
+**`GET /v1/fetch-log`** is the CLI-facing endpoint (consumed by `src/api/client.ts`'s `getFetchLogs`, backing `releases admin source fetch-log`). It stays on its current bare-array shape — out of scope. The org-scoped web view uses `/v1/status/fetch-log?org=...`, so both dashboard surfaces benefit from the single endpoint change.
 
-**Backwards compatibility:** both endpoints are consumed only by the in-repo Next.js app. Clean break on response shape — no versioning.
+**Backwards compatibility:** `/v1/status/fetch-log` is consumed only by the in-repo Next.js app. Clean break on response shape — no versioning.
 
 ### Data and queries
 
@@ -146,7 +146,7 @@ Web UI: manual smoke on the seeded multi-page dataset. No automated dashboard-co
 
 Single PR. Worker + web ship together — no external consumers of the old array shape.
 
-1. Worker changes (`workers/api/src/routes/status.ts`, `workers/api/src/routes/fetch-log.ts`).
+1. Worker changes (`workers/api/src/routes/status.ts`).
 2. Web changes (status dashboard, org fetch-log view, shared hook).
 3. Integration tests.
 4. Deploy: GH Actions auto-deploys the worker on merge to main; Vercel auto-deploys the web app.
