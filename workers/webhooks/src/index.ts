@@ -1,4 +1,14 @@
+import { createDb } from "./db.js";
+import {
+  getWebhookSubscriptionById,
+  updateWebhookSubscriptionSummary,
+  setWebhookSubscriptionEnabled,
+} from "./queries.js";
+import { deliver } from "./deliver.js";
+import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
+
+export const DLQ_QUEUE = "webhook-dlq";
 
 export interface Env {
   DB: D1Database;
@@ -9,17 +19,100 @@ export interface Env {
   AUTO_DISABLE_THRESHOLD: string;
 }
 
+/** Build a synthetic AE attempt for branches with no live HTTP result (skipped/dlq/auto_disabled). */
+function syntheticAttempt(
+  body: DeliveryMessage,
+  attempts: number,
+  outcome: Outcome,
+  errorMessage: string | null = null,
+): DeliveryAttempt {
+  return {
+    subscriptionId: body.subscriptionId,
+    eventId: body.event.id,
+    outcome,
+    httpStatus: 0,
+    latencyMs: 0,
+    attempt: attempts,
+    errorMessage,
+    errorCode: null,
+  };
+}
+
 export default {
-  async queue(batch: MessageBatch<DeliveryMessage>, _env: Env): Promise<void> {
-    if (batch.queue === "webhook-dlq") {
+  async queue(batch: MessageBatch<DeliveryMessage>, env: Env): Promise<void> {
+    if (batch.queue === DLQ_QUEUE) {
       for (const msg of batch.messages) {
-        console.warn(`[webhook-dlq] ${msg.body.subscriptionId} ${msg.body.event.release.id}`);
+        console.warn(
+          `[webhook-dlq] sub=${msg.body.subscriptionId} release=${msg.body.event.release.id} attempts=${msg.attempts}`,
+        );
+        writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, syntheticAttempt(msg.body, msg.attempts, "dlq"));
         msg.ack();
       }
       return;
     }
+
+    const db = createDb(env.DB);
+    const timeoutMs = parseInt(env.DELIVERY_TIMEOUT_MS, 10) || 10000;
+    const threshold = parseInt(env.AUTO_DISABLE_THRESHOLD, 10) || 50;
+
     for (const msg of batch.messages) {
-      msg.ack();
+      const body = msg.body;
+
+      const limit = await env.PER_SUB_RATE_LIMITER.limit({ key: body.subscriptionId });
+      if (!limit.success) {
+        msg.retry({ delaySeconds: 6 });
+        continue;
+      }
+
+      const sub = await getWebhookSubscriptionById(db, body.subscriptionId);
+      if (!sub || !sub.enabled) {
+        writeDeliveryAttempt(
+          env.WEBHOOK_DELIVERIES_AE,
+          syntheticAttempt(body, msg.attempts, "skipped", sub ? "disabled" : "not_found"),
+        );
+        msg.ack();
+        continue;
+      }
+
+      const result = await deliver(body, { masterKey: env.WEBHOOK_HMAC_MASTER, timeoutMs });
+
+      writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, {
+        subscriptionId: body.subscriptionId,
+        eventId: body.event.id,
+        outcome: result.outcome,
+        httpStatus: result.httpStatus,
+        latencyMs: result.latencyMs,
+        attempt: msg.attempts,
+        errorMessage: result.errorMessage,
+        errorCode: result.errorCode,
+      });
+
+      const at = new Date().toISOString();
+      if (result.outcome === "success") {
+        await updateWebhookSubscriptionSummary(db, body.subscriptionId, { kind: "success", at });
+        msg.ack();
+      } else {
+        await updateWebhookSubscriptionSummary(db, body.subscriptionId, {
+          kind: "error",
+          at,
+          message: result.errorMessage ?? "unknown",
+        });
+        const fresh = await getWebhookSubscriptionById(db, body.subscriptionId);
+        if (fresh && fresh.consecutiveFailures >= threshold) {
+          await setWebhookSubscriptionEnabled(
+            db,
+            body.subscriptionId,
+            false,
+            `auto-disabled after ${fresh.consecutiveFailures} consecutive failures`,
+          );
+          writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, syntheticAttempt(body, msg.attempts, "auto_disabled"));
+        }
+        if (result.outcome === "perm_fail") {
+          msg.ack();
+        } else {
+          msg.retry();
+        }
+      }
     }
   },
 };
