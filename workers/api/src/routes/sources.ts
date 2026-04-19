@@ -305,6 +305,12 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
     // Feed and GitHub sources: fetch server-side
     const githubToken = await c.env.GITHUB_TOKEN?.get();
     const sessionId = c.req.query("sessionId") ?? undefined;
+    const dryRun = c.req.query("dryRun") === "true" || c.req.query("dryRun") === "1";
+    const maxRaw = c.req.query("max");
+    const maxParsed = maxRaw ? Number.parseInt(maxRaw, 10) : null;
+    if (maxRaw && (!Number.isFinite(maxParsed) || maxParsed! <= 0)) {
+      return c.json({ error: "invalid_max", message: "max must be a positive integer" }, 400);
+    }
     const result = await fetchOne(
       db,
       src,
@@ -316,7 +322,7 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
         VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
         OPENAI_API_KEY: c.env.OPENAI_API_KEY,
       },
-      { sessionId },
+      { sessionId, dryRun, maxEntries: maxParsed ?? undefined },
     );
     responsePayload = { fetched: true, ...result };
   } else {
