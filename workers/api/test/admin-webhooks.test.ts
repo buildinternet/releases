@@ -108,7 +108,9 @@ function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
     };
   }
   const app = new Hono();
-  app.route("/", adminWebhooksRoutes);
+  const v1 = new Hono();
+  v1.route("/", adminWebhooksRoutes);
+  app.route("/v1", v1);
   return (req: Request) => app.fetch(req, fakeEnv);
 }
 
@@ -605,7 +607,9 @@ describe("GET /v1/admin/webhooks/:id/deliveries", () => {
     };
     const { Hono: H } = await import("hono");
     const app = new H();
-    app.route("/", adminWebhooksRoutes);
+    const v1 = new H();
+    v1.route("/", adminWebhooksRoutes);
+    app.route("/v1", v1);
     const fetch = (req: Request) => app.fetch(req, fakeEnv);
 
     const res = await fetch(

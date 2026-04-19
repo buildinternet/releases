@@ -48,7 +48,7 @@ async function requireMasterKey(c: any): Promise<string | Response> {
   return masterKey;
 }
 
-adminWebhooksRoutes.post("/v1/admin/webhooks", async (c) => {
+adminWebhooksRoutes.post("/admin/webhooks", async (c) => {
   const masterKey = await requireMasterKey(c);
   if (masterKey instanceof Response) return masterKey;
 
@@ -90,7 +90,7 @@ adminWebhooksRoutes.post("/v1/admin/webhooks", async (c) => {
   return c.json({ ...sub, signingKey }, 201);
 });
 
-adminWebhooksRoutes.get("/v1/admin/webhooks", async (c) => {
+adminWebhooksRoutes.get("/admin/webhooks", async (c) => {
   const orgId = c.req.query("org");
   if (!orgId) {
     return c.json({ error: "bad_request", message: "org query param is required" }, 400);
@@ -106,7 +106,7 @@ adminWebhooksRoutes.get("/v1/admin/webhooks", async (c) => {
   return c.json({ subscriptions });
 });
 
-adminWebhooksRoutes.get("/v1/admin/webhooks/:id", async (c) => {
+adminWebhooksRoutes.get("/admin/webhooks/:id", async (c) => {
   const id = c.req.param("id");
   const db = getDb(c);
   const sub = await getWebhookSubscriptionById(db, id);
@@ -116,7 +116,7 @@ adminWebhooksRoutes.get("/v1/admin/webhooks/:id", async (c) => {
   return c.json(sub);
 });
 
-adminWebhooksRoutes.patch("/v1/admin/webhooks/:id", async (c) => {
+adminWebhooksRoutes.patch("/admin/webhooks/:id", async (c) => {
   let body: Partial<{
     url: string;
     description: string | null;
@@ -159,14 +159,14 @@ adminWebhooksRoutes.patch("/v1/admin/webhooks/:id", async (c) => {
   return c.json(fresh);
 });
 
-adminWebhooksRoutes.delete("/v1/admin/webhooks/:id", async (c) => {
+adminWebhooksRoutes.delete("/admin/webhooks/:id", async (c) => {
   const id = c.req.param("id");
   const db = getDb(c);
   await deleteWebhookSubscription(db, id);
   return new Response(null, { status: 204 });
 });
 
-adminWebhooksRoutes.post("/v1/admin/webhooks/:id/rotate-secret", async (c) => {
+adminWebhooksRoutes.post("/admin/webhooks/:id/rotate-secret", async (c) => {
   const masterKey = await requireMasterKey(c);
   if (masterKey instanceof Response) return masterKey;
 
@@ -178,7 +178,7 @@ adminWebhooksRoutes.post("/v1/admin/webhooks/:id/rotate-secret", async (c) => {
   return c.json({ secretVersion: newVersion, signingKey });
 });
 
-adminWebhooksRoutes.post("/v1/admin/webhooks/:id/test", async (c) => {
+adminWebhooksRoutes.post("/admin/webhooks/:id/test", async (c) => {
   const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
   if (!queue) {
     return c.json({ error: "queue_unavailable", message: "WEBHOOK_DELIVERY_QUEUE binding missing" }, 503);
@@ -218,7 +218,7 @@ adminWebhooksRoutes.post("/v1/admin/webhooks/:id/test", async (c) => {
   return c.json({ enqueued: true, eventId: synthetic.event.id });
 });
 
-adminWebhooksRoutes.get("/v1/admin/webhooks/:id/deliveries", async (c) => {
+adminWebhooksRoutes.get("/admin/webhooks/:id/deliveries", async (c) => {
   const cfApiToken: string | undefined = await c.env.CF_API_TOKEN?.get();
   const cfAccountId: string | undefined = c.env.CF_ACCOUNT_ID;
 
