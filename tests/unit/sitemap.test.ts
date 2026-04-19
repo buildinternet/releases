@@ -1,25 +1,33 @@
 /**
- * Tests for the bulk sitemap endpoint.
- *
- * `handleSitemap` (`src/api/routes/orgs.ts`) and the worker route
- * (`workers/api/src/routes/sitemap.ts`) share the same query logic —
- * three bulk queries keyed by the set of org IDs, grouped client-side.
- * Testing the local handler validates the shape and filtering rules;
- * the worker route is a 1:1 translation that runs the same SQL via D1.
+ * Exercises the sitemap route against an in-memory bun:sqlite DB wired to
+ * a Hono app — same `app.fetch()` pattern used across `workers/api/test/`.
  */
 
-import { describe, test, expect, beforeEach, afterAll, beforeAll, mock } from "bun:test";
+import { describe, test, expect, beforeEach, afterAll, beforeAll } from "bun:test";
+import { Hono } from "hono";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
 import { organizations, sources, products, releases } from "@releases/core-internal/schema";
+import { sitemapRoutes } from "../../workers/api/src/routes/sitemap.js";
 
 let testDatabase: TestDatabase;
+let app: Hono;
+
+type SitemapResponse = {
+  orgs: { slug: string; lastActivity: string | null }[];
+  sources: { orgSlug: string; slug: string; latestDate: string | null }[];
+  products: { orgSlug: string; slug: string }[];
+};
+
+async function callSitemap(): Promise<SitemapResponse> {
+  const res = await app.fetch(new Request("http://test/sitemap"), { DB: testDatabase.db });
+  expect(res.status).toBe(200);
+  return (await res.json()) as SitemapResponse;
+}
 
 beforeAll(() => {
   testDatabase = createTestDb();
-  // Swap the singleton so handleSitemap (which calls getDb()) uses our test DB.
-  mock.module("../../src/db/connection.js", () => ({
-    getDb: () => testDatabase.db,
-  }));
+  app = new Hono();
+  app.route("/", sitemapRoutes);
 });
 
 afterAll(() => {
@@ -30,13 +38,7 @@ beforeEach(() => {
   clearAllTables(testDatabase.db);
 });
 
-// Dynamic import so the mock.module above applies before the handler binds to getDb().
-async function callSitemap() {
-  const mod = await import("../../src/api/routes/orgs.js");
-  return mod.handleSitemap();
-}
-
-describe("handleSitemap", () => {
+describe("GET /sitemap", () => {
   test("returns empty payload when DB has no orgs", async () => {
     const result = await callSitemap();
     expect(result).toEqual({ orgs: [], sources: [], products: [] });

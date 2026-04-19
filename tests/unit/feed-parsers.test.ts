@@ -15,7 +15,7 @@ import {
   iframeSrcToWatchUrl,
   parseFeedLinks,
   getSourceMeta,
-} from "../../src/adapters/feed.js";
+} from "@releases/adapters/feed";
 
 const fixturesDir = join(import.meta.dirname, "../fixtures/feeds");
 

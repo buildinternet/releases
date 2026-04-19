@@ -3,7 +3,7 @@ import {
   fetchAndParseFeed,
   FEED_4XX_INVALIDATE_THRESHOLD,
   CLEARED_FEED_FIELDS,
-} from "../../src/adapters/feed.js";
+} from "@releases/adapters/feed";
 import { FeedHttpError } from "@releases/lib/errors";
 
 const realFetch = globalThis.fetch;

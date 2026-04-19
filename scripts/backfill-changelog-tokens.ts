@@ -9,12 +9,10 @@
  * total by splitting each file on `##` headings and encoding every section
  * independently — each chunk stays well under the cap, so BPE stays bounded.
  *
- * Supports both modes:
- *   - Local: reads/writes `source_changelog_files` directly via `getDb()`.
- *   - Remote: lists oversized rows via
- *       `GET /v1/sources/changelog-files/oversized`, fetches content via
- *       `GET /v1/sources/:slug/changelog`, and writes back via
- *       `PATCH /v1/sources/:slug/changelog/tokens` (admin-auth required).
+ * Lists oversized rows via `GET /v1/sources/changelog-files/oversized`,
+ * fetches content via `GET /v1/sources/:slug/changelog`, and writes back
+ * via `PATCH /v1/sources/:slug/changelog/tokens`. Requires
+ * RELEASED_API_URL and admin RELEASED_API_KEY in env.
  *
  * Usage:
  *   bun scripts/backfill-changelog-tokens.ts                 # dry run (default)
@@ -28,16 +26,11 @@
 
 import { Tiktoken } from "js-tiktoken/lite";
 import cl100k_base from "js-tiktoken/ranks/cl100k_base";
-import { eq, and, sql } from "drizzle-orm";
 
 import { logger } from "@buildinternet/releases-lib/logger";
-import {
-  isRemoteMode,
-  getApiUrl,
-  getApiKey,
-  isAdminMode,
-  validateRemoteMode,
-} from "../src/lib/mode.js";
+
+const API_URL = process.env.RELEASED_API_URL;
+const API_KEY = process.env.RELEASED_API_KEY;
 
 // Matches LIVE_ENCODE_MAX_CHARS in src/lib/tokens.ts. Kept as a local
 // constant so the script doesn't depend on an internal export.
@@ -141,77 +134,7 @@ function parseArgs(argv: string[]): ParsedArgs {
   return args;
 }
 
-// ── Local mode ─────────────────────────────────────────────────────────────
-
-async function runLocal(args: ParsedArgs): Promise<BackfillRow[]> {
-  const { getDb } = await import("../src/db/connection.js");
-  const { sourceChangelogFiles, sources } = await import("@releases/core-internal/schema");
-  const db = getDb();
-
-  const baseWhere = sql`length(${sourceChangelogFiles.content}) > ${LIVE_ENCODE_MAX_CHARS}`;
-
-  const rows = args.source
-    ? await db
-        .select({
-          id: sourceChangelogFiles.id,
-          sourceSlug: sources.slug,
-          path: sourceChangelogFiles.path,
-          filename: sourceChangelogFiles.filename,
-          content: sourceChangelogFiles.content,
-          bytes: sourceChangelogFiles.bytes,
-          tokens: sourceChangelogFiles.tokens,
-        })
-        .from(sourceChangelogFiles)
-        .innerJoin(sources, eq(sources.id, sourceChangelogFiles.sourceId))
-        .where(and(eq(sources.slug, args.source), baseWhere))
-        .orderBy(sourceChangelogFiles.path)
-    : await db
-        .select({
-          id: sourceChangelogFiles.id,
-          sourceSlug: sources.slug,
-          path: sourceChangelogFiles.path,
-          filename: sourceChangelogFiles.filename,
-          content: sourceChangelogFiles.content,
-          bytes: sourceChangelogFiles.bytes,
-          tokens: sourceChangelogFiles.tokens,
-        })
-        .from(sourceChangelogFiles)
-        .innerJoin(sources, eq(sources.id, sourceChangelogFiles.sourceId))
-        .where(baseWhere)
-        .orderBy(sources.slug, sourceChangelogFiles.path);
-
-  logger.info(`local: found ${rows.length} oversized changelog row(s)`);
-
-  const out: BackfillRow[] = [];
-  for (const row of rows) {
-    const newTokens = exactTokensBySection(row.content);
-    const oldTokens = row.tokens;
-    const delta = oldTokens === null ? newTokens : newTokens - oldTokens;
-    const summary: BackfillRow = {
-      sourceSlug: row.sourceSlug,
-      path: row.path,
-      filename: row.filename,
-      bytes: row.bytes,
-      oldTokens,
-      newTokens,
-      delta,
-    };
-    out.push(summary);
-    logger.info(
-      `[${args.apply ? "apply" : "dry-run"}] ${row.sourceSlug} (${row.path}) ` +
-        `bytes=${row.bytes} old=${oldTokens ?? "null"} new=${newTokens} delta=${delta >= 0 ? "+" : ""}${delta}`,
-    );
-    if (args.apply) {
-      await db
-        .update(sourceChangelogFiles)
-        .set({ tokens: newTokens })
-        .where(eq(sourceChangelogFiles.id, row.id));
-    }
-  }
-  return out;
-}
-
-// ── Remote mode ────────────────────────────────────────────────────────────
+// ── API helpers ────────────────────────────────────────────────────────────
 
 interface OversizedRowResponse {
   sourceSlug: string;
@@ -224,10 +147,9 @@ interface OversizedRowResponse {
 }
 
 async function apiGet<T>(path: string): Promise<T> {
-  const url = `${getApiUrl()}${path}`;
-  const headers: Record<string, string> = { Accept: "application/json" };
-  if (isAdminMode()) headers["Authorization"] = `Bearer ${getApiKey()}`;
-  const res = await fetch(url, { headers });
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Accept: "application/json", Authorization: `Bearer ${API_KEY}` },
+  });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`GET ${path} → ${res.status}: ${body}`);
@@ -236,13 +158,15 @@ async function apiGet<T>(path: string): Promise<T> {
 }
 
 async function apiPatch<T>(path: string, body: unknown): Promise<T> {
-  const url = `${getApiUrl()}${path}`;
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    Accept: "application/json",
-  };
-  if (isAdminMode()) headers["Authorization"] = `Bearer ${getApiKey()}`;
-  const res = await fetch(url, { method: "PATCH", headers, body: JSON.stringify(body) });
+  const res = await fetch(`${API_URL}${path}`, {
+    method: "PATCH",
+    headers: {
+      "Content-Type": "application/json",
+      Accept: "application/json",
+      Authorization: `Bearer ${API_KEY}`,
+    },
+    body: JSON.stringify(body),
+  });
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     throw new Error(`PATCH ${path} → ${res.status}: ${text}`);
@@ -250,11 +174,7 @@ async function apiPatch<T>(path: string, body: unknown): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-async function runRemote(args: ParsedArgs): Promise<BackfillRow[]> {
-  if (!isAdminMode()) {
-    throw new Error("remote mode backfill requires RELEASED_API_KEY (admin auth)");
-  }
-
+async function run(args: ParsedArgs): Promise<BackfillRow[]> {
   const all = await apiGet<OversizedRowResponse[]>(
     `/v1/sources/changelog-files/oversized?minBytes=${LIVE_ENCODE_MAX_CHARS}`,
   );
@@ -300,16 +220,16 @@ async function runRemote(args: ParsedArgs): Promise<BackfillRow[]> {
 // ── Entry point ────────────────────────────────────────────────────────────
 
 async function main() {
+  if (!API_URL || !API_KEY) {
+    throw new Error("RELEASED_API_URL and RELEASED_API_KEY must be set");
+  }
   const args = parseArgs(process.argv.slice(2));
-  validateRemoteMode();
-
-  const mode = isRemoteMode() ? "remote" : "local";
   logger.info(
-    `backfill-changelog-tokens starting (mode=${mode}, ${args.apply ? "APPLY" : "dry-run"}` +
+    `backfill-changelog-tokens starting (${args.apply ? "APPLY" : "dry-run"}` +
       `${args.source ? `, source=${args.source}` : ""})`,
   );
 
-  const rows = isRemoteMode() ? await runRemote(args) : await runLocal(args);
+  const rows = await run(args);
 
   const totalDelta = rows.reduce((sum, r) => sum + r.delta, 0);
   logger.info(
@@ -321,7 +241,6 @@ async function main() {
     process.stdout.write(
       JSON.stringify(
         {
-          mode,
           apply: args.apply,
           source: args.source,
           processed: rows.length,

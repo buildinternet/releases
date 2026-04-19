@@ -28,7 +28,7 @@ import {
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
-import { assemblePlaybook } from "@releases/ai/playbook.js";
+import { assemblePlaybook } from "@releases/ai-internal/playbook";
 import type { Env } from "../index.js";
 import {
   getOrgsWithStats,

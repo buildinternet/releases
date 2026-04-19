@@ -26,12 +26,7 @@ type TestBody = {
   body?: string;
 };
 
-const VALID_STATUSES: CronReportStatus[] = new Set([
-  "done",
-  "degraded",
-  "dispatch_failed",
-  "aborted",
-]);
+const VALID_STATUSES: CronReportStatus[] = ["done", "degraded", "dispatch_failed", "aborted"];
 
 adminNotificationsRoutes.post("/admin/notifications/test", async (c) => {
   const body = await c.req.json<TestBody>().catch(() => ({}) as TestBody);
@@ -48,7 +43,7 @@ adminNotificationsRoutes.post("/admin/notifications/test", async (c) => {
   }
 
   const status: CronReportStatus =
-    body.status && VALID_STATUSES.has(body.status) ? body.status : "done";
+    body.status && VALID_STATUSES.includes(body.status) ? body.status : "done";
   const now = new Date();
   const startedAt = new Date(now.getTime() - 7500).toISOString();
   const endedAt = now.toISOString();
