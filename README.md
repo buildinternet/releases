@@ -26,6 +26,8 @@ bun link           # register this package
 bun link releases  # symlink `releases` into $HOME/.bun/bin
 ```
 
+Working in a git worktree? Run `./scripts/setup-worktree.sh` once after `git worktree add` — it installs dependencies and copies `.env` + `web/.env.local` from the main checkout. Claude Code sessions trigger the dependency install automatically via a `SessionStart` hook; the script is for terminal-driven bootstraps.
+
 If `releases` isn't on your PATH after linking, add `$HOME/.bun/bin` to your shell's PATH:
 
 ```bash
@@ -614,6 +616,8 @@ bun run dev:mcp              # start MCP worker locally (Cloudflare)
 ```
 
 To use the Cloudflare worker API locally with the web frontend, set `RELEASED_API_URL=http://localhost:8787` in `web/.env.local`. The default (`localhost:3456`) uses the Bun-based local API server backed by SQLite.
+
+`wrangler dev` does not pull from Cloudflare's Secrets Store, so any endpoint that reads `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `VOYAGE_API_KEY`, `RELEASED_API_KEY`, or `WEBHOOK_HMAC_MASTER` will fail locally unless you create `workers/api/.dev.vars` with the values you need. The file is gitignored.
 
 Workers live in `workers/api/` (Hono API backed by D1), `workers/discovery/` (Durable Objects + Sandbox for agent-driven source discovery), and `workers/mcp/` (remote MCP server). All three share the same D1 database.
 
