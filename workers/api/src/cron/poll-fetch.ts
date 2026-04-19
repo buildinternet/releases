@@ -897,7 +897,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
 //
 // These helpers hydrate DB rows, build the embed config from Worker secrets,
 // push vectors to Vectorize, and mark the rows as embedded. All failures are
-// swallowed by the shared helpers in src/lib/embed-*.ts so the callers never
+// swallowed by the shared helpers in @releases/lib/embed-* so the callers never
 // need to try/catch.
 
 async function embedReleasesForSource(

@@ -7,7 +7,14 @@
     "./atom": "./src/atom.ts",
     "./atom-http": "./src/atom-http.ts",
     "./config": "./src/config.ts",
+    "./embed-changelog-pipeline": "./src/embed-changelog-pipeline.ts",
+    "./embed-changelogs": "./src/embed-changelogs.ts",
+    "./embed-entities": "./src/embed-entities.ts",
+    "./embed-releases": "./src/embed-releases.ts",
+    "./embedding-cache": "./src/embedding-cache.ts",
+    "./embeddings": "./src/embeddings.ts",
     "./errors": "./src/errors.ts",
-    "./logger": "./src/logger.ts"
+    "./logger": "./src/logger.ts",
+    "./vector-search": "./src/vector-search.ts"
   }
 }

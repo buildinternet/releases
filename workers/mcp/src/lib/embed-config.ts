@@ -16,7 +16,7 @@ interface EmbeddingConfig {
   apiKey?: string;
 }
 
-/** Kept in sync with DEFAULT_MODELS in src/lib/embeddings.ts. */
+/** Kept in sync with DEFAULT_MODELS in packages/lib/src/embeddings.ts. */
 const DEFAULT_MODELS: Record<EmbeddingProvider, string> = {
   voyage: "voyage-4-lite",
   openai: "text-embedding-3-small",

@@ -2,7 +2,7 @@
  * Admin-only endpoints for semantic-search backfill. The CLI cannot talk to
  * Vectorize directly (bindings are Worker-only), so `releases admin embed ...`
  * proxies through these routes. Each POST endpoint pulls up to BATCH_CAP rows
- * where `embedded_at IS NULL`, hands them to the matching `src/lib/embed-*.ts`
+ * where `embedded_at IS NULL`, hands them to the matching `@releases/lib/embed-*`
  * helper from task 6, and returns a summary including `remaining` so the CLI
  * can loop until the backlog is drained.
  *

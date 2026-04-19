@@ -31,7 +31,7 @@ export interface Env {
   RELEASES_INDEX: VectorizeIndex;
   ENTITIES_INDEX: VectorizeIndex;
   CHANGELOG_CHUNKS_INDEX: VectorizeIndex;
-  // Embedding provider config (see src/lib/embeddings.ts).
+  // Embedding provider config (see packages/lib/src/embeddings.ts).
   EMBEDDING_PROVIDER?: string;
   VOYAGE_API_KEY?: SecretBinding;
   OPENAI_API_KEY?: SecretBinding;
