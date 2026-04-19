@@ -37,7 +37,7 @@ Worker tsconfigs map `@releases/lib/*` first to `packages/lib/src/*` (published 
 - `src/api/types.ts` — shared API types, imported by `web/` and all workers (pinned in worker tsconfig `files[]`).
 - `src/lib/` — web + worker shared helpers still in flight for carve-out: `formatters`, `atom`, `atom-http`, `embed-*`, `embedding-cache`, `embeddings`, `media`, `media-url`, `source-edit`, `vector-search`.
 - `src/db/schema-coverage.ts`, `src/db/migrations/` — release_coverage schema + drizzle-kit migration output.
-- `src/agent/` — managed-agents harness (`managed-discovery.ts`, `released.ts`, `run-discovery.ts`, `cli-cmd.ts`, `mcp-cloudflare-browser.ts`). The legacy sandbox-engine `runDiscovery` still lives here but is branch-gated behind `RELEASED_DISCOVERY_ENGINE=sandbox` and not deployable (follow-up tracked in #370/#377).
+- `src/agent/` — managed-agents harness (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `released.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`workers/discovery/`) is the only production entrypoint.
 - `src/shared/` — shared prompts and typed tools used by both agents and the API worker.
 
 ## Conventions

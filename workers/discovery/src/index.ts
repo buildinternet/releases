@@ -7,18 +7,7 @@ import type {
 } from "./types.js";
 
 export { Sandbox } from "@cloudflare/sandbox";
-export { DiscoverySession } from "./discovery-session.js";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
-
-type DiscoveryEngine = "managed-agents" | "sandbox";
-
-function resolveEngine(env: Env, body?: { engine?: string }): DiscoveryEngine {
-  // Request-level override > env var > default
-  if (body?.engine === "sandbox") return "sandbox";
-  if (body?.engine === "managed-agents") return "managed-agents";
-  if (env.RELEASED_DISCOVERY_ENGINE?.toLowerCase() === "sandbox") return "sandbox";
-  return "managed-agents";
-}
 
 const MAX_UPDATE_SOURCES = 20;
 
@@ -63,6 +52,45 @@ async function checkAuth(request: Request, env: Env): Promise<Response | null> {
     return errorResponse("Unauthorized", 401);
   }
   return null;
+}
+
+/**
+ * Guard the API key, resolve the agent config, mint a session ID, and kick the
+ * managed-agents DO alarm. Returns the new sessionId or an error Response.
+ */
+async function startManagedSession(
+  env: Env,
+  errorLabel: string,
+  buildParams: (ctx: {
+    sessionId: string;
+    agentId: string;
+    agentVersion?: number;
+    environmentId: string;
+  }) => Record<string, unknown>,
+): Promise<{ sessionId: string } | Response> {
+  const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
+  if (!anthropicKey) {
+    return errorResponse("ANTHROPIC_API_KEY not configured", 500);
+  }
+
+  const config = getAnthropicConfig(env);
+  if (config instanceof Response) return config;
+  const { agentId, agentVersion, environmentId } = config;
+
+  const sessionId = `ma-${crypto.randomUUID()}`;
+  const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
+  const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
+
+  try {
+    await (maStub as any).startSession(
+      buildParams({ sessionId, agentId, agentVersion, environmentId }),
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    return errorResponse(`${errorLabel}: ${message}`, 500);
+  }
+
+  return { sessionId };
 }
 
 export default {
@@ -124,61 +152,20 @@ export default {
         console.warn("[discovery] Could not check active onboards — proceeding anyway");
       }
 
-      const engine = resolveEngine(env, body as OnboardRequest & { engine?: string });
-      const sessionId = `${engine === "managed-agents" ? "ma" : "sb"}-${crypto.randomUUID()}`;
-
-      if (engine === "managed-agents") {
-        const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
-        if (!anthropicKey) {
-          return errorResponse(
-            "ANTHROPIC_API_KEY not configured — cannot use managed-agents engine",
-            500,
-          );
-        }
-
-        const config = getAnthropicConfig(env);
-        if (config instanceof Response) return config;
-        const { agentId, agentVersion, environmentId } = config;
-
-        const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
-        const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
-
-        try {
-          await (maStub as any).startSession({
-            company: body.company,
-            domain: body.domain,
-            githubOrg: body.githubOrg,
-            sessionId,
-            agentId,
-            agentVersion,
-            environmentId,
-            mode: "onboard",
-          });
-        } catch (err) {
-          const message = err instanceof Error ? err.message : String(err);
-          return errorResponse(`Failed to start managed agents discovery: ${message}`, 500);
-        }
-
-        const response: OnboardResponse = { sessionId, status: "running" };
-        return jsonResponse(response, 202);
-      }
-
-      // ── Sandbox path (legacy) ──
-      const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
-      const stub = env.DISCOVERY_SESSION.get(doId);
-
-      try {
-        await (stub as any).startDiscovery({
+      const result = await startManagedSession(
+        env,
+        "Failed to start managed agents discovery",
+        (ctx) => ({
           company: body.company,
           domain: body.domain,
           githubOrg: body.githubOrg,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return errorResponse(`Failed to start discovery: ${message}`, 500);
-      }
+          mode: "onboard",
+          ...ctx,
+        }),
+      );
+      if (result instanceof Response) return result;
 
-      const response: OnboardResponse = { sessionId, status: "running" };
+      const response: OnboardResponse = { sessionId: result.sessionId, status: "running" };
       return jsonResponse(response, 202);
     }
 
@@ -205,66 +192,35 @@ export default {
         );
       }
 
-      const anthropicKey = await env.ANTHROPIC_API_KEY?.get();
-      if (!anthropicKey) {
-        return errorResponse("ANTHROPIC_API_KEY not configured", 500);
-      }
+      const result = await startManagedSession(env, "Failed to start update session", (ctx) => ({
+        company: body.company,
+        mode: "update",
+        sourceIdentifiers: identifiers,
+        orgId: body.orgId,
+        correlationId: body.correlationId,
+        ...ctx,
+      }));
+      if (result instanceof Response) return result;
 
-      const config = getAnthropicConfig(env);
-      if (config instanceof Response) return config;
-      const { agentId, agentVersion, environmentId } = config;
-
-      const sessionId = `ma-${crypto.randomUUID()}`;
-      const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
-      const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
-
-      try {
-        await (maStub as any).startSession({
-          company: body.company,
-          sessionId,
-          agentId,
-          agentVersion,
-          environmentId,
-          mode: "update",
-          sourceIdentifiers: identifiers,
-          orgId: body.orgId,
-          correlationId: body.correlationId,
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        return errorResponse(`Failed to start update session: ${message}`, 500);
-      }
-
-      return jsonResponse({ sessionId, status: "running", sourceIdentifiers: identifiers }, 202);
+      return jsonResponse(
+        { sessionId: result.sessionId, status: "running", sourceIdentifiers: identifiers },
+        202,
+      );
     }
 
     const statusMatch = url.pathname.match(/^\/onboard\/([\w-]+)\/status$/);
     if (request.method === "GET" && statusMatch) {
       const sessionId = statusMatch[1];
 
-      // Route to the correct DO based on session ID prefix
-      if (sessionId.startsWith("ma-")) {
-        try {
-          const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
-          const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
-          const maStatus = (await (maStub as any).getStatus()) as Record<string, unknown>;
-          if (maStatus.status && maStatus.status !== "idle") {
-            return jsonResponse(maStatus as unknown as StatusResponse);
-          }
-        } catch {
-          /* fall through */
+      try {
+        const maDoId = env.MANAGED_AGENTS_SESSION.idFromName(sessionId);
+        const maStub = env.MANAGED_AGENTS_SESSION.get(maDoId);
+        const maStatus = (await (maStub as any).getStatus()) as Record<string, unknown>;
+        if (maStatus.status && maStatus.status !== "idle") {
+          return jsonResponse(maStatus as unknown as StatusResponse);
         }
-      } else {
-        try {
-          const doId = env.DISCOVERY_SESSION.idFromName(sessionId);
-          const stub = env.DISCOVERY_SESSION.get(doId);
-          const status: StatusResponse = await (stub as any).getStatus();
-          if (status.status !== "idle") {
-            return jsonResponse(status);
-          }
-        } catch {
-          /* fall through */
-        }
+      } catch {
+        /* fall through */
       }
 
       return jsonResponse({ status: "running" } as StatusResponse);

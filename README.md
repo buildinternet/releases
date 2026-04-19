@@ -194,7 +194,7 @@ Point the web frontend at the local API worker by setting `RELEASED_API_URL=http
 
 `wrangler dev` does not pull from Cloudflare's Secrets Store, so any endpoint that reads `ANTHROPIC_API_KEY`, `GITHUB_TOKEN`, `VOYAGE_API_KEY`, `RELEASED_API_KEY`, or `WEBHOOK_HMAC_MASTER` will fail locally unless you create `workers/api/.dev.vars` with the values you need. The file is gitignored.
 
-The discovery worker runs **managed agents** (Anthropic-hosted) by default. Sessions are Durable Objects that stream events from the Anthropic API via typed executor tools. A legacy `sandbox` engine branch remains in code but is gated behind `RELEASED_DISCOVERY_ENGINE=sandbox`; its runtime harness is not currently deployable (teardown tracked in #370 / #377).
+The discovery worker runs **managed agents** (Anthropic-hosted). Sessions are Durable Objects that stream events from the Anthropic API via typed executor tools.
 
 After changing agent tools, system prompt, or skills, run `bun run deploy:agents` to sync both Anthropic-hosted agent definitions. Use `deploy:agents:discovery` or `deploy:agents:worker` to target a single agent. The script tracks content hashes for prompt and tools to avoid unnecessary updates. State is stored in `scripts/agent-skills.json`.
 
