@@ -474,12 +474,8 @@ export async function listSourcesWithOrg(opts?: {
       consecutiveNoChange: sources.consecutiveNoChange,
       consecutiveErrors: sources.consecutiveErrors,
       nextFetchAfter: sources.nextFetchAfter,
-      // Columns added in workers/api/migrations/20260418134132; the
-      // published @buildinternet/releases-core schema doesn't know about
-      // them yet, so reference by raw column name. Safe: local DBs get
-      // both columns from the matching Drizzle migration.
-      medianGapDays: sql<number | null>`median_gap_days`.as("medianGapDays"),
-      lastRetieredAt: sql<string | null>`last_retiered_at`.as("lastRetieredAt"),
+      medianGapDays: sources.medianGapDays,
+      lastRetieredAt: sources.lastRetieredAt,
       orgName: organizations.name,
       orgSlug: organizations.slug,
       productName: products.name,
