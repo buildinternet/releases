@@ -26,7 +26,7 @@ export const DEFAULT_LATEST_COUNT = 10;
 export function buildLatestCacheKey(params: Record<string, string | undefined>): string {
   const entries = Object.entries(params)
     .filter(([, v]) => v !== undefined && v !== "")
-    .sort(([a], [b]) => a.localeCompare(b));
+    .toSorted(([a], [b]) => a.localeCompare(b));
   const qs = entries.map(([k, v]) => `${k}=${v}`).join("&");
   return `${KEY_PREFIX}:${qs}`;
 }

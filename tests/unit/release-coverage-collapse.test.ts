@@ -117,6 +117,6 @@ describe("getLatestReleases — coverage collapse", () => {
     expect(scoped.map((r) => r.id)).toEqual(["rel_canon"]);
 
     const withCoverage = await getLatestReleases({ slug: "test-src", count: 50, includeCoverage: true });
-    expect(withCoverage.map((r) => r.id).sort()).toEqual(["rel_blog", "rel_canon"]);
+    expect(withCoverage.map((r) => r.id).toSorted()).toEqual(["rel_blog", "rel_canon"]);
   });
 });

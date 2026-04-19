@@ -152,8 +152,8 @@ function buildFeed(shell: FeedShell, opts: AtomFeedOptions): string {
   const mostRecent = built
     .map((b) => b.updated)
     .filter((t): t is string => Boolean(t))
-    .sort()
-    .reverse()[0];
+    .toSorted()
+    .toReversed()[0];
   const feedUpdated = mostRecent ?? new Date().toISOString();
 
   const header = [

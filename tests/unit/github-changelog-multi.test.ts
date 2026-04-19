@@ -188,7 +188,7 @@ describe("fetchChangelogFiles", () => {
     });
 
     const files = await fetchChangelogFiles(mkSource());
-    const paths = files.map((f) => f.path).sort();
+    const paths = files.map((f) => f.path).toSorted();
     expect(paths).toEqual([
       "CHANGELOG.md",
       "apps/web/CHANGELOG.md",
@@ -219,7 +219,7 @@ describe("fetchChangelogFiles", () => {
         metadata: JSON.stringify({ changelogPaths: ["custom/dir/CHANGELOG.md"] }),
       }),
     );
-    const paths = files.map((f) => f.path).sort();
+    const paths = files.map((f) => f.path).toSorted();
     expect(paths).toEqual(["CHANGELOG.md", "custom/dir/CHANGELOG.md"]);
   });
 

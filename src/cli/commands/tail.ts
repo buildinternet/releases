@@ -98,7 +98,7 @@ Examples:
       } else if (rows.length === 0) {
         console.log(chalk.yellow("No releases found."));
       } else if (opts.follow) {
-        for (const row of rows.slice().reverse()) {
+        for (const row of rows.slice().toReversed()) {
           console.log(renderStreamLine(row));
         }
       } else {
@@ -134,7 +134,7 @@ Examples:
           if (novel.length === 0) continue;
 
           rememberSeen(seen, novel.map((r) => r.id));
-          const ordered = novel.slice().reverse();
+          const ordered = novel.slice().toReversed();
           if (opts.json) {
             for (const row of ordered) console.log(JSON.stringify(row));
           } else {

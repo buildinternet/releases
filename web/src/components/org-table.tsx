@@ -83,7 +83,7 @@ export function OrgTable({ orgs }: { orgs: OrgListItem[] }) {
     }
   }
 
-  const sorted = useMemo(() => [...orgs].sort((a, b) => {
+  const sorted = useMemo(() => [...orgs].toSorted((a, b) => {
     const dir = sortDir === "asc" ? 1 : -1;
     if (sortKey === "name") {
       const av = (a.name ?? "").toLowerCase();

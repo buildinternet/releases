@@ -140,7 +140,7 @@ describe("handleSitemap", () => {
 
     const result = await callSitemap();
 
-    const pairs = result.products.map((p) => `${p.orgSlug}/${p.slug}`).sort();
+    const pairs = result.products.map((p) => `${p.orgSlug}/${p.slug}`).toSorted();
     expect(pairs).toEqual(["other/thing", "vercel/nextjs", "vercel/turborepo"]);
   });
 

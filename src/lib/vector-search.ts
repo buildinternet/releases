@@ -96,7 +96,7 @@ export function reciprocalRankFusion<T>(
     }
   }
 
-  return Array.from(acc.values()).sort((a, b) => b.score - a.score);
+  return Array.from(acc.values()).toSorted((a, b) => b.score - a.score);
 }
 
 export interface HybridFtsHit {

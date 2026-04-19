@@ -10,7 +10,7 @@ function makeHub() {
     delete: async (keys: string[]) => { for (const k of keys) map.delete(k); return undefined; },
     list: async (opts: { prefix: string; startAfter?: string }) => {
       const out = new Map<string, unknown>();
-      const keys = [...map.keys()].filter((k) => k.startsWith(opts.prefix)).sort();
+      const keys = [...map.keys()].filter((k) => k.startsWith(opts.prefix)).toSorted();
       for (const k of keys) {
         if (opts.startAfter && k <= opts.startAfter) continue;
         out.set(k, map.get(k));

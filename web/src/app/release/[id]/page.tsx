@@ -16,7 +16,7 @@ export async function generateMetadata({ params }: { params: Promise<{ id: strin
     const release = await api.release(id);
     const heading = release.version ?? release.title;
     const rawDesc = release.contentSummary ?? release.content ?? "";
-    const stripped = rawDesc.replace(/[#*\[\]`>_~]/g, "").replace(/\s+/g, " ").trim();
+    const stripped = rawDesc.replace(/[#*[\]`>_~]/g, "").replace(/\s+/g, " ").trim();
     const description = stripped.length > 160 ? stripped.slice(0, 157) + "..." : stripped;
     return {
       title: `${heading} — ${release.sourceName}`,

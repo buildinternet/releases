@@ -33,7 +33,7 @@ orgRoutes.get("/orgs", async (c) => {
   const sparklineMap = new Map<string, number[]>();
   for (const row of sparklineRows) {
     if (!sparklineMap.has(row.org_id)) {
-      sparklineMap.set(row.org_id, new Array(30).fill(0));
+      sparklineMap.set(row.org_id, Array.from({ length: 30 }, () => 0));
     }
     const dayDate = new Date(row.date + "T00:00:00Z");
     const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -55,7 +55,7 @@ orgRoutes.get("/orgs", async (c) => {
     recentReleaseCount: row.recent_release_count,
     lastActivity: row.last_activity ?? null,
     topProducts: row.top_products ? row.top_products.split("||") : [],
-    sparkline: sparklineMap.get(row.id) ?? new Array(30).fill(0),
+    sparkline: sparklineMap.get(row.id) ?? Array.from({ length: 30 }, () => 0),
   }));
 
   return c.json(result);
@@ -559,7 +559,7 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
     aggMap.set(row.week_start, (aggMap.get(row.week_start) ?? 0) + row.cnt);
   }
   const aggregateWeekly = Array.from(aggMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
+    .toSorted(([a], [b]) => a.localeCompare(b))
     .map(([weekStart, count]) => ({ weekStart, count }));
 
   return c.json({
@@ -629,12 +629,12 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
   // Build per-source sparkline arrays (30 entries, index 0 = 30d ago)
   const sourceSparklineMap = new Map<string, number[]>();
   for (const src of orgSources) {
-    sourceSparklineMap.set(src.id, new Array(30).fill(0));
+    sourceSparklineMap.set(src.id, Array.from({ length: 30 }, () => 0));
   }
   for (const row of sparklineRows) {
     let arr = sourceSparklineMap.get(row.source_id);
     if (!arr) {
-      arr = new Array(30).fill(0);
+      arr = Array.from({ length: 30 }, () => 0);
       sourceSparklineMap.set(row.source_id, arr);
     }
     const dayDate = new Date(row.date + "T00:00:00Z");
@@ -649,7 +649,7 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
   const sourcesOut = orgSources.map((src) => ({
     slug: src.slug,
     name: src.name,
-    sparkline: sourceSparklineMap.get(src.id) ?? new Array(30).fill(0),
+    sparkline: sourceSparklineMap.get(src.id) ?? Array.from({ length: 30 }, () => 0),
   }));
 
   // Aggregate per-product by summing source sparklines
@@ -664,7 +664,7 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
 
   const productsOut = productRows.map((prod) => {
     const sourceIds = productSourceMap.get(prod.id) ?? [];
-    const sparkline = new Array(30).fill(0);
+    const sparkline = Array.from({ length: 30 }, () => 0);
     for (const srcId of sourceIds) {
       const srcSparkline = sourceSparklineMap.get(srcId);
       if (srcSparkline) {
@@ -675,7 +675,7 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
   });
 
   // Aggregate total across all sources
-  const aggregate = new Array(30).fill(0);
+  const aggregate = Array.from({ length: 30 }, () => 0);
   for (const src of orgSources) {
     const srcSparkline = sourceSparklineMap.get(src.id);
     if (srcSparkline) {

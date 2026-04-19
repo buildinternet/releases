@@ -22,7 +22,7 @@ export function Sparkline({
 }) {
   const gradientId = `spark-${id}`;
 
-  if (data.length === 0 || data.every((v) => v === 0)) {
+  if (data.every((v) => v === 0)) {
     return (
       <svg
         width={width}

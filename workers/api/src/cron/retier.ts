@@ -103,7 +103,7 @@ export function computeMedianGapDays(isoDates: string[]): number {
   const timestamps = isoDates
     .map((d) => new Date(d).getTime())
     .filter((t) => Number.isFinite(t))
-    .sort((a, b) => a - b);
+    .toSorted((a, b) => a - b);
   if (timestamps.length < 2) return Number.POSITIVE_INFINITY;
   const gaps: number[] = [];
   for (let i = 1; i < timestamps.length; i++) {

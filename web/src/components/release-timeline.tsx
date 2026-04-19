@@ -20,7 +20,7 @@ function mergeBuckets(bucketArrays: WeeklyBucket[][]): WeeklyBucket[] {
     }
   }
   return Array.from(map.entries())
-    .sort(([a], [b]) => a - b)
+    .toSorted(([a], [b]) => a - b)
     .map(([ts, count]) => ({ weekStart: new Date(ts), count }));
 }
 
@@ -235,7 +235,7 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
           colorIndex: source.colorIndex,
         };
       })
-      .sort((a, b) => b.releaseCount - a.releaseCount);
+      .toSorted((a, b) => b.releaseCount - a.releaseCount);
   }, [parsedSources, brushedWeekGrid]);
 
   // Summary stats for the brushed window
@@ -268,7 +268,7 @@ export function ReleaseTimeline({ activity, heatmap, orgSlug, sources, products,
 
   // Sort sources: primary first, then by cadence release count (desc), non-github before github
   const sortedSources = useMemo(() => {
-    return [...sources].sort((a, b) => {
+    return [...sources].toSorted((a, b) => {
       if (a.isPrimary && !b.isPrimary) return -1;
       if (!a.isPrimary && b.isPrimary) return 1;
       const aCadence = cadenceMap.get(a.slug);
