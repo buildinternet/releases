@@ -13,7 +13,7 @@ export const DLQ_QUEUE = "webhook-dlq";
 export interface Env {
   DB: D1Database;
   WEBHOOK_DELIVERIES_AE: AnalyticsEngineDataset;
-  WEBHOOK_HMAC_MASTER: string;
+  WEBHOOK_HMAC_MASTER: { get(): Promise<string | null> };
   PER_SUB_RATE_LIMITER: RateLimit;
   DELIVERY_TIMEOUT_MS: string;
   AUTO_DISABLE_THRESHOLD: string;
@@ -54,6 +54,13 @@ export default {
     const db = createDb(env.DB);
     const timeoutMs = parseInt(env.DELIVERY_TIMEOUT_MS, 10) || 10000;
     const threshold = parseInt(env.AUTO_DISABLE_THRESHOLD, 10) || 50;
+    const masterKey = await env.WEBHOOK_HMAC_MASTER.get();
+    if (!masterKey) {
+      // Without the master we can't sign; retry each message so the queue can
+      // redeliver once the binding is fixed.
+      for (const msg of batch.messages) msg.retry();
+      return;
+    }
 
     for (const msg of batch.messages) {
       const body = msg.body;
@@ -74,7 +81,7 @@ export default {
         continue;
       }
 
-      const result = await deliver(body, { masterKey: env.WEBHOOK_HMAC_MASTER, timeoutMs });
+      const result = await deliver(body, { masterKey, timeoutMs });
 
       writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, {
         subscriptionId: body.subscriptionId,
