@@ -12,7 +12,7 @@
  */
 
 import { describe, it, expect } from "bun:test";
-import { evaluateChangelog } from "../../src/ai/evaluate.js";
+import { evaluateChangelog } from "@releases/ai-internal/evaluate";
 
 interface EvalCase {
   url: string;

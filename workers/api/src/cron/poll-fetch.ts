@@ -322,8 +322,7 @@ export async function fetchOne(
       contentHash: contentHash(raw),
       publishedAt: raw.publishedAt?.toISOString() ?? null,
       // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
-      // and direct rendering both see the underlying CDN asset. Mirrors the
-      // CLI-side filterJunkMedia normalize step in src/lib/media.ts.
+      // and direct rendering both see the underlying CDN asset.
       media: JSON.stringify(
         (raw.media ?? []).map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
       ),

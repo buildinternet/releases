@@ -5,10 +5,11 @@ import { config } from "@releases/lib/config";
 import { resolveCLICmd } from "./cli-cmd.js";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { skillsDir as npmSkillsDir } from "@buildinternet/releases-skills";
-import type { Confidence } from "../lib/discover.js";
 import { CATEGORIES } from "@releases/core-internal/categories";
 
 // ── Types ──────────────────────────────────────────────────────────
+
+export type Confidence = "high" | "medium" | "low";
 
 export interface AgentDiscoveredSource {
   url: string;

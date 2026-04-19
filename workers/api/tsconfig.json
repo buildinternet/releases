@@ -10,17 +10,12 @@
     "paths": {
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
       "@releases/core-internal/*": ["../../packages/core/src/*"],
-      "@releases/adapters/*": ["../../packages/adapters/src/*", "../../src/adapters/*"],
+      "@releases/ai-internal/*": ["../../packages/ai/src/*"],
+      "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
       "@releases/*": ["../../src/*"]
     }
   },
   "include": ["src/**/*.ts"],
-  "files": [
-    "../../src/lib/formatters.ts",
-    "../../src/api/types.ts",
-    "../../src/ai/evaluate.ts",
-    "../../src/lib/providers.ts",
-    "../../src/adapters/feed.ts"
-  ]
+  "files": ["../../src/lib/formatters.ts", "../../src/api/types.ts"]
 }

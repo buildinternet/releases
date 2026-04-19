@@ -1,32 +1,46 @@
 /**
  * Read-path collapse: releases listed in `release_coverage` as the coverage
- * side are hidden by default from latest / list / search. The canonical row
- * stays visible. `--include-coverage` (CLI) / `?include_coverage=true` (API) /
- * `include_coverage: true` (MCP) flips the filter off.
+ * side are hidden by default. `includeCoverage: true` flips the filter off.
  *
- * Exercises `getLatestReleases` against a seeded test DB — same mock.module
- * trick as tests/unit/sitemap.test.ts so the singleton `getDb()` uses our
- * isolated SQLite file.
+ * Exercises the worker's `getLatestReleasesAcross` SQL against an in-memory
+ * bun:sqlite DB with a thin D1-compatible shim.
  */
 
-import { describe, it, expect, beforeAll, afterAll, beforeEach, mock } from "bun:test";
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import { sql } from "drizzle-orm";
-import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { createTestDb, clearAllTables, type TestDatabase, type TestDb } from "../db-helper.js";
 import { organizations, sources, releases } from "@releases/core-internal/schema";
+import { getLatestReleasesAcross } from "../../workers/api/src/queries/releases.js";
 
 let testDatabase: TestDatabase;
 
+/**
+ * Minimal D1Database shim around bun-sqlite (`.prepare().bind().all()`).
+ * Cast to D1 at the call site — root tsconfig doesn't load @cloudflare/workers-types.
+ */
+function asD1(db: TestDb): unknown {
+  const sqlite = (db as unknown as { $client: import("bun:sqlite").Database }).$client;
+  return {
+    prepare(query: string) {
+      return makeStatement(sqlite.prepare(query), []);
+    },
+  };
+}
+
+function makeStatement(stmt: import("bun:sqlite").Statement, bindings: unknown[]) {
+  return {
+    bind(...args: unknown[]) {
+      return makeStatement(stmt, [...bindings, ...args]);
+    },
+    all<T>() {
+      const results = stmt.all(...(bindings as never[])) as T[];
+      return Promise.resolve({ results, success: true, meta: {} });
+    },
+  };
+}
+
 beforeAll(() => {
   testDatabase = createTestDb();
-  mock.module("../../src/db/connection.js", () => ({
-    getDb: () => testDatabase.db,
-  }));
-  mock.module("../../src/lib/mode.js", () => ({
-    isRemoteMode: () => false,
-    isAdminMode: () => false,
-    getApiUrl: () => "",
-    getApiKey: () => "",
-  }));
 });
 
 afterAll(() => {
@@ -35,9 +49,6 @@ afterAll(() => {
 
 beforeEach(() => {
   clearAllTables(testDatabase.db);
-  // Coverage rows FK-cascade when the releases are cleared, so this is a no-op
-  // after `clearAllTables`, but kept explicit for future-readers.
-  testDatabase.db.run(sql`DELETE FROM release_coverage`);
 });
 
 async function seedCluster() {
@@ -55,8 +66,6 @@ async function seedCluster() {
     })
     .run();
 
-  // Canonical release (the "real" launch) + a coverage release (a blog post
-  // that re-announces the same thing).
   db.insert(releases)
     .values([
       {
@@ -84,13 +93,10 @@ async function seedCluster() {
   `);
 }
 
-describe("getLatestReleases — coverage collapse", () => {
+describe("getLatestReleasesAcross — coverage collapse", () => {
   it("hides coverage rows by default, keeping only the canonical release visible", async () => {
     await seedCluster();
-
-    const { getLatestReleases } = await import("../../src/db/queries.js");
-    const rows = await getLatestReleases({ count: 50 });
-
+    const rows = await getLatestReleasesAcross(asD1(testDatabase.db) as never, { limit: 50 });
     const ids = rows.map((r) => r.id);
     expect(ids).toContain("rel_canon");
     expect(ids).not.toContain("rel_blog");
@@ -98,25 +104,26 @@ describe("getLatestReleases — coverage collapse", () => {
 
   it("returns both releases when includeCoverage is true", async () => {
     await seedCluster();
-
-    const { getLatestReleases } = await import("../../src/db/queries.js");
-    const rows = await getLatestReleases({ count: 50, includeCoverage: true });
-
+    const rows = await getLatestReleasesAcross(asD1(testDatabase.db) as never, {
+      limit: 50,
+      includeCoverage: true,
+    });
     const ids = rows.map((r) => r.id);
     expect(ids).toContain("rel_canon");
     expect(ids).toContain("rel_blog");
   });
 
-  it("still collapses when scoped to a source — the coverage row lives under that source too", async () => {
+  it("still collapses when scoped to a source", async () => {
     await seedCluster();
-
-    const { getLatestReleases } = await import("../../src/db/queries.js");
-    const scoped = await getLatestReleases({ slug: "test-src", count: 50 });
+    const scoped = await getLatestReleasesAcross(asD1(testDatabase.db) as never, {
+      sourceId: "src_test",
+      limit: 50,
+    });
     expect(scoped.map((r) => r.id)).toEqual(["rel_canon"]);
 
-    const withCoverage = await getLatestReleases({
-      slug: "test-src",
-      count: 50,
+    const withCoverage = await getLatestReleasesAcross(asD1(testDatabase.db) as never, {
+      sourceId: "src_test",
+      limit: 50,
       includeCoverage: true,
     });
     expect(withCoverage.map((r) => r.id).toSorted()).toEqual(["rel_blog", "rel_canon"]);

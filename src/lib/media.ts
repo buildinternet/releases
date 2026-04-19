@@ -239,10 +239,9 @@ async function runClassifier(
   ambiguous: MediaRef[],
   opts: FilterMediaOptions,
 ): Promise<Awaited<ReturnType<AmbiguousMediaClassifier>>> {
-  const classifier = opts.classifier ?? (await getDefaultClassifier());
-  if (!classifier) return null;
+  if (!opts.classifier) return null;
   try {
-    return await classifier(
+    return await opts.classifier(
       ambiguous.map((m) => ({ url: m.url, alt: m.alt, type: m.type })),
       {
         releaseTitle: opts.releaseTitle,
@@ -252,20 +251,6 @@ async function runClassifier(
     );
   } catch (err) {
     logger.debug("filterJunkMedia: classifier threw, keeping ambiguous items", err);
-    return null;
-  }
-}
-
-/**
- * Lazy import to avoid a static dep cycle between `lib/media.ts` and
- * `ai/classify-media.ts` (which transitively imports config/logger/client).
- */
-async function getDefaultClassifier(): Promise<AmbiguousMediaClassifier | null> {
-  try {
-    const mod = await import("../ai/classify-media.js");
-    return (items, ctx) => mod.classifyAmbiguousMedia(items, ctx);
-  } catch (err) {
-    logger.debug("filterJunkMedia: failed to load default classifier", err);
     return null;
   }
 }

@@ -10,7 +10,7 @@
     "paths": {
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
       "@releases/core-internal/*": ["../../packages/core/src/*"],
-      "@releases/adapters/*": ["../../packages/adapters/src/*", "../../src/adapters/*"],
+      "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
       "@releases/*": ["../../src/*"],
       "drizzle-orm": ["../../node_modules/drizzle-orm"],

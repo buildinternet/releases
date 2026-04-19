@@ -1,124 +1,65 @@
 # Releases
 
-Changelog indexer and registry for AI agents and developers.
+Changelog indexer and registry for AI agents and developers. The user-facing CLI lives out-of-tree at [buildinternet/releases-cli](https://github.com/buildinternet/releases-cli); this monorepo is the backend (API worker + D1), the remote MCP server, the web frontend, and the managed-agents harness.
 
 ## Stack
 
 - **Runtime:** Bun
 - **Language:** TypeScript (strict mode)
-- **Database:** SQLite via Bun's built-in `bun:sqlite` + Drizzle ORM (local), Cloudflare D1 + Drizzle (remote)
+- **Database:** Cloudflare D1 + Drizzle ORM. No local SQLite path in this repo — `bun:sqlite` is only used for test fixtures (`tests/db-helper.ts`).
 - **API:** Cloudflare Worker with Hono (`workers/api/`)
-- **CLI:** Commander
-- **MCP:** `@modelcontextprotocol/sdk` on stdio
-- **AI:** Anthropic SDK (`@anthropic-ai/sdk`)
+- **MCP:** Remote MCP server (`workers/mcp/`)
+- **AI:** Anthropic SDK (`@anthropic-ai/sdk`); managed agents via `@anthropic-ai/claude-agent-sdk`
 
 ## Commands
 
-```bash
-releases <command>            # after `bun link` (see Development Setup in README.md)
-bun src/index.ts <command>    # equivalent, works without linking
-```
-
-The project `.env` is auto-loaded by Bun, so `RELEASED_API_URL` and `RELEASED_API_KEY` are already set — no need to prefix commands with them. Remote mode is the default for day-to-day development.
-
-- Type-check: `npx tsc --noEmit`
+- Type-check: `npx tsc --noEmit` (root + each worker)
 - Tests: `bun test`
-- **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes to complete. Only run when explicitly asked via `bun run eval:parsing`, `bun run eval:evaluation`, or `bun run eval:discovery`.
+- Lint: `bun run lint` (oxlint)
+- Format: `bun run format:check`
+- **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes. `bun run eval:evaluation` is the only in-repo suite (URL evaluation, ~30s). Parsing + discovery evals live in the OSS CLI repo.
 
-## Building
+## Workspaces and carved-out packages
 
-The CLI compiles to a self-contained binary via `bun build --compile`:
+Root `package.json` declares `workers/api`, `web`, and `packages/*` as workspaces. `workers/discovery/`, `workers/mcp/`, and `workers/webhooks/` are intentionally excluded — wrangler manages their dependencies independently.
 
-```bash
-bun run build                 # compile for current platform (macOS)
-bun run build:linux           # cross-compile for Linux
-```
+Shared code is split between published npm packages (`@buildinternet/releases-*`) and private in-tree packages (`packages/`):
 
-Output goes to `dist/releases`. The compiled binary requires remote mode (`RELEASED_API_URL`) — local SQLite mode is only supported via `bun src/index.ts`.
+- `packages/core/` → imported as **`@releases/core-internal`**. Private superset: DB schema (source of truth), `release-upsert`, `tokens`, `changelog-range`, `hash`, `webhook-sign`, and the monorepo copies of `categories`, `dates`, `changelog-slice`, `overview`, `id`, `slug`. The OSS CLI independently publishes `@buildinternet/releases-core` — a **narrower, curated** subset for thin-client use. The two are intentional forks; **do not import `@buildinternet/releases-core` inside this monorepo**.
+- `packages/adapters/` — adapter primitives (`types`, `source-meta`, `content-hash`), the `github`, `cloudflare`, `crawl`, and `feed` adapters. All pure / worker-safe now that the DB-coupled wrappers are gone.
+- `packages/ai/` → imported as **`@releases/ai-internal`**. `evaluate` (URL recommendation + `buildMetadataFromEvaluation`), `playbook` (deterministic markdown generation), `providers` (provider-detection table). Worker-safe.
+- `packages/lib/` — `@releases/lib/{config,errors}` private. `logger` is published as `@buildinternet/releases-lib/logger`.
 
-**Workspaces:** Root `package.json` declares `workers/api`, `web`, `npm/*`, and `packages/*` as workspaces. `workers/discovery/` and `workers/mcp/` are intentionally excluded because Bun eagerly resolves imports across all workspace members at startup — the `cloudflare:workers` imports in those workers' files cause `bun src/index.ts` to fail even though the CLI never imports from them. Wrangler manages those workers' dependencies independently.
+Worker tsconfigs map `@releases/lib/*` first to `packages/lib/src/*` (published carve-outs) and fall through to `src/lib/*` for files not yet carved out (formatters, embed helpers, media helpers, vector search).
 
-**Carved-out packages:** Shared code is split between published npm packages (`@buildinternet/releases-*`) and private in-tree packages (`packages/`):
+## Surviving `src/` tree
 
-- `packages/core/` → imported as **`@releases/core-internal`** inside the monorepo. Private superset: DB schema (source of truth), `release-upsert`, `tokens`, `changelog-range`, `hash`, `webhook-sign`, and the monorepo copies of `categories`, `dates`, `changelog-slice`, `overview`, `id`, `slug`. The OSS CLI (`buildinternet/releases-cli`) independently publishes `@buildinternet/releases-core` — a **narrower, curated** subset of these exports for thin-client use. The two are intentional forks; **do not import `@buildinternet/releases-core` inside this monorepo**. Tracked in #370 (consolidation plan).
-- `packages/adapters/` — adapter primitives (`types`, `source-meta`, `content-hash`), the `github`, `cloudflare`, and `crawl` adapters, and the pure subset of `feed`. DB-coupled adapters (`src/adapters/{feed,agent,scrape,resolve}.ts`) stay in `src/` because they reach into `src/db/queries` and `src/ai/*`.
-- `packages/ai/` → imported as **`@releases/ai-internal`**. Pure, worker-safe pieces of the AI/evaluation surface: `evaluate` (URL recommendation + `buildMetadataFromEvaluation`, no DB), `playbook` (deterministic markdown generation), `providers` (provider-detection table). DB-coupled `applyEvaluation` stays in `src/ai/evaluate.ts` (CLI-only, dies in #370 PR 4b).
-- `packages/lib/` — `@releases/lib/{config,errors}` private. `logger` is published as `@buildinternet/releases-lib/logger`. Published lib exposes only `getDataDir`/`getLogsDir`.
-
-Worker tsconfigs map `@releases/lib/*` to `../../src/lib/*` for files not yet carved out.
+- `src/api/types.ts` — shared API types, imported by `web/` and all workers (pinned in worker tsconfig `files[]`).
+- `src/lib/` — web + worker shared helpers still in flight for carve-out: `formatters`, `atom`, `atom-http`, `embed-*`, `embedding-cache`, `embeddings`, `media`, `media-url`, `source-edit`, `vector-search`.
+- `src/db/schema-coverage.ts`, `src/db/migrations/` — release_coverage schema + drizzle-kit migration output.
+- `src/agent/` — managed-agents harness (`managed-discovery.ts`, `released.ts`, `run-discovery.ts`, `cli-cmd.ts`, `mcp-cloudflare-browser.ts`). The legacy sandbox-engine `runDiscovery` still lives here but is branch-gated behind `RELEASED_DISCOVERY_ENGINE=sandbox` and not deployable (follow-up tracked in #370/#377).
+- `src/shared/` — shared prompts and typed tools used by both agents and the API worker.
 
 ## Conventions
 
-- All logging goes to **stderr** via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`). stdout is reserved for MCP JSON-RPC in serve mode.
-- Source types: `github`, `scrape`, `feed`, `agent`. The `scrape` adapter auto-discovers RSS/Atom/JSON feeds before falling back to Cloudflare + AI. Feed metadata (URL, type, ETag) is cached in `source.metadata`.
-- Crawl mode (`--crawl`) uses Cloudflare's `/crawl` endpoint for multi-page changelogs, stored in `source.metadata.crawlEnabled`. See `packages/adapters/src/crawl.ts`.
-- Use shared DB query helpers in `src/db/queries.ts` instead of inlining drizzle queries.
-- `toReleaseInput()` from `src/ai/query.ts` maps DB rows (nullable) to AI input shape — don't hand-roll.
+- All logging goes to **stderr** via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`).
+- Source types: `github`, `scrape`, `feed`, `agent`. The `scrape` adapter auto-discovers RSS/Atom/JSON feeds before falling back to Cloudflare browser rendering + AI. Feed metadata (URL, type, ETag) is cached in `source.metadata`.
+- Crawl mode uses Cloudflare's `/crawl` endpoint for multi-page changelogs, stored in `source.metadata.crawlEnabled`. See `packages/adapters/src/crawl.ts`.
 - `daysAgoIso()` from `@releases/core-internal/dates` for date cutoffs.
-- CLI data commands support `--json` for machine-readable output.
-- Batch DB inserts chunk in 500s locally (SQLite variable limit). D1's hard limit is **100 bound parameters per prepared statement**, so `workers/api/src/routes/sources.ts` chunks at `floor(100 / binds_per_row)` per INSERT. For `releases` (13 binds/row) that's 7 rows per statement. `inArray(...)` lookups chunk at 90 IDs. Raising without re-checking bind count surfaces as a 500 on `/releases/batch`.
-- Dedup via `UNIQUE(source_id, url)` and the shared `RELEASE_URL_UPSERT` config in `@releases/core-internal/release-upsert` — on URL collision, content is backfilled when incoming is non-empty and existing is empty. Both local and worker paths import it so they can't drift.
-- `releases admin source import <file>` bulk-imports orgs/sources from a JSON manifest (discovery agent handoff). Supports `--dry-run`, `--json`, `--skip-existing`.
-- Smart fetch: `--stale <hours>` respects backoff + `fetchPriority`. `--changed` targets sources with `changeDetectedAt`. `--retry-errors` retries failed fetches. Backoff counters (`consecutiveNoChange`, `consecutiveErrors`) on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h). Default max 200 releases/source; `--max <n>` or `--all` overrides.
-- Categories validated against `CATEGORIES` in `@releases/core-internal/categories` — adding one requires a code change. Tags are freeform (get-or-create via `tags` table). Join tables are `org_tags` and `product_tags` (not polymorphic).
-- Domain aliases (`domain_aliases` table) map alternate domains to orgs/products. Globally unique. CLI: `releases admin {org,product} alias add/remove/list`. Matched in `findOrg()`/`findProduct()` fallback and in search LEFT JOINs.
-- Products are an **optional** grouping layer between orgs and sources (nullable `productId`). Multi-product orgs (e.g. Vercel → Next.js, Turborepo) use them; simple orgs skip. CLI: `releases admin product list/add/edit/remove/adopt`. `product adopt` converts an org into a product under another org.
-- Ignored URLs are **org-scoped** (`ignored_urls`, requires `orgId`); blocked URLs are **global** (`blocked_urls`, spam/bad domains). CLI: `releases admin policy {ignore,block} ...`. Both checked by `isUrlExcluded()`.
-- Release suppression: `releases admin release suppress <id> --reason "..."` hides from all read paths without deleting. `unsuppress` restores.
-- Release coverage: multiple releases can cover one launch (marketing post + changelog + app note). Canonical + coverage items tracked in `release_coverage`; read paths hide coverage-side rows by default. See [coverage.md](docs/architecture/coverage.md) for cluster verb, ingest-time grouping, and cron observability.
-- Org overviews: AI-generated `knowledge_pages` (scope `org`) summarize recent activity. Staleness threshold `OVERVIEW_STALE_DAYS = 30` from `@releases/core-internal/overview`; past threshold surfaces show a `⚠ older than 30 days` warning. See [web.md](docs/architecture/web.md).
-- Release type: `feature` (default) or `rollup` (seasonal/quarterly catch-all like Brex Fall Release). Classified by the parse agent via the `parsing-changelogs` skill. `RELEASE_TYPES`/`ReleaseType` exported from `@releases/core-internal/schema`. `search_releases` and `get_latest_releases` accept a `type` filter. `search_releases` also takes `mode: "lexical"|"semantic"|"hybrid"` and returns a `kind: "release"|"changelog_chunk"` discriminator — see [semantic-search.md](docs/architecture/semantic-search.md).
-- GitHub CHANGELOG files are fetched alongside tagged releases and stored in `source_changelog_files`; refresh piggybacks on every GitHub fetch. Web surfaces the file in a Changelog tab via `GET /v1/sources/:slug/changelog`. See [web.md](docs/architecture/web.md).
-- Entity resolution prefers IDs over slugs. All lookups (CLI, API, agent tools) accept either `{org_|src_|prod_|rel_}...` or a slug. IDs are immutable; prefer them when available.
-- Media pipeline: `filterJunkMedia()` (tracking pixels, favicons, AI-classified chrome) then `processMediaForR2()` uploads survivors to R2. `normalizeMediaUrl()` unwraps Next.js/Vercel image-optimizer URLs before upload. Web renders `r2Url ?? url`; `FallbackImage` shows a placeholder on load error. See [web.md](docs/architecture/web.md).
-- Remote mode fetch requires a filter (`--stale`, `--unfetched`, `--changed`, `--retry-errors`, or a source slug). Bare `releases admin source fetch` is blocked to prevent expensive bulk ops. Remote concurrency defaults to 3, capped at 5.
-
-## Common CLI Patterns
-
-```bash
-releases show <id|slug>         # Inspect any entity by ID (rel_/src_/org_/prod_) or slug
-releases tail                   # Latest releases across all sources (alias: latest)
-releases tail <slug> --count 5  # Latest releases from one source
-releases tail -f                # Follow new releases as they arrive (polls every 60s)
-releases tail -f --interval 30  # Same, with a 30s interval
-releases tail --once --json     # Single poll, JSON output (for scripts/cron)
-releases list <slug> --json     # Inspect a single source
-releases list --json --compact  # Lightweight JSON (id, slug, name, type, org, date)
-releases list --json --limit 20 --page 2  # Paginated JSON output
-releases list --query <text>    # Filter sources by name, slug, or URL
-releases list --has-feed        # Sources with a discovered feed URL
-releases list --product nextjs  # Filter sources by product
-releases admin source list      # Alias for "releases list" (within admin source)
-releases admin source edit <identifier> --name "New Name"  # Edit by ID (src_...) or slug
-releases admin source edit <slug> --slug new-slug --confirm-slug-change  # Rename slug (breaks web links)
-releases admin source fetch <slug> --max 5   # Fetch limited releases for one source
-releases admin source fetch --changed        # Fetch only sources where poll detected changes
-releases admin source fetch-log <slug>       # Check recent fetch history for a source
-releases admin discovery task list           # List active/recent remote sessions
-releases admin discovery task cancel <id>    # Cancel a running remote session
-releases admin product list vercel           # List products for an org
-releases admin product adopt nextjs --into vercel  # Convert org to product
-releases categories             # List valid categories
-releases admin org add "Acme" --category cloud --tags typescript,edge
-releases admin org edit acme --category developer-tools
-releases admin org show acme              # Full details: accounts, tags, sources, products
-releases admin org tag add acme react serverless
-releases admin org tag list acme
-releases admin product add "CLI" --org acme --category developer-tools --tags golang
-releases admin product tag add acme-cli testing
-releases list --category ai     # Filter sources by category
-releases admin source poll                   # Check all feed sources for upstream changes
-releases admin source poll --changed         # Show only sources with detected changes
-releases admin source poll --json            # Machine-readable output
-releases admin notify test                   # Fire a sample cron-report email to EMAIL_NOTIFY_TO
-releases admin notify test --status dispatch_failed  # Preview a "failed" subject/body
-```
-
-- Commands accept entity IDs (`org_...`, `src_...`, `prod_...`, `rel_...`) or slugs. IDs are preferred — slugs can change, IDs cannot. The top-level `show <id|slug>` dispatches by ID prefix, falling back to a slug lookup (org → product → source) for bare strings.
-- `edit` accepts IDs or slugs. Slug renames (`--slug`) require `--confirm-slug-change` because they break web links.
-- `releases list` is aliased as `releases admin source list`.
-- Source slug is always a **positional argument** (e.g., `admin source fetch claude-code`), not a flag. `--source <slug>` is accepted as an alias.
-- `releases admin org list` returns a summary view. Use `releases admin org show <slug>` for full details.
+- D1's hard limit is **100 bound parameters per prepared statement**, so batch INSERTs chunk at `floor(100 / binds_per_row)` per statement. For `releases` (13 binds/row) that's 7 rows per statement. `inArray(...)` lookups chunk at 90 IDs. Raising without re-checking bind count surfaces as a 500 on `/releases/batch`.
+- Dedup via `UNIQUE(source_id, url)` and the shared `RELEASE_URL_UPSERT` config in `@releases/core-internal/release-upsert` — on URL collision, content is backfilled when incoming is non-empty and existing is empty.
+- Smart fetch (cron): `consecutiveNoChange` / `consecutiveErrors` counters on the `sources` table drive exponential backoff (no_change: 1h–48h, errors: 1h–72h).
+- Categories validated against `CATEGORIES` in `@releases/core-internal/categories` — adding one requires a code change. Tags are freeform (get-or-create via `tags` table). Join tables are `org_tags` and `product_tags`.
+- Domain aliases (`domain_aliases` table) map alternate domains to orgs/products. Globally unique. Matched in `findOrg()`/`findProduct()` fallback and in search LEFT JOINs.
+- Products are an **optional** grouping layer between orgs and sources (nullable `productId`). Multi-product orgs (e.g. Vercel → Next.js, Turborepo) use them; simple orgs skip.
+- Ignored URLs are **org-scoped** (`ignored_urls`, requires `orgId`); blocked URLs are **global** (`blocked_urls`, spam/bad domains). Both checked by `isUrlExcluded()`.
+- Release suppression hides from all read paths without deleting (`suppressed=1`).
+- Release coverage: multiple releases can cover one launch (marketing post + changelog + app note). Canonical + coverage items tracked in `release_coverage`; read paths hide coverage-side rows by default. See [coverage.md](docs/architecture/coverage.md).
+- Org overviews: AI-generated `knowledge_pages` (scope `org`) summarize recent activity. Staleness threshold `OVERVIEW_STALE_DAYS = 30` from `@releases/core-internal/overview`. See [web.md](docs/architecture/web.md).
+- Release type: `feature` (default) or `rollup` (seasonal/quarterly catch-all). Classified by the parse agent via the `parsing-changelogs` skill. `search_releases` and `get_latest_releases` accept a `type` filter. `search_releases` also takes `mode: "lexical"|"semantic"|"hybrid"` and returns a `kind: "release"|"changelog_chunk"` discriminator — see [semantic-search.md](docs/architecture/semantic-search.md).
+- GitHub CHANGELOG files are fetched alongside tagged releases and stored in `source_changelog_files`; refresh piggybacks on every GitHub fetch. Web surfaces the file via `GET /v1/sources/:slug/changelog`. See [web.md](docs/architecture/web.md).
+- Entity resolution prefers IDs over slugs. All lookups accept either `{org_|src_|prod_|rel_}...` or a slug. IDs are immutable; prefer them.
+- Media pipeline: `filterJunkMedia()` (tracking pixels, favicons, AI-classified chrome) then `processMediaForR2()` uploads survivors to R2. `normalizeMediaUrl()` unwraps Next.js/Vercel image-optimizer URLs before upload. See [web.md](docs/architecture/web.md).
 
 ## Further reading
 
