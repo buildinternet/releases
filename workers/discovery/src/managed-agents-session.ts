@@ -187,7 +187,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         events: [{ type: "user.message", content: [{ type: "text", text: prompt }] }],
       });
 
-      let capturedState: Record<string, unknown> | null = null;
+      // Mutable container so TS tracks closure mutations correctly
+      const captured: { state: Record<string, unknown> | null } = { state: null };
       let done = false;
       let toolCallCount = 0;
       let toolErrors = 0;
@@ -227,7 +228,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   executor,
                   onScrapeFetch: scrapeHandler,
                   onStateCapture: (state) => {
-                    capturedState = state;
+                    captured.state = state;
                   },
                   onToolCall: (toolName) => {
                     toolCallCount++;
@@ -355,9 +356,10 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         /* non-critical */
       }
 
-      if (capturedState) {
-        capturedState["agentSessionId"] = session.id;
-        await this.ctx.storage.put("result", capturedState);
+      if (captured.state) {
+        const state = captured.state;
+        state["agentSessionId"] = session.id;
+        await this.ctx.storage.put("result", state);
         await this.ctx.storage.put("status", "complete");
 
         await this.notifyStatusHub(
@@ -365,10 +367,10 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             type: "session:complete",
             sessionId,
             company: params.company,
-            sourcesFound: Array.isArray(capturedState["sources"])
-              ? (capturedState["sources"] as unknown[]).length
+            sourcesFound: Array.isArray(state["sources"])
+              ? (state["sources"] as unknown[]).length
               : 0,
-            result: capturedState,
+            result: state,
             ...(sessionUsage ? { usage: sessionUsage } : {}),
           },
           releasedApiKey,

@@ -13,7 +13,6 @@
   },
   "vars": {
     "RELEASED_API_URL": "https://api.releases.sh",
-    "RELEASED_DISCOVERY_ENGINE": "managed-agents",
     "ANTHROPIC_AGENT_ID": "agent_011CZtWpasPtsYjF3aysf2ZH",
     "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU",
     "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB",
@@ -39,7 +38,6 @@
   "durable_objects": {
     "bindings": [
       { "class_name": "Sandbox", "name": "Sandbox" },
-      { "class_name": "DiscoverySession", "name": "DISCOVERY_SESSION" },
       { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
     ],
   },
@@ -47,17 +45,13 @@
     { "new_sqlite_classes": ["Sandbox"], "tag": "v1" },
     { "new_classes": ["DiscoverySession"], "tag": "v2" },
     { "new_classes": ["ManagedAgentsSession"], "tag": "v3" },
+    { "deleted_classes": ["DiscoverySession"], "tag": "v4" },
   ],
   "secrets_store_secrets": [
     {
       "binding": "RELEASED_API_KEY",
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "RELEASED_API_KEY",
-    },
-    {
-      "binding": "GITHUB_TOKEN",
-      "store_id": "a887a71cab084105b79706df23380723",
-      "secret_name": "GITHUB_TOKEN",
     },
     {
       "binding": "ANTHROPIC_API_KEY",
