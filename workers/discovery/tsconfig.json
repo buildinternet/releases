@@ -11,11 +11,11 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "paths": {
-      "@buildinternet/releases-lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
+      "@buildinternet/releases-lib/*": ["../../packages/lib/src/*"],
       "@releases/core-internal/*": ["../../packages/core/src/*"],
       "@releases/ai-internal/*": ["../../packages/ai/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
-      "@releases/lib/*": ["../../packages/lib/src/*", "../../src/lib/*"],
+      "@releases/lib/*": ["../../packages/lib/src/*"],
       "@releases/*": ["../../src/*"]
     }
   },

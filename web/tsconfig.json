@@ -21,7 +21,6 @@
     "paths": {
       "@/*": ["./src/*"],
       "@shared/api/*": ["../src/api/*"],
-      "@shared/*": ["../src/lib/*"],
       "@releases/lib/*": ["../packages/lib/src/*"]
     }
   },

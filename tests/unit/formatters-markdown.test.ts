@@ -3,7 +3,7 @@ import {
   releaseToMarkdown,
   orgReleaseFeedToMarkdown,
   searchToMarkdown,
-} from "../../src/lib/formatters.js";
+} from "@releases/lib/formatters";
 import type { ReleaseDetail, OrgReleaseItem, UnifiedSearchResponse } from "../../src/api/types.js";
 
 // ── Fixtures ───────────────────────────────────────────────────────

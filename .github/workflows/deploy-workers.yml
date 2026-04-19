@@ -38,7 +38,6 @@ jobs:
           filters: |
             _shared: &shared
               - 'packages/**'
-              - 'src/lib/**'
               - 'src/db/**'
               - 'package.json'
               - 'bun.lock'

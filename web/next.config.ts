@@ -24,7 +24,6 @@ const nextConfig: NextConfig = {
     root: path.resolve(__dirname, ".."),
     resolveAlias: {
       "@shared/api/*": "../src/api/*",
-      "@shared/*": "../src/lib/*",
       "@releases/lib/*": "../packages/lib/src/*",
     },
   },
@@ -32,7 +31,6 @@ const nextConfig: NextConfig = {
     config.resolve.alias = {
       ...config.resolve.alias,
       "@shared/api": path.resolve(__dirname, "../src/api"),
-      "@shared": path.resolve(__dirname, "../src/lib"),
       "@releases/lib": path.resolve(__dirname, "../packages/lib/src"),
     };
     return config;
