@@ -11,6 +11,20 @@ Both agents are deployed via `bun run deploy:agents`. Use `deploy:agents:discove
 - **Deterministic pipeline** (ingest, incremental, summarize) stays as direct Messages API calls — not routed through the agent.
 - **URL evaluation** runs pre-checks only (provider detection, feed discovery) via `POST /v1/evaluate`. The discovery agent handles deeper evaluation when needed.
 
+### Skills vs. playbooks
+
+Agents operate on three layers of fetch guidance:
+
+| Layer                 | Scope      | Location                                     | Example                                     |
+| --------------------- | ---------- | -------------------------------------------- | ------------------------------------------- |
+| **Global skills**     | All orgs   | `src/agent/skills/**/SKILL.md`               | `parsing-changelogs`, `managing-sources`    |
+| **Playbook**          | One org    | `knowledge_pages` rows with `scope=playbook` | "Vercel canary releases ship empty content" |
+| **parseInstructions** | One source | `sources.parseInstructions` column           | "Skip entries tagged `marketing`"           |
+
+**A playbook is a per-org skill.** Same mental model as the global skill corpus — imperative instructions an LLM follows when fetching — scoped to one organization. When an agent fetches any of an org's sources, it should load that org's playbook into context alongside the global skills. Global skills teach general patterns; the playbook overrides with org-specific behavior (naming conventions, what counts as a release, rollup cadence, cross-source dedup rules); per-source `parseInstructions` add source-specific hints on top.
+
+Playbook notes are written by the discovery/worker agents themselves (via the `seeding-playbooks` skill for bulk creation, or inline during fetch when something new is learned). They're owned by agents, not humans — think "the agent's own notebook for this company," not "operator documentation."
+
 ## Claude Code Plugin
 
 A Claude Code plugin at `plugins/claude/releases/` exposes the registry for use in Claude Code sessions. It connects to the remote MCP server at `mcp.releases.sh` and adapts the managed agent prompts for CLI-based operation.

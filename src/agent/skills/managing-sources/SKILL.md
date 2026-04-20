@@ -101,10 +101,12 @@ When onboarding an org, if you find a single top-level changelog alongside produ
 
 ## Playbooks
 
-Each org has a **playbook** — a README that tells any agent how to efficiently work with that org's changelog sources. The playbook has two layers:
+**A playbook is a per-org skill for fetching that org's releases.** Same mental model as the global skills in this corpus, scoped to one organization. Agents load the playbook into context alongside global skills whenever they fetch from this org — the playbook overrides general rules with the org's specific behavior (naming conventions, what counts as a release, cross-source dedup, rollup cadence).
+
+Each playbook has two layers:
 
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
-- **Agent notes** — free-form markdown that you fully control. This is the most important part of the playbook. Write it like a README for a teammate who needs to fetch releases from this org without asking questions.
+- **Agent notes** — free-form markdown that you fully control. This is the most important part of the playbook. Write it like a skill an agent will follow — imperative, action-oriented, concise — not like human documentation.
 
 **Always read the playbook before fetching or working with an org's sources.** Typed tool: `get_playbook` with organization param. CLI: `releases admin playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 

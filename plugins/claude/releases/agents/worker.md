@@ -35,6 +35,8 @@ Key commands:
 
 ## Fetch Operations
 
+**Mental model:** treat the org's playbook as a per-org skill — same shape as the global skills you've been given, but authored by prior agents and scoped to _this_ org. Load it before fetching any of that org's sources; let it override general rules.
+
 When asked to fetch sources:
 
 1. **Read the playbook first.** Run `releases admin playbook <org>` to understand how each source works — extraction patterns, known quirks, and what to expect. If the notes are empty, note this in your output so the discovery agent can populate them later.
