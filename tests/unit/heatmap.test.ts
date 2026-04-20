@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { sql } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { organizations, sources, releases } from "@releases/core-internal/schema";
+import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 
 let testDatabase: TestDatabase;
 testDatabase = createTestDb();

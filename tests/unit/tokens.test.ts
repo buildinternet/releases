@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { countTokens, countTokensSafe, estimateTokens } from "@releases/core-internal/tokens";
+import { countTokens, countTokensSafe, estimateTokens } from "@buildinternet/releases-core/tokens";
 
 describe("countTokens", () => {
   it("returns 0 for the empty string", () => {

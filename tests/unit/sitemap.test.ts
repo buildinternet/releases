@@ -6,7 +6,7 @@
 import { describe, test, expect, beforeEach, afterAll, beforeAll } from "bun:test";
 import { Hono } from "hono";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { organizations, sources, products, releases } from "@releases/core-internal/schema";
+import { organizations, sources, products, releases } from "@buildinternet/releases-core/schema";
 import { sitemapRoutes } from "../../workers/api/src/routes/sitemap.js";
 
 let testDatabase: TestDatabase;

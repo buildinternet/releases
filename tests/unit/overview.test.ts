@@ -4,7 +4,7 @@ import {
   isOverviewStale,
   overviewAgeDays,
   overviewPreview,
-} from "@releases/core-internal/overview";
+} from "@buildinternet/releases-core/overview";
 
 const DAY = 24 * 60 * 60 * 1000;
 

@@ -2,7 +2,7 @@ import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
-import { organizations, sources, releases, usageLog } from "@releases/core-internal/schema";
+import { organizations, sources, releases, usageLog } from "@buildinternet/releases-core/schema";
 
 type AnthropicCall = { model: string; messages: unknown; system: string };
 const anthropicCalls: AnthropicCall[] = [];

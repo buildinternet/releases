@@ -14,7 +14,7 @@ import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
-import { CATEGORIES } from "@releases/core-internal/categories";
+import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
 
 function truncate(text: string, maxLength: number): string {

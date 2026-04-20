@@ -12,7 +12,7 @@ import {
   tags,
   orgTags,
   productTags,
-} from "@releases/core-internal/schema";
+} from "@buildinternet/releases-core/schema";
 
 let testDatabase: TestDatabase;
 

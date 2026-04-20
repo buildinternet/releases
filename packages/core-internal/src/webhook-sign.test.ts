@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { deriveSigningKey, signPayload, verifySignature } from "./webhook-sign.js";
+import { deriveSigningKey, signPayload, verifySignature } from "./webhook-sign";
 
 describe("webhook signing", () => {
   const master = "a".repeat(64);

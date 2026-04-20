@@ -11,10 +11,10 @@ import {
   orgTags,
   domainAliases,
   knowledgePages,
-} from "@releases/core-internal/schema";
-import { daysAgoIso } from "@releases/core-internal/dates";
-import { isValidCategory } from "@releases/core-internal/categories";
-import { toSlug } from "@releases/core-internal/slug";
+} from "@buildinternet/releases-core/schema";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { isValidCategory } from "@buildinternet/releases-core/categories";
+import { toSlug } from "@buildinternet/releases-core/slug";
 import {
   isConflictError,
   computeAvgPerWeek,

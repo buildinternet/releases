@@ -5,7 +5,7 @@ import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 import { mkdtempSync, rmSync } from "fs";
 import { tmpdir } from "os";
-import * as schema from "@releases/core-internal/schema";
+import * as schema from "@buildinternet/releases-core/schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const migrationsFolder = join(__dirname, "..", "src", "db", "migrations");

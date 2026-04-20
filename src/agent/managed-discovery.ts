@@ -12,7 +12,7 @@ import { resolve } from "path";
 import { config, getDataDir } from "@releases/lib/config";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { logger } from "@buildinternet/releases-lib/logger";
-import { CATEGORIES } from "@releases/core-internal/categories";
+import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { buildDiscoveryPrompt } from "./released.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./released.js";
 import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";

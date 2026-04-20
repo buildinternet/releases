@@ -10,7 +10,7 @@
 
 import { sha256Hex } from "@releases/core-internal/hash";
 import { AdapterError } from "@releases/lib/errors";
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import { extractFromBody } from "./extract-from-body.js";
 import {
   DIRECT_FETCH_SYSTEM_PROMPT,

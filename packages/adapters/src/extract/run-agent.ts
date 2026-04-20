@@ -8,7 +8,7 @@ import type Anthropic from "@anthropic-ai/sdk";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { AdapterError } from "@releases/lib/errors";
 import { fetchCloudflareMarkdown } from "../cloudflare.js";
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import { extractFromBody } from "./extract-from-body.js";
 import {
   extractReleasesToolFull,

@@ -1,5 +1,5 @@
 import { sqliteTable, text, index } from "drizzle-orm/sqlite-core";
-import { releases } from "@releases/core-internal/schema";
+import { releases } from "@buildinternet/releases-core/schema";
 
 export const releaseCoverage = sqliteTable(
   "release_coverage",

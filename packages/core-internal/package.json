@@ -1,0 +1,15 @@
+{
+  "name": "@releases/core-internal",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./release-upsert": "./src/release-upsert.ts",
+    "./hash": "./src/hash.ts",
+    "./webhook-sign": "./src/webhook-sign.ts"
+  },
+  "dependencies": {
+    "@buildinternet/releases-core": "workspace:*",
+    "drizzle-orm": "^0.45.2"
+  }
+}

@@ -7,7 +7,12 @@
 
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "./db.js";
-import { sources, organizations, products, knowledgePages } from "@releases/core-internal/schema";
+import {
+  sources,
+  organizations,
+  products,
+  knowledgePages,
+} from "@buildinternet/releases-core/schema";
 import {
   generatePlaybookHeader,
   extractNotesFromLegacyPlaybook,

@@ -6,7 +6,7 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
-import { countTokensSafe } from "@releases/core-internal/tokens";
+import { countTokensSafe } from "@buildinternet/releases-core/tokens";
 import type { ExtractDeps, ExtractedEntry } from "./types.js";
 import {
   extractReleasesToolFull,

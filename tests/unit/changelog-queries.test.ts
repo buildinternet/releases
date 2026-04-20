@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterAll } from "bun:test";
 import { eq } from "drizzle-orm";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
-import { organizations, sources, sourceChangelogFiles } from "@releases/core-internal/schema";
-import { isTruncated } from "@releases/core-internal/changelog-slice";
+import { organizations, sources, sourceChangelogFiles } from "@buildinternet/releases-core/schema";
+import { isTruncated } from "@buildinternet/releases-core/changelog-slice";
 
 let testDatabase: TestDatabase;
 testDatabase = createTestDb();

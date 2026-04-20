@@ -8,9 +8,9 @@ import {
   orgAccounts,
   tags,
   productTags,
-} from "@releases/core-internal/schema";
-import { toSlug } from "@releases/core-internal/slug";
-import { isValidCategory } from "@releases/core-internal/categories";
+} from "@buildinternet/releases-core/schema";
+import { toSlug } from "@buildinternet/releases-core/slug";
+import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { isConflictError, getOrCreateTagsD1, productWhere, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";

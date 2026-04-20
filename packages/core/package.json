@@ -1,21 +1,32 @@
 {
-  "name": "@releases/core-internal",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@buildinternet/releases-core",
+  "version": "0.16.0",
+  "description": "Pure helpers shared by the Releases registry — schema, categories, slicing, IDs, slugs, tokens.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "packages/core"
+  },
   "exports": {
     "./schema": "./src/schema.ts",
-    "./release-upsert": "./src/release-upsert.ts",
     "./categories": "./src/categories.ts",
     "./dates": "./src/dates.ts",
-    "./tokens": "./src/tokens.ts",
     "./changelog-range": "./src/changelog-range.ts",
     "./changelog-slice": "./src/changelog-slice.ts",
     "./overview": "./src/overview.ts",
     "./id": "./src/id.ts",
     "./slug": "./src/slug.ts",
-    "./hash": "./src/hash.ts",
-    "./webhook-sign": "./src/webhook-sign.ts"
+    "./tokens": "./src/tokens.ts",
+    "./cli-contracts": "./src/cli-contracts.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   },
   "dependencies": {
     "drizzle-orm": "^0.45.2",

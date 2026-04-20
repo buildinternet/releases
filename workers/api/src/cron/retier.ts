@@ -1,6 +1,6 @@
 import { drizzle } from "drizzle-orm/d1";
 import { eq, sql } from "drizzle-orm";
-import { sources, releases } from "@releases/core-internal/schema";
+import { sources, releases } from "@buildinternet/releases-core/schema";
 
 // Median gap thresholds in days. Sources with a median gap at or below
 // NORMAL_MAX are retiered to "normal" (polled every 4h), between NORMAL_MAX

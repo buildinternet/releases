@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { eq, sql } from "drizzle-orm";
-import { organizations, sources, releases, fetchLog } from "@releases/core-internal/schema";
+import { organizations, sources, releases, fetchLog } from "@buildinternet/releases-core/schema";
 import type { RawRelease } from "@releases/adapters/types";
 
 // Stateful stub for @releases/adapters/feed — configured per test via nextFeedResult.

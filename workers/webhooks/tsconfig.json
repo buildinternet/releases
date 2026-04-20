@@ -11,8 +11,9 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "paths": {
+      "@buildinternet/releases-core/*": ["../../packages/core/src/*"],
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*"],
-      "@releases/core-internal/*": ["../../packages/core/src/*"],
+      "@releases/core-internal/*": ["../../packages/core-internal/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*"],
       "@releases/*": ["../../src/*"]

@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync, mkdirSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 import { sha256Hex } from "@releases/core-internal/hash";
-import { CATEGORIES } from "@releases/core-internal/categories";
+import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { parseArgs } from "../../src/shared/parse-args.js";
 import { buildDiscoverySystemPrompt } from "../../src/shared/discovery-prompt.js";
 import { buildWorkerSystemPrompt } from "../../src/shared/worker-prompt.js";

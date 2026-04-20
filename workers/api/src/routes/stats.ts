@@ -8,8 +8,8 @@ import {
   releases,
   products,
   fetchLog,
-} from "@releases/core-internal/schema";
-import { daysAgoIso } from "@releases/core-internal/dates";
+} from "@buildinternet/releases-core/schema";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type { Env } from "../index.js";
 
 export const statsRoutes = new Hono<Env>();

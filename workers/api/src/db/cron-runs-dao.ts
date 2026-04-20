@@ -1,6 +1,6 @@
 import { and, eq, lt } from "drizzle-orm";
 import { cronRuns } from "./schema-cron.js";
-import { newCronRunId } from "@releases/core-internal/id";
+import { newCronRunId } from "@buildinternet/releases-core/id";
 
 /** Cap on JSON arrays stored in dispatch_error_detail / sessions_started. */
 export const CRON_RUNS_JSON_ARRAY_CAP = 20;

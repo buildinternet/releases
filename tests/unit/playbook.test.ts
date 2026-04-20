@@ -4,7 +4,7 @@ import {
   assemblePlaybook,
   extractNotesFromLegacyPlaybook,
 } from "@releases/ai-internal/playbook";
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 
 function makeSource(overrides: Partial<Source> = {}): Source {
   return {

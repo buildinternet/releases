@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { releases, type NewRelease } from "./schema.js";
+import { releases, type NewRelease } from "@buildinternet/releases-core/schema";
 
 export type ReleaseUpsertRow = NewRelease;
 

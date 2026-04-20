@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { eq } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { domainAliases, organizations } from "@releases/core-internal/schema";
+import { domainAliases, organizations } from "@buildinternet/releases-core/schema";
 import { isConflictError } from "../utils.js";
 import type { Env } from "../index.js";
 

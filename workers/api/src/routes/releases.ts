@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { releases, organizations, sources } from "@releases/core-internal/schema";
+import { releases, organizations, sources } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceWhere, parseBoolParam, resolveR2Url } from "../utils.js";

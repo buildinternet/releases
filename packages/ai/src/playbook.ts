@@ -12,7 +12,7 @@
  * The full playbook is assembled at read time by combining header + notes.
  */
 
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta";
 
 export interface ProductInfo {

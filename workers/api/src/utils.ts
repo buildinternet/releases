@@ -1,6 +1,6 @@
 import { eq, inArray } from "drizzle-orm";
-import { tags, sources, organizations, products } from "@releases/core-internal/schema";
-import { toSlug } from "@releases/core-internal/slug";
+import { tags, sources, organizations, products } from "@buildinternet/releases-core/schema";
+import { toSlug } from "@buildinternet/releases-core/slug";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/lib/media-url.js";
 
 /** Resolve a source by ID (src_ prefix) or slug */
