@@ -1,14 +1,13 @@
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { mkdtempSync, rmSync } from "fs";
+import { mkdtempSync, rmSync, readdirSync, readFileSync } from "fs";
 import { tmpdir } from "os";
 import * as schema from "@buildinternet/releases-core/schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const migrationsFolder = join(__dirname, "..", "src", "db", "migrations");
+const MIGRATIONS_DIR = join(__dirname, "..", "workers", "api", "migrations");
 
 export type TestDb = ReturnType<typeof drizzle<typeof schema>>;
 
@@ -19,10 +18,20 @@ export interface TestDatabase {
 }
 
 /**
- * Create an isolated SQLite database for testing.
- * Runs all Drizzle migrations to match the current schema.
- * Call cleanup() when done to remove the temp directory.
+ * Apply every .sql file under workers/api/migrations/ in sorted filename
+ * order to the given sqlite database. Matches what `wrangler d1 migrations
+ * apply` does in prod.
  */
+export function applyMigrations(sqlite: Database): void {
+  const files = readdirSync(MIGRATIONS_DIR)
+    .filter((f) => f.endsWith(".sql"))
+    .sort();
+  for (const f of files) {
+    const sql = readFileSync(join(MIGRATIONS_DIR, f), "utf8");
+    sqlite.run(sql);
+  }
+}
+
 export function createTestDb(): TestDatabase {
   const tmpDir = mkdtempSync(join(tmpdir(), "releases-test-"));
   const dbPath = join(tmpDir, "test.db");
@@ -31,7 +40,7 @@ export function createTestDb(): TestDatabase {
   sqlite.run("PRAGMA foreign_keys=ON");
   const db = drizzle(sqlite, { schema });
 
-  migrate(db, { migrationsFolder });
+  applyMigrations(sqlite);
 
   return {
     db,

@@ -50,14 +50,35 @@ jobs:
           BASE_REF: ${{ github.base_ref }}
         run: ./scripts/check-migration-filenames.sh "origin/$BASE_REF"
 
-      - name: Check for uncommitted schema drift
+      - name: Pair schema changes with a wrangler migration (PR only)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          RELEASED_DATA_DIR=/tmp/drizzle-drift-check bunx drizzle-kit generate > /tmp/drift.log 2>&1
-          if ! grep -q "No schema changes" /tmp/drift.log; then
-            echo "ERROR: schema.ts has changes that weren't captured by 'bun run db:generate'." >&2
-            tail -20 /tmp/drift.log >&2
+          # If a schema file changed on this PR, require at least one added
+          # file under workers/api/migrations/. Catches schema changes that
+          # ship without a paired wrangler migration.
+          schema_changed=$(git diff --name-only "origin/$BASE_REF"...HEAD -- \
+            'packages/core/src/schema.ts' \
+            'src/db/schema-coverage.ts' \
+            'workers/api/src/db/schema-cron.ts' || true)
+          if [ -z "$schema_changed" ]; then
+            echo "No schema files changed — pairing check skipped."
+            exit 0
+          fi
+          added=$(git diff --name-only --diff-filter=A "origin/$BASE_REF"...HEAD -- 'workers/api/migrations/*.sql' || true)
+          if [ -z "$added" ]; then
+            echo "ERROR: schema files changed, but this PR adds no file under workers/api/migrations/." >&2
+            echo "Changed schema files:" >&2
+            echo "$schema_changed" | sed 's/^/  /' >&2
+            echo "Hand-author the wrangler migration and commit it alongside the schema change." >&2
+            echo "Preview the SQL with: bun run db:generate (output goes to .drizzle-out/)." >&2
             exit 1
           fi
+          echo "Schema files changed:"
+          echo "$schema_changed" | sed 's/^/  /'
+          echo "Found new wrangler migration file(s):"
+          echo "$added" | sed 's/^/  /'
 
       - name: Run tests
         run: bun run test

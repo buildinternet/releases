@@ -1,1 +1,0 @@
-ALTER TABLE `organizations` ADD `avatar_url` text;

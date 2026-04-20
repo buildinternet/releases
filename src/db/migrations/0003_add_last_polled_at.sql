@@ -1,1 +1,0 @@
-ALTER TABLE `sources` ADD `last_polled_at` text;

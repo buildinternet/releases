@@ -73,3 +73,6 @@ tests/evals/results/
 # npm publish artifacts (compiled binaries + temp auth)
 npm/*/releases
 npm/.npmrc
+
+# drizzle-kit generate output — scaffold only, source of truth is workers/api/migrations/
+.drizzle-out/

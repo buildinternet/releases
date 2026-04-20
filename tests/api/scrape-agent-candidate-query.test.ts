@@ -1,14 +1,14 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { applyMigrations } from "../db-helper";
 import { sources, organizations } from "@buildinternet/releases-core/schema";
 import { queryCandidates } from "../../workers/api/src/cron/scrape-agent-sweep";
 
 function seed() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite);
-  migrate(db, { migrationsFolder: "src/db/migrations" });
+  applyMigrations(sqlite);
 
   db.insert(organizations)
     .values([
@@ -134,7 +134,7 @@ describe("queryCandidates", () => {
   it("returns empty when nothing is flagged", async () => {
     const sqlite = new Database(":memory:");
     const db = drizzle(sqlite);
-    migrate(db, { migrationsFolder: "src/db/migrations" });
+    applyMigrations(sqlite);
     const result = await queryCandidates(db, { cap: 10 });
     expect(result.rows).toEqual([]);
     expect(result.skippedOverCap).toBe(0);

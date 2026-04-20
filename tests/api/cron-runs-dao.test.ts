@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { applyMigrations } from "../db-helper";
 import { eq } from "drizzle-orm";
 import { cronRuns } from "../../workers/api/src/db/schema-cron";
 import { insertRunningRow, finalizeRunRow } from "../../workers/api/src/db/cron-runs-dao";
@@ -9,7 +9,7 @@ import { insertRunningRow, finalizeRunRow } from "../../workers/api/src/db/cron-
 function makeDb() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite);
-  migrate(db, { migrationsFolder: "src/db/migrations" });
+  applyMigrations(sqlite);
   return { db, sqlite };
 }
 
