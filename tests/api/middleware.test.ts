@@ -21,12 +21,12 @@ const { cacheControl } = (await import("../../workers/api/src/middleware/cache.j
 // Auth middleware
 // ---------------------------------------------------------------------------
 
-describe("authMiddleware", () => {
-  /** Create a mock SecretBinding that returns the given value from .get() */
-  function mockSecret(value: string) {
-    return { get: () => Promise.resolve(value) };
-  }
+/** Create a mock SecretBinding that returns the given value from .get() */
+function mockSecret(value: string) {
+  return { get: () => Promise.resolve(value) };
+}
 
+describe("authMiddleware", () => {
   function createApp() {
     type Env = { Bindings: { RELEASED_API_KEY?: { get(): Promise<string> } } };
     const app = new Hono<Env>();

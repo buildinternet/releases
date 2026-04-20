@@ -197,8 +197,8 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     name: row.name,
     type: row.type,
     url: row.url,
-    isPrimary: row.is_primary ? true : false,
-    isHidden: row.is_hidden ? true : false,
+    isPrimary: Boolean(row.is_primary),
+    isHidden: Boolean(row.is_hidden),
     fetchPriority: (row.fetch_priority ?? null) as "normal" | "low" | "paused" | null,
     releaseCount: row.release_count,
     latestVersion: row.latest_version_by_date ?? row.latest_version_by_fetch ?? null,
@@ -314,10 +314,10 @@ orgRoutes.post("/orgs", async (c) => {
 
     if (body.tags && body.tags.length > 0) {
       const tagRows = await getOrCreateTagsD1(db, body.tags);
-      const now = new Date().toISOString();
+      const tagCreatedAt = new Date().toISOString();
       await db
         .insert(orgTags)
-        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: tagCreatedAt })))
         .onConflictDoNothing();
     }
 
@@ -497,8 +497,10 @@ orgRoutes.delete("/orgs/:slug/tags", async (c) => {
 
   for (const tagName of body.tags) {
     const tagSlug = toSlug(tagName);
+    // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
     const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
     if (tag) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
       await db.delete(orgTags).where(and(eq(orgTags.orgId, org.id), eq(orgTags.tagId, tag.id)));
     }
   }
@@ -662,7 +664,7 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   }
   const aggregateWeekly = Array.from(aggMap.entries())
     .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([weekStart, count]) => ({ weekStart, count }));
+    .map(([weekStart, releaseCount]) => ({ weekStart, count: releaseCount }));
 
   return c.json({
     org: { slug: org.slug, name: org.name },
@@ -880,10 +882,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
       } catch {
         return [];
       }
-    })().map((m: any) => ({
-      ...m,
-      r2Url: resolveR2Url(m.r2Key, mediaOrigin),
-    })),
+    })().map((m: any) => Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) })),
     source: {
       slug: r.source_slug,
       name: r.source_name,

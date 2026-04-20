@@ -455,6 +455,7 @@ export async function processMediaForR2(
   const BATCH_SIZE = 5;
   for (let i = 0; i < uploadable.length; i += BATCH_SIZE) {
     const batch = uploadable.slice(i, i + BATCH_SIZE);
+    // oxlint-disable-next-line no-await-in-loop -- R2 upload backpressure; process BATCH_SIZE concurrently, then await before next batch
     const results = await Promise.allSettled(batch.map((m) => uploadToR2(m.url, sourceSlug)));
 
     for (let j = 0; j < batch.length; j++) {

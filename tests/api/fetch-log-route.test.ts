@@ -82,6 +82,7 @@ describe("fetch-log route", () => {
     });
 
     for (const sourceId of ["src_1", "src_2", "src_1"]) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential: insertion order must be preserved for the length/filter assertion below
       await fetchApi(
         new Request("http://test/v1/fetch-log", {
           method: "POST",

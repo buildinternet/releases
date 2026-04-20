@@ -264,6 +264,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                 if (block.type === "text" && block.text) {
                   const text = truncate(block.text, 500);
                   lastAgentMessage = block.text;
+                  // oxlint-disable-next-line no-await-in-loop -- agent event stream; status hub notifications must be ordered
                   await this.notifyStatusHub(
                     {
                       type: "session:progress",
@@ -298,6 +299,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               for (const block of (event as any).content ?? []) {
                 if (block.type === "text" && block.text) {
                   const text = truncate(block.text, 200);
+                  // oxlint-disable-next-line no-await-in-loop -- agent event stream; status hub notifications must be ordered
                   await this.notifyStatusHub(
                     {
                       type: "session:progress",

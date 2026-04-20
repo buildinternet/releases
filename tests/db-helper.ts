@@ -25,7 +25,7 @@ export interface TestDatabase {
 export function applyMigrations(sqlite: Database): void {
   const files = readdirSync(MIGRATIONS_DIR)
     .filter((f) => f.endsWith(".sql"))
-    .sort();
+    .toSorted();
   for (const f of files) {
     const sql = readFileSync(join(MIGRATIONS_DIR, f), "utf8");
     sqlite.run(sql);

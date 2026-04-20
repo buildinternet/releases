@@ -116,10 +116,7 @@ releaseRoutes.get("/releases/latest", async (c) => {
         } catch {
           return [];
         }
-      })().map((m: any) => ({
-        ...m,
-        r2Url: resolveR2Url(m.r2Key, mediaOrigin),
-      })),
+      })().map((m: any) => Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) })),
       source: {
         slug: r.source_slug,
         name: r.source_name,

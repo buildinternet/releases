@@ -35,6 +35,7 @@ export class ReleaseHub extends DurableObject {
       const store = storageAsEventStore(this.ctx.storage);
       const stored: ReleaseEvent[] = [];
       for (const payload of body.events) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential DO storage append: event ordering must be preserved
         stored.push(await appendEvent(store, payload, EVENT_BUFFER_SIZE));
       }
       // Fan out to attached sockets. Iteration order is insertion.

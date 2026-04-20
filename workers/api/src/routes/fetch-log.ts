@@ -36,7 +36,7 @@ fetchLogRoutes.post("/fetch-log", async (c) => {
   let inserted;
   try {
     [inserted] = await db.insert(fetchLog).values(body).returning();
-  } catch (err) {
+  } catch {
     return c.json({ error: "insert_failed", message: "Failed to insert fetch log" }, 500);
   }
 

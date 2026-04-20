@@ -182,8 +182,8 @@ sourceRoutes.get("/sources", async (c) => {
     orgName: src.org_name,
     productName: src.product_name,
     productSlug: src.product_slug,
-    isPrimary: src.is_primary ? true : false,
-    isHidden: src.is_hidden ? true : false,
+    isPrimary: Boolean(src.is_primary),
+    isHidden: Boolean(src.is_hidden),
     metadata: src.metadata ?? null,
     releaseCount: src.release_count,
     latestVersion: src.latest_version ?? null,
@@ -400,6 +400,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
       // RELEASE_URL_UPSERT has a conditional WHERE clause that causes the
       // database to omit rows where the update didn't apply. The returned
       // rows are the authoritative set of affected ids + content.
+      // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
       const rows = await db
         .insert(releases)
         .values(chunk)
@@ -466,6 +467,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
             }> = [];
             for (let i = 0; i < insertedIds.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
               const slice = insertedIds.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+              // oxlint-disable-next-line no-await-in-loop -- D1 chunked select (100 bind param limit for inArray)
               const rows = await db
                 .select({
                   id: releases.id,
@@ -484,6 +486,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
 
             const category = orgRow?.category ?? null;
             await embedAndUpsertReleases({
+              // oxlint-disable-next-line no-map-spread -- copy-on-write required; r is a DB row
               releases: rowsToEmbed.map((r) => ({
                 ...r,
                 orgId: src.orgId,
@@ -502,6 +505,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
                 const now = new Date().toISOString();
                 for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
                   const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+                  // oxlint-disable-next-line no-await-in-loop -- D1 chunked update (100 bind param limit)
                   await db
                     .update(releases)
                     .set({ embeddedAt: now })
@@ -552,6 +556,7 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
         try {
           const CHUNK = 500;
           for (let i = 0; i < vectorIds.length; i += CHUNK) {
+            // oxlint-disable-next-line no-await-in-loop -- Vectorize chunked delete (API batch limit)
             await c.env.RELEASES_INDEX.deleteByIds(vectorIds.slice(i, i + CHUNK));
           }
         } catch (err) {
@@ -1021,10 +1026,9 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
-    media: JSON.parse(r.media ?? "[]").map((m: any) => ({
-      ...m,
-      r2Url: resolveR2Url(m.r2Key, mediaOrigin),
-    })),
+    media: JSON.parse(r.media ?? "[]").map((m: any) =>
+      Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
+    ),
   }));
 
   // Derive latest{Version,Date}. Page 1 uses already-fetched rows; page > 1 uses the parallel query above.
@@ -1315,7 +1319,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
       .onConflictDoNothing()
       .returning();
     return c.json(release ?? { skipped: true }, release ? 201 : 200);
-  } catch (err) {
+  } catch {
     return c.json({ error: "insert_failed", message: "Failed to insert release" }, 500);
   }
 });
@@ -1346,10 +1350,9 @@ sourceRoutes.get("/releases/:id", async (c) => {
   const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
-  const media = JSON.parse((release.media as string) ?? "[]").map((m: any) => ({
-    ...m,
-    r2Url: resolveR2Url(m.r2Key, mediaOrigin),
-  }));
+  const media = JSON.parse((release.media as string) ?? "[]").map((m: any) =>
+    Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
+  );
 
   const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
   const result = {

@@ -187,6 +187,7 @@ async function run(args: ParsedArgs): Promise<BackfillRow[]> {
   for (const row of filtered) {
     // Fetch the full file content via the existing changelog GET. Passing
     // no range params returns the full body verbatim.
+    // oxlint-disable-next-line no-await-in-loop -- sequential: fetch then conditionally patch each row; API rate limit applies
     const cl = await apiGet<{ content: string; path: string; bytes: number }>(
       `/v1/sources/${encodeURIComponent(row.sourceSlug)}/changelog?path=${encodeURIComponent(row.path)}`,
     );
@@ -208,6 +209,7 @@ async function run(args: ParsedArgs): Promise<BackfillRow[]> {
         `bytes=${row.bytes} old=${oldTokens ?? "null"} new=${newTokens} delta=${delta >= 0 ? "+" : ""}${delta}`,
     );
     if (args.apply) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential: must patch after fetch completes; API rate limit applies
       await apiPatch(`/v1/sources/${encodeURIComponent(row.sourceSlug)}/changelog/tokens`, {
         tokens: newTokens,
         path: row.path,

@@ -243,6 +243,7 @@ adminEmbedRoutes.post("/admin/embed/releases", async (c) => {
       // D1 has a ~100 param limit per statement; chunk conservatively.
       for (let i = 0; i < ids.length; i += 50) {
         const slice = ids.slice(i, i + 50);
+        // oxlint-disable-next-line no-await-in-loop -- D1 chunked update (100 bind param limit)
         await db.update(releases).set({ embeddedAt: now }).where(inArray(releases.id, slice));
       }
     },
@@ -258,6 +259,19 @@ adminEmbedRoutes.post("/admin/embed/releases", async (c) => {
 });
 
 // ── POST /admin/embed/entities ────────────────────────────────────────────
+
+function urlHost(url: string | null): string | null {
+  if (!url) return null;
+  try {
+    return new URL(url).hostname;
+  } catch {
+    return null;
+  }
+}
+
+function needsWork(r: { nullChunks: number | null; totalChunks: number | null }): boolean {
+  return Number(r.totalChunks ?? 0) === 0 || Number(r.nullChunks ?? 0) > 0;
+}
 
 interface EmbedEntitiesBody {
   kind?: EntityKind;
@@ -276,15 +290,6 @@ adminEmbedRoutes.post("/admin/embed/entities", async (c) => {
   // Inputs are built to a uniform shape so `embedAndUpsertEntities` can handle
   // them in one batch — all three share ENTITIES_INDEX.
   const entities: EmbedEntityInput[] = [];
-
-  function urlHost(url: string | null): string | null {
-    if (!url) return null;
-    try {
-      return new URL(url).hostname;
-    } catch {
-      return null;
-    }
-  }
 
   async function fetchUnembedded(kind: EntityKind, n: number): Promise<void> {
     if (n <= 0) return;
@@ -481,10 +486,6 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
     nullChunks: sql<number>`SUM(CASE WHEN ${sourceChangelogChunks.vectorId} IS NULL THEN 1 ELSE 0 END)`,
     totalChunks: sql<number>`COUNT(${sourceChangelogChunks.id})`,
   };
-  function needsWork(r: { nullChunks: number | null; totalChunks: number | null }): boolean {
-    return Number(r.totalChunks ?? 0) === 0 || Number(r.nullChunks ?? 0) > 0;
-  }
-
   const fileRows = await db
     .select(baseSelect)
     .from(sourceChangelogFiles)
@@ -534,6 +535,7 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
 
   for (const row of todo) {
     const file = row.file;
+    // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed; each file's chunk state feeds embedAndUpsertChangelogFile
     const existingChunks = await db
       .select({
         id: sourceChangelogChunks.id,
@@ -545,6 +547,7 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
       .where(eq(sourceChangelogChunks.sourceChangelogFileId, file.id));
 
     let applied = false;
+    // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
     await embedAndUpsertChangelogFile({
       file: {
         id: file.id,
@@ -564,6 +567,7 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
         if (diff.toDelete.length > 0) {
           const ids = diff.toDelete.map((d) => d.id);
           for (let i = 0; i < ids.length; i += 50) {
+            // oxlint-disable-next-line no-await-in-loop -- D1 chunked delete (100 bind param limit)
             await db
               .delete(sourceChangelogChunks)
               .where(inArray(sourceChangelogChunks.id, ids.slice(i, i + 50)));
@@ -573,6 +577,7 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
         // Update unchanged rows' offset/length/heading in case the surrounding
         // file shifted — content hash matched so they don't need re-embedding.
         for (const u of diff.unchanged) {
+          // oxlint-disable-next-line no-await-in-loop -- sequential per-chunk offset update (diff is typically small)
           await db
             .update(sourceChangelogChunks)
             .set({
@@ -604,6 +609,7 @@ adminEmbedRoutes.post("/admin/embed/changelogs", async (c) => {
           // D1 caps bound parameters per statement at ~100. This table has
           // 11 columns, so 9 rows per batch keeps us under the limit.
           for (let i = 0; i < inserts.length; i += 9) {
+            // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit; 11 cols → 9 rows/batch)
             await db.insert(sourceChangelogChunks).values(inserts.slice(i, i + 9));
           }
         }

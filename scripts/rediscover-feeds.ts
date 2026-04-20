@@ -177,6 +177,7 @@ async function main(): Promise<void> {
   const verdicts: Verdict[] = [];
   for (const row of candidates) {
     log(`  ${row.slug} ← ${row.url}`);
+    // oxlint-disable-next-line no-await-in-loop -- sequential: external HTTP probes per source; rate limit applies
     const v = await processOne(row);
     let statusLabel: string = v.status;
     if (v.status === "promoted") statusLabel = apply ? "promoted" : "would promote";

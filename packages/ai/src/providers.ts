@@ -392,6 +392,7 @@ async function fetchHttpSignals(url: string): Promise<HttpSignals | null> {
     const decoder = new TextDecoder();
     let html = "";
     while (true) {
+      // oxlint-disable-next-line no-await-in-loop -- streaming response body chunk by chunk until </head> found
       const { done, value } = await reader.read();
       if (done) break;
       html += decoder.decode(value, { stream: true });

@@ -224,22 +224,24 @@ describe("unwrapImageProxyUrls", () => {
 
 // ── filterJunkMedia (full pipeline) ─────────────────────────────────
 
-describe("filterJunkMedia — full two-stage pipeline", () => {
-  // Stub classifier: the tests inject this so we don't hit the real
-  // Anthropic API. The production default classifier lives in
-  // src/ai/classify-media.ts and is wired up when `classifier` is omitted.
-  const makeClassifier = (
-    rules: Record<string, { decision: "keep" | "drop"; confidence: "high" | "low" }>,
-  ): AmbiguousMediaClassifier => {
-    return async (items) =>
-      items.map((item) => ({
-        url: item.url,
-        decision: rules[item.url]?.decision ?? "keep",
-        confidence: rules[item.url]?.confidence ?? "low",
-        reason: "test stub",
-      }));
-  };
+// Stub classifier: the tests inject this so we don't hit the real
+// Anthropic API. The production default classifier lives in
+// src/ai/classify-media.ts and is wired up when `classifier` is omitted.
+const makeClassifier = (
+  rules: Record<string, { decision: "keep" | "drop"; confidence: "high" | "low" }>,
+): AmbiguousMediaClassifier => {
+  return async (items) =>
+    items.map((item) => ({
+      url: item.url,
+      decision: rules[item.url]?.decision ?? "keep",
+      confidence: rules[item.url]?.confidence ?? "low",
+      reason: "test stub",
+    }));
+};
 
+const nullClassifier: AmbiguousMediaClassifier = async () => null;
+
+describe("filterJunkMedia — full two-stage pipeline", () => {
   it("drops pre-check junk without calling the classifier", async () => {
     let called = false;
     const classifier: AmbiguousMediaClassifier = async () => {
@@ -306,8 +308,7 @@ describe("filterJunkMedia — full two-stage pipeline", () => {
 
   it("keeps ambiguous items when the classifier is unavailable (returns null)", async () => {
     const media: MediaRef[] = [{ type: "image", url: "https://example.com/avatars/someone.png" }];
-    const classifier: AmbiguousMediaClassifier = async () => null;
-    const result = await filterJunkMedia(media, "body", { classifier });
+    const result = await filterJunkMedia(media, "body", { classifier: nullClassifier });
     expect(result.media.length).toBe(1);
   });
 

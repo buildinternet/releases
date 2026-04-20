@@ -58,6 +58,7 @@ describe("appendEvent", () => {
 
   it("trims the oldest event when buffer exceeds max size", async () => {
     const store = makeStore();
+    // oxlint-disable-next-line no-await-in-loop -- sequential: each append must complete to get monotonic seq before next
     for (let i = 0; i < 4; i++) await appendEvent(store, payload(`r${i}`), 2);
     const events = await replayEvents(store, 0);
     expect(events.map((e) => e.seq)).toEqual([3, 4]);
@@ -67,6 +68,7 @@ describe("appendEvent", () => {
 describe("replayEvents", () => {
   it("returns events with seq > since in order", async () => {
     const store = makeStore();
+    // oxlint-disable-next-line no-await-in-loop -- sequential: each append must complete to get monotonic seq before next
     for (let i = 0; i < 3; i++) await appendEvent(store, payload(`r${i}`), 1000);
     const events = await replayEvents(store, 1);
     expect(events.map((e) => e.seq)).toEqual([2, 3]);
@@ -97,6 +99,7 @@ describe("oldestSeq", () => {
 
   it("returns the oldest retained seq after a trim", async () => {
     const store = makeStore();
+    // oxlint-disable-next-line no-await-in-loop -- sequential: each append must complete to get monotonic seq before next
     for (let i = 0; i < 4; i++) await appendEvent(store, payload(`r${i}`), 2);
     expect(await oldestSeq(store)).toBe(3);
   });

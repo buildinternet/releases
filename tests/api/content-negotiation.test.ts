@@ -8,15 +8,15 @@ const { wantsMarkdown, markdownResponse, varyOnAccept } =
 // wantsMarkdown
 // ---------------------------------------------------------------------------
 
-describe("wantsMarkdown", () => {
-  function mockContext(accept?: string) {
-    return {
-      req: {
-        header: (name: string) => (name === "accept" ? accept : undefined),
-      },
-    };
-  }
+function mockContext(accept?: string) {
+  return {
+    req: {
+      header: (name: string) => (name === "accept" ? accept : undefined),
+    },
+  };
+}
 
+describe("wantsMarkdown", () => {
   it("returns true when Accept is text/markdown", () => {
     expect(wantsMarkdown(mockContext("text/markdown"))).toBe(true);
   });

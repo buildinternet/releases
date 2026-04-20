@@ -73,9 +73,11 @@ export class StatusHub extends DurableObject {
     const entries = [...this.stdoutBuffer.entries()];
     this.stdoutBuffer.clear();
     for (const [sid, newLines] of entries) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential DO storage read: each session's prior lines needed before merge
       const existing = (await this.ctx.storage.get<string[]>(`stdout:${sid}`)) ?? [];
       const merged = [...existing, ...newLines];
       const trimmed = merged.length > STDOUT_MAX_LINES ? merged.slice(-STDOUT_MAX_LINES) : merged;
+      // oxlint-disable-next-line no-await-in-loop -- sequential DO storage write: ordering preserved per session
       await this.ctx.storage.put(`stdout:${sid}`, trimmed);
     }
   }
@@ -399,6 +401,7 @@ export class StatusHub extends DurableObject {
         session.status = "error";
         session.error = "Session timed out (no updates received)";
         session.lastUpdatedAt = now;
+        // oxlint-disable-next-line no-await-in-loop -- sequential DO storage write: session state updated in place during iteration
         await this.ctx.storage.put(`session:${session.sessionId}`, session);
       }
       if (!session.dismissed) {

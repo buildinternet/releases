@@ -68,12 +68,14 @@ export default {
     for (const msg of batch.messages) {
       const body = msg.body;
 
+      // oxlint-disable-next-line no-await-in-loop -- webhook delivery; per-subscriber rate limiter check must be sequential
       const limit = await env.PER_SUB_RATE_LIMITER.limit({ key: body.subscriptionId });
       if (!limit.success) {
         msg.retry({ delaySeconds: 6 });
         continue;
       }
 
+      // oxlint-disable-next-line no-await-in-loop -- webhook delivery; subscription lookup per message must be sequential
       const sub = await getWebhookSubscriptionById(db, body.subscriptionId);
       if (!sub || !sub.enabled) {
         writeDeliveryAttempt(
@@ -84,6 +86,7 @@ export default {
         continue;
       }
 
+      // oxlint-disable-next-line no-await-in-loop -- webhook delivery; each subscriber delivered sequentially with retry/backoff
       const result = await deliver(body, { masterKey, timeoutMs });
 
       writeDeliveryAttempt(env.WEBHOOK_DELIVERIES_AE, {
@@ -99,16 +102,20 @@ export default {
 
       const at = new Date().toISOString();
       if (result.outcome === "success") {
+        // oxlint-disable-next-line no-await-in-loop -- webhook delivery; success summary update per-subscriber
         await updateWebhookSubscriptionSummary(db, body.subscriptionId, { kind: "success", at });
         msg.ack();
       } else {
+        // oxlint-disable-next-line no-await-in-loop -- webhook delivery; failure summary update per-subscriber
         await updateWebhookSubscriptionSummary(db, body.subscriptionId, {
           kind: "error",
           at,
           message: result.errorMessage ?? "unknown",
         });
+        // oxlint-disable-next-line no-await-in-loop -- webhook delivery; re-fetch subscription to check auto-disable threshold
         const fresh = await getWebhookSubscriptionById(db, body.subscriptionId);
         if (fresh && fresh.consecutiveFailures >= threshold) {
+          // oxlint-disable-next-line no-await-in-loop -- webhook delivery; auto-disable subscription after threshold failures
           await setWebhookSubscriptionEnabled(
             db,
             body.subscriptionId,
