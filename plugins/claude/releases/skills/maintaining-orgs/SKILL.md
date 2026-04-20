@@ -4,12 +4,11 @@ description: >
   Routine maintenance of indexed organizations — fetch all sources, regenerate
   overviews, verify data quality. Use when asked to "update", "refresh", or
   "maintain" one or more orgs, or when doing periodic sweeps of the registry.
-  Local-only (Claude Code CLI against production API).
 ---
 
 # Maintaining Orgs
 
-Keep indexed organizations current by fetching their sources and regenerating overviews. This is a local-only workflow — run it from Claude Code with the `releases` CLI linked and remote mode active.
+Keep indexed organizations current by fetching their sources and regenerating overviews. Driven from Claude Code using the installed `releases` CLI against the production API — no managed-agent dispatch required.
 
 ## When to Use
 
@@ -78,17 +77,16 @@ Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each
 
 Each agent prompt should include:
 
-1. The working directory (`/Users/zachdunn/Code/released`)
-2. That `releases` is bun-linked and remote mode is active
-3. The org slug
-4. The `org refresh` command to run
-5. Instructions to report back concisely: sources fetched, new releases, overview status
+1. That the `releases` CLI is installed and configured with an admin API key
+2. The org slug
+3. The `org refresh` command to run
+4. Instructions to report back concisely: sources fetched, new releases, overview status
 
 Example prompt template:
 
 ```
-You are operating the Released CLI (`releases`) — a bun-linked changelog indexer.
-Working directory: /Users/zachdunn/Code/released
+You are operating the Released CLI (`releases`) — a hosted changelog registry client.
+The CLI is installed and authenticated against the production API.
 
 Your task: refresh **{Org Name}** (slug: `{slug}`).
 
