@@ -111,7 +111,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
       const anthropicApiKey = await this.env.ANTHROPIC_API_KEY.get();
       if (!anthropicApiKey) {
-        await this.fail(sessionId, params.company, "ANTHROPIC_API_KEY not configured", releasedApiKey);
+        await this.fail(
+          sessionId,
+          params.company,
+          "ANTHROPIC_API_KEY not configured",
+          releasedApiKey,
+        );
         return;
       }
 
