@@ -6,7 +6,7 @@ import {
   type FormatSourceDetail,
   type FormatOrgDetail,
 } from "@releases/lib/formatters";
-import type { KnowledgePageItem } from "@releases/lib/api-types";
+import type { KnowledgePageItem, OrgReleaseItem } from "@releases/lib/api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 
@@ -444,6 +444,96 @@ describe("orgToMarkdown", () => {
   it("omits overview_url when overview is absent", () => {
     const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
     expect(md).not.toContain("overview_url:");
+  });
+
+  // ── Recent Releases preview ──
+
+  const recent: OrgReleaseItem[] = [
+    {
+      id: "rel_1",
+      version: "15.0.0",
+      title: "Next.js 15",
+      summary: "React 19 support landed",
+      publishedAt: "2024-06-15T00:00:00Z",
+      url: "https://github.com/vercel/next.js/releases/tag/v15.0.0",
+      source: { slug: "next-js", name: "Next.js", type: "github" },
+    },
+    {
+      id: "rel_2",
+      version: "2.0.0",
+      title: "2.0.0",
+      summary: "Turborepo rewrite",
+      publishedAt: "2024-06-01T00:00:00Z",
+      url: null,
+      source: { slug: "turbo", name: "Turborepo", type: "github" },
+    },
+  ];
+
+  it("renders Recent Releases section when recentReleases provided", () => {
+    const md = orgToMarkdown(fullOrg, { recentReleases: recent });
+    expect(md).toContain("## Recent Releases");
+    expect(md).toContain('source="next-js"');
+    expect(md).toContain('version="15.0.0"');
+    expect(md).toContain("React 19 support landed");
+    expect(md).toContain("### Next.js 15");
+  });
+
+  it("marks recent releases as truncated and includes lead-in prose", () => {
+    const md = orgToMarkdown(fullOrg, { recentReleases: recent });
+    expect(md).toContain('truncated="true"');
+    expect(md).toContain("Summaries below");
+  });
+
+  it("adds canonical internal URL when baseUrl provided and release has id", () => {
+    const md = orgToMarkdown(fullOrg, {
+      recentReleases: recent,
+      baseUrl: "https://releases.sh",
+    });
+    expect(md).toContain('canonical="https://releases.sh/release/rel_1"');
+    expect(md).toContain('canonical="https://releases.sh/release/rel_2"');
+  });
+
+  it("omits canonical when baseUrl is missing", () => {
+    const md = orgToMarkdown(fullOrg, { recentReleases: recent });
+    expect(md).not.toContain("canonical=");
+  });
+
+  it("omits Recent Releases section when recentReleases is empty", () => {
+    const md = orgToMarkdown(fullOrg, { recentReleases: [] });
+    expect(md).not.toContain("## Recent Releases");
+  });
+
+  it("skips title heading when title equals version", () => {
+    const md = orgToMarkdown(fullOrg, { recentReleases: recent });
+    // Turborepo's title is "2.0.0" which matches version — no heading.
+    expect(md).not.toContain("### 2.0.0");
+    expect(md).toContain("Turborepo rewrite");
+  });
+
+  it("includes Fetching more guidance with URLs when baseUrl provided", () => {
+    const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
+    expect(md).toContain("## Fetching more");
+    expect(md).toContain("https://releases.sh/vercel/{source-slug}");
+    expect(md).toContain("https://releases.sh/vercel.atom");
+    expect(md).not.toContain("{source-slug}.md");
+  });
+
+  it("adds canonical URL to Product tags when baseUrl provided", () => {
+    const md = orgToMarkdown(fullOrg, { baseUrl: "https://releases.sh" });
+    expect(md).toContain('canonical="https://releases.sh/vercel/product/nextjs"');
+  });
+
+  it("omits Product canonical when baseUrl is missing", () => {
+    const md = orgToMarkdown(fullOrg);
+    expect(md).toContain("<Product");
+    const productLine = md.split("\n").find((l) => l.includes("<Product"));
+    expect(productLine).not.toContain("canonical=");
+  });
+
+  it("omits Fetching more when org has no sources", () => {
+    const org: FormatOrgDetail = { ...fullOrg, sources: [] };
+    const md = orgToMarkdown(org, { baseUrl: "https://releases.sh" });
+    expect(md).not.toContain("## Fetching more");
   });
 });
 
