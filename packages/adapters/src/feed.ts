@@ -59,9 +59,24 @@ const WELL_KNOWN_PATHS = [
 ];
 
 /**
+ * Suffixes appended to the page's own path when probing for sibling feeds.
+ * Ordered from most specific to most generic so the first hit wins cleanly.
+ */
+const PAGE_SIBLING_SUFFIXES = [
+  "/rss.xml",
+  "/feed.xml",
+  "/feed",
+  "/rss",
+  "/atom.xml",
+  ".rss",
+  ".atom",
+];
+
+/**
  * Discover a feed URL for a given page URL.
  * 1. Fetch the HTML and look for <link rel="alternate"> feed tags.
- * 2. Probe well-known feed paths in parallel.
+ * 2. Probe sibling paths derived from the page URL's own path.
+ * 3. Probe well-known feed paths at the origin root as a last resort.
  * Prefers JSON feeds over XML when multiple are available.
  */
 export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | null> {
@@ -69,6 +84,21 @@ export async function discoverFeed(pageUrl: string): Promise<DiscoveredFeed | nu
   if (fromHead) return fromHead;
 
   const base = new URL(pageUrl);
+
+  // Step 2: sibling-path probes relative to the page URL's own path.
+  // Skip when the page is the root (pathname "/" or empty) — those probes
+  // would duplicate the origin-root well-known probes below.
+  const trimmedPath = base.pathname.replace(/\/$/, "");
+  if (trimmedPath && trimmedPath !== "") {
+    const siblingResults = await Promise.allSettled(
+      PAGE_SIBLING_SUFFIXES.map((suffix) => probeFeedPath(base.origin, `${trimmedPath}${suffix}`)),
+    );
+    for (const result of siblingResults) {
+      if (result.status === "fulfilled" && result.value) return result.value;
+    }
+  }
+
+  // Step 3: fall back to well-known origin-root paths.
   const results = await Promise.allSettled(
     WELL_KNOWN_PATHS.map((path) => probeFeedPath(base.origin, path)),
   );
