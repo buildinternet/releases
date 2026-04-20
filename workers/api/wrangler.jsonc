@@ -41,6 +41,10 @@
     "EMAIL_NOTIFY_TO": "zach@releases.sh",
     "EMAIL_FROM": "notifications@releases.sh",
     "ADMIN_BASE_URL": "https://api.releases.sh",
+    // Event-driven KV purge of GET /v1/releases/latest. Ships "false" to
+    // run the helper in shadow mode (log-only); flip to "true" after a
+    // week of parity-check logs. See #408.
+    "INVALIDATION_ENABLED": "false",
   },
   "d1_databases": [
     {
@@ -57,7 +61,7 @@
     { "binding": "CHANGELOG_CHUNKS_INDEX", "index_name": "changelog-chunks-v1" },
   ],
   // KV namespaces. LATEST_CACHE fronts GET /v1/releases/latest with a
-  // 60s TTL (keys: latest:v1:<sorted-qs>). Optional — `withLatestCache`
+  // 300s TTL (keys: latest:v1:<sorted-qs>). Optional — `withLatestCache`
   // degrades to pass-through when the binding is absent.
   "kv_namespaces": [
     {

@@ -28,6 +28,8 @@ import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/lib/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
 import { publishReleaseEvents } from "../events/publish.js";
+import { invalidateLatestCache } from "../lib/latest-cache.js";
+import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 
 // ── Tier intervals (hours) ──
@@ -45,7 +47,7 @@ const FETCH_CONCURRENCY = 3;
 // ── Main entry point ──
 
 export async function pollAndFetch(
-  env: FetchOneEnv & { DB: D1Database; CRON_ENABLED?: string },
+  env: FetchOneEnv & InvalidationEnv & { DB: D1Database; CRON_ENABLED?: string },
 ): Promise<void> {
   if (env.CRON_ENABLED === "false") {
     console.log("[cron] Disabled via CRON_ENABLED=false, skipping");
@@ -79,10 +81,28 @@ export async function pollAndFetch(
         (s.type === "scrape" && getSourceMeta(s).feedUrl != null),
     );
 
+  // Aggregate insert count across the whole cron run so the latest-cache
+  // invalidator fires once per cron invocation, not once per source.
+  let totalInserted = 0;
+  let lastInsertingSource: string | undefined;
+
   if (fetchable.length > 0) {
     console.log(`[cron] Fetching ${fetchable.length} changed source(s)`);
-    await runWithConcurrency(fetchable, FETCH_CONCURRENCY, async (source) => {
-      return fetchOne(db, source, env);
+    const results = await runWithConcurrency(fetchable, FETCH_CONCURRENCY, async (source) => {
+      const r = await fetchOne(db, source, env);
+      if (r.releasesInserted > 0) {
+        totalInserted += r.releasesInserted;
+        lastInsertingSource = source.id;
+      }
+      return r;
+    });
+    void results;
+  }
+
+  if (totalInserted > 0) {
+    await invalidateLatestCache(env, {
+      nReleases: totalInserted,
+      sourceId: lastInsertingSource ?? "cron",
     });
   }
 

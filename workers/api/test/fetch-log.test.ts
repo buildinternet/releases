@@ -402,11 +402,15 @@ describe("fetchOne → dry-run", () => {
 describe("POST /v1/sources/:slug/fetch query params", () => {
   function mkApp(db: ReturnType<typeof mkDb>) {
     const fakeEnv = { DB: db, STATUS_HUB: statusHubStub };
+    const fakeCtx = {
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
     const app = new Hono();
     const v1 = new Hono();
     v1.route("/", sourceRoutes);
     app.route("/v1", v1);
-    return (req: Request) => app.fetch(req, fakeEnv);
+    return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
   }
 
   it("passes dryRun=true through so releases are not inserted", async () => {
@@ -488,11 +492,15 @@ describe("POST /v1/sources/:slug/fetch — scrape source inline dispatch", () =>
 
   function mkApp(db: ReturnType<typeof mkDb>) {
     const fakeEnv = { DB: db, STATUS_HUB: statusHubStub };
+    const fakeCtx = {
+      waitUntil: () => {},
+      passThroughOnException: () => {},
+    } as unknown as ExecutionContext;
     const app = new Hono();
     const v1 = new Hono();
     v1.route("/", sourceRoutes);
     app.route("/v1", v1);
-    return (req: Request) => app.fetch(req, fakeEnv);
+    return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
   }
 
   it("runs inline (fetched=true) for a scrape source that has a discovered feedUrl", async () => {
