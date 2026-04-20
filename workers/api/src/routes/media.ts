@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { sql, count } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { mediaAssets } from "@releases/core-internal/schema";
+import { mediaAssets } from "@buildinternet/releases-core/schema";
 import { authMiddleware } from "../middleware/auth.js";
 import type { UploadResult } from "@releases/lib/media.js";
 

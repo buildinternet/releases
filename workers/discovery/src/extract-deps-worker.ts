@@ -5,7 +5,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import type { ExtractDeps, ExtractRepo, UsageEntry } from "@releases/adapters/extract";
 
 export interface WorkerDepsEnv {

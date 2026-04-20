@@ -35,6 +35,10 @@ const ID_PREFIXES: Record<string, EntityType> = {
 // nanoid() default alphabet is A-Za-z0-9_- and length 21
 const BARE_NANOID = /^[A-Za-z0-9_-]{21}$/;
 
+export function isLikelyBareId(s: string): boolean {
+  return BARE_NANOID.test(s);
+}
+
 export function getEntityType(id: string): EntityType {
   for (const [prefix, type] of Object.entries(ID_PREFIXES)) {
     if (id.startsWith(prefix)) return type;

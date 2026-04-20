@@ -1,4 +1,4 @@
-import type { Source, ReleaseType } from "@releases/core-internal/schema";
+import type { Source, ReleaseType } from "@buildinternet/releases-core/schema";
 
 export interface RawRelease {
   version?: string;

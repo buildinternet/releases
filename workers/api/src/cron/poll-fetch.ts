@@ -6,10 +6,10 @@ import {
   fetchLog,
   sourceChangelogFiles,
   sourceChangelogChunks,
-} from "@releases/core-internal/schema";
-import { countTokensSafe } from "@releases/core-internal/tokens";
+} from "@buildinternet/releases-core/schema";
+import { countTokensSafe } from "@buildinternet/releases-core/tokens";
 import { notDisabled } from "../queries/shared.js";
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import {
   headCheckFeed,
   fetchAndParseFeed,

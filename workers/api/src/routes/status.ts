@@ -8,7 +8,7 @@ import {
   sources,
   organizations,
   usageLog,
-} from "@releases/core-internal/schema";
+} from "@buildinternet/releases-core/schema";
 import type { Env } from "../index.js";
 import { getStatusHub } from "../utils.js";
 import { encodeCursor, decodeCursor } from "./fetch-log-cursor.js";

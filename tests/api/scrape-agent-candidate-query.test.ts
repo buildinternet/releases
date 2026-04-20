@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
-import { sources, organizations } from "@releases/core-internal/schema";
+import { sources, organizations } from "@buildinternet/releases-core/schema";
 import { queryCandidates } from "../../workers/api/src/cron/scrape-agent-sweep";
 
 function seed() {

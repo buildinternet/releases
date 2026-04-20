@@ -7,6 +7,7 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.112",
         "@anthropic-ai/sdk": "^0.88.0",
+        "@buildinternet/releases-core": "workspace:*",
         "@buildinternet/releases-lib": "^0.13.2",
         "@buildinternet/releases-skills": "^0.13.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
@@ -35,6 +36,7 @@
       "version": "0.0.0",
       "dependencies": {
         "@anthropic-ai/sdk": "^0.88.0",
+        "@buildinternet/releases-core": "workspace:*",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
       },
@@ -43,28 +45,39 @@
       "name": "@releases/ai-internal",
       "version": "0.0.0",
       "dependencies": {
+        "@buildinternet/releases-core": "workspace:*",
         "@releases/adapters": "workspace:*",
-        "@releases/core-internal": "workspace:*",
       },
     },
     "packages/core": {
-      "name": "@releases/core-internal",
-      "version": "0.0.0",
+      "name": "@buildinternet/releases-core",
+      "version": "0.16.0",
       "dependencies": {
         "drizzle-orm": "^0.45.2",
         "js-tiktoken": "^1.0.21",
         "nanoid": "^5.1.7",
       },
     },
+    "packages/core-internal": {
+      "name": "@releases/core-internal",
+      "version": "0.0.0",
+      "dependencies": {
+        "@buildinternet/releases-core": "workspace:*",
+        "drizzle-orm": "^0.45.2",
+      },
+    },
     "packages/lib": {
       "name": "@releases/lib",
       "version": "0.0.0",
+      "dependencies": {
+        "@buildinternet/releases-core": "workspace:*",
+      },
     },
     "web": {
       "name": "released-web",
       "version": "0.9.2",
       "dependencies": {
-        "@releases/core-internal": "workspace:*",
+        "@buildinternet/releases-core": "workspace:*",
         "@shikijs/langs": "^4.0.2",
         "@shikijs/rehype": "^4.0.2",
         "@shikijs/themes": "^4.0.2",
@@ -109,6 +122,8 @@
     "@babel/runtime": ["@babel/runtime@7.29.2", "", {}, "sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g=="],
 
     "@babel/runtime-corejs3": ["@babel/runtime-corejs3@7.29.2", "", { "dependencies": { "core-js-pure": "^3.48.0" } }, "sha512-Lc94FOD5+0aXhdb0Tdg3RUtqT6yWbI/BbFWvlaSJ3gAb9Ks+99nHRDKADVqC37er4eCB0fHyWT+y+K3QOvJKbw=="],
+
+    "@buildinternet/releases-core": ["@buildinternet/releases-core@workspace:packages/core"],
 
     "@buildinternet/releases-lib": ["@buildinternet/releases-lib@0.13.2", "", {}, "sha512-R/TG+rYwAE4bIYN6e/4Oiv7I92lP8mXhIHTQ4FSGM22QJy1rT+ol+mYEkHu7WwvoSIqFkdFdPn5j4ZCn1ESSrw=="],
 
@@ -398,7 +413,7 @@
 
     "@releases/ai-internal": ["@releases/ai-internal@workspace:packages/ai"],
 
-    "@releases/core-internal": ["@releases/core-internal@workspace:packages/core"],
+    "@releases/core-internal": ["@releases/core-internal@workspace:packages/core-internal"],
 
     "@releases/lib": ["@releases/lib@workspace:packages/lib"],
 

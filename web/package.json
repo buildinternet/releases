@@ -8,7 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
-    "@releases/core-internal": "workspace:*",
+    "@buildinternet/releases-core": "workspace:*",
     "@shikijs/langs": "^4.0.2",
     "@shikijs/rehype": "^4.0.2",
     "@shikijs/themes": "^4.0.2",

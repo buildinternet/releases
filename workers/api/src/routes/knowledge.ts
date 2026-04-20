@@ -1,7 +1,12 @@
 import { Hono } from "hono";
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { knowledgePages, organizations, products, sources } from "@releases/core-internal/schema";
+import {
+  knowledgePages,
+  organizations,
+  products,
+  sources,
+} from "@buildinternet/releases-core/schema";
 import { generatePlaybookHeader } from "@releases/ai-internal/playbook";
 import { newKnowledgePageId, orgWhere, productWhere } from "../utils.js";
 import { isValidBearerAuth } from "../middleware/auth.js";

@@ -6,7 +6,7 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
-import { RELEASE_TYPES, type ReleaseType } from "@releases/core-internal/schema";
+import { RELEASE_TYPES, type ReleaseType } from "@buildinternet/releases-core/schema";
 import type { ExtractedEntry, KnownRelease } from "./types.js";
 
 // ── Version sanitization ─────────────────────────────────────────────

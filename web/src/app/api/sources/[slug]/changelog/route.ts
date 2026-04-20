@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { api } from "@/lib/api";
-import { parseRangeParam } from "@releases/core-internal/changelog-range";
+import { parseRangeParam } from "@buildinternet/releases-core/changelog-range";
 
 export async function GET(req: Request, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;

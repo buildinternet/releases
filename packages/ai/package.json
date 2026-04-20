@@ -9,7 +9,7 @@
     "./providers": "./src/providers.ts"
   },
   "dependencies": {
-    "@releases/adapters": "workspace:*",
-    "@releases/core-internal": "workspace:*"
+    "@buildinternet/releases-core": "workspace:*",
+    "@releases/adapters": "workspace:*"
   }
 }

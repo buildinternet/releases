@@ -8,7 +8,7 @@ import {
   type Chunk,
   type ExistingChunkRow,
 } from "./embed-changelogs.js";
-import { countTokensSafe } from "@releases/core-internal/tokens";
+import { countTokensSafe } from "@buildinternet/releases-core/tokens";
 
 function buildLargeChangelog(): string {
   // ~10kb with 5 H2 sections. Each section is padded enough that its real

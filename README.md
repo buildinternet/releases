@@ -14,7 +14,7 @@ The user-facing CLI (`@buildinternet/releases`) lives in [buildinternet/releases
 - `workers/mcp/` — Remote MCP server at `mcp.releases.sh`.
 - `workers/webhooks/` — Outbound webhook consumer: signs and delivers `release.created` events to subscribed endpoints with HMAC-SHA256, retry/DLQ via Cloudflare Queues, and a 7-day replay window. See [docs/webhooks.md](docs/webhooks.md).
 - `web/` — Next.js frontend for releases.sh.
-- `packages/` — In-tree shared code (`core`, `lib`, `adapters`, `ai`). The public subset is mirrored to the OSS repo and published as `@buildinternet/releases-*`.
+- `packages/` — In-tree shared code. `packages/core/` publishes `@buildinternet/releases-core` (schema + pure helpers shared with the OSS CLI). `packages/core-internal/`, `packages/lib/`, `packages/adapters/`, `packages/ai/` are private workspaces. `packages/lib/src/logger.ts` is also published via the OSS CLI as `@buildinternet/releases-lib/logger`.
 - `src/agent/` — Managed-agents discovery + worker harness (invoked by the discovery worker's Durable Object).
 - `plugins/claude/releases/` — Claude Code plugin (committed copy; skill source of truth is OSS `@buildinternet/releases-skills`).
 

@@ -11,7 +11,7 @@ try {
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, ".."),
-  transpilePackages: ["@releases/core-internal"],
+  transpilePackages: ["@buildinternet/releases-core"],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "github.com", pathname: "/*.png" },

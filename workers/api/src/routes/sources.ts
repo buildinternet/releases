@@ -22,14 +22,15 @@ import {
   products,
   sourceChangelogFiles,
   type ReleaseType,
-} from "@releases/core-internal/schema";
+} from "@buildinternet/releases-core/schema";
+import type { Pagination } from "@buildinternet/releases-core/cli-contracts";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
-import { daysAgoIso } from "@releases/core-internal/dates";
-import { toSlug } from "@releases/core-internal/slug";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { toSlug } from "@buildinternet/releases-core/slug";
 import {
   buildChangelogResponse,
   selectChangelogFile,
-} from "@releases/core-internal/changelog-slice";
+} from "@buildinternet/releases-core/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@releases/lib/api-types";
 import {
   getStatusHub,
@@ -196,20 +197,16 @@ sourceRoutes.get("/sources", async (c) => {
     lastRetieredAt: src.last_retiered_at ?? null,
   }));
 
-  // TODO: share with `@releases/core-internal/cli-contracts` once
-  // `cli-contracts.ts` is carved into the monorepo's `packages/core/`.
   if (wantsEnvelope && totalItems != null) {
-    return c.json({
-      items: result,
-      pagination: {
-        page: effectivePage,
-        pageSize: limit,
-        returned: result.length,
-        totalItems,
-        totalPages: Math.max(1, Math.ceil(totalItems / limit)),
-        hasMore: effectivePage * limit < totalItems,
-      },
-    });
+    const pagination: Pagination = {
+      page: effectivePage,
+      pageSize: limit,
+      returned: result.length,
+      totalItems,
+      totalPages: Math.max(1, Math.ceil(totalItems / limit)),
+      hasMore: effectivePage * limit < totalItems,
+    };
+    return c.json({ items: result, pagination });
   }
 
   return c.json(result);

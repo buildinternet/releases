@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { sources, organizations, fetchLog } from "@releases/core-internal/schema";
+import { sources, organizations, fetchLog } from "@buildinternet/releases-core/schema";
 import { decodeCursor } from "../../workers/api/src/routes/fetch-log-cursor";
 import { mkDb, mkApp } from "./status-fetch-log-helpers";
 

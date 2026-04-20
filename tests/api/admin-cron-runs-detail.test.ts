@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { cronRuns } from "../../workers/api/src/db/schema-cron";
-import { fetchLog, organizations, sources } from "@releases/core-internal/schema";
+import { fetchLog, organizations, sources } from "@buildinternet/releases-core/schema";
 import { mkDb, mkApp } from "./admin-cron-runs-helpers";
 
 describe("GET /v1/admin/cron-runs/:id", () => {

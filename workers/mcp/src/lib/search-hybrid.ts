@@ -12,7 +12,7 @@ import {
   organizations,
   products,
   sourceChangelogFiles,
-} from "@releases/core-internal/schema";
+} from "@buildinternet/releases-core/schema";
 import {
   hybridSearch,
   type VectorizeIndex as HybridVectorizeIndex,

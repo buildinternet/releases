@@ -21,5 +21,8 @@
     "./media-url": "./src/media-url.ts",
     "./source-edit": "./src/source-edit.ts",
     "./vector-search": "./src/vector-search.ts"
+  },
+  "dependencies": {
+    "@buildinternet/releases-core": "workspace:*"
   }
 }

@@ -6,8 +6,8 @@
 import { Hono } from "hono";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, releases, sources, usageLog } from "@releases/core-internal/schema";
-import { daysAgoIso } from "@releases/core-internal/dates";
+import { organizations, releases, sources, usageLog } from "@buildinternet/releases-core/schema";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { orgWhere, sourceWhere } from "../utils.js";
 import { notDisabled } from "../queries/shared.js";
 import { callAnthropic, AnthropicError } from "../lib/anthropic.js";

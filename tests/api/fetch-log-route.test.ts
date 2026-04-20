@@ -8,7 +8,7 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import { Hono } from "hono";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { organizations, sources } from "@releases/core-internal/schema";
+import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { fetchLogRoutes } from "../../workers/api/src/routes/fetch-log.js";
 
 let testDatabase: TestDatabase;

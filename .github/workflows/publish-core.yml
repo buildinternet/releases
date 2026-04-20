@@ -1,0 +1,72 @@
+name: Publish @buildinternet/releases-core
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: "Dry-run only (no npm publish)"
+        type: boolean
+        default: false
+
+concurrency:
+  group: publish-core
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: Publish packages/core to npm
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Type-check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Read version
+        id: version
+        run: echo "version=$(jq -r .version packages/core/package.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Check if version already published
+        id: check
+        env:
+          CORE_VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if npm view "@buildinternet/releases-core@${CORE_VERSION}" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "Version ${CORE_VERSION} already on npm — skipping publish." >&2
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Configure npm auth
+        if: steps.check.outputs.already == 'false'
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
+
+      - name: Publish
+        if: steps.check.outputs.already == 'false'
+        working-directory: packages/core
+        env:
+          DRY_RUN: ${{ inputs.dry-run }}
+        run: |
+          if [ "${DRY_RUN}" = "true" ]; then
+            npm publish --dry-run
+          else
+            npm publish
+          fi

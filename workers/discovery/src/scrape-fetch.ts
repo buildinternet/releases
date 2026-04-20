@@ -16,7 +16,7 @@
  * `managed-agents-session.ts`, even though it now covers agent-type sources.
  */
 
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import { fetchCloudflareMarkdown } from "@releases/adapters/cloudflare";
 import { getSourceMeta } from "@releases/adapters/source-meta";
 import {

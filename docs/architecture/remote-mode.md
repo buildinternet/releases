@@ -51,7 +51,7 @@ Unauthenticated public reads can be throttled per-IP via `publicRateLimitMiddlew
 
 ## Schema + deployment
 
-The API Worker lives at `workers/api/` and shares the Drizzle schema from `@releases/core-internal/schema` (`packages/core/src/schema.ts`). D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
+The API Worker lives at `workers/api/` and shares the Drizzle schema from `@buildinternet/releases-core/schema` (`packages/core/src/schema.ts`). D1 migrations are in `workers/api/migrations/`. Deploy with `cd workers/api && wrangler deploy`.
 
 ## Migrations
 

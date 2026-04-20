@@ -5,8 +5,8 @@ import {
   newOrgId,
   newProductId,
   newTagId,
-} from "@releases/core-internal/id";
-import { newCronRunId } from "@releases/core-internal/id";
+} from "@buildinternet/releases-core/id";
+import { newCronRunId } from "@buildinternet/releases-core/id";
 
 describe("ID generators", () => {
   it("newSourceId has correct prefix", () => {

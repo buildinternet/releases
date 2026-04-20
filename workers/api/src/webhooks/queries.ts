@@ -1,5 +1,8 @@
 import { eq, and, inArray } from "drizzle-orm";
-import { webhookSubscriptions, type WebhookSubscription } from "@releases/core-internal/schema";
+import {
+  webhookSubscriptions,
+  type WebhookSubscription,
+} from "@buildinternet/releases-core/schema";
 import type { D1Db } from "../db.js";
 
 export type WebhookSubscriptionUpdates = Partial<{

@@ -1,4 +1,4 @@
-import type { Source } from "@releases/core-internal/schema";
+import type { Source } from "@buildinternet/releases-core/schema";
 import type { Adapter, RawRelease, FetchOptions, FetchResult } from "@releases/adapters/types";
 import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
