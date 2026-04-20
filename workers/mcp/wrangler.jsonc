@@ -11,6 +11,14 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": {
     "enabled": true,
+    "logs": {
+      "enabled": true,
+      "destinations": ["axiom-logs"],
+    },
+    "traces": {
+      "enabled": true,
+      "destinations": ["axiom-traces"],
+    },
   },
   "vars": {
     "ENABLE_AI_TOOLS": "false",
