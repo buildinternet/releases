@@ -27,6 +27,7 @@ import type { Pagination } from "@buildinternet/releases-core/cli-contracts";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import {
   buildChangelogResponse,
   selectChangelogFile,
@@ -1135,6 +1136,16 @@ sourceRoutes.post("/sources", async (c) => {
   }
 
   const slug = body.slug ?? toSlug(body.name);
+  if (isReservedSlug(slug, "nested")) {
+    return c.json(
+      {
+        error: "slug_reserved",
+        message: `Slug "${slug}" is reserved and cannot be used for a source. Choose a different slug or rename the source.`,
+        slug,
+      },
+      409,
+    );
+  }
 
   // Auto-detect feed type when metadata contains a feedUrl and no explicit type was provided
   let type = body.type ?? "scrape";
@@ -1243,6 +1254,16 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
 
   // Check for slug uniqueness before attempting update
   if (body.slug !== undefined && body.slug !== src.slug) {
+    if (isReservedSlug(body.slug, "nested")) {
+      return c.json(
+        {
+          error: "slug_reserved",
+          message: `Slug "${body.slug}" is reserved and cannot be used for a source.`,
+          slug: body.slug,
+        },
+        409,
+      );
+    }
     const [existing] = await db.select().from(sources).where(eq(sources.slug, body.slug));
     if (existing) {
       return c.json(
