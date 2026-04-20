@@ -91,3 +91,26 @@ Per-subscription HTTPS POST consumer. The publisher in
 signs payloads, retries on transient failures, and DLQs on retry
 exhaustion. See [docs/webhooks.md](../webhooks.md) for the public
 subscriber contract.
+
+### KV cache invalidation (`invalidateLatestCache`)
+
+In-process consumer. Alongside the two `publishReleaseEvents` sites we
+call `invalidateLatestCache` (`workers/api/src/lib/latest-cache.ts`) to
+purge the cached `/v1/releases/latest` default shape
+(`latest:v1:count=10`). Gated behind `INVALIDATION_ENABLED`; ships `"false"`
+in shadow-log mode, flipped to `"true"` after a parity-check week.
+
+- **Batch ingest** (`POST /v1/sources/:slug/releases/batch` in `routes/sources.ts`)
+  — called via `ctx.waitUntil`, fires once per ingest with the batch's
+  inserted count.
+- **Admin manual fetch** (`POST /v1/admin/sources/:slug/fetch`) — same
+  pattern, once per triggered fetch if any rows were inserted.
+- **Cron poll-and-fetch** (`cron/poll-fetch.ts`) — aggregated inside
+  `pollAndFetch` so a single cron run produces one invalidate call
+  regardless of how many sources published (prevents N redundant
+  `KV.delete`s against the same key).
+
+`LATEST_CACHE_TTL_SECONDS` (300s) remains the fallback ceiling; purges
+are best-effort and never fail the ingest path. Structured logs under
+the `[invalidation]` tag go to axiom-logs — see
+[remote-mode.md](remote-mode.md) for the cache entry shape.

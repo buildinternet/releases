@@ -66,6 +66,7 @@ import { publishReleaseEvents } from "../events/publish.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { invalidateLatestCache } from "../lib/latest-cache.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -325,10 +326,21 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
         EMBEDDING_PROVIDER: c.env.EMBEDDING_PROVIDER,
         VOYAGE_API_KEY: c.env.VOYAGE_API_KEY,
         OPENAI_API_KEY: c.env.OPENAI_API_KEY,
+        RELEASE_HUB: c.env.RELEASE_HUB,
+        WEBHOOK_DELIVERY_QUEUE: c.env.WEBHOOK_DELIVERY_QUEUE,
+        DB: c.env.DB,
       },
       { sessionId, dryRun, maxEntries: maxParsed ?? undefined },
     );
     responsePayload = { fetched: true, ...result };
+    if (result.releasesInserted > 0) {
+      c.executionCtx.waitUntil(
+        invalidateLatestCache(c.env, {
+          nReleases: result.releasesInserted,
+          sourceId: src.id,
+        }),
+      );
+    }
   } else {
     // Scrape and agent sources: flag for CLI pickup
     await db
@@ -431,6 +443,12 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
         publishReleaseEvents(c.env, {
           src: { name: src.name, slug: src.slug, orgId: src.orgId, sourceId: src.id },
           inserted: publishRows,
+        }),
+      );
+      c.executionCtx.waitUntil(
+        invalidateLatestCache(c.env, {
+          nReleases: publishRows.length,
+          sourceId: src.id,
         }),
       );
     }

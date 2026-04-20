@@ -26,8 +26,11 @@ issue #333 comments for the cost model). The handler sets
 `X-Cache: HIT|MISS` on cached responses and `X-Cache: BYPASS` on
 fall-through. Cache entries live in the `LATEST_CACHE` KV namespace
 (`workers/api/src/lib/latest-cache.ts`) for 300 seconds; write-back on miss
-is fire-and-forget via `ctx.waitUntil`. Stale-up-to-5-minutes is acceptable
-for a feed whose upstream publishers push a few times per day at most.
+is fire-and-forget via `ctx.waitUntil`. The 300s TTL is now a fallback
+ceiling rather than the freshness floor: `invalidateLatestCache` purges
+the cached key immediately after each publish (see
+[events.md](events.md)), so typical staleness drops to seconds once
+`INVALIDATION_ENABLED` is flipped to `"true"`.
 
 Cache keys are built from the sorted filter params under prefix `latest:v1:`,
 keyed on resolved source/org IDs so two callers for the same entity (slug

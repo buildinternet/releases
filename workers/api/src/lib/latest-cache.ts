@@ -8,6 +8,7 @@
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
+  delete(key: string): Promise<void>;
 }
 
 // Sized to keep KV write volume bounded under sustained `tail -f` polling —
@@ -40,6 +41,10 @@ export interface NormalizedLatestParams {
 // filtered request is a hot enough read to justify its own cache entry.
 // Example: the Vercel org page might eventually warrant
 //   "latest:v1:count=10&org=org_vercel_id"
+//
+// When you add an entry, also extend `invalidateLatestCache` below so the
+// purge set matches the cache set — otherwise entries here will be stale
+// for up to LATEST_CACHE_TTL_SECONDS after any release to the relevant org.
 export const ALLOWLISTED_CACHE_KEYS: ReadonlySet<string> = new Set<string>();
 
 // The homepage/CLI default request — unfiltered, default count, coverage
@@ -82,4 +87,57 @@ export async function withLatestCache<T>(
   if (waitUntil) waitUntil(write);
   else await write;
   return { data, hit: false };
+}
+
+/**
+ * Environment slice used by `invalidateLatestCache`. Keep in sync with the
+ * API worker's `Env.Bindings` and the `FetchOneEnv` used from the cron.
+ */
+export interface InvalidationEnv {
+  LATEST_CACHE?: LatestCacheBinding;
+  INVALIDATION_ENABLED?: string;
+}
+
+/**
+ * Purge the cached /v1/releases/latest default shape after a publish.
+ *
+ * Called fire-and-forget from the publish sites alongside publishReleaseEvents.
+ * Purges are best-effort; the 300s TTL remains the safety net on failure.
+ *
+ * v1 scope: only the unfiltered default shape (`latest:v1:count=10`) is cached,
+ * so that's all this purges. When ALLOWLISTED_CACHE_KEYS grows, extend this
+ * helper to purge the matching shapes in the same PR.
+ *
+ * Kept inline (no queue, no dedicated Worker) because the work is a single
+ * KV.delete(). If a second event-driven side-effect emerges, revisit a
+ * dedicated consumer — see https://github.com/buildinternet/releases/issues/408
+ * for the conversation.
+ */
+export async function invalidateLatestCache(
+  env: InvalidationEnv,
+  meta: { nReleases: number; sourceId: string },
+): Promise<void> {
+  const key = buildLatestCacheKey({ count: String(DEFAULT_LATEST_COUNT) });
+  const base = `[invalidation] key=${key} source_id=${meta.sourceId} n_releases=${meta.nReleases}`;
+
+  if (env.INVALIDATION_ENABLED !== "true") {
+    console.info(`${base} action=skipped reason=flag_off`);
+    return;
+  }
+  if (!env.LATEST_CACHE) {
+    console.info(`${base} action=skipped reason=no_binding`);
+    return;
+  }
+  if (meta.nReleases <= 0) {
+    console.info(`${base} action=skipped reason=no_releases`);
+    return;
+  }
+
+  try {
+    await env.LATEST_CACHE.delete(key);
+    console.info(`${base} action=purged ok=true`);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.warn(`${base} action=purged reason=error ok=false error="${msg}"`);
+  }
 }

@@ -83,6 +83,10 @@ export type Env = {
     // Optional KV namespace caching the GET /v1/releases/latest response
     // (see src/lib/latest-cache.ts). Absent → every request hits D1.
     LATEST_CACHE?: KVNamespace;
+    // Gates event-driven KV purge of `/v1/releases/latest` (see
+    // src/lib/latest-cache.ts invalidateLatestCache). Ships "false"; flipped
+    // to "true" after a parity-logging week.
+    INVALIDATION_ENABLED?: string;
     // Email notifications (see src/lib/email.ts). SEND_EMAIL is the Cloudflare
     // Email Routing send binding; absent → email notifications no-op.
     SEND_EMAIL?: { send(message: unknown): Promise<void> };
@@ -306,6 +310,9 @@ export default {
         VOYAGE_API_KEY: env.VOYAGE_API_KEY,
         OPENAI_API_KEY: env.OPENAI_API_KEY,
         RELEASE_HUB: env.RELEASE_HUB,
+        WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
+        LATEST_CACHE: env.LATEST_CACHE,
+        INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
       }),
     );
   },
