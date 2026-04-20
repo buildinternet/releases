@@ -15,7 +15,7 @@ function getDb(c: any): any {
   return c.get("db") ?? createDb(c.env.DB);
 }
 
-adminCronRunsRoutes.get("/v1/admin/cron-runs", async (c) => {
+adminCronRunsRoutes.get("/admin/cron-runs", async (c) => {
   const db = getDb(c);
   const cron = c.req.query("cron");
   const limit = Math.min(parseInt(c.req.query("limit") ?? "50", 10) || 50, 200);
@@ -48,7 +48,7 @@ adminCronRunsRoutes.get("/v1/admin/cron-runs", async (c) => {
   return c.json(rows);
 });
 
-adminCronRunsRoutes.get("/v1/admin/cron-runs/:id", async (c) => {
+adminCronRunsRoutes.get("/admin/cron-runs/:id", async (c) => {
   const db = getDb(c);
   const id = c.req.param("id");
 

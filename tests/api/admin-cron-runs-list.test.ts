@@ -2,7 +2,7 @@ import { describe, it, expect } from "bun:test";
 import { cronRuns } from "../../workers/api/src/db/schema-cron";
 import { mkDb, mkApp } from "./admin-cron-runs-helpers";
 
-describe("GET /v1/admin/cron-runs", () => {
+describe("GET /admin/cron-runs", () => {
   it("returns rows for the named cron ordered by startedAt desc", async () => {
     const db = mkDb();
     await db.insert(cronRuns).values([
@@ -27,7 +27,7 @@ describe("GET /v1/admin/cron-runs", () => {
 
     const app = mkApp(db);
     const res = await app.request(
-      "/v1/admin/cron-runs?cron=scrape-agent-sweep&limit=50&since=2000-01-01T00:00:00Z",
+      "/admin/cron-runs?cron=scrape-agent-sweep&limit=50&since=2000-01-01T00:00:00Z",
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as Array<{ id: string }>;
@@ -59,7 +59,7 @@ describe("GET /v1/admin/cron-runs", () => {
 
     const app = mkApp(db);
     const res = await app.request(
-      "/v1/admin/cron-runs?status=degraded,aborted&since=2000-01-01T00:00:00Z",
+      "/admin/cron-runs?status=degraded,aborted&since=2000-01-01T00:00:00Z",
     );
     const body = (await res.json()) as Array<{ status: string }>;
     expect(body.map((r) => r.status).toSorted()).toEqual(["aborted", "degraded"]);
