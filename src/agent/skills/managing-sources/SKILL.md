@@ -30,8 +30,8 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Ignore URL            | `releases admin policy ignore add --org <org> <url>`                                                                              | `exclude_url` action "ignore" with url, organization                          |
 | Block URL             | `releases admin policy block add <url>`                                                                                           | `exclude_url` action "block" with url                                         |
 | List categories       | `releases categories --json`                                                                                                      | `list_categories`                                                             |
-| Get playbook          | `releases admin content playbook <org>`                                                                                           | `get_playbook` with organization param                                        |
-| Update playbook notes | `releases admin content playbook <org> --notes "..."`                                                                             | `update_playbook_notes` with organization, notes params                       |
+| Get playbook          | `releases admin playbook <org>`                                                                                                   | `get_playbook` with organization param                                        |
+| Update playbook notes | `releases admin playbook <org> --notes "..."`                                                                                     | `update_playbook_notes` with organization, notes params                       |
 
 ## Listing Sources
 
@@ -106,7 +106,7 @@ Each org has a **playbook** — a README that tells any agent how to efficiently
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
 - **Agent notes** — free-form markdown that you fully control. This is the most important part of the playbook. Write it like a README for a teammate who needs to fetch releases from this org without asking questions.
 
-**Always read the playbook before fetching or working with an org's sources.** Typed tool: `get_playbook` with organization param. CLI: `releases admin content playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
+**Always read the playbook before fetching or working with an org's sources.** Typed tool: `get_playbook` with organization param. CLI: `releases admin playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
 ### Writing good agent notes
 

@@ -28,8 +28,8 @@ Key commands:
 - `releases admin source edit <identifier> [--primary] [--priority <p>]` — Edit source config (accepts ID or slug)
 - `releases admin org edit <slug> [--category <c>]` — Edit org
 - `releases admin product add <name> --org <org>` — Create product
-- `releases admin content playbook <org>` — Read playbook
-- `releases admin content playbook <org> --notes "..."` — Update playbook notes
+- `releases admin playbook <org>` — Read playbook
+- `releases admin playbook <org> --notes "..."` — Update playbook notes
 - `releases tail [slug] --json [--org <org>]` — Get latest releases
 - `releases list [slug] --json` — List sources
 
@@ -37,11 +37,11 @@ Key commands:
 
 When asked to fetch sources:
 
-1. **Read the playbook first.** Run `releases admin content playbook <org>` to understand how each source works — extraction patterns, known quirks, and what to expect. If the notes are empty, note this in your output so the discovery agent can populate them later.
+1. **Read the playbook first.** Run `releases admin playbook <org>` to understand how each source works — extraction patterns, known quirks, and what to expect. If the notes are empty, note this in your output so the discovery agent can populate them later.
 2. Run `releases admin source fetch <slug>` for each source.
 3. Report the number of releases fetched per source.
 4. Report any errors encountered.
-5. **Update the playbook** if you encountered something unexpected — errors, changed page structure, new traps. Run `releases admin content playbook <org> --notes "..."` with updated content. Notes use sections: `### Fetch instructions`, `### Traps`, `### Coverage`.
+5. **Update the playbook** if you encountered something unexpected — errors, changed page structure, new traps. Run `releases admin playbook <org> --notes "..."` with updated content. Notes use sections: `### Fetch instructions`, `### Traps`, `### Coverage`.
 6. Do NOT add, remove, or modify sources — only fetch.
 
 ## Update Operations

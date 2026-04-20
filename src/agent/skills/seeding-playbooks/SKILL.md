@@ -103,14 +103,15 @@ Products: {product list or "none"}
 **Coverage**: 2-3 sentences. Which sources are canonical, whether there are gaps.
 
 Save by running:
-bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
-bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts admin content playbook {slug} 2>/dev/null | tail -20
+Verify with: releases admin playbook {slug} 2>/dev/null | tail -20
 ```
+
+The playbook header regenerates automatically after any source add/edit/remove, and the `--notes` PATCH seeds a fresh header on first write — no separate regenerate step needed.
 
 ### Verified prompt template
 
@@ -149,13 +150,12 @@ Every claim must cite observed data. If uncertain, say so explicitly.
 
 ## Step 4: Save
 
-bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
-bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts admin content playbook {slug} 2>/dev/null | tail -20
+Verify with: releases admin playbook {slug} 2>/dev/null | tail -20
 ```
 
 ### Dispatch pattern
@@ -178,8 +178,7 @@ Sub-agents may be blocked from saving notes via Bash (heredoc permission issues)
 2. The parent agent (you) saves the notes manually:
 
 ```bash
-bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
-bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes "$(cat <<'NOTES'
 {paste notes from agent result}
 NOTES
 )" 2>/dev/null
