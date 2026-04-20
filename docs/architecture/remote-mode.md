@@ -1,10 +1,6 @@
-# Remote Mode (D1)
+# API worker (D1)
 
-When `RELEASED_API_URL` is set, the CLI routes data operations through the API Worker instead of local SQLite. The switch point is `src/lib/mode.ts` — `isRemoteMode()` checks the env var once and caches the result. Compiled binaries auto-detect remote mode and default to `https://api.releases.sh` when `RELEASED_API_URL` is unset. Query functions in `src/db/queries.ts` delegate to `src/api/client.ts` in remote mode. All CLI commands support both modes — no command calls `getDb()` directly (except `search` for local FTS).
-
-**Local mode** (default for `bun src/index.ts`): No config needed. Uses `bun:sqlite` at `~/.releases/releases.db`.
-
-**Remote mode** (default for compiled binary): Set `RELEASED_API_URL` and `RELEASED_API_KEY` for admin access. Public read-only access works without any env vars — the compiled binary defaults to `https://api.releases.sh`.
+The API worker at `workers/api/` is the authoritative data plane — every read and write goes through it. There is no local-SQLite path anymore; the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)) is a pure HTTP client that talks to `RELEASED_API_URL` (default `https://api.releases.sh`), and all the internal workers (MCP, discovery, webhooks, cron) bind directly to D1.
 
 ## Auth model
 
@@ -12,7 +8,7 @@ GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE
 
 ## On-demand AI admin endpoints
 
-`POST /v1/admin/summaries` and `POST /v1/admin/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summaries` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/admin-ai.ts` — edit them there (the CLI-side copies in `src/ai/query.ts` go away with PR 4 of #370).
+`POST /v1/admin/summaries` and `POST /v1/admin/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summaries` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/admin-ai.ts`.
 
 ## Cached latest-releases endpoint
 

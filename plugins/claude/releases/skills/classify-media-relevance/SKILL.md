@@ -3,8 +3,6 @@ name: classify-media-relevance
 description: Decide whether an image or video found on a release page is editorial content (screenshots, demos, diagrams, product shots) or site chrome (avatars, logos, tracking pixels, decorative badges). Used during parsing to populate a release's media array.
 ---
 
-<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
-
 # Classifying Media Relevance
 
 Release pages contain two kinds of media: **editorial content** that belongs in the release (screenshots of the feature, demo videos, diagrams explaining a change) and **site chrome** that doesn't (author avatars, nav logos, tracking pixels, decorative separators). This skill governs which items end up in a release's `media[]` array.

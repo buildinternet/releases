@@ -1,11 +1,11 @@
 ---
 name: parsing-changelogs
-description: How the Released fetch and parse pipeline works — covers feed vs scrape adapters, incremental vs bulk parsing, dry-run testing, crawl mode, content hashing, and enrichment
+description: How the Releases fetch and parse pipeline works — covers feed vs scrape adapters, incremental vs bulk parsing, dry-run testing, crawl mode, content hashing, and enrichment
 ---
 
 # Parsing Changelogs
 
-How the Released fetch pipeline converts changelog pages into structured release data.
+How the Releases fetch pipeline converts changelog pages into structured release data.
 
 ## Pipeline Overview
 

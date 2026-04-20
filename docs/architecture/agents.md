@@ -7,18 +7,21 @@ Two Anthropic managed agents handle changelog work, sharing the same tools (`AGE
 
 Both agents are deployed via `bun run deploy:agents`. Use `deploy:agents:discovery` or `deploy:agents:worker` to target one. Agent IDs and config state live in `scripts/agent-skills.json`.
 
-- **Agent skills** are sourced from `@buildinternet/releases-skills` (published OSS). Each skill is a `SKILL.md` with YAML frontmatter. Skills are uploaded to the managed agent definition via `bun run deploy:skills`. To add or edit skills, update the OSS repo, publish a new `@buildinternet/releases-skills` version, and redeploy.
+- **Agent skills** live in this monorepo at `src/agent/skills/`. Each skill is a `SKILL.md` with YAML frontmatter. Skills are uploaded to the managed agent definition via `bun run deploy:skills`.
 - **Deterministic pipeline** (ingest, incremental, summarize) stays as direct Messages API calls — not routed through the agent.
-- **`evaluate` CLI command** runs pre-checks only (provider detection, feed discovery). The agent handles deeper evaluation when needed.
+- **URL evaluation** runs pre-checks only (provider detection, feed discovery) via `POST /v1/evaluate`. The discovery agent handles deeper evaluation when needed.
 
 ## Claude Code Plugin
 
 A Claude Code plugin at `plugins/claude/releases/` exposes the registry for use in Claude Code sessions. It connects to the remote MCP server at `mcp.releases.sh` and adapts the managed agent prompts for CLI-based operation.
 
-**Components:** `.mcp.json` (MCP connection), 2 agents (discovery/worker), 1 command (`/releases`), 6 skills (1 consumer + 5 synced from `src/agent/skills/`).
+**Components:** `.mcp.json` (MCP connection), 2 agents (discovery/worker), 1 command (`/releases`), 8 skills synced from `src/agent/skills/` (`analyzing-releases`, `classify-media-relevance`, `finding-changelogs`, `grouping-releases`, `maintaining-orgs`, `managing-sources`, `parsing-changelogs`, `seeding-playbooks`).
 
 **Test locally:** `claude --plugin-dir plugins/claude/releases`
 
 **Validate:** `claude plugin validate plugins/claude/releases`
 
-**Skill sync:** Skills are published to npm as `@buildinternet/releases-skills` via the OSS repo. The plugin directory carries committed copies of the skills — update them by editing `src/agent/skills/` in the OSS repo and bumping the package version. `bun run deploy:skills` pushes skill updates to the Anthropic managed-agents API; `scripts/sync-plugin-skills.ts` has been removed — the plugin copies must now be updated manually when OSS skill content changes.
+**Skill sources of truth.** Two skill trees coexist and do not share tooling:
+
+- `src/agent/skills/` (this monorepo) is the canonical source for managed agents and this repo's Claude plugin at `plugins/claude/releases/skills/`. Copies are maintained by hand — `scripts/sync-plugin-skills.ts` was removed when local mode was killed. After editing `src/agent/skills/<skill>/SKILL.md`, copy the change to `plugins/claude/releases/skills/<skill>/SKILL.md` in the same PR, then run `bun run deploy:skills` to push the managed-agents update.
+- The OSS CLI at [`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli) ships its own `skills/` tree (publishes `@buildinternet/releases-skills` + a separate Claude plugin) that includes the six user-oriented skills plus `releases-cli` / `releases-mcp`. When you edit one of the six shared skills here, mirror the change into the OSS CLI so the published package doesn't drift.

@@ -79,7 +79,9 @@ and the backfill path after `snapshot_gap`).
 ### CLI tail (`releases tail -f`)
 
 Connects to `/v1/releases/stream` over WebSocket. Falls back to polling
-on disconnect. See `src/cli/commands/tail.ts`.
+on disconnect. Implemented in the OSS CLI at
+[`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli)
+(`src/cli/commands/tail.ts`).
 
 ### Webhooks (`workers/webhooks`)
 
