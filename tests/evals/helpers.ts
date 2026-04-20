@@ -78,7 +78,7 @@ export function loadFixtures(fixturesDir: string): FixturePair[] {
       const markdown = readFileSync(join(fixturesDir, mdFile), "utf-8");
       const expected = JSON.parse(readFileSync(expectedFile, "utf-8")) as ExpectedRelease[];
       fixtures.push({ name, markdown, expected });
-    } catch (error) {
+    } catch {
       logger.warn(`Skipping fixture ${name}: missing expected JSON or parse error`);
     }
   }

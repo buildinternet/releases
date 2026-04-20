@@ -125,6 +125,7 @@ export async function embedBatch(
   const all: number[][] = [];
   let totalInputTokens = 0;
   for (const chunk of chunks) {
+    // oxlint-disable-next-line no-await-in-loop -- embedding provider rate limit; chunks must be submitted sequentially
     const result = await callWithRetry(chunk, cfg);
     all.push(...result.vectors);
     totalInputTokens += result.inputTokens ?? 0;
@@ -152,11 +153,13 @@ async function callWithRetry(chunk: string[], cfg: EmbeddingConfig): Promise<Emb
   let lastErr: unknown;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      // oxlint-disable-next-line no-await-in-loop -- embedding provider rate limit; each retry attempt must await before next
       return await dispatchProvider(chunk, cfg);
     } catch (err) {
       lastErr = err;
       if (!isRetryable(err) || attempt === maxRetries) break;
       const delayMs = 500 * 2 ** attempt + Math.floor(Math.random() * 250);
+      // oxlint-disable-next-line no-await-in-loop -- exponential backoff between retry attempts
       await sleep(delayMs);
     }
   }

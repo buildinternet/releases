@@ -27,13 +27,34 @@ function msg(): DeliveryMessage {
   };
 }
 
+async function fetch200() {
+  return new Response("ok", { status: 200 });
+}
+
+async function fetch400() {
+  return new Response("bad", { status: 400 });
+}
+
+async function fetch503() {
+  return new Response("err", { status: 503 });
+}
+
+async function fetchNetworkError(): Promise<Response> {
+  throw new TypeError("network");
+}
+
+async function fetchAbortError(): Promise<Response> {
+  const e: any = new Error("aborted");
+  e.name = "AbortError";
+  throw e;
+}
+
 describe("deliver", () => {
   it("returns success on 2xx", async () => {
-    const fetch = async () => new Response("ok", { status: 200 });
     const r = await deliver(msg(), {
       masterKey: "deadbeef".repeat(8),
       timeoutMs: 1000,
-      fetchImpl: fetch as any,
+      fetchImpl: fetch200 as any,
       now: () => 1729281234,
     });
     expect(r.outcome).toBe("success");
@@ -42,11 +63,10 @@ describe("deliver", () => {
   });
 
   it("returns perm_fail on 4xx", async () => {
-    const fetch = async () => new Response("bad", { status: 400 });
     const r = await deliver(msg(), {
       masterKey: "deadbeef".repeat(8),
       timeoutMs: 1000,
-      fetchImpl: fetch as any,
+      fetchImpl: fetch400 as any,
       now: () => 1,
     });
     expect(r.outcome).toBe("perm_fail");
@@ -54,24 +74,20 @@ describe("deliver", () => {
   });
 
   it("returns retry on 5xx", async () => {
-    const fetch = async () => new Response("err", { status: 503 });
     const r = await deliver(msg(), {
       masterKey: "deadbeef".repeat(8),
       timeoutMs: 1000,
-      fetchImpl: fetch as any,
+      fetchImpl: fetch503 as any,
       now: () => 1,
     });
     expect(r.outcome).toBe("retry");
   });
 
   it("returns retry on network error", async () => {
-    const fetch = async () => {
-      throw new TypeError("network");
-    };
     const r = await deliver(msg(), {
       masterKey: "deadbeef".repeat(8),
       timeoutMs: 1000,
-      fetchImpl: fetch as any,
+      fetchImpl: fetchNetworkError as any,
       now: () => 1,
     });
     expect(r.outcome).toBe("retry");
@@ -79,15 +95,10 @@ describe("deliver", () => {
   });
 
   it("returns retry on timeout (AbortError)", async () => {
-    const fetch = async () => {
-      const e: any = new Error("aborted");
-      e.name = "AbortError";
-      throw e;
-    };
     const r = await deliver(msg(), {
       masterKey: "deadbeef".repeat(8),
       timeoutMs: 1,
-      fetchImpl: fetch as any,
+      fetchImpl: fetchAbortError as any,
       now: () => 1,
     });
     expect(r.outcome).toBe("retry");

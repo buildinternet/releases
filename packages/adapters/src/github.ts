@@ -246,6 +246,7 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
       const lastSlash = normalized.lastIndexOf("/");
       const dir = lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
       const filename = lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
+      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; iterate override paths sequentially
       const f = await fetchAndBuildFile(owner, repo, dir, filename, rawHeaders, source.slug);
       requestCount++;
       if (f) {
@@ -299,6 +300,7 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
       if (trimmed.endsWith("/*")) {
         const parent = trimmed.slice(0, -2);
         if (!parent || parent.includes("*")) continue;
+        // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; globs resolved sequentially
         const parentEntries = await listContents(owner, repo, parent, apiHeaders, cache);
         requestCount++;
         if (!parentEntries) continue;
@@ -317,11 +319,13 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
         logger.info(`fetchChangelogFiles(${source.slug}): hit CHANGELOG_MAX_FILES cap`);
         break;
       }
+      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; package dirs scanned sequentially
       const dirEntries = await listContents(owner, repo, dir, apiHeaders, cache);
       requestCount++;
       if (!dirEntries) continue;
       const filename = pickChangelogInDir(dirEntries);
       if (!filename) continue;
+      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; fetch each changelog file sequentially
       const f = await fetchAndBuildFile(owner, repo, dir, filename, rawHeaders, source.slug);
       requestCount++;
       if (f) files.push(f);
@@ -367,6 +371,7 @@ export async function detectChangelogUrl(source: Source): Promise<string | null>
 
   for (const filename of CHANGELOG_FILENAMES) {
     try {
+      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; probe each filename sequentially until found
       const res = await fetch(
         `https://api.github.com/repos/${owner}/${repo}/contents/${filename}`,
         { method: "HEAD", headers },
@@ -419,6 +424,7 @@ export const github: Adapter = {
     let hitDateCutoff = false;
 
     while (url && !hitDateCutoff) {
+      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API pagination; next URL comes from prior response Link header
       const res: Response = await fetch(url, { headers });
 
       if (res.status === 429) {
@@ -429,12 +435,15 @@ export const github: Adapter = {
       }
 
       if (!res.ok) {
+        // oxlint-disable-next-line no-await-in-loop -- GitHub REST API pagination; reading error body from same paged response
+        const errBody = await res.text();
         throw new AdapterError(
           "github",
-          `GitHub API returned ${res.status} for ${owner}/${repo}: ${await res.text()}`,
+          `GitHub API returned ${res.status} for ${owner}/${repo}: ${errBody}`,
         );
       }
 
+      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API pagination; reading JSON body from same paged response
       const data: GitHubRelease[] = await res.json();
 
       for (const rel of data) {

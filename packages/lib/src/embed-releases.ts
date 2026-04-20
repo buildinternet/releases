@@ -117,6 +117,7 @@ export async function embedAndUpsertReleases(opts: EmbedAndUpsertReleasesOptions
         metadata: buildMetadata(r),
       }));
       try {
+        // oxlint-disable-next-line no-await-in-loop -- Vectorize D1 chunking; chunks must be upserted sequentially to respect batch limits
         await vectorIndex.upsert(upsertPayload);
         persisted.push(...chunk.map((r) => r.id));
       } catch (err) {

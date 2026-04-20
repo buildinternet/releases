@@ -354,8 +354,10 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
 
   for (const tagName of body.tags) {
     const tagSlug = toSlug(tagName);
+    // oxlint-disable-next-line no-await-in-loop -- sequential: tag lookup result feeds the delete
     const [tag] = await db.select().from(tags).where(eq(tags.slug, tagSlug));
     if (tag) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential per-tag delete; ordering matters for partial success
       await db
         .delete(productTags)
         .where(and(eq(productTags.productId, product.id), eq(productTags.tagId, tag.id)));

@@ -129,11 +129,13 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
   const deadline = Date.now() + POLL_TIMEOUT_MS;
 
   while (Date.now() < deadline) {
+    // oxlint-disable-next-line no-await-in-loop -- crawl polling loop; each iteration checks job status before next poll
     const res = await fetch(url, { headers: cfHeaders() });
     if (!res.ok) {
       throw new AdapterError("crawl", `Failed to poll crawl ${jobId}: ${res.status}`);
     }
 
+    // oxlint-disable-next-line no-await-in-loop -- crawl polling loop; reading JSON body from same response
     const data = (await res.json()) as {
       success: boolean;
       result: {
@@ -164,8 +166,10 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
         let cursor: string | undefined = data.result_info.cursor;
         while (cursor) {
           pageUrl.searchParams.set("cursor", cursor);
+          // oxlint-disable-next-line no-await-in-loop -- crawl result pagination; next cursor comes from prior response
           const pageRes = await fetch(pageUrl.toString(), { headers: cfHeaders() });
           if (!pageRes.ok) break;
+          // oxlint-disable-next-line no-await-in-loop -- crawl result pagination; reading JSON body from same paged response
           const pageData = (await pageRes.json()) as typeof data;
           pages.push(...recordsToPages(pageData.result.records ?? []));
           cursor = pageData.result_info?.cursor;
@@ -175,6 +179,7 @@ export async function pollCrawlResults(jobId: string): Promise<CrawlPage[]> {
       return pages;
     }
 
+    // oxlint-disable-next-line no-await-in-loop -- crawl polling; deliberate sleep between status checks
     await new Promise((resolve) => setTimeout(resolve, POLL_INTERVAL_MS));
   }
 

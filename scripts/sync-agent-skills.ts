@@ -343,6 +343,7 @@ async function main() {
         console.log(`↻ ${displayTitle} (${existingId}) — pushing new version`);
         skillsChanged++;
         if (!dryRun) {
+          // oxlint-disable-next-line no-await-in-loop -- API rate limit; skills must be deployed sequentially
           const newVersion = await createSkillVersion(apiKey, existingId, content, dirName);
           config.skills[displayTitle] = {
             skillId: existingId,
@@ -357,6 +358,7 @@ async function main() {
         console.log(`+ ${displayTitle} — creating new skill`);
         skillsChanged++;
         if (!dryRun) {
+          // oxlint-disable-next-line no-await-in-loop -- API rate limit; skills must be deployed sequentially
           const created = await createSkill(apiKey, displayTitle, content, dirName);
           config.skills[displayTitle] = {
             skillId: created.id,

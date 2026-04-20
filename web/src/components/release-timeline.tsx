@@ -170,13 +170,16 @@ export function ReleaseTimeline({
 
   // Parse buckets once — stable across brush changes
   const parsedSources = useMemo(() => {
-    return activity.sources
-      .filter((source) => source.releaseCount > 0)
-      .map((source, i) => ({
-        ...source,
-        allBuckets: parseBuckets(source.weeklyBuckets),
-        colorIndex: productColorMap?.sourceColorMap.get(source.slug) ?? i,
-      }));
+    return (
+      activity.sources
+        .filter((source) => source.releaseCount > 0)
+        // oxlint-disable-next-line no-map-spread -- copy-on-write: source is from external API response
+        .map((source, i) => ({
+          ...source,
+          allBuckets: parseBuckets(source.weeklyBuckets),
+          colorIndex: productColorMap?.sourceColorMap.get(source.slug) ?? i,
+        }))
+    );
   }, [activity.sources, productColorMap]);
 
   // Per-source bucket data for stacked bar chart (only meaningful with multiple sources)

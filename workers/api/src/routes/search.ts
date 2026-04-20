@@ -34,10 +34,9 @@ function hydrateReleaseHit(
   try {
     const parsed = JSON.parse(row.media ?? "[]");
     if (Array.isArray(parsed)) {
-      media = parsed.map((m: RawMediaRow) => ({
-        ...m,
-        r2Url: resolveR2Url(m.r2Key, mediaOrigin),
-      }));
+      media = parsed.map((m: RawMediaRow) =>
+        Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
+      );
     }
   } catch {
     // Keep media empty — a malformed row shouldn't break the whole response.

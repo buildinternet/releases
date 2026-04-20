@@ -17,6 +17,7 @@ evaluateRoutes.get("/evaluate", async (c) => {
   }
 
   try {
+    // oxlint-disable-next-line no-new -- URL constructor is the standard way to validate URLs
     new URL(url);
   } catch {
     return c.json({ error: "invalid_parameter", message: "url must be a valid URL" }, 400);

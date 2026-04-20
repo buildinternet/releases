@@ -94,6 +94,7 @@ export async function runIncrementalExtraction(
   const rawReleases = Array.isArray(input?.releases) ? input.releases : [];
   const needsMoreContext = input?.needsMoreContext ?? false;
 
+  // oxlint-disable-next-line no-map-spread -- r comes from parsed AI output; copy-on-write is intentional
   const sanitized = rawReleases.map((r) => ({ ...r, version: sanitizeVersion(r.version) }));
   const releases = mapEntries(sanitized, { sourceUrl: source.url });
 

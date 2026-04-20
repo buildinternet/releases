@@ -64,10 +64,9 @@ type PositionedMilestone = ModelMilestone & { pct: number };
 function milestonesInRange(from: Date, to: Date): PositionedMilestone[] {
   const span = to.getTime() - from.getTime();
   if (span <= 0) return [];
-  return MODEL_MILESTONES.filter((m) => m.date >= from && m.date <= to).map((m) => ({
-    ...m,
-    pct: ((m.date.getTime() - from.getTime()) / span) * 100,
-  }));
+  return MODEL_MILESTONES.filter((m) => m.date >= from && m.date <= to).map((m) =>
+    Object.assign({}, m, { pct: ((m.date.getTime() - from.getTime()) / span) * 100 }),
+  );
 }
 
 const ANNOTATIONS_STORAGE_KEY = "released:show-model-annotations";
@@ -443,6 +442,7 @@ function DetailChart() {
     const mo = new Date(first);
     mo.setDate(1);
     if (mo < first) mo.setMonth(mo.getMonth() + 1);
+    // oxlint-disable-next-line no-unmodified-loop-condition -- mo advances via setMonth() below; last is a stable upper bound
     while (mo <= last) {
       const m = mo.getMonth();
       const keep = stride === 1 || (stride >= 12 ? m === 0 : m % stride === 0);

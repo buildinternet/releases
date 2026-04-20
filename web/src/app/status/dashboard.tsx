@@ -316,23 +316,23 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
-      ws.onopen = () => {
+      ws.addEventListener("open", () => {
         setConnected(true);
         reconnectDelay.current = 1000;
-      };
+      });
 
-      ws.onmessage = handleMessage;
+      ws.addEventListener("message", handleMessage);
 
-      ws.onclose = () => {
+      ws.addEventListener("close", () => {
         setConnected(false);
         if (intentionalClose.current) return;
         reconnectTimer.current = setTimeout(() => {
           reconnectDelay.current = Math.min(reconnectDelay.current * 2, 30000);
           connect();
         }, reconnectDelay.current);
-      };
+      });
 
-      ws.onerror = () => ws.close();
+      ws.addEventListener("error", () => ws.close());
     }
 
     connect();

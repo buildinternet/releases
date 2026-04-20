@@ -351,6 +351,7 @@ export async function fetchOne(
       // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
       // and direct rendering both see the underlying CDN asset.
       media: JSON.stringify(
+        // oxlint-disable-next-line no-map-spread -- copy-on-write required; m is an adapter-returned object
         (raw.media ?? []).map((m) => ({ ...m, url: normalizeMediaUrl(m.url) })),
       ),
     }));
@@ -362,6 +363,7 @@ export async function fetchOne(
       // Build publish rows from the RETURNING set (not zipped against
       // `chunk`) because onConflictDoNothing skips conflicting rows and
       // RETURNING omits them, so index alignment would drift.
+      // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit)
       const result = await db.insert(releases).values(chunk).onConflictDoNothing().returning({
         id: releases.id,
         title: releases.title,
@@ -737,6 +739,7 @@ async function refreshChangelogFile(
       const lastSlash = normalized.lastIndexOf("/");
       const dir = lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
       const filename = lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
+      // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub raw content API
       const f = await fetchOneFile(owner, repo, dir, filename, rawHeaders, source.slug);
       requestCount++;
       if (f) {
@@ -767,6 +770,7 @@ async function refreshChangelogFile(
         if (trimmed.endsWith("/*")) {
           const parent = trimmed.slice(0, -2);
           if (!parent || parent.includes("*")) continue;
+          // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub API; each glob dir fetched sequentially
           const parentEntries = await listDirContents(owner, repo, parent, apiHeaders);
           requestCount++;
           if (!parentEntries) continue;
@@ -781,11 +785,13 @@ async function refreshChangelogFile(
       }
       for (const dir of packageDirs) {
         if (fetched.length >= CHANGELOG_MAX_FILES) break;
+        // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub API; each package dir fetched sequentially
         const entries = await listDirContents(owner, repo, dir, apiHeaders);
         requestCount++;
         if (!entries) continue;
         const filename = pickChangelog(entries);
         if (!filename) continue;
+        // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub raw content API
         const f = await fetchOneFile(owner, repo, dir, filename, rawHeaders, source.slug);
         requestCount++;
         if (f) fetched.push(f);
@@ -811,6 +817,7 @@ async function refreshChangelogFile(
   for (const file of fetched) {
     const prior = existingByPath.get(file.path);
     if (!prior) {
+      // oxlint-disable-next-line no-await-in-loop -- sequential upsert: each file insert must complete before checking the next
       const [row] = await db
         .insert(sourceChangelogFiles)
         .values({
@@ -835,8 +842,10 @@ async function refreshChangelogFile(
       // Hash unchanged — short-circuit, no embed needed. Backfill tokens if the prior row predates that column.
       const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
       if (prior.tokens === null) touch.tokens = countTokensSafe(prior.content);
+      // oxlint-disable-next-line no-await-in-loop -- sequential per-file touch (content unchanged path)
       await db.update(sourceChangelogFiles).set(touch).where(eq(sourceChangelogFiles.id, prior.id));
     } else {
+      // oxlint-disable-next-line no-await-in-loop -- sequential per-file update (content changed path)
       await db
         .update(sourceChangelogFiles)
         .set({
@@ -863,6 +872,7 @@ async function refreshChangelogFile(
   if (changed.length > 0 && env.CHANGELOG_CHUNKS_INDEX) {
     for (const file of changed) {
       try {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
         await embedChangelogFileForSource(db, source, file, env);
       } catch (err) {
         console.warn(
@@ -876,6 +886,7 @@ async function refreshChangelogFile(
   const keep = new Set(fetched.map((f) => f.path));
   const toDelete = existing.filter((row) => !keep.has(row.path));
   for (const row of toDelete) {
+    // oxlint-disable-next-line no-await-in-loop -- sequential prune; set is typically empty or 1-2 rows
     await db.delete(sourceChangelogFiles).where(eq(sourceChangelogFiles.id, row.id));
     console.log(`[cron] Pruned ${row.path} for ${source.slug}`);
   }
@@ -961,6 +972,7 @@ async function embedReleasesForSource(
   }
 
   await embedAndUpsertReleases({
+    // oxlint-disable-next-line no-map-spread -- copy-on-write required; r is a DB row
     releases: rowsToEmbed.map((r) => ({
       ...r,
       orgId: source.orgId,
@@ -976,6 +988,7 @@ async function embedReleasesForSource(
       const now = new Date().toISOString();
       for (let i = 0; i < ids.length; i += 100) {
         const slice = ids.slice(i, i + 100);
+        // oxlint-disable-next-line no-await-in-loop -- D1 chunked update (100 bind param limit)
         await db.update(releases).set({ embeddedAt: now }).where(inArray(releases.id, slice));
       }
     },
@@ -1026,6 +1039,7 @@ async function embedChangelogFileForSource(
         const ids = diff.toDelete.map((d) => d.id);
         for (let i = 0; i < ids.length; i += 100) {
           const slice = ids.slice(i, i + 100);
+          // oxlint-disable-next-line no-await-in-loop -- D1 chunked delete (100 bind param limit)
           await db.delete(sourceChangelogChunks).where(inArray(sourceChangelogChunks.id, slice));
         }
       }
@@ -1033,6 +1047,7 @@ async function embedChangelogFileForSource(
       // 2. Update unchanged rows to reflect the new offset/heading/length.
       //    One-at-a-time is fine — the diff is usually small.
       for (const u of diff.unchanged) {
+        // oxlint-disable-next-line no-await-in-loop -- sequential per-chunk offset update (diff is typically small)
         await db
           .update(sourceChangelogChunks)
           .set({
@@ -1066,6 +1081,7 @@ async function embedChangelogFileForSource(
         // D1 caps bound parameters per statement at ~100. This table has
         // 11 columns, so 9 rows per batch keeps us under the limit.
         for (let i = 0; i < values.length; i += 9) {
+          // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit; 11 cols → 9 rows/batch)
           await db.insert(sourceChangelogChunks).values(values.slice(i, i + 9));
         }
       }

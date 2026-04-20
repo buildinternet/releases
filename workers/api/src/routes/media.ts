@@ -105,6 +105,7 @@ mediaRoutes.post("/media/assets", authMiddleware, async (c) => {
       releaseId: a.releaseId ?? null,
       createdAt,
     }));
+    // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit; 10 cols → 9 rows/batch)
     const rows = await db
       .insert(mediaAssets)
       .values(chunk)

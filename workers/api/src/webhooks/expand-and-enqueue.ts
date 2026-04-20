@@ -39,6 +39,7 @@ export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void
     if (messages.length === 0) return;
     for (let i = 0; i < messages.length; i += QUEUE_BATCH_LIMIT) {
       const chunk = messages.slice(i, i + QUEUE_BATCH_LIMIT);
+      // oxlint-disable-next-line no-await-in-loop -- Cloudflare Queue chunked sendBatch (API batch size limit)
       await args.queue.sendBatch(chunk.map((body) => ({ body })));
     }
   } catch (err) {

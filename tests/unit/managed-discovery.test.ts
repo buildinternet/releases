@@ -324,15 +324,15 @@ describe("buildWorkerSystemPrompt", () => {
 
 // ── Update session error detection (mirrors logic in managed-agents-session.ts) ──
 
-describe("update session error detection", () => {
-  /**
-   * Mirrors the decision logic at the end of runSession() for update mode.
-   * Given tool call counts, determines whether the session should fail or complete.
-   */
-  function shouldFail(toolCallCount: number, toolErrors: number): boolean {
-    return toolCallCount === 0 || (toolErrors > 0 && toolErrors >= toolCallCount);
-  }
+/**
+ * Mirrors the decision logic at the end of runSession() for update mode.
+ * Given tool call counts, determines whether the session should fail or complete.
+ */
+function shouldFail(toolCallCount: number, toolErrors: number): boolean {
+  return toolCallCount === 0 || (toolErrors > 0 && toolErrors >= toolCallCount);
+}
 
+describe("update session error detection", () => {
   it("fails when no tool calls were made", () => {
     expect(shouldFail(0, 0)).toBe(true);
   });
@@ -360,11 +360,11 @@ describe("update session error detection", () => {
 
 // ── Error string detection (mirrors sendResult check in managed-agents-session.ts) ──
 
-describe("tool error detection via result prefix", () => {
-  function isError(result: string): boolean {
-    return result.startsWith("Error");
-  }
+function isError(result: string): boolean {
+  return result.startsWith("Error");
+}
 
+describe("tool error detection via result prefix", () => {
   it("detects standard error responses", () => {
     expect(isError("Error: identifier is required")).toBe(true);
     expect(isError("Error (HTTP 404): not found")).toBe(true);

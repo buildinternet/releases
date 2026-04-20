@@ -55,6 +55,12 @@ function isInactive(source: SourceListItem): boolean {
   return Boolean(source.isHidden) || source.fetchPriority === "paused" || source.releaseCount === 0;
 }
 
+function sortByImportance(a: SourceListItem, b: SourceListItem): number {
+  if (a.isPrimary && !b.isPrimary) return -1;
+  if (!a.isPrimary && b.isPrimary) return 1;
+  return b.releaseCount - a.releaseCount;
+}
+
 export function SourceTable({
   sources,
   products,
@@ -72,11 +78,6 @@ export function SourceTable({
     (isInactive(s) ? inactive : active).push(s);
   }
 
-  const sortByImportance = (a: SourceListItem, b: SourceListItem) => {
-    if (a.isPrimary && !b.isPrimary) return -1;
-    if (!a.isPrimary && b.isPrimary) return 1;
-    return b.releaseCount - a.releaseCount;
-  };
   active.sort(sortByImportance);
   inactive.sort(sortByImportance);
 
