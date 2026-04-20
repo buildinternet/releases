@@ -217,8 +217,8 @@ export default async function OrgPage({
             sections={sidebarSections}
             accounts={org.accounts}
             formatPath={`/${orgSlug}`}
-            footnote={org.lastFetchedAt ? `Last fetched ${formatDate(org.lastFetchedAt)}` : null}
-            footnoteTitle={org.lastFetchedAt}
+            lastCheckedAt={org.lastPolledAt ?? org.lastFetchedAt}
+            lastFetchedAt={org.lastFetchedAt}
           />
         </div>
       </div>

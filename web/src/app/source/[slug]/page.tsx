@@ -175,10 +175,8 @@ export default async function IndependentSourcePage({
           <Sidebar
             sections={sidebarSections}
             formatPath={`/source/${slug}`}
-            footnote={
-              source.lastFetchedAt ? `Last fetched ${formatDate(source.lastFetchedAt)}` : null
-            }
-            footnoteTitle={source.lastFetchedAt}
+            lastCheckedAt={source.lastPolledAt ?? source.lastFetchedAt}
+            lastFetchedAt={source.lastFetchedAt}
           />
         </div>
       </div>

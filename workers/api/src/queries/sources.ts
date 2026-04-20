@@ -13,6 +13,7 @@ export type SourceListRow = {
   is_hidden: number | null;
   metadata: string | null;
   last_fetched_at: string | null;
+  last_polled_at: string | null;
   fetch_priority: string | null;
   change_detected_at: string | null;
   consecutive_no_change: number | null;

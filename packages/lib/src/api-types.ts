@@ -61,6 +61,7 @@ export interface OrgDetail {
   releasesLast30Days: number;
   avgReleasesPerWeek: number;
   lastFetchedAt: string | null;
+  lastPolledAt: string | null;
   trackingSince: string;
   aliases?: string[];
   accounts: { platform: string; handle: string }[];
@@ -95,6 +96,7 @@ export interface SourceListItem {
   isHidden?: boolean;
   fetchPriority?: "normal" | "low" | "paused" | null;
   lastFetchedAt?: string | null;
+  lastPolledAt?: string | null;
   changeDetectedAt?: string | null;
   consecutiveNoChange?: number | null;
   consecutiveErrors?: number | null;
@@ -128,6 +130,7 @@ export interface SourceWithOrg {
   latestVersion: string | null;
   latestDate: string | null;
   lastFetchedAt: string | null;
+  lastPolledAt: string | null;
   fetchPriority: string | null;
   changeDetectedAt: string | null;
   consecutiveNoChange: number | null;
@@ -215,6 +218,7 @@ export interface SourceDetail {
   latestVersion: string | null;
   latestDate: string | null;
   lastFetchedAt: string | null;
+  lastPolledAt: string | null;
   trackingSince: string;
   releases: ReleaseItem[];
   pagination: { page: number; pageSize: number; totalPages: number; totalItems: number };

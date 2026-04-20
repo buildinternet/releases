@@ -118,6 +118,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     aliasRows,
     totalReleaseRow,
     latestFetchRow,
+    latestPollRow,
     knowledgePageRows,
     metricsRow,
   ] = await Promise.all([
@@ -167,6 +168,12 @@ orgRoutes.get("/orgs/:slug", async (c) => {
       .from(sources)
       .where(eq(sources.orgId, org.id)),
 
+    // Latest poll (change-detection check) timestamp across all org sources
+    db
+      .select({ maxPoll: max(sources.lastPolledAt) })
+      .from(sources)
+      .where(eq(sources.orgId, org.id)),
+
     // Overview + playbook pages for this org (single query, split client-side)
     db
       .select()
@@ -201,6 +208,8 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     isPrimary: Boolean(row.is_primary),
     isHidden: Boolean(row.is_hidden),
     fetchPriority: (row.fetch_priority ?? null) as "normal" | "low" | "paused" | null,
+    lastFetchedAt: row.last_fetched_at ?? null,
+    lastPolledAt: row.last_polled_at ?? null,
     releaseCount: row.release_count,
     latestVersion: row.latest_version_by_date ?? row.latest_version_by_fetch ?? null,
     latestDate: row.latest_date ?? null,
@@ -216,6 +225,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
   const totalReleases = totalReleaseRow[0];
   const latestFetch = latestFetchRow[0];
+  const latestPoll = latestPollRow[0];
   const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
   // Playbook content (header + agent notes) is internal — only return it to
   // authenticated callers so we don't leak it via the public-cached JSON.
@@ -248,6 +258,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     releasesLast30Days,
     avgReleasesPerWeek,
     lastFetchedAt: latestFetch.maxFetch ?? null,
+    lastPolledAt: latestPoll.maxPoll ?? null,
     trackingSince: oldestReleaseDate ?? org.createdAt,
     aliases: aliasRows.map((a) => a.domain),
     accounts,
