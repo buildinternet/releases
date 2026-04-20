@@ -29,11 +29,19 @@ interface SidebarProps {
   sections: SidebarSection[];
   accounts?: { platform: string; handle: string }[];
   formatPath?: string;
-  footnote?: string | null;
-  footnoteTitle?: string | null;
+  /** ISO timestamp for the "last checked" indicator — rendered with relative-time tooltip and stale warning. */
+  lastCheckedAt?: string | null;
+  /** ISO timestamp for the most recent successful full fetch — shown in the stale tooltip when it differs from lastCheckedAt. */
+  lastFetchedAt?: string | null;
 }
 
-export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitle }: SidebarProps) {
+export function Sidebar({
+  sections,
+  accounts,
+  formatPath,
+  lastCheckedAt,
+  lastFetchedAt,
+}: SidebarProps) {
   return (
     <div className="w-full md:w-[200px] shrink-0">
       {sections.map((section, si) => (
@@ -103,22 +111,22 @@ export function Sidebar({ sections, accounts, formatPath, footnote, footnoteTitl
           </div>
         </div>
       )}
-      {(footnote || formatPath) && (
+      {(lastCheckedAt || formatPath) && (
         <div className="border-t border-stone-200 dark:border-stone-800 pt-4 mb-6">
-          {footnoteTitle ? (
+          {lastCheckedAt && (
             <div className="text-[11px] mb-3 cursor-default text-stone-400 dark:text-stone-500 flex items-center gap-1">
-              <LocalTimestamp iso={footnoteTitle} prefix="Last fetched " />
-              {isStale(footnoteTitle) && (
+              <LocalTimestamp iso={lastCheckedAt} prefix="Last checked " />
+              {isStale(lastCheckedAt) && (
                 <InfoTooltip
-                  text={`Last fetched ${formatRelativeDate(footnoteTitle)} — this data may be out of date.`}
+                  text={
+                    lastFetchedAt && lastFetchedAt !== lastCheckedAt
+                      ? `Last checked ${formatRelativeDate(lastCheckedAt)}; last successful fetch ${formatRelativeDate(lastFetchedAt)}. This data may be out of date.`
+                      : `Last checked ${formatRelativeDate(lastCheckedAt)} — this data may be out of date.`
+                  }
                 />
               )}
             </div>
-          ) : footnote ? (
-            <div className={`text-[11px] mb-3 cursor-default text-stone-400 dark:text-stone-500`}>
-              {footnote}
-            </div>
-          ) : null}
+          )}
           {formatPath && (
             <div className="flex gap-2 text-[11px] text-stone-400 dark:text-stone-500">
               <a

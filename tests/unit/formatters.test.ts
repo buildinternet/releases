@@ -18,9 +18,12 @@ const fullSource: FormatSourceDetail = {
   changelogUrl: "https://nextjs.org/changelog",
   org: { slug: "vercel", name: "Vercel" },
   releaseCount: 150,
+  releasesLast30Days: 5,
+  avgReleasesPerWeek: 2.5,
   latestVersion: "15.0.0",
   latestDate: "2024-06-15T00:00:00Z",
   lastFetchedAt: "2024-06-16T12:00:00Z",
+  lastPolledAt: "2024-06-16T13:00:00Z",
   trackingSince: "2024-01-01T00:00:00Z",
   releases: [
     {
@@ -73,6 +76,7 @@ const fullOrg: FormatOrgDetail = {
   releasesLast30Days: 12,
   avgReleasesPerWeek: 3.5,
   lastFetchedAt: "2024-06-16T00:00:00Z",
+  lastPolledAt: "2024-06-16T01:00:00Z",
   trackingSince: "2024-01-01T00:00:00Z",
   accounts: [
     { platform: "github", handle: "vercel" },

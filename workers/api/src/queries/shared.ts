@@ -20,6 +20,8 @@ export type SourceWithStats = {
   is_primary: number | null;
   is_hidden: number | null;
   fetch_priority: string | null;
+  last_fetched_at: string | null;
+  last_polled_at: string | null;
   release_count: number;
   latest_version_by_date: string | null;
   latest_date: string | null;
