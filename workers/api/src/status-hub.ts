@@ -351,6 +351,26 @@ export class StatusHub extends DurableObject {
           existing.usage = event.usage as SessionState["usage"];
         }
         await this.ctx.storage.put(`session:${existing.sessionId}`, existing);
+      } else {
+        // session:start was never received (e.g. the managed-agent alarm failed before
+        // it could register the session). Create a minimal error row so the session ID
+        // the caller already received is visible and not a ghost.
+        const ghost: SessionState = {
+          sessionId: event.sessionId as string,
+          company: (event.company as string | undefined) ?? "(unknown)",
+          type: (event.sessionType as SessionState["type"]) ?? "update",
+          status: "error",
+          error: event.error as string,
+          startedAt: now,
+          lastUpdatedAt: now,
+          activeSources: [],
+        };
+        await this.ctx.storage.put(`session:${ghost.sessionId}`, ghost);
+        // Ensure cleanup alarm is scheduled
+        const existingAlarm = await this.ctx.storage.getAlarm();
+        if (!existingAlarm) {
+          await this.ctx.storage.setAlarm(now + CLEANUP_INTERVAL_MS);
+        }
       }
     }
     this.broadcast(event);

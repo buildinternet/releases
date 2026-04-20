@@ -88,13 +88,33 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     const agentVersion = useWorker ? undefined : params.agentVersion;
 
     try {
+      // Register the session with StatusHub BEFORE any Anthropic API calls so that
+      // the session ID the caller already received is always visible in /v1/sessions.
+      // If anything below fails, fail() will update this session row to status=error
+      // rather than silently dropping the notification (which happened previously
+      // because StatusHub's session:error handler required an existing row).
+      const releasedApiKey = await this.env.RELEASED_API_KEY.get();
+      await this.notifyStatusHub(
+        {
+          type: "session:start",
+          sessionId,
+          company: params.company,
+          sessionType: mode,
+          agent: useWorker ? "haiku" : "sonnet",
+          ...(params.correlationId ? { correlationId: params.correlationId } : {}),
+          ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
+            ? { activeSources: params.sourceIdentifiers }
+            : {}),
+        },
+        releasedApiKey,
+      );
+
       const anthropicApiKey = await this.env.ANTHROPIC_API_KEY.get();
       if (!anthropicApiKey) {
-        await this.fail(sessionId, params.company, "ANTHROPIC_API_KEY not configured");
+        await this.fail(sessionId, params.company, "ANTHROPIC_API_KEY not configured", releasedApiKey);
         return;
       }
 
-      const releasedApiKey = await this.env.RELEASED_API_KEY.get();
       const fetcher = this.env.API_WORKER ?? {
         fetch: (input: RequestInfo | URL, init?: RequestInit) =>
           globalThis.fetch(
@@ -144,21 +164,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         title: sessionTitle,
       });
 
+      // Update StatusHub with the Anthropic session ID now that we have it
       await this.notifyStatusHub(
         {
-          type: "session:start",
+          type: "session:progress",
           sessionId,
-          company: params.company,
-          sessionType: mode,
-          agent: useWorker ? "haiku" : "sonnet",
           anthropicSessionId: session.id,
-          ...(params.correlationId ? { correlationId: params.correlationId } : {}),
-          // Register source identifiers so the CLI overlap check can detect
-          // in-flight managed-agent sessions. These may be IDs (src_…) or slugs;
-          // fetch.ts normalises them to slugs before comparing.
-          ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
-            ? { activeSources: params.sourceIdentifiers }
-            : {}),
         },
         releasedApiKey,
       );
