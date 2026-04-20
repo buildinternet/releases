@@ -1,9 +1,10 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { negotiate } from "@/lib/accept";
 import { FORMATS, type Format } from "@/lib/request";
 
 /**
  * Route requests to format API handlers either by URL suffix or by
- * `Accept: text/markdown` content negotiation.
+ * `Accept` header content negotiation (RFC 9110 §12.5.1).
  *
  * Docs pages:
  *   /docs.md                         → /api/docs/index
@@ -15,10 +16,16 @@ import { FORMATS, type Format } from "@/lib/request";
  *   /inngest.atom                    → /api/format/inngest   (format: atom)
  *   /inngest/inngest-changelog.json  → /api/format/inngest/inngest-changelog
  *   /source/my-source.md             → /api/format/source/my-source
+ *
+ * For all other requests we negotiate on the Accept header. Paths with a
+ * markdown representation offer `text/html` + `text/markdown`; everything
+ * else offers only `text/html`. When the client accepts none of the offered
+ * types we return 406 Not Acceptable instead of silently serving HTML.
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // Explicit suffix routes — skip Accept negotiation.
   if (pathname === "/docs.md") {
     return rewriteTo(request, "/api/docs/index");
   }
@@ -26,23 +33,24 @@ export function proxy(request: NextRequest) {
     const slug = pathname.slice("/docs/".length, -".md".length);
     return rewriteTo(request, `/api/docs/${slug}`);
   }
-
   const suffixMatch = pathname.match(SUFFIX_PATTERN);
   if (suffixMatch) {
     const [, basePath, format] = suffixMatch;
     return rewriteToFormat(request, `/api/format${basePath}`, format as Format);
   }
 
-  // Accept: text/markdown negotiation for agents.
-  if (prefersMarkdown(request.headers.get("accept"))) {
-    const target = mapPathToMarkdownRoute(pathname);
-    if (target) {
-      return target.startsWith("/api/docs/")
-        ? rewriteTo(request, target)
-        : rewriteToFormat(request, target, "md");
-    }
-  }
+  const mdTarget = mapPathToMarkdownRoute(pathname);
+  const offered = mdTarget ? OFFERED_WITH_MARKDOWN : OFFERED_HTML_ONLY;
+  const chosen = negotiate(request.headers.get("accept"), offered);
 
+  if (chosen === null) {
+    return notAcceptable(offered);
+  }
+  if (chosen === "text/markdown" && mdTarget) {
+    return mdTarget.startsWith("/api/docs/")
+      ? rewriteTo(request, mdTarget)
+      : rewriteToFormat(request, mdTarget, "md");
+  }
   return NextResponse.next();
 }
 
@@ -61,9 +69,25 @@ function rewriteToFormat(request: NextRequest, pathname: string, format: Format)
   return NextResponse.rewrite(url, { request: { headers } });
 }
 
+function notAcceptable(offered: readonly string[]) {
+  return new NextResponse(
+    `406 Not Acceptable\n\nThis resource can produce: ${offered.join(", ")}\n`,
+    {
+      status: 406,
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        Vary: "Accept",
+      },
+    },
+  );
+}
+
 const SUFFIX_PATTERN = new RegExp(`^(\\/[^.]+)\\.(${FORMATS.join("|")})$`);
 
-// Top-level segments that aren't org slugs — skip Accept negotiation on these.
+const OFFERED_WITH_MARKDOWN = ["text/html", "text/markdown"] as const;
+const OFFERED_HTML_ONLY = ["text/html"] as const;
+
+// Top-level segments that aren't org slugs — these have no markdown variant.
 const RESERVED_TOP_SEGMENTS = new Set([
   "api",
   "_next",
@@ -92,18 +116,10 @@ function mapPathToMarkdownRoute(pathname: string): string | null {
   const parts = pathname.slice(1).split("/").filter(Boolean);
   if (parts.length === 0) return null; // homepage — no md equivalent yet
   if (RESERVED_TOP_SEGMENTS.has(parts[0])) return null;
-  // /{orgSlug} or /{orgSlug}/{sourceSlug} — /api/format handles both shapes.
   if (parts.length === 1 || parts.length === 2) {
     return `/api/format/${parts.join("/")}`;
   }
   return null;
-}
-
-function prefersMarkdown(accept: string | null): boolean {
-  if (!accept || !accept.includes("text/markdown")) return false;
-  const mdPos = accept.indexOf("text/markdown");
-  const htmlPos = accept.indexOf("text/html");
-  return htmlPos === -1 || mdPos < htmlPos;
 }
 
 export const config = {
