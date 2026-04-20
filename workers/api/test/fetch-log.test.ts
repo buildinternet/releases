@@ -469,10 +469,7 @@ describe("POST /v1/sources/:slug/fetch query params", () => {
 });
 
 describe("POST /v1/sources/:slug/fetch — scrape source inline dispatch", () => {
-  async function seedScrape(
-    db: ReturnType<typeof mkDb>,
-    meta: Record<string, unknown> | null,
-  ) {
+  async function seedScrape(db: ReturnType<typeof mkDb>, meta: Record<string, unknown> | null) {
     await db
       .insert(organizations)
       .values({ id: "org_b", slug: "beta", name: "Beta", category: "cloud" });

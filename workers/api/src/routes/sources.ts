@@ -300,7 +300,11 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
   let responsePayload: Record<string, unknown>;
 
   const meta = getSourceMeta(src);
-  if (src.type === "feed" || src.type === "github" || (src.type === "scrape" && meta.feedUrl != null)) {
+  if (
+    src.type === "feed" ||
+    src.type === "github" ||
+    (src.type === "scrape" && meta.feedUrl != null)
+  ) {
     // Feed, GitHub, and scrape sources with a discovered feedUrl: fetch server-side
     const githubToken = await c.env.GITHUB_TOKEN?.get();
     const sessionId = c.req.query("sessionId") ?? undefined;
