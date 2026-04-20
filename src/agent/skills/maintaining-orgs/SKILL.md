@@ -41,7 +41,7 @@ This fetches every active source for the org (skipping `fetchPriority: paused`) 
 For orgs with `scrape` or `agent` sources, skim the playbook before refreshing — it documents source-specific quirks that may affect `--max` or require crawl flags:
 
 ```bash
-releases admin content playbook <slug>
+releases admin playbook <slug>
 ```
 
 Skip this for orgs with only `feed` and `github` sources. Check source types with `releases admin org show <slug>`.
@@ -93,7 +93,7 @@ Your task: refresh **{Org Name}** (slug: `{slug}`).
 Run: releases admin org refresh {slug} --json
 
 If the org has scrape or agent sources, first check the playbook:
-  releases admin content playbook {slug} 2>/dev/null
+  releases admin playbook {slug} 2>/dev/null
 
 Report back: sources fetched, new releases found, overview status
 (from the JSON output). Keep it concise.

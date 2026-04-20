@@ -63,12 +63,11 @@ releases admin source changelog apollo-client --tokens 10000 --json
 
 # JSON output carries totalTokens + sliceTokens alongside offset/nextOffset/totalChars
 releases admin source changelog apollo-client --limit 5000 --json
-
-# Manually refresh the cached copy (local mode only — remote mode uses a worker cron on a 24h TTL)
-releases admin source refresh-changelog apollo-client
 ```
 
-Works in both local and remote mode. The slicer snaps boundaries to `##` headings so sections are never cut mid-entry. `--tokens` and `--limit` both operate under the same rules; `--tokens` wins when both are passed. Chain successive calls by feeding `nextOffset` back as `--offset`. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
+The cached CHANGELOG copy refreshes automatically via a worker cron on a 24-hour TTL; no manual refresh command is needed.
+
+The slicer snaps boundaries to `##` headings so sections are never cut mid-entry. `--tokens` and `--limit` both operate under the same rules; `--tokens` wins when both are passed. Chain successive calls by feeding `nextOffset` back as `--offset`. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
 
 ## Evaluate
 
@@ -160,15 +159,24 @@ releases admin release delete rel_abc123
 releases admin release suppress rel_abc123 --reason "promotional content"
 ```
 
-## Persisted summaries
+## Playbook
 
-Generate cached AI summaries with configurable windows:
+Read or update an organization's playbook — the agent-facing reference for how each source works.
 
 ```bash
-releases admin content summary generate next-js
-releases admin content summary generate next-js --window 30
-releases admin content summary generate next-js --monthly
+# Read the assembled playbook (header + agent notes)
+releases admin playbook vercel
+releases admin playbook vercel --json
+
+# Replace agent notes — seeds a fresh header on first write
+releases admin playbook vercel --notes "$(cat playbook-notes.md)"
 ```
+
+The playbook header (source list, products) regenerates automatically after any source add/edit/remove.
+
+## Persisted summaries
+
+On-demand AI summaries and comparisons are exposed via `POST /v1/admin/summaries` and `POST /v1/admin/compare`. A thin CLI wrapper is planned ([see #419](https://github.com/buildinternet/releases/issues/419)) — for now, call the API directly with `curl` and an admin key.
 
 ## Source health checks
 

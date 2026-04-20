@@ -7,6 +7,14 @@ description: Coordinate bulk playbook writing using parallel sub-agents — cove
 
 Coordinate bulk creation or enrichment of playbook agent notes across many orgs using parallel sub-agents.
 
+## What a playbook is
+
+**A playbook is a per-org skill for fetching that org's releases.** Same mental model as the global skills in this corpus (`parsing-changelogs`, `managing-sources`, etc.) — but scoped to one organization. It tells a future agent (managed or local) how to pull updates from _this_ org: extraction quirks, naming conventions, which sources are canonical, what to skip, where rollups hide.
+
+Global skills teach general patterns; per-source `parseInstructions` teach source-specific hints; the playbook is the org-level layer between them. When agents fetch any of an org's sources, they should load that org's playbook into context alongside the global skills — the playbook overrides general rules with specific org behavior.
+
+Write notes as instructions to an LLM, not as human documentation. Imperative voice ("Set version=null", "Parse `<h2>` as version boundaries"), concrete examples from real data, and only observations that change future fetch behavior.
+
 **Local-only**: This skill requires Claude Code's Agent tool to dispatch sub-agents. Managed agents (discovery worker, Haiku worker) cannot spawn sub-agents — that capability is behind a private beta and not yet available. When sub-agent support ships for managed agents, this skill can be adapted into a managed session mode.
 
 ## When to Use
@@ -24,7 +32,7 @@ bun -e "
 const orgs = JSON.parse(Bun.spawnSync(['bun', 'src/index.ts', 'admin', 'org', 'list', '--json'], { stderr: 'ignore' }).stdout.toString());
 const active = orgs.filter(o => o.sourceCount > 0).sort((a,b) => b.releaseCount - a.releaseCount);
 for (const org of active) {
-  const playbook = JSON.parse(Bun.spawnSync(['bun', 'src/index.ts', 'admin', 'content', 'playbook', org.slug, '--json'], { stderr: 'ignore' }).stdout.toString());
+  const playbook = JSON.parse(Bun.spawnSync(['releases', 'admin', 'playbook', org.slug, '--json'], { stderr: 'ignore' }).stdout.toString());
   const status = playbook.notes?.length > 100 ? 'has notes (' + playbook.notes.length + ' chars)' : 'NEEDS PLAYBOOK';
   console.log(org.slug.padEnd(25) + ' sources=' + String(org.sourceCount).padStart(2) + '  ' + status);
 }
@@ -103,14 +111,15 @@ Products: {product list or "none"}
 **Coverage**: 2-3 sentences. Which sources are canonical, whether there are gaps.
 
 Save by running:
-bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
-bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts admin content playbook {slug} 2>/dev/null | tail -20
+Verify with: releases admin playbook {slug} 2>/dev/null | tail -20
 ```
+
+The playbook header regenerates automatically after any source add/edit/remove, and the `--notes` PATCH seeds a fresh header on first write — no separate regenerate step needed.
 
 ### Verified prompt template
 
@@ -149,13 +158,12 @@ Every claim must cite observed data. If uncertain, say so explicitly.
 
 ## Step 4: Save
 
-bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
-bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes "$(cat <<'NOTES'
 YOUR NOTES HERE
 NOTES
 )" 2>/dev/null
 
-Verify with: bun src/index.ts admin content playbook {slug} 2>/dev/null | tail -20
+Verify with: releases admin playbook {slug} 2>/dev/null | tail -20
 ```
 
 ### Dispatch pattern
@@ -178,8 +186,7 @@ Sub-agents may be blocked from saving notes via Bash (heredoc permission issues)
 2. The parent agent (you) saves the notes manually:
 
 ```bash
-bun src/index.ts admin content playbook {slug} --regenerate 2>/dev/null
-bun src/index.ts admin content playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes "$(cat <<'NOTES'
 {paste notes from agent result}
 NOTES
 )" 2>/dev/null

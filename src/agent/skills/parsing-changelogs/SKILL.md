@@ -91,7 +91,7 @@ Once `feedContentDepth` is set, skip the sampling step on future encounters. Cra
 
 Engineering blogs and news pages mix product announcements with educational content, opinion pieces, and corporate news. They can be useful supplementary sources but require aggressive filtering via `parseInstructions` to avoid noise.
 
-**Before working with blog sources:** Check the org's playbook (`releases admin content playbook <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
+**Before working with blog sources:** Check the org's playbook (`releases admin playbook <org>`) for notes about how existing blog sources perform, what filtering works, and which products they cover.
 
 **When to add a blog source:**
 
@@ -168,7 +168,7 @@ Most releases are **features** — individual version bumps, single product anno
 
 **How to recognize rollup sources:**
 
-Before parsing, **always read the playbook** (CLI: `releases admin content playbook <org>`, typed tool: `get_playbook` with organization param). If a company publishes rollups as its primary cadence — quarterly, seasonal, "every few months" — the playbook notes should say so explicitly. Example notes:
+Before parsing, **always read the playbook** (CLI: `releases admin playbook <org>`, typed tool: `get_playbook` with organization param). If a company publishes rollups as its primary cadence — quarterly, seasonal, "every few months" — the playbook notes should say so explicitly. Example notes:
 
 - "Brex publishes quarterly seasonal rollup pages at `/product-announcements/{fall,spring,summer,winter}-release-YYYY`. Treat each as `type: rollup`."
 - "Ramp's blog series `/blog/new-on-ramp-*-edition` and `/new-on-ramp-q*-*` are quarterly/monthly rollups. Classify as `type: rollup`; individual features within are not separately indexed."

@@ -139,7 +139,7 @@ If no releases were fetched:
 For orgs with `scrape` or `agent` sources, write verified agent notes once you have real fetch data:
 
 ```bash
-releases admin content playbook <slug> --notes "$(cat <<'EOF'
+releases admin playbook <slug> --notes "$(cat <<'EOF'
 ### Fetch instructions
 ...
 
