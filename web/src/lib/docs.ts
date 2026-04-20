@@ -3,10 +3,11 @@ import path from "node:path";
 import { cache } from "react";
 import matter from "gray-matter";
 
-const DOCS_DIR = path.join(process.cwd(), "src", "content", "docs");
+const CONTENT_ROOT = path.join(process.cwd(), "src", "content");
 
 export type DocFrontmatter = {
   title: string;
+  description?: string;
   adminOnly?: boolean;
 };
 
@@ -34,8 +35,8 @@ export function keepAdminBlocks(content: string): string {
   return content.replace(ADMIN_MARKER_PATTERN, "");
 }
 
-export const loadDoc = cache((slug: string): Doc => {
-  const filePath = path.join(DOCS_DIR, `${slug}.md`);
+export const loadMarkdown = cache((dir: string, slug: string): Doc => {
+  const filePath = path.join(CONTENT_ROOT, dir, `${slug}.md`);
   const raw = fs.readFileSync(filePath, "utf8");
   const parsed = matter(raw);
   const { adminOnly: _adminOnly, ...publicFrontmatter } = parsed.data as DocFrontmatter;
@@ -50,3 +51,6 @@ export const loadDoc = cache((slug: string): Doc => {
     public: matter.stringify(bodyWithoutSlots, publicFrontmatter),
   };
 });
+
+export const loadDoc = (slug: string): Doc => loadMarkdown("docs", slug);
+export const loadPage = (slug: string): Doc => loadMarkdown("pages", slug);

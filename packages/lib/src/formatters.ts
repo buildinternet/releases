@@ -13,6 +13,7 @@ import type {
   SourceListItem,
   OrgDetail,
   OrgReleaseItem,
+  ProductDetail,
   UnifiedSearchResponse,
   OverviewPageItem,
 } from "./api-types.js";
@@ -288,6 +289,57 @@ export function releaseToMarkdown(release: ReleaseDetail, opts: FormatOptions = 
 
   if (release.content) {
     lines.push(release.content);
+    lines.push("");
+  }
+
+  return lines.join("\n");
+}
+
+// ── Product → Markdown ─────────────────────────────────────────────
+
+export function productToMarkdown(
+  product: ProductDetail,
+  orgSlug: string,
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+
+  lines.push("---");
+  lines.push(yamlLine("name", product.name));
+  lines.push(yamlLine("slug", product.slug));
+  lines.push(yamlLine("organization_slug", orgSlug));
+  if (product.url) lines.push(yamlLine("url", product.url));
+  if (product.category) lines.push(yamlLine("category", product.category));
+  lines.push(yamlLine("source_count", product.sources.length));
+  if (opts.baseUrl) {
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/${orgSlug}/product/${product.slug}`));
+  }
+  lines.push("---");
+  lines.push("");
+
+  lines.push(`# ${product.name}`);
+  lines.push("");
+  if (product.description) {
+    lines.push(product.description);
+    lines.push("");
+  }
+
+  lines.push(`## Sources (${product.sources.length})`);
+  lines.push("");
+  if (product.sources.length === 0) {
+    lines.push("_No sources yet._");
+  } else {
+    for (const source of product.sources) {
+      const url = opts.baseUrl
+        ? `${opts.baseUrl}/${orgSlug}/${source.slug}`
+        : `/${orgSlug}/${source.slug}`;
+      lines.push(`- [${source.name}](${url}) — \`${source.type}\``);
+    }
+  }
+  lines.push("");
+
+  if (product.tags.length > 0) {
+    lines.push(`**Tags:** ${product.tags.map((t) => `\`${t}\``).join(", ")}`);
     lines.push("");
   }
 
