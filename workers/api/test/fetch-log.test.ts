@@ -467,3 +467,66 @@ describe("POST /v1/sources/:slug/fetch query params", () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe("POST /v1/sources/:slug/fetch — scrape source inline dispatch", () => {
+  async function seedScrape(
+    db: ReturnType<typeof mkDb>,
+    meta: Record<string, unknown> | null,
+  ) {
+    await db
+      .insert(organizations)
+      .values({ id: "org_b", slug: "beta", name: "Beta", category: "cloud" });
+    await db.insert(sources).values({
+      id: "src_b1",
+      orgId: "org_b",
+      slug: "beta-scrape",
+      name: "Beta Scrape",
+      url: "https://b.test/changelog",
+      type: "scrape",
+      metadata: meta ? JSON.stringify(meta) : null,
+    });
+    const [src] = await db.select().from(sources).where(eq(sources.id, "src_b1"));
+    return src;
+  }
+
+  function mkApp(db: ReturnType<typeof mkDb>) {
+    const fakeEnv = { DB: db, STATUS_HUB: statusHubStub };
+    const app = new Hono();
+    const v1 = new Hono();
+    v1.route("/", sourceRoutes);
+    app.route("/v1", v1);
+    return (req: Request) => app.fetch(req, fakeEnv);
+  }
+
+  it("runs inline (fetched=true) for a scrape source that has a discovered feedUrl", async () => {
+    const db = mkDb();
+    await seedScrape(db, { feedUrl: "https://b.test/feed.xml", feedType: "rss" });
+    const fetch = mkApp(db);
+    nextFeedResult = { releases: [mkRaw("https://b.test/v1")] };
+
+    const res = await fetch(
+      new Request("https://x.test/v1/sources/beta-scrape/fetch", { method: "POST" }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.fetched).toBe(true);
+    // feedCalls proves fetchAndParseFeed was actually invoked
+    expect(feedCalls.length).toBeGreaterThan(0);
+  });
+
+  it("flags (queued=true) for a scrape source without a feedUrl", async () => {
+    const db = mkDb();
+    await seedScrape(db, null);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/sources/beta-scrape/fetch", { method: "POST" }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.queued).toBe(true);
+    expect(body.type).toBe("flagged");
+    // fetchAndParseFeed must NOT have been called
+    expect(feedCalls.length).toBe(0);
+  });
+});
