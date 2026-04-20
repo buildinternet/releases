@@ -44,7 +44,15 @@ With local-only discovery retired, Claude does the discovery work directly — f
 
 ### Step 3: Evaluate Source Quality
 
-Before adding any source, spot-check freshness:
+For each candidate URL, run the AI-backed evaluator to get the recommended ingestion method (feed / github / markdown / scrape / crawl), feed URL, provider detection, and confidence:
+
+```bash
+releases admin discovery evaluate <url> --json
+```
+
+This is often enough on its own to pick the right source type — skip manual feed sniffing when the evaluator returns a high-confidence feed URL.
+
+Then spot-check freshness:
 
 ```bash
 # Web pages — look for recent dates

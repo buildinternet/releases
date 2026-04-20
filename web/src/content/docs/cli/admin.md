@@ -142,16 +142,6 @@ releases admin discovery onboard "Vercel"
 releases admin discovery onboard "Stripe" --domain stripe.com --github-org stripe
 ```
 
-## Discover
-
-Find changelog pages for a domain:
-
-```bash
-releases admin discovery discover vercel.com
-releases admin discovery discover vercel.com --verify
-releases admin discovery discover vercel.com --add
-```
-
 ## Ignored & blocked URLs
 
 ```bash
