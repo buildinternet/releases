@@ -10,6 +10,7 @@ import {
   productTags,
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { isConflictError, getOrCreateTagsD1, productWhere, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
@@ -74,9 +75,19 @@ productRoutes.post("/products/adopt", async (c) => {
       404,
     );
 
-  const sourcesToMove = await db.select().from(sources).where(eq(sources.orgId, sourceOrg.id));
-
   const productSlug = body.slug ?? sourceOrg.slug;
+  if (isReservedSlug(productSlug, "nested")) {
+    return c.json(
+      {
+        error: "slug_reserved",
+        message: `Slug "${productSlug}" is reserved and cannot be used for a product. Pass an explicit "slug" field to override.`,
+        slug: productSlug,
+      },
+      409,
+    );
+  }
+
+  const sourcesToMove = await db.select().from(sources).where(eq(sources.orgId, sourceOrg.id));
   const productUrl = body.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
 
   if (body.dryRun) {
@@ -214,6 +225,16 @@ productRoutes.post("/products", async (c) => {
   }
 
   const slug = body.slug ?? toSlug(body.name);
+  if (isReservedSlug(slug, "nested")) {
+    return c.json(
+      {
+        error: "slug_reserved",
+        message: `Slug "${slug}" is reserved and cannot be used for a product. Choose a different slug or rename the product.`,
+        slug,
+      },
+      409,
+    );
+  }
 
   try {
     const [created] = await db

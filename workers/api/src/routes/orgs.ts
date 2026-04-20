@@ -15,6 +15,7 @@ import {
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import {
   isConflictError,
   computeAvgPerWeek,
@@ -296,6 +297,16 @@ orgRoutes.post("/orgs", async (c) => {
   }
 
   const slug = body.slug ?? toSlug(body.name);
+  if (isReservedSlug(slug, "root")) {
+    return c.json(
+      {
+        error: "slug_reserved",
+        message: `Slug "${slug}" is reserved and cannot be used for an organization. Choose a different slug (e.g. by passing an explicit "slug" field) or rename the organization.`,
+        slug,
+      },
+      409,
+    );
+  }
   const now = new Date().toISOString();
 
   try {
@@ -352,6 +363,17 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
 
   const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  if (body.slug && isReservedSlug(body.slug, "root")) {
+    return c.json(
+      {
+        error: "slug_reserved",
+        message: `Slug "${body.slug}" is reserved and cannot be used for an organization.`,
+        slug: body.slug,
+      },
+      409,
+    );
+  }
 
   const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
   if (body.name) updates.name = body.name;
