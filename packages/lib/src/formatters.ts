@@ -174,7 +174,12 @@ export function sourceToMarkdown(source: FormatSourceDetail, opts: FormatOptions
 
 // ── Org → Markdown ──────────────────────────────────────────────────
 
-export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): string {
+export interface OrgMarkdownOptions extends FormatOptions {
+  /** Most recent releases across all sources, rendered as a timeline preview. */
+  recentReleases?: OrgReleaseItem[];
+}
+
+export function orgToMarkdown(org: FormatOrgDetail, opts: OrgMarkdownOptions = {}): string {
   const lines: string[] = [];
 
   // ── Frontmatter ──
@@ -234,8 +239,9 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): s
   // ── Products ──
   if (org.products.length > 0) {
     for (const product of org.products) {
+      const canonical = opts.baseUrl ? `${opts.baseUrl}/${org.slug}/product/${product.slug}` : null;
       lines.push(
-        `<Product${attr("name", product.name)}${attr("slug", product.slug)}${attr("sources", product.sourceCount)}${product.url ? attr("url", product.url) : ""} />`,
+        `<Product${attr("name", product.name)}${attr("slug", product.slug)}${attr("sources", product.sourceCount)}${product.url ? attr("url", product.url) : ""}${attr("canonical", canonical)} />`,
       );
     }
     lines.push("");
@@ -248,8 +254,50 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: FormatOptions = {}): s
       `<Source${attr("name", source.name)}${attr("slug", source.slug)}${attr("type", source.type)}${attr("releases", source.releaseCount)}${attr("latest-version", source.latestVersion)}${attr("latest-date", source.latestDate)}${source.isPrimary ? ' primary="true"' : ""}${sourceUrl} />`,
     );
   }
-
   lines.push("");
+
+  // ── Recent Releases (cross-source preview) ──
+  const recent = opts.recentReleases ?? [];
+  if (recent.length > 0) {
+    lines.push("## Recent Releases");
+    lines.push("");
+    lines.push(
+      "_Summaries below — fetch the release's `canonical` URL for full content, or `url` for the original source._",
+    );
+    lines.push("");
+    for (const release of recent) {
+      const dateStr = formatIsoDate(release.publishedAt);
+      const canonical = opts.baseUrl && release.id ? `${opts.baseUrl}/release/${release.id}` : null;
+      lines.push(
+        `<Release${attr("source", release.source.slug)}${attr("version", release.version)}${attr("date", dateStr)}${attr("published", release.publishedAt)}${attr("url", release.url)}${attr("canonical", canonical)} truncated="true">`,
+      );
+      if (release.title && release.title !== release.version) {
+        lines.push(`### ${release.title}`);
+        lines.push("");
+      }
+      if (release.summary) {
+        lines.push(release.summary);
+      }
+      lines.push("</Release>");
+      lines.push("");
+    }
+  }
+
+  // ── Fetch-more guidance ──
+  if (org.sources.length > 0) {
+    lines.push("## Fetching more");
+    lines.push("");
+    lines.push(
+      "Append `.md` (markdown), `.json` (raw data), or `.atom` (feed) to any URL on this page.",
+    );
+    if (opts.baseUrl) {
+      lines.push("");
+      lines.push(`- Per-source history: \`${opts.baseUrl}/${org.slug}/{source-slug}\``);
+      lines.push(`- Atom feed: \`${opts.baseUrl}/${org.slug}.atom\``);
+      lines.push(`- Individual release: \`${opts.baseUrl}/release/{release-id}\``);
+    }
+    lines.push("");
+  }
 
   return lines.join("\n");
 }
