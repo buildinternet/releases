@@ -2,29 +2,19 @@
 
 Multiple releases can cover the same underlying launch (marketing post + platform changelog + app version note). The `release_coverage` table (source in `src/db/schema-coverage.ts`) records the canonical release and its coverage items with an audit trail (`decided_by = human:cli | agent:<model>`, `decided_at`).
 
-## CLI verbs
+## API surface
 
-Both local and remote modes support:
+Coverage is managed through the API worker. Routes in `workers/api/src/routes/releases.ts`:
 
-- `releases admin release link <canonical> <coverage...>`
-- `releases admin release unlink <id>`
-- `releases admin release cluster <org> [--window 30] [--model <model>] [--dry-run]`
+- `GET /v1/releases/:id/coverage` — fetch the canonical release and all rows that roll up into it.
+- `POST /v1/releases/:id/coverage` — link coverage items to a canonical release (admin-auth).
+- `DELETE /v1/releases/:id/coverage/:coverageId` — unlink (admin-auth).
 
-The `cluster` verb invokes the `grouping-releases` skill via Haiku by default (override with `RELEASED_GROUPING_MODEL` or `--model claude-sonnet-4-6`). The agent's output is validated against the candidate set — hallucinated IDs and missing-from-output cases are rejected before any write.
+The `grouping-releases` skill is bundled with the managed discovery/worker agents; operator-driven cluster runs happen by dispatching an agent session, not via a CLI verb. Bulk re-clustering over a historical window is not currently exposed as a first-class admin endpoint — if you need it, spin up a discovery session with an explicit prompt.
 
 ## Read-path behavior
 
 Read paths (`latest`, `list`, search, MCP) hide coverage-side rows by default; pass `--include-coverage` (CLI) or `includeCoverage: true` (MCP) to surface them.
-
-## Ingest-time grouping
-
-After a fetch wave completes, each org whose sources inserted new rows gets a single pass through `src/lib/ingest-grouping.ts` → `runIngestTimeGrouping` — drained from an `orgsNeedingGrouping` set in `src/cli/commands/fetch.ts`, alongside the existing `orgsNeedingKnowledgeUpdate` drain.
-
-Candidate set is the org's prior 7 days. Running once per org (rather than once per source) collapses what would otherwise be N overlapping agent calls for multi-source orgs. The drain wraps each call in `try { … } catch (err) { logger.warn(…) }` so a flaky agent can never block ingest. Pass `--no-grouping` to skip.
-
-Per-request agent output budget is `GROUPING_MAX_TOKENS = 8192` (Haiku 4.5 ceiling); requests that exceed it surface a `response truncated` error rather than a misleading JSON parse failure. Operators who want to re-cluster historical data should use the explicit `cluster` verb with a wider `--window`.
-
-Shared helpers `rowsToCandidates` + `writeCoverageClusters` in `src/ai/grouping.ts` back both ingest-time and `release cluster` paths so they can't drift.
 
 ## Cron observability
 

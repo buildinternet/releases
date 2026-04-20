@@ -7,8 +7,6 @@ description: >
   Local-only (Claude Code CLI against production API).
 ---
 
-<!-- AUTO-GENERATED: Do not edit directly. Source of truth is src/agent/skills/. Changes here will be overwritten by scripts/sync-plugin-skills.ts -->
-
 # Maintaining Orgs
 
 Keep indexed organizations current by fetching their sources and regenerating overviews. This is a local-only workflow — run it from Claude Code with the `releases` CLI linked and remote mode active.

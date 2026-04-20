@@ -5,7 +5,7 @@ Search changelogs, track releases, and manage changelog sources with the [Releas
 ## What's Included
 
 - **MCP Server** — Connects Claude Code to the Releases.sh changelog registry
-- **Skills** — Auto-triggers changelog lookups when you ask about releases or what's new
+- **Skills** — Operator playbooks bundled from `src/agent/skills/`: `finding-changelogs`, `managing-sources`, `parsing-changelogs`, `grouping-releases`, `analyzing-releases`, `maintaining-orgs`, `classify-media-relevance`, and `seeding-playbooks`
 - **Agents** — `discovery` (finds and onboards sources) and `worker` (executes fetch operations)
 - **Commands** — `/releases` for manual changelog queries
 
@@ -104,8 +104,4 @@ Use the worker agent to fetch all Vercel sources
 
 ## Skill Sync
 
-Operational skills (finding-changelogs, managing-sources, etc.) are synced from `src/agent/skills/` — do not edit them directly in the plugin directory. Run the sync:
-
-```bash
-bun scripts/sync-plugin-skills.ts
-```
+Plugin skill copies are maintained by hand alongside their source of truth in `src/agent/skills/`. When you edit a skill, update both files in the same PR; there is no sync script (the previous `scripts/sync-plugin-skills.ts` was removed when local mode was killed). See `docs/architecture/agents.md` for the full skill ownership matrix.

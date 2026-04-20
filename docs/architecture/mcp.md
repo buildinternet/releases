@@ -8,7 +8,7 @@ Deploy: `bun run deploy:mcp`. Dev: `bun run dev:mcp`. Connect from Claude Deskto
 
 ## Parity with WebMCP
 
-The web app also exposes a browser-side subset of these tools via `navigator.modelContext.registerTool()` — see `web/src/components/webmcp-provider.tsx`. Today that surface mirrors `search_releases`, `list_organizations`, `get_organization`, `get_source`, `get_release` plus an `open_search_page` nav helper, all pointed at the public API. When you add, rename, or change the signature of a read-only tool in `workers/mcp/src/tools.ts` (or the local stdio server in `src/mcp/`), update the WebMCP provider in the same PR so the three surfaces don't drift. Write/admin tools stay out of WebMCP — browser-side callers can't present an API key safely.
+The web app also exposes a browser-side subset of these tools via `navigator.modelContext.registerTool()` — see `web/src/components/webmcp-provider.tsx`. Today that surface mirrors `search_releases`, `list_organizations`, `get_organization`, `get_source`, `get_release` plus an `open_search_page` nav helper, all pointed at the public API. When you add, rename, or change the signature of a read-only tool in `workers/mcp/src/tools.ts`, update the WebMCP provider in the same PR so the two surfaces don't drift. The OSS CLI's stdio bridge (`releases admin mcp serve`) is a thin proxy to the hosted server, so it inherits tool changes on the next worker deploy. Write/admin tools stay out of WebMCP — browser-side callers can't present an API key safely.
 
 ## MCP Registry listing
 
