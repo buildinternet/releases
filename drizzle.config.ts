@@ -11,7 +11,7 @@ export default defineConfig({
     "./src/db/schema-coverage.ts",
     "./workers/api/src/db/schema-cron.ts",
   ],
-  out: "./src/db/migrations",
+  out: "./.drizzle-out",
   migrations: {
     prefix: "timestamp",
   },

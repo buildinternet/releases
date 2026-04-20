@@ -211,7 +211,7 @@ bun run db:pull              # sync remote D1 data into local D1
 npx tsc --noEmit             # type-check (root — src/ survivors)
 cd workers/api && npx tsc --noEmit   # type-check the API worker
 cd web && npx tsc --noEmit   # type-check the frontend
-bun run db:generate          # generate a D1 migration after a schema change
+bun run db:generate          # scaffold a migration preview under .drizzle-out/ (then hand-author the real file under workers/api/migrations/)
 ```
 
 ### Testing

@@ -1,7 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { applyMigrations } from "../db-helper";
 import { cronRuns } from "../../workers/api/src/db/schema-cron";
 import { sql } from "drizzle-orm";
 
@@ -9,7 +9,7 @@ describe("cron_runs migration", () => {
   it("creates the table with all columns and the composite index", () => {
     const sqlite = new Database(":memory:");
     const db = drizzle(sqlite);
-    migrate(db, { migrationsFolder: "src/db/migrations" });
+    applyMigrations(sqlite);
 
     const tables = sqlite
       .query("SELECT name FROM sqlite_master WHERE type='table' AND name='cron_runs'")

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { applyMigrations } from "../db-helper";
 import { sources, organizations } from "@buildinternet/releases-core/schema";
 import { cronRuns } from "../../workers/api/src/db/schema-cron";
 import { scrapeAgentSweep } from "../../workers/api/src/cron/scrape-agent-sweep";
@@ -10,7 +10,7 @@ import { desc } from "drizzle-orm";
 function mkDb() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite);
-  migrate(db, { migrationsFolder: "src/db/migrations" });
+  applyMigrations(sqlite);
   db.insert(organizations)
     .values([
       { id: "org_a", name: "Org A", slug: "a", category: "developer-tools" },
@@ -205,7 +205,7 @@ describe("scrapeAgentSweep (E2E)", () => {
   it("no candidates: writes a done row with notes", async () => {
     const sqlite = new Database(":memory:");
     const db = drizzle(sqlite);
-    migrate(db, { migrationsFolder: "src/db/migrations" });
+    applyMigrations(sqlite);
     const env = mkEnv();
     await scrapeAgentSweep({ ...env, _drizzleOverride: db } as any);
     const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();

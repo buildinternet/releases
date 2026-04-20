@@ -33,7 +33,7 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 
 ## Surviving `src/` tree
 
-- `src/db/schema-coverage.ts`, `src/db/migrations/` — release_coverage schema + drizzle-kit migration output.
+- `src/db/schema-coverage.ts` — release_coverage schema (part of the drizzle composite schema).
 - `src/agent/` — managed-agents harness (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `released.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`workers/discovery/`) is the only production entrypoint.
 - `src/shared/` — shared prompts and typed tools used by both agents and the API worker.
 

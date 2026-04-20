@@ -1,7 +1,7 @@
 import { describe, it, expect, mock, beforeEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, sources, releases, usageLog } from "@buildinternet/releases-core/schema";
 
 type AnthropicCall = { model: string; messages: unknown; system: string };
@@ -35,7 +35,7 @@ const { adminAiRoutes } = await import("../src/routes/admin-ai.js");
 function mkDb() {
   const sqlite = new Database(":memory:");
   const db = drizzle(sqlite);
-  migrate(db, { migrationsFolder: "src/db/migrations" });
+  applyMigrations(sqlite);
   return db;
 }
 
