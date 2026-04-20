@@ -2,9 +2,15 @@ import { describe, it, expect } from "bun:test";
 import {
   releaseToMarkdown,
   orgReleaseFeedToMarkdown,
+  productToMarkdown,
   searchToMarkdown,
 } from "@releases/lib/formatters";
-import type { ReleaseDetail, OrgReleaseItem, UnifiedSearchResponse } from "@releases/lib/api-types";
+import type {
+  ReleaseDetail,
+  OrgReleaseItem,
+  ProductDetail,
+  UnifiedSearchResponse,
+} from "@releases/lib/api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 
@@ -304,5 +310,52 @@ describe("searchToMarkdown", () => {
     expect(md).not.toContain("## Products");
     expect(md).not.toContain("## Sources");
     expect(md).toContain("## Releases");
+  });
+});
+
+// ── productToMarkdown ─────────────────────────────────────────────
+
+const fullProduct: ProductDetail = {
+  id: "prod_001",
+  name: "Next.js",
+  slug: "next-js",
+  orgId: "org_vercel",
+  url: "https://nextjs.org",
+  description: "React framework for production",
+  category: "framework",
+  createdAt: "2024-01-01T00:00:00Z",
+  sources: [
+    {
+      id: "src_001",
+      slug: "next-js",
+      name: "Next.js",
+      type: "github",
+      url: "https://github.com/vercel/next.js",
+    },
+  ],
+  tags: ["react", "ssr"],
+};
+
+describe("productToMarkdown", () => {
+  it("emits frontmatter, body, and source list", () => {
+    const md = productToMarkdown(fullProduct, "vercel", { baseUrl: "https://releases.sh" });
+    expect(md).toContain("name: Next.js");
+    expect(md).toContain("organization_slug: vercel");
+    expect(md).toContain("canonical: https://releases.sh/vercel/product/next-js");
+    expect(md).toContain("# Next.js");
+    expect(md).toContain("React framework for production");
+    expect(md).toContain("- [Next.js](https://releases.sh/vercel/next-js) — `github`");
+    expect(md).toContain("**Tags:** `react`, `ssr`");
+  });
+
+  it("handles empty source list and missing optional fields", () => {
+    const md = productToMarkdown(
+      { ...fullProduct, sources: [], tags: [], description: null, url: null, category: null },
+      "vercel",
+    );
+    expect(md).toContain("_No sources yet._");
+    expect(md).not.toContain("**Tags:**");
+    expect(md).not.toContain("url:");
+    expect(md).not.toContain("category:");
   });
 });

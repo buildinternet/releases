@@ -1,6 +1,8 @@
 export {
   sourceToMarkdown,
   orgToMarkdown,
+  releaseToMarkdown,
+  productToMarkdown,
   overviewToMarkdown,
   knowledgeToMarkdown,
 } from "@releases/lib/formatters";

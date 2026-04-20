@@ -2,7 +2,7 @@ import { Fragment } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import matter from "gray-matter";
-import { loadDoc, stripAdminBlocks, keepAdminBlocks } from "@/lib/docs";
+import { loadDoc, stripAdminBlocks, keepAdminBlocks, type Doc } from "@/lib/docs";
 import { adminDocs } from "@/flags";
 import { rehypeShikiPlugin } from "@/lib/shiki";
 import { CodeBlock } from "@/components/code-block";
@@ -38,11 +38,13 @@ function splitBySlots(content: string): Segment[] {
 export async function MarkdownDoc({
   slug,
   slots,
+  loader = loadDoc,
 }: {
   slug: string;
   slots?: Record<string, React.ReactNode>;
+  loader?: (slug: string) => Doc;
 }) {
-  const doc = loadDoc(slug);
+  const doc = loader(slug);
   const body = adminDocs ? keepAdminBlocks(doc.body) : stripAdminBlocks(doc.body);
   const copyMarkdown = adminDocs
     ? doc.public
