@@ -3,6 +3,7 @@ import { JetBrains_Mono } from "next/font/google";
 import { cookies } from "next/headers";
 import { ThemeProvider } from "@/components/theme-provider";
 import { WebMcpProvider } from "@/components/webmcp-provider";
+import { Footer } from "@/components/footer";
 import "./globals.css";
 
 const PUBLIC_API_URL = process.env.RELEASED_API_URL ?? "https://api.releases.sh";
@@ -54,8 +55,11 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <head>
         <style dangerouslySetInnerHTML={{ __html: THEME_STYLE }} />
       </head>
-      <body className="font-sans bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 antialiased">
-        <ThemeProvider>{children}</ThemeProvider>
+      <body className="font-sans bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 antialiased min-h-screen flex flex-col">
+        <ThemeProvider>
+          <div className="flex-1 flex flex-col">{children}</div>
+          <Footer />
+        </ThemeProvider>
         <WebMcpProvider apiBaseUrl={PUBLIC_API_URL} />
       </body>
     </html>

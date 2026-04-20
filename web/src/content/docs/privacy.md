@@ -7,6 +7,8 @@ adminOnly: false
 
 Releases collects anonymous usage data from the CLI and the local MCP stdio server so we can understand which commands and tools are actually used. This page documents exactly what is collected, how to see it, and how to turn it off.
 
+For the full privacy policy covering the web app, API worker logs, third-party processors, and data retention, see [/privacy](/privacy).
+
 ## What is collected
 
 Every CLI command and every local MCP tool call records a single event with:
@@ -63,3 +65,7 @@ Events are sent best-effort to `POST /v1/telemetry` on the public API with a 1.5
 ## Retention
 
 Telemetry events are retained for 90 days and then deleted.
+
+## Questions
+
+For questions about telemetry or anything else data-related, email [privacy@releases.sh](mailto:privacy@releases.sh). For takedown requests, email [abuse@releases.sh](mailto:abuse@releases.sh). For security reports, email [security@releases.sh](mailto:security@releases.sh). The full privacy policy lives at [/privacy](/privacy).
