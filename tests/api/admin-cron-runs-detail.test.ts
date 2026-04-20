@@ -3,11 +3,11 @@ import { cronRuns } from "../../workers/api/src/db/schema-cron";
 import { fetchLog, organizations, sources } from "@buildinternet/releases-core/schema";
 import { mkDb, mkApp } from "./admin-cron-runs-helpers";
 
-describe("GET /v1/admin/cron-runs/:id", () => {
+describe("GET /admin/cron-runs/:id", () => {
   it("returns 404 for unknown id", async () => {
     const db = mkDb();
     const app = mkApp(db);
-    const res = await app.request("/v1/admin/cron-runs/crun_missing");
+    const res = await app.request("/admin/cron-runs/crun_missing");
     expect(res.status).toBe(404);
   });
 
@@ -91,7 +91,7 @@ describe("GET /v1/admin/cron-runs/:id", () => {
     ] as any);
 
     const app = mkApp(db);
-    const res = await app.request("/v1/admin/cron-runs/crun_1");
+    const res = await app.request("/admin/cron-runs/crun_1");
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       run: any;
