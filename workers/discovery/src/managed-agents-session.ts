@@ -41,6 +41,14 @@ export interface SessionParams {
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 
+/**
+ * Character cap on the inlined playbook body. ~20K chars ≈ 5K tokens, which
+ * keeps the session prompt well under 10% of Haiku's 200K context even when
+ * combined with the tool catalog and system prompt. Truncation is surfaced to
+ * the agent (not silent) so it can call `get_playbook` for the full content.
+ */
+const MAX_PLAYBOOK_CHARS = 20_000;
+
 export class ManagedAgentsSession extends DurableObject<Env> {
   async startSession(params: SessionParams): Promise<void> {
     await this.ctx.storage.put("params", params);
@@ -478,7 +486,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       const notes = page?.notes?.trim() ?? "";
       const parts = [header, notes ? `## Agent Notes\n\n${notes}` : ""].filter(Boolean);
       if (parts.length === 0) return "";
-      return `\n\n---\n\n## Playbook for this org\n\n${parts.join("\n\n")}\n\n---`;
+      const body = parts.join("\n\n");
+      const displayBody =
+        body.length > MAX_PLAYBOOK_CHARS
+          ? `${body.slice(0, MAX_PLAYBOOK_CHARS)}\n\n_[Playbook truncated from ${body.length} to ${MAX_PLAYBOOK_CHARS} characters. Call \`get_playbook\` for the full content if a trap or instruction looks cut off.]_`
+          : body;
+      return `\n\n---\n\n## Playbook for this org\n\n${displayBody}\n\n---`;
     } catch (err) {
       console.error(`[managed-agents] playbook fetch failed: ${err}`);
       return "";
