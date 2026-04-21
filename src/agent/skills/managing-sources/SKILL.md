@@ -50,6 +50,8 @@ Use `--json` (CLI) for structured output. Typed tools always return JSON.
 
 Required: **name** and **url**. Optional: **type** (github, scrape, feed, agent — auto-detected from URL if omitted), **organization** (org ID or slug to associate with), **feed_url** (direct feed URL if known).
 
+On slug collision the API auto-suffixes (`changelog` → `changelog-2`, `-3`, …) and the created row in the response tells you the resolved slug — no rename-and-retry needed.
+
 ### Naming sources and products
 
 **Don't prefix names with the org name.** The org is already shown as context on every page — repeating it in each child source produces noise like "Datadog › Datadog dd-trace-py". Pick the bare, recognizable name instead.
