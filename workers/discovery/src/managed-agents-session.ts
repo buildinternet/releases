@@ -11,11 +11,68 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { RateLimitError } from "@anthropic-ai/sdk";
+import type { ErrorType } from "@anthropic-ai/sdk/resources/shared";
 import type { Env } from "./types.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
+
+// ── MA 429 rate-limit classifier ─────────────────────────────────────────────
+
+const MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S = 60;
+const MA_RATE_LIMIT_JITTER_MAX_S = 10;
+const MA_RATE_LIMIT_MAX_RETRIES = 2;
+
+export interface MaRateLimitClassification {
+  isRateLimit: boolean;
+  errorType?: ErrorType;
+  /** Retry-After delay in milliseconds (includes jitter). */
+  retryAfterMs: number;
+}
+
+/**
+ * Classify an error thrown by the Anthropic SDK as a 429 rate-limit error.
+ * Reads `Retry-After` from response headers when present; falls back to a 60s
+ * default plus jitter. `getJitterMs` is injectable for deterministic tests.
+ */
+export function classifyMaRateLimitError(
+  err: unknown,
+  opts: { getJitterMs?: () => number } = {},
+): MaRateLimitClassification {
+  if (!(err instanceof RateLimitError)) return { isRateLimit: false, retryAfterMs: 0 };
+
+  let retryAfterS = MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S;
+  const raw = err.headers.get("retry-after");
+  if (raw) {
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) retryAfterS = parsed;
+  }
+
+  const getJitterMs = opts.getJitterMs ?? (() => Math.random() * MA_RATE_LIMIT_JITTER_MAX_S * 1000);
+
+  return {
+    isRateLimit: true,
+    errorType: err.type ?? undefined,
+    retryAfterMs: retryAfterS * 1000 + getJitterMs(),
+  };
+}
+
+export function buildMaRateLimitErrorMessage(
+  classification: MaRateLimitClassification,
+  retryCount: number,
+): string {
+  const typeNote = classification.errorType ? ` (${classification.errorType})` : "";
+  const retryAfterS = Math.round(classification.retryAfterMs / 1000);
+  return `Anthropic managed-agents rate limit${typeNote}. Retry after ${retryAfterS}s. Session was retried ${retryCount} time(s).`;
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
@@ -162,12 +219,39 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         mode === "update" ? `Update: ${params.company}` : `Discovery: ${params.company}`;
 
       const vaultId = this.env.ANTHROPIC_VAULT_ID;
-      const session = await (client.beta.sessions as any).create({
+      const sessionCreateParams = {
         agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
         environment_id: environmentId,
         ...(vaultId ? { vault_ids: [vaultId] } : {}),
         title: sessionTitle,
-      });
+      };
+
+      // Retry session creation on 429 rate-limit responses (bounded to MA_RATE_LIMIT_MAX_RETRIES).
+      let session: any;
+      let rateLimitRetries = 0;
+      while (true) {
+        try {
+          // oxlint-disable-next-line no-await-in-loop -- sequential retry; intentional
+          session = await (client.beta.sessions as any).create(sessionCreateParams);
+          break;
+        } catch (createErr) {
+          const classification = classifyMaRateLimitError(createErr);
+          if (!classification.isRateLimit) throw createErr;
+          if (rateLimitRetries >= MA_RATE_LIMIT_MAX_RETRIES) {
+            const structured = buildMaRateLimitErrorMessage(classification, rateLimitRetries);
+            console.error(`[managed-agents] ${structured}`);
+            // oxlint-disable-next-line no-await-in-loop -- fail() must complete before return
+            await this.fail(sessionId, params.company, structured, releasesApiKey);
+            return;
+          }
+          rateLimitRetries++;
+          console.error(
+            `[managed-agents] 429 rate limit on session create (attempt ${rateLimitRetries}/${MA_RATE_LIMIT_MAX_RETRIES}); retrying in ${Math.round(classification.retryAfterMs / 1000)}s. type=${classification.errorType ?? "unknown"}`,
+          );
+          // oxlint-disable-next-line no-await-in-loop -- sequential backoff; intentional
+          await delay(classification.retryAfterMs);
+        }
+      }
 
       // Update StatusHub with the Anthropic session ID now that we have it
       await this.notifyStatusHub(
