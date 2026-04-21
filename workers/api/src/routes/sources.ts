@@ -1149,6 +1149,7 @@ sourceRoutes.post("/sources", async (c) => {
     orgId?: string;
     orgSlug?: string;
     metadata?: string;
+    isPrimary?: boolean;
   }>();
 
   if (!body.name || !body.url) {
@@ -1196,6 +1197,7 @@ sourceRoutes.post("/sources", async (c) => {
         orgId,
         metadata: body.metadata ?? "{}",
         createdAt: new Date().toISOString(),
+        ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
       })
       .returning();
     if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));

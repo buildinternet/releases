@@ -189,7 +189,8 @@ export const AGENT_TOOLS = [
         feed_url: { type: "string", description: "Direct feed URL, if pre-known (add only)" },
         is_primary: {
           type: "boolean",
-          description: "Mark as primary source for the org (edit only)",
+          description:
+            "Mark as primary source for the org (supported on add and edit; prefer setting on add to avoid a follow-up edit call)",
         },
         fetch_priority: {
           type: "string",
@@ -576,6 +577,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
           else if (feedUrl) body.type = "feed";
           if (input.organization) body.orgSlug = input.organization;
           if (feedUrl) body.metadata = JSON.stringify({ feedUrl });
+          if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
 
           let result = await api("POST", "/sources", body);
           if (evalSummary && !result.startsWith("Error")) {
