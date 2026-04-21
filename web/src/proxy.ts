@@ -4,11 +4,21 @@ import { FORMATS, type Format } from "@/lib/request";
 import { routeMap } from "@/lib/route-map";
 
 /**
- * URL-suffix routes (`/inngest.md`, `/docs.md`, `/inngest.atom`, etc.)
- * dispatch explicitly; everything else negotiates on the Accept header
- * per RFC 9110 §12.5.1. The set of paths with a markdown representation
- * lives in `routeMap()` — paths it doesn't match only offer `text/html`,
- * and an Accept that matches nothing gets a 406 instead of HTML.
+ * URL-suffix routes (`/inngest.md`, `/docs.md`, `/inngest.atom`, etc.) dispatch
+ * explicitly. Otherwise, if the request targets a path with a markdown
+ * representation AND the client explicitly prefers markdown, rewrite to the
+ * markdown variant. Anything else falls through to Next.js.
+ *
+ * We intentionally do NOT return 406 when the Accept header doesn't match
+ * `text/html` / `text/markdown`. Strict negotiation was breaking real clients
+ * that hit this middleware on non-HTML paths: Facebook's OG image crawler
+ * (`Accept: image/png,image/*;q=0.8`), the MCP registry publisher fetching
+ * `/.well-known/mcp-registry-auth` (`Accept: text/plain`), and XML-aware
+ * sitemap clients all got a 406 instead of the asset they wanted. `routeMap()`
+ * can't tell `/vercel/nextjs` (org+source, markdown-capable) apart from
+ * `/vercel/opengraph-image` (Next.js-generated image, definitely not), so
+ * preferring HTML over 406 is the safer default. Explicit `.md` / `.atom` /
+ * `.json` suffix routes remain the reliable way to get a specific format.
  */
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -28,16 +38,13 @@ export function proxy(request: NextRequest) {
   }
 
   const mdTarget = routeMap(pathname);
-  const offered = mdTarget ? OFFERED_WITH_MARKDOWN : OFFERED_HTML_ONLY;
-  const chosen = negotiate(request.headers.get("accept"), offered);
-
-  if (chosen === null) {
-    return notAcceptable(offered);
-  }
-  if (chosen === "text/markdown" && mdTarget) {
-    return mdTarget.startsWith("/api/docs/")
-      ? rewriteTo(request, mdTarget)
-      : rewriteToFormat(request, mdTarget, "md");
+  if (mdTarget) {
+    const chosen = negotiate(request.headers.get("accept"), OFFERED_WITH_MARKDOWN);
+    if (chosen === "text/markdown") {
+      return mdTarget.startsWith("/api/docs/")
+        ? rewriteTo(request, mdTarget)
+        : rewriteToFormat(request, mdTarget, "md");
+    }
   }
   return NextResponse.next();
 }
@@ -57,23 +64,9 @@ function rewriteToFormat(request: NextRequest, pathname: string, format: Format)
   return NextResponse.rewrite(url, { request: { headers } });
 }
 
-function notAcceptable(offered: readonly string[]) {
-  return new NextResponse(
-    `406 Not Acceptable\n\nThis resource can produce: ${offered.join(", ")}\n`,
-    {
-      status: 406,
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        Vary: "Accept",
-      },
-    },
-  );
-}
-
 const SUFFIX_PATTERN = new RegExp(`^(\\/[^.]+)\\.(${FORMATS.join("|")})$`);
 
 const OFFERED_WITH_MARKDOWN = ["text/html", "text/markdown"] as const;
-const OFFERED_HTML_ONLY = ["text/html"] as const;
 
 export const config = {
   matcher: ["/((?!api/|_next/|favicon\\.ico$).*)"],
