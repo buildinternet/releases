@@ -1156,13 +1156,13 @@ sourceRoutes.post("/sources", async (c) => {
     return c.json({ error: "bad_request", message: "Missing required fields: name, url" }, 400);
   }
 
-  const slug = body.slug ?? toSlug(body.name);
-  if (isReservedSlug(slug, "nested")) {
+  const baseSlug = body.slug ?? toSlug(body.name);
+  if (isReservedSlug(baseSlug, "nested")) {
     return c.json(
       {
         error: "slug_reserved",
-        message: `Slug "${slug}" is reserved and cannot be used for a source. Choose a different slug or rename the source.`,
-        slug,
+        message: `Slug "${baseSlug}" is reserved and cannot be used for a source. Choose a different slug or rename the source.`,
+        slug: baseSlug,
       },
       409,
     );
@@ -1186,32 +1186,52 @@ sourceRoutes.post("/sources", async (c) => {
     orgId = org?.id ?? null;
   }
 
-  try {
-    const [source] = await db
-      .insert(sources)
-      .values({
-        name: body.name,
-        slug,
-        type: type as "github" | "scrape" | "feed" | "agent",
-        url: body.url,
-        orgId,
-        metadata: body.metadata ?? "{}",
-        createdAt: new Date().toISOString(),
-        ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
-      })
-      .returning();
-    if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
-    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
-    return c.json(source, 201);
-  } catch (err) {
-    if (isConflictError(err)) {
-      return c.json(
-        { error: "conflict", message: `Source with slug "${slug}" already exists` },
-        409,
-      );
+  // Insert with auto-suffix on slug collision: try base, then base-2 … base-20.
+  // Loop-with-catch is race-safe: no TOCTOU gap between check and insert.
+  const MAX_SLUG_ATTEMPTS = 20;
+  const createdAt = new Date().toISOString();
+  const insertValues = (slug: string) => ({
+    name: body.name,
+    slug,
+    type: type as "github" | "scrape" | "feed" | "agent",
+    url: body.url,
+    orgId,
+    metadata: body.metadata ?? "{}",
+    createdAt,
+    ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
+  });
+
+  let source: typeof sources.$inferSelect | undefined;
+
+  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- sequential retry loop: each attempt depends on the previous collision
+      const [row] = await db.insert(sources).values(insertValues(slug)).returning();
+      source = row;
+      break;
+    } catch (err) {
+      if (isConflictError(err)) {
+        continue;
+      }
+      throw err;
     }
-    throw err;
   }
+
+  if (!source) {
+    // All 20 slug attempts collided — fall back to the original 409 path.
+    return c.json(
+      {
+        error: "conflict",
+        message: `Source with slug "${baseSlug}" already exists (exhausted ${MAX_SLUG_ATTEMPTS} suffix attempts)`,
+      },
+      409,
+    );
+  }
+
+  if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
+  c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
+  return c.json(source, 201);
 });
 
 sourceRoutes.patch("/sources/:slug", async (c) => {
