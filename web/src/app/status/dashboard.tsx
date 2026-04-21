@@ -133,7 +133,7 @@ function formatElapsed(startedAt: number, endedAt?: number): string {
   return `${minutes}m ${secs}s`;
 }
 
-export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: string }) {
+export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [tab, setTab] = useState<Tab>("sessions");
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
@@ -163,18 +163,15 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
   const after = getDateRangeAfter(dateRange);
 
   const hydrate = useCallback(() => {
-    const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    const safeFetch = (url: string) =>
-      fetch(url, { headers }).then((r) => (r.ok ? r.json() : null));
-    return Promise.all([safeFetch(`${apiUrl}/v1/sessions`), safeFetch(`${apiUrl}/v1/status/usage`)])
+    const safeFetch = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null));
+    return Promise.all([safeFetch(`/api/admin/sessions`), safeFetch(`/api/admin/status/usage`)])
       .then(([s, u]) => {
         if (s) setSessions(s as SessionState[]);
         if (u) setUsage(u as UsageEntry[]);
         return s as SessionState[] | null;
       })
       .catch(() => null);
-  }, [apiUrl, apiKey]);
+  }, []);
 
   useEffect(() => {
     hydrate();
@@ -182,15 +179,13 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
 
   // Fetch sources once on mount (not tied to date range — requires auth)
   useEffect(() => {
-    const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    fetch(`${apiUrl}/v1/sources`, { headers })
+    fetch(`/api/admin/sources`)
       .then((r) => (r.ok ? r.json() : null))
       .then((src) => {
         if (src) setAllSources(src as SourceEntry[]);
       })
       .catch(() => {});
-  }, [apiUrl, apiKey]);
+  }, []);
 
   // Handle incoming WebSocket messages
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -362,31 +357,26 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
 
   // Fetch persisted logs and stdout once when expanding a session
   const fetchedLogsRef = useRef<Set<string>>(new Set());
-  const fetchLogsForSession = useCallback(
-    (sid: string) => {
-      if (fetchedLogsRef.current.has(sid)) return;
-      fetchedLogsRef.current.add(sid);
-      const headers: Record<string, string> = {};
-      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-      fetch(`${apiUrl}/v1/sessions/${sid}/logs`, { headers })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((logs: string[] | null) => {
-          if (logs?.length) {
-            setSessionLogs((prev) => ({ ...prev, [sid]: logs }));
-          }
-        })
-        .catch(() => {});
-      fetch(`${apiUrl}/v1/sessions/${sid}/stdout`, { headers })
-        .then((r) => (r.ok ? r.json() : null))
-        .then((lines: string[] | null) => {
-          if (lines?.length) {
-            setSessionStdout((prev) => ({ ...prev, [sid]: lines }));
-          }
-        })
-        .catch(() => {});
-    },
-    [apiUrl, apiKey],
-  );
+  const fetchLogsForSession = useCallback((sid: string) => {
+    if (fetchedLogsRef.current.has(sid)) return;
+    fetchedLogsRef.current.add(sid);
+    fetch(`/api/admin/sessions/${sid}/logs`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((logs: string[] | null) => {
+        if (logs?.length) {
+          setSessionLogs((prev) => ({ ...prev, [sid]: logs }));
+        }
+      })
+      .catch(() => {});
+    fetch(`/api/admin/sessions/${sid}/stdout`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((lines: string[] | null) => {
+        if (lines?.length) {
+          setSessionStdout((prev) => ({ ...prev, [sid]: lines }));
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   // Filter sessions client-side by date range (sessions come from DO, not SQL)
   const afterMs = after ? new Date(after).getTime() : 0;
@@ -496,7 +486,6 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           expandedSessions={expandedSessions}
           sessionLogs={sessionLogs}
           sessionStdout={sessionStdout}
-          apiUrl={apiUrl}
           page={sessionPage}
           perPage={pageSize}
           onPageChange={setSessionPage}
@@ -512,16 +501,9 @@ export function StatusDashboard({ apiUrl, apiKey }: { apiUrl: string; apiKey?: s
           onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         />
       )}
-      {tab === "fetch-log" && (
-        <FetchLogTable
-          apiUrl={apiUrl}
-          apiKey={apiKey}
-          after={after}
-          prependRef={fetchLogPrependRef}
-        />
-      )}
-      {tab === "sources" && <SourcesTable sources={allSources} apiUrl={apiUrl} apiKey={apiKey} />}
-      {tab === "cron" && <CronRunsTab apiUrl={apiUrl} apiKey={apiKey} />}
+      {tab === "fetch-log" && <FetchLogTable after={after} prependRef={fetchLogPrependRef} />}
+      {tab === "sources" && <SourcesTable sources={allSources} />}
+      {tab === "cron" && <CronRunsTab />}
     </div>
   );
 }
@@ -546,7 +528,6 @@ function SessionsTable({
   expandedSessions,
   sessionLogs,
   sessionStdout,
-  apiUrl,
   page,
   perPage,
   onPageChange,
@@ -557,7 +538,6 @@ function SessionsTable({
   expandedSessions: Set<string>;
   sessionLogs: Record<string, string[]>;
   sessionStdout: Record<string, string[]>;
-  apiUrl: string;
   page: number;
   perPage: number;
   onPageChange: (page: number) => void;
@@ -659,13 +639,13 @@ function SessionsTable({
                       title="Dismiss"
                       onClick={(e) => {
                         e.stopPropagation();
-                        fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" });
+                        fetch(`/api/admin/sessions/${session.sessionId}`, { method: "DELETE" });
                         onDismiss(session.sessionId);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.stopPropagation();
-                          fetch(`${apiUrl}/v1/sessions/${session.sessionId}`, { method: "DELETE" });
+                          fetch(`/api/admin/sessions/${session.sessionId}`, { method: "DELETE" });
                           onDismiss(session.sessionId);
                         }
                       }}
@@ -891,21 +871,15 @@ function SessionLogPanel({
 }
 
 function FetchLogTable({
-  apiUrl,
-  apiKey,
   after,
   prependRef,
 }: {
-  apiUrl: string;
-  apiKey?: string;
   after: string | null;
   prependRef: React.RefObject<((entry: FetchLogEntry) => void) | null>;
 }) {
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
   const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore, prepend } =
     useFetchLog({
-      apiUrl,
-      apiKey,
       after,
       status: filter,
     });
@@ -955,15 +929,7 @@ function FetchLogTable({
 
 type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 
-function SourcesTable({
-  sources,
-  apiUrl,
-  apiKey,
-}: {
-  sources: SourceEntry[];
-  apiUrl: string;
-  apiKey?: string;
-}) {
+function SourcesTable({ sources }: { sources: SourceEntry[] }) {
   const [filter, setFilter] = useState<SourceTypeFilter>("all");
   const [query, setQuery] = useState("");
   const [fetching, setFetching] = useState<Set<string>>(new Set());
@@ -1001,9 +967,7 @@ function SourcesTable({
       return next;
     });
     try {
-      const headers: Record<string, string> = {};
-      if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-      const res = await fetch(`${apiUrl}/v1/sources/${slug}/fetch`, { method: "POST", headers });
+      const res = await fetch(`/api/admin/sources/${slug}/fetch`, { method: "POST" });
       const data: FetchTriggerResult = await res.json();
       setResults((prev) => ({ ...prev, [slug]: data }));
     } catch {

@@ -49,6 +49,10 @@ export type Env = {
   Bindings: {
     DB: D1Database;
     RELEASED_API_KEY?: SecretBinding;
+    // Shared secret for the web frontend's server-to-server traffic. Unlike
+    // RELEASED_API_KEY this only exempts requests from the public rate limiter —
+    // it does NOT unlock admin-gated content. Sent as X-Releases-Proxy-Key.
+    RELEASES_PROXY_KEY?: SecretBinding;
     STATUS_HUB: DurableObjectNamespace;
     RELEASE_HUB: DurableObjectNamespace;
     WEBHOOK_DELIVERY_QUEUE: Queue<unknown>;

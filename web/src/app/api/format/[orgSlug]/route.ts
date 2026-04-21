@@ -59,9 +59,8 @@ export async function GET(
     );
   }
 
-  // The web server forwards its admin bearer on every API call, so the API's
-  // own playbook gate always resolves to "authed" for web-proxied requests.
-  // Strip the playbook here before serving public JSON.
-  const { playbook: _playbook, ...publicOrg } = org;
-  return NextResponse.json(publicOrg);
+  // The API's public-read endpoints gate admin-only fields (e.g. playbook)
+  // behind isValidBearerAuth. The web no longer forwards the admin bearer on
+  // these calls, so the response is safe to serve verbatim.
+  return NextResponse.json(org);
 }

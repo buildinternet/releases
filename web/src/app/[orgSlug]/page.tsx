@@ -1,7 +1,7 @@
 import { cache } from "react";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, ApiSetupError, type OrgHeatmap, type OrgReleasesResponse } from "@/lib/api";
+import { api, adminApi, ApiSetupError, type OrgHeatmap, type OrgReleasesResponse } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { Sidebar } from "@/components/sidebar";
@@ -103,6 +103,15 @@ export default async function OrgPage({
     notFound();
   }
 
+  // Dev-only: fetch the playbook server-side with admin auth so the content
+  // never rides along in a public-cached org JSON response. The value stays
+  // server-only until the playbook tab is rendered.
+  const playbook =
+    process.env.NODE_ENV === "development" && activeTab === "playbook"
+      ? await adminApi.orgPlaybook(orgSlug).catch(() => null)
+      : null;
+  const hasPlaybook = process.env.NODE_ENV === "development" && !!playbook;
+
   const sidebarSections = [
     {
       items: [
@@ -155,7 +164,7 @@ export default async function OrgPage({
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-6">
           <div className="flex-1 min-w-0">
             <OrgTabs
-              hasPlaybook={process.env.NODE_ENV === "development" && !!org.playbook}
+              hasPlaybook={hasPlaybook}
               hasFetchLog={process.env.NODE_ENV === "development"}
             />
 
@@ -187,16 +196,12 @@ export default async function OrgPage({
                   return Object.keys(map).length > 0 ? map : undefined;
                 })()}
               />
-            ) : activeTab === "playbook" &&
-              process.env.NODE_ENV === "development" &&
-              org.playbook ? (
-              <PlaybookView playbook={org.playbook} />
-            ) : activeTab === "fetch-log" && process.env.NODE_ENV === "development" ? (
-              <OrgFetchLogView
-                apiUrl={process.env.RELEASED_API_URL ?? "http://localhost:3456"}
-                apiKey={process.env.RELEASED_API_KEY}
-                orgSlug={orgSlug}
+            ) : activeTab === "playbook" && hasPlaybook && playbook ? (
+              <PlaybookView
+                playbook={{ content: playbook.content, updatedAt: playbook.updatedAt }}
               />
+            ) : activeTab === "fetch-log" && process.env.NODE_ENV === "development" ? (
+              <OrgFetchLogView orgSlug={orgSlug} />
             ) : (
               <>
                 {activity && (

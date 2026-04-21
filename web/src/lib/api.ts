@@ -56,6 +56,13 @@ export type {
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+// Trusted-proxy secret — bypasses the API's per-IP rate limiter for
+// server-to-server traffic from Vercel. Does NOT carry admin privileges, so
+// admin-gated fields (e.g. org playbook) never leak into the public cache.
+const PROXY_KEY = process.env.RELEASES_PROXY_KEY;
+// Admin bearer — server-only. Do NOT pass this to fetchApi or any path that
+// serves cached public responses. Use adminFetchApi from server components
+// for dev-gated views that need admin content.
 const API_SECRET = process.env.RELEASED_API_KEY;
 
 export class ApiSetupError extends Error {
@@ -73,8 +80,8 @@ async function fetchApi<T>(
 ): Promise<T> {
   let res: Response;
   const headers: Record<string, string> = {};
-  if (API_SECRET) {
-    headers["Authorization"] = `Bearer ${API_SECRET}`;
+  if (PROXY_KEY) {
+    headers["X-Releases-Proxy-Key"] = PROXY_KEY;
   }
   const fetchInit: RequestInit = { headers };
   if (init?.cache) {
@@ -104,6 +111,28 @@ async function fetchApi<T>(
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }
+
+/**
+ * Server-only admin fetch. Sends the admin Bearer token so the response can
+ * include admin-gated fields. Never call from a client component or return
+ * the response body as a prop — keep the result inside the server boundary.
+ */
+async function adminFetchApi<T>(path: string): Promise<T | null> {
+  if (!API_SECRET) return null;
+  const res = await fetch(`${API_URL}${path}`, {
+    headers: { Authorization: `Bearer ${API_SECRET}` },
+    cache: "no-store",
+  });
+  if (!res.ok) return null;
+  return res.json();
+}
+
+export const adminApi = {
+  orgPlaybook: (slug: string) =>
+    adminFetchApi<{ content: string; updatedAt: string } | null>(
+      `/v1/knowledge?scope=playbook&slug=${encodeURIComponent(slug)}`,
+    ),
+};
 
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
