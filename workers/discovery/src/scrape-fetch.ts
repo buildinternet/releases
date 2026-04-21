@@ -270,6 +270,20 @@ async function runScrapePath(
   }
 
   const knownReleases = await knownReleasesPromise;
+
+  // Incremental extraction is designed for already-indexed sources. On a
+  // brand-new source (zero known releases) it would bail immediately and
+  // return an empty list — the caller would then emit status=no_change even
+  // though nothing has been fetched yet. Fall through to full agent extraction
+  // so the first fetch is treated as a seed run rather than a no-op.
+  if (knownReleases.length === 0) {
+    deps.logger.info(
+      `No known releases for ${source.slug} — running full agent extraction (seed run)`,
+    );
+    const result = await runAgentExtraction(source, { guidance }, deps);
+    return finalize(env, source, result.releases, start);
+  }
+
   const result = await runIncrementalExtraction(
     source,
     { markdown, knownReleases, guidance },
