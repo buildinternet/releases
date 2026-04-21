@@ -26,8 +26,7 @@ function makeSdkError(
   if (opts.errorBody !== undefined) err.error = opts.errorBody;
   if (opts.headers) {
     err.headers = {
-      get: (name: string) =>
-        opts.headers![name] ?? opts.headers![name.toLowerCase()] ?? null,
+      get: (name: string) => opts.headers![name] ?? opts.headers![name.toLowerCase()] ?? null,
     };
   }
   return err as Error;
@@ -123,7 +122,11 @@ describe("classifyMaRateLimitError", () => {
 
 describe("buildMaRateLimitErrorMessage", () => {
   it("includes the error type in parentheses when present", () => {
-    const classification = { isRateLimit: true, errorType: "rate_limit_error", retryAfterMs: 60_000 };
+    const classification = {
+      isRateLimit: true,
+      errorType: "rate_limit_error",
+      retryAfterMs: 60_000,
+    };
     const msg = buildMaRateLimitErrorMessage(classification, 2);
     expect(msg).toContain("(rate_limit_error)");
   });

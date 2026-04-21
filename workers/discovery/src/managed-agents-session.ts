@@ -82,8 +82,7 @@ export function classifyMaRateLimitError(
     }
   }
 
-  const jitterS =
-    opts.fixedJitterS !== undefined ? opts.fixedJitterS : Math.random() * jitterMaxS;
+  const jitterS = opts.fixedJitterS !== undefined ? opts.fixedJitterS : Math.random() * jitterMaxS;
   const retryAfterMs = (retryAfterS + jitterS) * 1000;
 
   return { isRateLimit: true, errorType, retryAfterMs };
