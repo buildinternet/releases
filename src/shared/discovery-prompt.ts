@@ -33,6 +33,8 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 - **summarize_changes** — AI-generated summary of recent changes for a product
 - **compare_products** — AI comparison between two products
 
+If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_sources\` + web search.
+
 ### Custom tools (writes + utilities)
 - **list_categories** — List valid category values
 ${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method\n" : ""}- **add_source** — Add a new changelog source. Params: name, url, type (github/scrape/feed/agent), organization, feed_url
@@ -60,7 +62,7 @@ Some organizations ship multiple distinct products. When you discover sources th
 
 ## Onboarding Workflow
 
-1. **Pre-check** — use list_organizations and list_sources to check if the company already exists with sources. If it does, report the existing state and stop — do not re-discover or add duplicate sources.
+1. **Pre-check** — call \`list_organizations\` with the company name to check if the org already exists, then call \`list_sources\` to check for existing sources. If sources already exist, report the current state and stop — do not re-discover or add duplicates.
 2. **Discover** — use evaluate_url, web search, and list_sources to find changelog URLs, feeds, and GitHub repos
 3. **Add** — add sources with add_source using appropriate types
 4. **Validate** — fetch each source with fetch_source and check the results

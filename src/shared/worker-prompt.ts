@@ -25,6 +25,8 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 - **summarize_changes** — AI-generated summary of recent changes for a product
 - **compare_products** — AI comparison between two products
 
+If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_sources\` + web search.
+
 ### Custom tools (writes + utilities)
 - **list_categories** — List valid category values
 - **add_source** — Add a new changelog source
