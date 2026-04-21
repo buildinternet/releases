@@ -112,10 +112,8 @@ export const TASKS: ToolUxTask[] = [
       kind: "source_priority",
       args: { sourceSlug: "vercel-changelog", priority: "paused" },
     },
-    cleanup: [
-      // Revert to normal after the run.
-      { kind: "delete_source", args: { note: "driver should restore priority=normal" } },
-    ],
+    // No cleanup predicate — priority restore requires a prior-state snapshot
+    // the driver takes before the run, not a declarative kind.
   },
 
   // ── Remove flow — exercises find → manage_source(remove) ────────────

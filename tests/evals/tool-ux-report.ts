@@ -37,7 +37,6 @@ interface Aggregate {
   totalTokensMedian: number;
   wrongToolRate: number;
   errorRate: number;
-  toolHistogram: Map<string, number>;
 }
 
 function median(values: number[]): number {
@@ -55,7 +54,6 @@ function aggregate(runs: EvalRun[], task: ToolUxTask, variant: "old" | "new"): A
   const matching = runs.filter((r) => r.taskId === task.id && r.variant === variant);
   const expected = new Set(task.expected[variant]);
 
-  const toolHistogram = new Map<string, number>();
   let wrongToolCalls = 0;
   let totalCalls = 0;
   let errors = 0;
@@ -64,7 +62,6 @@ function aggregate(runs: EvalRun[], task: ToolUxTask, variant: "old" | "new"): A
     if (run.error) errors++;
     for (const call of run.toolCalls) {
       totalCalls++;
-      toolHistogram.set(call.name, (toolHistogram.get(call.name) ?? 0) + 1);
       if (!expected.has(call.name)) wrongToolCalls++;
     }
   }
@@ -77,7 +74,6 @@ function aggregate(runs: EvalRun[], task: ToolUxTask, variant: "old" | "new"): A
     totalTokensMedian: median(matching.map((r) => totalTokens(r.usage))),
     wrongToolRate: totalCalls === 0 ? 0 : wrongToolCalls / totalCalls,
     errorRate: matching.length === 0 ? 0 : errors / matching.length,
-    toolHistogram,
   };
 }
 
