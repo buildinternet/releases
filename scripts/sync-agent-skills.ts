@@ -14,6 +14,14 @@
  *   bun scripts/sync-agent-skills.ts --agent          # prompt/tools/model only
  *   bun scripts/sync-agent-skills.ts --discovery      # discovery agent only
  *   bun scripts/sync-agent-skills.ts --worker         # worker agent only
+ *   bun scripts/sync-agent-skills.ts --agent-id <id>  # target an ad-hoc agent
+ *
+ * `--agent-id <id>` overrides the discovery/worker targets and syncs a single
+ * arbitrary agent instead. Pushes skill resource versions (which propagate to
+ * any agent via `version: "latest"`), attaches the skill IDs, and updates
+ * tools when AGENT_TOOLS has changed. Never touches the target's system
+ * prompt or model — intended for ad-hoc / eval agents whose prompts are
+ * hand-maintained outside the discovery/worker prompt builders.
  *
  * Requires ANTHROPIC_API_KEY in .env or environment.
  *
@@ -330,10 +338,19 @@ async function main() {
   const agentOnly = process.argv.includes("--agent");
   const discoveryOnly = process.argv.includes("--discovery");
   const workerOnly = process.argv.includes("--worker");
+
+  const agentIdIdx = process.argv.indexOf("--agent-id");
+  const agentIdOverride = agentIdIdx >= 0 ? process.argv[agentIdIdx + 1] : null;
+  if (agentIdIdx >= 0 && !agentIdOverride) {
+    throw new Error("--agent-id requires a value");
+  }
+
   const syncSkills = !agentOnly;
   const syncAgent = !skillsOnly;
-  const syncDiscovery = !workerOnly;
-  const syncWorker = !discoveryOnly;
+  // --agent-id disables the default discovery/worker targets. Only the
+  // override agent is touched.
+  const syncDiscovery = !workerOnly && !agentIdOverride;
+  const syncWorker = !discoveryOnly && !agentIdOverride;
 
   const envIdx = process.argv.indexOf("--env");
   const envArg = envIdx >= 0 ? process.argv[envIdx + 1] : "production";
@@ -346,10 +363,14 @@ async function main() {
 
   const apiKey = getApiKey();
   const configOnDisk = loadConfig(configPath);
-  const agentId = getAgentId(deployEnv, configOnDisk);
+  // Skip the discovery-agent lookup when the caller is targeting an
+  // override — the discovery config may not even be populated (e.g. running
+  // --agent-id against a freshly seeded staging config).
+  const agentId = agentIdOverride ?? getAgentId(deployEnv, configOnDisk);
 
   console.log(`Environment: ${deployEnv}`);
-  if (syncDiscovery) console.log(`Discovery agent: ${agentId}`);
+  if (agentIdOverride) console.log(`Target agent (override): ${agentIdOverride}`);
+  else if (syncDiscovery) console.log(`Discovery agent: ${agentId}`);
   if (dryRun) console.log("DRY RUN — no changes will be made");
   console.log();
 
@@ -570,6 +591,46 @@ async function main() {
       } else {
         console.log("(would create worker agent)");
       }
+    }
+    console.log();
+  }
+
+  // ── 4. Sync override agent (--agent-id) ──────────────────────
+  // Never touches system prompt or model. Pushes latest skill IDs and
+  // AGENT_TOOLS when they have drifted. Skill resource versions are
+  // already in place from step 1 and propagate via version: "latest".
+
+  if (agentIdOverride && syncAgent) {
+    console.log("── Override Agent ───────────────────────────────");
+    const overrideAgent = await getAgent(apiKey, agentIdOverride);
+
+    const payload: {
+      skills?: typeof skillIds;
+      tools?: unknown[];
+    } = {};
+    const changes: string[] = [];
+
+    if (skillsChanged > 0) {
+      payload.skills = skillIds;
+      changes.push(`${skillsChanged} skill(s)`);
+    }
+
+    // Override agents aren't tracked in the config, so we don't know their
+    // prior tools hash. Always push current AGENT_TOOLS — cheaper than being
+    // wrong, and overrides are invoked rarely.
+    payload.tools = [...AGENT_TOOLS];
+    changes.push(`${AGENT_TOOLS.length} tools`);
+
+    console.log(`  Tools: pushing current (${currentToolsHash})`);
+    console.log(`  System prompt: preserved (override never rewrites)`);
+    console.log(`  Model: preserved (${overrideAgent.model.id})`);
+
+    console.log(`Updating override agent: ${changes.join(", ")}...`);
+    if (!dryRun) {
+      const updated = await updateAgent(apiKey, agentIdOverride, overrideAgent.version, payload);
+      console.log(`✓ Override agent updated to v${updated.version}`);
+    } else {
+      console.log("(would update override agent)");
     }
     console.log();
   }
