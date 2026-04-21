@@ -122,3 +122,60 @@ Sequenced follow-ups:
 3. Add the eval agent to `scripts/agent-skills.staging.json` (or give sync-agent-skills an `--agent-id` flag) so tool-schema pushes aren't manual curls.
 4. Build the Vercel `append-playbook-note` snapshot flow.
 5. With 1–4 in place: re-run full 8 tasks against both Sonnet and Haiku, single-surface-stripped (deprecated tools removed).
+
+## Round 3 — full 8-task battery, both models
+
+Follow-ups 1–4 landed (PRs #464, #465, #466, #467). Eval agent synced with current tools + skills via the new `--agent-id` flag — first real exercise of the mechanism. Sonnet ran all 8 tasks; Haiku ran 7 (pause-source-fetching was skipped — see notes).
+
+Raw sessions in `./runs/round-3-sonnet/` and `./runs/round-3-haiku/`.
+
+| Task                          | Sonnet calls | Sonnet tokens | Sonnet elapsed |                       Haiku calls | Haiku tokens | Haiku elapsed |
+| ----------------------------- | -----------: | ------------: | -------------: | --------------------------------: | -----------: | ------------: |
+| `block-spam-domain`           |            1 |        17,307 |           8.8s |                                 1 |       17,753 |          8.0s |
+| `ignore-per-org-url`          |            1 |        17,374 |           8.7s |                                 1 |       17,735 |          7.9s |
+| `add-source-to-existing-org`  |            1 |        36,043 |          19.3s |                                 1 |       18,069 |          8.1s |
+| `add-source-auto-detect-type` |            2 |        26,703 |          17.9s |                                 2 |       27,136 |         14.5s |
+| `remove-eval-source`          |            1 |        17,267 |           8.6s |                                 1 |       17,605 |          7.9s |
+| `onboard-new-org`             |            3 |        64,619 |          32.0s |                                 2 |       28,743 |         24.5s |
+| `append-playbook-note`        |            2 |        33,609 |          31.0s |                                 2 |       33,851 |         24.5s |
+| `pause-source-fetching`       |            2 |        29,757 |          20.6s | _skipped — source already paused_ |            — |             — |
+
+### Skill rewording landed (PR #465 validated on Haiku)
+
+`add-source-to-existing-org` on Haiku called `manage_source(add, name, url, organization)` **without** `is_primary`. Round 2 had Haiku unconditionally setting `is_primary: true` on this same task because the skill's primary-source rule read as unconditional prose. The PR #465 rewording — leading with "only set when the source is the org's primary changelog" — held: Haiku correctly treated the Linear changelog add as a secondary source and omitted the flag. Confirms the conditional rewording was load-bearing, not cosmetic.
+
+### Haiku hit the onboard-new-org floor this round
+
+Sonnet: 3 calls (`manage_org`, `manage_source(add, name="Changelog")` 409, `manage_source(add, name="Eval Test Corp Changelog")`).
+Haiku: **2 calls** (`manage_org`, `manage_source(add, name="Eval Test Corp Changelog", is_primary=true)`).
+
+Haiku preemptively prefixed the source name with the org, avoiding the `changelog` global-slug collision entirely. Sonnet still took the hit. Theoretical minimum (2 calls) reached on Haiku. The fixture's name/slug collision cost remains a Sonnet-visible artifact; not a tool-surface issue.
+
+### `append-playbook-note` measured cleanly via the PR #467 snapshot flow
+
+Both models: 2 calls — `manage_playbook(get)` then `manage_playbook(update_notes)`. The snapshot/restore cleanup captured Vercel's real playbook notes pre-run and restored them post-run; verified both models preserved the existing 7-paragraph notes block and appended the required trap about RSS truncation. No call-count win vs. the old surface (`get_playbook` + `update_playbook_notes` would also be 2), but the consolidated schema is a smaller tool-catalog footprint.
+
+### `pause-source-fetching` got an unusual shape on Sonnet
+
+Sonnet called `manage_playbook(get, vercel)` then `manage_source(edit, fetch_priority=paused, identifier=src_ybwLQLQFrJY-...)` — using the playbook to discover the source ID instead of the `find` tool. Two calls either way, but the shape hints at skill prose pushing agents toward playbook-as-directory when a lookup was the point. Worth a later skill tightening.
+
+Haiku was skipped on this task: the Sonnet run left the Vercel source at `fetchPriority=paused`, and the sandbox denied the unpause PATCH (shared staging resource, not created in-session). Deferrable — the Haiku shape on this task is not load-bearing for the core consolidation question.
+
+### One fixture bug surfaced and fixed
+
+`add-source-to-existing-org`'s cleanup block filtered by URL (`https://linear.app/changelog` + `orgSlug=linear`). Linear's prod-synced primary source sits at exactly that URL. Pre-run cleanup matched it and deleted the legitimate row before the agent ran. Cleanup now uses the agent's deterministic slug (`linear-changelog`) via a slug arg; `delete_source` helper handles either form. Staging Linear sources were lost to this bug for the Sonnet run of the task — recoverable via `./scripts/sync-staging-db.sh` but unaffected the measurement (tool-call telemetry is independent of DB side-effects).
+
+`pause-source-fetching` had a dbCheck slug mismatch too — expected `vercel-changelog`, actual is `vercel`. Fixed in the same commit. No runner consumes dbCheck yet, so this was purely documentation drift.
+
+### Findings
+
+1. **Skill prose quality is the second-order lever.** PR #465 landed a conditional rewording; Haiku's behavior changed on the next measurement. Worker-agent (Haiku) workloads depend on prose being tight — unconditional-sounding imperatives get taken literally. This matches the Anthropic article's claim that tool-level consolidation is necessary but not sufficient; the skill-layer discipline matters equally.
+2. **Haiku matches or beats Sonnet on call count** across the battery. The one divergence (Haiku 2 vs Sonnet 3 on onboard-new-org) was Haiku preemptively namespacing to dodge a global-slug collision Sonnet walked into. Non-obvious — "weaker" model made the more defensive choice here.
+3. **Tool-schema consolidation is real but narrow.** Wins concentrate on tasks that previously required a follow-up edit (onboard-new-org, `is_primary` fold-in). Single-call tasks (block, ignore, remove) don't change. Multi-call tasks with irreducible steps (append-playbook-note's read-then-write) don't change either.
+4. **The remaining cost isn't tool surface — it's fixture + API ergonomics.** Global source-slug uniqueness collides with the most natural onboarding name ("Changelog"). A soft-collision `POST /sources` (auto-suffix + return resolved slug) would pull Sonnet down to the 2-call floor and eliminate the class entirely.
+
+### Follow-ups from round 3
+
+- **Un-namespaced `pause-source-fetching` fixture**: restore Vercel's `fetchPriority` after each run. Either add a `snapshot_source_priority`/`restore_source_priority` cleanup pair (mirror of the playbook snapshot work from PR #467), or use a throwaway source. Priority: low — one task, clear workaround.
+- **Soft-collision on `POST /sources`**: drop the `_2` / rename dance. Auto-suffix and return resolved slug. Would simplify the onboarding skill and save Sonnet a call on onboard-new-org. Priority: medium — real API improvement, not just eval housekeeping.
+- **Tighten `pause-source-fetching` skill prose**: clarify when to use `find` vs. playbook for source-id lookup. Priority: low — Sonnet-only quirk, no call-count cost.
