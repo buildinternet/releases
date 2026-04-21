@@ -8,7 +8,7 @@ export default {
     if (url.pathname === "/") {
       return new Response(
         JSON.stringify({
-          name: "Released MCP Server",
+          name: "Releases MCP Server",
           description:
             "Changelog registry — search releases, compare products, and get AI summaries",
           mcp_endpoint: "/mcp",

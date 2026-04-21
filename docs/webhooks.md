@@ -21,10 +21,10 @@ Each event arrives as `POST <your-url>` with these headers:
 
 ```
 Content-Type: application/json
-X-Released-Version: 1
-X-Released-Event-Id: evt_<id>         # idempotency key
-X-Released-Timestamp: <unix-seconds>
-X-Released-Signature: sha256=<hex>    # HMAC-SHA256(key, "${timestamp}.${body}")
+X-Releases-Version: 1
+X-Releases-Event-Id: evt_<id>         # idempotency key
+X-Releases-Timestamp: <unix-seconds>
+X-Releases-Signature: sha256=<hex>    # HMAC-SHA256(key, "${timestamp}.${body}")
 User-Agent: releases-webhooks/1
 ```
 
@@ -87,7 +87,7 @@ func verify(secret, ts, body, sig string) bool {
 
 ## Idempotency
 
-Cloudflare Queues guarantees at-least-once delivery, so the same event may arrive more than once (typically after a transient failure on your side). Use `X-Released-Event-Id` as the dedup key and persist it in durable storage — e.g. a `processed_event_ids` table with a unique index, checked before you act on the event. An in-memory set or TTL cache is not sufficient: a process restart between delivery and ack will cause replays to be reprocessed.
+Cloudflare Queues guarantees at-least-once delivery, so the same event may arrive more than once (typically after a transient failure on your side). Use `X-Releases-Event-Id` as the dedup key and persist it in durable storage — e.g. a `processed_event_ids` table with a unique index, checked before you act on the event. An in-memory set or TTL cache is not sufficient: a process restart between delivery and ack will cause replays to be reprocessed.
 
 ## Retry behavior
 
@@ -119,8 +119,8 @@ Verify signatures from a captured payload using the CLI:
 ```bash
 releases webhook verify \
   --secret <key> \
-  --signature <X-Released-Signature header> \
-  --timestamp <X-Released-Timestamp header> \
+  --signature <X-Releases-Signature header> \
+  --timestamp <X-Releases-Timestamp header> \
   --body-file path/to/captured-body.json
 ```
 

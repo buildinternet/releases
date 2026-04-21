@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Install script for the Released CLI
+# Install script for the Releases CLI
 # Usage: curl -fsSL https://releases.sh/install | bash
 
 REPO="buildinternet/releases"
@@ -36,7 +36,7 @@ esac
 TARGET="${PLATFORM}-${ARCH_SUFFIX}"
 PKG_NAME="@buildinternet/releases-${TARGET}"
 
-echo "Released CLI installer"
+echo "Releases CLI installer"
 echo "  Platform: ${OS} ${ARCH} (${TARGET})"
 echo "  Install to: ${INSTALL_DIR}/${BINARY_NAME}"
 echo ""

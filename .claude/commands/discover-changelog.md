@@ -1,6 +1,6 @@
 # Discover and Set Up Changelog Sources
 
-Given a company name or domain, find their changelog/release-note sources, add them to Released, and fetch recent entries. This is the manual, Claude-driven onboarding flow — it uses the `releases` CLI against the production API and does not dispatch to managed agents. (If you want managed-agent onboarding, use `releases admin discovery onboard <company>` directly.)
+Given a company name or domain, find their changelog/release-note sources, add them to Releases, and fetch recent entries. This is the manual, Claude-driven onboarding flow — it uses the `releases` CLI against the production API and does not dispatch to managed agents. (If you want managed-agent onboarding, use `releases admin discovery onboard <company>` directly.)
 
 ## Arguments
 

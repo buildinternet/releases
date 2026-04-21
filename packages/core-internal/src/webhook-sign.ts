@@ -44,7 +44,7 @@ export async function deriveSigningKey(
 
 /**
  * Sign the (timestamp, body) pair with the given hex key.
- * Returns "sha256=<hex>" suitable for the X-Released-Signature header.
+ * Returns "sha256=<hex>" suitable for the X-Releases-Signature header.
  */
 export async function signPayload(
   signingKeyHex: string,

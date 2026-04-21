@@ -46,7 +46,7 @@ Copy `.env.example` to `.env` and fill in:
 Install the plugin to get MCP tools, auto-triggering skills, and operational agents directly in Claude Code:
 
 ```bash
-claude plugin add /path/to/released/plugins/claude/releases
+claude plugin add /path/to/releases/plugins/claude/releases
 ```
 
 Or load for a single session:
@@ -76,7 +76,7 @@ Use this when you want skill auto-triggering (on questions about releases or the
 
 ### MCP Server
 
-Released is available as an MCP server for AI agent integration. There are two ways to connect:
+Releases is available as an MCP server for AI agent integration. There are two ways to connect:
 
 #### Remote server (recommended)
 

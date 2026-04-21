@@ -1,7 +1,7 @@
 /**
  * Discovery via Anthropic Managed Agents.
  *
- * Alternative to the Claude Agent SDK path in released.ts.
+ * Alternative to the Claude Agent SDK path in discovery.ts.
  * CLI operations execute host-side via custom tools — secrets never enter
  * the Managed Agent container.
  */
@@ -13,8 +13,8 @@ import { config, getDataDir } from "@releases/lib/config";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
-import { buildDiscoveryPrompt } from "./released.js";
-import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./released.js";
+import { buildDiscoveryPrompt } from "./discovery.js";
+import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./discovery.js";
 import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";
 import { AGENT_TOOLS, createTypedExecutor, handleCustomToolUse } from "../shared/agent-tools.js";
 
@@ -120,7 +120,7 @@ async function ensureAgentAndEnv(
 
   logger.info("[managed-agents] Creating agent and environment (first run)...");
   const environment = await (client.beta.environments as any).create({
-    name: "released-discovery",
+    name: "releases-discovery",
     config: {
       type: "cloud",
       networking: { type: "unrestricted" },
@@ -129,7 +129,7 @@ async function ensureAgentAndEnv(
   environmentId = environment.id;
 
   const agent = await (client.beta.agents as any).create({
-    name: "Released Discovery Agent",
+    name: "Releases Discovery Agent",
     model: config.agentModel(),
     system: currentPrompt,
     tools: AGENT_TOOLS,
@@ -172,12 +172,12 @@ async function ensureVault(client: Anthropic): Promise<string> {
   logger.info("[managed-agents] Creating vault and MCP credential (first run)...");
 
   const vault = await (client.beta.vaults as any).create({
-    display_name: "released-system",
-    metadata: { purpose: "released-discovery-agent" },
+    display_name: "releases-system",
+    metadata: { purpose: "releases-discovery-agent" },
   });
 
   await (client.beta.vaults.credentials as any).create(vault.id, {
-    display_name: "Released MCP Server",
+    display_name: "Releases MCP Server",
     auth: {
       type: "static_bearer",
       mcp_server_url: MCP_SERVER_URL,
@@ -228,15 +228,15 @@ export async function runManagedDiscovery(
     executor ??
     (() => {
       const apiUrl = process.env.RELEASED_API_URL;
-      const releasedApiKey = process.env.RELEASED_API_KEY;
-      if (!apiUrl || !releasedApiKey) {
+      const releasesApiKey = process.env.RELEASED_API_KEY;
+      if (!apiUrl || !releasesApiKey) {
         throw new Error(
           "RELEASED_API_URL and RELEASED_API_KEY are required for managed agents discovery",
         );
       }
       return createTypedExecutor({
         fetcher: { fetch: globalThis.fetch.bind(globalThis) },
-        apiKey: releasedApiKey,
+        apiKey: releasesApiKey,
         baseUrl: apiUrl.replace(/\/+$/, ""),
       });
     })();

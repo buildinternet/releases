@@ -93,7 +93,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // If anything below fails, fail() will update this session row to status=error
       // rather than silently dropping the notification (which happened previously
       // because StatusHub's session:error handler required an existing row).
-      const releasedApiKey = await this.env.RELEASED_API_KEY.get();
+      const releasesApiKey = await this.env.RELEASED_API_KEY.get();
       await this.notifyStatusHub(
         {
           type: "session:start",
@@ -106,7 +106,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             ? { activeSources: params.sourceIdentifiers }
             : {}),
         },
-        releasedApiKey,
+        releasesApiKey,
       );
 
       const anthropicApiKey = await this.env.ANTHROPIC_API_KEY.get();
@@ -115,7 +115,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           sessionId,
           params.company,
           "ANTHROPIC_API_KEY not configured",
-          releasedApiKey,
+          releasesApiKey,
         );
         return;
       }
@@ -130,7 +130,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           ),
       };
 
-      const executor = createTypedExecutor({ fetcher, apiKey: releasedApiKey, sessionId });
+      const executor = createTypedExecutor({ fetcher, apiKey: releasesApiKey, sessionId });
 
       // Resolve Cloudflare secrets for scrape fetch capability
       const [cfAccountId, cfApiToken] = await Promise.all([
@@ -147,7 +147,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   cloudflareApiToken: cfApiToken,
                   anthropicApiKey: anthropicApiKey,
                   apiFetcher: fetcher,
-                  apiKey: releasedApiKey,
+                  apiKey: releasesApiKey,
                   sessionId,
                 },
                 sourceIdentifier,
@@ -176,7 +176,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           sessionId,
           anthropicSessionId: session.id,
         },
-        releasedApiKey,
+        releasesApiKey,
       );
 
       let prompt: string;
@@ -271,7 +271,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                       sessionId,
                       logLine: text,
                     },
-                    releasedApiKey,
+                    releasesApiKey,
                   );
                 }
               }
@@ -288,7 +288,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                     sessionId,
                     currentAction: toolName,
                   },
-                  releasedApiKey,
+                  releasesApiKey,
                 );
               }
               break;
@@ -306,7 +306,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                       sessionId,
                       logLine: text,
                     },
-                    releasedApiKey,
+                    releasesApiKey,
                   );
                   break; // only forward first text block
                 }
@@ -330,7 +330,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                 sessionId,
                 params.company,
                 `Session error: ${errDetail}`,
-                releasedApiKey,
+                releasesApiKey,
               );
               done = true;
               break;
@@ -391,7 +391,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             result: state,
             ...(sessionUsage ? { usage: sessionUsage } : {}),
           },
-          releasedApiKey,
+          releasesApiKey,
         );
         return;
       }
@@ -406,7 +406,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           const detail = lastAgentMessage
             ? `${reason}: ${truncate(lastAgentMessage, 120)}`
             : reason;
-          await this.fail(sessionId, params.company, detail, releasedApiKey, sessionUsage);
+          await this.fail(sessionId, params.company, detail, releasesApiKey, sessionUsage);
           return;
         }
         await this.ctx.storage.put("status", "complete");
@@ -417,7 +417,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             company: params.company,
             ...(sessionUsage ? { usage: sessionUsage } : {}),
           },
-          releasedApiKey,
+          releasesApiKey,
         );
         return;
       }
@@ -426,7 +426,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         sessionId,
         params.company,
         "Agent did not report discovery state",
-        releasedApiKey,
+        releasesApiKey,
       );
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

@@ -12,7 +12,7 @@ Search changelogs, track releases, and manage changelog sources with the [Releas
 ## Installation
 
 ```bash
-claude plugin add /path/to/released/plugins/claude/releases
+claude plugin add /path/to/releases/plugins/claude/releases
 ```
 
 ### Skills only (no plugin)

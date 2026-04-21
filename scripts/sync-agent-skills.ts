@@ -510,7 +510,7 @@ async function main() {
       console.log("Creating worker agent...");
       if (!dryRun) {
         const created = await createAgent(apiKey, {
-          name: "Released Worker Agent",
+          name: "Releases Worker Agent",
           model: workerModel,
           system: workerPrompt,
           tools: [...AGENT_TOOLS],
