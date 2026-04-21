@@ -40,7 +40,8 @@ export function classifyPreflightResponse(err: unknown): PreflightAction {
       // problems. Flag the run but don't abort.
       return { action: "warn" };
     default:
-      // 5xx, connection errors, or anything unexpected: proceed but flag the run.
+      // bad_request, server (5xx), connection errors, or anything
+      // unexpected: proceed but flag the run.
       return { action: "warn" };
   }
 }

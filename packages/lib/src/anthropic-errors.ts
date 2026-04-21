@@ -47,6 +47,8 @@ export function classifyAnthropicError(err: unknown): AnthropicErrorClassificati
   // Credit exhaustion can surface as 402 or as a 429/400 carrying the
   // `credit_balance_too_low` error.type. Classify all three as "credits"
   // so callers don't retry what is really a billing problem.
+  // `CREDIT_BALANCE_TOO_LOW` isn't in the SDK's `ErrorType` union, but the
+  // server still returns it; widen for the comparison.
   if (status === 402 || (err.type as string | null) === CREDIT_BALANCE_TOO_LOW) {
     return { kind: "credits", status, errorType };
   }
@@ -79,4 +81,22 @@ function readRetryAfterMs(headers: Headers | undefined): number | undefined {
   if (!raw) return undefined;
   const parsed = parseInt(raw, 10);
   return Number.isFinite(parsed) && parsed > 0 ? parsed * 1000 : undefined;
+}
+
+/**
+ * Default HTTP status mapping for a failed Anthropic call: upstream-ish
+ * failures (rate limits, server/connection errors, auth/credit issues) map
+ * to 502 Bad Gateway; anything else we blame on ourselves with 500.
+ */
+export function anthropicErrorHttpStatus(kind: AnthropicErrorKind): 502 | 500 {
+  switch (kind) {
+    case "rate_limit":
+    case "server":
+    case "connection":
+    case "auth":
+    case "credits":
+      return 502;
+    default:
+      return 500;
+  }
 }

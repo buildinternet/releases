@@ -18,7 +18,6 @@ export interface AnthropicRequest {
   system: string;
   messages: AnthropicMessage[];
   maxTokens: number;
-  timeoutMs?: number;
 }
 
 export interface AnthropicResult {
@@ -27,12 +26,25 @@ export interface AnthropicResult {
   outputTokens: number;
 }
 
+// Cache the client per isolate to amortize constructor cost across requests.
+// `ANTHROPIC_API_KEY` comes from a Secrets Store binding so the value is
+// stable for the life of the isolate; keying on it handles test/mocking
+// scenarios that swap keys.
+let cachedClient: Anthropic | undefined;
+let cachedKey: string | undefined;
+
+function getClient(apiKey: string): Anthropic {
+  if (cachedClient && cachedKey === apiKey) return cachedClient;
+  cachedClient = new Anthropic({ apiKey, timeout: DEFAULT_TIMEOUT_MS });
+  cachedKey = apiKey;
+  return cachedClient;
+}
+
 export async function callAnthropic(
   apiKey: string,
   req: AnthropicRequest,
 ): Promise<AnthropicResult> {
-  const client = new Anthropic({ apiKey, timeout: req.timeoutMs ?? DEFAULT_TIMEOUT_MS });
-  const response = await client.messages.create({
+  const response = await getClient(apiKey).messages.create({
     model: req.model,
     max_tokens: req.maxTokens,
     system: req.system,
