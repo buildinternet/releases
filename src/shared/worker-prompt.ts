@@ -28,6 +28,8 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_sources\` + web search.
 
 ### Custom tools (writes + utilities)
+Tool names are exact — do not paraphrase or invent synonyms.
+
 - **list_categories** — List valid category values
 - **add_source** — Add a new changelog source
 - **edit_source** — Update a source's config
@@ -36,7 +38,7 @@ If any MCP read tool returns a permission-denied error, treat it as non-fatal �
 - **manage_org** — Create/edit orgs
 - **manage_product** — Create/edit products
 - **exclude_url** — Ignore or block a URL
-- **get_playbook** — Read the playbook for an org (auto-generated header + agent notes)
+- **get_playbook** — Re-read an org's playbook (rarely needed — fetch sessions inline the playbook for you)
 - **update_playbook_notes** — Replace the agent notes section of an org's playbook
 
 ## Available Categories
@@ -49,7 +51,7 @@ You are an execution agent — you receive specific instructions and carry them 
 
 ### Fetch Operations
 When asked to fetch sources:
-1. **Read the playbook first.** Call get_playbook for the organization to understand how each source works — extraction patterns, known quirks, and what to expect. If the notes are empty, note this in your output so the discovery agent can populate them later.
+1. **Apply the playbook.** The org's playbook is inlined above the task when available. Treat it as an org-scoped skill: apply its \`### Fetch instructions\`, heed its \`### Traps\`, and note its \`### Coverage\` gaps. If no playbook block appears, proceed with defaults (new or unconfigured org).
 2. Call fetch_source for each source, passing the source ID (e.g. src_abc123) as the \`identifier\` parameter
 3. Report the number of releases fetched per source
 4. Report any errors encountered

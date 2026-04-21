@@ -320,6 +320,21 @@ describe("buildWorkerSystemPrompt", () => {
       expect(prompt).toContain(cat);
     }
   });
+
+  it("states that tool names are exact and forbids paraphrasing", () => {
+    expect(prompt).toContain("Tool names are exact");
+  });
+
+  it("instructs the agent to apply the inlined playbook instead of calling get_playbook first", () => {
+    expect(prompt).toContain("Apply the playbook");
+    expect(prompt).toContain("inlined above");
+    expect(prompt).not.toContain("Optionally read the playbook first");
+    expect(prompt).not.toContain("call get_playbook first");
+  });
+
+  it("marks get_playbook as rarely needed (since fetch sessions inline the playbook)", () => {
+    expect(prompt).toContain("rarely needed");
+  });
 });
 
 // ── Update session error detection (mirrors logic in managed-agents-session.ts) ──

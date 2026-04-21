@@ -98,6 +98,14 @@ export interface SessionParams {
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 
+/**
+ * Character cap on the inlined playbook body. ~20K chars ≈ 5K tokens, which
+ * keeps the session prompt well under 10% of Haiku's 200K context even when
+ * combined with the tool catalog and system prompt. Truncation is surfaced to
+ * the agent (not silent) so it can call `get_playbook` for the full content.
+ */
+const MAX_PLAYBOOK_CHARS = 20_000;
+
 export class ManagedAgentsSession extends DurableObject<Env> {
   async startSession(params: SessionParams): Promise<void> {
     await this.ctx.storage.put("params", params);
@@ -266,10 +274,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       let prompt: string;
       if (mode === "update") {
         const idList = (params.sourceIdentifiers ?? []).map((s) => `- ${s}`).join("\n");
-        const guideStep = params.orgId
-          ? `\n\nFirst, call get_playbook with organization "${params.orgId}" to understand how each source works — extraction patterns, known quirks, and what to expect. Then call`
-          : `\n\nCall`;
-        prompt = `Fetch release updates for "${params.company}". Sources to fetch:\n${idList}${guideStep} fetch_source for each source using the source ID as the \`identifier\` parameter (e.g. \`{"identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
+        const playbookBlock = await this.loadPlaybookBlock(fetcher, releasesApiKey, params.orgId);
+        prompt = `Fetch release updates for "${params.company}".${playbookBlock}\n\nSources to fetch:\n${idList}\n\nCall fetch_source for each source using the source ID as the \`identifier\` parameter (e.g. \`{"identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
       } else {
         const systemContext = buildDiscoverySystemPrompt({
           evaluateAvailable: false,
@@ -537,6 +543,43 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       },
       cachedApiKey,
     );
+  }
+
+  /**
+   * Fetch the org's playbook from the API worker and format it as a prompt
+   * block. Returns "" when no orgId is supplied, the playbook doesn't exist,
+   * or the fetch fails — the session continues without it in those cases.
+   *
+   * Inlining the playbook removes the need for the worker agent to call
+   * `get_playbook` as its first step, eliminating a class of tool-name
+   * hallucinations (e.g. `get_source_guide`) observed in production.
+   */
+  private async loadPlaybookBlock(
+    fetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> },
+    apiKey: string,
+    orgId: string | undefined,
+  ): Promise<string> {
+    if (!orgId) return "";
+    try {
+      const res = await fetcher.fetch(`https://api/v1/playbook?slug=${encodeURIComponent(orgId)}`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+      });
+      if (!res.ok) return "";
+      const page = (await res.json()) as { content?: string | null; notes?: string | null } | null;
+      const header = page?.content?.trim() ?? "";
+      const notes = page?.notes?.trim() ?? "";
+      const parts = [header, notes ? `## Agent Notes\n\n${notes}` : ""].filter(Boolean);
+      if (parts.length === 0) return "";
+      const body = parts.join("\n\n");
+      const displayBody =
+        body.length > MAX_PLAYBOOK_CHARS
+          ? `${body.slice(0, MAX_PLAYBOOK_CHARS)}\n\n_[Playbook truncated from ${body.length} to ${MAX_PLAYBOOK_CHARS} characters. Call \`get_playbook\` for the full content if a trap or instruction looks cut off.]_`
+          : body;
+      return `\n\n---\n\n## Playbook for this org\n\n${displayBody}\n\n---`;
+    } catch (err) {
+      console.error(`[managed-agents] playbook fetch failed: ${err}`);
+      return "";
+    }
   }
 
   private async notifyStatusHub(
