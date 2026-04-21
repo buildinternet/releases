@@ -39,6 +39,11 @@ export interface Env {
   EMBED_CACHE?: KVNamespace;
   /** Staging-only: disables indexing (X-Robots-Tag + deny-all /robots.txt). */
   INDEXING_DISABLED?: string;
+  /**
+   * Staging-only shared secret. When bound, every request must carry a
+   * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
+   */
+  STAGING_ACCESS_KEY?: SecretBinding;
 }
 
 export function createServer(env: Env, ctx?: ExecutionContext) {

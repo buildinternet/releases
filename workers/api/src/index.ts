@@ -6,6 +6,7 @@ import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
 import { blockIndexing } from "./middleware/indexing.js";
+import { stagingAccessGate } from "./middleware/staging-access.js";
 import { statsRoutes } from "./routes/stats.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { sitemapRoutes } from "./routes/sitemap.js";
@@ -102,6 +103,9 @@ export type Env = {
     ADMIN_BASE_URL?: string;
     // Staging-only kill switch — see middleware/indexing.ts.
     INDEXING_DISABLED?: string;
+    // Staging-only shared secret — see middleware/staging-access.ts. Absent
+    // everywhere outside `[env.staging]`, so the gate no-ops for prod/local.
+    STAGING_ACCESS_KEY?: SecretBinding;
   };
 };
 
@@ -113,6 +117,7 @@ app.onError((err, c) => {
 });
 
 app.use("*", cors());
+app.use("*", stagingAccessGate());
 app.use("*", blockIndexing());
 
 // Security response headers
