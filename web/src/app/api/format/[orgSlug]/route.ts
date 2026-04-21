@@ -59,5 +59,9 @@ export async function GET(
     );
   }
 
-  return NextResponse.json(org);
+  // The web server forwards its admin bearer on every API call, so the API's
+  // own playbook gate always resolves to "authed" for web-proxied requests.
+  // Strip the playbook here before serving public JSON.
+  const { playbook: _playbook, ...publicOrg } = org;
+  return NextResponse.json(publicOrg);
 }
