@@ -177,5 +177,34 @@ Haiku was skipped on this task: the Sonnet run left the Vercel source at `fetchP
 ### Follow-ups from round 3
 
 - **Un-namespaced `pause-source-fetching` fixture**: restore Vercel's `fetchPriority` after each run. Either add a `snapshot_source_priority`/`restore_source_priority` cleanup pair (mirror of the playbook snapshot work from PR #467), or use a throwaway source. Priority: low — one task, clear workaround.
-- **Soft-collision on `POST /sources`**: drop the `_2` / rename dance. Auto-suffix and return resolved slug. Would simplify the onboarding skill and save Sonnet a call on onboard-new-org. Priority: medium — real API improvement, not just eval housekeeping.
+- ~~**Soft-collision on `POST /sources`**~~: shipped in PR #469. See round 4.
 - **Tighten `pause-source-fetching` skill prose**: clarify when to use `find` vs. playbook for source-id lookup. Priority: low — Sonnet-only quirk, no call-count cost.
+
+## Round 4 — validation of PR #469 (soft-collision) + PR #470 (deprecated-strip)
+
+Single targeted re-run of `onboard-new-org` on Sonnet-4.6 after PRs #469 and #470 landed and staging API redeployed. Confirms both predictions:
+
+- PR #469 eliminates the slug-collision retry. The agent's first `manage_source(add, name="Changelog")` call now succeeds with slug `changelog-2` (the API auto-suffixed around the existing `changelog` row); no retry needed.
+- PR #470 shrinks the tool catalog from 14 to 8 entries (6 deprecated tools removed), which shrinks the cold-cache write footprint.
+
+| Round | Sonnet calls | Tokens | cache_write | cache_read |     Cost | Elapsed |
+| ----- | -----------: | -----: | ----------: | ---------: | -------: | ------: |
+| R0    |            4 | 72,341 |       5,924 |     65,553 | $0.05375 |   39.5s |
+| R3    |            3 | 64,619 |       6,183 |     57,622 | $0.05160 |   32.0s |
+| R4    |            2 | 61,674 |         891 |     60,017 | $0.03274 |   42.4s |
+
+R4 vs R0: **−2 calls (−50%), −14.8% tokens, −39.1% cost**. R4 vs R3 (the incremental delta from #469 + #470): **−1 call, cache_write −85.6%, cost −36.6%**. Session: `sesn_011CaHopPT7ZwUBkhkmEZZM6` (`tests/evals/fixtures/tool-ux/runs/round-4-sonnet/onboard-new-org.json`).
+
+Tool calls on R4:
+
+```
+manage_org(action=add, name="Eval Test Corp", category="developer-tools", domain=..., description=...)
+manage_source(action=add, name="Changelog", is_primary=true, organization="eval-test-corp", url=...)
+  ← {"slug": "changelog-2", ...}  // API auto-suffixed; agent never saw a 409
+```
+
+This is the theoretical floor Sonnet was expected to hit once the fixture-cost slug collision was eliminated. Matches Haiku's R3 shape exactly.
+
+### Close-out
+
+With PRs #464, #465, #466, #467, #469, #470 all merged and validated end-to-end, the tool-UX consolidation thread is functionally complete. The remaining two follow-ups (`pause-source-fetching` priority snapshot, skill prose tweak) are nice-to-haves with no measurable cost impact — defer until the eval battery is re-run with different motivations.
