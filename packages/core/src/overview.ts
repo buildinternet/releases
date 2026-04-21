@@ -1,3 +1,5 @@
+import type { Release, Source } from "./schema.js";
+
 /**
  * Overview is considered stale beyond this many days. CLI and MCP both warn
  * (but still show) when an overview's `generatedAt` is older than this.
@@ -6,6 +8,43 @@ export const OVERVIEW_STALE_DAYS = 30;
 
 /** Default preview length when truncating overview content for inline display. */
 export const OVERVIEW_PREVIEW_WORDS = 80;
+
+/** Lookback window for selecting releases to feed into overview regeneration. */
+export const OVERVIEW_WINDOW_DAYS = 90;
+
+/** Hard cap on releases passed to the model in a single regeneration. */
+export const OVERVIEW_RELEASE_LIMIT = 50;
+
+/**
+ * Per-source caps applied before the overall limit. GitHub sources ship many
+ * patch bumps that otherwise crowd out higher-signal product changelogs
+ * (scrape/feed) within the same org.
+ */
+export const PER_SOURCE_CAPS: Record<Source["type"], number> = {
+  github: 10,
+  scrape: 20,
+  feed: 20,
+  agent: 20,
+};
+
+/**
+ * Select releases to feed into overview regeneration. Pure: input arrays must
+ * each be sorted by `publishedAt` desc; output is the merged, capped, limited,
+ * resorted slice plus the pre-cap total for reporting.
+ */
+export function selectReleasesForOverview(
+  perSource: Array<{ type: Source["type"]; releases: Release[] }>,
+  limit: number = OVERVIEW_RELEASE_LIMIT,
+): { releases: Release[]; totalAvailable: number } {
+  const totalAvailable = perSource.reduce((n, s) => n + s.releases.length, 0);
+  const capped = perSource.flatMap(({ type, releases }) =>
+    releases.slice(0, PER_SOURCE_CAPS[type] ?? 20),
+  );
+  const sorted = capped.toSorted((a, b) =>
+    (b.publishedAt ?? "").localeCompare(a.publishedAt ?? ""),
+  );
+  return { releases: sorted.slice(0, limit), totalAvailable };
+}
 
 export interface OverviewMeta {
   generatedAt: string;
