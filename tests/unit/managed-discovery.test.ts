@@ -320,6 +320,20 @@ describe("buildWorkerSystemPrompt", () => {
       expect(prompt).toContain(cat);
     }
   });
+
+  it("states that tool names are exact and forbids paraphrasing", () => {
+    expect(prompt).toContain("Tool names are exact");
+    expect(prompt).toContain("source_guide");
+  });
+
+  it("uses backtick-quoted get_playbook in the canonical name note", () => {
+    expect(prompt).toContain("`get_playbook`");
+  });
+
+  it("makes playbook read conditional rather than mandatory for fetch jobs", () => {
+    expect(prompt).toContain("Optionally read the playbook first");
+    expect(prompt).not.toContain("Read the playbook first.");
+  });
 });
 
 // ── Update session error detection (mirrors logic in managed-agents-session.ts) ──
