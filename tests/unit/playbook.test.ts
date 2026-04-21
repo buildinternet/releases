@@ -112,7 +112,7 @@ describe("generatePlaybookHeader", () => {
 
     expect(header).toContain("## Parse Instructions");
     expect(header).toContain("Only extract new features");
-    expect(header).toContain("edit_source");
+    expect(header).toContain("manage_source(action=edit)");
   });
 
   it("shows priority in type column for non-normal priorities", () => {
