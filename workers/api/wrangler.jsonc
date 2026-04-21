@@ -220,7 +220,7 @@
       // itself is still pointless).
       "triggers": { "crons": [] },
       // No Vectorize bindings — search degrades to FTS (see search-hybrid.ts).
-      // No DISCOVERY_WORKER service — discovery isn't mirrored to staging.
+      "services": [{ "binding": "DISCOVERY_WORKER", "service": "releases-discovery-staging" }],
       "secrets_store_secrets": [
         {
           "binding": "RELEASED_API_KEY",

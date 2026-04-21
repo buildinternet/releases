@@ -5,7 +5,34 @@ Two Anthropic managed agents handle changelog work, sharing the same tools (`AGE
 - **Discovery agent** (`claude-sonnet-4-6`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `src/shared/discovery-prompt.ts`.
 - **Worker agent** (`claude-haiku-4-5`) — Fetches, updates, and mechanical operations at ~3x lower cost. System prompt: `src/shared/worker-prompt.ts`. The discovery worker DO routes `mode: "update"` sessions to this agent via `ANTHROPIC_WORKER_AGENT_ID`.
 
-Both agents are deployed via `bun run deploy:agents`. Use `deploy:agents:discovery` or `deploy:agents:worker` to target one. Agent IDs and config state live in `scripts/agent-skills.json`.
+Both agents are deployed via `bun run deploy:agents`. Use `deploy:agents:discovery` or `deploy:agents:worker` to target one. Agent IDs and config state live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
+
+### Per-environment agents
+
+Staging uses a parallel set of Anthropic resources so prompt/skill changes can be iterated without touching prod.
+
+| Resource                 | Production                       | Staging                             |
+| ------------------------ | -------------------------------- | ----------------------------------- |
+| Discovery agent (Sonnet) | `agent_011CZtWpasPtsYjF3aysf2ZH` | `agent_011CaHHrroDymm1aEitzUmz1`    |
+| Worker agent (Haiku)     | `agent_011CZvdgPKDQ2eRs8gTrLnNA` | `agent_011CaHHqcTEy9WDeLPzqsmHP`    |
+| Environment              | `env_01Tq7S8F2FK1KBz68NMje2RU`   | `env_015c9WRKAWFfSqAV6tsAj6Qf`      |
+| Vault                    | `vlt_011CZvFkwFPgCkGqRqP87AKB`   | `vlt_011CaHHvBA7pA6GDwRHJa4TN`      |
+| Worker                   | `releases-discovery`             | `releases-discovery-staging`        |
+| Config file              | `scripts/agent-skills.json`      | `scripts/agent-skills.staging.json` |
+| Skill display titles     | `Finding Changelogs`, …          | `Finding Changelogs (staging)`, …   |
+
+Skills are account-level Anthropic resources identified by `skill_…` IDs. Staging uses **separate skill resources** (different IDs, suffixed display title) so pushing a new version does not immediately affect prod agents. Add `--env staging` to any of the deploy scripts to target staging:
+
+```bash
+bun run deploy:skills -- --env staging              # push staging skill versions only
+bun run deploy:agents -- --env staging              # sync prompt/tools/model on both staging agents
+bun run deploy:agents:discovery -- --env staging    # discovery only
+bun run deploy:agents:worker -- --env staging       # worker only
+```
+
+The `deploy-managed-agents.yml` workflow exposes the same selector as a `workflow_dispatch` input.
+
+**Follow-up (not yet done):** there's no CLI/API surface to trigger a staging discovery session against `releases-discovery-staging` — the worker is service-bound from `releases-api-staging` but we haven't threaded an `--env staging` flag through the CLI's onboard/update commands. Track via issue #447.
 
 - **Agent skills** live in this monorepo at `src/agent/skills/`. Each skill is a `SKILL.md` with YAML frontmatter. Skills are uploaded to the managed agent definition via `bun run deploy:skills`.
 - **Deterministic pipeline** (ingest, incremental, summarize) stays as direct Messages API calls — not routed through the agent.

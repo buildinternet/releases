@@ -3,6 +3,11 @@ name: Deploy Managed Agents
 on:
   workflow_dispatch:
     inputs:
+      environment:
+        description: Target environment (agents are separate Anthropic resources per env)
+        type: choice
+        options: [production, staging]
+        default: production
       deploy:
         description: What to deploy
         type: choice
@@ -16,6 +21,10 @@ on:
 
 env:
   BUN_VERSION: "1.3.11"
+  # Choice-typed inputs: values are constrained to the allowlist above, so
+  # interpolating them into run: commands is safe. Surfaced here via env to
+  # keep the job steps readable.
+  DEPLOY_ENV: ${{ inputs.environment }}
 
 jobs:
   deploy:
@@ -40,22 +49,22 @@ jobs:
         if: ${{ inputs.deploy == 'both' || inputs.deploy == 'skills' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: bun run deploy:skills
+        run: bun run deploy:skills -- --env "$DEPLOY_ENV"
 
       - name: Deploy agents (both)
         if: ${{ (inputs.deploy == 'both' || inputs.deploy == 'agents') && inputs.agent == 'all' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: bun run deploy:agents
+        run: bun run deploy:agents -- --env "$DEPLOY_ENV"
 
       - name: Deploy discovery agent
         if: ${{ (inputs.deploy == 'both' || inputs.deploy == 'agents') && inputs.agent == 'discovery' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: bun run deploy:agents:discovery
+        run: bun run deploy:agents:discovery -- --env "$DEPLOY_ENV"
 
       - name: Deploy worker agent
         if: ${{ (inputs.deploy == 'both' || inputs.deploy == 'agents') && inputs.agent == 'worker' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-        run: bun run deploy:agents:worker
+        run: bun run deploy:agents:worker -- --env "$DEPLOY_ENV"
