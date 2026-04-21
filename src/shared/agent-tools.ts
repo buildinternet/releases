@@ -18,34 +18,6 @@ import { assemblePlaybook } from "@releases/ai-internal/playbook";
 // MCP server at mcp.releases.sh via vault credentials. Only write, utility,
 // and session tools remain as custom tools here.
 
-export interface AddSourceInput {
-  name: string;
-  url: string;
-  type?: "github" | "scrape" | "feed" | "agent";
-  organization?: string;
-  feed_url?: string;
-}
-
-export interface EditSourceInput {
-  /** Source ID (src_...) or slug */
-  identifier: string;
-  is_primary?: boolean;
-  fetch_priority?: "normal" | "low" | "paused";
-  name?: string;
-  url?: string;
-  type?: "github" | "scrape" | "feed" | "agent";
-}
-
-export interface RemoveSourceInput {
-  /** Source ID (src_...) or slug */
-  identifier: string;
-}
-
-export interface FetchSourceInput {
-  /** Source ID (src_...) or slug */
-  identifier: string;
-}
-
 export interface ManageOrgInput {
   action: "add" | "edit" | "tag_add" | "link_account";
   /** Required for add */
@@ -89,15 +61,6 @@ export interface ExcludeUrlInput {
   block_type?: "exact" | "domain";
 }
 
-export interface GetPlaybookInput {
-  organization: string;
-}
-
-export interface UpdatePlaybookNotesInput {
-  organization: string;
-  notes: string;
-}
-
 export interface ReportStateInput {
   state: Record<string, unknown>;
 }
@@ -133,16 +96,10 @@ export interface ManagePlaybookInput {
 export type AgentToolCall =
   | { tool: "manage_source"; input: ManageSourceInput }
   | { tool: "manage_playbook"; input: ManagePlaybookInput }
-  | { tool: "add_source"; input: AddSourceInput }
-  | { tool: "edit_source"; input: EditSourceInput }
-  | { tool: "remove_source"; input: RemoveSourceInput }
-  | { tool: "fetch_source"; input: FetchSourceInput }
   | { tool: "manage_org"; input: ManageOrgInput }
   | { tool: "manage_product"; input: ManageProductInput }
   | { tool: "evaluate_url"; input: EvaluateUrlInput }
   | { tool: "exclude_url"; input: ExcludeUrlInput }
-  | { tool: "get_playbook"; input: GetPlaybookInput }
-  | { tool: "update_playbook_notes"; input: UpdatePlaybookNotesInput }
   | { tool: "releases_report_state"; input: ReportStateInput };
 
 // ── Anthropic tool schemas ───────────────────────────────────────────
@@ -225,118 +182,6 @@ export const AGENT_TOOLS = [
     },
   },
 
-  // ── Deprecated per-action source/playbook tools ──
-  // Kept alive for one release window to give in-flight sessions time to
-  // migrate. Skills and prompts now recommend manage_source/manage_playbook.
-  // Scheduled for removal once round-1 consolidation evals land.
-
-  {
-    type: "custom",
-    name: "get_playbook",
-    description:
-      "[Deprecated — prefer manage_playbook(action=get).] Get the playbook for an organization.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        organization: { type: "string", description: "Organization ID (org_...) or slug" },
-      },
-      required: ["organization"],
-    },
-  },
-  {
-    type: "custom",
-    name: "update_playbook_notes",
-    description:
-      "[Deprecated — prefer manage_playbook(action=update_notes).] Replace the agent notes section of an org's playbook.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        organization: { type: "string", description: "Organization ID (org_...) or slug" },
-        notes: {
-          type: "string",
-          description:
-            "Complete markdown content for the agent notes section. Replaces existing notes entirely.",
-        },
-      },
-      required: ["organization", "notes"],
-    },
-  },
-
-  // ── Deprecated per-action source tools (prefer manage_source) ──
-
-  {
-    type: "custom",
-    name: "add_source",
-    description:
-      "[Deprecated — prefer manage_source(action=add).] Add a new changelog source. Type is auto-detected from URL if omitted (GitHub URLs → github, others → scrape).",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        name: { type: "string", description: "Display name for the source" },
-        url: { type: "string", description: "URL of the changelog source" },
-        type: {
-          type: "string",
-          enum: ["github", "scrape", "feed", "agent"],
-          description: "Source type (auto-detected if omitted)",
-        },
-        organization: { type: "string", description: "Organization ID (org_...) or slug" },
-        feed_url: { type: "string", description: "Direct feed URL if known" },
-      },
-      required: ["name", "url"],
-    },
-  },
-  {
-    type: "custom",
-    name: "edit_source",
-    description:
-      "[Deprecated — prefer manage_source(action=edit).] Edit an existing changelog source's configuration.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        identifier: { type: "string", description: "Source ID (src_...) or slug" },
-        is_primary: { type: "boolean", description: "Mark as primary source for its org" },
-        fetch_priority: {
-          type: "string",
-          enum: ["normal", "low", "paused"],
-          description: "Fetch priority tier",
-        },
-        name: { type: "string", description: "New display name" },
-        url: { type: "string", description: "New URL" },
-        type: {
-          type: "string",
-          enum: ["github", "scrape", "feed", "agent"],
-          description: "New source type",
-        },
-      },
-      required: ["identifier"],
-    },
-  },
-  {
-    type: "custom",
-    name: "remove_source",
-    description:
-      "[Deprecated — prefer manage_source(action=remove).] Remove a changelog source and all its releases.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        identifier: { type: "string", description: "Source ID (src_...) or slug" },
-      },
-      required: ["identifier"],
-    },
-  },
-  {
-    type: "custom",
-    name: "fetch_source",
-    description:
-      "[Deprecated — prefer manage_source(action=fetch).] Trigger a fetch for a source to pull its latest releases. For feed/GitHub sources, fetches server-side. For scrape/agent sources, runs the full pipeline (render → parse → insert) in managed agent sessions, or flags for CLI pickup otherwise.",
-    input_schema: {
-      type: "object" as const,
-      properties: {
-        identifier: { type: "string", description: "Source ID (src_...) or slug" },
-      },
-      required: ["identifier"],
-    },
-  },
   {
     type: "custom",
     name: "manage_org",
@@ -655,90 +500,6 @@ export function createTypedExecutor(opts: APIClientOptions) {
         return `Error: unknown action "${action}"`;
       }
 
-      // ── Deprecated per-action tools (kept for one release window) ──
-
-      case "get_playbook": {
-        const org = String(input.organization ?? "");
-        if (!org) return "Error: organization is required";
-        const result = await api("GET", `/playbook?slug=${encodeURIComponent(org)}`);
-        if (result === "null" || result.trim() === "null") {
-          return `No playbook exists yet for "${org}". A playbook will be auto-generated when you add, edit, or remove a source for this org.`;
-        }
-        try {
-          const data = JSON.parse(result);
-          return assemblePlaybook(data.content ?? "", data.notes ?? null);
-        } catch {
-          return result;
-        }
-      }
-
-      case "update_playbook_notes": {
-        const org = String(input.organization ?? "");
-        if (!org) return "Error: organization is required";
-        if (input.notes === undefined) return "Error: notes is required";
-        return api("PATCH", `/playbook/notes?slug=${encodeURIComponent(org)}`, {
-          notes: String(input.notes),
-        });
-      }
-
-      // ── Write tools ──
-
-      case "add_source": {
-        const body: Record<string, unknown> = {
-          name: input.name,
-          url: input.url,
-        };
-        if (input.type) body.type = input.type;
-        else if (input.feed_url) body.type = "feed";
-        if (input.organization) body.orgSlug = input.organization;
-        if (input.feed_url) {
-          body.metadata = JSON.stringify({ feedUrl: input.feed_url });
-        }
-        const result = await api("POST", "/sources", body);
-        if (input.organization && !result.startsWith("Error")) {
-          return (
-            result +
-            `\n\n[Playbook for "${input.organization}" has been auto-regenerated. Use get_playbook to review.]`
-          );
-        }
-        return result;
-      }
-
-      case "edit_source": {
-        const identifier = String(input.identifier ?? "");
-        if (!identifier) return "Error: identifier is required";
-        const body: Record<string, unknown> = {};
-        if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
-        if (input.fetch_priority) body.fetchPriority = input.fetch_priority;
-        if (input.name) body.name = input.name;
-        if (input.url) body.url = input.url;
-        if (input.type) body.type = input.type;
-        const result = await api("PATCH", `/sources/${encodeURIComponent(identifier)}`, body);
-        if (!result.startsWith("Error")) {
-          return result + `\n\n[Playbook has been auto-regenerated to reflect this change.]`;
-        }
-        return result;
-      }
-
-      case "remove_source": {
-        const identifier = String(input.identifier ?? "");
-        if (!identifier) return "Error: identifier is required";
-        const result = await api("DELETE", `/sources/${encodeURIComponent(identifier)}`);
-        if (!result.startsWith("Error")) {
-          return result + `\n\n[Playbook has been auto-regenerated to reflect this removal.]`;
-        }
-        return result;
-      }
-
-      case "fetch_source": {
-        const identifier = String(input.identifier ?? "");
-        if (!identifier) return "Error: identifier is required";
-        const fetchPath = opts.sessionId
-          ? `/sources/${encodeURIComponent(identifier)}/fetch?sessionId=${encodeURIComponent(opts.sessionId)}`
-          : `/sources/${encodeURIComponent(identifier)}/fetch`;
-        return api("POST", fetchPath);
-      }
-
       case "manage_org": {
         const action = String(input.action ?? "");
 
@@ -876,10 +637,10 @@ export interface ToolDispatchContext {
   /** Called when an API tool is dispatched. */
   onToolCall?: (toolName: string, input: Record<string, unknown>) => void;
   /**
-   * Optional handler for scrape source fetches. When provided and fetch_source
-   * returns a "flagged" response, this handler is called to do the actual
-   * scrape (Cloudflare render → AI parse → insert). Returns the result string
-   * to send back to the agent.
+   * Optional handler for scrape source fetches. When provided and
+   * manage_source(action=fetch) returns a "flagged" response, this handler is
+   * called to do the actual scrape (Cloudflare render → AI parse → insert).
+   * Returns the result string to send back to the agent.
    */
   onScrapeFetch?: (sourceIdentifier: string) => Promise<string>;
 }
@@ -911,9 +672,10 @@ export async function handleCustomToolUse(
     ctx.onToolCall?.(toolName, toolInput);
     let result = await ctx.executor(toolName, toolInput);
 
-    // When fetch_source returns "flagged" and a scrape handler is available,
-    // run the actual scrape pipeline instead of just reporting the flag.
-    if (toolName === "fetch_source" && ctx.onScrapeFetch) {
+    // When manage_source(action=fetch) returns a "flagged" response and a
+    // scrape handler is available, run the actual scrape pipeline instead of
+    // just reporting the flag.
+    if (toolName === "manage_source" && toolInput.action === "fetch" && ctx.onScrapeFetch) {
       const isFlagged = (() => {
         try {
           return JSON.parse(result ?? "{}").type === "flagged";

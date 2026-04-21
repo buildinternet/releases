@@ -105,7 +105,9 @@ export function generatePlaybookHeader(input: PlaybookInput): string {
   if (sourcesWithInstructions.length > 0) {
     lines.push(`## Parse Instructions`);
     lines.push("");
-    lines.push(`> To update, use \`edit_source\` with metadata — do not edit the playbook header.`);
+    lines.push(
+      `> To update, use \`manage_source(action=edit)\` with metadata — do not edit the playbook header.`,
+    );
     lines.push("");
     for (const { source, meta } of sourcesWithInstructions) {
       lines.push(
@@ -163,7 +165,7 @@ export function assemblePlaybook(header: string, notes: string | null): string {
   const trimmedNotes = notes?.trim();
   const notesBody = trimmedNotes
     ? trimmedNotes
-    : "_No agent notes yet. Use `update_playbook_notes` to add skill-style notes with three sections: `### Fetch instructions` (per-source playbook — what to do, what to expect), `### Traps` (concise warnings that prevent wasted work), `### Coverage` (what's tracked, what's not, why)._";
+    : "_No agent notes yet. Use `manage_playbook(action=update_notes)` to add skill-style notes with three sections: `### Fetch instructions` (per-source playbook — what to do, what to expect), `### Traps` (concise warnings that prevent wasted work), `### Coverage` (what's tracked, what's not, why)._";
 
   return `${header}\n## Agent Notes\n\n${notesBody}\n`;
 }
