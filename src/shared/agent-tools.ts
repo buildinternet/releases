@@ -102,8 +102,37 @@ export interface ReportStateInput {
   state: Record<string, unknown>;
 }
 
+export interface ManageSourceInput {
+  action: "add" | "edit" | "remove" | "fetch";
+  /** Required for add; new URL on edit. */
+  url?: string;
+  /** Required for add. */
+  name?: string;
+  /** Source ID (src_...) or slug — required for edit/remove/fetch. */
+  identifier?: string;
+  /** On add: auto-detected via evaluator when omitted. */
+  type?: "github" | "scrape" | "feed" | "agent";
+  /** Organization slug or ID. Used on add; ignored elsewhere. */
+  organization?: string;
+  /** Pre-known feed URL for add. */
+  feed_url?: string;
+  /** Edit-only. */
+  is_primary?: boolean;
+  /** Edit-only. */
+  fetch_priority?: "normal" | "low" | "paused";
+}
+
+export interface ManagePlaybookInput {
+  action: "get" | "update_notes";
+  organization: string;
+  /** Required for update_notes. */
+  notes?: string;
+}
+
 // Discriminated union for executor dispatch (custom tools only — reads via MCP)
 export type AgentToolCall =
+  | { tool: "manage_source"; input: ManageSourceInput }
+  | { tool: "manage_playbook"; input: ManagePlaybookInput }
   | { tool: "add_source"; input: AddSourceInput }
   | { tool: "edit_source"; input: EditSourceInput }
   | { tool: "remove_source"; input: RemoveSourceInput }
@@ -114,7 +143,6 @@ export type AgentToolCall =
   | { tool: "exclude_url"; input: ExcludeUrlInput }
   | { tool: "get_playbook"; input: GetPlaybookInput }
   | { tool: "update_playbook_notes"; input: UpdatePlaybookNotesInput }
-  | { tool: "list_categories"; input: Record<string, never> }
   | { tool: "releases_report_state"; input: ReportStateInput };
 
 // ── Anthropic tool schemas ───────────────────────────────────────────
@@ -123,27 +151,89 @@ export type AgentToolCall =
 export const AGENT_TOOLS = [
   { type: "agent_toolset_20260401", default_config: { enabled: true } },
 
-  // ── Read tools ──
-  // Most read tools (list_sources, list_organizations, get_latest_releases,
-  // search_releases, summarize_changes, compare_products) are provided by
-  // the MCP server via vault credentials. Only list_categories remains here
-  // because it's hardcoded and not backed by the MCP server.
+  // Read tools (list_sources, list_organizations, get_latest_releases,
+  // search_releases, summarize_changes, compare_products) are served by the
+  // MCP server via vault credentials. The custom surface below is writes,
+  // utilities, and session tools.
 
+  // ── Consolidated write tools (prefer these) ──
   {
     type: "custom",
-    name: "list_categories",
-    description: "List valid category values for organizations and products.",
+    name: "manage_source",
+    description:
+      "Create, modify, remove, or fetch a changelog source in one tool. On action=add: name + url required; type is auto-detected (evaluator run server-side) when omitted. On action=edit: identifier required; pass any of name/url/type/is_primary/fetch_priority. On action=remove or action=fetch: identifier required. After an add, the org's playbook is auto-regenerated — use manage_playbook(get) to review.",
     input_schema: {
       type: "object" as const,
-      properties: {},
+      properties: {
+        action: {
+          type: "string",
+          enum: ["add", "edit", "remove", "fetch"],
+          description: "Operation to perform",
+        },
+        name: { type: "string", description: "Display name (required for add; optional for edit)" },
+        url: { type: "string", description: "Source URL (required for add; optional for edit)" },
+        identifier: {
+          type: "string",
+          description: "Source ID (src_...) or slug — required for edit/remove/fetch",
+        },
+        type: {
+          type: "string",
+          enum: ["github", "scrape", "feed", "agent"],
+          description:
+            "Source type. On add, auto-detected via the evaluator when omitted (feed discovery, provider detection). On edit, replaces the current type.",
+        },
+        organization: {
+          type: "string",
+          description: "Organization ID (org_...) or slug — used on add",
+        },
+        feed_url: { type: "string", description: "Direct feed URL, if pre-known (add only)" },
+        is_primary: {
+          type: "boolean",
+          description: "Mark as primary source for the org (edit only)",
+        },
+        fetch_priority: {
+          type: "string",
+          enum: ["normal", "low", "paused"],
+          description: "Fetch priority tier (edit only)",
+        },
+      },
+      required: ["action"],
     },
   },
+  {
+    type: "custom",
+    name: "manage_playbook",
+    description:
+      "Read or replace the agent notes section of an organization's playbook. action=get returns the full assembled playbook (auto-generated header + agent notes) — read this before fetching or working with an org's sources. action=update_notes replaces the notes section with the provided markdown. Notes are free-form; structure them as skill-style sections (### Fetch instructions, ### Traps, ### Coverage, ### Release cadence). To change source configuration like parseInstructions, use manage_source(edit) — the header updates automatically.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        action: {
+          type: "string",
+          enum: ["get", "update_notes"],
+          description: "get = read playbook, update_notes = replace notes section",
+        },
+        organization: { type: "string", description: "Organization ID (org_...) or slug" },
+        notes: {
+          type: "string",
+          description:
+            "Complete markdown for the notes section — replaces existing notes entirely (required for update_notes)",
+        },
+      },
+      required: ["action", "organization"],
+    },
+  },
+
+  // ── Deprecated per-action source/playbook tools ──
+  // Kept alive for one release window to give in-flight sessions time to
+  // migrate. Skills and prompts now recommend manage_source/manage_playbook.
+  // Scheduled for removal once round-1 consolidation evals land.
 
   {
     type: "custom",
     name: "get_playbook",
     description:
-      "Get the playbook for an organization. The playbook has two parts: an auto-generated header (source metadata, types, priorities, parseInstructions) and agent notes (free-form markdown you can edit). Read this before fetching or working with an org's sources. Returns null if no playbook exists yet (one will be auto-generated after the first source mutation). To change source configuration like parseInstructions, use edit_source — the header updates automatically.",
+      "[Deprecated — prefer manage_playbook(action=get).] Get the playbook for an organization.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -156,7 +246,7 @@ export const AGENT_TOOLS = [
     type: "custom",
     name: "update_playbook_notes",
     description:
-      "Replace the agent notes section of an org's playbook. The notes section is free-form markdown that you fully control — you can rewrite, reorganize, or clear it. Use this to record observations about sources, content depth findings, feed quirks, filtering recommendations, or anything that helps future agents work with this org's sources. Pass the complete notes content (not a diff).",
+      "[Deprecated — prefer manage_playbook(action=update_notes).] Replace the agent notes section of an org's playbook.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -171,13 +261,13 @@ export const AGENT_TOOLS = [
     },
   },
 
-  // ── Write tools ──
+  // ── Deprecated per-action source tools (prefer manage_source) ──
 
   {
     type: "custom",
     name: "add_source",
     description:
-      "Add a new changelog source. Type is auto-detected from URL if omitted (GitHub URLs → github, others → scrape).",
+      "[Deprecated — prefer manage_source(action=add).] Add a new changelog source. Type is auto-detected from URL if omitted (GitHub URLs → github, others → scrape).",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -197,7 +287,8 @@ export const AGENT_TOOLS = [
   {
     type: "custom",
     name: "edit_source",
-    description: "Edit an existing changelog source's configuration.",
+    description:
+      "[Deprecated — prefer manage_source(action=edit).] Edit an existing changelog source's configuration.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -222,7 +313,8 @@ export const AGENT_TOOLS = [
   {
     type: "custom",
     name: "remove_source",
-    description: "Remove a changelog source and all its releases.",
+    description:
+      "[Deprecated — prefer manage_source(action=remove).] Remove a changelog source and all its releases.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -235,7 +327,7 @@ export const AGENT_TOOLS = [
     type: "custom",
     name: "fetch_source",
     description:
-      "Trigger a fetch for a source to pull its latest releases. For feed/GitHub sources, fetches server-side. For scrape/agent sources, runs the full pipeline (render → parse → insert) in managed agent sessions, or flags for CLI pickup otherwise.",
+      "[Deprecated — prefer manage_source(action=fetch).] Trigger a fetch for a source to pull its latest releases. For feed/GitHub sources, fetches server-side. For scrape/agent sources, runs the full pipeline (render → parse → insert) in managed agent sessions, or flags for CLI pickup otherwise.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -247,8 +339,7 @@ export const AGENT_TOOLS = [
   {
     type: "custom",
     name: "manage_org",
-    description:
-      "Create or modify an organization. Actions: add (create new), edit (update fields), tag_add (add tags), link_account (link a platform account like GitHub or Twitter).",
+    description: `Create or modify an organization. Actions: add (create new), edit (update fields), tag_add (add tags), link_account (link a platform account like GitHub or Twitter). Valid categories: ${CATEGORIES.join(", ")}.`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -264,7 +355,7 @@ export const AGENT_TOOLS = [
         },
         domain: { type: "string", description: "Primary domain (e.g. vercel.com)" },
         description: { type: "string", description: "Brief one-sentence product description" },
-        category: { type: "string", description: "Category slug" },
+        category: { type: "string", enum: [...CATEGORIES], description: "Category slug" },
         tags: { type: "array", items: { type: "string" }, description: "Tags to add" },
         platform: {
           type: "string",
@@ -278,8 +369,7 @@ export const AGENT_TOOLS = [
   {
     type: "custom",
     name: "manage_product",
-    description:
-      "Create or modify a product (grouping layer under an organization). Actions: add (create new), edit (update fields), tag_add (add tags).",
+    description: `Create or modify a product (grouping layer under an organization). Actions: add (create new), edit (update fields), tag_add (add tags). Valid categories: ${CATEGORIES.join(", ")}.`,
     input_schema: {
       type: "object" as const,
       properties: {
@@ -299,7 +389,7 @@ export const AGENT_TOOLS = [
         },
         url: { type: "string", description: "Canonical product URL" },
         description: { type: "string", description: "Brief product description" },
-        category: { type: "string", description: "Category slug" },
+        category: { type: "string", enum: [...CATEGORIES], description: "Category slug" },
         tags: { type: "array", items: { type: "string" }, description: "Tags to add" },
       },
       required: ["action"],
@@ -426,13 +516,144 @@ export function createTypedExecutor(opts: APIClientOptions) {
    * Execute a typed tool call. Returns the result text, or null if the tool
    * is `releases_report_state` (which is handled by the session runner).
    */
+  /**
+   * Server-side auto-evaluate for manage_source(add) when type is omitted.
+   * Maps evaluator's recommendedMethod → our source type, and lifts a
+   * discovered feed URL into metadata so the downstream add call has enough
+   * to skip the redundant evaluate_url step.
+   */
+  async function autoEvaluate(
+    url: string,
+  ): Promise<{ type?: string; feedUrl?: string; summary: string }> {
+    const raw = await api("GET", `/evaluate?url=${encodeURIComponent(url)}`);
+    if (raw.startsWith("Error")) {
+      return { summary: `evaluator unavailable (${raw}); proceeding without type inference` };
+    }
+    try {
+      const data = JSON.parse(raw) as {
+        recommendedMethod?: string;
+        feedUrl?: string;
+        confidence?: string;
+      };
+      const mapped =
+        data.recommendedMethod === "feed" || data.recommendedMethod === "github"
+          ? data.recommendedMethod
+          : "scrape";
+      return {
+        type: mapped,
+        feedUrl: data.feedUrl,
+        summary: `auto-detected type=${mapped}${data.feedUrl ? `, feed=${data.feedUrl}` : ""} (confidence=${data.confidence ?? "unknown"})`,
+      };
+    } catch {
+      return { summary: "evaluator returned non-JSON; proceeding without type inference" };
+    }
+  }
+
   return async (toolName: string, input: Record<string, unknown>): Promise<string | null> => {
     switch (toolName) {
-      // ── Read tool (remaining — most reads served by MCP) ──
+      // ── Consolidated write tools ──
 
-      case "list_categories": {
-        return JSON.stringify({ categories: CATEGORIES });
+      case "manage_source": {
+        const action = String(input.action ?? "");
+
+        if (action === "add") {
+          const name = input.name;
+          const url = input.url;
+          if (!name || !url) return "Error: name and url are required for add";
+
+          let type = input.type ? String(input.type) : undefined;
+          let feedUrl = input.feed_url ? String(input.feed_url) : undefined;
+          let evalSummary: string | undefined;
+          if (!type) {
+            const ev = await autoEvaluate(String(url));
+            type = ev.type;
+            feedUrl = feedUrl ?? ev.feedUrl;
+            evalSummary = ev.summary;
+          }
+
+          const body: Record<string, unknown> = { name, url };
+          if (type) body.type = type;
+          else if (feedUrl) body.type = "feed";
+          if (input.organization) body.orgSlug = input.organization;
+          if (feedUrl) body.metadata = JSON.stringify({ feedUrl });
+
+          let result = await api("POST", "/sources", body);
+          if (evalSummary && !result.startsWith("Error")) {
+            result = `[${evalSummary}]\n${result}`;
+          }
+          if (input.organization && !result.startsWith("Error")) {
+            result += `\n\n[Playbook for "${input.organization}" has been auto-regenerated. Use manage_playbook(get) to review.]`;
+          }
+          return result;
+        }
+
+        if (action === "edit") {
+          const identifier = String(input.identifier ?? "");
+          if (!identifier) return "Error: identifier is required for edit";
+          const body: Record<string, unknown> = {};
+          if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
+          if (input.fetch_priority) body.fetchPriority = input.fetch_priority;
+          if (input.name) body.name = input.name;
+          if (input.url) body.url = input.url;
+          if (input.type) body.type = input.type;
+          const result = await api("PATCH", `/sources/${encodeURIComponent(identifier)}`, body);
+          if (!result.startsWith("Error")) {
+            return result + `\n\n[Playbook has been auto-regenerated to reflect this change.]`;
+          }
+          return result;
+        }
+
+        if (action === "remove") {
+          const identifier = String(input.identifier ?? "");
+          if (!identifier) return "Error: identifier is required for remove";
+          const result = await api("DELETE", `/sources/${encodeURIComponent(identifier)}`);
+          if (!result.startsWith("Error")) {
+            return result + `\n\n[Playbook has been auto-regenerated to reflect this removal.]`;
+          }
+          return result;
+        }
+
+        if (action === "fetch") {
+          const identifier = String(input.identifier ?? "");
+          if (!identifier) return "Error: identifier is required for fetch";
+          const fetchPath = opts.sessionId
+            ? `/sources/${encodeURIComponent(identifier)}/fetch?sessionId=${encodeURIComponent(opts.sessionId)}`
+            : `/sources/${encodeURIComponent(identifier)}/fetch`;
+          return api("POST", fetchPath);
+        }
+
+        return `Error: unknown action "${action}"`;
       }
+
+      case "manage_playbook": {
+        const action = String(input.action ?? "");
+        const org = String(input.organization ?? "");
+        if (!org) return "Error: organization is required";
+
+        if (action === "get") {
+          const result = await api("GET", `/playbook?slug=${encodeURIComponent(org)}`);
+          if (result === "null" || result.trim() === "null") {
+            return `No playbook exists yet for "${org}". A playbook will be auto-generated when you add, edit, or remove a source for this org.`;
+          }
+          try {
+            const data = JSON.parse(result);
+            return assemblePlaybook(data.content ?? "", data.notes ?? null);
+          } catch {
+            return result;
+          }
+        }
+
+        if (action === "update_notes") {
+          if (input.notes === undefined) return "Error: notes is required for update_notes";
+          return api("PATCH", `/playbook/notes?slug=${encodeURIComponent(org)}`, {
+            notes: String(input.notes),
+          });
+        }
+
+        return `Error: unknown action "${action}"`;
+      }
+
+      // ── Deprecated per-action tools (kept for one release window) ──
 
       case "get_playbook": {
         const org = String(input.organization ?? "");

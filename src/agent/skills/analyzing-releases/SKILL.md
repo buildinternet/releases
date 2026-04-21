@@ -15,14 +15,14 @@ Turn changelog data into competitive intelligence by analyzing release patterns 
 
 ## Key Operations
 
-| Operation              | CLI                                           | Typed tool                                      |
-| ---------------------- | --------------------------------------------- | ----------------------------------------------- |
-| Check existing sources | `releases list --query <company> --json`      | `list_sources` with query param                 |
-| Fetch releases         | `releases admin source fetch <slug> --max 50` | `fetch_source` with identifier (ID or slug)     |
-| Get latest releases    | `releases tail <slug> --json`                 | `get_latest_releases` with source/org and limit |
-| Search releases        | `releases search <query> --json`              | `search_releases` with query                    |
-| Summarize              | `releases summary <slug> --json`              | (not available as typed tool)                   |
-| Compare                | `releases compare <slugA> <slugB> --json`     | (not available as typed tool)                   |
+| Operation              | CLI                                           | Typed tool                                                  |
+| ---------------------- | --------------------------------------------- | ----------------------------------------------------------- |
+| Check existing sources | `releases list --query <company> --json`      | `list_sources` with query param                             |
+| Fetch releases         | `releases admin source fetch <slug> --max 50` | `manage_source` action "fetch" with identifier (ID or slug) |
+| Get latest releases    | `releases tail <slug> --json`                 | `get_latest_releases` with source/org and limit             |
+| Search releases        | `releases search <query> --json`              | `search_releases` with query                                |
+| Summarize              | `releases summary <slug> --json`              | (not available as typed tool)                               |
+| Compare                | `releases compare <slugA> <slugB> --json`     | (not available as typed tool)                               |
 
 ## Workflow
 
