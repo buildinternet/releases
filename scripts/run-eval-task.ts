@@ -241,6 +241,11 @@ async function runCleanup(t: (typeof TASKS)[number], phase: "pre" | "post"): Pro
         );
       }
       if (kind === "delete_source") {
+        // Prefer a slug hit — it's a direct DELETE and can't match unrelated
+        // rows. Fall back to URL lookup only when the fixture has no slug.
+        if (args.slug) {
+          return cleanupFetch("DELETE", `/sources/${encodeURIComponent(args.slug)}`);
+        }
         return deleteSource(step);
       }
       if (kind === "snapshot_playbook_notes") {

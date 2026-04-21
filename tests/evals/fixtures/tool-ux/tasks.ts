@@ -85,7 +85,10 @@ export const TASKS: ToolUxTask[] = [
       args: { url: "https://linear.app/changelog", orgSlug: "linear" },
     },
     cleanup: [
-      { kind: "delete_source", args: { url: "https://linear.app/changelog", orgSlug: "linear" } },
+      // Target the agent's deterministic slug, not the URL. The URL form would
+      // also match Linear's pre-existing primary source (same changelog URL)
+      // and delete legitimate data during pre-run cleanup.
+      { kind: "delete_source", args: { slug: "linear-changelog" } },
     ],
   },
 
@@ -116,7 +119,7 @@ export const TASKS: ToolUxTask[] = [
     },
     dbCheck: {
       kind: "source_priority",
-      args: { sourceSlug: "vercel-changelog", priority: "paused" },
+      args: { sourceSlug: "vercel", priority: "paused" },
     },
     // No cleanup predicate — priority restore requires a prior-state snapshot
     // the driver takes before the run, not a declarative kind.
