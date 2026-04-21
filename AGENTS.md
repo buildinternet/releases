@@ -87,7 +87,7 @@ The `api` and `mcp` workers have a `[env.staging]` block in their `wrangler.json
 - **R2:** reuses `released-media` (read-only in practice; no cron writes)
 - **KV:** reuses the existing preview namespaces, so `wrangler dev` and staging share cache
 - **Indexing:** `INDEXING_DISABLED=true` — every response carries `X-Robots-Tag: noindex, nofollow` and `/robots.txt` returns `Disallow: /`
-- **Not yet protected:** the hosts are publicly reachable; add CF Access or a header guard before exposing them more widely
+- **Access gate:** both hosts require `X-Releases-Staging-Key: <STAGING_ACCESS_KEY>` on every request. Missing/invalid → 401. The gate runs before routing, so public-read endpoints and admin endpoints are equally protected; CORS preflight (OPTIONS) passes through. The secret is bound via Secrets Store (`STAGING_ACCESS_KEY`) in both `workers/api/wrangler.jsonc` and `workers/mcp/wrangler.jsonc` staging blocks — create it in the Cloudflare dashboard before first staging deploy. Cloudflare Access (SSO) is still the long-term target — see issue #444.
 
 Deploy:
 

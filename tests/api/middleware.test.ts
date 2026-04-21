@@ -17,6 +17,11 @@ const { cacheControl } = (await import("../../workers/api/src/middleware/cache.j
   ) => MiddlewareHandler;
 };
 
+const { stagingAccessGate } =
+  (await import("../../workers/api/src/middleware/staging-access.js")) as unknown as {
+    stagingAccessGate: () => MiddlewareHandler;
+  };
+
 // ---------------------------------------------------------------------------
 // Auth middleware
 // ---------------------------------------------------------------------------
@@ -165,5 +170,53 @@ describe("cacheControl", () => {
     const { app, env } = createApp(60);
     const res = await app.request("/preset", { method: "GET" }, env);
     expect(res.headers.get("Cache-Control")).toBe("no-store");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Staging access gate
+// ---------------------------------------------------------------------------
+
+describe("stagingAccessGate", () => {
+  function createApp() {
+    type Env = { Bindings: { STAGING_ACCESS_KEY?: { get(): Promise<string> } } };
+    const app = new Hono<Env>();
+    app.use("*", stagingAccessGate());
+    app.get("/test", (c) => c.json({ ok: true }));
+    return app;
+  }
+
+  it("skips the gate when no STAGING_ACCESS_KEY binding is present (prod/local)", async () => {
+    const app = createApp();
+    const res = await app.request("/test", {}, {});
+    expect(res.status).toBe(200);
+  });
+
+  it("returns 401 when the header is missing", async () => {
+    const app = createApp();
+    const res = await app.request("/test", {}, { STAGING_ACCESS_KEY: mockSecret("shh") });
+    expect(res.status).toBe(401);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("unauthorized");
+  });
+
+  it("returns 401 when the header doesn't match", async () => {
+    const app = createApp();
+    const res = await app.request(
+      "/test",
+      { headers: { "X-Releases-Staging-Key": "wrong" } },
+      { STAGING_ACCESS_KEY: mockSecret("shh") },
+    );
+    expect(res.status).toBe(401);
+  });
+
+  it("passes through when the header matches", async () => {
+    const app = createApp();
+    const res = await app.request(
+      "/test",
+      { headers: { "X-Releases-Staging-Key": "shh" } },
+      { STAGING_ACCESS_KEY: mockSecret("shh") },
+    );
+    expect(res.status).toBe(200);
   });
 });

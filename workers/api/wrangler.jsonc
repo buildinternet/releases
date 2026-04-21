@@ -160,8 +160,9 @@
   // sync-staging-db workflow. Vectorize and the discovery service are
   // intentionally omitted — the search path degrades to FTS, and cron is
   // hard-disabled so staging never writes behind prod's back.
-  // TODO: gate the staging hostnames behind access protection (CF Access
-  // or a header-check) before the crawl is indexable.
+  // Interim access gate: `STAGING_ACCESS_KEY` (see middleware/staging-access.ts)
+  // rejects any request missing the `X-Releases-Staging-Key` header. CF Access
+  // is still the long-term plan — see issue #444.
   "env": {
     "staging": {
       "name": "releases-api-staging",
@@ -250,6 +251,11 @@
           "binding": "WEBHOOK_HMAC_MASTER",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "WEBHOOK_HMAC_MASTER",
+        },
+        {
+          "binding": "STAGING_ACCESS_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "STAGING_ACCESS_KEY",
         },
       ],
     },

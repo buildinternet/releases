@@ -1,6 +1,21 @@
 import { createMcpHandler } from "agents/mcp";
 import { createServer, type Env } from "./mcp-agent.js";
 
+/** Custom header carrying the staging shared secret. Mirrors workers/api. */
+const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
+
+async function checkStagingKey(request: Request, env: Env): Promise<Response | null> {
+  if (!env.STAGING_ACCESS_KEY) return null;
+  if (request.method === "OPTIONS") return null;
+  const secret = await env.STAGING_ACCESS_KEY.get();
+  if (!secret) return null;
+  if (request.headers.get(STAGING_KEY_HEADER) === secret) return null;
+  return new Response(
+    JSON.stringify({ error: "unauthorized", message: "Missing or invalid staging access key" }),
+    { status: 401, headers: { "Content-Type": "application/json" } },
+  );
+}
+
 async function handle(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
   const noIndex = env.INDEXING_DISABLED === "true";
@@ -13,6 +28,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
       },
     });
   }
+
+  const unauthorized = await checkStagingKey(request, env);
+  if (unauthorized) return unauthorized;
 
   if (url.pathname === "/") {
     return Response.json({
