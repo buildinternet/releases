@@ -32,58 +32,51 @@ export interface MaRateLimitClassification {
 }
 
 /**
+ * Duck-typed shape of an Anthropic SDK `APIError` — we only need the subset the
+ * classifier reads, and avoiding the SDK type keeps this file unit-testable
+ * without a live client.
+ */
+interface SdkErrorLike extends Error {
+  status?: number;
+  type?: string;
+  error?: unknown;
+  headers?: { get(name: string): string | null };
+}
+
+/**
  * Classify an error thrown by the Anthropic SDK as a 429 rate-limit error.
- * Extracts `Retry-After` from response headers when available; falls back to
- * `defaultRetryAfterS` + jitter.
+ * Extracts `Retry-After` from response headers when available; falls back to a
+ * 60s default plus jitter.
  *
- * Pure function — no I/O, no side effects. Suitable for unit testing.
+ * Pure function — no I/O. `getJitterMs` is injectable for deterministic tests.
  */
 export function classifyMaRateLimitError(
   err: unknown,
-  opts: {
-    defaultRetryAfterS?: number;
-    jitterMaxS?: number;
-    /** Inject a fixed jitter (seconds) for deterministic tests. */
-    fixedJitterS?: number;
-  } = {},
+  opts: { getJitterMs?: () => number } = {},
 ): MaRateLimitClassification {
-  const defaultRetryAfterS = opts.defaultRetryAfterS ?? MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S;
-  const jitterMaxS = opts.jitterMaxS ?? MA_RATE_LIMIT_JITTER_MAX_S;
-
   const notRateLimit: MaRateLimitClassification = { isRateLimit: false, retryAfterMs: 0 };
 
   if (!(err instanceof Error)) return notRateLimit;
+  const sdkErr = err as SdkErrorLike;
+  if (sdkErr.status !== 429) return notRateLimit;
 
-  // Anthropic SDK exposes `.status` on APIError subclasses.
-  const status = (err as any).status;
-  if (status !== 429) return notRateLimit;
-
-  // Prefer `.type` set directly on the SDK error object, fall back to body parse.
   let errorType: string | undefined;
-  const sdkType = (err as any).type;
-  if (typeof sdkType === "string" && sdkType.length > 0) {
-    errorType = sdkType;
+  if (typeof sdkErr.type === "string" && sdkErr.type.length > 0) {
+    errorType = sdkErr.type;
   } else {
-    const errorBody = (err as any).error as Record<string, unknown> | undefined;
-    if (typeof errorBody?.error === "object" && errorBody.error !== null) {
-      const inner = errorBody.error as Record<string, unknown>;
-      if (typeof inner.type === "string") errorType = inner.type;
-    }
+    const body = sdkErr.error as { error?: { type?: unknown } } | undefined;
+    if (typeof body?.error?.type === "string") errorType = body.error.type;
   }
 
-  // Parse Retry-After header (integer seconds; HTTP-date form is ignored).
-  const headers = (err as any).headers as Headers | undefined;
-  let retryAfterS = defaultRetryAfterS;
-  if (headers) {
-    const raw = headers.get("retry-after") ?? headers.get("Retry-After");
-    if (raw) {
-      const parsed = parseInt(raw, 10);
-      if (Number.isFinite(parsed) && parsed > 0) retryAfterS = parsed;
-    }
+  let retryAfterS = MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S;
+  const raw = sdkErr.headers?.get("retry-after");
+  if (raw) {
+    const parsed = parseInt(raw, 10);
+    if (Number.isFinite(parsed) && parsed > 0) retryAfterS = parsed;
   }
 
-  const jitterS = opts.fixedJitterS !== undefined ? opts.fixedJitterS : Math.random() * jitterMaxS;
-  const retryAfterMs = (retryAfterS + jitterS) * 1000;
+  const getJitterMs = opts.getJitterMs ?? (() => Math.random() * MA_RATE_LIMIT_JITTER_MAX_S * 1000);
+  const retryAfterMs = retryAfterS * 1000 + getJitterMs();
 
   return { isRateLimit: true, errorType, retryAfterMs };
 }
@@ -262,27 +255,21 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // Retry session creation on 429 rate-limit responses (bounded to MA_RATE_LIMIT_MAX_RETRIES).
       let session: any;
       let rateLimitRetries = 0;
-      let lastRateLimitClassification: MaRateLimitClassification | undefined;
       while (true) {
         try {
           // oxlint-disable-next-line no-await-in-loop -- sequential retry; intentional
           session = await (client.beta.sessions as any).create(sessionCreateParams);
-          break; // success
+          break;
         } catch (createErr) {
           const classification = classifyMaRateLimitError(createErr);
-          if (!classification.isRateLimit || rateLimitRetries >= MA_RATE_LIMIT_MAX_RETRIES) {
-            if (classification.isRateLimit) {
-              // Exhausted retries — fall through with structured error.
-              lastRateLimitClassification = classification;
-              const structured = buildMaRateLimitErrorMessage(classification, rateLimitRetries);
-              console.error(`[managed-agents] ${structured}`);
-              // oxlint-disable-next-line no-await-in-loop -- fail() must complete before return
-              await this.fail(sessionId, params.company, structured, releasesApiKey);
-              return;
-            }
-            throw createErr; // not a 429 — propagate normally
+          if (!classification.isRateLimit) throw createErr;
+          if (rateLimitRetries >= MA_RATE_LIMIT_MAX_RETRIES) {
+            const structured = buildMaRateLimitErrorMessage(classification, rateLimitRetries);
+            console.error(`[managed-agents] ${structured}`);
+            // oxlint-disable-next-line no-await-in-loop -- fail() must complete before return
+            await this.fail(sessionId, params.company, structured, releasesApiKey);
+            return;
           }
-          lastRateLimitClassification = classification;
           rateLimitRetries++;
           console.error(
             `[managed-agents] 429 rate limit on session create (attempt ${rateLimitRetries}/${MA_RATE_LIMIT_MAX_RETRIES}); retrying in ${Math.round(classification.retryAfterMs / 1000)}s. type=${classification.errorType ?? "unknown"}`,
@@ -291,7 +278,6 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           await delay(classification.retryAfterMs);
         }
       }
-      void lastRateLimitClassification; // referenced above; suppress unused-var lint
 
       // Update StatusHub with the Anthropic session ID now that we have it
       await this.notifyStatusHub(
