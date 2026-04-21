@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./anthropic-errors": "./src/anthropic-errors.ts",
     "./api-types": "./src/api-types.ts",
     "./atom": "./src/atom.ts",
     "./atom-http": "./src/atom-http.ts",
@@ -23,6 +24,7 @@
     "./vector-search": "./src/vector-search.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.88.0",
     "@buildinternet/releases-core": "workspace:*"
   }
 }

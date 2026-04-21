@@ -10,7 +10,10 @@ import { organizations, releases, sources, usageLog } from "@buildinternet/relea
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { orgWhere, sourceWhere } from "../utils.js";
 import { notDisabled } from "../queries/shared.js";
-import { callAnthropic, AnthropicError } from "../lib/anthropic.js";
+import { APIError } from "@anthropic-ai/sdk";
+import { classifyAnthropicError } from "@releases/lib/anthropic-errors.js";
+import type { AnthropicErrorClassification } from "@releases/lib/anthropic-errors.js";
+import { callAnthropic } from "../lib/anthropic.js";
 import type { Env } from "../index.js";
 
 export const adminAiRoutes = new Hono<Env>();
@@ -86,6 +89,24 @@ async function logAiUsage(
 async function getAnthropicKey(env: Env["Bindings"]): Promise<string | null> {
   const key = await env.ANTHROPIC_API_KEY?.get();
   return key && key.length > 0 ? key : null;
+}
+
+/**
+ * Map an Anthropic SDK failure to a Hono JSON response. Upstream conditions
+ * (rate limits, server errors, connection failures, auth/credit issues) map
+ * to 502; anything else we blame on ourselves with 500.
+ */
+function anthropicErrorStatus(classification: AnthropicErrorClassification): 502 | 500 {
+  switch (classification.kind) {
+    case "rate_limit":
+    case "server":
+    case "connection":
+    case "auth":
+    case "credits":
+      return 502;
+    default:
+      return 500;
+  }
 }
 
 // ── POST /admin/summaries ─────────────────────────────────────────────────
@@ -240,10 +261,10 @@ adminAiRoutes.post("/admin/summaries", async (c) => {
       scope,
     });
   } catch (err) {
-    if (err instanceof AnthropicError) {
+    if (err instanceof APIError) {
       return c.json(
         { error: "upstream_error", message: err.message },
-        err.status && err.status >= 500 ? 502 : 500,
+        anthropicErrorStatus(classifyAnthropicError(err)),
       );
     }
     throw err;
@@ -385,10 +406,10 @@ adminAiRoutes.post("/admin/compare", async (c) => {
       },
     });
   } catch (err) {
-    if (err instanceof AnthropicError) {
+    if (err instanceof APIError) {
       return c.json(
         { error: "upstream_error", message: err.message },
-        err.status && err.status >= 500 ? 502 : 500,
+        anthropicErrorStatus(classifyAnthropicError(err)),
       );
     }
     throw err;

@@ -72,6 +72,7 @@
       "name": "@releases/lib",
       "version": "0.0.0",
       "dependencies": {
+        "@anthropic-ai/sdk": "^0.88.0",
         "@buildinternet/releases-core": "workspace:*",
       },
     },
@@ -105,6 +106,7 @@
     "workers/api": {
       "name": "releases-api",
       "dependencies": {
+        "@anthropic-ai/sdk": "^0.88.0",
         "hono": "^4.12.14",
         "mimetext": "^3.0.24",
       },
