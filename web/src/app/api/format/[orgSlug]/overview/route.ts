@@ -21,7 +21,7 @@ export async function GET(
     );
   }
 
-  const overview = org.overview ?? org.knowledgePage;
+  const overview = org.overview;
   if (!overview) {
     return NextResponse.json(
       { error: "not_found", message: "No overview page exists for this organization" },

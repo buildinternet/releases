@@ -56,12 +56,17 @@ export function sourceAtomResponse(request: NextRequest, source: SourceDetail): 
 /** Render an org's aggregated release feed into an Atom response. */
 export function orgAtomResponse(
   request: NextRequest,
-  org: Pick<OrgDetail, "slug" | "name" | "lastFetchedAt">,
+  org: Pick<OrgDetail, "slug" | "name" | "lastFetchedAt" | "overview">,
   feed: OrgReleasesResponse,
 ): NextResponse {
   const baseUrl = getBaseUrl(request);
   const body = orgReleasesToAtom(
-    { orgSlug: org.slug, orgName: org.name, releases: feed.releases },
+    {
+      orgSlug: org.slug,
+      orgName: org.name,
+      releases: feed.releases,
+      overview: org.overview ?? null,
+    },
     { baseUrl },
   );
   const lastModified = feed.releases[0]?.publishedAt ?? org.lastFetchedAt ?? null;

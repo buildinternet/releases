@@ -450,6 +450,28 @@ describe("orgToMarkdown", () => {
     expect(md).not.toContain("overview_url:");
   });
 
+  it("embeds overview content in the body when present", () => {
+    const org: FormatOrgDetail = {
+      ...fullOrg,
+      overview: {
+        scope: "org",
+        content: "Vercel shipped Turbopack as stable and doubled down on caching.",
+        releaseCount: 10,
+        lastContributingReleaseAt: "2024-06-15T00:00:00Z",
+        generatedAt: "2024-06-16T00:00:00Z",
+        updatedAt: "2024-06-16T00:00:00Z",
+      },
+    };
+    const md = orgToMarkdown(org);
+    expect(md).toContain("## Overview");
+    expect(md).toContain("Vercel shipped Turbopack as stable and doubled down on caching.");
+  });
+
+  it("omits the overview section when overview is absent", () => {
+    const md = orgToMarkdown(fullOrg);
+    expect(md).not.toContain("## Overview");
+  });
+
   // ── Recent Releases preview ──
 
   const recent: OrgReleaseItem[] = [
