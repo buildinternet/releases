@@ -116,9 +116,11 @@ export default {
       try {
         const guardPath = "/v1/sessions?status=running&type=onboard";
         const apiKey = await env.RELEASED_API_KEY?.get();
-        const guardHeaders: Record<string, string> = apiKey
-          ? { Authorization: `Bearer ${apiKey}` }
-          : {};
+        const stagingKey = (await env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
+        const guardHeaders: Record<string, string> = {
+          ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+          ...(stagingKey ? { "X-Releases-Staging-Key": stagingKey } : {}),
+        };
         // Use service binding (Worker-to-Worker) when available, public URL as fallback
         const guardRes = env.API_WORKER
           ? await env.API_WORKER.fetch(

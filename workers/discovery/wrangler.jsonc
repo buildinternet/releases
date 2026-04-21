@@ -77,4 +77,78 @@
       "secret_name": "CLOUDFLARE_API_TOKEN",
     },
   ],
+  // ── Staging environment ──────────────────────────────────────────────
+  // Deployed as `releases-discovery-staging`, service-bound from
+  // `releases-api-staging`. Uses a separate Anthropic agent + environment +
+  // vault so prompt/skill changes can be iterated without touching prod. Skills
+  // are deployed as dedicated staging copies (display title suffixed
+  // "(staging)") — see scripts/sync-agent-skills.ts --env staging. Binds
+  // STAGING_ACCESS_KEY so outbound calls to api-staging pass the access gate.
+  "env": {
+    "staging": {
+      "name": "releases-discovery-staging",
+      "vars": {
+        "RELEASED_API_URL": "https://api-staging.releases.sh",
+        "ANTHROPIC_AGENT_ID": "agent_011CaHHrroDymm1aEitzUmz1",
+        "ANTHROPIC_ENVIRONMENT_ID": "env_015c9WRKAWFfSqAV6tsAj6Qf",
+        "ANTHROPIC_VAULT_ID": "vlt_011CaHHvBA7pA6GDwRHJa4TN",
+        "ANTHROPIC_WORKER_AGENT_ID": "agent_011CaHHqcTEy9WDeLPzqsmHP",
+      },
+      "containers": [
+        {
+          "class_name": "Sandbox",
+          "image": "./Dockerfile",
+          "image_build_context": "../../",
+          "instance_type": "basic",
+          "max_instances": 2,
+        },
+      ],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "released-db-staging",
+          "database_id": "68d44939-feab-4fcb-8f4f-19778ca1dee8",
+        },
+      ],
+      "services": [{ "binding": "API_WORKER", "service": "releases-api-staging" }],
+      "durable_objects": {
+        "bindings": [
+          { "class_name": "Sandbox", "name": "Sandbox" },
+          { "class_name": "ManagedAgentsSession", "name": "MANAGED_AGENTS_SESSION" },
+        ],
+      },
+      // Fresh worker — collapse prod's v1-v4 into a single create step.
+      "migrations": [
+        { "new_sqlite_classes": ["Sandbox"], "tag": "v1" },
+        { "new_classes": ["ManagedAgentsSession"], "tag": "v2" },
+      ],
+      "secrets_store_secrets": [
+        {
+          "binding": "RELEASED_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASED_API_KEY",
+        },
+        {
+          "binding": "ANTHROPIC_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "ANTHROPIC_API_KEY",
+        },
+        {
+          "binding": "CLOUDFLARE_ACCOUNT_ID",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "CLOUDFLARE_ACCOUNT_ID",
+        },
+        {
+          "binding": "CLOUDFLARE_API_TOKEN",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "CLOUDFLARE_API_TOKEN",
+        },
+        {
+          "binding": "STAGING_ACCESS_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "STAGING_ACCESS_KEY",
+        },
+      ],
+    },
+  },
 }

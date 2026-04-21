@@ -59,4 +59,10 @@ export interface Env {
   ANTHROPIC_ENVIRONMENT_ID?: string;
   /** Pre-created Anthropic Vault ID for MCP server access. */
   ANTHROPIC_VAULT_ID?: string;
+  /**
+   * Staging access gate shared secret. Present only in [env.staging]; when set,
+   * outbound calls to api-staging attach `X-Releases-Staging-Key` so they pass
+   * the middleware in workers/api/src/middleware/staging-access.ts.
+   */
+  STAGING_ACCESS_KEY?: SecretBinding;
 }

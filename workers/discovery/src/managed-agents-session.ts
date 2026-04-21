@@ -19,6 +19,24 @@ import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
 
+/** Staging access gate header — must match workers/api/src/middleware/staging-access.ts. */
+const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
+
+/**
+ * Wrap a Fetcher so every outbound request carries the staging access key.
+ * Returns the fetcher unchanged when `stagingKey` is empty (prod/local).
+ */
+function withStagingHeader(fetcher: Fetcher, stagingKey: string): Fetcher {
+  if (!stagingKey) return fetcher;
+  return {
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      req.headers.set(STAGING_KEY_HEADER, stagingKey);
+      return fetcher.fetch(req, init);
+    },
+  } as Fetcher;
+}
+
 // ── MA 429 rate-limit classifier ─────────────────────────────────────────────
 
 const MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S = 60;
@@ -107,6 +125,15 @@ const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
 const MAX_PLAYBOOK_CHARS = 20_000;
 
 export class ManagedAgentsSession extends DurableObject<Env> {
+  /** Cached staging access key — resolved lazily, reused for every outbound api call. */
+  private stagingKey: string | null = null;
+
+  private async getStagingKey(): Promise<string> {
+    if (this.stagingKey !== null) return this.stagingKey;
+    this.stagingKey = (await this.env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
+    return this.stagingKey;
+  }
+
   async startSession(params: SessionParams): Promise<void> {
     await this.ctx.storage.put("params", params);
     await this.ctx.storage.put("status", "running");
@@ -185,7 +212,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         return;
       }
 
-      const fetcher = this.env.API_WORKER ?? {
+      const baseFetcher = this.env.API_WORKER ?? {
         fetch: (input: RequestInfo | URL, init?: RequestInit) =>
           globalThis.fetch(
             typeof input === "string"
@@ -194,6 +221,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             init,
           ),
       };
+      const fetcher = withStagingHeader(baseFetcher as Fetcher, await this.getStagingKey());
 
       const executor = createTypedExecutor({ fetcher, apiKey: releasesApiKey, sessionId });
 
@@ -588,9 +616,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   ): Promise<void> {
     try {
       const apiKey = cachedApiKey ?? (await this.env.RELEASED_API_KEY.get());
+      const stagingKey = await this.getStagingKey();
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
+        ...(stagingKey ? { [STAGING_KEY_HEADER]: stagingKey } : {}),
       };
       const body = JSON.stringify(event);
 

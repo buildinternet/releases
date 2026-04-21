@@ -77,17 +77,18 @@ Do not edit `.env` directly. Required vars documented in `.env.example`.
 
 ## Staging
 
-The `api` and `mcp` workers have a `[env.staging]` block in their `wrangler.jsonc`. Everything else (discovery, webhooks, crons, Vectorize) is intentionally absent — staging is a read-surface for UI/API iteration, not a full replica.
+The `api`, `mcp`, and `discovery` workers have a `[env.staging]` block in their `wrangler.jsonc`. Webhooks, crons, and Vectorize are intentionally absent — staging is a read-surface for UI/API iteration plus an agent-iteration sandbox, not a full replica.
 
 - **Hosts:** `api-staging.releases.sh`, `mcp-staging.releases.sh`
-- **Deployed as:** `releases-api-staging`, `releases-mcp-staging`
+- **Deployed as:** `releases-api-staging`, `releases-mcp-staging`, `releases-discovery-staging`
+- **Managed agents:** separate Anthropic discovery + worker agents, environment, and vault. Skills are deployed as distinct staging resources (display title suffix `(staging)`) so iteration does not affect prod. See [docs/architecture/agents.md](docs/architecture/agents.md#per-environment-agents). There is no CLI trigger for staging discovery sessions yet — the worker is reachable only via direct POST to `releases-discovery-staging` or scrape-agent cron sweeps (and those are disabled in staging).
 - **DB:** `released-db-staging` (separate D1), refreshed on demand from prod
 - **Crons:** disabled (`CRON_ENABLED=false`, no cron triggers)
 - **Vectorize:** no bindings — search degrades to FTS; `/v1/related/*` returns `degraded: true`
 - **R2:** reuses `released-media` (read-only in practice; no cron writes)
 - **KV:** reuses the existing preview namespaces, so `wrangler dev` and staging share cache
 - **Indexing:** `INDEXING_DISABLED=true` — every response carries `X-Robots-Tag: noindex, nofollow` and `/robots.txt` returns `Disallow: /`
-- **Access gate:** both hosts require `X-Releases-Staging-Key: <STAGING_ACCESS_KEY>` on every request. Missing/invalid → 401. The gate runs before routing, so public-read endpoints and admin endpoints are equally protected; CORS preflight (OPTIONS) passes through. The secret is bound via Secrets Store (`STAGING_ACCESS_KEY`) in both `workers/api/wrangler.jsonc` and `workers/mcp/wrangler.jsonc` staging blocks — create it in the Cloudflare dashboard before first staging deploy. Cloudflare Access (SSO) is still the long-term target — see issue #444.
+- **Access gate:** both hosts require `X-Releases-Staging-Key: <STAGING_ACCESS_KEY>` on every request. Missing/invalid → 401. The gate runs before routing, so public-read endpoints and admin endpoints are equally protected; CORS preflight (OPTIONS) passes through. The secret is bound via Secrets Store (`STAGING_ACCESS_KEY`) in `workers/api/wrangler.jsonc`, `workers/mcp/wrangler.jsonc`, and `workers/discovery/wrangler.jsonc` staging blocks — `workers/discovery` attaches it to outbound calls to `api-staging` so service-bound requests clear the gate. Cloudflare Access (SSO) is still the long-term target — see issue #444.
 
 Deploy:
 
@@ -95,6 +96,7 @@ Deploy:
 # From workflow_dispatch on deploy-workers.yml with environment=staging, or:
 bunx wrangler deploy --env staging --config workers/api/wrangler.jsonc
 bunx wrangler deploy --env staging --config workers/mcp/wrangler.jsonc
+bunx wrangler deploy --env staging --config workers/discovery/wrangler.jsonc
 ```
 
 Refresh staging data from prod:

@@ -2,12 +2,13 @@
 /**
  * Deploy managed agents: sync skills, system prompt, tools, and model.
  *
- * Manages two agents:
+ * Manages two agents per environment:
  *   - Discovery agent (Sonnet) — onboarding, evaluation, judgment tasks
  *   - Worker agent (Haiku) — fetches, updates, mechanical operations
  *
  * Usage:
- *   bun scripts/sync-agent-skills.ts                  # deploy both agents
+ *   bun scripts/sync-agent-skills.ts                  # deploy both agents (prod)
+ *   bun scripts/sync-agent-skills.ts --env staging    # deploy against staging agents
  *   bun scripts/sync-agent-skills.ts --dry-run        # preview without changes
  *   bun scripts/sync-agent-skills.ts --skills         # skills only
  *   bun scripts/sync-agent-skills.ts --agent          # prompt/tools/model only
@@ -15,7 +16,11 @@
  *   bun scripts/sync-agent-skills.ts --worker         # worker agent only
  *
  * Requires ANTHROPIC_API_KEY in .env or environment.
- * Reads ANTHROPIC_AGENT_ID from env or workers/discovery/wrangler.jsonc.
+ *
+ * Per-env state lives in scripts/agent-skills.json (prod) and
+ * scripts/agent-skills.staging.json. Staging skills are created as separate
+ * Anthropic custom-skill resources with the display title suffixed
+ * " (staging)" so iteration in staging does not affect prod agents.
  */
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
@@ -30,7 +35,18 @@ import { CATEGORIES } from "@buildinternet/releases-core/categories";
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..");
 const SKILLS_DIR = resolve(PROJECT_ROOT, "src/agent/skills");
-const CONFIG_PATH = resolve(PROJECT_ROOT, "scripts/agent-skills.json");
+
+type DeployEnv = "production" | "staging";
+
+function configPathFor(env: DeployEnv): string {
+  return env === "staging"
+    ? resolve(PROJECT_ROOT, "scripts/agent-skills.staging.json")
+    : resolve(PROJECT_ROOT, "scripts/agent-skills.json");
+}
+
+function displayTitleSuffixFor(env: DeployEnv): string {
+  return env === "staging" ? " (staging)" : "";
+}
 
 const SKILL_DIRS = [
   "finding-changelogs",
@@ -81,16 +97,16 @@ interface ApiSkill {
 
 // ── Helpers ──────────────────────────────────────────────────────
 
-function loadConfig(): SkillConfig | null {
+function loadConfig(configPath: string): SkillConfig | null {
   try {
-    return JSON.parse(readFileSync(CONFIG_PATH, "utf8"));
+    return JSON.parse(readFileSync(configPath, "utf8"));
   } catch {
     return null;
   }
 }
 
-function saveConfig(cfg: SkillConfig): void {
-  writeFileSync(CONFIG_PATH, JSON.stringify(cfg, null, 2) + "\n");
+function saveConfig(configPath: string, cfg: SkillConfig): void {
+  writeFileSync(configPath, JSON.stringify(cfg, null, 2) + "\n");
 }
 
 function getApiKey(): string {
@@ -123,7 +139,20 @@ function readWranglerVar(varName: string): string | null {
   return null;
 }
 
-function getAgentId(): string {
+function getAgentId(env: DeployEnv, config: SkillConfig | null): string {
+  // Staging reads exclusively from the staging config file (seeded with the IDs
+  // created in the Anthropic console). Prod retains the historical lookup chain
+  // for backwards compatibility with operators who set env vars or edit the
+  // wrangler.jsonc by hand.
+  if (env === "staging") {
+    const id = config?.agentId ?? process.env.ANTHROPIC_AGENT_ID;
+    if (!id) {
+      throw new Error(
+        "Staging ANTHROPIC_AGENT_ID not found. Seed scripts/agent-skills.staging.json or set ANTHROPIC_AGENT_ID.",
+      );
+    }
+    return id;
+  }
   const id = process.env.ANTHROPIC_AGENT_ID ?? readWranglerVar("ANTHROPIC_AGENT_ID");
   if (!id) {
     throw new Error(
@@ -133,11 +162,14 @@ function getAgentId(): string {
   return id;
 }
 
-function getWorkerAgentId(): string | null {
+function getWorkerAgentId(env: DeployEnv, config: SkillConfig | null): string | null {
+  if (env === "staging") {
+    return config?.workerAgentId ?? process.env.ANTHROPIC_WORKER_AGENT_ID ?? null;
+  }
   return (
     process.env.ANTHROPIC_WORKER_AGENT_ID ??
     readWranglerVar("ANTHROPIC_WORKER_AGENT_ID") ??
-    loadConfig()?.workerAgentId ??
+    config?.workerAgentId ??
     null
   );
 }
@@ -303,14 +335,25 @@ async function main() {
   const syncDiscovery = !workerOnly;
   const syncWorker = !discoveryOnly;
 
-  const apiKey = getApiKey();
-  const agentId = getAgentId();
+  const envIdx = process.argv.indexOf("--env");
+  const envArg = envIdx >= 0 ? process.argv[envIdx + 1] : "production";
+  if (envArg !== "production" && envArg !== "staging") {
+    throw new Error(`--env must be "production" or "staging"; got "${envArg}"`);
+  }
+  const deployEnv = envArg as DeployEnv;
+  const configPath = configPathFor(deployEnv);
+  const titleSuffix = displayTitleSuffixFor(deployEnv);
 
+  const apiKey = getApiKey();
+  const configOnDisk = loadConfig(configPath);
+  const agentId = getAgentId(deployEnv, configOnDisk);
+
+  console.log(`Environment: ${deployEnv}`);
   if (syncDiscovery) console.log(`Discovery agent: ${agentId}`);
   if (dryRun) console.log("DRY RUN — no changes will be made");
   console.log();
 
-  const config = loadConfig() || {
+  const config = configOnDisk || {
     skills: {},
     agentId,
   };
@@ -333,10 +376,13 @@ async function main() {
     console.log(`Found ${existing.length} existing custom skill(s)\n`);
 
     for (const dirName of SKILL_DIRS) {
-      const displayTitle = displayTitleFromDir(dirName);
+      const baseTitle = displayTitleFromDir(dirName);
+      const displayTitle = `${baseTitle}${titleSuffix}`;
       const { content } = readSkillFile(dirName);
       const remote = existingByTitle.get(displayTitle);
-      const cached = config.skills[displayTitle];
+      // Cache key stays on the base title so the staging config file mirrors
+      // the prod structure — only the Anthropic resource ID differs.
+      const cached = config.skills[baseTitle];
       const existingId = remote?.id ?? cached?.skillId;
 
       if (existingId) {
@@ -345,7 +391,7 @@ async function main() {
         if (!dryRun) {
           // oxlint-disable-next-line no-await-in-loop -- API rate limit; skills must be deployed sequentially
           const newVersion = await createSkillVersion(apiKey, existingId, content, dirName);
-          config.skills[displayTitle] = {
+          config.skills[baseTitle] = {
             skillId: existingId,
             localDir: dirName,
           };
@@ -360,7 +406,7 @@ async function main() {
         if (!dryRun) {
           // oxlint-disable-next-line no-await-in-loop -- API rate limit; skills must be deployed sequentially
           const created = await createSkill(apiKey, displayTitle, content, dirName);
-          config.skills[displayTitle] = {
+          config.skills[baseTitle] = {
             skillId: created.id,
             localDir: dirName,
           };
@@ -372,7 +418,7 @@ async function main() {
       }
     }
 
-    if (!dryRun) saveConfig(config);
+    if (!dryRun) saveConfig(configPath, config);
   }
 
   // ── 2. Sync agents ─────────────────────────────────────────────
@@ -448,7 +494,7 @@ async function main() {
     if (!dryRun) {
       const updated = await updateAgent(apiKey, id, remoteAgent.version, payload);
       onSuccess();
-      saveConfig(config);
+      saveConfig(configPath, config);
       console.log(`✓ ${label} updated to v${updated.version}`);
     } else {
       console.log(`(would update ${label.toLowerCase()})`);
@@ -488,7 +534,7 @@ async function main() {
     const workerModel = process.env.RELEASED_WORKER_AGENT_MODEL || "claude-haiku-4-5";
     const workerPrompt = buildWorkerSystemPrompt({ categories: CATEGORIES });
     const workerPromptHash = hash(workerPrompt);
-    const workerAgentId = getWorkerAgentId();
+    const workerAgentId = getWorkerAgentId(deployEnv, config);
 
     if (workerAgentId) {
       const workerAgent = await getAgent(apiKey, workerAgentId);
@@ -518,7 +564,7 @@ async function main() {
         });
         config.workerAgentId = created.id;
         config.workerPromptHash = workerPromptHash;
-        saveConfig(config);
+        saveConfig(configPath, config);
         console.log(`✓ Worker agent created: ${created.id} (v${created.version})`);
         console.log(`  Add to wrangler.jsonc: "ANTHROPIC_WORKER_AGENT_ID": "${created.id}"`);
       } else {
