@@ -23,6 +23,7 @@ import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import knowledge from "./routes/knowledge.js";
 import overview from "./routes/overview.js";
+import overviewInputs from "./routes/overview-inputs.js";
 import playbook from "./routes/playbook.js";
 import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
@@ -165,6 +166,7 @@ const adminRoutes = [
   "admin/summaries",
   "admin/compare",
   "playbook",
+  "overview-inputs",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -224,6 +226,7 @@ v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
 v1.route("/summaries", summaries);
 v1.route("/overview", overview);
+v1.route("/overview-inputs", overviewInputs);
 v1.route("/playbook", playbook);
 v1.route("/knowledge", knowledge); // deprecated — alias for overview/playbook
 v1.route("/", discoverRoutes);

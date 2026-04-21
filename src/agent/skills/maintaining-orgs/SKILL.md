@@ -8,7 +8,12 @@ description: >
 
 # Maintaining Orgs
 
-Keep indexed organizations current by fetching their sources and regenerating overviews. Driven from Claude Code using the installed `releases` CLI against the production API — no managed-agent dispatch required.
+Keep indexed organizations current by fetching their sources and regenerating overviews. Driven from Claude Code using the installed `releases` CLI against the production API. Two pieces compose:
+
+1. **Fetch** — pull every active source so the database reflects what's been published. CLI does the work; no AI required.
+2. **Regenerate overview** — re-derive the org's AI summary from the freshened release set. AI work; runs through the **`regenerating-overviews`** skill (which carries the prompt + workflow).
+
+There is intentionally **no single-command "refresh in one step"** today. Compose the two pieces below.
 
 ## When to Use
 
@@ -19,26 +24,20 @@ Keep indexed organizations current by fetching their sources and regenerating ov
 
 ## Single Org Update
 
-The one-liner:
+Two steps:
 
 ```bash
-releases admin org refresh <slug>
+# 1. Fetch active sources (skips fetchPriority=paused)
+releases admin source fetch --org <slug>
+
+# 2. Regenerate the overview by invoking the regenerating-overviews skill.
+#    See that skill for the workflow; the inputs and write commands are:
+releases admin overview-inputs <slug> --json
+# … generate markdown locally per skill prompt …
+releases admin overview-write <slug> --content-file /tmp/<slug>-overview.md
 ```
 
-This fetches every active source for the org (skipping `fetchPriority: paused`) and regenerates the AI overview in one step. It reports sources fetched, new releases, and overview status on completion.
-
-### Useful flags
-
-- `--max <n>` — per-source release cap (default 20)
-- `--concurrency <n>` — parallel fetches (default 3)
-- `--window <days>` — window for overview release selection (default 90)
-- `--dry-run` — preview without fetching
-- `--skip-overview` — fetch only, don't regenerate the overview
-- `--json` — machine-readable output
-
-### When to check the playbook first
-
-For orgs with `scrape` or `agent` sources, skim the playbook before refreshing — it documents source-specific quirks that may affect `--max` or require crawl flags:
+For orgs with `scrape` or `agent` sources, skim the playbook before fetching — it documents source-specific quirks that may affect `--max` or require crawl flags:
 
 ```bash
 releases admin playbook <slug>
@@ -46,20 +45,21 @@ releases admin playbook <slug>
 
 Skip this for orgs with only `feed` and `github` sources. Check source types with `releases admin org show <slug>`.
 
+### Useful flags on `admin source fetch`
+
+- `--max <n>` — per-source release cap (default 200)
+- `--concurrency <n>` — parallel fetches (default 3)
+- `--dry-run` — preview without fetching
+- `--org <slug>` — fetch all active sources for the org
+- `--stale` / `--changed` / `--retry-errors` — narrow scope
+
 ### Verifying the result
 
-`org refresh` logs a post-regen confirmation: `Overview regenerated (<chars> chars from <n> of <total> releases, window: <d>d)`. If no releases exist in the window, it warns and skips overview regeneration — this is usually a signal that `--max` was too low or all sources are paused.
-
-## Lower-level building blocks
-
-- `releases admin source fetch --org <slug>` — fetch all active sources for an org without regenerating the overview. Composes with `--stale`, `--changed`, `--retry-errors`, or a positional source slug to narrow scope.
-- `releases admin org show <slug> --regenerate [--window <days>]` — regenerate the overview from whatever releases already exist, no fetching.
-
-Use these when you want to decouple the fetch and regenerate steps — e.g., re-running overview generation with a tighter window after a fetch has already completed.
+After regen, `releases admin overview <slug>` prints the new content with metadata. If `selected: []` came back from `overview-inputs`, no overview is written — that's usually a signal that the fetch missed (try `--max` higher) or all sources are paused.
 
 ## Batch Updates
 
-When updating multiple orgs, use parallel Claude Code sub-agents (one per org). Each agent runs `org refresh` for its target.
+When updating multiple orgs, use parallel Claude Code sub-agents (one per org). Each agent runs the two-step flow above for its target.
 
 ### Selecting targets
 
@@ -79,7 +79,7 @@ Each agent prompt should include:
 
 1. That the `releases` CLI is installed and configured with an admin API key
 2. The org slug
-3. The `org refresh` command to run
+3. Instructions to run the fetch + regen-overview flow (referencing the `regenerating-overviews` skill for the AI step)
 4. Instructions to report back concisely: sources fetched, new releases, overview status
 
 Example prompt template:
@@ -90,13 +90,16 @@ The CLI is installed and authenticated against the production API.
 
 Your task: refresh **{Org Name}** (slug: `{slug}`).
 
-Run: releases admin org refresh {slug} --json
+Steps:
+  1. (Optional) For scrape/agent sources, check the playbook:
+     releases admin playbook {slug} 2>/dev/null
+  2. Fetch active sources:
+     releases admin source fetch --org {slug} --json
+  3. Regenerate the overview by following the `regenerating-overviews` skill —
+     this means calling overview-inputs, generating markdown using the skill's
+     prompt, then overview-write.
 
-If the org has scrape or agent sources, first check the playbook:
-  releases admin playbook {slug} 2>/dev/null
-
-Report back: sources fetched, new releases found, overview status
-(from the JSON output). Keep it concise.
+Report back: sources fetched, new releases found, overview status. Keep it concise.
 ```
 
 ### Tracking results
@@ -107,3 +110,9 @@ After all agents complete, compile a summary table:
 | --- | ------- | ------------ | -------- |
 
 This gives a quick audit of what changed and whether any orgs need attention.
+
+## Composing With Other Skills
+
+- **`regenerating-overviews`** — the AI prompt + workflow for the overview step. Required reading for any sub-agent doing the second step above.
+- **`parsing-changelogs`** — what `admin source fetch` does under the hood. Useful when fetches misbehave.
+- **`managing-sources`** — for adding, hiding, or pausing sources before a refresh.
