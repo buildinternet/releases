@@ -11,27 +11,28 @@ Operational guide for managing changelog sources.
 
 Operations can be performed via CLI commands or typed MCP/agent tools. Use whichever interface is available in your context.
 
-| Operation             | CLI                                                                                                                               | Typed tool                                                                    |
-| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------- |
-| List sources          | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>] [--compact] [--limit <n>] [--page <n>]` | `list_sources` with query, organization, category, has_feed params            |
-| Add source            | `releases admin source add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]`                                   | `add_source` with name, url, type, organization, feed_url params              |
-| Edit source           | `releases admin source edit <identifier> [--primary] [--priority <p>]`                                                            | `edit_source` with identifier (ID or slug), is_primary, fetch_priority params |
-| Remove source         | `releases admin source remove <slug> [--ignore --reason <reason>]`                                                                | `remove_source` with identifier (ID or slug) param                            |
-| Fetch releases        | `releases admin source fetch <slug> [--dry-run] [--max <n>]`                                                                      | `fetch_source` with identifier (ID or slug) param                             |
-| Get latest releases   | `releases tail [slug] --json [--org <org>]`                                                                                       | `get_latest_releases` with source, organization, limit params                 |
-| Search releases       | `releases search <query> --json`                                                                                                  | `search_releases` with query, limit params                                    |
-| Evaluate URL          | `releases admin discovery evaluate <url> --json`                                                                                  | `evaluate_url` with url param                                                 |
-| Add org               | `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]`                              | `manage_org` action "add" with name, domain, description, category, tags      |
-| Edit org              | `releases admin org edit <slug> [--category <c>]`                                                                                 | `manage_org` action "edit" with identifier, category                          |
-| Show org              | `releases admin org show <slug> --json`                                                                                           | `get_organization` with identifier                                            |
-| Add tags to org       | `releases admin org tag add <slug> <tags...>`                                                                                     | `manage_org` action "tag_add" with identifier, tags                           |
-| Link account          | `releases admin org link <slug> --platform <p> --handle <h>`                                                                      | `manage_org` action "link_account" with identifier, platform, handle          |
-| Add product           | `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]`                                                     | `manage_product` action "add" with name, organization, category, tags         |
-| Ignore URL            | `releases admin policy ignore add --org <org> <url>`                                                                              | `exclude_url` action "ignore" with url, organization                          |
-| Block URL             | `releases admin policy block add <url>`                                                                                           | `exclude_url` action "block" with url                                         |
-| List categories       | `releases categories --json`                                                                                                      | `list_categories`                                                             |
-| Get playbook          | `releases admin playbook <org>`                                                                                                   | `get_playbook` with organization param                                        |
-| Update playbook notes | `releases admin playbook <org> --notes "..."`                                                                                     | `update_playbook_notes` with organization, notes params                       |
+| Operation             | CLI                                                                                                                               | Typed tool                                                                                                |
+| --------------------- | --------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| List sources          | `releases list [slug] --json [--org <org>] [--query <text>] [--has-feed] [--category <c>] [--compact] [--limit <n>] [--page <n>]` | `list_sources` with query, organization, category, has_feed params                                        |
+| Add source            | `releases admin source add <name> --url <url> [--type <type>] [--org <org>] [--feed-url <url>]`                                   | `manage_source` action "add" with name, url, type, organization, feed_url (type auto-detected if omitted) |
+| Edit source           | `releases admin source edit <identifier> [--primary] [--priority <p>]`                                                            | `manage_source` action "edit" with identifier, is_primary, fetch_priority, name, url, type                |
+| Remove source         | `releases admin source remove <slug> [--ignore --reason <reason>]`                                                                | `manage_source` action "remove" with identifier                                                           |
+| Fetch releases        | `releases admin source fetch <slug> [--dry-run] [--max <n>]`                                                                      | `manage_source` action "fetch" with identifier                                                            |
+| Get latest releases   | `releases tail [slug] --json [--org <org>]`                                                                                       | `get_latest_releases` with source, organization, limit params                                             |
+| Search releases       | `releases search <query> --json`                                                                                                  | `search_releases` with query, limit params                                                                |
+| Evaluate URL          | `releases admin discovery evaluate <url> --json`                                                                                  | `evaluate_url` with url param (optional dry-run; `manage_source` action "add" auto-evaluates)             |
+| Add org               | `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]`                              | `manage_org` action "add" with name, domain, description, category, tags                                  |
+| Edit org              | `releases admin org edit <slug> [--category <c>]`                                                                                 | `manage_org` action "edit" with identifier, category                                                      |
+| Show org              | `releases admin org show <slug> --json`                                                                                           | `get_organization` with identifier                                                                        |
+| Add tags to org       | `releases admin org tag add <slug> <tags...>`                                                                                     | `manage_org` action "tag_add" with identifier, tags                                                       |
+| Link account          | `releases admin org link <slug> --platform <p> --handle <h>`                                                                      | `manage_org` action "link_account" with identifier, platform, handle                                      |
+| Add product           | `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]`                                                     | `manage_product` action "add" with name, organization, category, tags                                     |
+| Ignore URL            | `releases admin policy ignore add --org <org> <url>`                                                                              | `exclude_url` action "ignore" with url, organization                                                      |
+| Block URL             | `releases admin policy block add <url>`                                                                                           | `exclude_url` action "block" with url                                                                     |
+| Get playbook          | `releases admin playbook <org>`                                                                                                   | `manage_playbook` action "get" with organization                                                          |
+| Update playbook notes | `releases admin playbook <org> --notes "..."`                                                                                     | `manage_playbook` action "update_notes" with organization, notes                                          |
+
+Valid categories (pass to `manage_org`/`manage_product`): see the enum in those tool descriptions or your system prompt. `list_categories` (now retired) has been folded into the two tool descriptions.
 
 ## Listing Sources
 
@@ -73,7 +74,7 @@ Adding or editing an org, product, or source triggers an entity embedding into t
 
 ## Removing Sources
 
-When removing discovery results, also ignore the URL to prevent re-discovery. In CLI: `releases admin source remove <slug> --ignore --reason "..."`. With typed tools: call `remove_source` then `exclude_url` with action "ignore".
+When removing discovery results, also ignore the URL to prevent re-discovery. In CLI: `releases admin source remove <slug> --ignore --reason "..."`. With typed tools: call `manage_source` action "remove" then `exclude_url` action "ignore".
 
 ## Ignored URLs (org-scoped)
 
@@ -88,7 +89,7 @@ For spam domains and known-bad URLs that should never be added for any org. Use 
 After adding a source, validate it:
 
 1. **Add the source** — provide name and URL
-2. **Fetch** — trigger a fetch (CLI: `--dry-run` for preview, then real fetch; typed tools: `fetch_source`)
+2. **Fetch** — trigger a fetch (CLI: `--dry-run` for preview, then real fetch; typed tools: `manage_source` action "fetch")
 3. **Check results** — get latest releases and verify they have titles, dates, content
 4. **If bad:** remove the source and ignore the URL
 5. **If good:** the source is ready for production fetches
@@ -108,7 +109,7 @@ Each playbook has two layers:
 - **Header** — auto-generated from source metadata. Shows source types, URLs, priorities, parseInstructions, and product groupings. Regenerates automatically on every source mutation. You never edit this directly.
 - **Agent notes** — free-form markdown that you fully control. This is the most important part of the playbook. Write it like a skill an agent will follow — imperative, action-oriented, concise — not like human documentation.
 
-**Always read the playbook before fetching or working with an org's sources.** Typed tool: `get_playbook` with organization param. CLI: `releases admin playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
+**Always read the playbook before fetching or working with an org's sources.** Typed tool: `manage_playbook` action "get" with organization param. CLI: `releases admin playbook <org>`. If no playbook exists yet, one will be auto-generated on the next source mutation (add/edit/remove).
 
 ### Writing good agent notes
 
@@ -157,9 +158,9 @@ Use the verified approach for high-value orgs, when onboarding new orgs with scr
 
 Write notes during onboarding after you've fetched and validated sources. Update them when you discover new quirks or when source behavior changes. If notes are empty or stale, write them before doing fetch work — future agents (including yourself in later sessions) will benefit.
 
-**Updating notes:** Use `update_playbook_notes` with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
+**Updating notes:** Use `manage_playbook` action "update_notes" with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
 
-**Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `edit_source` with metadata — the header updates automatically.
+**Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `manage_source` action "edit" with metadata — the header updates automatically.
 
 **Product context:** Playbooks group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the playbook calls these out as "Organization-Level Sources" with a note about which products they may cover.
 

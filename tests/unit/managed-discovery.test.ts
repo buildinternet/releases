@@ -311,8 +311,9 @@ describe("buildWorkerSystemPrompt", () => {
     expect(prompt).toContain("src_");
   });
 
-  it("mentions fetch_source tool", () => {
-    expect(prompt).toContain("fetch_source");
+  it("mentions the manage_source tool for fetch operations", () => {
+    expect(prompt).toContain("manage_source");
+    expect(prompt).toContain("action=fetch");
   });
 
   it("includes all categories", () => {
@@ -325,14 +326,14 @@ describe("buildWorkerSystemPrompt", () => {
     expect(prompt).toContain("Tool names are exact");
   });
 
-  it("instructs the agent to apply the inlined playbook instead of calling get_playbook first", () => {
+  it("instructs the agent to apply the inlined playbook instead of re-reading it first", () => {
     expect(prompt).toContain("Apply the playbook");
     expect(prompt).toContain("inlined above");
     expect(prompt).not.toContain("Optionally read the playbook first");
-    expect(prompt).not.toContain("call get_playbook first");
+    expect(prompt).not.toContain("call manage_playbook(get) first");
   });
 
-  it("marks get_playbook as rarely needed (since fetch sessions inline the playbook)", () => {
+  it("marks playbook reads as rarely needed (since fetch sessions inline the playbook)", () => {
     expect(prompt).toContain("rarely needed");
   });
 });

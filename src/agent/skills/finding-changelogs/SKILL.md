@@ -167,7 +167,7 @@ If evaluation returns `confidence: low` or `recommendedMethod: scrape`, you may 
 
 When evaluating multiple changelog sources for an org, identify which one is the company's **primary changelog** — the top-level, platform-wide changelog that covers the product as a whole. This is typically a website changelog page (e.g., `example.com/changelog`) rather than individual GitHub repos or product-specific pages.
 
-After adding sources, mark the primary one. CLI: `releases admin source edit <identifier> --primary`. Typed tool: `edit_source` with identifier (ID or slug) and is_primary: true. Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
+After adding sources, mark the primary one. CLI: `releases admin source edit <identifier> --primary`. Typed tool: `manage_source` action "edit" with identifier (ID or slug) and is_primary: true. Only one source per org should be primary. If there's no clear top-level changelog, don't mark any as primary.
 
 ## When to Use Crawl
 
@@ -245,7 +245,7 @@ When in doubt, add and pause rather than skip entirely. A focused index with 3 c
 
 When you find a source that matches the staleness or ecosystem criteria above, **still add it to the database** but immediately set it to `--priority paused`. This prevents future onboard runs from rediscovering the same source and re-evaluating it. The source record serves as documentation that "we know about this, and we decided not to track it."
 
-Add the source and immediately set it to paused priority. CLI: `releases admin source add <name> --url <url> --org <org> --type github` then `releases admin source edit <identifier> --priority paused`. Typed tools: `add_source` then `edit_source` with identifier (ID or slug) and fetch_priority: "paused".
+Add the source and immediately set it to paused priority. CLI: `releases admin source add <name> --url <url> --org <org> --type github` then `releases admin source edit <identifier> --priority paused`. Typed tools: `manage_source` action "add" then `manage_source` action "edit" with identifier and fetch_priority: "paused".
 
 Do the same for ecosystem plugins, deprecated products, and low-value repos. The goal is to capture the discovery decision, not to lose the knowledge.
 
@@ -253,6 +253,6 @@ Do the same for ecosystem plugins, deprecated products, and low-value repos. The
 
 Organizations can have multiple distinct products (e.g., Vercel → Next.js, Turborepo, v0). When discovering sources for an org, consider whether they belong to separate products.
 
-Use product and org management operations to organize what you find. CLI: `releases admin product add`, `releases admin org tag add`, `releases categories`. Typed tools: `manage_product`, `manage_org`, `list_categories`. The full list of valid categories is provided in your system prompt.
+Use product and org management operations to organize what you find. CLI: `releases admin product add`, `releases admin org tag add`, `releases categories`. Typed tools: `manage_product`, `manage_org` — each carries the valid category list in its description (also provided in your system prompt).
 
 Don't force product groupings when sources are ambiguous — leave them at the org level and note suggestions in the state file.

@@ -15,7 +15,7 @@ export interface DiscoveryPromptOptions {
 export function buildDiscoverySystemPrompt(opts: DiscoveryPromptOptions): string {
   const evaluateNote = opts.evaluateAvailable
     ? ""
-    : "\nNOTE: The evaluate_url tool is not available in this mode. Use list_sources to find sources and fetch_source to validate them.";
+    : "\nNOTE: The evaluate_url tool is not available in this mode. Use list_sources to find sources and manage_source(action=fetch) to validate them.";
 
   return `You manage changelog sources for Releases. You find, evaluate, add, fetch, and validate changelog sources using the available tools.
 
@@ -36,16 +36,11 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_sources\` + web search.
 
 ### Custom tools (writes + utilities)
-- **list_categories** — List valid category values
-${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method\n" : ""}- **add_source** — Add a new changelog source. Params: name, url, type (github/scrape/feed/agent), organization, feed_url
-- **edit_source** — Update a source's config. Params: slug, is_primary, fetch_priority, name, url, type
-- **remove_source** — Delete a source and its releases. Params: slug
-- **fetch_source** — Trigger a fetch for a source. Params: slug
-- **manage_org** — Create/edit orgs. Params: action (add/edit/tag_add/link_account), name, identifier, domain, description, category, tags, platform, handle
+${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method (optional dry-run; manage_source(add) auto-evaluates when type is omitted)\n" : ""}- **manage_source** — Create, modify, remove, or fetch a source. Params: action (add/edit/remove/fetch), url, name, identifier, type, organization, feed_url, is_primary, fetch_priority. On action=add, type is auto-detected when omitted.
+- **manage_org** — Create/edit orgs. Params: action (add/edit/tag_add/link_account), name, identifier, domain, description, category, tags, platform, handle. Valid categories are listed below.
 - **manage_product** — Create/edit products. Params: action (add/edit/tag_add), name, organization, slug, url, description, category, tags
+- **manage_playbook** — Read or update an org's playbook notes. Params: action (get/update_notes), organization, notes
 - **exclude_url** — Ignore or block a URL. Params: action (ignore/block), url, organization, reason, block_type
-- **get_playbook** — Read the playbook for an org (auto-generated header + agent notes). Params: organization
-- **update_playbook_notes** — Replace the agent notes section of an org's playbook. Params: organization, notes (complete markdown)
 ${evaluateNote}
 ## Available Categories
 
@@ -63,11 +58,11 @@ Some organizations ship multiple distinct products. When you discover sources th
 ## Onboarding Workflow
 
 1. **Pre-check** — call \`list_organizations\` with the company name to check if the org already exists, then call \`list_sources\` to check for existing sources. If sources already exist, report the current state and stop — do not re-discover or add duplicates.
-2. **Discover** — use evaluate_url, web search, and list_sources to find changelog URLs, feeds, and GitHub repos
-3. **Add** — add sources with add_source using appropriate types
-4. **Validate** — fetch each source with fetch_source and check the results
+2. **Discover** — use web search and list_sources to find changelog URLs, feeds, and GitHub repos (evaluate_url is optional; manage_source(add) auto-evaluates when type is omitted).
+3. **Add** — add sources with \`manage_source\` action=add; omit \`type\` to let the server infer it (feed discovery, provider detection) or pass it explicitly when you already know.
+4. **Validate** — fetch each source with \`manage_source\` action=fetch and check the results
 5. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-6. **Write the playbook** — after validating sources, call update_playbook_notes to write notes covering extraction patterns (page structure, version format, publish cadence per source), known quirks, and source coverage. Write it like a README for a teammate who will fetch releases from this org without asking questions. See the get_playbook tool for the current playbook state.
+6. **Write the playbook** — after validating sources, call \`manage_playbook\` action=update_notes to write notes covering extraction patterns (page structure, version format, publish cadence per source), known quirks, and source coverage. Write it like a README for a teammate who will fetch releases from this org without asking questions. Read current state with \`manage_playbook\` action=get first.
 7. **Report** — summarize what was found, including how many releases were persisted
 
 ## Source Selection
@@ -94,13 +89,13 @@ IMPORTANT: At the end of discovery, call the releases_report_state tool with the
     {
       "url": "<source url>",
       "type": "github|scrape|feed",
-      "slug": "<slug from add_source>",
+      "slug": "<slug from manage_source(add)>",
       "label": "<human-readable label>",
       "confidence": "high|medium|low",
       "validated": true/false,
       "validationError": "<error message if validation failed>",
       "releaseCount": <number>,
-      "releasesFetched": <number of releases persisted via fetch_source>,
+      "releasesFetched": <number of releases persisted via manage_source(fetch)>,
       "fetched": true/false,
       "contentDepth": "full|summary-only"
     }
