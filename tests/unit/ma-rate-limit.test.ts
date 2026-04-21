@@ -1,35 +1,21 @@
 import { describe, it, expect } from "bun:test";
 import {
+  RateLimitError,
+  APIError,
+  InternalServerError,
+  AuthenticationError,
+} from "@anthropic-ai/sdk";
+import type { ErrorType } from "@anthropic-ai/sdk/resources/shared";
+import {
   classifyMaRateLimitError,
   buildMaRateLimitErrorMessage,
 } from "../../workers/discovery/src/managed-agents-session";
 
-interface SdkLikeError extends Error {
-  status?: number;
-  type?: string;
-  error?: unknown;
-  headers?: { get(name: string): string | null };
-}
-
-function makeSdkError(
-  status: number,
-  opts: {
-    type?: string;
-    errorBody?: Record<string, unknown>;
-    headers?: Record<string, string>;
-  } = {},
-): SdkLikeError {
-  const err = new Error(`${status} mock error`) as SdkLikeError;
-  err.status = status;
-  if (opts.type !== undefined) err.type = opts.type;
-  if (opts.errorBody !== undefined) err.error = opts.errorBody;
-  if (opts.headers) {
-    const h = opts.headers;
-    err.headers = {
-      get: (name: string) => h[name] ?? h[name.toLowerCase()] ?? null,
-    };
-  }
-  return err;
+function makeRateLimitError(opts: { type?: ErrorType; retryAfter?: string } = {}): RateLimitError {
+  const type = opts.type ?? "rate_limit_error";
+  const body = { type: "error" as const, error: { type, message: `${type} mock` } };
+  const headers = new Headers(opts.retryAfter ? { "retry-after": opts.retryAfter } : {});
+  return new RateLimitError(429, body, "rate limit mock", headers, type);
 }
 
 const NO_JITTER = { getJitterMs: () => 0 };
@@ -42,61 +28,60 @@ describe("classifyMaRateLimitError", () => {
     expect(classifyMaRateLimitError(429).isRateLimit).toBe(false);
   });
 
-  it("returns isRateLimit=false for non-429 HTTP errors", () => {
-    expect(classifyMaRateLimitError(makeSdkError(401)).isRateLimit).toBe(false);
-    expect(classifyMaRateLimitError(makeSdkError(500)).isRateLimit).toBe(false);
-    expect(classifyMaRateLimitError(makeSdkError(503)).isRateLimit).toBe(false);
+  it("returns isRateLimit=false for non-RateLimitError SDK errors", () => {
+    const auth = new AuthenticationError(401, undefined, "auth", new Headers());
+    const server = new InternalServerError(500, undefined, "server", new Headers());
+    expect(classifyMaRateLimitError(auth).isRateLimit).toBe(false);
+    expect(classifyMaRateLimitError(server).isRateLimit).toBe(false);
   });
 
-  it("returns isRateLimit=false for plain Errors without .status", () => {
+  it("returns isRateLimit=false for plain Errors", () => {
     expect(classifyMaRateLimitError(new Error("generic failure")).isRateLimit).toBe(false);
   });
 
-  it("classifies a 429 as a rate limit", () => {
-    const err = makeSdkError(429, { type: "rate_limit_error" });
-    const result = classifyMaRateLimitError(err, NO_JITTER);
+  it("classifies a RateLimitError as a rate limit and reads err.type", () => {
+    const result = classifyMaRateLimitError(makeRateLimitError(), NO_JITTER);
     expect(result.isRateLimit).toBe(true);
     expect(result.errorType).toBe("rate_limit_error");
   });
 
-  it("falls back to nested .error.error.type when .type is absent", () => {
-    const err = makeSdkError(429, {
-      errorBody: { error: { type: "rate_limit_error", message: "Type 2b rate limited." } },
-    });
-    const result = classifyMaRateLimitError(err, NO_JITTER);
+  it("preserves err.type when it's a non-rate-limit ErrorType (e.g. overloaded_error)", () => {
+    // RateLimitError can carry any ErrorType in err.type — the 429 status is what drives classification.
+    const result = classifyMaRateLimitError(
+      makeRateLimitError({ type: "overloaded_error" }),
+      NO_JITTER,
+    );
     expect(result.isRateLimit).toBe(true);
-    expect(result.errorType).toBe("rate_limit_error");
+    expect(result.errorType).toBe("overloaded_error");
   });
 
   it("uses default retry-after (60s) when no Retry-After header is present", () => {
-    const err = makeSdkError(429, { type: "rate_limit_error" });
-    expect(classifyMaRateLimitError(err, NO_JITTER).retryAfterMs).toBe(60_000);
+    expect(classifyMaRateLimitError(makeRateLimitError(), NO_JITTER).retryAfterMs).toBe(60_000);
   });
 
   it("parses Retry-After header (integer seconds)", () => {
-    const err = makeSdkError(429, {
-      type: "rate_limit_error",
-      headers: { "retry-after": "120" },
-    });
+    const err = makeRateLimitError({ retryAfter: "120" });
     expect(classifyMaRateLimitError(err, NO_JITTER).retryAfterMs).toBe(120_000);
   });
 
   it("ignores a non-numeric Retry-After header and uses default", () => {
-    const err = makeSdkError(429, {
-      type: "rate_limit_error",
-      headers: { "retry-after": "Thu, 01 Jan 2099 00:00:00 GMT" },
-    });
+    const err = makeRateLimitError({ retryAfter: "Thu, 01 Jan 2099 00:00:00 GMT" });
     expect(classifyMaRateLimitError(err, NO_JITTER).retryAfterMs).toBe(60_000);
   });
 
   it("adds the injected jitter to the retry-after delay", () => {
-    const err = makeSdkError(429, { type: "rate_limit_error" });
-    const result = classifyMaRateLimitError(err, { getJitterMs: () => 5_000 });
+    const result = classifyMaRateLimitError(makeRateLimitError(), { getJitterMs: () => 5_000 });
     expect(result.retryAfterMs).toBe(65_000);
   });
 
   it("returns retryAfterMs=0 when isRateLimit is false", () => {
-    expect(classifyMaRateLimitError(makeSdkError(500)).retryAfterMs).toBe(0);
+    const server = new InternalServerError(500, undefined, "server", new Headers());
+    expect(classifyMaRateLimitError(server).retryAfterMs).toBe(0);
+  });
+
+  it("rejects a generic APIError with a non-429 status", () => {
+    const apiErr = new APIError(418, undefined, "teapot", new Headers());
+    expect(classifyMaRateLimitError(apiErr).isRateLimit).toBe(false);
   });
 });
 

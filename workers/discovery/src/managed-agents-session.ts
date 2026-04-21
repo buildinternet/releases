@@ -11,6 +11,8 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
+import { RateLimitError } from "@anthropic-ai/sdk";
+import type { ErrorType } from "@anthropic-ai/sdk/resources/shared";
 import type { Env } from "./types.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
@@ -25,66 +27,38 @@ const MA_RATE_LIMIT_MAX_RETRIES = 2;
 
 export interface MaRateLimitClassification {
   isRateLimit: boolean;
-  /** Error type string from the Anthropic error body, e.g. "rate_limit_error". */
-  errorType?: string;
+  errorType?: ErrorType;
   /** Retry-After delay in milliseconds (includes jitter). */
   retryAfterMs: number;
 }
 
 /**
- * Duck-typed shape of an Anthropic SDK `APIError` — we only need the subset the
- * classifier reads, and avoiding the SDK type keeps this file unit-testable
- * without a live client.
- */
-interface SdkErrorLike extends Error {
-  status?: number;
-  type?: string;
-  error?: unknown;
-  headers?: { get(name: string): string | null };
-}
-
-/**
  * Classify an error thrown by the Anthropic SDK as a 429 rate-limit error.
- * Extracts `Retry-After` from response headers when available; falls back to a
- * 60s default plus jitter.
- *
- * Pure function — no I/O. `getJitterMs` is injectable for deterministic tests.
+ * Reads `Retry-After` from response headers when present; falls back to a 60s
+ * default plus jitter. `getJitterMs` is injectable for deterministic tests.
  */
 export function classifyMaRateLimitError(
   err: unknown,
   opts: { getJitterMs?: () => number } = {},
 ): MaRateLimitClassification {
-  const notRateLimit: MaRateLimitClassification = { isRateLimit: false, retryAfterMs: 0 };
-
-  if (!(err instanceof Error)) return notRateLimit;
-  const sdkErr = err as SdkErrorLike;
-  if (sdkErr.status !== 429) return notRateLimit;
-
-  let errorType: string | undefined;
-  if (typeof sdkErr.type === "string" && sdkErr.type.length > 0) {
-    errorType = sdkErr.type;
-  } else {
-    const body = sdkErr.error as { error?: { type?: unknown } } | undefined;
-    if (typeof body?.error?.type === "string") errorType = body.error.type;
-  }
+  if (!(err instanceof RateLimitError)) return { isRateLimit: false, retryAfterMs: 0 };
 
   let retryAfterS = MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S;
-  const raw = sdkErr.headers?.get("retry-after");
+  const raw = err.headers.get("retry-after");
   if (raw) {
     const parsed = parseInt(raw, 10);
     if (Number.isFinite(parsed) && parsed > 0) retryAfterS = parsed;
   }
 
   const getJitterMs = opts.getJitterMs ?? (() => Math.random() * MA_RATE_LIMIT_JITTER_MAX_S * 1000);
-  const retryAfterMs = retryAfterS * 1000 + getJitterMs();
 
-  return { isRateLimit: true, errorType, retryAfterMs };
+  return {
+    isRateLimit: true,
+    errorType: err.type ?? undefined,
+    retryAfterMs: retryAfterS * 1000 + getJitterMs(),
+  };
 }
 
-/**
- * Build a structured, human-readable error string for a 429 that exhausted
- * all retries. Keeps it parseable without dumping raw Anthropic JSON.
- */
 export function buildMaRateLimitErrorMessage(
   classification: MaRateLimitClassification,
   retryCount: number,
