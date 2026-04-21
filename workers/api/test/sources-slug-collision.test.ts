@@ -5,25 +5,18 @@
  * are created, the second one gets `<base>-2` and both return 201 with
  * distinct resolved slugs.
  */
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../../../tests/db-helper";
 import { organizations } from "@buildinternet/releases-core/schema";
+import { Hono } from "hono";
+import { sourceRoutes } from "../src/routes/sources.js";
 
-// Stub modules that source routes pull in but aren't needed for these tests.
-mock.module("../src/playbook-regen.js", () => ({
-  regeneratePlaybook: async () => {},
-}));
-mock.module("../src/lib/embed-config.js", () => ({
-  buildEmbedConfig: async () => null,
-}));
-mock.module("@releases/lib/embed-entities.js", () => ({
-  embedAndUpsertEntities: async () => {},
-}));
-
-const { Hono } = await import("hono");
-const { sourceRoutes } = await import("../src/routes/sources.js");
+// Embed + playbook-regen side effects in POST /sources are fire-and-forget via
+// c.executionCtx.waitUntil. The no-op waitUntil stub below never runs them, so
+// no module-level mocks are needed here. (Earlier version used mock.module,
+// which leaks globally across bun:test files and poisoned embed-entities.test.ts.)
 
 // Minimal DO stubs required by route internals (STATUS_HUB for fetch route,
 // not used here but the route file references it at module level via getStatusHub).
