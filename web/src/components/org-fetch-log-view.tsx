@@ -14,19 +14,9 @@ function formatTime(iso: string): string {
   return `${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} ${time}`;
 }
 
-export function OrgFetchLogView({
-  apiUrl,
-  apiKey,
-  orgSlug,
-}: {
-  apiUrl: string;
-  apiKey?: string;
-  orgSlug: string;
-}) {
+export function OrgFetchLogView({ orgSlug }: { orgSlug: string }) {
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
   const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore } = useFetchLog({
-    apiUrl,
-    apiKey,
     org: orgSlug,
     status: filter,
   });

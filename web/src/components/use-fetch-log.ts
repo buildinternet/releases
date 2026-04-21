@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type {
   FetchLogEntry,
   FetchLogResponse,
@@ -9,8 +9,6 @@ import type {
 } from "./fetch-log-shared";
 
 interface Params {
-  apiUrl: string;
-  apiKey?: string;
   after?: string | null;
   before?: string | null;
   org?: string;
@@ -35,7 +33,7 @@ function buildUrl(base: string, params: Record<string, string | null | undefined
   return `${base}${qs.toString() ? `?${qs}` : ""}`;
 }
 
-export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSize = 25 }: Params) {
+export function useFetchLog({ after, before, org, status, pageSize = 25 }: Params) {
   const [state, setState] = useState<State>({
     entries: [],
     nextCursor: null,
@@ -46,18 +44,12 @@ export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSi
   });
   const reqId = useRef(0);
 
-  const headers = useMemo<Record<string, string>>(() => {
-    const h: Record<string, string> = {};
-    if (apiKey) h.Authorization = `Bearer ${apiKey}`;
-    return h;
-  }, [apiKey]);
-
   const fetchPage = useCallback(
     async (cursor: string | null, append: boolean) => {
       const id = ++reqId.current;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const url = buildUrl(`${apiUrl}/v1/status/fetch-log`, {
+        const url = buildUrl(`/api/admin/status/fetch-log`, {
           after: after ?? undefined,
           before: before ?? undefined,
           org,
@@ -65,7 +57,7 @@ export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSi
           limit: String(pageSize),
           cursor: cursor ?? undefined,
         });
-        const res = await fetch(url, { headers });
+        const res = await fetch(url);
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         const body = (await res.json()) as FetchLogResponse;
         if (reqId.current !== id) return;
@@ -86,7 +78,7 @@ export function useFetchLog({ apiUrl, apiKey, after, before, org, status, pageSi
         }));
       }
     },
-    [apiUrl, headers, after, before, org, status, pageSize],
+    [after, before, org, status, pageSize],
   );
 
   useEffect(() => {

@@ -35,21 +35,19 @@ function formatStartedAt(iso: string): string {
   return `${get("month")} ${get("day")}, ${get("hour")}:${get("minute")} ${get("timeZoneName")}`;
 }
 
-export function CronRunsTab({ apiUrl, apiKey }: { apiUrl: string; apiKey?: string }) {
+export function CronRunsTab() {
   const [rows, setRows] = useState<CronRun[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    const headers: Record<string, string> = {};
-    if (apiKey) headers.Authorization = `Bearer ${apiKey}`;
-    fetch(`${apiUrl}/v1/admin/cron-runs?limit=50`, { headers })
+    fetch(`/api/admin/admin/cron-runs?limit=50`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json();
       })
       .then((data: CronRun[]) => setRows(data))
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
-  }, [apiUrl, apiKey]);
+  }, []);
 
   if (err) return <div className="text-red-500 text-xs">Error loading cron runs: {err}</div>;
   if (!rows) return <div className="text-stone-500 text-xs">Loading...</div>;
