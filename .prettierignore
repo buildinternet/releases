@@ -10,3 +10,4 @@ package-lock.json
 **/migrations/**/*.sql
 plugins/claude-code/skills
 packages/*/dist
+tests/evals/fixtures/tool-ux/runs
