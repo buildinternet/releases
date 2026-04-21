@@ -10,6 +10,14 @@ on:
         type: choice
         options: [all, api, mcp, discovery, webhooks]
         default: all
+      # Target environment. "staging" is supported for api + mcp only.
+      # Constrained to a choice so the value is one of production|staging;
+      # shell steps reference it through env: to keep interpolation inert.
+      environment:
+        description: Target environment
+        type: choice
+        options: [production, staging]
+        default: production
 
 concurrency:
   group: deploy-workers-${{ github.ref }}
@@ -80,16 +88,26 @@ jobs:
       # Apply D1 migrations before the worker starts serving the new code so
       # new schema lands before anything queries it. Idempotent: wrangler
       # skips entries already tracked in d1_migrations.
+      #
+      # Prod passes the DB name (`released-db`); staging passes the binding name
+      # (`DB`) + `--env staging`, so wrangler resolves through the env block.
       - name: Apply D1 migrations
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler d1 migrations apply released-db --remote --config workers/api/wrangler.jsonc
+          TARGET_ENV: ${{ inputs.environment }}
+        run: |
+          if [ "$TARGET_ENV" = "staging" ]; then
+            bunx wrangler d1 migrations apply DB --env staging --remote --config workers/api/wrangler.jsonc
+          else
+            bunx wrangler d1 migrations apply released-db --remote --config workers/api/wrangler.jsonc
+          fi
       - name: Deploy
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler deploy --config workers/api/wrangler.jsonc
+          WRANGLER_ENV_FLAG: ${{ inputs.environment == 'staging' && '--env staging' || '' }}
+        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/api/wrangler.jsonc
 
   deploy-mcp:
     name: Deploy MCP worker
@@ -118,14 +136,18 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler deploy --config workers/mcp/wrangler.jsonc
+          WRANGLER_ENV_FLAG: ${{ inputs.environment == 'staging' && '--env staging' || '' }}
+        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/mcp/wrangler.jsonc
 
   deploy-discovery:
     name: Deploy discovery worker
     needs: changes
+    # Discovery has no staging env; skip when staging is selected.
     if: |
-      (github.event_name == 'push' && needs.changes.outputs.discovery == 'true') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'discovery'))
+      inputs.environment != 'staging' && (
+        (github.event_name == 'push' && needs.changes.outputs.discovery == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'discovery'))
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -150,9 +172,12 @@ jobs:
   deploy-webhooks:
     name: Deploy webhooks worker
     needs: changes
+    # Webhooks has no staging env; skip when staging is selected.
     if: |
-      (github.event_name == 'push' && needs.changes.outputs.webhooks == 'true') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'webhooks'))
+      inputs.environment != 'staging' && (
+        (github.event_name == 'push' && needs.changes.outputs.webhooks == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'webhooks'))
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -207,9 +232,12 @@ jobs:
   publish-mcp-registry:
     name: Publish MCP registry metadata
     needs: [changes, deploy-mcp]
+    # Registry metadata is production-only — staging deploys skip it.
     if: |
-      (github.event_name == 'push' && needs.changes.outputs.mcp_registry == 'true') ||
-      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'mcp'))
+      inputs.environment != 'staging' && (
+        (github.event_name == 'push' && needs.changes.outputs.mcp_registry == 'true') ||
+        (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'mcp'))
+      )
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

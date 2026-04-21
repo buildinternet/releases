@@ -154,4 +154,104 @@
       "secret_name": "WEBHOOK_HMAC_MASTER",
     },
   ],
+  // ── Staging environment ──────────────────────────────────────────────
+  // Deployed as `releases-api-staging` at api-staging.releases.sh. Points
+  // at a separate D1 (released-db-staging) refreshed from prod via the
+  // sync-staging-db workflow. Vectorize and the discovery service are
+  // intentionally omitted — the search path degrades to FTS, and cron is
+  // hard-disabled so staging never writes behind prod's back.
+  // TODO: gate the staging hostnames behind access protection (CF Access
+  // or a header-check) before the crawl is indexable.
+  "env": {
+    "staging": {
+      "name": "releases-api-staging",
+      "routes": [{ "pattern": "api-staging.releases.sh", "custom_domain": true }],
+      "vars": {
+        "CRON_ENABLED": "false",
+        "SCRAPE_AGENT_CRON_ENABLED": "false",
+        "SCRAPE_AGENT_MAX_SESSIONS": "0",
+        "MEDIA_ORIGIN": "https://media.releases.sh",
+        "EMBEDDING_PROVIDER": "voyage",
+        "RATE_LIMIT_ENABLED": "false",
+        "EMAIL_NOTIFY_ENABLED": "false",
+        "EMAIL_NOTIFY_TO": "zach@releases.sh",
+        "EMAIL_FROM": "notifications@releases.sh",
+        "ADMIN_BASE_URL": "https://api-staging.releases.sh",
+        "INVALIDATION_ENABLED": "false",
+        // Staging-only: emit X-Robots-Tag: noindex on every response and
+        // serve a deny-all /robots.txt. Belt-and-suspenders against the
+        // staging hostname getting crawled while it sits unprotected.
+        "INDEXING_DISABLED": "true",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "released-db-staging",
+          "database_id": "68d44939-feab-4fcb-8f4f-19778ca1dee8",
+        },
+      ],
+      // KV reuses the preview namespaces — those already exist and aren't
+      // bound to prod. Keeps `wrangler dev` and staging in the same cache.
+      "kv_namespaces": [
+        { "binding": "EMBED_CACHE", "id": "7737ccafd37a43fc9d2365c9a2d7ebca" },
+        { "binding": "LATEST_CACHE", "id": "832712867aff4c91bc11bb3cecd7da9e" },
+      ],
+      // Prod R2 bucket is read-shared; staging writes go nowhere destructive
+      // because CRON_ENABLED=false prevents the ingest paths that call put().
+      "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "released-media" }],
+      "queues": {
+        "producers": [{ "binding": "WEBHOOK_DELIVERY_QUEUE", "queue": "webhook-delivery" }],
+      },
+      "send_email": [{ "name": "SEND_EMAIL" }],
+      "durable_objects": {
+        "bindings": [
+          { "class_name": "StatusHub", "name": "STATUS_HUB" },
+          { "class_name": "ReleaseHub", "name": "RELEASE_HUB" },
+        ],
+      },
+      "migrations": [
+        { "new_classes": ["StatusHub"], "tag": "v1" },
+        { "new_classes": ["ReleaseHub"], "tag": "v2" },
+      ],
+      // Empty cron list. Without this override, Wrangler inherits the
+      // top-level schedule and fires scheduled events hourly against staging
+      // (CRON_ENABLED=false would short-circuit the handler, but the invocation
+      // itself is still pointless).
+      "triggers": { "crons": [] },
+      // No Vectorize bindings — search degrades to FTS (see search-hybrid.ts).
+      // No DISCOVERY_WORKER service — discovery isn't mirrored to staging.
+      "secrets_store_secrets": [
+        {
+          "binding": "RELEASED_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASED_API_KEY",
+        },
+        {
+          "binding": "RELEASES_PROXY_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASES_PROXY_KEY",
+        },
+        {
+          "binding": "GITHUB_TOKEN",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "GITHUB_TOKEN",
+        },
+        {
+          "binding": "VOYAGE_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "VOYAGER_API_KEY",
+        },
+        {
+          "binding": "ANTHROPIC_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "ANTHROPIC_API_KEY",
+        },
+        {
+          "binding": "WEBHOOK_HMAC_MASTER",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "WEBHOOK_HMAC_MASTER",
+        },
+      ],
+    },
+  },
 }

@@ -37,6 +37,8 @@ export interface Env {
   OPENAI_API_KEY?: SecretBinding;
   /** Optional KV namespace caching single-query embeddings. */
   EMBED_CACHE?: KVNamespace;
+  /** Staging-only: disables indexing (X-Robots-Tag + deny-all /robots.txt). */
+  INDEXING_DISABLED?: string;
 }
 
 export function createServer(env: Env, ctx?: ExecutionContext) {

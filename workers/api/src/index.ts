@@ -5,6 +5,7 @@ import { publicRateLimitMiddleware } from "./middleware/rate-limit.js";
 import { dbHealthCheck } from "./middleware/db-health.js";
 import { cacheControl } from "./middleware/cache.js";
 import { varyOnAccept } from "./middleware/content-negotiation.js";
+import { blockIndexing } from "./middleware/indexing.js";
 import { statsRoutes } from "./routes/stats.js";
 import { orgRoutes } from "./routes/orgs.js";
 import { sitemapRoutes } from "./routes/sitemap.js";
@@ -99,6 +100,8 @@ export type Env = {
     EMAIL_NOTIFY_TO?: string;
     EMAIL_FROM?: string;
     ADMIN_BASE_URL?: string;
+    // Staging-only kill switch — see middleware/indexing.ts.
+    INDEXING_DISABLED?: string;
   };
 };
 
@@ -110,6 +113,7 @@ app.onError((err, c) => {
 });
 
 app.use("*", cors());
+app.use("*", blockIndexing());
 
 // Security response headers
 app.use("*", async (c, next) => {
