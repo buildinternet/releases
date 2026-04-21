@@ -10,7 +10,12 @@ import { organizations, releases, sources, usageLog } from "@buildinternet/relea
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { orgWhere, sourceWhere } from "../utils.js";
 import { notDisabled } from "../queries/shared.js";
-import { callAnthropic, AnthropicError } from "../lib/anthropic.js";
+import { APIError } from "@anthropic-ai/sdk";
+import {
+  anthropicErrorHttpStatus,
+  classifyAnthropicError,
+} from "@releases/lib/anthropic-errors.js";
+import { callAnthropic } from "../lib/anthropic.js";
 import type { Env } from "../index.js";
 
 export const adminAiRoutes = new Hono<Env>();
@@ -240,10 +245,10 @@ adminAiRoutes.post("/admin/summaries", async (c) => {
       scope,
     });
   } catch (err) {
-    if (err instanceof AnthropicError) {
+    if (err instanceof APIError) {
       return c.json(
         { error: "upstream_error", message: err.message },
-        err.status && err.status >= 500 ? 502 : 500,
+        anthropicErrorHttpStatus(classifyAnthropicError(err).kind),
       );
     }
     throw err;
@@ -385,10 +390,10 @@ adminAiRoutes.post("/admin/compare", async (c) => {
       },
     });
   } catch (err) {
-    if (err instanceof AnthropicError) {
+    if (err instanceof APIError) {
       return c.json(
         { error: "upstream_error", message: err.message },
-        err.status && err.status >= 500 ? 502 : 500,
+        anthropicErrorHttpStatus(classifyAnthropicError(err).kind),
       );
     }
     throw err;

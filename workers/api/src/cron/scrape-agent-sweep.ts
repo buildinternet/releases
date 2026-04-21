@@ -4,9 +4,11 @@
  * docs/superpowers/specs/2026-04-18-scrape-agent-cron-design.md.
  */
 
+import Anthropic from "@anthropic-ai/sdk";
 import { and, eq, isNotNull, ne, or, isNull, sql, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sources, organizations } from "@buildinternet/releases-core/schema";
+import { classifyAnthropicError } from "@releases/lib/anthropic-errors.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import { insertRunningRow, finalizeRunRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
 import { sendCronReport } from "../lib/notifications.js";
@@ -19,34 +21,29 @@ export type PreflightAction =
   | { action: "abort"; abortReason: "anthropic_auth" | "anthropic_credits" };
 
 /**
- * Classifies an Anthropic /v1/models pre-flight response. Single source of
- * truth for the preflight matrix in the design spec. Pure function — no
- * fetch, no side effects.
+ * Classifies a preflight outcome from `anthropic.models.list()`. Pass `null`
+ * on success, or the thrown SDK error on failure. Single source of truth for
+ * the preflight matrix in the design spec. Pure function — no fetch, no side
+ * effects.
  */
-export function classifyPreflightResponse(input: {
-  status: number;
-  body: string;
-}): PreflightAction {
-  const { status, body } = input;
-  if (status === 200) return { action: "proceed" };
-  if (status === 401 || status === 403) return { action: "abort", abortReason: "anthropic_auth" };
-  if (status === 402) return { action: "abort", abortReason: "anthropic_credits" };
-  if (status === 429) {
-    // Narrow: 429 with a credit_balance_too_low error payload is permanent
-    // (account out of credits). Any other 429 is transient rate-limiting;
-    // per-session inference will surface real problems.
-    try {
-      const parsed = JSON.parse(body.slice(0, 1024)) as { error?: { type?: string } };
-      if (parsed?.error?.type === "credit_balance_too_low") {
-        return { action: "abort", abortReason: "anthropic_credits" };
-      }
-    } catch {
-      // Non-JSON or malformed body: fall through to warn.
-    }
-    return { action: "warn" };
+export function classifyPreflightResponse(err: unknown): PreflightAction {
+  if (err === null || err === undefined) return { action: "proceed" };
+
+  const classification = classifyAnthropicError(err);
+  switch (classification.kind) {
+    case "auth":
+      return { action: "abort", abortReason: "anthropic_auth" };
+    case "credits":
+      return { action: "abort", abortReason: "anthropic_credits" };
+    case "rate_limit":
+      // Transient rate-limiting; per-session inference will surface real
+      // problems. Flag the run but don't abort.
+      return { action: "warn" };
+    default:
+      // bad_request, server (5xx), connection errors, or anything
+      // unexpected: proceed but flag the run.
+      return { action: "warn" };
   }
-  // 5xx or anything else unexpected: proceed but flag the run.
-  return { action: "warn" };
 }
 
 export type Candidate = {
@@ -347,22 +344,14 @@ function parseMaxSessions(raw: string | undefined): number {
 }
 
 async function runPreflight(apiKey: string): Promise<PreflightAction> {
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), PREFLIGHT_TIMEOUT_MS);
+  const client = new Anthropic({ apiKey, timeout: PREFLIGHT_TIMEOUT_MS });
   try {
-    const res = await fetch("https://api.anthropic.com/v1/models", {
-      headers: { "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
-      signal: controller.signal,
-    });
-    const body = await res.text().catch(() => "");
-    return classifyPreflightResponse({ status: res.status, body });
+    // /v1/models is a cheap, credit-free endpoint; we only care that the
+    // key authenticates and the account has credits. We don't use the list.
+    await client.models.list({ limit: 1 });
+    return classifyPreflightResponse(null);
   } catch (err) {
-    console.warn(
-      `[scrape-agent-cron] preflight failed: ${err instanceof Error ? err.message : err}`,
-    );
-    return { action: "warn" };
-  } finally {
-    clearTimeout(timeout);
+    return classifyPreflightResponse(err);
   }
 }
 

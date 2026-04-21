@@ -9,13 +9,6 @@ const anthropicCalls: AnthropicCall[] = [];
 let nextResponseText = "generated text";
 
 mock.module("../src/lib/anthropic.js", () => ({
-  AnthropicError: class AnthropicError extends Error {
-    status?: number;
-    constructor(msg: string, status?: number) {
-      super(msg);
-      this.status = status;
-    }
-  },
   callAnthropic: async (
     _apiKey: string,
     req: {
