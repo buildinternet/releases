@@ -58,7 +58,13 @@ export interface ToolUxTask {
    * throwaway DB snapshot.
    */
   cleanup?: Array<{
-    kind: "delete_source" | "delete_org" | "unblock_url" | "unignore_url";
+    kind:
+      | "delete_source"
+      | "delete_org"
+      | "unblock_url"
+      | "unignore_url"
+      | "snapshot_playbook_notes"
+      | "restore_playbook_notes";
     args: Record<string, string>;
   }>;
 }
@@ -167,7 +173,12 @@ export const TASKS: ToolUxTask[] = [
       kind: "playbook_notes_contain",
       args: { orgSlug: "vercel", substring: "truncates at 10 items" },
     },
-    // Cleanup: restore prior notes. Driver snapshots notes before the run.
+    // Pre-run snapshots the current notes; post-run restores them so the
+    // test doesn't permanently mutate Vercel's playbook in staging.
+    cleanup: [
+      { kind: "snapshot_playbook_notes", args: { orgSlug: "vercel" } },
+      { kind: "restore_playbook_notes", args: { orgSlug: "vercel" } },
+    ],
   },
 
   // ── Block + ignore — exercises exclude_url ──────────────────────────
