@@ -64,4 +64,43 @@
       "secret_name": "VOYAGER_API_KEY",
     },
   ],
+  // ── Staging environment ──────────────────────────────────────────────
+  // Deployed as `releases-mcp-staging` at mcp-staging.releases.sh. Points
+  // at the staging D1 (released-db-staging); Vectorize is omitted so
+  // semantic MCP tools degrade to lexical.
+  // TODO: gate the staging hostname behind access protection.
+  "env": {
+    "staging": {
+      "name": "releases-mcp-staging",
+      "routes": [{ "pattern": "mcp-staging.releases.sh", "custom_domain": true }],
+      "vars": {
+        "ENABLE_AI_TOOLS": "false",
+        "MEDIA_ORIGIN": "https://media.releases.sh",
+        "EMBEDDING_PROVIDER": "voyage",
+        // Staging-only: emit X-Robots-Tag: noindex and serve a deny-all
+        // /robots.txt. Belt-and-suspenders against crawling.
+        "INDEXING_DISABLED": "true",
+      },
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "released-db-staging",
+          "database_id": "68d44939-feab-4fcb-8f4f-19778ca1dee8",
+        },
+      ],
+      "kv_namespaces": [{ "binding": "EMBED_CACHE", "id": "7737ccafd37a43fc9d2365c9a2d7ebca" }],
+      "secrets_store_secrets": [
+        {
+          "binding": "ANTHROPIC_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "ANTHROPIC_API_KEY",
+        },
+        {
+          "binding": "VOYAGE_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "VOYAGER_API_KEY",
+        },
+      ],
+    },
+  },
 }

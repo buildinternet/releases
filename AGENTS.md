@@ -75,6 +75,39 @@ Deep dives live in `docs/architecture/`:
 
 Do not edit `.env` directly. Required vars documented in `.env.example`.
 
+## Staging
+
+The `api` and `mcp` workers have a `[env.staging]` block in their `wrangler.jsonc`. Everything else (discovery, webhooks, crons, Vectorize) is intentionally absent — staging is a read-surface for UI/API iteration, not a full replica.
+
+- **Hosts:** `api-staging.releases.sh`, `mcp-staging.releases.sh`
+- **Deployed as:** `releases-api-staging`, `releases-mcp-staging`
+- **DB:** `released-db-staging` (separate D1), refreshed on demand from prod
+- **Crons:** disabled (`CRON_ENABLED=false`, no cron triggers)
+- **Vectorize:** no bindings — search degrades to FTS; `/v1/related/*` returns `degraded: true`
+- **R2:** reuses `released-media` (read-only in practice; no cron writes)
+- **KV:** reuses the existing preview namespaces, so `wrangler dev` and staging share cache
+- **Indexing:** `INDEXING_DISABLED=true` — every response carries `X-Robots-Tag: noindex, nofollow` and `/robots.txt` returns `Disallow: /`
+- **Not yet protected:** the hosts are publicly reachable; add CF Access or a header guard before exposing them more widely
+
+Deploy:
+
+```bash
+# From workflow_dispatch on deploy-workers.yml with environment=staging, or:
+bunx wrangler deploy --env staging --config workers/api/wrangler.jsonc
+bunx wrangler deploy --env staging --config workers/mcp/wrangler.jsonc
+```
+
+Refresh staging data from prod:
+
+```bash
+# Locally (requires `wrangler whoami` in the Build Internet account):
+./scripts/sync-staging-db.sh
+
+# Or via GH Actions: run the "Sync staging DB" workflow with confirm="yes".
+```
+
+The sync script copies a content subset — orgs, products, sources, releases, tags, media, knowledge pages, source changelog files, coverage — and skips observability/webhook/vectorize tables (see the TABLES list at the top of `scripts/sync-staging-db.sh`).
+
 ## Legacy naming
 
 The project was originally called "Released"; the rename to "Releases" leaves a few deliberately-unchanged identifiers:
