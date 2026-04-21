@@ -1,5 +1,29 @@
 {
-  "skills": {},
+  "skills": {
+    "Finding Changelogs": {
+      "skillId": "skill_01VK5fSFwPyvFYWhKegXqWjZ",
+      "localDir": "finding-changelogs"
+    },
+    "Managing Sources": {
+      "skillId": "skill_013P36ioGhxmrRj5FRSGHGMX",
+      "localDir": "managing-sources"
+    },
+    "Parsing Changelogs": {
+      "skillId": "skill_01DRRRcUsqActnc7ZY8u3HhE",
+      "localDir": "parsing-changelogs"
+    },
+    "Analyzing Releases": {
+      "skillId": "skill_014ZJKDrrxBrcQvy2J6XbZqW",
+      "localDir": "analyzing-releases"
+    },
+    "Classify Media Relevance": {
+      "skillId": "skill_01HygPTYkj76j7RHibSwvA47",
+      "localDir": "classify-media-relevance"
+    }
+  },
   "agentId": "agent_011CaHHrroDymm1aEitzUmz1",
-  "workerAgentId": "agent_011CaHHqcTEy9WDeLPzqsmHP"
+  "workerAgentId": "agent_011CaHHqcTEy9WDeLPzqsmHP",
+  "promptHash": "435192864078e9a1",
+  "toolsHash": "526c9fb57a4ec7a6",
+  "workerPromptHash": "948b9d57f3cbe27f"
 }
