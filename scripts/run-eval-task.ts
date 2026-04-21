@@ -86,12 +86,19 @@ const client = new Anthropic({ apiKey: anthropicApiKey });
 
 // ── Cleanup helper ───────────────────────────────────────────────────────────
 
+// Process-scoped snapshot store. Pre-run reads notes in; post-run writes them
+// back. Kept simple: one key per org slug, overwritten on each snapshot call.
+const playbookSnapshots = new Map<string, string | null>();
+
 /**
  * Run the cleanup block for a task against the staging API. Best-effort:
  * 404 is swallowed (row absent is fine), other errors log to stderr but do
  * not abort the run.
+ *
+ * The `phase` parameter gates asymmetric steps — snapshot only runs pre, restore
+ * only runs post. Symmetric kinds (delete_*, un*_url) run on both phases.
  */
-async function runCleanup(t: (typeof TASKS)[number]): Promise<void> {
+async function runCleanup(t: (typeof TASKS)[number], phase: "pre" | "post"): Promise<void> {
   if (!t.cleanup || t.cleanup.length === 0) return;
 
   const baseUrl = "https://api";
@@ -99,6 +106,48 @@ async function runCleanup(t: (typeof TASKS)[number]): Promise<void> {
     "Content-Type": "application/json",
     Authorization: `Bearer ${stagingApiKey}`,
   };
+
+  async function snapshotNotes(orgSlug: string): Promise<void> {
+    const url = `${baseUrl}/v1/playbook?slug=${encodeURIComponent(orgSlug)}`;
+    try {
+      const res = await fetcher.fetch(url, { headers: authHeaders });
+      if (!res.ok) {
+        console.error(`cleanup: snapshot ${orgSlug} (error ${res.status})`);
+        playbookSnapshots.set(orgSlug, null);
+        return;
+      }
+      const body = (await res.json()) as { notes?: string | null } | null;
+      playbookSnapshots.set(orgSlug, body?.notes ?? null);
+      console.error(`cleanup: snapshot ${orgSlug} (ok)`);
+    } catch (err) {
+      console.error(`cleanup: snapshot ${orgSlug} (fetch error: ${(err as Error).message})`);
+      playbookSnapshots.set(orgSlug, null);
+    }
+  }
+
+  async function restoreNotes(orgSlug: string): Promise<void> {
+    if (!playbookSnapshots.has(orgSlug)) {
+      console.error(`cleanup: restore ${orgSlug} (skipped — no snapshot)`);
+      return;
+    }
+    const notes = playbookSnapshots.get(orgSlug) ?? "";
+    const url = `${baseUrl}/v1/playbook/notes?slug=${encodeURIComponent(orgSlug)}`;
+    try {
+      const res = await fetcher.fetch(url, {
+        method: "PATCH",
+        headers: authHeaders,
+        body: JSON.stringify({ notes }),
+      });
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        console.error(`cleanup: restore ${orgSlug} (error ${res.status}: ${body})`);
+        return;
+      }
+      console.error(`cleanup: restore ${orgSlug} (ok)`);
+    } catch (err) {
+      console.error(`cleanup: restore ${orgSlug} (fetch error: ${(err as Error).message})`);
+    }
+  }
 
   function cleanupFetch(method: string, path: string): Promise<void> {
     const url = `${baseUrl}/v1${path}`;
@@ -194,6 +243,12 @@ async function runCleanup(t: (typeof TASKS)[number]): Promise<void> {
       if (kind === "delete_source") {
         return deleteSource(step);
       }
+      if (kind === "snapshot_playbook_notes") {
+        return phase === "pre" ? snapshotNotes(args.orgSlug) : Promise.resolve();
+      }
+      if (kind === "restore_playbook_notes") {
+        return phase === "post" ? restoreNotes(args.orgSlug) : Promise.resolve();
+      }
       return Promise.resolve();
     }),
   );
@@ -220,7 +275,7 @@ async function main(): Promise<void> {
 
   // Pre-run cleanup: clear any stale rows from a previous run before the agent starts.
   console.error("pre-run cleanup...");
-  await runCleanup(task!);
+  await runCleanup(task!, "pre");
 
   const stream = await (client.beta.sessions.events as any).stream(sessionId);
   await (client.beta.sessions.events as any).send(sessionId, {
@@ -303,7 +358,7 @@ async function main(): Promise<void> {
 
   // Post-run cleanup: leave staging in the same clean state for the next run.
   console.error("post-run cleanup...");
-  await runCleanup(task!);
+  await runCleanup(task!, "post");
 }
 
 function deriveMetrics(sessionEvents: Array<Record<string, unknown>>) {
