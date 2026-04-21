@@ -28,6 +28,15 @@ import {
 } from "@releases/adapters/extract";
 import { buildWorkerExtractDeps } from "./extract-deps-worker.js";
 
+/**
+ * True when a source has no indexed releases yet — its first fetch should run
+ * full agent extraction rather than incremental, which bails early on empty
+ * known lists and would produce a false-positive `no_change` status.
+ */
+export function isSeedRun(knownReleases: readonly KnownRelease[]): boolean {
+  return knownReleases.length === 0;
+}
+
 // ── Types ──────────────────────────────────────────────────────────
 
 export interface ScrapeEnv {
@@ -270,6 +279,20 @@ async function runScrapePath(
   }
 
   const knownReleases = await knownReleasesPromise;
+
+  // Incremental extraction is designed for already-indexed sources. On a
+  // brand-new source (zero known releases) it would bail immediately and
+  // return an empty list — the caller would then emit status=no_change even
+  // though nothing has been fetched yet. Fall through to full agent extraction
+  // so the first fetch is treated as a seed run rather than a no-op.
+  if (isSeedRun(knownReleases)) {
+    deps.logger.info(
+      `No known releases for ${source.slug} — running full agent extraction (seed run)`,
+    );
+    const result = await runAgentExtraction(source, { guidance }, deps);
+    return finalize(env, source, result.releases, start);
+  }
+
   const result = await runIncrementalExtraction(
     source,
     { markdown, knownReleases, guidance },
