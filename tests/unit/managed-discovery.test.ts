@@ -323,16 +323,17 @@ describe("buildWorkerSystemPrompt", () => {
 
   it("states that tool names are exact and forbids paraphrasing", () => {
     expect(prompt).toContain("Tool names are exact");
-    expect(prompt).toContain("source_guide");
   });
 
-  it("uses backtick-quoted get_playbook in the canonical name note", () => {
-    expect(prompt).toContain("`get_playbook`");
+  it("instructs the agent to apply the inlined playbook instead of calling get_playbook first", () => {
+    expect(prompt).toContain("Apply the playbook");
+    expect(prompt).toContain("inlined above");
+    expect(prompt).not.toContain("Optionally read the playbook first");
+    expect(prompt).not.toContain("call get_playbook first");
   });
 
-  it("makes playbook read conditional rather than mandatory for fetch jobs", () => {
-    expect(prompt).toContain("Optionally read the playbook first");
-    expect(prompt).not.toContain("Read the playbook first.");
+  it("marks get_playbook as rarely needed (since fetch sessions inline the playbook)", () => {
+    expect(prompt).toContain("rarely needed");
   });
 });
 
