@@ -38,6 +38,58 @@ The `deploy-managed-agents.yml` workflow exposes the same selector as a `workflo
 - **Deterministic pipeline** (ingest, incremental, summarize) stays as direct Messages API calls — not routed through the agent.
 - **URL evaluation** runs pre-checks only (provider detection, feed discovery) via `POST /v1/evaluate`. The discovery agent handles deeper evaluation when needed.
 
+## Tool surfaces: MCP vs custom tools
+
+Managed agents operate against two tool surfaces. They share the same tool-use protocol from the model's perspective but are executed completely differently — the MCP surface is a public Worker, the custom-tool surface runs inside the discovery DO. Contributors frequently conflate them.
+
+| Surface          | Declared in                                     | Executed by                           | Writes? |
+| ---------------- | ----------------------------------------------- | ------------------------------------- | ------- |
+| **MCP tools**    | `workers/mcp/src/mcp-agent.ts` (`createServer`) | `mcp.releases.sh` — remote MCP server | No      |
+| **Custom tools** | `src/shared/agent-tools.ts` (`AGENT_TOOLS`)     | Discovery DO (`ManagedAgentsSession`) | Yes     |
+
+Custom tools are plain Anthropic tool definitions ([Managed Agents → Custom tools](https://platform.claude.com/docs/en/managed-agents/tools#custom-tools)) that aren't served by any worker. When the model emits an `agent.custom_tool_use` event, the DO intercepts it, dispatches to `createTypedExecutor`, and sends the result back via `user.custom_tool_result`. Every write the agent performs (`manage_org`, `add_source`, `fetch_source`, `update_playbook_notes`, etc.) is a custom tool — writes run inside the trust boundary using the shared admin API key, not through the public MCP server.
+
+### Request flow
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant M as Claude (model)
+    participant S as Anthropic session
+    participant DO as Discovery DO
+    participant MCP as mcp.releases.sh
+    participant API as api.releases.sh
+    participant D1
+
+    Note over M,MCP: MCP tool (read)
+    M->>S: agent.mcp_tool_use
+    S->>MCP: Bearer (vault credential)
+    MCP->>D1: SELECT
+    D1-->>MCP: rows
+    MCP-->>S: tool result
+    S-->>M: result
+
+    Note over M,API: Custom tool (write)
+    M->>S: agent.custom_tool_use
+    S-->>DO: stream event
+    DO->>API: Bearer RELEASED_API_KEY<br/>(+ X-Releases-Staging-Key in staging)
+    API->>D1: INSERT
+    D1-->>API: row
+    API-->>DO: 200 OK
+    DO->>S: user.custom_tool_result
+    S-->>M: result
+```
+
+### Where to look
+
+- **Add / edit a custom tool** — append to `AGENT_TOOLS` in `src/shared/agent-tools.ts`, add a `case` to `createTypedExecutor` mapping it to a REST call, then `bun run deploy:agents` to sync both managed agents.
+- **Add / edit an MCP tool** — register it inside `createServer` in `workers/mcp/src/mcp-agent.ts`, deploy the `mcp` worker.
+- **DO interception point** — `workers/discovery/src/managed-agents-session.ts`, the `agent.custom_tool_use` case inside `runSession()`.
+
+### Why not put writes in MCP?
+
+A single write tool in MCP would expose destructive operations to every unauthenticated caller of `mcp.releases.sh`. Adding principal resolution + per-org scoping to the MCP server is real work that depends on a staging auth story (issue #455) and vault-credential → principal mapping. Folding writes into MCP is planned but not scheduled.
+
 ### Skills vs. playbooks
 
 Agents operate on three layers of fetch guidance:
