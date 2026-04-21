@@ -134,13 +134,18 @@ interface FeedShell {
   alternateUrl: string;
   authorName: string;
   entries: EntryInput[];
+  /** Pre-rendered entry inserted at the top of the feed (e.g. org overview). */
+  pinnedEntry?: string | null;
 }
 
 function buildFeed(shell: FeedShell, opts: AtomFeedOptions): string {
   const built = shell.entries
     .slice(0, ATOM_DEFAULT_MAX_ENTRIES)
     .map((e) => buildEntry(e, opts.baseUrl));
-  const entriesXml = built.map((b) => b.xml).join("\n");
+  const releaseEntriesXml = built.map((b) => b.xml).join("\n");
+  const entriesXml = shell.pinnedEntry
+    ? [shell.pinnedEntry, releaseEntriesXml].filter(Boolean).join("\n")
+    : releaseEntriesXml;
 
   // Feed <updated> must reflect the newest entry's timestamp; if there are
   // no entries, use "now" so the feed is still valid.
@@ -210,6 +215,8 @@ export function orgReleasesToAtom(
     orgSlug: string;
     orgName: string;
     releases: OrgReleaseItem[];
+    /** AI-generated overview — surfaced as a pinned entry so agents see it alongside releases. */
+    overview?: { content: string; generatedAt: string; updatedAt: string } | null;
   },
   opts: AtomFeedOptions,
 ): string {
@@ -223,6 +230,10 @@ export function orgReleasesToAtom(
     linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
   }));
 
+  const overviewEntry = params.overview
+    ? buildOverviewEntry(params.orgSlug, params.orgName, params.overview, opts.baseUrl)
+    : null;
+
   return buildFeed(
     {
       scope: "org",
@@ -233,7 +244,33 @@ export function orgReleasesToAtom(
       alternateUrl: orgPath,
       authorName: params.orgName,
       entries,
+      pinnedEntry: overviewEntry,
     },
     opts,
   );
+}
+
+function buildOverviewEntry(
+  orgSlug: string,
+  orgName: string,
+  overview: { content: string; generatedAt: string; updatedAt: string },
+  baseUrl: string,
+): string {
+  const updated =
+    toRfc3339(overview.updatedAt) ?? toRfc3339(overview.generatedAt) ?? new Date().toISOString();
+  const published = toRfc3339(overview.generatedAt) ?? updated;
+  const linkHref = `${baseUrl}/${orgSlug}/overview.md`;
+  const id = `tag:${tagAuthority(baseUrl)},2005:${orgSlug}/overview`;
+
+  const parts: string[] = ["  <entry>"];
+  parts.push(`    <id>${escapeXml(id)}</id>`);
+  parts.push(`    <title>${escapeXml(`${orgName} — overview`)}</title>`);
+  parts.push(`    <link rel="alternate" type="text/markdown" href="${escapeAttr(linkHref)}" />`);
+  parts.push(`    <updated>${updated}</updated>`);
+  parts.push(`    <published>${published}</published>`);
+  parts.push(`    <author><name>${escapeXml(orgName)}</name></author>`);
+  parts.push(`    <category term="overview" label="Overview" />`);
+  parts.push(`    <content type="text">${escapeXml(overview.content)}</content>`);
+  parts.push("  </entry>");
+  return parts.join("\n");
 }

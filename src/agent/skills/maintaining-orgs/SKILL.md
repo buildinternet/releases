@@ -63,53 +63,66 @@ When updating multiple orgs, use parallel Claude Code sub-agents (one per org). 
 
 ### Selecting targets
 
-Pick orgs by activity level. Good candidates for routine maintenance:
+Pick orgs by activity level or overview freshness.
 
-- **High-value orgs** with many sources (Vercel, Stripe, Cloudflare, Anthropic, GitHub)
-- **Recently active orgs** — check `recentReleaseCount` in `releases admin org list --json`
-- **Orgs not recently fetched** — sources with stale `lastFetchedAt`
+**Finding orgs with missing or stale overviews.** No single command exposes this, but the CLI is composable. The snippet below writes each org's overview status to `/tmp/overview-status/`, then prints a sorted table:
 
-Previously completed in this project: Anthropic, OpenAI, Vercel, Cloudflare, GitHub, Stripe, Supabase, Sentry, Clerk, Prisma, Datadog, Docker, Expo, Linear, Neon.
+```bash
+mkdir -p /tmp/overview-status
+releases admin org list --json | jq -r '.[].slug' \
+  | xargs -n1 -P8 -I{} sh -c 'releases admin overview {} --json 2>/dev/null > /tmp/overview-status/{}.json'
+
+for f in /tmp/overview-status/*.json; do
+  slug="${f##*/}"; slug="${slug%.json}"
+  jq -r --arg slug "$slug" 'if .content then "\($slug)\t\(.updatedAt // .generatedAt)" else "\($slug)\tNONE" end' "$f"
+done | sort -t$'\t' -k2
+```
+
+`NONE` means no overview exists; anything older than **30 days** is stale per `OVERVIEW_STALE_DAYS` (`@buildinternet/releases-core/overview`).
+
+**Other selection signals.** `releases admin org list --json` exposes:
+
+- `recentReleaseCount` — recently active orgs with overviews not updated since last activity
+- `lastActivity` — orgs inactive long enough that existing overview may be fine
 
 ### Dispatching agents
 
 Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each org. Send all agent calls in a single message for maximum parallelism.
 
-Each agent prompt should include:
+**Have agents return markdown inline, not upload it.** Dispatched sub-agents commonly get their `Write` and `Bash` denied against `/tmp`, which breaks the write-file-then-`overview-write` handoff. Shape the prompt so the agent returns generated markdown in its final report; the parent session writes the file and uploads. This also keeps the failure surface in one place — if an agent bails, the parent falls back to generating in-session from `overview-inputs`.
 
-1. That the `releases` CLI is installed and configured with an admin API key
-2. The org slug
-3. Instructions to run the fetch + regen-overview flow (referencing the `regenerating-overviews` skill for the AI step)
-4. Instructions to report back concisely: sources fetched, new releases, overview status
-
-Example prompt template:
+Prompt template:
 
 ```
-You are operating the Released CLI (`releases`) — a hosted changelog registry client.
-The CLI is installed and authenticated against the production API.
+Regenerate the AI overview for the `{slug}` org in the Released registry.
+The `releases` CLI is installed and authenticated against production.
+Invoke the `regenerating-overviews` skill for the prompt and workflow.
 
-Your task: refresh **{Org Name}** (slug: `{slug}`).
+  1. (If scrape/agent sources) skim `releases admin playbook {slug}`.
+  2. `releases admin source fetch --org {slug} --json` if needed.
+  3. `releases admin overview-inputs {slug} --json`. If `selected` is empty,
+     stop and report "empty-window".
+  4. Generate the markdown inline per the skill.
 
-Steps:
-  1. (Optional) For scrape/agent sources, check the playbook:
-     releases admin playbook {slug} 2>/dev/null
-  2. Fetch active sources:
-     releases admin source fetch --org {slug} --json
-  3. Regenerate the overview by following the `regenerating-overviews` skill —
-     this means calling overview-inputs, generating markdown using the skill's
-     prompt, then overview-write.
+Return in your final message:
+  - Slug, Selected/Total
+  - Status: generated | empty-window
+  - The generated markdown in a fenced code block (required when generated).
 
-Report back: sources fetched, new releases found, overview status. Keep it concise.
+Do not attempt to upload. The parent session handles writes.
 ```
 
 ### Tracking results
 
-After all agents complete, compile a summary table:
+After agents complete, the parent harvests each returned code block, writes `/tmp/<slug>-overview.md`, and runs `releases admin overview-write` in parallel (idempotent, last write wins). For any agent that bailed without content, re-fetch `overview-inputs` locally and generate inline.
 
-| Org | Sources | New Releases | Overview |
-| --- | ------- | ------------ | -------- |
+Summary table format:
 
-This gives a quick audit of what changed and whether any orgs need attention.
+| Org | Window | Selected/Total | Result                                |
+| --- | ------ | -------------- | ------------------------------------- |
+| …   | 90d    | 9/9            | regenerated (1.7k chars)              |
+| …   | 90d    | 0/0            | skipped — no releases in window       |
+| …   | 90d    | 14/14          | regenerated in-session (agent bailed) |
 
 ## Composing With Other Skills
 

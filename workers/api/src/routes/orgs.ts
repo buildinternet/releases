@@ -265,7 +265,6 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     products: productRows,
     sources: sourcesWithStats,
     overview: overviewData,
-    knowledgePage: overviewData, // deprecated — use overview
     playbook: playbookRow
       ? {
           scope: playbookRow.scope as "playbook",

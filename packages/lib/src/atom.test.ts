@@ -135,6 +135,38 @@ describe("orgReleasesToAtom", () => {
     expect(xml).not.toInclude("<entry>");
   });
 
+  it("includes an overview entry when overview is provided", () => {
+    const xml = orgReleasesToAtom(
+      {
+        orgSlug: "acme",
+        orgName: "Acme Inc",
+        releases: [],
+        overview: {
+          content: "# Acme\n\nRecent focus on observability and billing.",
+          generatedAt: "2026-04-18T00:00:00Z",
+          updatedAt: "2026-04-18T00:00:00Z",
+        },
+      },
+      { baseUrl: BASE },
+    );
+
+    expect(xml).toInclude("<title>Acme Inc — overview</title>");
+    expect(xml).toInclude("<id>tag:releases.sh,2005:acme/overview</id>");
+    expect(xml).toInclude(
+      '<link rel="alternate" type="text/markdown" href="https://releases.sh/acme/overview.md" />',
+    );
+    expect(xml).toInclude('<category term="overview" label="Overview" />');
+    expect(xml).toInclude("Recent focus on observability and billing.");
+  });
+
+  it("omits overview entry when overview is absent", () => {
+    const xml = orgReleasesToAtom(
+      { orgSlug: "acme", orgName: "Acme", releases: [] },
+      { baseUrl: BASE },
+    );
+    expect(xml).not.toInclude('category term="overview"');
+  });
+
   it("derives tag URI authority from baseUrl (not a hardcoded host)", () => {
     const xml = orgReleasesToAtom(
       {

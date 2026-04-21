@@ -206,7 +206,7 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: OrgMarkdownOptions = {
 
   if (opts.baseUrl) {
     lines.push(yamlLine("canonical", `${opts.baseUrl}/${org.slug}`));
-    if (org.overview || org.knowledgePage) {
+    if (org.overview) {
       lines.push(yamlLine("overview_url", `${opts.baseUrl}/${org.slug}/overview.md`));
     }
   }
@@ -235,6 +235,14 @@ export function orgToMarkdown(org: FormatOrgDetail, opts: OrgMarkdownOptions = {
 
   lines.push("---");
   lines.push("");
+
+  // ── Overview ──
+  if (org.overview) {
+    lines.push("## Overview");
+    lines.push("");
+    lines.push(org.overview.content);
+    lines.push("");
+  }
 
   // ── Products ──
   if (org.products.length > 0) {
