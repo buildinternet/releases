@@ -20,7 +20,7 @@ Connected via the Releases MCP server:
 
 ### CLI commands (writes)
 
-Run via Bash using `bun src/index.ts` (dev) or `released` (compiled binary). Use `--json` for structured output.
+Run via Bash using `bun src/index.ts` (dev) or `releases` (compiled binary). Use `--json` for structured output.
 
 Key commands:
 

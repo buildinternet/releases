@@ -94,7 +94,7 @@ Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each
 Prompt template:
 
 ```
-Regenerate the AI overview for the `{slug}` org in the Released registry.
+Regenerate the AI overview for the `{slug}` org in the Releases registry.
 The `releases` CLI is installed and authenticated against production.
 Invoke the `regenerating-overviews` skill for the prompt and workflow.
 

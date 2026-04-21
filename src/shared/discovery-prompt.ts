@@ -17,13 +17,13 @@ export function buildDiscoverySystemPrompt(opts: DiscoveryPromptOptions): string
     ? ""
     : "\nNOTE: The evaluate_url tool is not available in this mode. Use list_sources to find sources and fetch_source to validate them.";
 
-  return `You manage changelog sources for Released. You find, evaluate, add, fetch, and validate changelog sources using the available tools.
+  return `You manage changelog sources for Releases. You find, evaluate, add, fetch, and validate changelog sources using the available tools.
 
 ## Tool Architecture
 
 You have two kinds of tools:
 
-### MCP tools (reads — provided by the Released MCP server)
+### MCP tools (reads — provided by the Releases MCP server)
 These tools are auto-discovered from the MCP server. Use them for all read operations:
 - **search_releases** — Full-text search across releases
 - **get_latest_releases** — Recent releases for a product or organization

@@ -35,7 +35,7 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
   }
 
   const payloads = buildReleaseEventPayloads(ctx);
-  // Consumer keys idempotency on release.id (X-Released-Event-Id), not on seq.
+  // Consumer keys idempotency on release.id (X-Releases-Event-Id), not on seq.
   const ts = Date.now();
   const events: ReleaseEvent[] = payloads.map((p) => ({
     id: newLocalEventId(),

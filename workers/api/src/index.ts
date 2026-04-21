@@ -282,8 +282,8 @@ export default {
         console.warn("[scrape-agent-cron] DISCOVERY_WORKER binding missing; skipping");
         return;
       }
-      const releasedApiKey = await env.RELEASED_API_KEY?.get();
-      if (!releasedApiKey) {
+      const releasesApiKey = await env.RELEASED_API_KEY?.get();
+      if (!releasesApiKey) {
         console.warn("[scrape-agent-cron] RELEASED_API_KEY secret missing; skipping");
         return;
       }
@@ -294,7 +294,7 @@ export default {
           SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
           SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
           DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-          RELEASED_API_KEY: releasedApiKey,
+          RELEASED_API_KEY: releasesApiKey,
           ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
           SEND_EMAIL: env.SEND_EMAIL,
           EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,

@@ -119,10 +119,10 @@ describe("deliver", () => {
     });
     expect(captured).not.toBeNull();
     const r = captured!;
-    expect(r.headers.get("X-Released-Version")).toBe("1");
-    expect(r.headers.get("X-Released-Event-Id")).toBe("evt_1");
-    expect(r.headers.get("X-Released-Timestamp")).toBe("1729281234");
-    expect(r.headers.get("X-Released-Signature")).toMatch(/^sha256=[0-9a-f]{64}$/);
+    expect(r.headers.get("X-Releases-Version")).toBe("1");
+    expect(r.headers.get("X-Releases-Event-Id")).toBe("evt_1");
+    expect(r.headers.get("X-Releases-Timestamp")).toBe("1729281234");
+    expect(r.headers.get("X-Releases-Signature")).toMatch(/^sha256=[0-9a-f]{64}$/);
     expect(r.headers.get("Content-Type")).toBe("application/json");
     expect(r.headers.get("User-Agent")).toBe("releases-webhooks/1");
   });

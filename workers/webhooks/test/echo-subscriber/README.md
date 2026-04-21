@@ -2,7 +2,7 @@
 
 A minimal Cloudflare Worker that accepts any HTTP request, logs the headers and body, and returns `{"ok":true}`. It acts as a stable sink for the CI live e2e test — one subscription, one URL, reused on every deploy.
 
-> **Security note:** this Worker logs every request header (including the `X-Released-Signature` HMAC) and the full JSON body to Cloudflare Workers logs. Use it only for the dedicated CI test subscription. Do not reuse the same Worker URL for subscriptions carrying sensitive org data — any operator with log access would see verbatim webhook bodies and the signature that attests to them.
+> **Security note:** this Worker logs every request header (including the `X-Releases-Signature` HMAC) and the full JSON body to Cloudflare Workers logs. Use it only for the dedicated CI test subscription. Do not reuse the same Worker URL for subscriptions carrying sensitive org data — any operator with log access would see verbatim webhook bodies and the signature that attests to them.
 
 ## One-time setup
 

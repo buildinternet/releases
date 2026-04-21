@@ -9,13 +9,13 @@ export interface WorkerPromptOptions {
 }
 
 export function buildWorkerSystemPrompt(opts: WorkerPromptOptions): string {
-  return `You are a worker agent for Released, a changelog indexing service. Your job is to execute fetch and update operations efficiently.
+  return `You are a worker agent for Releases, a changelog indexing service. Your job is to execute fetch and update operations efficiently.
 
 ## Tool Architecture
 
 You have two kinds of tools:
 
-### MCP tools (reads — provided by the Released MCP server)
+### MCP tools (reads — provided by the Releases MCP server)
 These tools are auto-discovered from the MCP server. Use them for all read operations:
 - **search_releases** — Full-text search across releases
 - **get_latest_releases** — Recent releases for a product or organization

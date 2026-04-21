@@ -34,7 +34,7 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 ## Surviving `src/` tree
 
 - `src/db/schema-coverage.ts` — release_coverage schema (part of the drizzle composite schema).
-- `src/agent/` — managed-agents harness (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `released.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`workers/discovery/`) is the only production entrypoint.
+- `src/agent/` — managed-agents harness (`managed-discovery.ts`) plus shared discovery types and the prompt builder in `discovery.ts`. The legacy sandbox-engine `runDiscovery` has been removed; the discovery worker (`workers/discovery/`) is the only production entrypoint.
 - `src/shared/` — shared prompts and typed tools used by both agents and the API worker.
 
 ## Conventions
@@ -74,3 +74,12 @@ Deep dives live in `docs/architecture/`:
 ## Environment
 
 Do not edit `.env` directly. Required vars documented in `.env.example`.
+
+## Legacy naming
+
+The project was originally called "Released"; the rename to "Releases" leaves a few deliberately-unchanged identifiers:
+
+- **Env vars** keep the `RELEASED_` prefix (`RELEASED_API_URL`, `RELEASED_API_KEY`, `RELEASED_DATA_DIR`, etc.) — they're wired into Cloudflare Secrets Store, GitHub Actions secrets, and local `.env` files. Renaming requires coordinated rotation across all three.
+- **Cloudflare resources** keep their old names: D1 database `released-db` and R2 bucket `released-media`. Renaming these is a live migration, not a text change.
+
+Everything else — copy, prompts, display names, webhook headers (`X-Releases-*`), package/workspace names, the `~/.releases` data dir, localStorage keys — uses the new name.

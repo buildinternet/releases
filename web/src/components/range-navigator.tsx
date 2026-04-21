@@ -69,7 +69,7 @@ function milestonesInRange(from: Date, to: Date): PositionedMilestone[] {
   );
 }
 
-const ANNOTATIONS_STORAGE_KEY = "released:show-model-annotations";
+const ANNOTATIONS_STORAGE_KEY = "releases:show-model-annotations";
 
 function useModelAnnotations() {
   const [show, setShow] = useState(() => {
