@@ -390,11 +390,16 @@ export default {
 
 /**
  * Query due sources and spawn one `POLL_AND_FETCH_WORKFLOW` per source.
- * Uses `createBatch` so all instances start in a single control-plane call.
+ * `createBatch` has a hard cap of 100 instances per call, so we chunk.
  * The workflow handles CRON_ENABLED internally — keeping that check there
  * means a flag flip mid-fan-out still short-circuits each instance cleanly.
  */
-async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): Promise<void> {
+export const CREATE_BATCH_MAX = 100;
+
+export async function fanOutPollAndFetch(
+  env: Env["Bindings"],
+  scheduledTime: number,
+): Promise<void> {
   const db = drizzle(env.DB);
   const due = await queryDueSources(db, new Date());
   if (due.length === 0) {
@@ -408,5 +413,9 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
     id: `poll-fetch-${scheduledTime}-${source.id}`,
     params: { sourceId: source.id, scheduledTime },
   }));
-  await env.POLL_AND_FETCH_WORKFLOW!.createBatch(params);
+  for (let i = 0; i < params.length; i += CREATE_BATCH_MAX) {
+    const chunk = params.slice(i, i + CREATE_BATCH_MAX);
+    // oxlint-disable-next-line no-await-in-loop -- sequential to stay under control-plane rate; per-instance work runs in parallel anyway
+    await env.POLL_AND_FETCH_WORKFLOW!.createBatch(chunk);
+  }
 }
