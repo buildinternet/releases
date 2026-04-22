@@ -20,10 +20,15 @@ mock.module("../src/lib/anthropic.js", () => ({
     anthropicCalls.push({ model: req.model, system: req.system, messages: req.messages });
     return { text: nextResponseText, inputTokens: 100, outputTokens: 50 };
   },
+  getAnthropicKey: async (env: { ANTHROPIC_API_KEY?: { get(): Promise<string> } }) => {
+    const k = await env.ANTHROPIC_API_KEY?.get();
+    return k && k.length > 0 ? k : null;
+  },
+  resolveGatewayOpts: async () => ({}),
 }));
 
 const { Hono } = await import("hono");
-const { adminAiRoutes } = await import("../src/routes/admin-ai.js");
+const { workflowsRoutes } = await import("../src/routes/workflows.js");
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -40,7 +45,7 @@ function mkApp(db: ReturnType<typeof mkDb>, opts?: { apiKey?: string | null }) {
   };
   const app = new Hono();
   const v1 = new Hono();
-  v1.route("/", adminAiRoutes);
+  v1.route("/", workflowsRoutes);
   app.route("/v1", v1);
   return (req: Request) => app.fetch(req, fakeEnv);
 }
@@ -126,7 +131,7 @@ beforeEach(() => {
   nextResponseText = "generated text";
 });
 
-describe("POST /v1/admin/summaries", () => {
+describe("POST /v1/workflows/summarize", () => {
   it("generates a summary for a source by slug", async () => {
     const db = mkDb();
     await seed(db);
@@ -134,7 +139,7 @@ describe("POST /v1/admin/summaries", () => {
     nextResponseText = "# Acme One\n- thing happened";
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "acme-one" }),
@@ -160,7 +165,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "src_a1" }),
@@ -178,7 +183,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ org: "acme" }),
@@ -200,7 +205,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "acme-one", instructions: "focus on breaking changes" }),
@@ -217,7 +222,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({}),
@@ -232,7 +237,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "acme-one", org: "acme" }),
@@ -247,7 +252,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "acme-one", days: 9999 }),
@@ -262,7 +267,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "ghost" }),
@@ -277,7 +282,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ org: "ghost-org" }),
@@ -292,7 +297,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db, { apiKey: null });
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "acme-one" }),
@@ -315,7 +320,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "x-src" }),
@@ -334,7 +339,7 @@ describe("POST /v1/admin/summaries", () => {
     const fetch = mkApp(db);
 
     await fetch(
-      new Request("https://x.test/v1/admin/summaries", {
+      new Request("https://x.test/v1/workflows/summarize", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ source: "acme-one" }),
@@ -349,7 +354,7 @@ describe("POST /v1/admin/summaries", () => {
   });
 });
 
-describe("POST /v1/admin/compare", () => {
+describe("POST /v1/workflows/compare", () => {
   it("generates a comparison between two sources", async () => {
     const db = mkDb();
     await seed(db);
@@ -357,7 +362,7 @@ describe("POST /v1/admin/compare", () => {
     nextResponseText = "## Compare\n- diff";
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/compare", {
+      new Request("https://x.test/v1/workflows/compare", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
@@ -385,7 +390,7 @@ describe("POST /v1/admin/compare", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/compare", {
+      new Request("https://x.test/v1/workflows/compare", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sourceA: "acme-one" }),
@@ -400,7 +405,7 @@ describe("POST /v1/admin/compare", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/compare", {
+      new Request("https://x.test/v1/workflows/compare", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sourceA: "acme-one", sourceB: "ghost" }),
@@ -433,7 +438,7 @@ describe("POST /v1/admin/compare", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/compare", {
+      new Request("https://x.test/v1/workflows/compare", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sourceA: "x-one", sourceB: "x-two" }),
@@ -457,7 +462,7 @@ describe("POST /v1/admin/compare", () => {
     const fetch = mkApp(db);
 
     await fetch(
-      new Request("https://x.test/v1/admin/compare", {
+      new Request("https://x.test/v1/workflows/compare", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),
@@ -476,7 +481,7 @@ describe("POST /v1/admin/compare", () => {
     const fetch = mkApp(db, { apiKey: null });
 
     const res = await fetch(
-      new Request("https://x.test/v1/admin/compare", {
+      new Request("https://x.test/v1/workflows/compare", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ sourceA: "acme-one", sourceB: "other-one" }),

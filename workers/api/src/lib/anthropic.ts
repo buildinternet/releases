@@ -55,6 +55,28 @@ function getClient(apiKey: string, opts: GatewayOptions): Anthropic {
   return cachedClient;
 }
 
+type SecretBinding = { get(): Promise<string> };
+
+interface AnthropicEnv {
+  ANTHROPIC_API_KEY?: SecretBinding;
+  ANTHROPIC_BASE_URL?: string;
+  AI_GATEWAY_TOKEN?: SecretBinding;
+}
+
+export async function getAnthropicKey(env: AnthropicEnv): Promise<string | null> {
+  const key = await env.ANTHROPIC_API_KEY?.get();
+  return key && key.length > 0 ? key : null;
+}
+
+export async function resolveGatewayOpts(env: AnthropicEnv): Promise<GatewayOptions> {
+  const baseURL = env.ANTHROPIC_BASE_URL?.trim();
+  const gatewayToken = (await env.AI_GATEWAY_TOKEN?.get().catch(() => ""))?.trim();
+  return {
+    ...(baseURL ? { baseURL } : {}),
+    ...(gatewayToken ? { gatewayToken } : {}),
+  };
+}
+
 export async function callAnthropic(
   apiKey: string,
   req: AnthropicRequest,

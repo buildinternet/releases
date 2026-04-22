@@ -1,6 +1,6 @@
 /**
- * Admin-only routes for managing webhook subscriptions. Gated by authMiddleware
- * via the `admin/webhooks` entry in workers/api/src/index.ts.
+ * Webhook subscription routes: CRUD, rotate-secret, test, deliveries.
+ * Mounted at /v1/webhooks/*; gated by authMiddleware via the "webhooks" allowlist entry.
  */
 import { Hono } from "hono";
 import { deriveSigningKey } from "@releases/core-internal/webhook-sign";
@@ -33,7 +33,7 @@ function validateUrl(url: string): string | null {
   return null;
 }
 
-export const adminWebhooksRoutes = new Hono<Env>();
+export const webhooksRoutes = new Hono<Env>();
 
 function getDb(c: any): any {
   return c.get("db") ?? createDb(c.env.DB);
@@ -51,7 +51,7 @@ async function requireMasterKey(c: any): Promise<string | Response> {
   return masterKey;
 }
 
-adminWebhooksRoutes.post("/admin/webhooks", async (c) => {
+webhooksRoutes.post("/webhooks", async (c) => {
   const masterKey = await requireMasterKey(c);
   if (masterKey instanceof Response) return masterKey;
 
@@ -93,7 +93,7 @@ adminWebhooksRoutes.post("/admin/webhooks", async (c) => {
   return c.json({ ...sub, signingKey }, 201);
 });
 
-adminWebhooksRoutes.get("/admin/webhooks", async (c) => {
+webhooksRoutes.get("/webhooks", async (c) => {
   const orgId = c.req.query("org");
   if (!orgId) {
     return c.json({ error: "bad_request", message: "org query param is required" }, 400);
@@ -107,7 +107,7 @@ adminWebhooksRoutes.get("/admin/webhooks", async (c) => {
   return c.json({ subscriptions });
 });
 
-adminWebhooksRoutes.get("/admin/webhooks/:id", async (c) => {
+webhooksRoutes.get("/webhooks/:id", async (c) => {
   const id = c.req.param("id");
   const db = getDb(c);
   const sub = await getWebhookSubscriptionById(db, id);
@@ -117,7 +117,7 @@ adminWebhooksRoutes.get("/admin/webhooks/:id", async (c) => {
   return c.json(sub);
 });
 
-adminWebhooksRoutes.patch("/admin/webhooks/:id", async (c) => {
+webhooksRoutes.patch("/webhooks/:id", async (c) => {
   let body: Partial<{
     url: string;
     description: string | null;
@@ -160,14 +160,14 @@ adminWebhooksRoutes.patch("/admin/webhooks/:id", async (c) => {
   return c.json(fresh);
 });
 
-adminWebhooksRoutes.delete("/admin/webhooks/:id", async (c) => {
+webhooksRoutes.delete("/webhooks/:id", async (c) => {
   const id = c.req.param("id");
   const db = getDb(c);
   await deleteWebhookSubscription(db, id);
   return new Response(null, { status: 204 });
 });
 
-adminWebhooksRoutes.post("/admin/webhooks/:id/rotate-secret", async (c) => {
+webhooksRoutes.post("/webhooks/:id/rotate-secret", async (c) => {
   const masterKey = await requireMasterKey(c);
   if (masterKey instanceof Response) return masterKey;
 
@@ -179,7 +179,7 @@ adminWebhooksRoutes.post("/admin/webhooks/:id/rotate-secret", async (c) => {
   return c.json({ secretVersion: newVersion, signingKey });
 });
 
-adminWebhooksRoutes.post("/admin/webhooks/:id/test", async (c) => {
+webhooksRoutes.post("/webhooks/:id/test", async (c) => {
   const queue = c.env.WEBHOOK_DELIVERY_QUEUE;
   if (!queue) {
     return c.json(
@@ -222,7 +222,7 @@ adminWebhooksRoutes.post("/admin/webhooks/:id/test", async (c) => {
   return c.json({ enqueued: true, eventId: synthetic.event.id });
 });
 
-adminWebhooksRoutes.get("/admin/webhooks/:id/deliveries", async (c) => {
+webhooksRoutes.get("/webhooks/:id/deliveries", async (c) => {
   const cfApiToken: string | undefined = await c.env.CF_API_TOKEN?.get();
   const cfAccountId: string | undefined = c.env.CF_ACCOUNT_ID;
 

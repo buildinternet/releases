@@ -31,10 +31,9 @@ import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
-import { adminEmbedRoutes } from "./routes/admin-embed.js";
+import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
-import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
-import { adminAiRoutes } from "./routes/admin-ai.js";
+import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
@@ -96,7 +95,7 @@ export type Env = {
     OPENAI_API_KEY?: SecretBinding;
     WEBHOOK_HMAC_MASTER?: SecretBinding;
     // Cloudflare credentials for querying Analytics Engine (webhook deliveries endpoint).
-    // Absent → GET /v1/admin/webhooks/:id/deliveries returns 501.
+    // Absent → GET /v1/webhooks/:id/deliveries returns 501.
     CF_API_TOKEN?: SecretBinding;
     CF_ACCOUNT_ID?: string;
     // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
@@ -191,11 +190,9 @@ const adminRoutes = [
   "status/fetch-log",
   "status/usage",
   "status/event",
-  "admin/embed",
+  "admin/embed/status",
   "admin/cron-runs",
-  "admin/webhooks",
-  "admin/summaries",
-  "admin/compare",
+  "webhooks",
   "playbook",
   "overview-inputs",
   "workflows",
@@ -264,10 +261,9 @@ v1.route("/knowledge", knowledge); // deprecated — alias for overview/playbook
 v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
-v1.route("/", adminEmbedRoutes);
+v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
-v1.route("/", adminWebhooksRoutes);
-v1.route("/", adminAiRoutes);
+v1.route("/", webhooksRoutes);
 v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);
 

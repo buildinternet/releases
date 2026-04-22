@@ -20,7 +20,7 @@ Ingest is automatic on writes and never blocks them. The release batch insert, o
 
 ## Backfill + debugging
 
-`releases admin embed status` is the first stop — it reports per-table embedded vs unembedded counts via `GET /v1/admin/embed/status`. Run `releases admin embed releases|entities|changelogs` to backfill in 50-row batches against the matching `POST /v1/admin/embed/*` admin route. All embed routes are gated by `authMiddleware`.
+`releases admin embed status` is the first stop — it reports per-table embedded vs unembedded counts via `GET /v1/admin/embed/status`. Run `releases admin embed releases|entities|changelogs` to backfill in 50-row batches against the matching `POST /v1/workflows/embed-{releases,entities,changelogs}` route. The status GET stays under `/admin/embed/status`; the three backfill POSTs live under `/workflows/` and are gated by `authMiddleware` via the `"workflows"` allowlist entry.
 
 ## Search modes
 
@@ -40,4 +40,5 @@ Optional KV binding `EMBED_CACHE` (both workers) caches single-query embeddings 
 - Worker hybrid orchestrators: `workers/api/src/lib/search-hybrid.ts`, `workers/mcp/src/lib/search-hybrid.ts`
 - Ingest helpers: `packages/lib/src/embed-releases.ts`, `packages/lib/src/embed-entities.ts`, `packages/lib/src/embed-changelog-pipeline.ts`
 - Backfill CLI: `releases admin embed status|releases|entities|changelogs` — lives in the OSS CLI ([`buildinternet/releases-cli`](https://github.com/buildinternet/releases-cli), `src/cli/commands/admin/embed.ts`)
-- Admin routes: `workers/api/src/routes/admin-embed.ts`
+- Status route: `workers/api/src/routes/admin-embed-status.ts` (`GET /v1/admin/embed/status`)
+- Backfill routes: `workers/api/src/routes/workflows.ts` (`POST /v1/workflows/embed-{releases,entities,changelogs}`)
