@@ -2,9 +2,14 @@
  * Thin wrapper around the Anthropic SDK for worker routes. Errors from
  * `anthropic.messages.create()` propagate unmodified so callers can
  * `instanceof APIError` / classify via `@releases/lib/anthropic-errors`.
+ *
+ * Optional `baseURL` routes calls through Cloudflare AI Gateway; optional
+ * `gatewayToken` adds the `cf-aig-authorization` bearer header when the
+ * gateway is configured in authenticated mode.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 
 const DEFAULT_TIMEOUT_MS = 90_000;
 
@@ -26,25 +31,36 @@ export interface AnthropicResult {
   outputTokens: number;
 }
 
+export interface GatewayOptions {
+  baseURL?: string;
+  gatewayToken?: string;
+}
+
 // Cache the client per isolate to amortize constructor cost across requests.
-// `ANTHROPIC_API_KEY` comes from a Secrets Store binding so the value is
-// stable for the life of the isolate; keying on it handles test/mocking
-// scenarios that swap keys.
+// Cache key includes `baseURL` so flipping the gateway env var takes effect on
+// the next deploy without a stale client lingering across isolates.
 let cachedClient: Anthropic | undefined;
 let cachedKey: string | undefined;
 
-function getClient(apiKey: string): Anthropic {
-  if (cachedClient && cachedKey === apiKey) return cachedClient;
-  cachedClient = new Anthropic({ apiKey, timeout: DEFAULT_TIMEOUT_MS });
-  cachedKey = apiKey;
+function getClient(apiKey: string, opts: GatewayOptions): Anthropic {
+  const cacheKey = `${apiKey}::${opts.baseURL ?? ""}::${opts.gatewayToken ?? ""}`;
+  if (cachedClient && cachedKey === cacheKey) return cachedClient;
+  cachedClient = buildAnthropicClient({
+    apiKey,
+    baseURL: opts.baseURL,
+    gatewayToken: opts.gatewayToken,
+    timeoutMs: DEFAULT_TIMEOUT_MS,
+  });
+  cachedKey = cacheKey;
   return cachedClient;
 }
 
 export async function callAnthropic(
   apiKey: string,
   req: AnthropicRequest,
+  opts: GatewayOptions = {},
 ): Promise<AnthropicResult> {
-  const response = await getClient(apiKey).messages.create({
+  const response = await getClient(apiKey, opts).messages.create({
     model: req.model,
     max_tokens: req.maxTokens,
     system: req.system,

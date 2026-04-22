@@ -4,11 +4,12 @@
  * docs/superpowers/specs/2026-04-18-scrape-agent-cron-design.md.
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { and, eq, isNotNull, ne, or, isNull, sql, asc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sources, organizations } from "@buildinternet/releases-core/schema";
 import { classifyAnthropicError } from "@releases/lib/anthropic-errors.js";
+import type { GatewayOptions } from "../lib/anthropic.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import { insertRunningRow, finalizeRunRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
 import { sendCronReport } from "../lib/notifications.js";
@@ -196,6 +197,8 @@ type SweepEnv = EmailEnv & {
   DISCOVERY_WORKER: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   RELEASED_API_KEY: string;
   ANTHROPIC_API_KEY?: string;
+  ANTHROPIC_BASE_URL?: string;
+  AI_GATEWAY_TOKEN?: string;
   /** Base URL included in the email body as a detail link (no trailing slash). */
   ADMIN_BASE_URL?: string;
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
@@ -228,7 +231,10 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   // Pre-flight
   let aborted: Extract<PreflightAction, { action: "abort" }> | undefined;
   if (env.ANTHROPIC_API_KEY) {
-    const preflight = await runPreflight(env.ANTHROPIC_API_KEY);
+    const preflight = await runPreflight(env.ANTHROPIC_API_KEY, {
+      baseURL: env.ANTHROPIC_BASE_URL,
+      gatewayToken: env.AI_GATEWAY_TOKEN,
+    });
     if (preflight.action === "abort") aborted = preflight;
   } else {
     console.warn(
@@ -343,8 +349,16 @@ function parseMaxSessions(raw: string | undefined): number {
   return n;
 }
 
-async function runPreflight(apiKey: string): Promise<PreflightAction> {
-  const client = new Anthropic({ apiKey, timeout: PREFLIGHT_TIMEOUT_MS });
+async function runPreflight(
+  apiKey: string,
+  gatewayOpts: GatewayOptions = {},
+): Promise<PreflightAction> {
+  const client = buildAnthropicClient({
+    apiKey,
+    baseURL: gatewayOpts.baseURL,
+    gatewayToken: gatewayOpts.gatewayToken,
+    timeoutMs: PREFLIGHT_TIMEOUT_MS,
+  });
   try {
     // /v1/models is a cheap, credit-free endpoint; we only care that the
     // key authenticates and the account has credits. We don't use the list.

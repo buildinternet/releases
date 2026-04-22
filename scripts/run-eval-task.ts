@@ -15,7 +15,7 @@
  *   bun scripts/run-eval-task.ts <task-id> --agent <agent-id> [--out <path>]
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { createTypedExecutor, handleCustomToolUse } from "../src/shared/agent-tools.ts";
@@ -82,7 +82,11 @@ const fetcher = {
   },
 };
 
-const client = new Anthropic({ apiKey: anthropicApiKey });
+const client = buildAnthropicClient({
+  apiKey: anthropicApiKey,
+  baseURL: process.env.ANTHROPIC_BASE_URL,
+  gatewayToken: process.env.AI_GATEWAY_TOKEN,
+});
 
 // ── Cleanup helper ───────────────────────────────────────────────────────────
 

@@ -44,6 +44,9 @@ export interface Env {
   MANAGED_AGENTS_SESSION: DurableObjectNamespace;
   DB: D1Database;
   ANTHROPIC_API_KEY: SecretBinding;
+  /** Optional Cloudflare AI Gateway passthrough — see docs/architecture/ai-gateway.md. */
+  ANTHROPIC_BASE_URL?: string;
+  AI_GATEWAY_TOKEN?: SecretBinding;
   CLOUDFLARE_ACCOUNT_ID: SecretBinding;
   CLOUDFLARE_API_TOKEN: SecretBinding;
   RELEASED_API_URL: string;
