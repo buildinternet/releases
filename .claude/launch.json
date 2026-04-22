@@ -17,6 +17,16 @@
       "env": {
         "RELEASED_API_URL": "http://localhost:8787"
       }
+    },
+    {
+      "name": "web-prod-api",
+      "runtimeExecutable": "bun",
+      "runtimeArgs": ["run", "dev:web"],
+      "port": 3000,
+      "autoPort": true,
+      "env": {
+        "RELEASED_API_URL": "https://api.releases.sh"
+      }
     }
   ]
 }
