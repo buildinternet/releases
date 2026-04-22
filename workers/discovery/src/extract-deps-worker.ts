@@ -4,12 +4,15 @@
  * over `RELEASED_API_URL` in local dev).
  */
 
-import Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ExtractDeps, ExtractRepo, UsageEntry } from "@releases/adapters/extract";
 
 export interface WorkerDepsEnv {
   anthropicApiKey: string;
+  /** Optional Cloudflare AI Gateway passthrough — see docs/architecture/ai-gateway.md. */
+  anthropicBaseURL?: string;
+  aiGatewayToken?: string;
   cloudflareAccountId?: string;
   cloudflareApiToken?: string;
   agentModel?: string;
@@ -121,7 +124,11 @@ export function buildWorkerExtractDeps(env: WorkerDepsEnv): ExtractDeps {
   // version at runtime but are nominally different compiled classes, so TS
   // rejects the instance on the `#private` field. The cast is safe because
   // the runtime shape is identical.
-  const anthropicClient = new Anthropic({ apiKey: env.anthropicApiKey });
+  const anthropicClient = buildAnthropicClient({
+    apiKey: env.anthropicApiKey,
+    baseURL: env.anthropicBaseURL,
+    gatewayToken: env.aiGatewayToken,
+  });
 
   return {
     anthropicClient: anthropicClient as unknown as ExtractDeps["anthropicClient"],

@@ -67,6 +67,12 @@ export type Env = {
     SCRAPE_AGENT_MAX_SESSIONS?: string;
     DISCOVERY_WORKER?: Fetcher;
     ANTHROPIC_API_KEY?: SecretBinding;
+    // Optional Cloudflare AI Gateway passthrough. When set, all direct Anthropic
+    // SDK calls from this worker route through the gateway for observability,
+    // caching, and fallback config. Managed-agent internal calls run on
+    // Anthropic's infra and are not affected. See docs/architecture/ai-gateway.md.
+    ANTHROPIC_BASE_URL?: string;
+    AI_GATEWAY_TOKEN?: SecretBinding;
     // Vectorize indexes for semantic search (provisioned out-of-band).
     RELEASES_INDEX: VectorizeIndex;
     ENTITIES_INDEX: VectorizeIndex;
@@ -305,6 +311,8 @@ export default {
           DISCOVERY_WORKER: env.DISCOVERY_WORKER,
           RELEASED_API_KEY: releasesApiKey,
           ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
+          ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+          AI_GATEWAY_TOKEN: await env.AI_GATEWAY_TOKEN?.get().catch(() => undefined),
           SEND_EMAIL: env.SEND_EMAIL,
           EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
           EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,

@@ -1,7 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDb } from "./db.js";
-import Anthropic from "@anthropic-ai/sdk";
+import type Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { hydrateMediaUrls } from "@releases/lib/media-url.js";
 import {
   searchReleases,
@@ -25,6 +26,9 @@ type SecretBinding = { get(): Promise<string> };
 export interface Env {
   DB: D1Database;
   ANTHROPIC_API_KEY: SecretBinding;
+  /** Optional Cloudflare AI Gateway passthrough — see docs/architecture/ai-gateway.md. */
+  ANTHROPIC_BASE_URL?: string;
+  AI_GATEWAY_TOKEN?: SecretBinding;
   ENABLE_AI_TOOLS?: string;
   MEDIA_ORIGIN?: string;
   // Vectorize indexes for semantic search (read-only usage from MCP).
@@ -71,8 +75,15 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   let anthropicClient: Anthropic | undefined;
   async function getAnthropic(): Promise<Anthropic> {
     if (!anthropicClient) {
-      const apiKey = await env.ANTHROPIC_API_KEY.get();
-      anthropicClient = new Anthropic({ apiKey });
+      const [apiKey, gatewayToken] = await Promise.all([
+        env.ANTHROPIC_API_KEY.get(),
+        env.AI_GATEWAY_TOKEN?.get().catch(() => ""),
+      ]);
+      anthropicClient = buildAnthropicClient({
+        apiKey,
+        baseURL: env.ANTHROPIC_BASE_URL,
+        gatewayToken: gatewayToken || undefined,
+      });
     }
     return anthropicClient;
   }

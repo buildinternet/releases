@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./anthropic-client": "./src/anthropic-client.ts",
     "./anthropic-errors": "./src/anthropic-errors.ts",
     "./api-types": "./src/api-types.ts",
     "./atom": "./src/atom.ts",

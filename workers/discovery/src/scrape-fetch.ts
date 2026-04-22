@@ -43,6 +43,9 @@ export interface ScrapeEnv {
   cloudflareAccountId: string;
   cloudflareApiToken: string;
   anthropicApiKey: string;
+  /** Optional Cloudflare AI Gateway passthrough for Anthropic calls in extract. */
+  anthropicBaseURL?: string;
+  aiGatewayToken?: string;
   /** Service binding or fetcher for API worker calls. */
   apiFetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   apiKey: string;
@@ -184,6 +187,8 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
 
   const deps = buildWorkerExtractDeps({
     anthropicApiKey: env.anthropicApiKey,
+    anthropicBaseURL: env.anthropicBaseURL,
+    aiGatewayToken: env.aiGatewayToken,
     cloudflareAccountId: env.cloudflareAccountId,
     cloudflareApiToken: env.cloudflareApiToken,
     apiFetcher: env.apiFetcher,

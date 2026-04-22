@@ -14,6 +14,7 @@ import { DurableObject } from "cloudflare:workers";
 import { RateLimitError } from "@anthropic-ai/sdk";
 import type { ErrorType } from "@anthropic-ai/sdk/resources/shared";
 import type { Env } from "./types.js";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
@@ -231,6 +232,9 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         this.env.CLOUDFLARE_API_TOKEN?.get().catch(() => ""),
       ]);
 
+      const gatewayToken = await this.env.AI_GATEWAY_TOKEN?.get().catch(() => "");
+      const anthropicBaseURL = this.env.ANTHROPIC_BASE_URL;
+
       const scrapeHandler =
         cfAccountId && cfApiToken
           ? async (sourceIdentifier: string) => {
@@ -239,6 +243,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   cloudflareAccountId: cfAccountId,
                   cloudflareApiToken: cfApiToken,
                   anthropicApiKey: anthropicApiKey,
+                  anthropicBaseURL,
+                  aiGatewayToken: gatewayToken || undefined,
                   apiFetcher: fetcher,
                   apiKey: releasesApiKey,
                   sessionId,
@@ -248,8 +254,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             }
           : undefined;
 
-      const { default: Anthropic } = await import("@anthropic-ai/sdk");
-      const client = new Anthropic({ apiKey: anthropicApiKey });
+      const client = buildAnthropicClient({
+        apiKey: anthropicApiKey,
+        baseURL: anthropicBaseURL,
+        gatewayToken: gatewayToken || undefined,
+      });
 
       const sessionTitle =
         mode === "update" ? `Update: ${params.company}` : `Discovery: ${params.company}`;

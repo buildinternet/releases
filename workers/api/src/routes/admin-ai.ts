@@ -15,7 +15,7 @@ import {
   anthropicErrorHttpStatus,
   classifyAnthropicError,
 } from "@releases/lib/anthropic-errors.js";
-import { callAnthropic } from "../lib/anthropic.js";
+import { callAnthropic, type GatewayOptions } from "../lib/anthropic.js";
 import type { Env } from "../index.js";
 
 export const adminAiRoutes = new Hono<Env>();
@@ -91,6 +91,15 @@ async function logAiUsage(
 async function getAnthropicKey(env: Env["Bindings"]): Promise<string | null> {
   const key = await env.ANTHROPIC_API_KEY?.get();
   return key && key.length > 0 ? key : null;
+}
+
+async function resolveGatewayOpts(env: Env["Bindings"]): Promise<GatewayOptions> {
+  const baseURL = env.ANTHROPIC_BASE_URL?.trim();
+  const gatewayToken = (await env.AI_GATEWAY_TOKEN?.get().catch(() => ""))?.trim();
+  return {
+    ...(baseURL ? { baseURL } : {}),
+    ...(gatewayToken ? { gatewayToken } : {}),
+  };
 }
 
 // ── POST /admin/summaries ─────────────────────────────────────────────────
@@ -218,17 +227,21 @@ adminAiRoutes.post("/admin/summaries", async (c) => {
     : "";
 
   try {
-    const result = await callAnthropic(apiKey, {
-      model: SUMMARY_MODEL,
-      maxTokens: SUMMARY_MAX_TOKENS,
-      system: SUMMARY_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: `Summarize these releases. Be very brief — the reader wants the gist, not the full changelog.${extraInstruction}\n\n${releasesText}`,
-        },
-      ],
-    });
+    const result = await callAnthropic(
+      apiKey,
+      {
+        model: SUMMARY_MODEL,
+        maxTokens: SUMMARY_MAX_TOKENS,
+        system: SUMMARY_SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: `Summarize these releases. Be very brief — the reader wants the gist, not the full changelog.${extraInstruction}\n\n${releasesText}`,
+          },
+        ],
+      },
+      await resolveGatewayOpts(c.env),
+    );
 
     await logAiUsage(db, {
       operation: "summarize",
@@ -359,17 +372,21 @@ adminAiRoutes.post("/admin/compare", async (c) => {
     `<product name="${name}">\n${rows.map(formatRelease).join("\n\n")}\n</product>`;
 
   try {
-    const result = await callAnthropic(apiKey, {
-      model: COMPARE_MODEL,
-      maxTokens: COMPARE_MAX_TOKENS,
-      system: COMPARE_SYSTEM,
-      messages: [
-        {
-          role: "user",
-          content: `Compare recent changes between these two products:\n\n${formatProduct(srcA.name, rowsA)}\n\n---\n\n${formatProduct(srcB.name, rowsB)}`,
-        },
-      ],
-    });
+    const result = await callAnthropic(
+      apiKey,
+      {
+        model: COMPARE_MODEL,
+        maxTokens: COMPARE_MAX_TOKENS,
+        system: COMPARE_SYSTEM,
+        messages: [
+          {
+            role: "user",
+            content: `Compare recent changes between these two products:\n\n${formatProduct(srcA.name, rowsA)}\n\n---\n\n${formatProduct(srcB.name, rowsB)}`,
+          },
+        ],
+      },
+      await resolveGatewayOpts(c.env),
+    );
 
     await logAiUsage(db, {
       operation: "compare",
