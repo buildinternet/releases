@@ -49,7 +49,7 @@ export function useFetchLog({ after, before, org, status, pageSize = 25 }: Param
       const id = ++reqId.current;
       setState((s) => ({ ...s, loading: true, error: null }));
       try {
-        const url = buildUrl(`/api/admin/status/fetch-log`, {
+        const url = buildUrl(`/api/proxy/status/fetch-log`, {
           after: after ?? undefined,
           before: before ?? undefined,
           org,

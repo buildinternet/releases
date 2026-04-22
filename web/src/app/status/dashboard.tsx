@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from "react";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type FetchLogEntry,
   type FetchLogStatusFilter,
@@ -8,6 +9,7 @@ import {
 } from "@/components/fetch-log-shared";
 import { FetchLogList } from "@/components/fetch-log-list";
 import { useFetchLog } from "@/components/use-fetch-log";
+import { DAY_MS } from "@/lib/cadence";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
 
@@ -80,8 +82,46 @@ interface FetchTriggerResult {
   type?: string;
 }
 
-type Tab = "sessions" | "fetch-log" | "sources" | "cron";
+type Tab = "sessions" | "fetch-log" | "sources" | "orgs" | "cron";
 type DateRange = "today" | "week" | "month" | "all";
+
+const TABS: { value: Tab; label: string }[] = [
+  { value: "sessions", label: "Sessions" },
+  { value: "fetch-log", label: "Fetch Log" },
+  { value: "sources", label: "Sources" },
+  { value: "orgs", label: "Orgs" },
+  { value: "cron", label: "Cron" },
+];
+const DEFAULT_TAB: Tab = "sessions";
+
+function parseTab(value: string | null): Tab {
+  return TABS.some((t) => t.value === value) ? (value as Tab) : DEFAULT_TAB;
+}
+
+// Matches the "low" retier band ceiling: sources shipping less than once a
+// quarter get flagged. Sources with no releases count as stale too.
+const STALE_THRESHOLD_DAYS = 90;
+
+function ageInDays(iso: string | null | undefined, now: number = Date.now()): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  if (!Number.isFinite(t)) return null;
+  return Math.max(0, (now - t) / DAY_MS);
+}
+
+function isSourceStale(src: SourceEntry, now: number = Date.now()): boolean {
+  const age = ageInDays(src.latestDate, now);
+  if (age == null) return true;
+  return age > STALE_THRESHOLD_DAYS;
+}
+
+function formatAge(days: number | null): string {
+  if (days == null) return "never";
+  if (days < 1) return "<1d";
+  if (days < 30) return `${Math.round(days)}d`;
+  if (days < 365) return `${Math.round(days / 30)}mo`;
+  return `${(days / 365).toFixed(1)}y`;
+}
 
 function getDateRangeAfter(range: DateRange): string | null {
   if (range === "all") return null;
@@ -134,7 +174,20 @@ function formatElapsed(startedAt: number, endedAt?: number): string {
 }
 
 export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
-  const [tab, setTab] = useState<Tab>("sessions");
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tab = parseTab(searchParams.get("tab"));
+  const setTab = useCallback(
+    (next: Tab) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (next === DEFAULT_TAB) params.delete("tab");
+      else params.set("tab", next);
+      const qs = params.toString();
+      router.replace(qs ? `${pathname}?${qs}` : pathname, { scroll: false });
+    },
+    [pathname, router, searchParams],
+  );
   const [dateRange, setDateRange] = useState<DateRange>("week");
   const [sessions, setSessions] = useState<SessionState[]>([]);
   const [usage, setUsage] = useState<UsageEntry[]>([]);
@@ -164,7 +217,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
   const hydrate = useCallback(() => {
     const safeFetch = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null));
-    return Promise.all([safeFetch(`/api/admin/sessions`), safeFetch(`/api/admin/status/usage`)])
+    return Promise.all([safeFetch(`/api/proxy/sessions`), safeFetch(`/api/proxy/status/usage`)])
       .then(([s, u]) => {
         if (s) setSessions(s as SessionState[]);
         if (u) setUsage(u as UsageEntry[]);
@@ -179,7 +232,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
   // Fetch sources once on mount (not tied to date range — requires auth)
   useEffect(() => {
-    fetch(`/api/admin/sources`)
+    fetch(`/api/proxy/sources`)
       .then((r) => (r.ok ? r.json() : null))
       .then((src) => {
         if (src) setAllSources(src as SourceEntry[]);
@@ -360,7 +413,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const fetchLogsForSession = useCallback((sid: string) => {
     if (fetchedLogsRef.current.has(sid)) return;
     fetchedLogsRef.current.add(sid);
-    fetch(`/api/admin/sessions/${sid}/logs`)
+    fetch(`/api/proxy/sessions/${sid}/logs`)
       .then((r) => (r.ok ? r.json() : null))
       .then((logs: string[] | null) => {
         if (logs?.length) {
@@ -368,7 +421,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         }
       })
       .catch(() => {});
-    fetch(`/api/admin/sessions/${sid}/stdout`)
+    fetch(`/api/proxy/sessions/${sid}/stdout`)
       .then((r) => (r.ok ? r.json() : null))
       .then((lines: string[] | null) => {
         if (lines?.length) {
@@ -418,46 +471,20 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       {/* Date range + Tabs */}
       <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 mb-4">
         <div className="flex gap-1">
-          <button
-            onClick={() => setTab("sessions")}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === "sessions"
-                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
-                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
-            }`}
-          >
-            Sessions{runningCount > 0 && ` (${runningCount})`}
-          </button>
-          <button
-            onClick={() => setTab("fetch-log")}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === "fetch-log"
-                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
-                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
-            }`}
-          >
-            Fetch Log
-          </button>
-          <button
-            onClick={() => setTab("sources")}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === "sources"
-                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
-                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
-            }`}
-          >
-            Sources
-          </button>
-          <button
-            onClick={() => setTab("cron")}
-            className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
-              tab === "cron"
-                ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
-                : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
-            }`}
-          >
-            Cron
-          </button>
+          {TABS.map(({ value, label }) => (
+            <button
+              key={value}
+              onClick={() => setTab(value)}
+              className={`px-3 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
+                tab === value
+                  ? "border-stone-900 dark:border-stone-100 text-stone-900 dark:text-stone-100"
+                  : "border-transparent text-stone-400 hover:text-stone-600 dark:hover:text-stone-300"
+              }`}
+            >
+              {label}
+              {value === "sessions" && runningCount > 0 && ` (${runningCount})`}
+            </button>
+          ))}
         </div>
         <div className="flex gap-1 mb-px">
           {(Object.keys(dateRangeLabels) as DateRange[]).map((range) => (
@@ -503,6 +530,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       )}
       {tab === "fetch-log" && <FetchLogTable after={after} prependRef={fetchLogPrependRef} />}
       {tab === "sources" && <SourcesTable sources={allSources} />}
+      {tab === "orgs" && <OrgsTable sources={allSources} />}
       {tab === "cron" && <CronRunsTab />}
     </div>
   );
@@ -639,13 +667,13 @@ function SessionsTable({
                       title="Dismiss"
                       onClick={(e) => {
                         e.stopPropagation();
-                        fetch(`/api/admin/sessions/${session.sessionId}`, { method: "DELETE" });
+                        fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
                         onDismiss(session.sessionId);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.stopPropagation();
-                          fetch(`/api/admin/sessions/${session.sessionId}`, { method: "DELETE" });
+                          fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
                           onDismiss(session.sessionId);
                         }
                       }}
@@ -932,29 +960,35 @@ type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 function SourcesTable({ sources }: { sources: SourceEntry[] }) {
   const [filter, setFilter] = useState<SourceTypeFilter>("all");
   const [query, setQuery] = useState("");
+  const [staleOnly, setStaleOnly] = useState(false);
   const [fetching, setFetching] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, FetchTriggerResult>>({});
   const [page, setPage] = useState(0);
   const perPage = 25;
 
-  // Pre-compute counts by type (single pass) for filter badges
-  const countByType = sources.reduce<Record<string, number>>((acc, s) => {
-    acc[s.type] = (acc[s.type] ?? 0) + 1;
-    return acc;
-  }, {});
+  const { countByType, staleCount } = useMemo(() => {
+    const counts: Record<string, number> = {};
+    let stale = 0;
+    for (const s of sources) {
+      counts[s.type] = (counts[s.type] ?? 0) + 1;
+      if (isSourceStale(s)) stale++;
+    }
+    return { countByType: counts, staleCount: stale };
+  }, [sources]);
 
-  const filtered = sources.filter((s) => {
-    if (filter !== "all" && s.type !== filter) return false;
-    if (query) {
-      const q = query.toLowerCase();
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return sources.filter((s) => {
+      if (filter !== "all" && s.type !== filter) return false;
+      if (staleOnly && !isSourceStale(s)) return false;
+      if (!q) return true;
       return (
         s.name.toLowerCase().includes(q) ||
         s.slug.toLowerCase().includes(q) ||
         (s.orgSlug ?? "").toLowerCase().includes(q)
       );
-    }
-    return true;
-  });
+    });
+  }, [sources, filter, staleOnly, query]);
 
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
@@ -967,7 +1001,7 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
       return next;
     });
     try {
-      const res = await fetch(`/api/admin/sources/${slug}/fetch`, { method: "POST" });
+      const res = await fetch(`/api/proxy/sources/${slug}/fetch`, { method: "POST" });
       const data: FetchTriggerResult = await res.json();
       setResults((prev) => ({ ...prev, [slug]: data }));
     } catch {
@@ -1023,6 +1057,20 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
             );
           })}
         </div>
+        <button
+          onClick={() => {
+            setStaleOnly((v) => !v);
+            setPage(0);
+          }}
+          title={`No release in ${STALE_THRESHOLD_DAYS}+ days, or never published`}
+          className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+            staleOnly
+              ? "bg-amber-500 text-white"
+              : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+          }`}
+        >
+          Stale <span className="ml-0.5 opacity-60">{staleCount}</span>
+        </button>
         <input
           type="text"
           placeholder="Filter sources..."
@@ -1040,7 +1088,7 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
           <div>Name</div>
           <div>Org</div>
           <div>Type</div>
-          <div>Last Fetched</div>
+          <div>Last Release</div>
           <div>Priority</div>
           <div>Cadence</div>
           <div></div>
@@ -1049,6 +1097,9 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
           const result = results[src.slug];
           const isFetching = fetching.has(src.slug);
           const cadence = describeCadence(src.medianGapDays, src.fetchPriority, src.lastRetieredAt);
+          const releaseAge = ageInDays(src.latestDate);
+          const fetchedAge = ageInDays(src.lastFetchedAt);
+          const stale = isSourceStale(src);
           return (
             <div
               key={src.id}
@@ -1061,12 +1112,18 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
               <div>
                 <SourceTypeBadge type={src.type} />
               </div>
-              <div className="text-stone-500">
-                {src.lastFetchedAt ? (
-                  formatTime(new Date(src.lastFetchedAt).getTime())
-                ) : (
-                  <span className="text-stone-400">never</span>
-                )}
+              <div>
+                <div
+                  className={stale ? "text-amber-600 dark:text-amber-400" : "text-stone-500"}
+                  title={src.latestDate ?? "No releases recorded"}
+                >
+                  {formatAge(releaseAge)}
+                  {releaseAge != null && <span className="text-stone-400"> ago</span>}
+                </div>
+                <div className="text-stone-400 text-[10px]" title={src.lastFetchedAt ?? undefined}>
+                  fetched {formatAge(fetchedAge)}
+                  {fetchedAge != null && " ago"}
+                </div>
               </div>
               <div className="text-stone-500 capitalize">{src.fetchPriority ?? "normal"}</div>
               <div title={cadence.tooltip}>
@@ -1145,4 +1202,164 @@ function SourceTypeBadge({ type }: { type: string }) {
     agent: "text-green-500",
   };
   return <span className={`capitalize ${styles[type] ?? "text-stone-400"}`}>{type}</span>;
+}
+
+interface OrgRow {
+  orgSlug: string;
+  sourceCount: number;
+  staleCount: number;
+  mostRecentRelease: string | null;
+  mostRecentAgeDays: number | null;
+  allStale: boolean;
+}
+
+type OrgStaleFilter = "all" | "stale" | "dormant";
+
+function OrgsTable({ sources }: { sources: SourceEntry[] }) {
+  const [filter, setFilter] = useState<OrgStaleFilter>("all");
+  const [query, setQuery] = useState("");
+
+  const { orgs, dormantCount, anyStaleCount } = useMemo(() => {
+    const byOrg = new Map<string, SourceEntry[]>();
+    for (const s of sources) {
+      const key = s.orgSlug ?? "—";
+      const list = byOrg.get(key) ?? [];
+      list.push(s);
+      byOrg.set(key, list);
+    }
+    const now = Date.now();
+    const rows: OrgRow[] = [];
+    let dormant = 0;
+    let anyStale = 0;
+    for (const [orgSlug, list] of byOrg) {
+      let mostRecent: string | null = null;
+      let staleCount = 0;
+      for (const s of list) {
+        if (isSourceStale(s, now)) staleCount++;
+        // ISO-8601 strings sort lexicographically by time.
+        if (s.latestDate && (!mostRecent || s.latestDate > mostRecent)) {
+          mostRecent = s.latestDate;
+        }
+      }
+      const allStale = staleCount === list.length;
+      if (allStale) dormant++;
+      if (staleCount > 0) anyStale++;
+      rows.push({
+        orgSlug,
+        sourceCount: list.length,
+        staleCount,
+        mostRecentRelease: mostRecent,
+        mostRecentAgeDays: ageInDays(mostRecent, now),
+        allStale,
+      });
+    }
+    rows.sort((a, b) => {
+      if (a.allStale !== b.allStale) return a.allStale ? -1 : 1;
+      const aAge = a.mostRecentAgeDays ?? Number.POSITIVE_INFINITY;
+      const bAge = b.mostRecentAgeDays ?? Number.POSITIVE_INFINITY;
+      if (aAge !== bAge) return bAge - aAge;
+      return a.orgSlug.localeCompare(b.orgSlug);
+    });
+    return { orgs: rows, dormantCount: dormant, anyStaleCount: anyStale };
+  }, [sources]);
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase();
+    return orgs.filter((o) => {
+      if (filter === "stale" && o.staleCount === 0) return false;
+      if (filter === "dormant" && !o.allStale) return false;
+      if (!q) return true;
+      return o.orgSlug.toLowerCase().includes(q);
+    });
+  }, [orgs, filter, query]);
+
+  if (sources.length === 0) {
+    return (
+      <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">
+        No sources loaded.
+      </div>
+    );
+  }
+
+  const filterButtons: { value: OrgStaleFilter; label: string; count: number }[] = [
+    { value: "all", label: "All", count: orgs.length },
+    { value: "stale", label: "Has stale", count: anyStaleCount },
+    { value: "dormant", label: "All stale", count: dormantCount },
+  ];
+
+  return (
+    <div>
+      <div className="flex items-center gap-3 mb-3">
+        <div className="flex gap-1">
+          {filterButtons.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                filter === f.value
+                  ? f.value === "dormant"
+                    ? "bg-amber-500 text-white"
+                    : "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+                  : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+              }`}
+            >
+              {f.label} <span className="ml-0.5 opacity-60">{f.count}</span>
+            </button>
+          ))}
+        </div>
+        <input
+          type="text"
+          placeholder="Filter orgs..."
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          className="px-2.5 py-1 text-xs rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 w-48"
+        />
+      </div>
+
+      <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
+        <div className="grid grid-cols-[2fr_0.8fr_0.8fr_1.4fr_0.8fr] gap-x-4 px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
+          <div>Org</div>
+          <div className="text-right">Sources</div>
+          <div className="text-right">Stale</div>
+          <div>Newest Release</div>
+          <div>Status</div>
+        </div>
+        {filtered.map((o) => (
+          <div
+            key={o.orgSlug}
+            className="grid grid-cols-[2fr_0.8fr_0.8fr_1.4fr_0.8fr] gap-x-4 px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center"
+          >
+            <div className="text-stone-900 dark:text-stone-100 truncate">{o.orgSlug}</div>
+            <div className="text-stone-500 text-right">{o.sourceCount}</div>
+            <div
+              className={`text-right ${o.staleCount > 0 ? "text-amber-600 dark:text-amber-400" : "text-stone-500"}`}
+            >
+              {o.staleCount}
+            </div>
+            <div
+              className={o.allStale ? "text-amber-600 dark:text-amber-400" : "text-stone-500"}
+              title={o.mostRecentRelease ?? undefined}
+            >
+              {formatAge(o.mostRecentAgeDays)}
+              {o.mostRecentAgeDays != null && <span className="text-stone-400"> ago</span>}
+            </div>
+            <div>
+              {o.allStale ? (
+                <span className="text-amber-600 dark:text-amber-400">Dormant</span>
+              ) : o.staleCount > 0 ? (
+                <span className="text-stone-500">Partial</span>
+              ) : (
+                <span className="text-green-600">Active</span>
+              )}
+            </div>
+          </div>
+        ))}
+        {filtered.length === 0 && (
+          <div className="px-4 py-6 text-xs text-stone-400 dark:text-stone-500 text-center">
+            No orgs match.
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
