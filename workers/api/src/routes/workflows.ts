@@ -1,15 +1,11 @@
-/**
- * Ad-hoc send path for exercising the email notification pipeline without
- * waiting for a cron to fire. Auth-gated via the `admin/notifications` entry
- * in workers/api/src/index.ts.
- */
+// Mount point for /v1/workflows/* job/workflow trigger endpoints.
 import { Hono } from "hono";
 import { sendCronReport } from "../lib/notifications.js";
 import { sendEmail } from "../lib/email.js";
 import type { CronReport, CronReportStatus } from "../lib/cron-report.js";
 import type { Env } from "../index.js";
 
-export const adminNotificationsRoutes = new Hono<Env>();
+export const workflowsRoutes = new Hono<Env>();
 
 type TestBody = {
   /** Override recipient; defaults to EMAIL_NOTIFY_TO. */
@@ -33,7 +29,7 @@ const VALID_STATUSES = new Set<CronReportStatus>([
   "aborted",
 ]);
 
-adminNotificationsRoutes.post("/admin/notifications/test", async (c) => {
+workflowsRoutes.post("/workflows/notifications-test", async (c) => {
   const body = await c.req.json<TestBody>().catch(() => ({}) as TestBody);
 
   if (body.plain) {
@@ -65,7 +61,7 @@ adminNotificationsRoutes.post("/admin/notifications/test", async (c) => {
     skippedOverCap: 0,
     dispatchErrors: status === "done" ? 0 : status === "degraded" ? 1 : 4,
     abortReason: status === "aborted" ? "anthropic_credits" : undefined,
-    notes: `Ad-hoc test email triggered via /v1/admin/notifications/test`,
+    notes: `Ad-hoc test email triggered via /v1/workflows/notifications-test`,
     sessionsStarted: status === "done" || status === "degraded" ? ["ma_test_1", "ma_test_2"] : [],
     dispatchErrorDetail:
       status === "degraded"
