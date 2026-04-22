@@ -34,10 +34,10 @@
     // fallback path.
     "SCRAPE_AGENT_USE_WORKFLOW": "true",
     // Feature flag for the Workflows-based poll-and-fetch cron (see issue #486).
-    // Ships "false"; when flipped, the 2-hourly cron fans out one
-    // POLL_AND_FETCH_WORKFLOW instance per due source so mid-embed 429s no
+    // When true, the hourly cron fans out one POLL_AND_FETCH_WORKFLOW instance
+    // per due source (gated by tier: normal=4h, low=24h) so mid-embed 429s no
     // longer silently drop Vectorize rows. Rollback: flip to "false".
-    "POLL_FETCH_USE_WORKFLOW": "false",
+    "POLL_FETCH_USE_WORKFLOW": "true",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
