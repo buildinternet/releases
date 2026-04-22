@@ -298,10 +298,13 @@ export default {
     // poll-and-fetch runs every other hour.
     if (event.cron === "0 3 * * *") {
       ctx.waitUntil(
-        retierSources({
-          DB: env.DB,
-          CRON_ENABLED: env.CRON_ENABLED,
-        }),
+        loggedDispatch(
+          "retier-cron",
+          retierSources({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+          }),
+        ),
       );
       return;
     }
@@ -322,10 +325,13 @@ export default {
           return;
         }
         ctx.waitUntil(
-          env.SCRAPE_AGENT_WORKFLOW.create({
-            id: `scrape-agent-sweep-${event.scheduledTime}`,
-            params: { scheduledTime: event.scheduledTime },
-          }).then(() => undefined),
+          loggedDispatch(
+            "scrape-agent-cron",
+            env.SCRAPE_AGENT_WORKFLOW.create({
+              id: `scrape-agent-sweep-${event.scheduledTime}`,
+              params: { scheduledTime: event.scheduledTime },
+            }),
+          ),
         );
         return;
       }
@@ -335,22 +341,25 @@ export default {
         return;
       }
       ctx.waitUntil(
-        scrapeAgentSweep({
-          DB: env.DB,
-          CRON_ENABLED: env.CRON_ENABLED,
-          SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
-          SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
-          DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-          RELEASED_API_KEY: releasesApiKey,
-          ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
-          ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-          AI_GATEWAY_TOKEN: await env.AI_GATEWAY_TOKEN?.get().catch(() => undefined),
-          SEND_EMAIL: env.SEND_EMAIL,
-          EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
-          EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
-          EMAIL_FROM: env.EMAIL_FROM,
-          ADMIN_BASE_URL: env.ADMIN_BASE_URL,
-        }),
+        loggedDispatch(
+          "scrape-agent-cron",
+          scrapeAgentSweep({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
+            SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
+            DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+            RELEASED_API_KEY: releasesApiKey,
+            ANTHROPIC_API_KEY: await env.ANTHROPIC_API_KEY?.get(),
+            ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
+            AI_GATEWAY_TOKEN: await env.AI_GATEWAY_TOKEN?.get().catch(() => undefined),
+            SEND_EMAIL: env.SEND_EMAIL,
+            EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
+            EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
+            EMAIL_FROM: env.EMAIL_FROM,
+            ADMIN_BASE_URL: env.ADMIN_BASE_URL,
+          }),
+        ),
       );
       return;
     }
@@ -365,28 +374,49 @@ export default {
         );
         return;
       }
-      ctx.waitUntil(fanOutPollAndFetch(env, event.scheduledTime));
+      ctx.waitUntil(
+        loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env, event.scheduledTime)),
+      );
       return;
     }
     const githubToken = await env.GITHUB_TOKEN?.get();
     ctx.waitUntil(
-      pollAndFetch({
-        DB: env.DB,
-        GITHUB_TOKEN: githubToken,
-        CRON_ENABLED: env.CRON_ENABLED,
-        RELEASES_INDEX: env.RELEASES_INDEX,
-        CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
-        EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
-        VOYAGE_API_KEY: env.VOYAGE_API_KEY,
-        OPENAI_API_KEY: env.OPENAI_API_KEY,
-        RELEASE_HUB: env.RELEASE_HUB,
-        WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
-        LATEST_CACHE: env.LATEST_CACHE,
-        INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
-      }),
+      loggedDispatch(
+        "poll-fetch-cron",
+        pollAndFetch({
+          DB: env.DB,
+          GITHUB_TOKEN: githubToken,
+          CRON_ENABLED: env.CRON_ENABLED,
+          RELEASES_INDEX: env.RELEASES_INDEX,
+          CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
+          EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
+          VOYAGE_API_KEY: env.VOYAGE_API_KEY,
+          OPENAI_API_KEY: env.OPENAI_API_KEY,
+          RELEASE_HUB: env.RELEASE_HUB,
+          WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
+          LATEST_CACHE: env.LATEST_CACHE,
+          INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
+        }),
+      ),
     );
   },
 };
+
+/**
+ * Wrap a cron dispatch promise so a rejection hits the Workers error log
+ * with our tag instead of vanishing into `ctx.waitUntil`'s swallow. Returns
+ * a Promise<void> that always resolves — swallowing stays; logging is what's
+ * new. See issue #486 postmortem.
+ */
+function loggedDispatch(tag: string, p: Promise<unknown>): Promise<void> {
+  return p
+    .then(() => undefined)
+    .catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      const stack = err instanceof Error ? err.stack : undefined;
+      console.error(`[${tag}] dispatch failed: ${message}`, stack ?? "");
+    });
+}
 
 /**
  * Query due sources and spawn one `POLL_AND_FETCH_WORKFLOW` per source.
