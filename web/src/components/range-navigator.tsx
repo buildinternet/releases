@@ -36,6 +36,7 @@ const MODEL_MILESTONES: ModelMilestone[] = [
   { name: "Claude 4.5 Opus", date: new Date("2025-11-24"), vendor: "claude" },
   { name: "Claude 4.6 Opus", date: new Date("2026-02-05"), vendor: "claude" },
   { name: "Claude 4.6 Sonnet", date: new Date("2026-02-17"), vendor: "claude" },
+  { name: "Claude 4.7 Opus", date: new Date("2026-04-16"), vendor: "claude" },
   // OpenAI
   { name: "GPT-4o", date: new Date("2024-05-13"), vendor: "openai" },
   { name: "GPT-4o mini", date: new Date("2024-07-18"), vendor: "openai" },
@@ -49,6 +50,8 @@ const MODEL_MILESTONES: ModelMilestone[] = [
   { name: "GPT-5-Codex", date: new Date("2025-09-23"), vendor: "openai" },
   { name: "GPT-5.3-Codex", date: new Date("2026-02-01"), vendor: "openai" },
   { name: "GPT-5.4", date: new Date("2026-03-05"), vendor: "openai" },
+  { name: "GPT-5.4 mini & nano", date: new Date("2026-03-17"), vendor: "openai" },
+  { name: "GPT-Rosalind", date: new Date("2026-04-16"), vendor: "openai" },
 ];
 
 const VENDOR_COLORS = {
