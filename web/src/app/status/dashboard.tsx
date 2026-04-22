@@ -217,7 +217,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
   const hydrate = useCallback(() => {
     const safeFetch = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null));
-    return Promise.all([safeFetch(`/api/admin/sessions`), safeFetch(`/api/admin/status/usage`)])
+    return Promise.all([safeFetch(`/api/proxy/sessions`), safeFetch(`/api/proxy/status/usage`)])
       .then(([s, u]) => {
         if (s) setSessions(s as SessionState[]);
         if (u) setUsage(u as UsageEntry[]);
@@ -232,7 +232,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
 
   // Fetch sources once on mount (not tied to date range — requires auth)
   useEffect(() => {
-    fetch(`/api/admin/sources`)
+    fetch(`/api/proxy/sources`)
       .then((r) => (r.ok ? r.json() : null))
       .then((src) => {
         if (src) setAllSources(src as SourceEntry[]);
@@ -413,7 +413,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const fetchLogsForSession = useCallback((sid: string) => {
     if (fetchedLogsRef.current.has(sid)) return;
     fetchedLogsRef.current.add(sid);
-    fetch(`/api/admin/sessions/${sid}/logs`)
+    fetch(`/api/proxy/sessions/${sid}/logs`)
       .then((r) => (r.ok ? r.json() : null))
       .then((logs: string[] | null) => {
         if (logs?.length) {
@@ -421,7 +421,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         }
       })
       .catch(() => {});
-    fetch(`/api/admin/sessions/${sid}/stdout`)
+    fetch(`/api/proxy/sessions/${sid}/stdout`)
       .then((r) => (r.ok ? r.json() : null))
       .then((lines: string[] | null) => {
         if (lines?.length) {
@@ -667,13 +667,13 @@ function SessionsTable({
                       title="Dismiss"
                       onClick={(e) => {
                         e.stopPropagation();
-                        fetch(`/api/admin/sessions/${session.sessionId}`, { method: "DELETE" });
+                        fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
                         onDismiss(session.sessionId);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.stopPropagation();
-                          fetch(`/api/admin/sessions/${session.sessionId}`, { method: "DELETE" });
+                          fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
                           onDismiss(session.sessionId);
                         }
                       }}
@@ -1001,7 +1001,7 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
       return next;
     });
     try {
-      const res = await fetch(`/api/admin/sources/${slug}/fetch`, { method: "POST" });
+      const res = await fetch(`/api/proxy/sources/${slug}/fetch`, { method: "POST" });
       const data: FetchTriggerResult = await res.json();
       setResults((prev) => ({ ...prev, [slug]: data }));
     } catch {

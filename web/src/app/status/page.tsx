@@ -10,7 +10,7 @@ export default function StatusPage() {
   if (!statusDashboard) notFound();
 
   // apiUrl is only used client-side for the WebSocket connection to /v1/status/ws,
-  // which has no auth. Admin HTTP calls go through /api/admin/... so the bearer
+  // which has no auth. Admin HTTP calls go through /api/proxy/... so the bearer
   // never crosses server→client.
   const apiUrl = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 
