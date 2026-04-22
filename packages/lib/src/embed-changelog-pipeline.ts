@@ -58,17 +58,24 @@ export interface EmbedAndUpsertChangelogFileOptions {
    */
   onDiff: (payload: OnDiffPayload) => Promise<void>;
   logger?: EmbedLogger;
+  /**
+   * When true, any embed/upsert failure re-throws after logging so the caller
+   * can retry (e.g. from a Cloudflare Workflow step). Default false preserves
+   * the historical fire-and-forget contract. See #486.
+   */
+  throwOnError?: boolean;
 }
 
 export async function embedAndUpsertChangelogFile(
   opts: EmbedAndUpsertChangelogFileOptions,
 ): Promise<void> {
-  const { file, existingChunks, vectorIndex, embedConfig, onDiff } = opts;
+  const { file, existingChunks, vectorIndex, embedConfig, onDiff, throwOnError = false } = opts;
   const logger = opts.logger ?? console;
 
   let diff: DiffResult;
   let embedded: EmbeddedChunk[] = [];
   let deleteIds: string[] = [];
+  let innerErr: unknown;
 
   try {
     const next = chunkChangelog(file.content);
@@ -88,9 +95,9 @@ export async function embedAndUpsertChangelogFile(
             vector: vectors[i],
           }));
         } else {
-          logger.warn(
-            `[embed-changelog-pipeline] vector count mismatch for ${file.id}: ${vectors.length} vs ${diff.toInsert.length}`,
-          );
+          const msg = `[embed-changelog-pipeline] vector count mismatch for ${file.id}: ${vectors.length} vs ${diff.toInsert.length}`;
+          logger.warn(msg);
+          innerErr ??= new Error(msg);
         }
       } catch (err) {
         logger.warn(
@@ -98,6 +105,7 @@ export async function embedAndUpsertChangelogFile(
             err instanceof Error ? err.message : String(err)
           }`,
         );
+        innerErr ??= err;
       }
     }
 
@@ -125,6 +133,7 @@ export async function embedAndUpsertChangelogFile(
         // Wipe the embedded list so the caller inserts rows with
         // vectorId = null rather than lying about what's in Vectorize.
         embedded = [];
+        innerErr ??= err;
       }
     }
 
@@ -141,6 +150,7 @@ export async function embedAndUpsertChangelogFile(
             err instanceof Error ? err.message : String(err)
           }`,
         );
+        innerErr ??= err;
       }
     }
   } catch (err) {
@@ -149,6 +159,7 @@ export async function embedAndUpsertChangelogFile(
         err instanceof Error ? err.message : String(err)
       }`,
     );
+    if (throwOnError) throw err;
     return;
   }
 
@@ -166,5 +177,8 @@ export async function embedAndUpsertChangelogFile(
         err instanceof Error ? err.message : String(err)
       }${cause}`,
     );
+    if (throwOnError) throw err;
   }
+
+  if (throwOnError && innerErr) throw innerErr;
 }

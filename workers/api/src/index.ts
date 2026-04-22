@@ -37,13 +37,15 @@ import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
 import { adminNotificationsRoutes } from "./routes/admin-notifications.js";
 import { adminAiRoutes } from "./routes/admin-ai.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
-import { pollAndFetch } from "./cron/poll-fetch.js";
+import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
+import { drizzle } from "drizzle-orm/d1";
 import { retierSources } from "./cron/retier.js";
 import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
 export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
+export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -71,6 +73,11 @@ export type Env = {
     // `scrapeAgentSweep()` in `ctx.waitUntil`. See issue #482.
     SCRAPE_AGENT_USE_WORKFLOW?: string;
     SCRAPE_AGENT_WORKFLOW?: Workflow;
+    // Feature flag: when "true", the 2-hourly poll-and-fetch cron fans out
+    // one `POLL_AND_FETCH_WORKFLOW` instance per due source instead of
+    // inlining `pollAndFetch()` in `ctx.waitUntil`. See issue #486.
+    POLL_FETCH_USE_WORKFLOW?: string;
+    POLL_AND_FETCH_WORKFLOW?: Workflow;
     DISCOVERY_WORKER?: Fetcher;
     ANTHROPIC_API_KEY?: SecretBinding;
     // Optional Cloudflare AI Gateway passthrough. When set, all direct Anthropic
@@ -347,6 +354,20 @@ export default {
       );
       return;
     }
+    // Feature-flag the Workflows-based poll-and-fetch path. When flipped,
+    // the cron fans out one workflow instance per due source so a single
+    // transient failure (usually a Voyage 429 mid-embed) no longer silently
+    // drops vectors. See issue #486.
+    if (env.POLL_FETCH_USE_WORKFLOW === "true") {
+      if (!env.POLL_AND_FETCH_WORKFLOW) {
+        console.warn(
+          "[poll-fetch-cron] POLL_FETCH_USE_WORKFLOW=true but workflow binding missing; skipping",
+        );
+        return;
+      }
+      ctx.waitUntil(fanOutPollAndFetch(env, event.scheduledTime));
+      return;
+    }
     const githubToken = await env.GITHUB_TOKEN?.get();
     ctx.waitUntil(
       pollAndFetch({
@@ -366,3 +387,26 @@ export default {
     );
   },
 };
+
+/**
+ * Query due sources and spawn one `POLL_AND_FETCH_WORKFLOW` per source.
+ * Uses `createBatch` so all instances start in a single control-plane call.
+ * The workflow handles CRON_ENABLED internally — keeping that check there
+ * means a flag flip mid-fan-out still short-circuits each instance cleanly.
+ */
+async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): Promise<void> {
+  const db = drizzle(env.DB);
+  const due = await queryDueSources(db, new Date());
+  if (due.length === 0) {
+    console.log("[poll-fetch-cron] no due sources; skipping workflow fan-out");
+    return;
+  }
+  console.log(`[poll-fetch-cron] fan-out ${due.length} workflow instance(s)`);
+  const params = due.map((source) => ({
+    // Instance IDs must be unique; pairing the scheduled time with the source
+    // id keeps replays from collisions across fires. See #486.
+    id: `poll-fetch-${scheduledTime}-${source.id}`,
+    params: { sourceId: source.id, scheduledTime },
+  }));
+  await env.POLL_AND_FETCH_WORKFLOW!.createBatch(params);
+}
