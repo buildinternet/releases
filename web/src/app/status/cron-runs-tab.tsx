@@ -40,7 +40,7 @@ export function CronRunsTab() {
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    fetch(`/api/admin/admin/cron-runs?limit=50`)
+    fetch(`/api/admin/cron-runs?limit=50`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json();
