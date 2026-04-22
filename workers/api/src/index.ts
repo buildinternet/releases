@@ -34,8 +34,8 @@ import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedRoutes } from "./routes/admin-embed.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
-import { adminNotificationsRoutes } from "./routes/admin-notifications.js";
 import { adminAiRoutes } from "./routes/admin-ai.js";
+import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
@@ -194,11 +194,11 @@ const adminRoutes = [
   "admin/embed",
   "admin/cron-runs",
   "admin/webhooks",
-  "admin/notifications",
   "admin/summaries",
   "admin/compare",
   "playbook",
   "overview-inputs",
+  "workflows",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -267,8 +267,8 @@ v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedRoutes);
 v1.route("/", adminCronRunsRoutes);
 v1.route("/", adminWebhooksRoutes);
-v1.route("/", adminNotificationsRoutes);
 v1.route("/", adminAiRoutes);
+v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);
 
 // Static endpoint — categories are defined in code, not DB

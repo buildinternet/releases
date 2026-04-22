@@ -42,4 +42,4 @@ Configuration (all in `workers/api/wrangler.jsonc` under `vars`):
 
 If the `SEND_EMAIL` binding is absent (e.g. local dev, tests) the helper logs `[notifications] skipped … no_binding` and returns — the cron itself never fails on a notification error.
 
-Ad-hoc test send (admin-auth, deployed env): `POST /v1/admin/notifications/test` fabricates a sample `CronReport` and sends it without waiting for the cron to fire. Body fields: `{ to?, status?, cronName?, plain?, subject?, body? }`. CLI wrapper: `releases admin notify test [--status …] [--to …] [--plain]`.
+Ad-hoc test send (admin-auth, deployed env): `POST /v1/workflows/notifications-test` fabricates a sample `CronReport` and sends it without waiting for the cron to fire. Body fields: `{ to?, status?, cronName?, plain?, subject?, body? }`. CLI wrapper: `releases admin notify test [--status …] [--to …] [--plain]`.
