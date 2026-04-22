@@ -20,6 +20,11 @@ mock.module("../src/lib/anthropic.js", () => ({
     anthropicCalls.push({ model: req.model, system: req.system, messages: req.messages });
     return { text: nextResponseText, inputTokens: 100, outputTokens: 50 };
   },
+  getAnthropicKey: async (env: { ANTHROPIC_API_KEY?: { get(): Promise<string> } }) => {
+    const k = await env.ANTHROPIC_API_KEY?.get();
+    return k && k.length > 0 ? k : null;
+  },
+  resolveGatewayOpts: async () => ({}),
 }));
 
 const { Hono } = await import("hono");

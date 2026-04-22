@@ -1,13 +1,6 @@
-/**
- * Telemetry endpoint for semantic-search backfill progress. Reports
- * per-table embedded vs unembedded counts so operators can assess
- * backfill status at a glance.
- *
- * Gated by `authMiddleware` via the `/admin/embed/status` entry in the
- * adminRoutes allowlist in workers/api/src/index.ts.
- *
- * The three backfill POST endpoints have moved to /v1/workflows/embed-*.
- */
+// Telemetry endpoint for semantic-search backfill progress: per-table
+// embedded vs unembedded counts. Auth-gated via the `admin/embed/status`
+// entry in the adminRoutes allowlist in workers/api/src/index.ts.
 
 import { Hono } from "hono";
 import { and, count, sql } from "drizzle-orm";
@@ -44,14 +37,9 @@ adminEmbedStatusRoutes.get("/admin/embed/status", async (c) => {
     db
       .select({ n: count() })
       .from(releases)
-      .where(
-        and(
-          // Embedded is simply "embedded_at IS NOT NULL" — suppressed rows are
-          // still counted because the backfill treats them the same. Operators
-          // who care about suppressed gaps can diff against the search paths.
-          sql`${releases.embeddedAt} IS NOT NULL`,
-        ),
-      ),
+      // Suppressed rows are still counted — the backfill treats them the
+      // same; operators who care about suppressed gaps diff against search.
+      .where(and(sql`${releases.embeddedAt} IS NOT NULL`)),
     db.select({ n: count() }).from(organizations),
     db
       .select({ n: count() })

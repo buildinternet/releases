@@ -22,7 +22,7 @@ import {
   anthropicErrorHttpStatus,
   classifyAnthropicError,
 } from "@releases/lib/anthropic-errors.js";
-import { callAnthropic, type GatewayOptions } from "../lib/anthropic.js";
+import { callAnthropic, getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
 import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/lib/embed-releases.js";
 import {
   embedAndUpsertEntities,
@@ -183,33 +183,21 @@ async function logAiUsage(
   }
 }
 
-async function getAnthropicKey(env: Env["Bindings"]): Promise<string | null> {
-  const key = await env.ANTHROPIC_API_KEY?.get();
-  return key && key.length > 0 ? key : null;
-}
-
-async function resolveGatewayOpts(env: Env["Bindings"]): Promise<GatewayOptions> {
-  const baseURL = env.ANTHROPIC_BASE_URL?.trim();
-  const gatewayToken = (await env.AI_GATEWAY_TOKEN?.get().catch(() => ""))?.trim();
-  return {
-    ...(baseURL ? { baseURL } : {}),
-    ...(gatewayToken ? { gatewayToken } : {}),
-  };
-}
-
 // ── POST /workflows/summarize ─────────────────────────────────────────────────
 //
 // Body: { source?, org?, days?, instructions? }  (exactly one of source/org)
 // Returns: { summary, releaseCount, scope }
 
+interface SummarizeBody {
+  source?: string;
+  org?: string;
+  days?: number | string;
+  instructions?: string;
+}
+
 workflowsRoutes.post("/workflows/summarize", async (c) => {
   const db = createDb(c.env.DB);
-  const body = (await c.req.json().catch(() => ({}))) as {
-    source?: string;
-    org?: string;
-    days?: number | string;
-    instructions?: string;
-  };
+  const body = await c.req.json<SummarizeBody>().catch(() => ({}) as SummarizeBody);
 
   const source = body.source?.trim();
   const org = body.org?.trim();
@@ -228,7 +216,10 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
     );
   }
 
-  const apiKey = await getAnthropicKey(c.env);
+  const [apiKey, gatewayOpts] = await Promise.all([
+    getAnthropicKey(c.env),
+    resolveGatewayOpts(c.env),
+  ]);
   if (!apiKey) {
     return c.json(
       { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
@@ -335,7 +326,7 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
           },
         ],
       },
-      await resolveGatewayOpts(c.env),
+      gatewayOpts,
     );
 
     await logAiUsage(db, {
@@ -368,13 +359,15 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
 // Body: { sourceA, sourceB, days? }
 // Returns: { comparison, releaseCountA, releaseCountB, sources }
 
+interface CompareBody {
+  sourceA?: string;
+  sourceB?: string;
+  days?: number | string;
+}
+
 workflowsRoutes.post("/workflows/compare", async (c) => {
   const db = createDb(c.env.DB);
-  const body = (await c.req.json().catch(() => ({}))) as {
-    sourceA?: string;
-    sourceB?: string;
-    days?: number | string;
-  };
+  const body = await c.req.json<CompareBody>().catch(() => ({}) as CompareBody);
 
   const a = body.sourceA?.trim();
   const b = body.sourceB?.trim();
@@ -393,7 +386,10 @@ workflowsRoutes.post("/workflows/compare", async (c) => {
     );
   }
 
-  const apiKey = await getAnthropicKey(c.env);
+  const [apiKey, gatewayOpts] = await Promise.all([
+    getAnthropicKey(c.env),
+    resolveGatewayOpts(c.env),
+  ]);
   if (!apiKey) {
     return c.json(
       { error: "service_unavailable", message: "ANTHROPIC_API_KEY not configured" },
@@ -480,7 +476,7 @@ workflowsRoutes.post("/workflows/compare", async (c) => {
           },
         ],
       },
-      await resolveGatewayOpts(c.env),
+      gatewayOpts,
     );
 
     await logAiUsage(db, {
@@ -532,14 +528,6 @@ function clampLimit(n: unknown): number {
   return Math.min(parsed, EMBED_BATCH_CAP);
 }
 
-async function safeJson<T>(req: Request): Promise<T> {
-  try {
-    return (await req.json()) as T;
-  } catch {
-    return {} as T;
-  }
-}
-
 function needsWork(r: { nullChunks: number | null; totalChunks: number | null }): boolean {
   return Number(r.totalChunks ?? 0) === 0 || Number(r.nullChunks ?? 0) > 0;
 }
@@ -554,7 +542,7 @@ interface EmbedReleasesBody {
 
 workflowsRoutes.post("/workflows/embed-releases", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await safeJson<EmbedReleasesBody>(c.req.raw);
+  const body = await c.req.json<EmbedReleasesBody>().catch(() => ({}) as EmbedReleasesBody);
   const limit = clampLimit(body.limit);
   const since = body.since;
   const dryRun = body.dryRun === true;
@@ -563,31 +551,33 @@ workflowsRoutes.post("/workflows/embed-releases", async (c) => {
   const conditions = [sql`${releases.embeddedAt} IS NULL`];
   if (since) conditions.push(gte(releases.publishedAt, since));
 
-  const rows = await db
-    .select({
-      id: releases.id,
-      title: releases.title,
-      content: releases.content,
-      contentSummary: releases.contentSummary,
-      version: releases.version,
-      publishedAt: releases.publishedAt,
-      sourceId: releases.sourceId,
-      type: releases.type,
-      orgId: sources.orgId,
-      productId: sources.productId,
-      category: organizations.category,
-    })
-    .from(releases)
-    .leftJoin(sources, eq(releases.sourceId, sources.id))
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(...conditions))
-    .limit(limit);
-
-  // Remaining = backlog under the same predicate minus what we just grabbed.
-  const [{ n: remainingBefore }] = await db
-    .select({ n: count() })
-    .from(releases)
-    .where(and(...conditions));
+  // Remaining = backlog under the same predicate. Ran in parallel with the
+  // row fetch so a cold D1 hit doesn't serialize two round-trips.
+  const [rows, [{ n: remainingBefore }]] = await Promise.all([
+    db
+      .select({
+        id: releases.id,
+        title: releases.title,
+        content: releases.content,
+        contentSummary: releases.contentSummary,
+        version: releases.version,
+        publishedAt: releases.publishedAt,
+        sourceId: releases.sourceId,
+        type: releases.type,
+        orgId: sources.orgId,
+        productId: sources.productId,
+        category: organizations.category,
+      })
+      .from(releases)
+      .leftJoin(sources, eq(releases.sourceId, sources.id))
+      .leftJoin(organizations, eq(sources.orgId, organizations.id))
+      .where(and(...conditions))
+      .limit(limit),
+    db
+      .select({ n: count() })
+      .from(releases)
+      .where(and(...conditions)),
+  ]);
 
   if (rows.length === 0 || dryRun) {
     return c.json({
@@ -666,7 +656,7 @@ interface EmbedEntitiesBody {
 
 workflowsRoutes.post("/workflows/embed-entities", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await safeJson<EmbedEntitiesBody>(c.req.raw);
+  const body = await c.req.json<EmbedEntitiesBody>().catch(() => ({}) as EmbedEntitiesBody);
   const limit = clampLimit(body.limit);
   const dryRun = body.dryRun === true;
   const kindFilter: EntityKind | undefined = body.kind;
@@ -845,7 +835,7 @@ interface EmbedChangelogsBody {
 
 workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await safeJson<EmbedChangelogsBody>(c.req.raw);
+  const body = await c.req.json<EmbedChangelogsBody>().catch(() => ({}) as EmbedChangelogsBody);
   const limit = clampLimit(body.limit);
   const dryRun = body.dryRun === true;
 
