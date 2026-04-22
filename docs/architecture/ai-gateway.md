@@ -25,6 +25,15 @@ Two optional env vars, both no-op when unset (falls back to direct Anthropic API
 
 For prod/staging deploys, set `ANTHROPIC_BASE_URL` in the `vars` block of each worker's `wrangler.jsonc`, and bind `AI_GATEWAY_TOKEN` through `secrets_store_secrets` if authenticated mode is enabled. Rollback: unset the var, redeploy.
 
+**Current deploy state.** Both environments run through the gateway in authenticated mode:
+
+| Env        | Gateway ID         | Secret Store key           | Workers             |
+| ---------- | ------------------ | -------------------------- | ------------------- |
+| Production | `releases`         | `AI_GATEWAY_TOKEN`         | api, mcp, discovery |
+| Staging    | `releases-staging` | `AI_GATEWAY_TOKEN_STAGING` | api, mcp, discovery |
+
+Tokens are account-scoped (not gateway-scoped), so the prod and staging tokens are kept separate purely for operational hygiene — they aren't an isolation boundary.
+
 ## Shared helper
 
 All five constructor sites route through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `workers/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
