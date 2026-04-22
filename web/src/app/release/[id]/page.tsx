@@ -8,6 +8,7 @@ import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { CliCommand } from "@/components/cli-command";
 import { AlsoCoveredBy } from "@/components/also-covered-by";
+import { RelatedRail } from "@/components/related-rail";
 import { ReleaseContent } from "./release-content";
 
 export async function generateMetadata({
@@ -153,6 +154,25 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
           <ReleaseContent content={release.content} title={release.title} media={media} />
           <Suspense fallback={null}>
             <AlsoCoveredBy anchorReleaseId={release.id} />
+          </Suspense>
+          {release.org && (
+            <Suspense fallback={null}>
+              <RelatedRail
+                anchorReleaseId={release.id}
+                anchorSourceSlug={release.sourceSlug}
+                scope="org"
+                heading={`More from ${release.org.name}`}
+              />
+            </Suspense>
+          )}
+          <Suspense fallback={null}>
+            <RelatedRail
+              anchorReleaseId={release.id}
+              anchorSourceSlug={release.sourceSlug}
+              scope="global"
+              heading="From other products"
+              excludeOrgSlug={release.org?.slug ?? null}
+            />
           </Suspense>
           {release.fetchedAt && (
             <p

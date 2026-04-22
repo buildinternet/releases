@@ -8,7 +8,7 @@ interface AlsoCoveredByProps {
 
 /**
  * Server component. Renders the release_coverage grouping relationship
- * for the anchor release. Mirrors related-releases.tsx — self-hides on
+ * for the anchor release. Mirrors related-rail.tsx — self-hides on
  * standalone, empty, or error. Follow that pattern so behavior stays
  * consistent across the detail-page rails.
  */

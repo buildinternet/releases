@@ -8,8 +8,7 @@ import { SourceTypeIcon } from "@/components/source-type-icon";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
 import { SourceMainContent } from "@/components/source-main-content";
-import { RelatedReleases } from "@/components/related-releases";
-import { RelatedSources } from "@/components/related-sources";
+import { RelatedRail } from "@/components/related-rail";
 import { Suspense } from "react";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
@@ -157,19 +156,15 @@ export default async function IndependentSourcePage({
               changelogPath={changelogPath}
               changelogOffset={changelogOffset}
             />
-            {(!tab || tab === "releases") && source.releases[0]?.id && (
-              <>
-                <Suspense fallback={null}>
-                  <RelatedReleases
-                    anchorReleaseId={source.releases[0].id}
-                    scope="global"
-                    heading="Similar releases"
-                  />
-                </Suspense>
-                <Suspense fallback={null}>
-                  <RelatedSources anchor={source.slug} scope="global" heading="Similar sources" />
-                </Suspense>
-              </>
+            {(!tab || tab === "releases") && (
+              <Suspense fallback={null}>
+                <RelatedRail
+                  anchorReleaseId={source.releases[0]?.id ?? null}
+                  anchorSourceSlug={source.slug}
+                  scope="global"
+                  heading="From other products"
+                />
+              </Suspense>
             )}
           </div>
           <Sidebar

@@ -134,6 +134,10 @@ export const adminApi = {
     ),
 };
 
+// Mirror the worker-side `cacheControl(300)` on /v1/related/* so Next's Data
+// Cache doesn't serve fresh semantic neighbors for longer than the CDN would.
+const RELATED_CACHE_OPTS = { next: { revalidate: 300 } } as const;
+
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
   orgs: () => fetchApi<OrgListItem[]>("/v1/orgs"),
@@ -187,12 +191,14 @@ export const api = {
   relatedReleases: (releaseId: string, scope: "org" | "global" = "global", limit = 8) =>
     fetchApi<RelatedReleasesResponse>(
       `/v1/related/releases?release=${encodeURIComponent(releaseId)}&scope=${scope}&limit=${limit}`,
+      RELATED_CACHE_OPTS,
     ),
   coverage: (releaseId: string) =>
     fetchApi<ReleaseCoverageResponse>(`/v1/releases/${encodeURIComponent(releaseId)}/coverage`),
   relatedSources: (sourceIdOrSlug: string, scope: "org" | "global" = "global", limit = 6) =>
     fetchApi<RelatedSourcesResponse>(
       `/v1/related/sources?source=${encodeURIComponent(sourceIdOrSlug)}&scope=${scope}&limit=${limit}`,
+      RELATED_CACHE_OPTS,
     ),
 };
 
@@ -203,6 +209,7 @@ export interface RelatedReleaseItem {
   url: string | null;
   publishedAt: string | null;
   summary: string;
+  thumbnail: { url: string; alt?: string } | null;
   score: number;
   source: {
     id: string;
@@ -222,8 +229,12 @@ export interface RelatedSourceItem {
   score: number;
   orgSlug: string | null;
   orgName: string | null;
+  orgAvatarUrl: string | null;
   releaseCount: number;
   latestDate: string | null;
+  latestTitle: string | null;
+  latestVersion: string | null;
+  recentCount: number;
 }
 
 export interface RelatedReleasesResponse {

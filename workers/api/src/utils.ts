@@ -1,7 +1,30 @@
 import { eq, inArray } from "drizzle-orm";
 import { tags, sources, organizations, products } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
+import { resolveR2Url } from "@releases/lib/media-url.js";
+import type { MediaItem } from "@releases/lib/api-types";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/lib/media-url.js";
+
+type RawMediaRow = MediaItem & { r2Key?: string | null };
+
+/**
+ * Parse a `releases.media` JSON blob and resolve each entry's `r2Key` into a
+ * signed `r2Url` so the web never sees raw R2 keys. Malformed JSON collapses
+ * to an empty list rather than throwing — one bad row shouldn't blank a page.
+ */
+export function parseReleaseMedia(raw: string | null, mediaOrigin: string): MediaItem[] {
+  if (!raw) return [];
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return [];
+  }
+  if (!Array.isArray(parsed)) return [];
+  return parsed.map((m: RawMediaRow) =>
+    Object.assign({}, m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
+  );
+}
 
 /** Resolve a source by ID (src_ prefix) or slug */
 export function sourceWhere(identifier: string) {
