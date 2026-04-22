@@ -29,8 +29,9 @@ export async function generateMetadata({
     return {
       title: org.name,
       description: `${org.name} changelog releases on Releases`,
-      openGraph: { type: "website" },
+      openGraph: { type: "website", url: `/${orgSlug}` },
       alternates: {
+        canonical: `/${orgSlug}`,
         types: {
           "application/atom+xml": [{ url: `/${orgSlug}.atom`, title: `${org.name} release notes` }],
         },
@@ -121,11 +122,25 @@ export default async function OrgPage({
     },
   ];
 
+  const orgUrl = `https://releases.sh/${orgSlug}`;
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "Organization",
-    name: org.name,
-    url: `https://releases.sh/${orgSlug}`,
+    "@graph": [
+      {
+        "@type": "Organization",
+        name: org.name,
+        url: orgUrl,
+        ...(org.avatarUrl ? { logo: org.avatarUrl, image: org.avatarUrl } : {}),
+        ...(org.domain ? { sameAs: [`https://${org.domain}`] } : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
+          { "@type": "ListItem", position: 2, name: org.name, item: orgUrl },
+        ],
+      },
+    ],
   };
 
   return (

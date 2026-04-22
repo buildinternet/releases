@@ -33,6 +33,14 @@ export default async function HomePage() {
     url: "https://releases.sh",
     description:
       "An agent-friendly API for product changelogs. A unified registry of product releases, available via CLI, API, or MCP.",
+    potentialAction: {
+      "@type": "SearchAction",
+      target: {
+        "@type": "EntryPoint",
+        urlTemplate: "https://releases.sh/search?q={search_term_string}",
+      },
+      "query-input": "required name=search_term_string",
+    },
   };
 
   return (

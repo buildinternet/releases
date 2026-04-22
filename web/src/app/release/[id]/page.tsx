@@ -31,8 +31,10 @@ export async function generateMetadata({
       description: description || `${heading} release notes for ${release.sourceName}`,
       openGraph: {
         type: "article",
+        url: `/release/${id}`,
         publishedTime: release.publishedAt ?? undefined,
       },
+      alternates: { canonical: `/release/${id}` },
     };
   } catch {
     return { title: "Release" };
@@ -82,13 +84,43 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
   const heading = hasVersion ? release.version : release.title;
   const showSubtitle = hasVersion && release.title && !titleMatchesVersion;
 
+  const releaseUrl = `https://releases.sh/release/${id}`;
+  const sourceUrl = `https://releases.sh${sourcePath}`;
+  const breadcrumbItems = [
+    { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
+    ...(release.org
+      ? [
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: release.org.name,
+            item: `https://releases.sh/${release.org.slug}`,
+          },
+          { "@type": "ListItem", position: 3, name: release.sourceName, item: sourceUrl },
+          { "@type": "ListItem", position: 4, name: heading ?? "Release", item: releaseUrl },
+        ]
+      : [
+          { "@type": "ListItem", position: 2, name: release.sourceName, item: sourceUrl },
+          { "@type": "ListItem", position: 3, name: heading ?? "Release", item: releaseUrl },
+        ]),
+  ];
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "Article",
-    headline: heading,
-    datePublished: release.publishedAt ?? undefined,
-    author: { "@type": "Organization", name: release.sourceName },
-    publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
+    "@graph": [
+      {
+        "@type": "Article",
+        headline: heading,
+        datePublished: release.publishedAt ?? undefined,
+        mainEntityOfPage: { "@type": "WebPage", "@id": releaseUrl },
+        url: releaseUrl,
+        author: { "@type": "Organization", name: release.sourceName },
+        publisher: { "@type": "Organization", name: "Releases", url: "https://releases.sh" },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: breadcrumbItems,
+      },
+    ],
   };
 
   return (
