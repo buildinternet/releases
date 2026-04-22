@@ -194,6 +194,9 @@
         "CRON_ENABLED": "false",
         "SCRAPE_AGENT_CRON_ENABLED": "false",
         "SCRAPE_AGENT_MAX_SESSIONS": "0",
+        // Mirrors the prod flag so wrangler doesn't warn about config
+        // drift. Not read in staging (no cron → no `scheduled()` event).
+        "SCRAPE_AGENT_USE_WORKFLOW": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         "RATE_LIMIT_ENABLED": "false",
@@ -240,9 +243,21 @@
         { "new_classes": ["StatusHub"], "tag": "v1" },
         { "new_classes": ["ReleaseHub"], "tag": "v2" },
       ],
-      // No workflow binding in staging — staging doesn't run crons, so the
-      // workflow has nothing to schedule it from. See memory:
-      // feedback_staging_no_crons.md.
+      // Workflow binding for on-demand validation only — no cron trigger
+      // fires it. Kick a manual instance via:
+      //   bunx wrangler workflows trigger scrape-agent-sweep-staging \
+      //     --config workers/api/wrangler.jsonc --env staging \
+      //     '{"scheduledTime": <unix-ms>}'
+      // Staging `CRON_ENABLED=false` short-circuits the workflow at
+      // `run()`, so manual triggers only validate wiring (deploy shape +
+      // workflow binding surface), not pipeline behavior. See issue #482.
+      "workflows": [
+        {
+          "name": "scrape-agent-sweep-staging",
+          "binding": "SCRAPE_AGENT_WORKFLOW",
+          "class_name": "ScrapeAgentSweepWorkflow",
+        },
+      ],
       // Empty cron list. Without this override, Wrangler inherits the
       // top-level schedule and fires scheduled events hourly against staging
       // (CRON_ENABLED=false would short-circuit the handler, but the invocation
