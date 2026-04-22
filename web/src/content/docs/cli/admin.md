@@ -176,7 +176,7 @@ The playbook header (source list, products) regenerates automatically after any 
 
 ## Persisted summaries
 
-On-demand AI summaries and comparisons are exposed via `POST /v1/admin/summaries` and `POST /v1/admin/compare`. A thin CLI wrapper is planned ([see #419](https://github.com/buildinternet/releases/issues/419)) — for now, call the API directly with `curl` and an admin key.
+On-demand AI summaries and comparisons are exposed via `POST /v1/workflows/summarize` and `POST /v1/workflows/compare`. A thin CLI wrapper is planned ([see #419](https://github.com/buildinternet/releases/issues/419)) — for now, call the API directly with `curl` and an admin key.
 
 ## Source health checks
 

@@ -34,7 +34,6 @@ import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedRoutes } from "./routes/admin-embed.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
-import { adminAiRoutes } from "./routes/admin-ai.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
@@ -194,8 +193,6 @@ const adminRoutes = [
   "admin/embed",
   "admin/cron-runs",
   "admin/webhooks",
-  "admin/summaries",
-  "admin/compare",
   "playbook",
   "overview-inputs",
   "workflows",
@@ -267,7 +264,6 @@ v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedRoutes);
 v1.route("/", adminCronRunsRoutes);
 v1.route("/", adminWebhooksRoutes);
-v1.route("/", adminAiRoutes);
 v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);
 
