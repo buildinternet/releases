@@ -394,12 +394,9 @@ export default {
  * The workflow handles CRON_ENABLED internally — keeping that check there
  * means a flag flip mid-fan-out still short-circuits each instance cleanly.
  */
-export const CREATE_BATCH_MAX = 100;
+const CREATE_BATCH_MAX = 100;
 
-export async function fanOutPollAndFetch(
-  env: Env["Bindings"],
-  scheduledTime: number,
-): Promise<void> {
+async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): Promise<void> {
   const db = drizzle(env.DB);
   const due = await queryDueSources(db, new Date());
   if (due.length === 0) {
