@@ -25,6 +25,11 @@
     "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU",
     "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB",
     "ANTHROPIC_WORKER_AGENT_ID": "agent_011CZvdgPKDQ2eRs8gTrLnNA",
+    // Route direct Anthropic SDK calls (extract-deps + managed-agents-session
+    // request helpers) through Cloudflare AI Gateway. The managed-agents
+    // internal loop runs on Anthropic's infra and stays off-gateway.
+    // See docs/architecture/ai-gateway.md. Gateway runs in authenticated mode.
+    "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases/anthropic",
   },
   "containers": [
     {
@@ -75,6 +80,11 @@
       "binding": "CLOUDFLARE_API_TOKEN",
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "CLOUDFLARE_API_TOKEN",
+    },
+    {
+      "binding": "AI_GATEWAY_TOKEN",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "AI_GATEWAY_TOKEN",
     },
   ],
   // ── Staging environment ──────────────────────────────────────────────
