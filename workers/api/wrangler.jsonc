@@ -28,9 +28,11 @@
     // first deploy ships at 5 for bounded blast radius (~$1/sweep worst case).
     "SCRAPE_AGENT_MAX_SESSIONS": "5",
     // Feature flag for the Workflows-based scrape-agent sweep (see issue #482).
-    // Ships "false" — prod cron stays on the inline `scrapeAgentSweep` path.
-    // Flip to "true" once staging validation is clean.
-    "SCRAPE_AGENT_USE_WORKFLOW": "false",
+    // Staging wiring validated in #484 (manual instance trigger, clean
+    // completion). Prod flipped to "true" on 2026-04-22. To roll back,
+    // flip to "false" — `scrapeAgentSweep()` in cron/ is still the
+    // fallback path.
+    "SCRAPE_AGENT_USE_WORKFLOW": "true",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
