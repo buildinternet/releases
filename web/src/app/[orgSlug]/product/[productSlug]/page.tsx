@@ -16,12 +16,14 @@ export async function generateMetadata({
 }: {
   params: Promise<{ orgSlug: string; productSlug: string }>;
 }): Promise<Metadata> {
-  const { productSlug } = await params;
+  const { orgSlug, productSlug } = await params;
   try {
     const product = await getProduct(productSlug);
     return {
       title: product.name,
       description: product.description ?? `${product.name} changelog sources`,
+      openGraph: { type: "website", url: `/${orgSlug}/product/${productSlug}` },
+      alternates: { canonical: `/${orgSlug}/product/${productSlug}` },
     };
   } catch {
     return { title: productSlug };
@@ -62,8 +64,38 @@ export default async function ProductPage({
       : []),
   ];
 
+  const productUrl = `https://releases.sh/${orgSlug}/product/${productSlug}`;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "CollectionPage",
+        name: product.name,
+        url: productUrl,
+        ...(product.description ? { description: product.description } : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
+          {
+            "@type": "ListItem",
+            position: 2,
+            name: orgSlug,
+            item: `https://releases.sh/${orgSlug}`,
+          },
+          { "@type": "ListItem", position: 3, name: product.name, item: productUrl },
+        ],
+      },
+    ],
+  };
+
   return (
     <div className="min-h-screen">
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
       <Header />
       <div className="max-w-4xl mx-auto px-6">
         <div className="pt-5 text-[13px] text-stone-400 dark:text-stone-500">

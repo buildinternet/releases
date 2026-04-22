@@ -7,7 +7,11 @@ import { SearchResults } from "@/components/search-results";
 import { InlineCopyCode } from "@/components/inline-copy-code";
 import type { UnifiedSearchResponse } from "@/lib/api";
 
-export const metadata: Metadata = { title: "Search" };
+export const metadata: Metadata = {
+  title: "Search",
+  alternates: { canonical: "/search" },
+  robots: { index: false, follow: true },
+};
 
 async function SearchContent({ q }: { q?: string }) {
   let results: UnifiedSearchResponse | null = null;

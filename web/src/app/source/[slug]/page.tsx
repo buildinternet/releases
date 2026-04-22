@@ -28,8 +28,9 @@ export async function generateMetadata({
     return {
       title: source.name,
       description: `Release notes and changelog for ${source.name}`,
-      openGraph: { type: "website" },
+      openGraph: { type: "website", url: `/source/${slug}` },
       alternates: {
+        canonical: `/source/${slug}`,
         types: {
           "application/atom+xml": [
             { url: `/source/${slug}.atom`, title: `${source.name} release notes` },
@@ -112,12 +113,24 @@ export default async function IndependentSourcePage({
     },
   ];
 
+  const sourceUrl = `https://releases.sh/source/${slug}`;
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: source.name,
-    softwareVersion: source.latestVersion ?? undefined,
-    url: `https://releases.sh/source/${slug}`,
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        name: source.name,
+        softwareVersion: source.latestVersion ?? undefined,
+        url: sourceUrl,
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
+          { "@type": "ListItem", position: 2, name: source.name, item: sourceUrl },
+        ],
+      },
+    ],
   };
 
   return (

@@ -74,8 +74,9 @@ export async function generateMetadata({
     return {
       title: `${source.name} — ${orgName}`,
       description: `Release notes and changelog for ${source.name} by ${orgName}`,
-      openGraph: { type: "website" },
+      openGraph: { type: "website", url: `/${orgSlug}/${sourceSlug}` },
       alternates: {
+        canonical: `/${orgSlug}/${sourceSlug}`,
         types: {
           "application/atom+xml": [
             {
@@ -156,12 +157,47 @@ export default async function SourcePage({
     },
   ];
 
+  const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: source.name,
-    softwareVersion: source.latestVersion ?? undefined,
-    url: `https://releases.sh/${orgSlug}/${sourceSlug}`,
+    "@graph": [
+      {
+        "@type": "SoftwareApplication",
+        name: source.name,
+        softwareVersion: source.latestVersion ?? undefined,
+        url: sourceUrl,
+        ...(source.org ? { publisher: { "@type": "Organization", name: source.org.name } } : {}),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: "https://releases.sh" },
+          ...(source.org
+            ? [
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: source.org.name,
+                  item: `https://releases.sh/${source.org.slug}`,
+                },
+                {
+                  "@type": "ListItem",
+                  position: 3,
+                  name: source.name,
+                  item: sourceUrl,
+                },
+              ]
+            : [
+                {
+                  "@type": "ListItem",
+                  position: 2,
+                  name: source.name,
+                  item: sourceUrl,
+                },
+              ]),
+        ],
+      },
+    ],
   };
 
   return (
