@@ -10,11 +10,13 @@ on:
         type: choice
         options: [all, api, mcp, discovery, webhooks]
         default: all
-      # Target environment. "staging" is supported for api + mcp only.
-      # Constrained to a choice so the value is one of production|staging;
-      # shell steps reference it through env: to keep interpolation inert.
+      # Target environment for a manual run. On push:main, the api/mcp/discovery
+      # jobs fan out to BOTH prod and staging via matrix (webhooks + the MCP
+      # registry remain prod-only). Constrained to a choice so the value is one
+      # of production|staging; shell steps reference it through env: to keep
+      # interpolation inert.
       environment:
-        description: Target environment
+        description: Target environment (manual run only; push deploys both)
         type: choice
         options: [production, staging]
         default: production
@@ -68,12 +70,17 @@ jobs:
               - 'workers/webhooks/**'
 
   deploy-api:
-    name: Deploy API worker
+    name: Deploy API worker (${{ matrix.environment }})
     needs: changes
     if: |
       (github.event_name == 'push' && needs.changes.outputs.api == 'true') ||
       (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'api'))
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # On push: fan out to prod + staging. On manual dispatch: just the chosen env.
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production", "staging"]') }}
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -95,7 +102,7 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          TARGET_ENV: ${{ inputs.environment }}
+          TARGET_ENV: ${{ matrix.environment }}
         run: |
           if [ "$TARGET_ENV" = "staging" ]; then
             bunx wrangler d1 migrations apply DB --env staging --remote --config workers/api/wrangler.jsonc
@@ -106,16 +113,20 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_ENV_FLAG: ${{ inputs.environment == 'staging' && '--env staging' || '' }}
+          WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
         run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/api/wrangler.jsonc
 
   deploy-mcp:
-    name: Deploy MCP worker
+    name: Deploy MCP worker (${{ matrix.environment }})
     needs: changes
     if: |
       (github.event_name == 'push' && needs.changes.outputs.mcp == 'true') ||
       (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'mcp'))
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production", "staging"]') }}
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -136,19 +147,20 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          WRANGLER_ENV_FLAG: ${{ inputs.environment == 'staging' && '--env staging' || '' }}
+          WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
         run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/mcp/wrangler.jsonc
 
   deploy-discovery:
-    name: Deploy discovery worker
+    name: Deploy discovery worker (${{ matrix.environment }})
     needs: changes
-    # Discovery has no staging env; skip when staging is selected.
     if: |
-      inputs.environment != 'staging' && (
-        (github.event_name == 'push' && needs.changes.outputs.discovery == 'true') ||
-        (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'discovery'))
-      )
+      (github.event_name == 'push' && needs.changes.outputs.discovery == 'true') ||
+      (github.event_name == 'workflow_dispatch' && (inputs.worker == 'all' || inputs.worker == 'discovery'))
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        environment: ${{ github.event_name == 'workflow_dispatch' && fromJSON(format('["{0}"]', inputs.environment)) || fromJSON('["production", "staging"]') }}
     steps:
       - uses: actions/checkout@v6
       - uses: oven-sh/setup-bun@v2
@@ -167,7 +179,8 @@ jobs:
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        run: bunx wrangler deploy --config workers/discovery/wrangler.jsonc
+          WRANGLER_ENV_FLAG: ${{ matrix.environment == 'staging' && '--env staging' || '' }}
+        run: bunx wrangler deploy $WRANGLER_ENV_FLAG --config workers/discovery/wrangler.jsonc
 
   deploy-webhooks:
     name: Deploy webhooks worker
