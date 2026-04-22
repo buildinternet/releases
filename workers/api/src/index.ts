@@ -31,7 +31,7 @@ import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
 import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
-import { adminEmbedRoutes } from "./routes/admin-embed.js";
+import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
@@ -190,7 +190,7 @@ const adminRoutes = [
   "status/fetch-log",
   "status/usage",
   "status/event",
-  "admin/embed",
+  "admin/embed/status",
   "admin/cron-runs",
   "admin/webhooks",
   "playbook",
@@ -261,7 +261,7 @@ v1.route("/knowledge", knowledge); // deprecated — alias for overview/playbook
 v1.route("/", discoverRoutes);
 v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
-v1.route("/", adminEmbedRoutes);
+v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
 v1.route("/", adminWebhooksRoutes);
 v1.route("/", workflowsRoutes);
