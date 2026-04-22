@@ -32,7 +32,7 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Get playbook          | `releases admin playbook <org>`                                                                                                   | `manage_playbook` action "get" with organization                                                                                                                                                                            |
 | Update playbook notes | `releases admin playbook <org> --notes "..."`                                                                                     | `manage_playbook` action "update_notes" with organization, notes                                                                                                                                                            |
 
-Valid categories (pass to `manage_org`/`manage_product`): see the enum in those tool descriptions or your system prompt. `list_categories` (now retired) has been folded into the two tool descriptions.
+Valid categories (pass to `manage_org`/`manage_product`): see the enum in those tool descriptions or your system prompt.
 
 ## Listing Sources
 
