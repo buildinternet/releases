@@ -109,8 +109,8 @@
     { "new_classes": ["ReleaseHub"], "tag": "v2" },
   ],
   // Cloudflare Workflows — durable, retriable multi-step pipelines. See
-  // workers/api/src/workflows/ and issue #482. Binding is present in both
-  // prod and staging so we can kick test instances either side.
+  // workers/api/src/workflows/ and issue #482. Prod-only; staging doesn't
+  // run crons (see memory: feedback_staging_no_crons.md).
   "workflows": [
     {
       "name": "scrape-agent-sweep",
@@ -194,10 +194,6 @@
         "CRON_ENABLED": "false",
         "SCRAPE_AGENT_CRON_ENABLED": "false",
         "SCRAPE_AGENT_MAX_SESSIONS": "0",
-        // Workflow flag is off in staging too — the cron itself is disabled
-        // (CRON_ENABLED=false), so this only matters if we manually trigger
-        // a workflow instance to validate the code path. See issue #482.
-        "SCRAPE_AGENT_USE_WORKFLOW": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         "RATE_LIMIT_ENABLED": "false",
@@ -244,13 +240,9 @@
         { "new_classes": ["StatusHub"], "tag": "v1" },
         { "new_classes": ["ReleaseHub"], "tag": "v2" },
       ],
-      "workflows": [
-        {
-          "name": "scrape-agent-sweep-staging",
-          "binding": "SCRAPE_AGENT_WORKFLOW",
-          "class_name": "ScrapeAgentSweepWorkflow",
-        },
-      ],
+      // No workflow binding in staging — staging doesn't run crons, so the
+      // workflow has nothing to schedule it from. See memory:
+      // feedback_staging_no_crons.md.
       // Empty cron list. Without this override, Wrangler inherits the
       // top-level schedule and fires scheduled events hourly against staging
       // (CRON_ENABLED=false would short-circuit the handler, but the invocation

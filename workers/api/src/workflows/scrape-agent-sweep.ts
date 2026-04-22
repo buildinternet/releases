@@ -1,12 +1,10 @@
 /**
- * Workflow-based replacement for the `scrapeAgentSweep` cron (see
- * `../cron/scrape-agent-sweep.ts`). Same pipeline, same DB side effects —
- * each phase becomes a `step.do` boundary so partial failure doesn't
- * strand the tail of the sweep.
+ * Workflow-based replacement for the `scrapeAgentSweep` cron. Same pipeline,
+ * same DB side effects — each phase becomes a `step.do` boundary so partial
+ * failure doesn't strand the tail of the sweep.
  *
  * Kicked from `scheduled()` when `SCRAPE_AGENT_USE_WORKFLOW=true`. The
- * existing `scrapeAgentSweep(env)` remains the default path and the
- * fallback if the flag is off. See issue #482 for the rollout plan.
+ * existing `scrapeAgentSweep(env)` remains the default path. See issue #482.
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
@@ -84,23 +82,13 @@ const RETRY_DISPATCH = {
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
 
-/**
- * Build a `SweepEnv`-shaped object with a resolved `RELEASED_API_KEY`.
- * `dispatchOne` + `buildReport` + `sendCronReport` all live in the
- * non-workflow path and expect strings, not secret bindings.
- */
-async function resolveDispatchEnv(env: ScrapeAgentSweepWorkflowEnv): Promise<SweepEnv> {
-  const releasedApiKey = (await env.RELEASED_API_KEY?.get()) ?? "";
-  if (!env.DISCOVERY_WORKER) {
-    throw new NonRetryableError("DISCOVERY_WORKER binding missing");
-  }
+/** Shared fields between dispatch and report env shapes. */
+function baseEnvFields(env: ScrapeAgentSweepWorkflowEnv) {
   return {
     DB: env.DB,
     CRON_ENABLED: env.CRON_ENABLED,
     SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
     SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
-    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
-    RELEASED_API_KEY: releasedApiKey,
     ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
     SEND_EMAIL: env.SEND_EMAIL,
     EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
@@ -111,24 +99,31 @@ async function resolveDispatchEnv(env: ScrapeAgentSweepWorkflowEnv): Promise<Swe
 }
 
 /**
- * Build a `SweepEnv` for report/email paths only. No secrets are read by
- * `buildReport` or `sendCronReport`, so we don't bother resolving them.
+ * Resolve a `SweepEnv` for `dispatchOne`. The functions in the non-workflow
+ * path expect resolved strings, not secret bindings. Throws `NonRetryableError`
+ * if `DISCOVERY_WORKER` is missing so the step doesn't retry a permanent gap.
+ */
+async function resolveDispatchEnv(env: ScrapeAgentSweepWorkflowEnv): Promise<SweepEnv> {
+  if (!env.DISCOVERY_WORKER) {
+    throw new NonRetryableError("DISCOVERY_WORKER binding missing");
+  }
+  return {
+    ...baseEnvFields(env),
+    DISCOVERY_WORKER: env.DISCOVERY_WORKER,
+    RELEASED_API_KEY: (await env.RELEASED_API_KEY?.get()) ?? "",
+  };
+}
+
+/**
+ * Resolve a `SweepEnv` for `buildReport` / `sendCronReport`. Neither reads
+ * secrets, so we skip resolving them and stub the worker binding if absent.
  */
 function resolveReportEnv(env: ScrapeAgentSweepWorkflowEnv): SweepEnv {
   return {
-    DB: env.DB,
-    CRON_ENABLED: env.CRON_ENABLED,
-    SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
-    SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
+    ...baseEnvFields(env),
     DISCOVERY_WORKER:
       env.DISCOVERY_WORKER ?? ({ fetch: async () => new Response() } as unknown as Fetcher),
     RELEASED_API_KEY: "",
-    ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
-    SEND_EMAIL: env.SEND_EMAIL,
-    EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
-    EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
-    EMAIL_FROM: env.EMAIL_FROM,
-    ADMIN_BASE_URL: env.ADMIN_BASE_URL,
   };
 }
 
@@ -180,13 +175,12 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
           return { action: "proceed" };
         }
         const gatewayToken = await env.AI_GATEWAY_TOKEN?.get().catch(() => undefined);
-        const result = await runPreflight(apiKey, {
+        // Auth/credits failures are deterministic — surface them as "abort"
+        // rather than burning retries. The workflow exits in the next step.
+        return await runPreflight(apiKey, {
           baseURL: env.ANTHROPIC_BASE_URL,
           gatewayToken,
         });
-        // Auth/credits are deterministic — don't burn retries on them. The
-        // workflow handles "abort" in the next step.
-        return result;
       },
     );
 
@@ -234,15 +228,12 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
 
     const groups = Array.from(groupByOrg(rows).values());
 
-    // Fan-out chunked at CONCURRENCY to preserve parity with the non-workflow
-    // path (`runWithConcurrency`). Workflows don't natively cap `Promise.all`
-    // on `step.do`, so we batch sequentially.
+    // Fan-out chunked at CONCURRENCY. Sequential-by-chunk preserves the
+    // CONCURRENCY=3 cap from the non-workflow path (`runWithConcurrency`) —
+    // flattening to a single Promise.all would fan out every org at once.
     const dispatchResults: DispatchResult[] = [];
     for (let i = 0; i < groups.length; i += CONCURRENCY) {
       const chunk = groups.slice(i, i + CONCURRENCY);
-      // Sequential-by-chunk is intentional: preserve the CONCURRENCY=3 cap
-      // from the non-workflow path (`runWithConcurrency`). Flattening to a
-      // single Promise.all would fan out every org at once.
       // eslint-disable-next-line no-await-in-loop
       const chunkResults = await Promise.all(
         chunk.map((group) => dispatchStep(step, env, sweepCorrelationId, group)),
@@ -297,16 +288,13 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
 }
 
 /**
- * Wrap `dispatchOne` in a retriable step. `dispatchOne` swallows exceptions
- * internally and returns `{ok:false}`, so we translate non-ok into throws
- * here — otherwise step.do would treat every attempt as a success and skip
- * the retry policy. The outer `.catch` converts the final (post-retry)
- * throw back into the DispatchResult shape so `deriveSweepStatus` stays
- * identical to the non-workflow path.
+ * Wrap `dispatchOne` in a retriable `step.do`. Since `dispatchOne` returns
+ * `{ok:false}` instead of throwing, we re-throw on failure so the retry
+ * policy fires. The outer `.catch` converts the final throw back into a
+ * `DispatchResult` so `deriveSweepStatus` works identically to the cron path.
  *
- * 4xx responses other than 429 from the discovery service binding (missing
- * auth, bad payload) are not transient; surface them as `NonRetryableError`
- * so we don't burn attempts on a permanent failure.
+ * 4xx errors other than 429 are permanent; they surface as `NonRetryableError`
+ * to avoid burning retry attempts on bad auth or malformed payloads.
  */
 function dispatchStep(
   step: WorkflowStep,

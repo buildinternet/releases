@@ -313,9 +313,10 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
   });
 
   it("no candidates: writes a done row with notes", async () => {
+    // Empty DB — no sources — so queryCandidates returns 0 rows.
     const sqlite = new Database(":memory:");
-    const db = drizzle(sqlite);
     applyMigrations(sqlite);
+    const db = drizzle(sqlite);
     const env = mkEnv({ _drizzleOverride: db });
     await runWorkflow(env);
     const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
@@ -324,11 +325,11 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
     expect(run.notes).toBe("no flagged sources");
   });
 
-  it("CRON_ENABLED=false: short-circuits without writing a cron_runs row", async () => {
+  async function assertFlagDisabled(flag: keyof ScrapeAgentSweepWorkflowEnv) {
     const db = mkDb();
     let dispatchCount = 0;
     const env = mkEnv({
-      CRON_ENABLED: "false",
+      [flag]: "false",
       DISCOVERY_WORKER: {
         fetch: async () => {
           dispatchCount++;
@@ -339,26 +340,149 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
     });
     await runWorkflow(env);
     expect(dispatchCount).toBe(0);
-    const rows = db.select().from(cronRuns).all();
-    expect(rows.length).toBe(0);
+    expect(db.select().from(cronRuns).all()).toHaveLength(0);
+  }
+
+  it("CRON_ENABLED=false: short-circuits without writing a cron_runs row", () =>
+    assertFlagDisabled("CRON_ENABLED"));
+
+  it("SCRAPE_AGENT_CRON_ENABLED=false: short-circuits without writing a cron_runs row", () =>
+    assertFlagDisabled("SCRAPE_AGENT_CRON_ENABLED"));
+
+  it("cap enforcement: 21 candidates + cap=20 -> 20 dispatched, skipped=1", async () => {
+    const db = mkDb();
+    // mkDb seeds 3 sources across 3 orgs. Add 18 more to reach 21.
+    for (let i = 0; i < 18; i++) {
+      db.insert(organizations)
+        .values({
+          id: `org_cap_${i}`,
+          name: `Cap Org ${i}`,
+          slug: `cap-${i}`,
+          category: "developer-tools",
+        })
+        .run();
+      // Pre-date these so they drain first under ASC ordering.
+      const ts = `2026-04-17T03:${String(i).padStart(2, "0")}:00Z`;
+      db.insert(sources)
+        .values({
+          id: `src_cap_${i}`,
+          name: `C${i}`,
+          slug: `sc-${i}`,
+          type: "scrape",
+          url: `https://cap-${i}.com/c`,
+          orgId: `org_cap_${i}`,
+          changeDetectedAt: ts,
+          metadata: "{}",
+        })
+        .run();
+    }
+    let dispatchCount = 0;
+    const env = mkEnv({
+      SCRAPE_AGENT_MAX_SESSIONS: "20",
+      DISCOVERY_WORKER: {
+        fetch: async () => {
+          dispatchCount++;
+          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), {
+            status: 202,
+          });
+        },
+      } as ScrapeAgentSweepWorkflowEnv["DISCOVERY_WORKER"],
+      _drizzleOverride: db,
+    });
+    await runWorkflow(env);
+    expect(dispatchCount).toBe(20);
+    const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
+    expect(run.candidates).toBe(20);
+    expect(run.skippedOverCap).toBe(1);
   });
 
-  it("SCRAPE_AGENT_CRON_ENABLED=false: short-circuits without writing a cron_runs row", async () => {
+  it("ANTHROPIC_API_KEY missing: preflight proceeds without hitting /v1/models", async () => {
     const db = mkDb();
-    let dispatchCount = 0;
+    let modelsCalls = 0;
+    globalThis.fetch = (async (input: unknown) => {
+      const url = typeof input === "string" ? input : (input as Request).url;
+      if (url.includes("/v1/models")) modelsCalls++;
+      return new Response("{}", { status: 200 });
+    }) as unknown as typeof fetch;
     const env = mkEnv({
-      SCRAPE_AGENT_CRON_ENABLED: "false",
+      ANTHROPIC_API_KEY: undefined,
+      _drizzleOverride: db,
+    });
+    await runWorkflow(env);
+    expect(modelsCalls).toBe(0);
+    const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
+    // 3 orgs from mkDb should still dispatch normally.
+    expect(run.status).toBe("done");
+    expect(run.dispatched).toBe(3);
+  });
+
+  it("DISCOVERY_WORKER missing: dispatch fails non-retryably (1 attempt)", async () => {
+    const db = mkDb();
+    const env = mkEnv({
+      DISCOVERY_WORKER: undefined,
+      _drizzleOverride: db,
+    });
+    const records = await runWorkflow(env);
+    const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
+    // All three dispatches fail permanently — sweep is dispatch_failed.
+    expect(run.status).toBe("dispatch_failed");
+    expect(run.dispatched).toBe(0);
+    expect(run.dispatchErrors).toBe(3);
+    // NonRetryableError from resolveDispatchEnv → single attempt each.
+    for (const dispatch of records.filter((r) => r.name.startsWith("dispatch-"))) {
+      expect(dispatch.attempts).toBe(1);
+      expect(dispatch.ok).toBe(false);
+    }
+  });
+
+  it("concurrency: fans out in chunks of CONCURRENCY=3", async () => {
+    // Seed 7 orgs so chunking is visible: [3, 3, 1].
+    const sqlite = new Database(":memory:");
+    const db = drizzle(sqlite);
+    applyMigrations(sqlite);
+    for (let i = 0; i < 7; i++) {
+      db.insert(organizations)
+        .values({
+          id: `org_cc_${i}`,
+          name: `CC ${i}`,
+          slug: `cc-${i}`,
+          category: "developer-tools",
+        })
+        .run();
+      db.insert(sources)
+        .values({
+          id: `src_cc_${i}`,
+          name: `CC${i}`,
+          slug: `scc-${i}`,
+          type: "scrape",
+          url: `https://cc-${i}.com/c`,
+          orgId: `org_cc_${i}`,
+          changeDetectedAt: `2026-04-18T00:${String(i).padStart(2, "0")}:00Z`,
+          metadata: "{}",
+        })
+        .run();
+    }
+
+    // Track concurrent inflight dispatches by having each fetch hold a
+    // resolvable promise open. The max observed inflight count should be 3.
+    let inflight = 0;
+    let maxInflight = 0;
+    const env = mkEnv({
       DISCOVERY_WORKER: {
         fetch: async () => {
-          dispatchCount++;
-          return new Response("{}", { status: 202 });
+          inflight++;
+          maxInflight = Math.max(maxInflight, inflight);
+          await new Promise((r) => setTimeout(r, 5));
+          inflight--;
+          return new Response(JSON.stringify({ sessionId: "ma" }), { status: 202 });
         },
       } as ScrapeAgentSweepWorkflowEnv["DISCOVERY_WORKER"],
       _drizzleOverride: db,
     });
     await runWorkflow(env);
-    expect(dispatchCount).toBe(0);
-    const rows = db.select().from(cronRuns).all();
-    expect(rows.length).toBe(0);
+    expect(maxInflight).toBeLessThanOrEqual(3);
+    expect(maxInflight).toBeGreaterThan(1);
+    const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
+    expect(run.dispatched).toBe(7);
   });
 });
