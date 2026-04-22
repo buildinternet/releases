@@ -33,7 +33,7 @@ import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
-import { adminWebhooksRoutes } from "./routes/admin-webhooks.js";
+import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
@@ -95,7 +95,7 @@ export type Env = {
     OPENAI_API_KEY?: SecretBinding;
     WEBHOOK_HMAC_MASTER?: SecretBinding;
     // Cloudflare credentials for querying Analytics Engine (webhook deliveries endpoint).
-    // Absent → GET /v1/admin/webhooks/:id/deliveries returns 501.
+    // Absent → GET /v1/webhooks/:id/deliveries returns 501.
     CF_API_TOKEN?: SecretBinding;
     CF_ACCOUNT_ID?: string;
     // Per-IP rate limiter for unauthenticated public reads (see middleware/rate-limit.ts).
@@ -192,7 +192,7 @@ const adminRoutes = [
   "status/event",
   "admin/embed/status",
   "admin/cron-runs",
-  "admin/webhooks",
+  "webhooks",
   "playbook",
   "overview-inputs",
   "workflows",
@@ -263,7 +263,7 @@ v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
-v1.route("/", adminWebhooksRoutes);
+v1.route("/", webhooksRoutes);
 v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);
 

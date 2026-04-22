@@ -84,7 +84,7 @@ mock.module("../src/webhooks/queries.js", () => ({
 
 // Imports must follow mock.module so the route picks up the stub.
 const { Hono } = await import("hono");
-const { adminWebhooksRoutes } = await import("../src/routes/admin-webhooks.js");
+const { webhooksRoutes } = await import("../src/routes/webhooks.js");
 
 const TEST_MASTER_KEY = "a".repeat(64);
 
@@ -104,7 +104,7 @@ function makeApp(opts?: { masterKey?: string | null; withQueue?: boolean }) {
   }
   const app = new Hono();
   const v1 = new Hono();
-  v1.route("/", adminWebhooksRoutes);
+  v1.route("/", webhooksRoutes);
   app.route("/v1", v1);
   return (req: Request) => app.fetch(req, fakeEnv);
 }
@@ -115,11 +115,11 @@ beforeEach(() => {
   nextId = 1;
 });
 
-describe("POST /v1/admin/webhooks", () => {
+describe("POST /v1/webhooks", () => {
   it("creates a subscription and returns id + signing key", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -134,7 +134,7 @@ describe("POST /v1/admin/webhooks", () => {
   it("returns 400 for non-HTTPS URL", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "http://insecure/u" }),
@@ -146,7 +146,7 @@ describe("POST /v1/admin/webhooks", () => {
   it("returns 400 for a malformed URL", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "not-a-url" }),
@@ -158,7 +158,7 @@ describe("POST /v1/admin/webhooks", () => {
   it("returns 400 when orgId is missing", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: "https://example.com/hook" }),
@@ -170,7 +170,7 @@ describe("POST /v1/admin/webhooks", () => {
   it("returns 400 when url is missing", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test" }),
@@ -180,17 +180,17 @@ describe("POST /v1/admin/webhooks", () => {
   });
 });
 
-describe("GET /v1/admin/webhooks", () => {
+describe("GET /v1/webhooks", () => {
   it("returns 200 with the subscriptions seeded for an org", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
       }),
     );
-    const res = await fetch(new Request("https://x.test/v1/admin/webhooks?org=org_test"));
+    const res = await fetch(new Request("https://x.test/v1/webhooks?org=org_test"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { subscriptions: { id: string; orgId: string }[] };
     expect(body.subscriptions).toHaveLength(1);
@@ -199,36 +199,36 @@ describe("GET /v1/admin/webhooks", () => {
 
   it("returns 400 when org param is missing", async () => {
     const fetch = makeApp();
-    const res = await fetch(new Request("https://x.test/v1/admin/webhooks"));
+    const res = await fetch(new Request("https://x.test/v1/webhooks"));
     expect(res.status).toBe(400);
   });
 });
 
-describe("GET /v1/admin/webhooks/:id", () => {
+describe("GET /v1/webhooks/:id", () => {
   it("returns 404 for an unknown id even when other subscriptions exist", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
       }),
     );
-    const res = await fetch(new Request("https://x.test/v1/admin/webhooks/whk_nonexistent"));
+    const res = await fetch(new Request("https://x.test/v1/webhooks/whk_nonexistent"));
     expect(res.status).toBe(404);
   });
 
   it("returns 200 with the subscription for a known id", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
       }),
     );
     const id = store[0].id;
-    const res = await fetch(new Request(`https://x.test/v1/admin/webhooks/${id}`));
+    const res = await fetch(new Request(`https://x.test/v1/webhooks/${id}`));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { id?: string };
     expect(body.id).toBe(id);
@@ -236,14 +236,14 @@ describe("GET /v1/admin/webhooks/:id", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PATCH /v1/admin/webhooks/:id
+// PATCH /v1/webhooks/:id
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("PATCH /v1/admin/webhooks/:id", () => {
+describe("PATCH /v1/webhooks/:id", () => {
   it("returns 404 for an unknown id", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks/whk_nope", {
+      new Request("https://x.test/v1/webhooks/whk_nope", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: "hi" }),
@@ -255,7 +255,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
   it("returns 400 when url is invalid", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -263,7 +263,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
     );
     const id = store[0].id;
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: "not-a-url" }),
@@ -275,7 +275,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
   it("returns 400 when url is HTTP (not HTTPS)", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -283,7 +283,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
     );
     const id = store[0].id;
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ url: "http://insecure.example.com/hook" }),
@@ -295,7 +295,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
   it("returns 400 when no recognized fields are provided", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -303,7 +303,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
     );
     const id = store[0].id;
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ unknownField: "whatever" }),
@@ -315,7 +315,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
   it("resets consecutiveFailures and clears disabledReason when enabled:true", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -328,7 +328,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
     store[0].disabledReason = "auto disabled";
 
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: true }),
@@ -344,7 +344,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
   it("sets disabledReason to 'manually disabled' when enabled:false with no reason", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -353,7 +353,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
     const id = store[0].id;
 
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ enabled: false }),
@@ -368,7 +368,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
   it("updates description and returns fresh subscription", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -377,7 +377,7 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
     const id = store[0].id;
 
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ description: "updated description" }),
@@ -391,14 +391,14 @@ describe("PATCH /v1/admin/webhooks/:id", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DELETE /v1/admin/webhooks/:id
+// DELETE /v1/webhooks/:id
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("DELETE /v1/admin/webhooks/:id", () => {
+describe("DELETE /v1/webhooks/:id", () => {
   it("returns 204 for an existing subscription", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -406,7 +406,7 @@ describe("DELETE /v1/admin/webhooks/:id", () => {
     );
     const id = store[0].id;
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "DELETE",
       }),
     );
@@ -416,7 +416,7 @@ describe("DELETE /v1/admin/webhooks/:id", () => {
   it("subscription is gone after delete (GET returns 404)", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -424,18 +424,18 @@ describe("DELETE /v1/admin/webhooks/:id", () => {
     );
     const id = store[0].id;
     await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}`, {
+      new Request(`https://x.test/v1/webhooks/${id}`, {
         method: "DELETE",
       }),
     );
-    const getRes = await fetch(new Request(`https://x.test/v1/admin/webhooks/${id}`));
+    const getRes = await fetch(new Request(`https://x.test/v1/webhooks/${id}`));
     expect(getRes.status).toBe(404);
   });
 
   it("returns 204 even for an unknown id (idempotent)", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks/whk_doesnotexist", {
+      new Request("https://x.test/v1/webhooks/whk_doesnotexist", {
         method: "DELETE",
       }),
     );
@@ -444,14 +444,14 @@ describe("DELETE /v1/admin/webhooks/:id", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /v1/admin/webhooks/:id/rotate-secret
+// POST /v1/webhooks/:id/rotate-secret
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
+describe("POST /v1/webhooks/:id/rotate-secret", () => {
   it("returns 404 for an unknown id", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks/whk_nope/rotate-secret", {
+      new Request("https://x.test/v1/webhooks/whk_nope/rotate-secret", {
         method: "POST",
       }),
     );
@@ -461,7 +461,7 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
   it("bumps secretVersion to 2 and returns a valid 64-hex signing key", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -471,7 +471,7 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
     expect(store[0].secretVersion).toBe(1);
 
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}/rotate-secret`, {
+      new Request(`https://x.test/v1/webhooks/${id}/rotate-secret`, {
         method: "POST",
       }),
     );
@@ -485,7 +485,7 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
     const fetch = makeApp();
     // First create and get the original signing key
     const createRes = await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -495,7 +495,7 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
     const id = original.id;
 
     const rotateRes = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}/rotate-secret`, {
+      new Request(`https://x.test/v1/webhooks/${id}/rotate-secret`, {
         method: "POST",
       }),
     );
@@ -505,14 +505,14 @@ describe("POST /v1/admin/webhooks/:id/rotate-secret", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// POST /v1/admin/webhooks/:id/test
+// POST /v1/webhooks/:id/test
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("POST /v1/admin/webhooks/:id/test", () => {
+describe("POST /v1/webhooks/:id/test", () => {
   it("returns 404 for an unknown id", async () => {
     const fetch = makeApp();
     const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks/whk_nope/test", {
+      new Request("https://x.test/v1/webhooks/whk_nope/test", {
         method: "POST",
       }),
     );
@@ -522,7 +522,7 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
   it("returns { enqueued: true, eventId } and sends the message to the queue", async () => {
     const fetch = makeApp();
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -531,7 +531,7 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
     const id = store[0].id;
 
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}/test`, {
+      new Request(`https://x.test/v1/webhooks/${id}/test`, {
         method: "POST",
       }),
     );
@@ -558,7 +558,7 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
   it("returns 503 when WEBHOOK_DELIVERY_QUEUE binding is missing", async () => {
     const fetch = makeApp({ withQueue: false });
     await fetch(
-      new Request("https://x.test/v1/admin/webhooks", {
+      new Request("https://x.test/v1/webhooks", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ orgId: "org_test", url: "https://example.com/hook" }),
@@ -568,7 +568,7 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
     const id = store[0].id;
 
     const res = await fetch(
-      new Request(`https://x.test/v1/admin/webhooks/${id}/test`, {
+      new Request(`https://x.test/v1/webhooks/${id}/test`, {
         method: "POST",
       }),
     );
@@ -577,15 +577,13 @@ describe("POST /v1/admin/webhooks/:id/test", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GET /v1/admin/webhooks/:id/deliveries
+// GET /v1/webhooks/:id/deliveries
 // ─────────────────────────────────────────────────────────────────────────────
 
-describe("GET /v1/admin/webhooks/:id/deliveries", () => {
+describe("GET /v1/webhooks/:id/deliveries", () => {
   it("returns 501 when CF_API_TOKEN is absent", async () => {
     const fetch = makeApp();
-    const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks/whk_test0001/deliveries"),
-    );
+    const res = await fetch(new Request("https://x.test/v1/webhooks/whk_test0001/deliveries"));
     expect(res.status).toBe(501);
     const body = (await res.json()) as { error: string; message: string };
     expect(body.error).toBe("deliveries_unavailable");
@@ -603,13 +601,11 @@ describe("GET /v1/admin/webhooks/:id/deliveries", () => {
     const { Hono: H } = await import("hono");
     const app = new H();
     const v1 = new H();
-    v1.route("/", adminWebhooksRoutes);
+    v1.route("/", webhooksRoutes);
     app.route("/v1", v1);
     const fetch = (req: Request) => app.fetch(req, fakeEnv);
 
-    const res = await fetch(
-      new Request("https://x.test/v1/admin/webhooks/not-a-real-id/deliveries"),
-    );
+    const res = await fetch(new Request("https://x.test/v1/webhooks/not-a-real-id/deliveries"));
     expect(res.status).toBe(400);
   });
 });
