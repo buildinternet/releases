@@ -27,6 +27,10 @@
     // Max managed-agent sessions dispatched per sweep. Default 20 once live;
     // first deploy ships at 5 for bounded blast radius (~$1/sweep worst case).
     "SCRAPE_AGENT_MAX_SESSIONS": "5",
+    // Feature flag for the Workflows-based scrape-agent sweep (see issue #482).
+    // Ships "false" — prod cron stays on the inline `scrapeAgentSweep` path.
+    // Flip to "true" once staging validation is clean.
+    "SCRAPE_AGENT_USE_WORKFLOW": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -103,6 +107,16 @@
   "migrations": [
     { "new_classes": ["StatusHub"], "tag": "v1" },
     { "new_classes": ["ReleaseHub"], "tag": "v2" },
+  ],
+  // Cloudflare Workflows — durable, retriable multi-step pipelines. See
+  // workers/api/src/workflows/ and issue #482. Prod-only; staging doesn't
+  // run crons (see memory: feedback_staging_no_crons.md).
+  "workflows": [
+    {
+      "name": "scrape-agent-sweep",
+      "binding": "SCRAPE_AGENT_WORKFLOW",
+      "class_name": "ScrapeAgentSweepWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -226,6 +240,9 @@
         { "new_classes": ["StatusHub"], "tag": "v1" },
         { "new_classes": ["ReleaseHub"], "tag": "v2" },
       ],
+      // No workflow binding in staging — staging doesn't run crons, so the
+      // workflow has nothing to schedule it from. See memory:
+      // feedback_staging_no_crons.md.
       // Empty cron list. Without this override, Wrangler inherits the
       // top-level schedule and fires scheduled events hourly against staging
       // (CRON_ENABLED=false would short-circuit the handler, but the invocation

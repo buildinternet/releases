@@ -43,6 +43,7 @@ import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
+export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -65,6 +66,11 @@ export type Env = {
     CRON_ENABLED?: string;
     SCRAPE_AGENT_CRON_ENABLED?: string;
     SCRAPE_AGENT_MAX_SESSIONS?: string;
+    // Feature flag: when "true", the 01:00 UTC cron kicks a
+    // `SCRAPE_AGENT_WORKFLOW` instance instead of inlining
+    // `scrapeAgentSweep()` in `ctx.waitUntil`. See issue #482.
+    SCRAPE_AGENT_USE_WORKFLOW?: string;
+    SCRAPE_AGENT_WORKFLOW?: Workflow;
     DISCOVERY_WORKER?: Fetcher;
     ANTHROPIC_API_KEY?: SecretBinding;
     // Optional Cloudflare AI Gateway passthrough. When set, all direct Anthropic
@@ -295,6 +301,25 @@ export default {
     if (event.cron === "0 1 * * *") {
       if (!env.DISCOVERY_WORKER) {
         console.warn("[scrape-agent-cron] DISCOVERY_WORKER binding missing; skipping");
+        return;
+      }
+      // Feature-flag the Workflows-based path. Behavior is identical to
+      // the inline sweep — the workflow resolves secrets + runs the same
+      // pipeline step-by-step so a partial failure doesn't strand the
+      // tail of the dispatch list. See issue #482.
+      if (env.SCRAPE_AGENT_USE_WORKFLOW === "true") {
+        if (!env.SCRAPE_AGENT_WORKFLOW) {
+          console.warn(
+            "[scrape-agent-cron] SCRAPE_AGENT_USE_WORKFLOW=true but workflow binding missing; skipping",
+          );
+          return;
+        }
+        ctx.waitUntil(
+          env.SCRAPE_AGENT_WORKFLOW.create({
+            id: `scrape-agent-sweep-${event.scheduledTime}`,
+            params: { scheduledTime: event.scheduledTime },
+          }).then(() => undefined),
+        );
         return;
       }
       const releasesApiKey = await env.RELEASED_API_KEY?.get();

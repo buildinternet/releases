@@ -56,7 +56,7 @@ export type Candidate = {
   changeDetectedAt: string;
 };
 
-type OrgGroup = {
+export type OrgGroup = {
   orgId: string;
   orgSlug: string;
   orgName: string;
@@ -86,7 +86,7 @@ export function groupByOrg(rows: Candidate[]): Map<string, OrgGroup> {
   return groups;
 }
 
-type DispatchResult =
+export type DispatchResult =
   | { orgSlug: string; ok: true; sessionId: string }
   | { orgSlug: string; ok: false; error: string };
 
@@ -183,13 +183,13 @@ export async function queryCandidates(
   };
 }
 
-const CRON_NAME = "scrape-agent-sweep";
-const PREFLIGHT_TIMEOUT_MS = 3000;
-const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000;
-const DEFAULT_MAX_SESSIONS = 20;
-const CONCURRENCY = 3;
+export const CRON_NAME = "scrape-agent-sweep";
+export const PREFLIGHT_TIMEOUT_MS = 3000;
+export const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000;
+export const DEFAULT_MAX_SESSIONS = 20;
+export const CONCURRENCY = 3;
 
-type SweepEnv = EmailEnv & {
+export type SweepEnv = EmailEnv & {
   DB: D1Database;
   CRON_ENABLED?: string;
   SCRAPE_AGENT_CRON_ENABLED?: string;
@@ -333,11 +333,11 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
 
 type ReportBody = Omit<CronReport, "cronName" | "adminBaseUrl">;
 
-function buildReport(env: SweepEnv, body: ReportBody): CronReport {
+export function buildReport(env: SweepEnv, body: ReportBody): CronReport {
   return { cronName: CRON_NAME, adminBaseUrl: env.ADMIN_BASE_URL, ...body };
 }
 
-function parseMaxSessions(raw: string | undefined): number {
+export function parseMaxSessions(raw: string | undefined): number {
   if (!raw) return DEFAULT_MAX_SESSIONS;
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) {
@@ -349,7 +349,7 @@ function parseMaxSessions(raw: string | undefined): number {
   return n;
 }
 
-async function runPreflight(
+export async function runPreflight(
   apiKey: string,
   gatewayOpts: GatewayOptions = {},
 ): Promise<PreflightAction> {
@@ -369,7 +369,7 @@ async function runPreflight(
   }
 }
 
-async function dispatchOne(
+export async function dispatchOne(
   env: SweepEnv,
   sweepCorrelationId: string,
   group: OrgGroup,
