@@ -17,7 +17,7 @@ import { Hono } from "hono";
 import { sql, inArray, eq } from "drizzle-orm";
 import { sources, organizations, releases } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
-import { sourceWhere } from "../utils.js";
+import { sourceWhere, parseReleaseMedia } from "../utils.js";
 import type { Env } from "../index.js";
 import type { D1Db } from "../db.js";
 
@@ -63,6 +63,7 @@ interface RelatedReleaseItem {
   url: string | null;
   publishedAt: string | null;
   summary: string;
+  thumbnail: { url: string; alt?: string } | null;
   score: number;
   source: {
     id: string;
@@ -82,8 +83,13 @@ interface RelatedSourceItem {
   score: number;
   orgSlug: string | null;
   orgName: string | null;
+  orgAvatarUrl: string | null;
   releaseCount: number;
   latestDate: string | null;
+  latestTitle: string | null;
+  latestVersion: string | null;
+  /** Total releases published in the last 30 days (includes the latest). */
+  recentCount: number;
 }
 
 // ── /v1/related/releases ─────────────────────────────────────────────────
@@ -98,6 +104,7 @@ relatedRoutes.get("/related/releases", async (c) => {
   }
   const scope = parseScope(c.req.query("scope"));
   const limit = clampLimit(c.req.query("limit"), 8, 25);
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
   const index = c.env.RELEASES_INDEX as unknown as ReadOnlyVectorizeIndex | undefined;
   if (!index || typeof index.getByIds !== "function") {
@@ -135,9 +142,10 @@ relatedRoutes.get("/related/releases", async (c) => {
     return c.json({ degraded: true as const, degradedReason: "anchor not embedded", items: [] });
   }
 
-  // Over-fetch so we can drop the anchor + any hidden/suppressed rows and
-  // still hit `limit`.
-  const topK = limit + 5;
+  // Over-fetch hard: the web layer reranks semantic score against publishedAt
+  // to bias toward recent items, so give it at least 25 candidates even when
+  // the caller asked for a few.
+  const topK = Math.max(limit * 3, 25);
   const filter: Record<string, unknown> | undefined =
     scope === "org" && anchor.orgId ? { org_id: anchor.orgId } : undefined;
 
@@ -159,7 +167,7 @@ relatedRoutes.get("/related/releases", async (c) => {
     return c.json({ scope, items: [] as RelatedReleaseItem[] });
   }
 
-  const items = await hydrateReleaseNeighbors(db, matches, anchor.id, limit);
+  const items = await hydrateReleaseNeighbors(db, matches, anchor.id, limit, mediaOrigin);
   return c.json({ scope, items });
 });
 
@@ -168,6 +176,7 @@ async function hydrateReleaseNeighbors(
   matches: Array<{ id: string; score: number }>,
   anchorId: string,
   limit: number,
+  mediaOrigin: string,
 ): Promise<RelatedReleaseItem[]> {
   const ids = matches.map((m) => m.id).filter((id) => id !== anchorId);
   if (ids.length === 0) return [];
@@ -179,6 +188,7 @@ async function hydrateReleaseNeighbors(
     url: string | null;
     publishedAt: string | null;
     summary: string;
+    media: string | null;
     sourceId: string;
     sourceSlug: string;
     sourceName: string;
@@ -191,6 +201,7 @@ async function hydrateReleaseNeighbors(
            r.url as url,
            r.published_at as publishedAt,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.media as media,
            s.id as sourceId,
            s.slug as sourceSlug,
            s.name as sourceName,
@@ -222,6 +233,7 @@ async function hydrateReleaseNeighbors(
       url: row.url,
       publishedAt: row.publishedAt,
       summary: row.summary,
+      thumbnail: firstImageThumbnail(row.media, mediaOrigin),
       score: m.score,
       source: {
         id: row.sourceId,
@@ -234,6 +246,23 @@ async function hydrateReleaseNeighbors(
     if (out.length >= limit) break;
   }
   return out;
+}
+
+/**
+ * Pick the first image-like media entry from a parsed media array. Returns
+ * null when the row has no usable image — rail consumers then fall back to
+ * a text-only card.
+ */
+function firstImageThumbnail(
+  raw: string | null,
+  mediaOrigin: string,
+): { url: string; alt?: string } | null {
+  const media = parseReleaseMedia(raw, mediaOrigin);
+  const first = media.find((m) => m.type === "image" || m.type === "gif");
+  if (!first) return null;
+  const url = first.r2Url ?? first.url;
+  if (!url) return null;
+  return first.alt ? { url, alt: first.alt } : { url };
 }
 
 // ── /v1/related/sources ──────────────────────────────────────────────────
@@ -288,7 +317,9 @@ relatedRoutes.get("/related/sources", async (c) => {
   const filter: Record<string, unknown> = { type: "source" };
   if (scope === "org" && anchor.orgId) filter.org_id = anchor.orgId;
 
-  const topK = limit + 5;
+  // Over-fetch so the web layer can rerank by recency without running out
+  // of candidates after hidden/suppressed filtering.
+  const topK = Math.max(limit * 3, 25);
   let matches: Array<{ id: string; score: number }>;
   try {
     const res = await index.query(anchorVector, {
@@ -335,32 +366,63 @@ relatedRoutes.get("/related/sources", async (c) => {
             id: organizations.id,
             slug: organizations.slug,
             name: organizations.name,
+            avatarUrl: organizations.avatarUrl,
           })
           .from(organizations)
           .where(inArray(organizations.id, orgIds))
       : [];
-  const orgById = new Map<string, { slug: string; name: string }>();
-  for (const o of orgRows) orgById.set(o.id, { slug: o.slug, name: o.name });
+  const orgById = new Map<string, { slug: string; name: string; avatarUrl: string | null }>();
+  for (const o of orgRows)
+    orgById.set(o.id, { slug: o.slug, name: o.name, avatarUrl: o.avatarUrl });
 
-  // Release counts + latest date per neighbor source — one aggregate query.
+  // Release stats per neighbor source — a single window-function query so we
+  // can return both the aggregates (release count, latest date, recent count)
+  // and the fields *of* the latest release (title, version) without a second
+  // roundtrip. ROW_NUMBER lets us pick exactly one row per source.
   const visibleIds = [...visibleById.keys()];
-  const statsRows: Array<{ sourceId: string; n: number; latest: string | null }> =
+  const recentCutoffIso = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const statsRows: Array<{
+    sourceId: string;
+    n: number;
+    latest: string | null;
+    latestTitle: string | null;
+    latestVersion: string | null;
+    recentCount: number;
+  }> =
     visibleIds.length > 0
-      ? await db.all<{ sourceId: string; n: number; latest: string | null }>(sql`
-          SELECT r.source_id as sourceId,
-                 COUNT(*) as n,
-                 MAX(r.published_at) as latest
-          FROM releases r
-          WHERE r.source_id IN (${sql.join(
-            visibleIds.map((id) => sql`${id}`),
-            sql`, `,
-          )})
-            AND (r.suppressed IS NULL OR r.suppressed = 0)
-          GROUP BY r.source_id
+      ? await db.all<{
+          sourceId: string;
+          n: number;
+          latest: string | null;
+          latestTitle: string | null;
+          latestVersion: string | null;
+          recentCount: number;
+        }>(sql`
+          SELECT sourceId, n, latest, latestTitle, latestVersion, recentCount
+          FROM (
+            SELECT r.source_id                                               AS sourceId,
+                   r.title                                                   AS latestTitle,
+                   r.version                                                 AS latestVersion,
+                   COUNT(*) OVER (PARTITION BY r.source_id)                  AS n,
+                   MAX(r.published_at) OVER (PARTITION BY r.source_id)       AS latest,
+                   SUM(CASE WHEN r.published_at >= ${recentCutoffIso} THEN 1 ELSE 0 END)
+                     OVER (PARTITION BY r.source_id)                         AS recentCount,
+                   ROW_NUMBER() OVER (
+                     PARTITION BY r.source_id
+                     ORDER BY r.published_at DESC NULLS LAST
+                   )                                                          AS rn
+            FROM releases r
+            WHERE r.source_id IN (${sql.join(
+              visibleIds.map((id) => sql`${id}`),
+              sql`, `,
+            )})
+              AND (r.suppressed IS NULL OR r.suppressed = 0)
+          ) AS ranked
+          WHERE rn = 1
         `)
       : [];
-  const statsById = new Map<string, { n: number; latest: string | null }>();
-  for (const row of statsRows) statsById.set(row.sourceId, { n: row.n, latest: row.latest });
+  const statsById = new Map<string, (typeof statsRows)[number]>();
+  for (const row of statsRows) statsById.set(row.sourceId, row);
 
   const items: RelatedSourceItem[] = [];
   for (const m of matches) {
@@ -378,8 +440,12 @@ relatedRoutes.get("/related/sources", async (c) => {
       score: m.score,
       orgSlug: org?.slug ?? null,
       orgName: org?.name ?? null,
+      orgAvatarUrl: org?.avatarUrl ?? null,
       releaseCount: stats?.n ?? 0,
       latestDate: stats?.latest ?? null,
+      latestTitle: stats?.latestTitle ?? null,
+      latestVersion: stats?.latestVersion ?? null,
+      recentCount: stats?.recentCount ?? 0,
     });
     if (items.length >= limit) break;
   }
