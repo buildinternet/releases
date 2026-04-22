@@ -183,6 +183,9 @@
         // serve a deny-all /robots.txt. Belt-and-suspenders against the
         // staging hostname getting crawled while it sits unprotected.
         "INDEXING_DISABLED": "true",
+        // Route Anthropic SDK calls through Cloudflare AI Gateway.
+        // See docs/architecture/ai-gateway.md. Flip on prod after staging burn-in.
+        "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases-staging/anthropic",
       },
       "d1_databases": [
         {
