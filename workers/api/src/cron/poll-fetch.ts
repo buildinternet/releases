@@ -117,7 +117,10 @@ export async function pollAndFetch(
 
 // ── Query due sources ──
 
-async function queryDueSources(db: ReturnType<typeof drizzle>, now: Date): Promise<Source[]> {
+export async function queryDueSources(
+  db: ReturnType<typeof drizzle>,
+  now: Date,
+): Promise<Source[]> {
   const notPaused = sql`${sources.fetchPriority} != 'paused'`;
   // Include sources that have a feed URL OR are GitHub type (GitHub sources
   // don't store a feedUrl — they use the GitHub releases API directly)
@@ -146,7 +149,7 @@ interface PollResult {
   changed: boolean;
 }
 
-async function pollOne(
+export async function pollOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
   now: Date,
@@ -214,6 +217,12 @@ export interface FetchOneResult {
   durationMs: number;
   status: "success" | "no_change" | "error" | "dry_run";
   error?: string;
+  /**
+   * IDs of newly-inserted release rows (empty when nothing changed).
+   * Populated so callers that opt out of the inline embed / changelog-refresh
+   * side-effects (`opts.skipSideEffects`) can drive those steps themselves.
+   */
+  insertedIds?: string[];
 }
 
 export const DEFAULT_FETCH_MAX_ENTRIES = 200;
@@ -241,13 +250,24 @@ export async function fetchOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
   env: FetchOneEnv,
-  opts?: { sessionId?: string; dryRun?: boolean; maxEntries?: number },
+  opts?: {
+    sessionId?: string;
+    dryRun?: boolean;
+    maxEntries?: number;
+    /**
+     * Skip the inline embed + CHANGELOG-refresh side-effects. Used by the
+     * Workflows path (#486) so those steps can be retried independently.
+     * When true, `insertedIds` is populated on success.
+     */
+    skipSideEffects?: boolean;
+  },
 ): Promise<FetchOneResult> {
   const start = Date.now();
   const meta = getSourceMeta(source);
   const sessionId = opts?.sessionId ?? null;
   const dryRun = opts?.dryRun ?? false;
   const maxEntries = opts?.maxEntries ?? DEFAULT_FETCH_MAX_ENTRIES;
+  const skipSideEffects = opts?.skipSideEffects ?? false;
 
   try {
     let rawReleases: RawRelease[];
@@ -413,7 +433,8 @@ export async function fetchOne(
     // Embed newly-inserted releases as a best-effort side effect. Failure
     // never aborts the fetch. Runs inline rather than in waitUntil because
     // fetchOne is already inside cron / a waitUntil boundary at the callers.
-    if (insertedIds.length > 0 && env.RELEASES_INDEX) {
+    // Workflows path skips this and drives embed from a separate step.
+    if (!skipSideEffects && insertedIds.length > 0 && env.RELEASES_INDEX) {
       try {
         await embedReleasesForSource(db, source, insertedIds, env);
       } catch (err) {
@@ -446,7 +467,8 @@ export async function fetchOne(
 
     // Refresh canonical CHANGELOG file for GitHub sources (mirrors CLI fetch step
     // in src/cli/commands/fetch.ts). Never fail the outer fetch if this errors.
-    if (source.type === "github") {
+    // Workflows path skips this and drives refresh + embed from separate steps.
+    if (!skipSideEffects && source.type === "github") {
       try {
         await refreshChangelogFile(db, source, env.GITHUB_TOKEN, env);
       } catch (err) {
@@ -463,6 +485,7 @@ export async function fetchOne(
       releasesInserted: inserted,
       durationMs: dur,
       status: inserted > 0 ? ("success" as const) : ("no_change" as const),
+      insertedIds,
     };
   } catch (err) {
     console.error(`[cron] Fetch error for ${source.slug}: ${err}`);
@@ -700,14 +723,24 @@ async function fetchOneFile(
  * counts. Callers (cron) wrap this in a try/catch so the outer fetch never
  * fails on a changelog refresh error.
  */
-async function refreshChangelogFile(
+/**
+ * Refresh the GitHub CHANGELOG mirror for a source.
+ *
+ * Historical default: upsert files AND embed changed ones inline (fire-and-
+ * forget). When `opts.skipEmbed` is true, returns the changed file list so
+ * the caller can embed in a separate step (used by the Workflows path in
+ * #486 so the embed retry is independent of the file refresh retry).
+ */
+export async function refreshChangelogFile(
   db: ReturnType<typeof drizzle>,
   source: Source,
   token: string | undefined,
   env: FetchOneEnv,
-): Promise<void> {
+  opts?: { skipEmbed?: boolean },
+): Promise<{ changedFiles: ChangedChangelogFile[] }> {
+  const skipEmbed = opts?.skipEmbed ?? false;
   const match = source.url.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!match) return;
+  if (!match) return { changedFiles: [] };
   const [, owner, rawRepo] = match;
   const repo = rawRepo.replace(/\.git$/, "");
 
@@ -741,7 +774,7 @@ async function refreshChangelogFile(
   requestCount++;
   if (!rootListing) {
     console.log(`[cron] refreshChangelogFile(${source.slug}): 0 files, ${requestCount} requests`);
-    return;
+    return { changedFiles: [] };
   }
   const rootFilename = pickChangelog(rootListing);
   if (rootFilename) {
@@ -886,10 +919,12 @@ async function refreshChangelogFile(
     }
   }
 
-  // Embed changed changelog files into CHANGELOG_CHUNKS_INDEX. Runs inline
-  // (the caller already wraps this function in try/catch) so failures just
-  // log and move on. Skipped when the Vectorize binding is missing.
-  if (changed.length > 0 && env.CHANGELOG_CHUNKS_INDEX) {
+  // Embed changed changelog files into CHANGELOG_CHUNKS_INDEX. Historical
+  // inline path runs best-effort (logged-and-swallowed) so failures don't
+  // stop the outer fetch. When `skipEmbed` is true the caller (e.g. the
+  // Workflows path) handles embed in a separate retriable step. Skipped
+  // either way when the Vectorize binding is missing.
+  if (!skipEmbed && changed.length > 0 && env.CHANGELOG_CHUNKS_INDEX) {
     for (const file of changed) {
       try {
         // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
@@ -910,6 +945,15 @@ async function refreshChangelogFile(
     await db.delete(sourceChangelogFiles).where(eq(sourceChangelogFiles.id, row.id));
     console.log(`[cron] Pruned ${row.path} for ${source.slug}`);
   }
+
+  return { changedFiles: changed };
+}
+
+/** Payload a caller needs to re-embed a changelog file after upsert. */
+export interface ChangedChangelogFile {
+  fileId: string;
+  content: string;
+  contentHash: string;
 }
 
 // ── GitHub fetch (Worker-side) ──
@@ -958,11 +1002,12 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
 // swallowed by the shared helpers in @releases/lib/embed-* so the callers never
 // need to try/catch.
 
-async function embedReleasesForSource(
+export async function embedReleasesForSource(
   db: ReturnType<typeof drizzle>,
   source: Source,
   releaseIds: string[],
   env: FetchOneEnv,
+  opts?: { throwOnError?: boolean },
 ): Promise<void> {
   const embedConfig = await buildEmbedConfig(env);
   if (!embedConfig || !env.RELEASES_INDEX) return;
@@ -1003,6 +1048,7 @@ async function embedReleasesForSource(
     // in metadata variance. Cast is safe at runtime.
     vectorIndex: env.RELEASES_INDEX as VectorizeIndex,
     embedConfig,
+    throwOnError: opts?.throwOnError ?? false,
     onPersisted: async (ids) => {
       if (ids.length === 0) return;
       const now = new Date().toISOString();
@@ -1015,11 +1061,12 @@ async function embedReleasesForSource(
   });
 }
 
-async function embedChangelogFileForSource(
+export async function embedChangelogFileForSource(
   db: ReturnType<typeof drizzle>,
   source: Source,
   file: { fileId: string; content: string; contentHash: string },
   env: FetchOneEnv,
+  opts?: { throwOnError?: boolean },
 ): Promise<void> {
   const embedConfig = await buildEmbedConfig(env);
   if (!embedConfig || !env.CHANGELOG_CHUNKS_INDEX) return;
@@ -1051,6 +1098,7 @@ async function embedChangelogFileForSource(
     })),
     vectorIndex: env.CHANGELOG_CHUNKS_INDEX as VectorizeIndex,
     embedConfig,
+    throwOnError: opts?.throwOnError ?? false,
     onDiff: async ({ diff, embedded }) => {
       const now = new Date().toISOString();
 

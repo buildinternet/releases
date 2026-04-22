@@ -2,12 +2,17 @@
  * Embed + upsert helper for release rows.
  *
  * Called as a side effect on write paths (see src/db/queries.ts#insertReleases
- * and workers/api/src/routes/sources.ts batch insert). The key contract:
+ * and workers/api/src/routes/sources.ts batch insert). Default contract:
  *
  *   **Embedding failure MUST NEVER fail the write.**
  *
  * All errors are caught and logged. Rows whose embedding call failed simply
  * stay with `embedded_at = NULL`; the backfill CLI sweeps them up later.
+ *
+ * Opt-in throwing: callers that can retry the embed (e.g. a Workflows step)
+ * pass `throwOnError: true` to bubble up failures after logging. Any top-level
+ * error OR any failed Vectorize chunk then throws. Chunks are keyed by id, so
+ * retries re-upsert idempotently.
  *
  * Runtime-agnostic: accepts a `VectorizeIndex` binding and an `embedConfig`
  * override so the same helper works inside the API Worker (Vectorize binding)
@@ -46,6 +51,12 @@ export interface EmbedAndUpsertReleasesOptions {
   /** Called after a successful Vectorize upsert with the ids that landed. */
   onPersisted?: (ids: string[]) => Promise<void>;
   logger?: EmbedLogger;
+  /**
+   * When true, any embed/upsert failure re-throws after logging so the caller
+   * can retry (e.g. from a Cloudflare Workflow step). Default false preserves
+   * the historical fire-and-forget contract. See #486.
+   */
+  throwOnError?: boolean;
 }
 
 /** Max characters of fallback content body when no summary is available. */
@@ -87,62 +98,74 @@ function buildMetadata(row: EmbedReleaseInput): Record<string, VectorMetadataVal
  * silently on any failure; inspect the logger output for diagnostics.
  */
 export async function embedAndUpsertReleases(opts: EmbedAndUpsertReleasesOptions): Promise<void> {
-  const { releases, vectorIndex, embedConfig, onPersisted } = opts;
+  const { releases, vectorIndex, embedConfig, onPersisted, throwOnError = false } = opts;
   const logger = opts.logger ?? console;
 
   if (!releases || releases.length === 0) return;
 
+  // Accumulate the first failure across each narrow catch below. Every
+  // failure is logged at its own site; `throwOnError` only re-throws at the
+  // end to avoid double-logging the same error through a wrapping catch.
+  let innerErr: unknown;
+
+  let vectors: number[][];
   try {
     const texts = releases.map(buildReleaseText);
-    const { vectors } = await embedBatch(texts, embedConfig);
-
-    if (vectors.length !== releases.length) {
-      logger.warn(
-        `[embed-releases] vector count mismatch (${vectors.length} vs ${releases.length}) — skipping upsert`,
-      );
-      return;
-    }
-
-    // Vectorize v1 caps upserts at 1000 vectors per call (April 2026). Keep
-    // well under that with a conservative chunk size — most ingest batches
-    // are much smaller anyway.
-    const UPSERT_CHUNK = 500;
-    const persisted: string[] = [];
-    for (let i = 0; i < releases.length; i += UPSERT_CHUNK) {
-      const chunk = releases.slice(i, i + UPSERT_CHUNK);
-      const chunkVectors = vectors.slice(i, i + UPSERT_CHUNK);
-      const upsertPayload = chunk.map((r, idx) => ({
-        id: r.id,
-        values: chunkVectors[idx],
-        metadata: buildMetadata(r),
-      }));
-      try {
-        // oxlint-disable-next-line no-await-in-loop -- Vectorize D1 chunking; chunks must be upserted sequentially to respect batch limits
-        await vectorIndex.upsert(upsertPayload);
-        persisted.push(...chunk.map((r) => r.id));
-      } catch (err) {
-        logger.warn(
-          `[embed-releases] Vectorize upsert failed for chunk of ${chunk.length}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-    }
-
-    if (persisted.length > 0 && onPersisted) {
-      try {
-        await onPersisted(persisted);
-      } catch (err) {
-        logger.warn(
-          `[embed-releases] onPersisted callback failed for ${persisted.length} id(s): ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-      }
-    }
+    ({ vectors } = await embedBatch(texts, embedConfig));
   } catch (err) {
     logger.warn(
       `[embed-releases] embed pipeline failed: ${err instanceof Error ? err.message : String(err)}`,
     );
+    if (throwOnError) throw err;
+    return;
   }
+
+  if (vectors.length !== releases.length) {
+    const msg = `[embed-releases] vector count mismatch (${vectors.length} vs ${releases.length}) — skipping upsert`;
+    logger.warn(msg);
+    if (throwOnError) throw new Error(msg);
+    return;
+  }
+
+  // Vectorize v1 caps upserts at 1000 vectors per call (April 2026). Keep
+  // well under that with a conservative chunk size — most ingest batches
+  // are much smaller anyway.
+  const UPSERT_CHUNK = 500;
+  const persisted: string[] = [];
+  for (let i = 0; i < releases.length; i += UPSERT_CHUNK) {
+    const chunk = releases.slice(i, i + UPSERT_CHUNK);
+    const chunkVectors = vectors.slice(i, i + UPSERT_CHUNK);
+    const upsertPayload = chunk.map((r, idx) => ({
+      id: r.id,
+      values: chunkVectors[idx],
+      metadata: buildMetadata(r),
+    }));
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- Vectorize D1 chunking; chunks must be upserted sequentially to respect batch limits
+      await vectorIndex.upsert(upsertPayload);
+      persisted.push(...chunk.map((r) => r.id));
+    } catch (err) {
+      logger.warn(
+        `[embed-releases] Vectorize upsert failed for chunk of ${chunk.length}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      innerErr ??= err;
+    }
+  }
+
+  if (persisted.length > 0 && onPersisted) {
+    try {
+      await onPersisted(persisted);
+    } catch (err) {
+      logger.warn(
+        `[embed-releases] onPersisted callback failed for ${persisted.length} id(s): ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      innerErr ??= err;
+    }
+  }
+
+  if (throwOnError && innerErr) throw innerErr;
 }

@@ -33,6 +33,11 @@
     // flip to "false" — `scrapeAgentSweep()` in cron/ is still the
     // fallback path.
     "SCRAPE_AGENT_USE_WORKFLOW": "true",
+    // Feature flag for the Workflows-based poll-and-fetch cron (see issue #486).
+    // Ships "false"; when flipped, the 2-hourly cron fans out one
+    // POLL_AND_FETCH_WORKFLOW instance per due source so mid-embed 429s no
+    // longer silently drop Vectorize rows. Rollback: flip to "false".
+    "POLL_FETCH_USE_WORKFLOW": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -119,6 +124,11 @@
       "binding": "SCRAPE_AGENT_WORKFLOW",
       "class_name": "ScrapeAgentSweepWorkflow",
     },
+    {
+      "name": "poll-and-fetch",
+      "binding": "POLL_AND_FETCH_WORKFLOW",
+      "class_name": "PollAndFetchWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -199,6 +209,8 @@
         // Mirrors the prod flag so wrangler doesn't warn about config
         // drift. Not read in staging (no cron → no `scheduled()` event).
         "SCRAPE_AGENT_USE_WORKFLOW": "false",
+        // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #486.
+        "POLL_FETCH_USE_WORKFLOW": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         "RATE_LIMIT_ENABLED": "false",
@@ -258,6 +270,11 @@
           "name": "scrape-agent-sweep-staging",
           "binding": "SCRAPE_AGENT_WORKFLOW",
           "class_name": "ScrapeAgentSweepWorkflow",
+        },
+        {
+          "name": "poll-and-fetch-staging",
+          "binding": "POLL_AND_FETCH_WORKFLOW",
+          "class_name": "PollAndFetchWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the
