@@ -42,7 +42,7 @@ import {
   computeAvgPerWeek,
   heatmapDateRange,
   hydrateMediaUrls,
-  resolveR2Url,
+  parseReleaseMedia,
   parseBoolParam,
 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
@@ -1046,9 +1046,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
-    media: JSON.parse(r.media ?? "[]").map((m: any) =>
-      Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
-    ),
+    media: parseReleaseMedia(r.media, mediaOrigin),
   }));
 
   // Derive latest{Version,Date}. Page 1 uses already-fetched rows; page > 1 uses the parallel query above.
@@ -1413,9 +1411,7 @@ sourceRoutes.get("/releases/:id", async (c) => {
   const org = orgSlug && orgName ? { slug: orgSlug, name: orgName } : null;
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
-  const media = JSON.parse((release.media as string) ?? "[]").map((m: any) =>
-    Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) }),
-  );
+  const media = parseReleaseMedia(release.media as string | null, mediaOrigin);
 
   const hydratedContent = hydrateMediaUrls(release.content as string, mediaOrigin);
   const result = {

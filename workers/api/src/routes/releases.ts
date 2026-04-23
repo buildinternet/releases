@@ -4,7 +4,7 @@ import { createDb } from "../db.js";
 import { releases, organizations, sources } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
-import { orgWhere, sourceWhere, parseBoolParam, resolveR2Url } from "../utils.js";
+import { orgWhere, sourceWhere, parseBoolParam, parseReleaseMedia } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
 import {
   buildLatestCacheKey,
@@ -110,13 +110,7 @@ releaseRoutes.get("/releases/latest", async (c) => {
       summary: r.content_summary,
       publishedAt: r.published_at,
       url: r.url,
-      media: (() => {
-        try {
-          return JSON.parse(r.media ?? "[]");
-        } catch {
-          return [];
-        }
-      })().map((m: any) => Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) })),
+      media: parseReleaseMedia(r.media, mediaOrigin),
       source: {
         slug: r.source_slug,
         name: r.source_name,

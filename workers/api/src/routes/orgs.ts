@@ -23,7 +23,7 @@ import {
   orgWhere,
   heatmapDateRange,
   hydrateMediaUrls,
-  resolveR2Url,
+  parseReleaseMedia,
   parseBoolParam,
   replaceAliases,
 } from "../utils.js";
@@ -922,13 +922,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
-    media: (() => {
-      try {
-        return JSON.parse(r.media ?? "[]");
-      } catch {
-        return [];
-      }
-    })().map((m: any) => Object.assign(m, { r2Url: resolveR2Url(m.r2Key, mediaOrigin) })),
+    media: parseReleaseMedia(r.media, mediaOrigin),
     source: {
       slug: r.source_slug,
       name: r.source_name,
