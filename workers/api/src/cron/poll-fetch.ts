@@ -20,6 +20,7 @@ import {
 import type { SourceMetadata } from "@releases/adapters/feed.js";
 import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { normalizeMediaUrl } from "@releases/lib/media-url.js";
 import { embedAndUpsertChangelogFile } from "@releases/lib/embed-changelog-pipeline.js";
@@ -746,10 +747,10 @@ export async function refreshChangelogFile(
 
   const apiHeaders: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "releases/0.1",
+    "User-Agent": RELEASES_BOT_UA,
   };
   if (token) apiHeaders.Authorization = `Bearer ${token}`;
-  const rawHeaders: Record<string, string> = { "User-Agent": "releases/0.1" };
+  const rawHeaders: Record<string, string> = { "User-Agent": RELEASES_BOT_UA };
   if (token) rawHeaders.Authorization = `Bearer ${token}`;
 
   let requestCount = 0;
@@ -966,7 +967,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
 
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
-    "User-Agent": "releases/0.1",
+    "User-Agent": RELEASES_BOT_UA,
   };
   if (token) headers.Authorization = `Bearer ${token}`;
 

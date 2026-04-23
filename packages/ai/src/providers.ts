@@ -1,4 +1,5 @@
 import { logger } from "@buildinternet/releases-lib/logger";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 // ── Provider definitions ─────────────────────────────────────────────
 
@@ -374,7 +375,7 @@ async function fetchHttpSignals(url: string): Promise<HttpSignals | null> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 10_000);
     const res = await fetch(url, {
-      headers: { "User-Agent": "releases/0.1", Accept: "text/html" },
+      headers: { "User-Agent": RELEASES_BOT_UA, Accept: "text/html" },
       redirect: "follow",
       signal: controller.signal,
     });

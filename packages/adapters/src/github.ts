@@ -4,6 +4,7 @@ import { config } from "@releases/lib/config";
 import { AdapterError } from "@releases/lib/errors";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { sha256Hex } from "@releases/core-internal/hash";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 function parseOwnerRepo(url: string): { owner: string; repo: string } {
   const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
@@ -204,9 +205,12 @@ export async function fetchChangelogFiles(source: Source): Promise<FetchedChange
   }
 
   const token = config.githubToken();
-  const apiHeaders: Record<string, string> = { Accept: "application/vnd.github+json" };
+  const apiHeaders: Record<string, string> = {
+    Accept: "application/vnd.github+json",
+    "User-Agent": RELEASES_BOT_UA,
+  };
   if (token) apiHeaders.Authorization = `Bearer ${token}`;
-  const rawHeaders: Record<string, string> = {};
+  const rawHeaders: Record<string, string> = { "User-Agent": RELEASES_BOT_UA };
   if (token) rawHeaders.Authorization = `Bearer ${token}`;
 
   const cache: ListingCache = { map: new Map() };
@@ -364,6 +368,7 @@ export async function detectChangelogUrl(source: Source): Promise<string | null>
 
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
+    "User-Agent": RELEASES_BOT_UA,
   };
   if (token) {
     headers.Authorization = `Bearer ${token}`;
@@ -414,6 +419,7 @@ export const github: Adapter = {
 
     const headers: Record<string, string> = {
       Accept: "application/vnd.github+json",
+      "User-Agent": RELEASES_BOT_UA,
     };
     if (token) {
       headers.Authorization = `Bearer ${token}`;

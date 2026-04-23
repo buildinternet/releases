@@ -26,6 +26,7 @@ import {
   type KnownRelease,
   type MappedEntry,
 } from "@releases/adapters/extract";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { buildWorkerExtractDeps } from "./extract-deps-worker.js";
 
 /**
@@ -161,7 +162,7 @@ async function writeFetchLog(
 async function fetchMarkdownUrl(url: string): Promise<string | null> {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "releases/0.1 (+https://releases.sh)" },
+      headers: { "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
       signal: AbortSignal.timeout(30_000),
     });
