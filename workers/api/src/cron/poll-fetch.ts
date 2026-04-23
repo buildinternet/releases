@@ -19,7 +19,7 @@ import {
   FEED_4XX_INVALIDATE_THRESHOLD,
   CLEARED_FEED_FIELDS,
 } from "@releases/adapters/feed.js";
-import type { SourceMetadata } from "@releases/adapters/feed.js";
+import type { SourceMetadata, ChangeStatus } from "@releases/adapters/feed.js";
 import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
 import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
@@ -309,6 +309,24 @@ async function pollScrapeOrAgentByQuirk(
     );
   };
 
+  // Persist a detector outcome: merge any new validators into metadata, set
+  // `changeDetectedAt` when the probe detected a change, and always bump
+  // `lastPolledAt`. Returns the `changed` flag the caller threads into the
+  // PollResult.
+  const persistOutcome = async (
+    metaUpdates: Partial<SourceMetadata>,
+    status: ChangeStatus,
+  ): Promise<boolean> => {
+    const changed = status === "changed" || status === "unknown";
+    const updates: Record<string, unknown> = { lastPolledAt: nowIso };
+    if (Object.keys(metaUpdates).length > 0) {
+      updates.metadata = JSON.stringify({ ...meta, ...metaUpdates });
+    }
+    if (changed) updates.changeDetectedAt = nowIso;
+    await db.update(sources).set(updates).where(eq(sources.id, source.id));
+    return changed;
+  };
+
   if (!quirk || quirk.changeDetector === "unreliable") {
     await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
     logOutcome(quirk?.changeDetector ?? "none", "skipped");
@@ -316,47 +334,45 @@ async function pollScrapeOrAgentByQuirk(
   }
 
   const probeUrl = quirk.changeProbeUrl ?? source.url;
+  const detector = quirk.changeDetector;
 
   try {
-    if (quirk.changeDetector === "body-hash") {
-      const result = await bodyHashCheck(probeUrl, meta.pageContentHash);
-      const metaUpdates: Partial<SourceMetadata> = {};
-      if (result.contentHash) metaUpdates.pageContentHash = result.contentHash;
-      const updates: Record<string, unknown> = { lastPolledAt: nowIso };
-      if (Object.keys(metaUpdates).length > 0) {
-        updates.metadata = JSON.stringify({ ...meta, ...metaUpdates });
+    let metaUpdates: Partial<SourceMetadata>;
+    let status: ChangeStatus;
+
+    switch (detector) {
+      case "body-hash": {
+        const result = await bodyHashCheck(probeUrl, meta.pageContentHash);
+        metaUpdates = {};
+        if (result.contentHash) metaUpdates.pageContentHash = result.contentHash;
+        status = result.status;
+        break;
       }
-      const changed = result.status === "changed" || result.status === "unknown";
-      if (changed) updates.changeDetectedAt = nowIso;
-      await db.update(sources).set(updates).where(eq(sources.id, source.id));
-      logOutcome("body-hash", result.status === "changed" ? "changed" : "unchanged");
-      return { source, changed };
+      // etag + content-length both share `headCheckUrl` — the detector name
+      // is really a hint about *which* header the source offers reliably,
+      // not a different probe.
+      case "etag":
+      case "content-length": {
+        const result = await headCheckUrl(probeUrl, {
+          etag: meta.pageEtag,
+          lastModified: meta.pageLastModified,
+          contentLength: meta.pageContentLength,
+        });
+        metaUpdates = {};
+        if (result.etag) metaUpdates.pageEtag = result.etag;
+        if (result.lastModified) metaUpdates.pageLastModified = result.lastModified;
+        if (result.contentLength) metaUpdates.pageContentLength = result.contentLength;
+        status = result.status;
+        break;
+      }
     }
 
-    // etag + content-length both share `headCheckUrl` — the detector name is
-    // really a hint about *which* header the source offers reliably, not a
-    // different probe.
-    const result = await headCheckUrl(probeUrl, {
-      etag: meta.pageEtag,
-      lastModified: meta.pageLastModified,
-      contentLength: meta.pageContentLength,
-    });
-    const metaUpdates: Partial<SourceMetadata> = {};
-    if (result.etag) metaUpdates.pageEtag = result.etag;
-    if (result.lastModified) metaUpdates.pageLastModified = result.lastModified;
-    if (result.contentLength) metaUpdates.pageContentLength = result.contentLength;
-    const updates: Record<string, unknown> = { lastPolledAt: nowIso };
-    if (Object.keys(metaUpdates).length > 0) {
-      updates.metadata = JSON.stringify({ ...meta, ...metaUpdates });
-    }
-    const changed = result.status === "changed" || result.status === "unknown";
-    if (changed) updates.changeDetectedAt = nowIso;
-    await db.update(sources).set(updates).where(eq(sources.id, source.id));
-    logOutcome(quirk.changeDetector, result.status === "changed" ? "changed" : "unchanged");
+    const changed = await persistOutcome(metaUpdates, status);
+    logOutcome(detector, status === "changed" ? "changed" : "unchanged");
     return { source, changed };
   } catch (err) {
     await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
-    logOutcome(quirk.changeDetector, "error", `err="${err instanceof Error ? err.message : err}"`);
+    logOutcome(detector, "error", `err="${err instanceof Error ? err.message : err}"`);
     return { source, changed: false };
   }
 }

@@ -35,6 +35,7 @@ mock.module("@releases/adapters/feed.js", () => ({
   getSourceMeta: (src: { metadata: string | null }) =>
     src.metadata ? JSON.parse(src.metadata) : {},
   headCheckUrl: async () => ({ changed: true }),
+  bodyHashCheck: async () => ({ status: "unchanged", responseMs: 0 }),
   fetchAndParseFeed: async (
     url: string,
     feedType: string,
