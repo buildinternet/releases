@@ -176,6 +176,23 @@ Write notes during onboarding after you've fetched and validated sources. Update
 
 **Updating notes:** Use `manage_playbook` action "update_notes" with the complete notes content — it replaces the entire notes section. You can rewrite, reorganize, or clear notes at any time.
 
+**Frontmatter (typed config):** If the existing notes begin with a YAML frontmatter fence (`---` lines at the very top), preserve that block verbatim when you update. It carries typed configuration that cron code reads directly — e.g. `fetchQuirks` per-source change-detector hints. Write your markdown _below_ the closing `---`. Example:
+
+```markdown
+---
+fetchQuirks:
+  brex:
+    changeDetector: etag
+    rationale: ETag stable across HEADs
+---
+
+### Fetch instructions
+
+(your prose notes here)
+```
+
+Only edit the fence when a source's fetch behavior genuinely changes (e.g. you verified a new ETag stability, or the site switched to SSR). Valid `changeDetector` values: `etag`, `content-length`, `body-hash`, `unreliable`. Optional keys: `tier` (`normal` | `low`), `changeProbeUrl` (alternate HEAD target).
+
 **Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `manage_source` action "edit" with metadata — the header updates automatically.
 
 **Product context:** Playbooks group sources by product when products are configured. Some sources (like an org's engineering blog) aren't tied to a specific product but may contain content relevant to any product under that org — the playbook calls these out as "Organization-Level Sources" with a note about which products they may cover.

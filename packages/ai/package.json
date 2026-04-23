@@ -10,6 +10,8 @@
   },
   "dependencies": {
     "@buildinternet/releases-core": "workspace:*",
-    "@releases/adapters": "workspace:*"
+    "@releases/adapters": "workspace:*",
+    "yaml": "^2.8.3",
+    "zod": "^4.3.6"
   }
 }
