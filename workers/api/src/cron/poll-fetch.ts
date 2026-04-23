@@ -6,18 +6,21 @@ import {
   fetchLog,
   sourceChangelogFiles,
   sourceChangelogChunks,
+  knowledgePages,
 } from "@buildinternet/releases-core/schema";
 import { countTokensSafe } from "@buildinternet/releases-core/tokens";
 import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import {
-  headCheckFeed,
+  headCheckUrl,
+  bodyHashCheck,
   fetchAndParseFeed,
   getSourceMeta,
   FEED_4XX_INVALIDATE_THRESHOLD,
   CLEARED_FEED_FIELDS,
 } from "@releases/adapters/feed.js";
-import type { SourceMetadata } from "@releases/adapters/feed.js";
+import type { SourceMetadata, ChangeStatus } from "@releases/adapters/feed.js";
+import { loadFetchQuirks, type FetchQuirk } from "@releases/ai-internal/playbook";
 import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
@@ -48,7 +51,12 @@ const FETCH_CONCURRENCY = 3;
 // ── Main entry point ──
 
 export async function pollAndFetch(
-  env: FetchOneEnv & InvalidationEnv & { DB: D1Database; CRON_ENABLED?: string },
+  env: FetchOneEnv &
+    InvalidationEnv & {
+      DB: D1Database;
+      CRON_ENABLED?: string;
+      SCRAPE_CHANGE_DETECT_ENABLED?: string;
+    },
 ): Promise<void> {
   if (env.CRON_ENABLED === "false") {
     console.log("[cron] Disabled via CRON_ENABLED=false, skipping");
@@ -57,16 +65,26 @@ export async function pollAndFetch(
 
   const db = drizzle(env.DB);
   const now = new Date();
+  const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";
 
   // Query sources due for a poll
-  const dueSources = await queryDueSources(db, now);
+  const dueSources = await queryDueSources(db, now, { changeDetectEnabled });
   if (dueSources.length === 0) return;
 
   console.log(`[cron] Polling ${dueSources.length} due source(s)`);
 
+  // Pre-load playbook notes once per distinct org so `pollOne`'s fetchQuirks
+  // lookup doesn't fan out into N queries. Empty when the flag is off.
+  const playbookNotesByOrg = changeDetectEnabled
+    ? await loadPlaybookNotesForSources(db, dueSources)
+    : new Map<string, string | null>();
+
   // Poll phase: HEAD checks
   const pollResults = await runWithConcurrency(dueSources, POLL_CONCURRENCY, async (source) => {
-    return pollOne(db, source, now);
+    return pollOne(db, source, now, {
+      changeDetectEnabled,
+      playbookNotes: source.orgId ? (playbookNotesByOrg.get(source.orgId) ?? null) : null,
+    });
   });
 
   // Fetch phase: fetch changed feed/github sources, plus scrape sources
@@ -121,11 +139,18 @@ export async function pollAndFetch(
 export async function queryDueSources(
   db: ReturnType<typeof drizzle>,
   now: Date,
+  opts?: { changeDetectEnabled?: boolean },
 ): Promise<Source[]> {
   const notPaused = sql`${sources.fetchPriority} != 'paused'`;
   // Include sources that have a feed URL OR are GitHub type (GitHub sources
-  // don't store a feedUrl — they use the GitHub releases API directly)
-  const pollable = sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL OR ${sources.type} = 'github')`;
+  // don't store a feedUrl — they use the GitHub releases API directly).
+  // Behind SCRAPE_CHANGE_DETECT_ENABLED (#517), also include scrape/agent
+  // sources with no feedUrl — `pollOne` routes those to a detector from the
+  // playbook's `fetchQuirks` (unreliable class is a no-op, so the widened
+  // filter doesn't explode poll volume).
+  const pollable = opts?.changeDetectEnabled
+    ? sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL OR ${sources.type} = 'github' OR ${sources.type} IN ('scrape','agent'))`
+    : sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL OR ${sources.type} = 'github')`;
 
   // Build OR conditions for each tier using sql template to avoid enum type issues
   const tierConditions = (Object.keys(TIER_INTERVALS) as PollTier[]).map((tier) => {
@@ -150,10 +175,35 @@ interface PollResult {
   changed: boolean;
 }
 
+/**
+ * Batch-load playbook notes for every distinct org represented in `due`.
+ * Returns a map keyed by `orgId`; orgs with no playbook row map to `null`.
+ * The cost is one D1 query no matter how many sources are due.
+ */
+export async function loadPlaybookNotesForSources(
+  db: ReturnType<typeof drizzle>,
+  due: Source[],
+): Promise<Map<string, string | null>> {
+  const orgIds = [...new Set(due.map((s) => s.orgId).filter((id): id is string => !!id))];
+  const result = new Map<string, string | null>();
+  if (orgIds.length === 0) return result;
+
+  const rows = await db
+    .select({ orgId: knowledgePages.orgId, notes: knowledgePages.notes })
+    .from(knowledgePages)
+    .where(and(eq(knowledgePages.scope, "playbook"), inArray(knowledgePages.orgId, orgIds)));
+
+  for (const row of rows) {
+    if (row.orgId) result.set(row.orgId, row.notes);
+  }
+  return result;
+}
+
 export async function pollOne(
   db: ReturnType<typeof drizzle>,
   source: Source,
   now: Date,
+  opts?: { changeDetectEnabled?: boolean; playbookNotes?: string | null },
 ): Promise<PollResult> {
   const nowIso = now.toISOString();
   const meta = getSourceMeta(source);
@@ -168,13 +218,24 @@ export async function pollOne(
     return { source, changed: true };
   }
 
+  // Scrape-no-feed / agent: route via the playbook's fetchQuirks entry.
+  // The flag gates both this branch and the pollable filter that admitted
+  // the source; with the flag off, queryDueSources wouldn't have returned it.
+  if (!meta.feedUrl && (source.type === "scrape" || source.type === "agent")) {
+    if (!opts?.changeDetectEnabled) {
+      await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
+      return { source, changed: false };
+    }
+    return pollScrapeOrAgentByQuirk(db, source, meta, now, opts.playbookNotes ?? null);
+  }
+
   if (!meta.feedUrl) {
     await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
     return { source, changed: false };
   }
 
   try {
-    const result = await headCheckFeed(meta.feedUrl, {
+    const result = await headCheckUrl(meta.feedUrl, {
       etag: meta.feedEtag,
       lastModified: meta.feedLastModified,
       contentLength: meta.feedContentLength,
@@ -206,6 +267,112 @@ export async function pollOne(
     // Don't let one source failure stop the whole cron
     console.error(`[cron] Poll error for ${source.slug}: ${err}`);
     await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
+    return { source, changed: false };
+  }
+}
+
+/**
+ * Change-detector branch for scrape-no-feed and agent sources. Routes via
+ * the playbook's `fetchQuirks[source.slug]` entry (#516 schema):
+ *
+ *   etag / content-length → `headCheckUrl` against the page URL with
+ *                           `page*` validators stored in metadata.
+ *   body-hash             → GET + SHA-256 against `pageContentHash`.
+ *   unreliable            → no-op; Phase 3 force-drain cron handles these.
+ *   absent                → no-op; source is stranded until populated.
+ *
+ * On a detected change the function sets `changeDetectedAt` (the scrape-
+ * agent sweep cron then drains it) and persists fresh validators in
+ * metadata. Always logs `detector=<x> outcome=<unchanged|changed|error>`
+ * so the poll-and-fetch Workflow step-level view stays the single source
+ * of truth for what happened on this cron tick.
+ */
+async function pollScrapeOrAgentByQuirk(
+  db: ReturnType<typeof drizzle>,
+  source: Source,
+  meta: SourceMetadata,
+  now: Date,
+  playbookNotes: string | null,
+): Promise<PollResult> {
+  const nowIso = now.toISOString();
+  const start = Date.now();
+  const quirk = loadFetchQuirks(playbookNotes, source.slug);
+
+  const logOutcome = (
+    detector: FetchQuirk["changeDetector"] | "none",
+    outcome: "unchanged" | "changed" | "error" | "skipped",
+    extra?: string,
+  ) => {
+    const durationMs = Date.now() - start;
+    console.log(
+      `[cron] Poll ${source.slug}: detector=${detector} outcome=${outcome} durationMs=${durationMs}${extra ? ` ${extra}` : ""}`,
+    );
+  };
+
+  // Persist a detector outcome: merge any new validators into metadata, set
+  // `changeDetectedAt` when the probe detected a change, and always bump
+  // `lastPolledAt`. Returns the `changed` flag the caller threads into the
+  // PollResult.
+  const persistOutcome = async (
+    metaUpdates: Partial<SourceMetadata>,
+    status: ChangeStatus,
+  ): Promise<boolean> => {
+    const changed = status === "changed" || status === "unknown";
+    const updates: Record<string, unknown> = { lastPolledAt: nowIso };
+    if (Object.keys(metaUpdates).length > 0) {
+      updates.metadata = JSON.stringify({ ...meta, ...metaUpdates });
+    }
+    if (changed) updates.changeDetectedAt = nowIso;
+    await db.update(sources).set(updates).where(eq(sources.id, source.id));
+    return changed;
+  };
+
+  if (!quirk || quirk.changeDetector === "unreliable") {
+    await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
+    logOutcome(quirk?.changeDetector ?? "none", "skipped");
+    return { source, changed: false };
+  }
+
+  const probeUrl = quirk.changeProbeUrl ?? source.url;
+  const detector = quirk.changeDetector;
+
+  try {
+    let metaUpdates: Partial<SourceMetadata>;
+    let status: ChangeStatus;
+
+    switch (detector) {
+      case "body-hash": {
+        const result = await bodyHashCheck(probeUrl, meta.pageContentHash);
+        metaUpdates = {};
+        if (result.contentHash) metaUpdates.pageContentHash = result.contentHash;
+        status = result.status;
+        break;
+      }
+      // etag + content-length both share `headCheckUrl` — the detector name
+      // is really a hint about *which* header the source offers reliably,
+      // not a different probe.
+      case "etag":
+      case "content-length": {
+        const result = await headCheckUrl(probeUrl, {
+          etag: meta.pageEtag,
+          lastModified: meta.pageLastModified,
+          contentLength: meta.pageContentLength,
+        });
+        metaUpdates = {};
+        if (result.etag) metaUpdates.pageEtag = result.etag;
+        if (result.lastModified) metaUpdates.pageLastModified = result.lastModified;
+        if (result.contentLength) metaUpdates.pageContentLength = result.contentLength;
+        status = result.status;
+        break;
+      }
+    }
+
+    const changed = await persistOutcome(metaUpdates, status);
+    logOutcome(detector, status === "changed" ? "changed" : "unchanged");
+    return { source, changed };
+  } catch (err) {
+    await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
+    logOutcome(detector, "error", `err="${err instanceof Error ? err.message : err}"`);
     return { source, changed: false };
   }
 }

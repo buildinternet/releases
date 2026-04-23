@@ -38,6 +38,12 @@
     // per due source (gated by tier: normal=4h, low=24h) so mid-embed 429s no
     // longer silently drop Vectorize rows. Rollback: flip to "false".
     "POLL_FETCH_USE_WORKFLOW": "true",
+    // Feature flag for scrape-no-feed / agent change detection (#517). When
+    // true, `queryDueSources` widens its filter to include type IN
+    // ('scrape','agent') AND feedUrl IS NULL, and `pollOne` routes each via
+    // the detector specified in the playbook's `fetchQuirks` frontmatter
+    // (#516). Default "false" — flip after canary validates.
+    "SCRAPE_CHANGE_DETECT_ENABLED": "false",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -211,6 +217,8 @@
         "SCRAPE_AGENT_USE_WORKFLOW": "false",
         // Mirrors prod flag; not read in staging (CRON_ENABLED=false). See #486.
         "POLL_FETCH_USE_WORKFLOW": "false",
+        // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #517.
+        "SCRAPE_CHANGE_DETECT_ENABLED": "false",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         "RATE_LIMIT_ENABLED": "false",
