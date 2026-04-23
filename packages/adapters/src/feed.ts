@@ -1,6 +1,7 @@
 import type { RawRelease, FetchOptions } from "@releases/adapters/types";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { FeedHttpError } from "@releases/lib/errors";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 // Re-export source-meta helpers so consumers can pull everything feed-related
 // from a single path.
@@ -124,7 +125,7 @@ const HEAD_DISCOVERY_BYTE_CAP = 512_000;
 async function discoverFromHead(pageUrl: string): Promise<DiscoveredFeed | null> {
   try {
     const res = await fetch(pageUrl, {
-      headers: { Accept: "text/html", "User-Agent": "releases/0.1" },
+      headers: { Accept: "text/html", "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
     });
     if (!res.ok || !res.body) return null;
@@ -157,7 +158,7 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
   const res = await fetch(probeUrl, {
     method: "HEAD",
     redirect: "follow",
-    headers: { "User-Agent": "releases/0.1" },
+    headers: { "User-Agent": RELEASES_BOT_UA },
   });
   if (!res.ok) return null;
 
@@ -169,7 +170,7 @@ async function probeFeedPath(origin: string, path: string): Promise<DiscoveredFe
     const getRes = await fetch(probeUrl, {
       redirect: "follow",
       headers: {
-        "User-Agent": "releases/0.1",
+        "User-Agent": RELEASES_BOT_UA,
         Accept:
           "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
       },
@@ -238,7 +239,7 @@ export async function fetchAndParseFeed(
   contentLength?: string;
 }> {
   const reqHeaders: Record<string, string> = {
-    "User-Agent": "releases/0.1",
+    "User-Agent": RELEASES_BOT_UA,
     Accept:
       "application/rss+xml, application/atom+xml, application/feed+json, application/xml, text/xml",
     ...headers,
@@ -324,7 +325,7 @@ export async function headCheckFeed(
   try {
     const res = await fetch(feedUrl, {
       method: "HEAD",
-      headers: { "User-Agent": "releases/0.1" },
+      headers: { "User-Agent": RELEASES_BOT_UA },
       signal: controller.signal,
       redirect: "follow",
     });

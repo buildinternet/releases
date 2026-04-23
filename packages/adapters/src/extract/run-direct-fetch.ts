@@ -11,6 +11,7 @@
 import { sha256Hex } from "@releases/core-internal/hash";
 import { AdapterError } from "@releases/lib/errors";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { extractFromBody } from "./extract-from-body.js";
 import {
   DIRECT_FETCH_SYSTEM_PROMPT,
@@ -47,7 +48,7 @@ export async function runDirectFetchExtraction(
   const { logger, repo, agentModel } = deps;
 
   const headers: Record<string, string> = {
-    "User-Agent": "releases/0.1 (+https://releases.sh)",
+    "User-Agent": RELEASES_BOT_UA,
     Accept: "*/*",
   };
   if (!opts.full) {

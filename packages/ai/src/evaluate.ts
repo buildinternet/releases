@@ -2,6 +2,7 @@ import { logger } from "@buildinternet/releases-lib/logger";
 import { detectProvider, type DetectedProvider } from "./providers.js";
 import { classifyFeedMime, discoverFeed } from "@releases/adapters/feed";
 import type { SourceMetadata } from "@releases/adapters/source-meta";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 // ── Types ──────────────────────────────────────────────────────────
 
@@ -63,7 +64,7 @@ async function tryMarkdownSuffix(url: string): Promise<string | null> {
   try {
     const res = await fetch(mdUrl, {
       method: "HEAD",
-      headers: { "User-Agent": "releases/0.1" },
+      headers: { "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
       signal: AbortSignal.timeout(8_000),
     });
@@ -96,7 +97,7 @@ async function tryProviderFeeds(
     candidates.map(async (feedUrl) => {
       const res = await fetch(feedUrl, {
         method: "HEAD",
-        headers: { "User-Agent": "releases/0.1" },
+        headers: { "User-Agent": RELEASES_BOT_UA },
         redirect: "follow",
         signal: AbortSignal.timeout(8_000),
       });

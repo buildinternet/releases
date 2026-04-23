@@ -2,6 +2,7 @@ import { config } from "@releases/lib/config";
 import { AdapterError, CrawlTimeoutError, CrawlJobError } from "@releases/lib/errors";
 import { logger } from "@buildinternet/releases-lib/logger";
 import type { CrawlPage } from "@releases/adapters/types";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 /** Resource types to block when rendering (duplicated from cloudflare.ts to avoid circular import). */
 const REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
 
@@ -33,6 +34,7 @@ function cfHeaders(): Record<string, string> {
   return {
     Authorization: `Bearer ${config.cloudflareApiToken()}`,
     "Content-Type": "application/json",
+    "User-Agent": RELEASES_BOT_UA,
   };
 }
 

@@ -9,6 +9,7 @@ import { sha256Hex } from "@releases/core-internal/hash";
 import { AdapterError } from "@releases/lib/errors";
 import { fetchCloudflareMarkdown } from "../cloudflare.js";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { extractFromBody } from "./extract-from-body.js";
 import {
   extractReleasesToolFull,
@@ -181,7 +182,7 @@ export async function runAgentExtraction(
 async function isJsRenderedPage(url: string): Promise<boolean> {
   try {
     const res = await fetch(url, {
-      headers: { "User-Agent": "releases/0.1 (+https://releases.sh)" },
+      headers: { "User-Agent": RELEASES_BOT_UA },
       redirect: "follow",
       signal: AbortSignal.timeout(10_000),
     });

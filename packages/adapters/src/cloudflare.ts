@@ -1,5 +1,6 @@
 import { logger } from "@buildinternet/releases-lib/logger";
 import { startCrawl, pollCrawlResults } from "./crawl.js";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 /** Resource types to block when rendering pages via Cloudflare Browser Rendering. */
 export const CF_REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
@@ -17,6 +18,7 @@ async function fetchCloudflareRendered(
     headers: {
       Authorization: `Bearer ${apiToken}`,
       "Content-Type": "application/json",
+      "User-Agent": RELEASES_BOT_UA,
     },
     body: JSON.stringify({
       url,
