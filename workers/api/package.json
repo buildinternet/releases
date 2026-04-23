@@ -8,7 +8,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply released-db --remote"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.88.0",
+    "@anthropic-ai/sdk": "^0.91.0",
     "hono": "^4.12.14",
     "mimetext": "^3.0.24"
   },
