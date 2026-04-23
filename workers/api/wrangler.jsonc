@@ -42,8 +42,8 @@
     // true, `queryDueSources` widens its filter to include type IN
     // ('scrape','agent') AND feedUrl IS NULL, and `pollOne` routes each via
     // the detector specified in the playbook's `fetchQuirks` frontmatter
-    // (#516). Default "false" — flip after canary validates.
-    "SCRAPE_CHANGE_DETECT_ENABLED": "false",
+    // (#516). Kill-switch: flip to "false" to revert to feed-only polling.
+    "SCRAPE_CHANGE_DETECT_ENABLED": "true",
     // Feature flag for the daily force-drain cron (#518). When true, the
     // 04:00 UTC cron flags stranded scrape/agent sources (unreliable quirk
     // or `last_fetched_at` older than FORCE_DRAIN_STALE_HOURS) so the
