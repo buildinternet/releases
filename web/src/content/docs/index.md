@@ -1,5 +1,6 @@
 ---
 title: "Documentation"
+description: "Overview of Releases — a changelog index with CLI, REST API, and MCP server."
 adminOnly: false
 ---
 

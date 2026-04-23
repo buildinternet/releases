@@ -1,5 +1,6 @@
 ---
 title: "Summaries & Comparisons"
+description: "AI-powered analysis of release activity across sources and orgs (operator-only)."
 adminOnly: true
 ---
 

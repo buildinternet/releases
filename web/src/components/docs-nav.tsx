@@ -3,49 +3,12 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
-type Section = {
+export type DocsNavSection = {
   title: string;
   items: { label: string; href: string }[];
 };
 
-const publicSections: Section[] = [
-  {
-    title: "Getting Started",
-    items: [
-      { label: "Overview", href: "/docs" },
-      { label: "Installation", href: "/docs/installation" },
-      { label: "Examples", href: "/docs/examples" },
-    ],
-  },
-  {
-    title: "CLI",
-    items: [{ label: "Browsing & Search", href: "/docs/cli/browsing" }],
-  },
-  {
-    title: "API",
-    items: [
-      { label: "REST Endpoints", href: "/docs/api/rest" },
-      { label: "MCP Server", href: "/docs/api/mcp" },
-    ],
-  },
-  {
-    title: "About",
-    items: [{ label: "Privacy & Telemetry", href: "/docs/privacy" }],
-  },
-];
-
-const adminSections: Section[] = [
-  {
-    title: "Admin CLI",
-    items: [
-      { label: "Summaries & Comparisons", href: "/docs/cli/analysis" },
-      { label: "Fetching Releases", href: "/docs/cli/fetching" },
-      { label: "Source Management", href: "/docs/cli/admin" },
-    ],
-  },
-];
-
-function SectionList({ sections, pathname }: { sections: Section[]; pathname: string }) {
+function SectionList({ sections, pathname }: { sections: DocsNavSection[]; pathname: string }) {
   return (
     <>
       {sections.map((section) => (
@@ -78,9 +41,8 @@ function SectionList({ sections, pathname }: { sections: Section[]; pathname: st
   );
 }
 
-export function DocsNav({ showAdmin = false }: { showAdmin?: boolean }) {
+export function DocsNav({ sections }: { sections: DocsNavSection[] }) {
   const pathname = usePathname();
-  const sections = showAdmin ? [...publicSections, ...adminSections] : publicSections;
   const currentLabel =
     sections.flatMap((s) => s.items).find((item) => item.href === pathname)?.label ?? "Docs";
 

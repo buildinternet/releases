@@ -1,5 +1,6 @@
 ---
 title: "Installation"
+description: "Install the Releases CLI via Homebrew, npm, or a one-line script."
 adminOnly: false
 ---
 

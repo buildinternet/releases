@@ -1,6 +1,7 @@
 import type { MetadataRoute } from "next";
+import { getStaticBaseUrl } from "@/lib/base-url";
 
-const BASE_URL = process.env.RELEASED_BASE_URL?.replace(/\/$/, "") ?? "https://releases.sh";
+const BASE_URL = getStaticBaseUrl();
 
 export default function robots(): MetadataRoute.Robots {
   return {

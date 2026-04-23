@@ -1,5 +1,6 @@
 ---
 title: "REST API"
+description: "HTTP endpoints for browsing orgs, sources, and releases in the index."
 adminOnly: false
 ---
 
