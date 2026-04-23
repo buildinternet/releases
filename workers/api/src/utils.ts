@@ -199,6 +199,23 @@ export function parseBoolParam(raw: string | undefined): boolean {
   return raw === "true";
 }
 
+/** Narrow an untrusted query string to one of a known-good set, falling back on mismatch. */
+export function parseEnumParam<T extends string>(
+  raw: string | undefined,
+  allowed: readonly T[],
+  fallback: T,
+): T {
+  return (allowed as readonly string[]).includes(raw ?? "") ? (raw as T) : fallback;
+}
+
+export function parseSortDir(
+  raw: string | undefined,
+  fallback: "asc" | "desc" = "desc",
+): "asc" | "desc" {
+  if (raw === "asc" || raw === "desc") return raw;
+  return fallback;
+}
+
 export function heatmapDateRange(): { from: string; to: string; toExclusive: string } {
   const today = new Date();
   const to = today.toISOString().slice(0, 10);

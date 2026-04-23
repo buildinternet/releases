@@ -3,7 +3,8 @@
 import { useState } from "react";
 import { type FetchLogStatusFilter } from "./fetch-log-shared";
 import { FetchLogList } from "./fetch-log-list";
-import { useFetchLog } from "./use-fetch-log";
+import { useFetchLog, type FetchLogSortField } from "./use-fetch-log";
+import type { SortState } from "./sort-header";
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
@@ -16,9 +17,15 @@ function formatTime(iso: string): string {
 
 export function OrgFetchLogView({ orgSlug }: { orgSlug: string }) {
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
+  const [sort, setSort] = useState<SortState<FetchLogSortField>>({
+    field: "createdAt",
+    dir: "desc",
+  });
   const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore } = useFetchLog({
     org: orgSlug,
     status: filter,
+    sort: sort.field,
+    dir: sort.dir,
   });
 
   if (loading && entries.length === 0) {
@@ -51,6 +58,8 @@ export function OrgFetchLogView({ orgSlug }: { orgSlug: string }) {
       filter={filter}
       onFilterChange={setFilter}
       onLoadMore={loadMore}
+      sort={sort}
+      onSortChange={setSort}
       formatTime={formatTime}
       className="mt-5"
     />

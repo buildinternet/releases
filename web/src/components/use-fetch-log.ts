@@ -8,12 +8,16 @@ import type {
   FetchLogStatusFilter,
 } from "./fetch-log-shared";
 
+export type FetchLogSortField = "createdAt" | "durationMs";
+
 interface Params {
   after?: string | null;
   before?: string | null;
   org?: string;
   status: FetchLogStatusFilter;
   pageSize?: number;
+  sort?: FetchLogSortField;
+  dir?: "asc" | "desc";
 }
 
 interface State {
@@ -33,7 +37,15 @@ function buildUrl(base: string, params: Record<string, string | null | undefined
   return `${base}${qs.toString() ? `?${qs}` : ""}`;
 }
 
-export function useFetchLog({ after, before, org, status, pageSize = 25 }: Params) {
+export function useFetchLog({
+  after,
+  before,
+  org,
+  status,
+  pageSize = 25,
+  sort = "createdAt",
+  dir = "desc",
+}: Params) {
   const [state, setState] = useState<State>({
     entries: [],
     nextCursor: null,
@@ -56,6 +68,8 @@ export function useFetchLog({ after, before, org, status, pageSize = 25 }: Param
           status: status === "all" ? undefined : status,
           limit: String(pageSize),
           cursor: cursor ?? undefined,
+          sort: sort === "createdAt" ? undefined : sort,
+          dir: sort === "createdAt" && dir === "desc" ? undefined : dir,
         });
         const res = await fetch(url);
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
@@ -78,7 +92,7 @@ export function useFetchLog({ after, before, org, status, pageSize = 25 }: Param
         }));
       }
     },
-    [after, before, org, status, pageSize],
+    [after, before, org, status, pageSize, sort, dir],
   );
 
   useEffect(() => {
