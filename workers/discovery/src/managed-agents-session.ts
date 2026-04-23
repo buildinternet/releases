@@ -11,10 +11,12 @@
  */
 
 import { DurableObject } from "cloudflare:workers";
-import { RateLimitError } from "@anthropic-ai/sdk";
-import type { ErrorType } from "@anthropic-ai/sdk/resources/shared";
 import type { Env } from "./types.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import {
+  classifyMaRateLimitError,
+  buildMaRateLimitErrorMessage,
+} from "@releases/lib/ma-rate-limit.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
@@ -56,54 +58,16 @@ function withDiscoveryIdentity(fetcher: Fetcher): Fetcher {
   } as Fetcher;
 }
 
-// ── MA 429 rate-limit classifier ─────────────────────────────────────────────
+// ── MA 429 rate-limit retry loop ─────────────────────────────────────────────
+//
+// `classifyMaRateLimitError` + `buildMaRateLimitErrorMessage` live in
+// `@releases/lib/ma-rate-limit` so their tests resolve `RateLimitError` against
+// the same `@anthropic-ai/sdk` install the classifier imports. Because this
+// worker is not a Bun workspace, its local `node_modules/@anthropic-ai/sdk`
+// would otherwise be a distinct install from the root-hoisted copy, breaking
+// `instanceof` in tests.
 
-const MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S = 60;
-const MA_RATE_LIMIT_JITTER_MAX_S = 10;
 const MA_RATE_LIMIT_MAX_RETRIES = 2;
-
-export interface MaRateLimitClassification {
-  isRateLimit: boolean;
-  errorType?: ErrorType;
-  /** Retry-After delay in milliseconds (includes jitter). */
-  retryAfterMs: number;
-}
-
-/**
- * Classify an error thrown by the Anthropic SDK as a 429 rate-limit error.
- * Reads `Retry-After` from response headers when present; falls back to a 60s
- * default plus jitter. `getJitterMs` is injectable for deterministic tests.
- */
-export function classifyMaRateLimitError(
-  err: unknown,
-  opts: { getJitterMs?: () => number } = {},
-): MaRateLimitClassification {
-  if (!(err instanceof RateLimitError)) return { isRateLimit: false, retryAfterMs: 0 };
-
-  let retryAfterS = MA_RATE_LIMIT_DEFAULT_RETRY_AFTER_S;
-  const raw = err.headers.get("retry-after");
-  if (raw) {
-    const parsed = parseInt(raw, 10);
-    if (Number.isFinite(parsed) && parsed > 0) retryAfterS = parsed;
-  }
-
-  const getJitterMs = opts.getJitterMs ?? (() => Math.random() * MA_RATE_LIMIT_JITTER_MAX_S * 1000);
-
-  return {
-    isRateLimit: true,
-    errorType: err.type ?? undefined,
-    retryAfterMs: retryAfterS * 1000 + getJitterMs(),
-  };
-}
-
-export function buildMaRateLimitErrorMessage(
-  classification: MaRateLimitClassification,
-  retryCount: number,
-): string {
-  const typeNote = classification.errorType ? ` (${classification.errorType})` : "";
-  const retryAfterS = Math.round(classification.retryAfterMs / 1000);
-  return `Anthropic managed-agents rate limit${typeNote}. Retry after ${retryAfterS}s. Session was retried ${retryCount} time(s).`;
-}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
