@@ -15,6 +15,7 @@ import { insertRunningRow, finalizeRunRow, reconcileStaleRunning } from "../db/c
 import { sendCronReport } from "../lib/notifications.js";
 import type { EmailEnv } from "../lib/email.js";
 import type { CronReport } from "../lib/cron-report.js";
+import { DEFAULT_FORCE_DRAIN_STALE_HOURS, pickCandidates } from "./force-drain-sweep.js";
 
 export type PreflightAction =
   | { action: "proceed" }
@@ -103,17 +104,35 @@ type DerivedStatus = {
  * Pure reducer from candidates + dispatch outcomes (+ optional aborted
  * preflight) to the final cron_runs status. Single source of truth for the
  * status matrix in the design spec.
+ *
+ * `strandedCount` is the number of scrape/agent sources the force-drain cron
+ * would pick up on its next run — i.e. sources that are stale or flagged
+ * `changeDetector: unreliable` via their playbook but haven't yet had
+ * `changeDetectedAt` set. Passing it in lets the zero-candidate note
+ * distinguish healthy-quiet (`no flagged or stranded sources`) from
+ * stranded-but-unreachable (`no flagged sources; stranded=N`). When the caller
+ * omits it, the legacy `no flagged sources` note is preserved.
  */
 export function deriveSweepStatus(input: {
   candidates: number;
   dispatchResults: DispatchResult[];
   abortedPreflight?: Extract<PreflightAction, { action: "abort" }>;
+  strandedCount?: number;
 }): DerivedStatus {
   if (input.abortedPreflight) {
     return { status: "aborted", abortReason: input.abortedPreflight.abortReason };
   }
   if (input.candidates === 0) {
-    return { status: "done", notes: "no flagged sources" };
+    if (input.strandedCount === undefined) {
+      return { status: "done", notes: "no flagged sources" };
+    }
+    return {
+      status: "done",
+      notes:
+        input.strandedCount > 0
+          ? `no flagged sources; stranded=${input.strandedCount}`
+          : "no flagged or stranded sources",
+    };
   }
   const errored = input.dispatchResults.filter((r) => !r.ok).length;
   if (errored === 0) return { status: "done" };
@@ -201,6 +220,11 @@ export type SweepEnv = EmailEnv & {
   CRON_ENABLED?: string;
   SCRAPE_AGENT_CRON_ENABLED?: string;
   SCRAPE_AGENT_MAX_SESSIONS?: string;
+  /**
+   * Shared with the force-drain cron — same cutoff so the stranded-count
+   * shown here matches the set force-drain will pick up at 04:00.
+   */
+  FORCE_DRAIN_STALE_HOURS?: string;
   DISCOVERY_WORKER: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   RELEASED_API_KEY: string;
   ANTHROPIC_API_KEY?: string;
@@ -211,6 +235,23 @@ export type SweepEnv = EmailEnv & {
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   _drizzleOverride?: any;
 };
+
+function parseStaleHours(raw: string | undefined): number {
+  const n = Number(raw ?? DEFAULT_FORCE_DRAIN_STALE_HOURS);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_FORCE_DRAIN_STALE_HOURS;
+}
+
+/**
+ * Count scrape/agent sources the force-drain cron would pick up on its next
+ * run. Reuses `pickCandidates` with `cap: 0` so the filter/quirk logic stays
+ * in one place. Only meaningful when the sweep found nothing flagged — when
+ * there are flagged rows, we drain them and let the breakdown note carry
+ * the signal.
+ */
+async function countStranded(db: any, now: Date, staleHours: number): Promise<number> {
+  const { totalStranded } = await pickCandidates(db, { now, staleHours, cap: 0 });
+  return totalStranded;
+}
 
 export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   if (env.CRON_ENABLED === "false") {
@@ -293,7 +334,19 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     (group) => dispatchOne(env, sweepCorrelationId, group),
   );
 
-  const derived = deriveSweepStatus({ candidates: rows.length, dispatchResults });
+  // Only consult the force-drain logic when nothing drained here. If we did
+  // drain, the per-type breakdown below already carries the signal and the
+  // extra query isn't worth the cost.
+  const strandedCount =
+    rows.length === 0
+      ? await countStranded(db, now, parseStaleHours(env.FORCE_DRAIN_STALE_HOURS))
+      : undefined;
+
+  const derived = deriveSweepStatus({
+    candidates: rows.length,
+    dispatchResults,
+    strandedCount,
+  });
   const sessionsStarted = dispatchResults.flatMap((r) => (r.ok ? [r.sessionId] : []));
   const dispatchErrors = dispatchResults.flatMap((r) =>
     !r.ok ? [{ orgSlug: r.orgSlug, error: r.error }] : [],

@@ -23,6 +23,7 @@ import {
   queryCandidates,
   runPreflight,
 } from "../cron/scrape-agent-sweep.js";
+import { DEFAULT_FORCE_DRAIN_STALE_HOURS, pickCandidates } from "../cron/force-drain-sweep.js";
 import type {
   DispatchResult,
   OrgGroup,
@@ -42,6 +43,11 @@ export type ScrapeAgentSweepWorkflowEnv = {
   CRON_ENABLED?: string;
   SCRAPE_AGENT_CRON_ENABLED?: string;
   SCRAPE_AGENT_MAX_SESSIONS?: string;
+  /**
+   * Shared with the force-drain cron — same cutoff so the stranded-count
+   * shown here matches the set force-drain will pick up at 04:00.
+   */
+  FORCE_DRAIN_STALE_HOURS?: string;
   DISCOVERY_WORKER?: Fetcher;
   RELEASED_API_KEY?: { get(): Promise<string> };
   ANTHROPIC_API_KEY?: { get(): Promise<string> };
@@ -89,6 +95,7 @@ function baseEnvFields(env: ScrapeAgentSweepWorkflowEnv) {
     CRON_ENABLED: env.CRON_ENABLED,
     SCRAPE_AGENT_CRON_ENABLED: env.SCRAPE_AGENT_CRON_ENABLED,
     SCRAPE_AGENT_MAX_SESSIONS: env.SCRAPE_AGENT_MAX_SESSIONS,
+    FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
     ANTHROPIC_BASE_URL: env.ANTHROPIC_BASE_URL,
     SEND_EMAIL: env.SEND_EMAIL,
     EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
@@ -96,6 +103,11 @@ function baseEnvFields(env: ScrapeAgentSweepWorkflowEnv) {
     EMAIL_FROM: env.EMAIL_FROM,
     ADMIN_BASE_URL: env.ADMIN_BASE_URL,
   };
+}
+
+function parseStaleHoursWorkflow(raw: string | undefined): number {
+  const n = Number(raw ?? DEFAULT_FORCE_DRAIN_STALE_HOURS);
+  return Number.isFinite(n) && n > 0 ? n : DEFAULT_FORCE_DRAIN_STALE_HOURS;
 }
 
 /**
@@ -241,8 +253,27 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
       dispatchResults.push(...chunkResults);
     }
 
+    // Count sources the force-drain cron would pick up next, but only when we
+    // drained nothing — the split only matters for the zero-candidates note.
+    const strandedCount: number | undefined =
+      rows.length === 0
+        ? await step.do("count-stranded", RETRY_QUERY, async () => {
+            const staleHours = parseStaleHoursWorkflow(env.FORCE_DRAIN_STALE_HOURS);
+            const { totalStranded } = await pickCandidates(db, {
+              now: new Date(),
+              staleHours,
+              cap: 0,
+            });
+            return totalStranded;
+          })
+        : undefined;
+
     await step.do("finalize-done", async () => {
-      const derived = deriveSweepStatus({ candidates: rows.length, dispatchResults });
+      const derived = deriveSweepStatus({
+        candidates: rows.length,
+        dispatchResults,
+        strandedCount,
+      });
       const sessionsStarted = dispatchResults.flatMap((r) => (r.ok ? [r.sessionId] : []));
       const dispatchErrors = dispatchResults.flatMap((r) =>
         !r.ok ? [{ orgSlug: r.orgSlug, error: r.error }] : [],

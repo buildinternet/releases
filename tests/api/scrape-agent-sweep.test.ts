@@ -202,7 +202,7 @@ describe("scrapeAgentSweep (E2E)", () => {
     expect(run.skippedOverCap).toBe(5);
   });
 
-  it("no candidates: writes a done row with notes", async () => {
+  it("no candidates, no stranded: writes a healthy-quiet done row", async () => {
     const sqlite = new Database(":memory:");
     const db = drizzle(sqlite);
     applyMigrations(sqlite);
@@ -211,7 +211,49 @@ describe("scrapeAgentSweep (E2E)", () => {
     const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
     expect(run.status).toBe("done");
     expect(run.candidates).toBe(0);
-    expect(run.notes).toBe("no flagged sources");
+    expect(run.notes).toBe("no flagged or stranded sources");
+  });
+
+  it("no flagged but stranded > 0: surfaces stranded count in notes", async () => {
+    // Two stale scrape sources without changeDetectedAt — force-drain would
+    // pick these up at 04:00 but the hourly poll hasn't flagged them yet.
+    const sqlite = new Database(":memory:");
+    const db = drizzle(sqlite);
+    applyMigrations(sqlite);
+    const stale = new Date(Date.now() - 96 * 3600_000).toISOString();
+    db.insert(organizations)
+      .values([{ id: "org_s", name: "S Org", slug: "s-org", category: "developer-tools" }])
+      .run();
+    db.insert(sources)
+      .values([
+        {
+          id: "src_stale_1",
+          name: "Stale 1",
+          slug: "stale-1",
+          type: "scrape",
+          url: "https://s.com/c1",
+          orgId: "org_s",
+          lastFetchedAt: stale,
+          metadata: "{}",
+        },
+        {
+          id: "src_stale_2",
+          name: "Stale 2",
+          slug: "stale-2",
+          type: "agent",
+          url: "https://s.com/c2",
+          orgId: "org_s",
+          lastFetchedAt: stale,
+          metadata: "{}",
+        },
+      ])
+      .run();
+    const env = mkEnv();
+    await scrapeAgentSweep({ ...env, _drizzleOverride: db } as any);
+    const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
+    expect(run.status).toBe("done");
+    expect(run.candidates).toBe(0);
+    expect(run.notes).toBe("no flagged sources; stranded=2");
   });
 
   it("CRON_ENABLED=false: short-circuits without writing a cron_runs row", async () => {

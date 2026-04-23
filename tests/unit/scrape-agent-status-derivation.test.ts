@@ -2,10 +2,35 @@ import { describe, it, expect } from "bun:test";
 import { deriveSweepStatus } from "../../workers/api/src/cron/scrape-agent-sweep";
 
 describe("deriveSweepStatus", () => {
-  it("returns done with zero-candidate note when candidates=0", () => {
+  it("returns done with legacy zero-candidate note when strandedCount is omitted", () => {
     const out = deriveSweepStatus({ candidates: 0, dispatchResults: [] });
     expect(out.status).toBe("done");
     expect(out.notes).toBe("no flagged sources");
+  });
+
+  it("returns healthy-quiet note when candidates=0 and strandedCount=0", () => {
+    const out = deriveSweepStatus({ candidates: 0, dispatchResults: [], strandedCount: 0 });
+    expect(out.status).toBe("done");
+    expect(out.notes).toBe("no flagged or stranded sources");
+  });
+
+  it("returns stranded note when candidates=0 and strandedCount>0", () => {
+    const out = deriveSweepStatus({ candidates: 0, dispatchResults: [], strandedCount: 3 });
+    expect(out.status).toBe("done");
+    expect(out.notes).toBe("no flagged sources; stranded=3");
+  });
+
+  it("ignores strandedCount when candidates>0", () => {
+    const out = deriveSweepStatus({
+      candidates: 2,
+      dispatchResults: [
+        { orgSlug: "a", ok: true, sessionId: "ma-1" },
+        { orgSlug: "b", ok: true, sessionId: "ma-2" },
+      ],
+      strandedCount: 5,
+    });
+    expect(out.status).toBe("done");
+    expect(out.notes).toBeUndefined();
   });
 
   it("returns done when all dispatches succeeded", () => {

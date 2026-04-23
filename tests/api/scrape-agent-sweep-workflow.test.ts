@@ -312,8 +312,9 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
     expect(callCounts["Org A"]).toBe(4);
   });
 
-  it("no candidates: writes a done row with notes", async () => {
-    // Empty DB — no sources — so queryCandidates returns 0 rows.
+  it("no candidates, no stranded: writes a healthy-quiet done row", async () => {
+    // Empty DB — no sources — so queryCandidates returns 0 rows and the
+    // count-stranded step also sees zero.
     const sqlite = new Database(":memory:");
     applyMigrations(sqlite);
     const db = drizzle(sqlite);
@@ -322,7 +323,48 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
     const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
     expect(run.status).toBe("done");
     expect(run.candidates).toBe(0);
-    expect(run.notes).toBe("no flagged sources");
+    expect(run.notes).toBe("no flagged or stranded sources");
+  });
+
+  it("no flagged but stranded > 0: surfaces stranded count via count-stranded step", async () => {
+    const sqlite = new Database(":memory:");
+    applyMigrations(sqlite);
+    const db = drizzle(sqlite);
+    const stale = new Date(Date.now() - 96 * 3600_000).toISOString();
+    db.insert(organizations)
+      .values([{ id: "org_s", name: "S Org", slug: "s-org", category: "developer-tools" }])
+      .run();
+    db.insert(sources)
+      .values([
+        {
+          id: "src_stale_1",
+          name: "Stale 1",
+          slug: "stale-1",
+          type: "scrape",
+          url: "https://s.com/c1",
+          orgId: "org_s",
+          lastFetchedAt: stale,
+          metadata: "{}",
+        },
+        {
+          id: "src_stale_2",
+          name: "Stale 2",
+          slug: "stale-2",
+          type: "agent",
+          url: "https://s.com/c2",
+          orgId: "org_s",
+          lastFetchedAt: stale,
+          metadata: "{}",
+        },
+      ])
+      .run();
+    const env = mkEnv({ _drizzleOverride: db });
+    const records = await runWorkflow(env);
+    const [run] = db.select().from(cronRuns).orderBy(desc(cronRuns.startedAt)).all();
+    expect(run.status).toBe("done");
+    expect(run.candidates).toBe(0);
+    expect(run.notes).toBe("no flagged sources; stranded=2");
+    expect(records.some((r) => r.name === "count-stranded" && r.ok)).toBe(true);
   });
 
   async function assertFlagDisabled(flag: keyof ScrapeAgentSweepWorkflowEnv) {
