@@ -5,7 +5,7 @@
  */
 
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { and, eq, isNotNull, ne, or, isNull, sql, asc } from "drizzle-orm";
+import { and, eq, isNotNull, ne, or, isNull, sql, asc, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { sources, organizations } from "@buildinternet/releases-core/schema";
 import { classifyAnthropicError } from "@releases/lib/anthropic-errors.js";
@@ -50,6 +50,7 @@ export function classifyPreflightResponse(err: unknown): PreflightAction {
 export type Candidate = {
   id: string;
   slug: string;
+  type: "scrape" | "agent";
   orgId: string;
   orgSlug: string;
   orgName: string;
@@ -126,16 +127,20 @@ type CandidateQueryResult = {
 };
 
 /**
- * Query flagged scrape-no-feed sources. Returns up to `cap` rows; if more
- * than `cap` matched, runs a follow-up COUNT(*) to populate skippedOverCap.
- * Most sweeps take the fast path (no count query).
+ * Query flagged scrape-no-feed and agent sources. Returns up to `cap` rows;
+ * if more than `cap` matched, runs a follow-up COUNT(*) to populate
+ * skippedOverCap. Most sweeps take the fast path (no count query).
+ *
+ * Agent sources (#517) join the sweep once the `SCRAPE_CHANGE_DETECT_ENABLED`
+ * cron pipeline flags them. The /update dispatcher handles both types
+ * identically, so widening the filter is safe.
  */
 export async function queryCandidates(
   db: any,
   params: { cap: number },
 ): Promise<CandidateQueryResult> {
   const whereClause = and(
-    eq(sources.type, "scrape"),
+    inArray(sources.type, ["scrape", "agent"]),
     ne(sources.fetchPriority, "paused"),
     isNotNull(sources.changeDetectedAt),
     sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NULL OR ${sources.metadata} IS NULL)`,
@@ -146,6 +151,7 @@ export async function queryCandidates(
     .select({
       id: sources.id,
       slug: sources.slug,
+      type: sources.type,
       orgId: sources.orgId,
       orgSlug: organizations.slug,
       orgName: organizations.name,
@@ -174,6 +180,7 @@ export async function queryCandidates(
     rows: sliced.map((r: any) => ({
       id: r.id,
       slug: r.slug,
+      type: r.type,
       orgId: r.orgId,
       orgSlug: r.orgSlug,
       orgName: r.orgName,
@@ -292,6 +299,19 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     !r.ok ? [{ orgSlug: r.orgSlug, error: r.error }] : [],
   );
 
+  // Breakdown by source type (#517) so the sweep row reveals whether an
+  // unusual drain was scrape-driven, agent-driven, or both — the /update
+  // pipeline handles both, but operationally they're different signals.
+  // Skip the breakdown when nothing drained; `derived.notes` already
+  // carries the "no flagged sources" signal in that case.
+  let notes: string | null = derived.notes ?? null;
+  if (rows.length > 0) {
+    const scrapeCount = rows.filter((r) => r.type === "scrape").length;
+    const agentCount = rows.filter((r) => r.type === "agent").length;
+    const breakdown = `drained=${rows.length} (type=scrape:${scrapeCount}, type=agent:${agentCount})`;
+    notes = notes ? `${notes}; ${breakdown}` : breakdown;
+  }
+
   const endedAtMs = Date.now();
   const endedAt = new Date(endedAtMs).toISOString();
   await finalizeRunRow(db, runId, {
@@ -304,7 +324,7 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     dispatchErrors: dispatchErrors.length,
     sessionsStarted,
     dispatchErrorDetail: dispatchErrors,
-    notes: derived.notes ?? null,
+    notes,
   });
 
   console.log(
@@ -324,7 +344,7 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
       dispatched: sessionsStarted.length,
       skippedOverCap,
       dispatchErrors: dispatchErrors.length,
-      notes: derived.notes ?? null,
+      notes,
       sessionsStarted,
       dispatchErrorDetail: dispatchErrors,
     }),

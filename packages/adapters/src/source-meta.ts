@@ -61,10 +61,15 @@ export interface SourceMetadata {
   // Summary generation
   summarize?: boolean; // false = opt-out of AI summaries
 
-  // Page HEAD check fields (scrape sources without feeds)
+  // Page HEAD / body-hash change-detection fields for scrape-no-feed and
+  // agent sources (#517). Validator choice is driven by the playbook's
+  // `fetchQuirks` entry (#516). Only populated on sources whose playbook
+  // opts them into a change detector.
   pageEtag?: string;
   pageLastModified?: string;
   pageContentLength?: string;
+  /** SHA-256 of the full response body. Used by the `body-hash` detector. */
+  pageContentHash?: string;
   headCheckUseless?: boolean; // server never returns useful headers
   headCheckSkips?: number; // times HEAD said unchanged and content hash agreed
   headCheckFalseNegatives?: number; // times HEAD said unchanged but content hash differed

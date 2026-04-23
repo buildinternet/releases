@@ -311,11 +311,14 @@ export interface HeadCheckResult {
 }
 
 /**
- * Send a HEAD request to a feed URL and compare response headers against
- * stored values to detect changes without downloading the feed body.
+ * Send a HEAD request to a URL and compare response headers against stored
+ * values to detect changes without downloading the body. The logic is generic
+ * HTTP — feeds, plain HTML pages, or any other resource can share this probe.
+ * Existing feed callers pass their feed URL; scrape-no-feed / agent callers
+ * (#517) pass the source page URL with `page*` validators from metadata.
  */
-export async function headCheckFeed(
-  feedUrl: string,
+export async function headCheckUrl(
+  url: string,
   stored: { etag?: string; lastModified?: string; contentLength?: string },
 ): Promise<HeadCheckResult> {
   const controller = new AbortController();
@@ -323,7 +326,7 @@ export async function headCheckFeed(
   const start = Date.now();
 
   try {
-    const res = await fetch(feedUrl, {
+    const res = await fetch(url, {
       method: "HEAD",
       headers: { "User-Agent": RELEASES_BOT_UA },
       signal: controller.signal,
@@ -361,6 +364,55 @@ export async function headCheckFeed(
     }
 
     return { status: anyCompared ? "unchanged" : "unknown", ...result };
+  } catch {
+    return { status: "unknown", responseMs: Date.now() - start };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+export interface BodyHashCheckResult {
+  status: ChangeStatus;
+  /** SHA-256 hex digest of the downloaded body, or `undefined` on failure. */
+  contentHash?: string;
+  responseMs: number;
+}
+
+/**
+ * GET a URL, SHA-256 the body, and compare against a stored hash. Used by
+ * the `body-hash` change detector (#517) for pages whose HEAD returns no
+ * stable validator. Pays full-body bandwidth per poll — reserve for sources
+ * that need it, not as a default.
+ */
+export async function bodyHashCheck(
+  url: string,
+  storedHash: string | undefined,
+): Promise<BodyHashCheckResult> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const start = Date.now();
+
+  try {
+    const res = await fetch(url, {
+      headers: { "User-Agent": RELEASES_BOT_UA },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+    const responseMs = Date.now() - start;
+    if (!res.ok) return { status: "unknown", responseMs };
+
+    const body = await res.text();
+    const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
+    const contentHash = Array.from(new Uint8Array(hashBytes))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    if (!storedHash) return { status: "unknown", contentHash, responseMs };
+    return {
+      status: contentHash === storedHash ? "unchanged" : "changed",
+      contentHash,
+      responseMs,
+    };
   } catch {
     return { status: "unknown", responseMs: Date.now() - start };
   } finally {

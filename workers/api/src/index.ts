@@ -74,6 +74,11 @@ export type Env = {
     // inlining `pollAndFetch()` in `ctx.waitUntil`. See issue #486.
     POLL_FETCH_USE_WORKFLOW?: string;
     POLL_AND_FETCH_WORKFLOW?: Workflow;
+    // Feature flag: when "true", poll-and-fetch widens its candidate set to
+    // include scrape/agent sources with no feedUrl and routes them through
+    // change-detector branches defined in the org playbook's `fetchQuirks`
+    // frontmatter. Default off. See #517.
+    SCRAPE_CHANGE_DETECT_ENABLED?: string;
     DISCOVERY_WORKER?: Fetcher;
     ANTHROPIC_API_KEY?: SecretBinding;
     // Optional Cloudflare AI Gateway passthrough. When set, all direct Anthropic
@@ -367,6 +372,7 @@ export default {
           DB: env.DB,
           GITHUB_TOKEN: githubToken,
           CRON_ENABLED: env.CRON_ENABLED,
+          SCRAPE_CHANGE_DETECT_ENABLED: env.SCRAPE_CHANGE_DETECT_ENABLED,
           RELEASES_INDEX: env.RELEASES_INDEX,
           CHANGELOG_CHUNKS_INDEX: env.CHANGELOG_CHUNKS_INDEX,
           EMBEDDING_PROVIDER: env.EMBEDDING_PROVIDER,
@@ -408,7 +414,9 @@ const CREATE_BATCH_MAX = 100;
 
 async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): Promise<void> {
   const db = drizzle(env.DB);
-  const due = await queryDueSources(db, new Date());
+  const due = await queryDueSources(db, new Date(), {
+    changeDetectEnabled: env.SCRAPE_CHANGE_DETECT_ENABLED === "true",
+  });
   if (due.length === 0) {
     console.log("[poll-fetch-cron] no due sources; skipping workflow fan-out");
     return;

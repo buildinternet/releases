@@ -19,6 +19,7 @@ import {
   embedReleasesForSource,
   embedChangelogFileForSource,
   refreshChangelogFile,
+  loadPlaybookNotesForSources,
   type FetchOneEnv,
 } from "../cron/poll-fetch.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
@@ -31,6 +32,7 @@ import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache
 export type PollAndFetchWorkflowEnv = InvalidationEnv & {
   DB: D1Database;
   CRON_ENABLED?: string;
+  SCRAPE_CHANGE_DETECT_ENABLED?: string;
   GITHUB_TOKEN?: { get(): Promise<string> };
   RELEASES_INDEX?: unknown;
   CHANGELOG_CHUNKS_INDEX?: unknown;
@@ -115,10 +117,21 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
     });
 
     const now = new Date();
+    const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";
 
-    // Poll phase: HEAD check (feed sources) or mark-changed (github).
+    // Poll phase: HEAD check (feed sources) or mark-changed (github). For
+    // scrape-no-feed / agent sources the flag opens a quirks-driven detector
+    // branch inside pollOne (#517). Playbook notes are loaded per instance
+    // so the step doesn't pin a large payload onto workflow state.
     const pollResult = await step.do("poll-head-check", RETRY_POLL, async () => {
-      return await pollOne(db, source, now);
+      const notesByOrg =
+        changeDetectEnabled && (source.type === "scrape" || source.type === "agent")
+          ? await loadPlaybookNotesForSources(db, [source])
+          : new Map<string, string | null>();
+      return await pollOne(db, source, now, {
+        changeDetectEnabled,
+        playbookNotes: source.orgId ? (notesByOrg.get(source.orgId) ?? null) : null,
+      });
     });
 
     if (!pollResult.changed) {
