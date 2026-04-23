@@ -1003,3 +1003,47 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
     remaining: Math.max(remainingBefore - succeeded, 0),
   });
 });
+
+// ── Discovery triggers ────────────────────────────────────────────────────────
+//
+// Kick off onboard / update sessions on the discovery worker. Session reads go
+// through `/v1/sessions/:id` — no separate status endpoint here.
+
+async function proxyToDiscovery(
+  c: {
+    env: Env["Bindings"];
+    req: { header: (k: string) => string | undefined };
+  },
+  path: string,
+  body: string,
+): Promise<Response> {
+  if (!c.env.DISCOVERY_WORKER) {
+    return new Response(JSON.stringify({ error: "Discovery worker not configured" }), {
+      status: 503,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  // Service bindings require a full URL; the host is ignored.
+  return c.env.DISCOVERY_WORKER.fetch(
+    new Request(`https://discovery${path}`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: c.req.header("Authorization") ?? "",
+      },
+      body,
+    }),
+  );
+}
+
+workflowsRoutes.post("/workflows/discover", async (c) => {
+  const body = await c.req.text();
+  const res = await proxyToDiscovery(c, "/onboard", body);
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});
+
+workflowsRoutes.post("/workflows/update", async (c) => {
+  const body = await c.req.text();
+  const res = await proxyToDiscovery(c, "/update", body);
+  return new Response(res.body, { status: res.status, headers: res.headers });
+});

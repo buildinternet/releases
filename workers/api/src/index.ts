@@ -27,7 +27,6 @@ import overview from "./routes/overview.js";
 import overviewInputs from "./routes/overview-inputs.js";
 import playbook from "./routes/playbook.js";
 import { productRoutes } from "./routes/products.js";
-import { discoverRoutes } from "./routes/discover.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
@@ -177,7 +176,6 @@ const adminRoutes = [
   "fetch-log",
   "usage-log",
   "blocked-urls",
-  "discover",
   "evaluate",
   "status/fetch-log",
   "status/usage",
@@ -247,7 +245,6 @@ v1.route("/", summaries);
 v1.route("/", overview);
 v1.route("/", overviewInputs);
 v1.route("/", playbook);
-v1.route("/", discoverRoutes);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
