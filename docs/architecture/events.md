@@ -103,7 +103,7 @@ in shadow-log mode, flipped to `"true"` after a parity-check week.
 - **Batch ingest** (`POST /v1/sources/:slug/releases/batch` in `routes/sources.ts`)
   — called via `ctx.waitUntil`, fires once per ingest with the batch's
   inserted count.
-- **Admin manual fetch** (`POST /v1/admin/sources/:slug/fetch`) — same
+- **Admin manual fetch** (`POST /v1/sources/:slug/fetch`) — same
   pattern, once per triggered fetch if any rows were inserted.
 - **Cron poll-and-fetch** (`cron/poll-fetch.ts`) — aggregated inside
   `pollAndFetch` so a single cron run produces one invalidate call
