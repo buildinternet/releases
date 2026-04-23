@@ -30,6 +30,7 @@ import { productRoutes } from "./routes/products.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
+import { adminMemoryRoutes } from "./routes/admin-memory.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
@@ -194,6 +195,7 @@ const adminRoutes = [
   "admin/embed/status",
   "admin/cron-runs",
   "admin/logs",
+  "admin/memory",
   "webhooks",
   "workflows",
 ];
@@ -260,6 +262,7 @@ v1.route("/", playbook);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
+v1.route("/", adminMemoryRoutes);
 v1.route("/", webhooksRoutes);
 v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);

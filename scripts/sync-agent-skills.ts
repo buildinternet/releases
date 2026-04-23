@@ -7,11 +7,12 @@
  *   - Worker agent (Haiku) — fetches, updates, mechanical operations
  *
  * Usage:
- *   bun scripts/sync-agent-skills.ts                  # deploy both agents (prod)
+ *   bun scripts/sync-agent-skills.ts                  # deploy skills, agents, memory stores (prod)
  *   bun scripts/sync-agent-skills.ts --env staging    # deploy against staging agents
  *   bun scripts/sync-agent-skills.ts --dry-run        # preview without changes
  *   bun scripts/sync-agent-skills.ts --skills         # skills only
  *   bun scripts/sync-agent-skills.ts --agent          # prompt/tools/model only
+ *   bun scripts/sync-agent-skills.ts --memory-stores  # memory stores only
  *   bun scripts/sync-agent-skills.ts --discovery      # discovery agent only
  *   bun scripts/sync-agent-skills.ts --worker         # worker agent only
  *   bun scripts/sync-agent-skills.ts --agent-id <id>  # target an ad-hoc agent
@@ -64,6 +65,35 @@ const SKILL_DIRS = [
   "classify-media-relevance",
 ];
 
+/**
+ * Managed-agents memory stores created idempotently per environment.
+ * Store IDs are recorded in the config file under `memoryStores.<key>`
+ * and surfaced to workers via env vars in their wrangler.jsonc.
+ */
+function memoryStoreEnvVarFor(key: string): string {
+  return key === "errata" ? "MEMORY_STORE_ERRATA_ID" : "MEMORY_STORE_TOOL_NOTES_ID";
+}
+
+const MEMORY_STORES = [
+  {
+    key: "errata",
+    name: "releases-errata",
+    description:
+      "Per-organization corrections and observations layered over playbook notes. " +
+      "Paths: /orgs/<org_id>/errata.md (trusted rules), " +
+      "/orgs/<org_id>/observations.md (unvalidated priors), " +
+      "/discovery/global.md (discovery-scope notes, written before an org is resolved).",
+  },
+  {
+    key: "toolNotes",
+    name: "releases-tool-notes",
+    description:
+      "Global harness and MCP tool quirks learned in session. " +
+      "Paths: /tools/<tool>.md, /mcp/<server>/<tool>.md, /harness/notes.md. " +
+      "Log tool errors and workarounds here — keep entries short, factual, cross-session.",
+  },
+] as const;
+
 const ANTHROPIC_API = "https://api.anthropic.com";
 const HEADERS = {
   "x-api-key": "",
@@ -94,6 +124,10 @@ interface SkillConfig {
   toolsHash?: string;
   workerAgentId?: string;
   workerPromptHash?: string;
+  memoryStores?: {
+    errata?: string;
+    toolNotes?: string;
+  };
 }
 
 interface ApiSkill {
@@ -324,6 +358,42 @@ async function updateAgent(
   return (await res.json()) as { version: number };
 }
 
+// ── Memory stores ───────────────────────────────────────────────
+
+interface ApiMemoryStore {
+  id: string;
+  name: string;
+  description: string | null;
+  archived_at: string | null;
+}
+
+async function listMemoryStores(apiKey: string): Promise<ApiMemoryStore[]> {
+  const res = await fetch(`${ANTHROPIC_API}/v1/memory_stores`, {
+    headers: { ...AGENT_HEADERS, "x-api-key": apiKey },
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to list memory stores: ${res.status} ${await res.text()}`);
+  }
+  const body = (await res.json()) as { data: ApiMemoryStore[] };
+  return body.data;
+}
+
+async function createMemoryStore(
+  apiKey: string,
+  name: string,
+  description: string,
+): Promise<ApiMemoryStore> {
+  const res = await fetch(`${ANTHROPIC_API}/v1/memory_stores`, {
+    method: "POST",
+    headers: { ...AGENT_HEADERS, "x-api-key": apiKey },
+    body: JSON.stringify({ name, description }),
+  });
+  if (!res.ok) {
+    throw new Error(`Failed to create memory store "${name}": ${res.status} ${await res.text()}`);
+  }
+  return (await res.json()) as ApiMemoryStore;
+}
+
 // ── Hashing ─────────────────────────────────────────────────────
 
 function hash(input: string): string {
@@ -336,6 +406,7 @@ async function main() {
   const dryRun = process.argv.includes("--dry-run");
   const skillsOnly = process.argv.includes("--skills");
   const agentOnly = process.argv.includes("--agent");
+  const memoryStoresOnly = process.argv.includes("--memory-stores");
   const discoveryOnly = process.argv.includes("--discovery");
   const workerOnly = process.argv.includes("--worker");
 
@@ -345,8 +416,11 @@ async function main() {
     throw new Error("--agent-id requires a value");
   }
 
-  const syncSkills = !agentOnly;
-  const syncAgent = !skillsOnly;
+  // Any of --skills, --agent, --memory-stores narrows to that subsystem only.
+  const anyOnly = skillsOnly || agentOnly || memoryStoresOnly;
+  const syncSkills = !anyOnly || skillsOnly;
+  const syncAgent = !anyOnly || agentOnly;
+  const syncMemoryStores = !anyOnly || memoryStoresOnly;
   // --agent-id disables the default discovery/worker targets. Only the
   // override agent is touched.
   const syncDiscovery = !workerOnly && !agentIdOverride;
@@ -440,6 +514,58 @@ async function main() {
     }
 
     if (!dryRun) saveConfig(configPath, config);
+  }
+
+  // ── 1b. Sync memory stores ───────────────────────────────────
+  // Idempotent: looks up by display name (with env suffix), creates if
+  // missing, records ID in config. Never updates name/description on
+  // existing stores — edit those in the console if needed.
+
+  if (syncMemoryStores) {
+    console.log("── Memory Stores ────────────────────────────────");
+    const remote = await listMemoryStores(apiKey);
+    const byName = new Map(remote.map((s) => [s.name, s]));
+    const storeIds: Record<string, string> = { ...config.memoryStores };
+
+    for (const def of MEMORY_STORES) {
+      const displayName = `${def.name}${titleSuffix}`;
+      const existing = byName.get(displayName);
+      const cached = config.memoryStores?.[def.key];
+      const existingId = existing?.id ?? cached;
+
+      if (existingId) {
+        console.log(`✓ ${displayName} (${existingId}) — exists`);
+        storeIds[def.key] = existingId;
+      } else {
+        console.log(`+ ${displayName} — creating`);
+        if (!dryRun) {
+          // oxlint-disable-next-line no-await-in-loop -- sequential for deterministic logging
+          const created = await createMemoryStore(apiKey, displayName, def.description);
+          storeIds[def.key] = created.id;
+          console.log(`  ✓ Created ${created.id}`);
+        } else {
+          console.log(`  (would create memory store)`);
+        }
+      }
+    }
+
+    const missingInWrangler = Object.entries(storeIds).filter(([key, id]) => {
+      const present = readWranglerVar(memoryStoreEnvVarFor(key));
+      return id && present !== id;
+    });
+    if (missingInWrangler.length > 0) {
+      console.log();
+      console.log("  ℹ wrangler.jsonc vars to set for the discovery + api workers:");
+      for (const [key, id] of missingInWrangler) {
+        console.log(`    "${memoryStoreEnvVarFor(key)}": "${id}"`);
+      }
+    }
+
+    if (!dryRun) {
+      config.memoryStores = storeIds as SkillConfig["memoryStores"];
+      saveConfig(configPath, config);
+    }
+    console.log();
   }
 
   // ── 2. Sync agents ─────────────────────────────────────────────
