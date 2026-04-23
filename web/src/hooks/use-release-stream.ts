@@ -126,6 +126,18 @@ export function fromLatestItem(item: LatestItem): LiveRelease {
 const POLL_INTERVAL_MS = 15_000;
 const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 30_000;
+// Hold off on REST polling after a WS close — if reconnect succeeds within
+// this window, `?since=<lastSeq>` covers the gap and we avoid prepending
+// items from /releases/latest that the client has never seen over WS.
+const POLL_FALLBACK_DELAY_MS = 2_500;
+// Keep the WS alive for a grace window after the tab hides so that the
+// favicon "unseen" badge on /live can reflect activity while the user is on
+// another tab. After this, we tear down to avoid holding a live connection
+// for forgotten tabs — Cloudflare's hibernation API makes idle WS cheap on
+// the server, but client connections still count against account-level
+// concurrency and per-event fan-out. Revisit if release volume or live-tab
+// adoption grows meaningfully.
+const HIDDEN_TEARDOWN_MS = 5 * 60_000;
 
 /**
  * Subscribe to /v1/releases/stream and surface a normalized, deduped list of
@@ -151,8 +163,18 @@ export function useReleaseStream(apiUrl: string): LiveState {
 
   useEffect(() => {
     let cancelled = false;
+    let pollStartTimer: ReturnType<typeof setTimeout> | undefined;
+    let hiddenTeardownTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function clearPollStartTimer() {
+      if (pollStartTimer) {
+        clearTimeout(pollStartTimer);
+        pollStartTimer = undefined;
+      }
+    }
 
     function stopPolling() {
+      clearPollStartTimer();
       if (pollTimer.current) {
         clearInterval(pollTimer.current);
         pollTimer.current = undefined;
@@ -192,6 +214,8 @@ export function useReleaseStream(apiUrl: string): LiveState {
 
       ws.addEventListener("open", () => {
         reconnectDelay.current = RECONNECT_BASE_MS;
+        // If a short blip triggered a pending poll-start but the reconnect
+        // succeeded first, cancel the deferred poll before it fires.
         stopPolling();
       });
 
@@ -228,8 +252,16 @@ export function useReleaseStream(apiUrl: string): LiveState {
         if (failureHandled || cancelled) return;
         failureHandled = true;
         dispatch({ type: "ws-close" });
-        if (intentionalClose.current || !visibleRef.current) return;
-        startPolling();
+        if (intentionalClose.current) return;
+        // Defer REST polling — reconnect may win within the fallback window,
+        // in which case WS `?since=<lastSeq>` replay covers any missed events
+        // without dumping the latest-10 into the list.
+        clearPollStartTimer();
+        pollStartTimer = setTimeout(() => {
+          pollStartTimer = undefined;
+          if (cancelled) return;
+          startPolling();
+        }, POLL_FALLBACK_DELAY_MS);
         reconnectTimer.current = setTimeout(() => {
           reconnectDelay.current = Math.min(reconnectDelay.current * 2, RECONNECT_MAX_MS);
           connect();
@@ -257,20 +289,51 @@ export function useReleaseStream(apiUrl: string): LiveState {
     function onVisibility() {
       const visible = !document.hidden;
       visibleRef.current = visible;
-      if (visible) {
-        reconnectDelay.current = RECONNECT_BASE_MS;
+      if (!visible) {
+        // Schedule a teardown after a grace window so short tab-flips keep
+        // the WS (and the favicon "unseen" badge) live, but a long-abandoned
+        // tab doesn't hold a connection forever.
+        if (hiddenTeardownTimer) clearTimeout(hiddenTeardownTimer);
+        hiddenTeardownTimer = setTimeout(() => {
+          hiddenTeardownTimer = undefined;
+          if (cancelled || visibleRef.current) return;
+          tearDown();
+        }, HIDDEN_TEARDOWN_MS);
+        return;
+      }
+      // Returning to the tab: cancel any pending hidden-teardown, reset
+      // backoff, and reconnect if the connection dropped while hidden.
+      if (hiddenTeardownTimer) {
+        clearTimeout(hiddenTeardownTimer);
+        hiddenTeardownTimer = undefined;
+      }
+      reconnectDelay.current = RECONNECT_BASE_MS;
+      const ws = wsRef.current;
+      if (!ws || ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        // tearDown() set intentionalClose — reset so handleFailure would retry
+        // if this reconnect attempt itself fails.
+        intentionalClose.current = false;
         connect();
-      } else {
-        tearDown();
       }
     }
 
     visibleRef.current = !document.hidden;
     document.addEventListener("visibilitychange", onVisibility);
-    if (visibleRef.current) connect();
+    if (visibleRef.current) {
+      // Seed with the most recent releases so the page is useful before the
+      // first WS event arrives. Dispatches `rest-batch` (not `polling-start`),
+      // so this doesn't flip the mode indicator.
+      void pollOnce();
+      connect();
+    }
 
     return () => {
       cancelled = true;
+      clearPollStartTimer();
+      if (hiddenTeardownTimer) {
+        clearTimeout(hiddenTeardownTimer);
+        hiddenTeardownTimer = undefined;
+      }
       document.removeEventListener("visibilitychange", onVisibility);
       tearDown();
     };
