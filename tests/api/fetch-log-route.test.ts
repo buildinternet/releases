@@ -1,5 +1,5 @@
 /**
- * Covers `/v1/fetch-log` reads + writes end-to-end: POST inserts a row,
+ * Covers `/v1/admin/logs/fetch` reads + writes end-to-end: POST inserts a row,
  * GET surfaces it (both the unscoped list and the source-scoped variant).
  * Tracks the gap called out in #377 (tests/integration/fetch-log.test.ts
  * used to exercise this via the CLI subprocess).
@@ -46,7 +46,7 @@ describe("fetch-log route", () => {
     await seedSource();
 
     const postRes = await fetchApi(
-      new Request("http://test/v1/fetch-log", {
+      new Request("http://test/v1/admin/logs/fetch", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -63,7 +63,7 @@ describe("fetch-log route", () => {
     expect(inserted.id).toBeDefined();
     expect(inserted.status).toBe("success");
 
-    const getRes = await fetchApi(new Request("http://test/v1/fetch-log"));
+    const getRes = await fetchApi(new Request("http://test/v1/admin/logs/fetch"));
     expect(getRes.status).toBe(200);
     const rows = (await getRes.json()) as Array<{ id: string; sourceId: string }>;
     expect(rows).toHaveLength(1);
@@ -84,7 +84,7 @@ describe("fetch-log route", () => {
     for (const sourceId of ["src_1", "src_2", "src_1"]) {
       // oxlint-disable-next-line no-await-in-loop -- sequential: insertion order must be preserved for the length/filter assertion below
       await fetchApi(
-        new Request("http://test/v1/fetch-log", {
+        new Request("http://test/v1/admin/logs/fetch", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -97,7 +97,7 @@ describe("fetch-log route", () => {
       );
     }
 
-    const res = await fetchApi(new Request("http://test/v1/fetch-log?source=acme-cl"));
+    const res = await fetchApi(new Request("http://test/v1/admin/logs/fetch?source=acme-cl"));
     expect(res.status).toBe(200);
     const rows = (await res.json()) as Array<{ sourceId: string }>;
     expect(rows).toHaveLength(2);
@@ -105,7 +105,7 @@ describe("fetch-log route", () => {
   });
 
   it("GET ?source=<slug> returns 404 for unknown slug", async () => {
-    const res = await fetchApi(new Request("http://test/v1/fetch-log?source=nope"));
+    const res = await fetchApi(new Request("http://test/v1/admin/logs/fetch?source=nope"));
     expect(res.status).toBe(404);
   });
 });
