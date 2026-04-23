@@ -1,5 +1,6 @@
 ---
 title: "Source Management"
+description: "Add, edit, and organize changelog sources (operator-only)."
 adminOnly: true
 ---
 

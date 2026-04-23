@@ -5,7 +5,7 @@ import { useCopyToClipboard } from "@/lib/use-copy-to-clipboard";
 
 export function CopyPageButton({ markdown, slug }: { markdown: string; slug: string }) {
   const { copied, copy } = useCopyToClipboard();
-  const viewHref = `/docs/${slug === "index" ? "" : slug}.md`;
+  const viewHref = slug === "index" ? "/docs.md" : `/docs/${slug}.md`;
 
   return (
     <div className="inline-flex items-center gap-1 rounded-md border border-stone-200 bg-white text-[12px] font-medium text-stone-700 shadow-sm dark:border-stone-700 dark:bg-stone-900 dark:text-stone-300">

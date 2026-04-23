@@ -1,5 +1,6 @@
 ---
 title: "MCP Server"
+description: "Use Releases as an MCP tool server from Claude, Cursor, and other agents."
 adminOnly: false
 ---
 

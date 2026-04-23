@@ -1,5 +1,7 @@
 ---
 title: "Examples"
+description: "Common CLI workflows for browsing, searching, and tracking releases."
+adminOnly: false
 ---
 
 # Examples

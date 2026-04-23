@@ -1,5 +1,6 @@
 ---
 title: "Privacy & Telemetry"
+description: "What the CLI and local MCP server collect, how to inspect it, and how to opt out."
 adminOnly: false
 ---
 

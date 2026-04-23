@@ -31,6 +31,8 @@ describe("routeMap", () => {
     "/favicon.ico",
     "/vercel/nextjs/extra/segment",
     "/sitemap.xml",
+    "/llms.txt",
+    "/llms-full.txt",
   ];
   for (const input of unsupported) {
     it(`returns null for ${input}`, () => {

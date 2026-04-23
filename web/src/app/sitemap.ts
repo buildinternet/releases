@@ -1,6 +1,8 @@
 import type { MetadataRoute } from "next";
 import { api, ApiSetupError } from "@/lib/api";
 import { adminDocs, statusDashboard } from "@/flags";
+import { getStaticBaseUrl } from "@/lib/base-url";
+import { docsManifest } from "@/lib/docs-manifest";
 
 // Render on-demand (not during `next build`) so a cold worker / slow D1 can't
 // time out the Vercel export. The API response already carries Cache-Control,
@@ -8,7 +10,7 @@ import { adminDocs, statusDashboard } from "@/flags";
 export const dynamic = "force-dynamic";
 export const revalidate = 3600;
 
-const BASE_URL = process.env.RELEASED_BASE_URL?.replace(/\/$/, "") ?? "https://releases.sh";
+const BASE_URL = getStaticBaseUrl();
 
 type StaticRoute = {
   path: string;
@@ -21,29 +23,23 @@ const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/search", changeFrequency: "weekly", priority: 0.5 },
 ];
 
-const PUBLIC_DOCS_ROUTES: StaticRoute[] = [
-  { path: "/docs", changeFrequency: "weekly", priority: 0.7 },
-  { path: "/docs/installation", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/docs/api/mcp", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/docs/api/rest", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/docs/cli/browsing", changeFrequency: "monthly", priority: 0.6 },
-];
-
-const ADMIN_DOCS_ROUTES: StaticRoute[] = [
-  { path: "/docs/cli/admin", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/docs/cli/analysis", changeFrequency: "monthly", priority: 0.6 },
-  { path: "/docs/cli/fetching", changeFrequency: "monthly", priority: 0.6 },
-];
-
 const STATUS_ROUTES: StaticRoute[] = [{ path: "/status", changeFrequency: "daily", priority: 0.4 }];
+
+function docsRoutes(): StaticRoute[] {
+  // adminOnly pages stay gated by the same flag the HTML route honors.
+  return docsManifest({ includeAdmin: adminDocs }).map((entry) => ({
+    path: entry.path,
+    changeFrequency: entry.slug === "index" ? "weekly" : "monthly",
+    priority: entry.slug === "index" ? 0.7 : 0.6,
+  }));
+}
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const now = new Date();
 
   const staticRoutes: StaticRoute[] = [
     ...ALWAYS_PUBLIC,
-    ...PUBLIC_DOCS_ROUTES,
-    ...(adminDocs ? ADMIN_DOCS_ROUTES : []),
+    ...docsRoutes(),
     ...(statusDashboard ? STATUS_ROUTES : []),
   ];
 

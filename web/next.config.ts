@@ -36,6 +36,15 @@ const nextConfig: NextConfig = {
   async redirects() {
     return [{ source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 }];
   },
+  async rewrites() {
+    // `/docs/*.md` and Accept-based markdown negotiation are handled by the
+    // Vercel routing middleware in `src/proxy.ts`. We only need to map the
+    // agent-discovery entry points here.
+    return [
+      { source: "/llms.txt", destination: "/api/llms" },
+      { source: "/llms-full.txt", destination: "/api/llms-full" },
+    ];
+  },
   async headers() {
     return [
       {

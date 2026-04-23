@@ -1,5 +1,6 @@
 ---
 title: "Browsing & Search"
+description: "CLI commands for listing, searching, and inspecting orgs, sources, and releases."
 adminOnly: false
 ---
 

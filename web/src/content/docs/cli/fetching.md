@@ -1,5 +1,6 @@
 ---
 title: "Fetching Releases"
+description: "Pull new releases from configured sources into the index (operator-only)."
 adminOnly: true
 ---
 
