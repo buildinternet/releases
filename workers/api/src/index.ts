@@ -37,6 +37,7 @@ import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
 import { retierSources } from "./cron/retier.js";
 import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
+import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -79,6 +80,13 @@ export type Env = {
     // change-detector branches defined in the org playbook's `fetchQuirks`
     // frontmatter. Default off. See #517.
     SCRAPE_CHANGE_DETECT_ENABLED?: string;
+    // Feature flag: when "true", the 04:00 UTC cron force-drains stranded
+    // scrape/agent sources (unreliable quirk or stale beyond
+    // FORCE_DRAIN_STALE_HOURS) into the scrape-agent-sweep inbox. Default
+    // off. See #518.
+    FORCE_DRAIN_CRON_ENABLED?: string;
+    FORCE_DRAIN_STALE_HOURS?: string;
+    FORCE_SWEEP_MAX_SESSIONS?: string;
     DISCOVERY_WORKER?: Fetcher;
     ANTHROPIC_API_KEY?: SecretBinding;
     // Optional Cloudflare AI Gateway passthrough. When set, all direct Anthropic
@@ -280,7 +288,22 @@ export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
     // Daily retier job runs at 03:00 UTC; scrape-no-feed agent sweep at 01:00 UTC;
-    // poll-and-fetch runs every other hour.
+    // force-drain for stranded sources at 04:00 UTC; poll-and-fetch hourly.
+    if (event.cron === "0 4 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "force-drain-cron",
+          forceDrainSweep({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            FORCE_DRAIN_CRON_ENABLED: env.FORCE_DRAIN_CRON_ENABLED,
+            FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
+            FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
+          }),
+        ),
+      );
+      return;
+    }
     if (event.cron === "0 3 * * *") {
       ctx.waitUntil(
         loggedDispatch(

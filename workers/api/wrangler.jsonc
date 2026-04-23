@@ -44,6 +44,13 @@
     // the detector specified in the playbook's `fetchQuirks` frontmatter
     // (#516). Default "false" — flip after canary validates.
     "SCRAPE_CHANGE_DETECT_ENABLED": "false",
+    // Feature flag for the daily force-drain cron (#518). When true, the
+    // 04:00 UTC cron flags stranded scrape/agent sources (unreliable quirk
+    // or `last_fetched_at` older than FORCE_DRAIN_STALE_HOURS) so the
+    // 01:00 scrape-agent-sweep picks them up tomorrow. Default off.
+    "FORCE_DRAIN_CRON_ENABLED": "false",
+    "FORCE_DRAIN_STALE_HOURS": "72",
+    "FORCE_SWEEP_MAX_SESSIONS": "10",
     "MEDIA_ORIGIN": "https://media.releases.sh",
     // Embedding provider for semantic search. Default: voyage (voyage-4-lite,
     // requested at 512 dims via output_dimension to match the Vectorize indexes).
@@ -139,9 +146,10 @@
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
     // Hourly: poll feed sources and fetch changed ones.
-    // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
     // Daily at 01:00 UTC: drain scrape-no-feed sources via managed-agents.
-    "crons": ["0 * * * *", "0 3 * * *", "0 1 * * *"],
+    // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
+    // Daily at 04:00 UTC: force-drain stranded scrape/agent sources (#518).
+    "crons": ["0 * * * *", "0 1 * * *", "0 3 * * *", "0 4 * * *"],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
   "unsafe": {
@@ -219,6 +227,10 @@
         "POLL_FETCH_USE_WORKFLOW": "false",
         // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #517.
         "SCRAPE_CHANGE_DETECT_ENABLED": "false",
+        // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #518.
+        "FORCE_DRAIN_CRON_ENABLED": "false",
+        "FORCE_DRAIN_STALE_HOURS": "72",
+        "FORCE_SWEEP_MAX_SESSIONS": "10",
         "MEDIA_ORIGIN": "https://media.releases.sh",
         "EMBEDDING_PROVIDER": "voyage",
         "RATE_LIMIT_ENABLED": "false",
