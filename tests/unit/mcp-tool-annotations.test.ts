@@ -79,8 +79,11 @@ describe("MCP tool annotations", () => {
     expect(compare).toBeDefined();
     for (const tool of [summarize!, compare!]) {
       expect(tool.annotations?.readOnlyHint).toBe(true);
+      expect(tool.annotations?.destructiveHint).toBe(false);
       expect(tool.annotations?.idempotentHint).toBe(false);
       expect(tool.annotations?.openWorldHint).toBe(false);
+      expect(tool.title).toBeString();
+      expect(tool.annotations?.title).toBe(tool.title);
     }
   });
 });

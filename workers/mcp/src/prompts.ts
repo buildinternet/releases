@@ -10,6 +10,22 @@ import { completeOrgSlug, completeProductSlug } from "./slug-completion.js";
  * prompt body short and explicit about which tools to use so models that don't
  * auto-plan well still land on the right call.
  */
+
+/**
+ * MCP prompt arguments arrive as strings (per spec). Coerce the `days`
+ * look-back to a positive integer; fall back to the prompt's default when
+ * missing, NaN, or non-positive so the interpolated tool call always embeds
+ * a valid number.
+ */
+function parseDays(raw: string | undefined, fallback: number): number {
+  if (raw === undefined) return fallback;
+  const n = Number.parseInt(raw, 10);
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+/** Quote user-controlled strings so the interpolated snippet stays parseable. */
+const q = (value: string): string => JSON.stringify(value);
+
 export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: boolean }) {
   server.registerPrompt(
     "whats_new",
@@ -26,10 +42,10 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
       },
     },
     async ({ product, days }) => {
-      const window = days ?? "30";
+      const window = parseDays(days, 30);
       const tool = opts.aiTools
-        ? `Use the \`summarize_changes\` tool with product="${product}" and days=${window} to generate an AI summary.`
-        : `Call \`get_latest_releases\` with product="${product}" (request enough entries to cover the last ${window} days) and summarize the highlights yourself.`;
+        ? `Use the \`summarize_changes\` tool with product=${q(product)} and days=${window} to generate an AI summary.`
+        : `Call \`get_latest_releases\` with product=${q(product)} (request enough entries to cover the last ${window} days) and summarize the highlights yourself.`;
       return {
         messages: [
           {
@@ -61,9 +77,9 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
       },
     },
     async ({ productA, productB, days }) => {
-      const window = days ?? "30";
+      const window = parseDays(days, 30);
       const tool = opts.aiTools
-        ? `Use the \`compare_products\` tool with products=["${productA}", "${productB}"] and days=${window}.`
+        ? `Use the \`compare_products\` tool with products=[${q(productA)}, ${q(productB)}] and days=${window}.`
         : `Call \`get_latest_releases\` twice — once per product — over the last ${window} days, then do the comparison yourself.`;
       return {
         messages: [
@@ -97,14 +113,14 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
       },
     },
     async ({ organization, days }) => {
-      const window = days ?? "14";
+      const window = parseDays(days, 14);
       return {
         messages: [
           {
             role: "user",
             content: {
               type: "text",
-              text: `Catch me up on ${organization}. First call \`get_organization_overview\` with identifier="${organization}" to read the narrative briefing. Then call \`get_latest_releases\` with organization="${organization}" and enough entries to cover the last ${window} days. Present the overview first, then a chronological list of the recent releases grouped by product.`,
+              text: `Catch me up on ${organization}. First call \`get_organization_overview\` with identifier=${q(organization)} to read the narrative briefing. Then call \`get_latest_releases\` with organization=${q(organization)} and enough entries to cover the last ${window} days. Present the overview first, then a chronological list of the recent releases grouped by product.`,
             },
           },
         ],

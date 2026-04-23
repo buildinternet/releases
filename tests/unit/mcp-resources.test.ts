@@ -151,6 +151,23 @@ describe("MCP resources + completion", () => {
     }
   });
 
+  it("returns an empty completion on empty / whitespace-only input", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const ref = { type: "ref/resource" as const, uri: "releases://org/{orgSlug}" };
+      const results = await Promise.all(
+        ["", "   "].map((value) =>
+          link.client.complete({ ref, argument: { name: "orgSlug", value } }),
+        ),
+      );
+      for (const result of results) {
+        expect(result.completion.values).toEqual([]);
+      }
+    } finally {
+      await link.close();
+    }
+  });
+
   it("matches the display name when the slug does not contain the needle", async () => {
     // "cf-workers" does not contain "cloud" but its display name is "Cloudflare".
     const link = await linkResources(fixture.db);

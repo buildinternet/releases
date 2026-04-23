@@ -144,9 +144,9 @@ Every tool carries MCP annotations (`readOnlyHint`, `idempotentHint`, `openWorld
 
 | URI template                       | Description                                                                                                  |
 | ---------------------------------- | ------------------------------------------------------------------------------------------------------------ |
-| `releases://org/{orgSlug}`         | Organization profile rendered as markdown. Completion suggests slugs by substring match against slug + name. |
-| `releases://product/{productSlug}` | Product detail rendered as markdown. Same completion behavior.                                               |
-| `releases://source/{sourceSlug}`   | Source detail rendered as markdown. Same completion behavior.                                                |
+| `releases://org/{orgSlug}`         | Organization profile rendered as Markdown. Completion suggests slugs by substring match against slug + name. |
+| `releases://product/{productSlug}` | Product detail rendered as Markdown. Same completion behavior.                                               |
+| `releases://source/{sourceSlug}`   | Source detail rendered as Markdown. Same completion behavior.                                                |
 
 All three templates are completion-only — `resources/list` returns empty so the catalog scales without silent truncation. Type a prefix or substring and the client will suggest matching slugs.
 

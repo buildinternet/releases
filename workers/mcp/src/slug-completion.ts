@@ -5,9 +5,11 @@ import type { D1Db } from "./db.js";
 
 const COMPLETE_LIMIT = 20;
 
-/** Strip SQL LIKE wildcards so user-supplied `%`/`_` can't widen the match. */
+/** Strip SQL LIKE wildcards so user-supplied `%`/`_` can't widen the match; trim whitespace-only input to empty so the caller's early-return can skip the query. */
 function sanitize(value: string): string {
-  return value.toLowerCase().replace(/[%_]/g, "");
+  const trimmed = value.trim();
+  if (!trimmed) return "";
+  return trimmed.toLowerCase().replace(/[%_]/g, "");
 }
 
 /**

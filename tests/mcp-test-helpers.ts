@@ -19,9 +19,9 @@ export function asD1(db: TestDatabase["db"]): D1Db {
  * helpers were typed against. This helper bridges the two with an internal
  * `unknown` cast so call sites don't have to repeat it.
  */
-export async function createMcpTestClient<R extends (server: never, ...rest: never[]) => void>(
-  register: R,
-  ...rest: R extends (server: never, ...rest: infer Tail) => void ? Tail : never
+export async function createMcpTestClient<Rest extends unknown[]>(
+  register: (server: never, ...rest: Rest) => void,
+  ...rest: Rest
 ): Promise<{ client: Client; close: () => Promise<void> }> {
   const server = new McpServer({ name: "releases-test", version: "0.0.0" });
   (register as unknown as (s: unknown, ...args: unknown[]) => void)(server, ...rest);

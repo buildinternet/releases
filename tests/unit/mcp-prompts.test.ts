@@ -85,6 +85,8 @@ describe("MCP prompts + completion", () => {
       expect(text).toContain("summarize_changes");
       // default window: 30 days
       expect(text).toContain("30");
+      // AI branch should not also instruct the LLM to call the fallback tool.
+      expect(text).not.toContain("get_latest_releases");
     } finally {
       await link.close();
     }
