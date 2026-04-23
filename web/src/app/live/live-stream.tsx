@@ -1,10 +1,14 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect, useRef, useState } from "react";
 import { LocalTimestamp } from "@/components/local-timestamp";
 import { useReleaseStream, type LiveRelease } from "@/hooks/use-release-stream";
 
 type StatusTone = "live" | "polling" | "reconnecting";
+
+const UNREAD_FAVICON = "/favicon-unread.svg";
+const BADGE_CAP = 9;
 
 function statusLabel(
   connected: boolean,
@@ -47,9 +51,82 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
   );
 }
 
+/**
+ * Track releases that arrived while the tab was hidden. Resets to 0 when the
+ * tab becomes visible again. Drives the favicon/title badge.
+ */
+function useUnreadCount(releaseIds: string[]): number {
+  const [unread, setUnread] = useState(0);
+  const lastSeenIdRef = useRef<string | undefined>(undefined);
+  const seenOnceRef = useRef(false);
+
+  useEffect(() => {
+    function reset() {
+      setUnread(0);
+      lastSeenIdRef.current = releaseIds[0];
+    }
+    if (!document.hidden) reset();
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) reset();
+    });
+    // No removeEventListener: handler is anonymous and this effect runs once.
+    // The page-level component unmount tears down the whole island.
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    // Seed lastSeen on the first render that has items, without counting the
+    // initial REST backfill as unread.
+    if (!seenOnceRef.current) {
+      seenOnceRef.current = true;
+      lastSeenIdRef.current = releaseIds[0];
+      return;
+    }
+    if (!document.hidden) {
+      lastSeenIdRef.current = releaseIds[0];
+      return;
+    }
+    const lastSeen = lastSeenIdRef.current;
+    if (!lastSeen) {
+      if (releaseIds.length > 0) setUnread(releaseIds.length);
+      return;
+    }
+    const idx = releaseIds.indexOf(lastSeen);
+    const newCount = idx === -1 ? releaseIds.length : idx;
+    if (newCount > 0) setUnread(newCount);
+  }, [releaseIds]);
+
+  return unread;
+}
+
+function useDocumentBadge(unread: number) {
+  useEffect(() => {
+    const originalTitle = document.title;
+    if (unread > 0) {
+      const badge = unread > BADGE_CAP ? `${BADGE_CAP}+` : String(unread);
+      document.title = `(${badge}) ${originalTitle.replace(/^\(\d+\+?\)\s*/, "")}`;
+    } else {
+      document.title = originalTitle.replace(/^\(\d+\+?\)\s*/, "");
+    }
+  }, [unread]);
+
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
+    if (!link) return;
+    const original = link.dataset.originalHref ?? link.href;
+    link.dataset.originalHref = original;
+    link.href = unread > 0 ? UNREAD_FAVICON : original;
+    return () => {
+      link.href = original;
+    };
+  }, [unread]);
+}
+
 export function LiveStream({ apiUrl }: { apiUrl: string }) {
   const { releases, connected, mode } = useReleaseStream(apiUrl);
   const status = statusLabel(connected, mode);
+  const releaseIds = releases.map((r) => r.id);
+  const unread = useUnreadCount(releaseIds);
+  useDocumentBadge(unread);
 
   return (
     <div className="space-y-4">
