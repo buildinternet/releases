@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { statusDashboard } from "@/flags";
+import { webApiHeaders } from "@/lib/api";
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 const API_SECRET = process.env.RELEASED_API_KEY;
@@ -19,10 +20,11 @@ async function handle(req: NextRequest, ctx: { params: Promise<{ path: string[] 
   const qs = req.nextUrl.search;
   const url = `${API_URL}/v1/${path.join("/")}${qs}`;
 
-  const headers: Record<string, string> = {};
-  if (API_SECRET) headers["Authorization"] = `Bearer ${API_SECRET}`;
+  const extra: Record<string, string> = {};
+  if (API_SECRET) extra["Authorization"] = `Bearer ${API_SECRET}`;
   const contentType = req.headers.get("content-type");
-  if (contentType) headers["Content-Type"] = contentType;
+  if (contentType) extra["Content-Type"] = contentType;
+  const headers = webApiHeaders(extra);
 
   const init: RequestInit = { method: req.method, headers };
   if (req.method !== "GET" && req.method !== "HEAD") {

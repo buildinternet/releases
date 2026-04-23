@@ -65,6 +65,24 @@ const PROXY_KEY = process.env.RELEASES_PROXY_KEY;
 // for dev-gated views that need admin content.
 const API_SECRET = process.env.RELEASED_API_KEY;
 
+// Identifies server-side web→API traffic in Cloudflare analytics. UA shows up
+// in the "Source user agents" panel; X-Requested-With has its own panel.
+// Filter or exclude these to see real visitor traffic.
+const WEB_UA_VERSION =
+  process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? process.env.VERCEL_ENV ?? "dev";
+export const WEB_USER_AGENT = `releases-web/${WEB_UA_VERSION} (+https://releases.sh)`;
+export const WEB_REQUESTED_WITH = "releases-web";
+
+export function webApiHeaders(extra?: Record<string, string>): Record<string, string> {
+  const headers: Record<string, string> = {
+    "User-Agent": WEB_USER_AGENT,
+    "X-Requested-With": WEB_REQUESTED_WITH,
+  };
+  if (PROXY_KEY) headers["X-Releases-Proxy-Key"] = PROXY_KEY;
+  if (extra) Object.assign(headers, extra);
+  return headers;
+}
+
 export class ApiSetupError extends Error {
   setup: string[];
   constructor(message: string, setup: string[]) {
@@ -79,11 +97,7 @@ async function fetchApi<T>(
   init?: { cache?: RequestCache; next?: { revalidate?: number | false } },
 ): Promise<T> {
   let res: Response;
-  const headers: Record<string, string> = {};
-  if (PROXY_KEY) {
-    headers["X-Releases-Proxy-Key"] = PROXY_KEY;
-  }
-  const fetchInit: RequestInit = { headers };
+  const fetchInit: RequestInit = { headers: webApiHeaders() };
   if (init?.cache) {
     fetchInit.cache = init.cache;
   } else {
@@ -120,7 +134,7 @@ async function fetchApi<T>(
 async function adminFetchApi<T>(path: string): Promise<T | null> {
   if (!API_SECRET) return null;
   const res = await fetch(`${API_URL}${path}`, {
-    headers: { Authorization: `Bearer ${API_SECRET}` },
+    headers: webApiHeaders({ Authorization: `Bearer ${API_SECRET}` }),
     cache: "no-store",
   });
   if (!res.ok) return null;

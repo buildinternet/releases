@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
+import { webApiHeaders } from "@/lib/api";
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
-const PROXY_KEY = process.env.RELEASES_PROXY_KEY;
 
 export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -10,10 +10,9 @@ export async function GET(req: NextRequest, { params }: { params: Promise<{ slug
   const qs = new URLSearchParams();
   if (cursor) qs.set("cursor", cursor);
 
-  const headers: Record<string, string> = {};
-  if (PROXY_KEY) headers["X-Releases-Proxy-Key"] = PROXY_KEY;
-
-  const res = await fetch(`${API_URL}/v1/orgs/${slug}/releases?${qs}`, { headers });
+  const res = await fetch(`${API_URL}/v1/orgs/${slug}/releases?${qs}`, {
+    headers: webApiHeaders(),
+  });
   const data = await res.json();
   return NextResponse.json(data, { status: res.status });
 }

@@ -19,6 +19,7 @@ import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
+import { discoveryIdentityHeaders } from "./identity.js";
 
 /** Staging access gate header — must match workers/api/src/middleware/staging-access.ts. */
 const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
@@ -33,6 +34,23 @@ function withStagingHeader(fetcher: Fetcher, stagingKey: string): Fetcher {
     fetch: (input: RequestInfo | URL, init?: RequestInit) => {
       const req = input instanceof Request ? input : new Request(input, init);
       req.headers.set(STAGING_KEY_HEADER, stagingKey);
+      return fetcher.fetch(req, init);
+    },
+  } as Fetcher;
+}
+
+/**
+ * Wrap a Fetcher so every outbound request carries the discovery worker's
+ * identity headers (User-Agent, X-Requested-With). These surface in Cloudflare
+ * Analytics on the API edge so staging traffic is distinguishable from real
+ * visitors. Harmless on service-binding fetches.
+ */
+function withDiscoveryIdentity(fetcher: Fetcher): Fetcher {
+  const identity = discoveryIdentityHeaders();
+  return {
+    fetch: (input: RequestInfo | URL, init?: RequestInit) => {
+      const req = input instanceof Request ? input : new Request(input, init);
+      for (const [k, v] of Object.entries(identity)) req.headers.set(k, v);
       return fetcher.fetch(req, init);
     },
   } as Fetcher;
@@ -222,7 +240,9 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             init,
           ),
       };
-      const fetcher = withStagingHeader(baseFetcher as Fetcher, await this.getStagingKey());
+      const fetcher = withDiscoveryIdentity(
+        withStagingHeader(baseFetcher as Fetcher, await this.getStagingKey()),
+      );
 
       const executor = createTypedExecutor({ fetcher, apiKey: releasesApiKey, sessionId });
 
@@ -628,6 +648,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       const stagingKey = await this.getStagingKey();
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
+        ...discoveryIdentityHeaders(),
         ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
         ...(stagingKey ? { [STAGING_KEY_HEADER]: stagingKey } : {}),
       };
