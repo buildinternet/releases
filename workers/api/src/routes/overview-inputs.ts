@@ -13,18 +13,20 @@ import {
   OVERVIEW_WINDOW_DAYS,
   selectReleasesForOverview,
 } from "@buildinternet/releases-core/overview";
-import { orgWhere } from "../utils.js";
+import { authMiddleware } from "../middleware/auth.js";
+import { hydrateMediaUrls, orgWhere, parseReleaseMedia } from "../utils.js";
 import type { Env } from "../index.js";
 
 /**
- * GET /v1/overview-inputs?slug=<orgSlug>&window=<days>&limit=<n>
+ * GET /v1/orgs/:slug/overview/inputs?window=<days>&limit=<n>
  *
  * Returns the payload an agent needs to (re)generate an org overview:
  * org metadata, active sources, the existing overview content (if any),
  * and the post-selection slice of recent releases. Pure data — no AI.
+ * Release content + media URLs are hydrated to absolute CDN URLs so the
+ * agent can paste them directly into generated markdown.
  *
- * The shape mirrors what the deleted `regenerateOrgOverview` used to assemble
- * server-side. Selection logic lives in `@buildinternet/releases-core/overview`
+ * Admin-only. Selection logic lives in `@buildinternet/releases-core/overview`
  * so worker and (eventually) other consumers share it.
  */
 const app = new Hono<Env>();
@@ -33,10 +35,11 @@ function getDb(c: any): ReturnType<typeof createDb> {
   return c.get("db") ?? createDb(c.env.DB);
 }
 
-app.get("/", async (c) => {
+// authMiddleware forces admin auth — the parent /orgs/* middleware would
+// otherwise allow unauthenticated GETs through.
+app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
   const db = getDb(c);
-  const slug = c.req.query("slug");
-  if (!slug) return c.json({ error: "slug required" }, 400);
+  const slug = c.req.param("slug");
 
   const windowDays = parseInt(c.req.query("window") ?? String(OVERVIEW_WINDOW_DAYS), 10);
   const limit = parseInt(c.req.query("limit") ?? String(OVERVIEW_RELEASE_LIMIT), 10);
@@ -104,11 +107,25 @@ app.get("/", async (c) => {
     .from(knowledgePages)
     .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)));
 
+  // Hydrate media so the agent sees absolute URLs it can paste directly into
+  // the generated overview. Raw `/_media/{key}` prefixes would render broken
+  // in the web because the overview read path doesn't re-hydrate.
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+  const selectedShaped = selected.map((r) => ({
+    id: r.id,
+    version: r.version,
+    title: r.title,
+    content: hydrateMediaUrls(r.content, mediaOrigin),
+    publishedAt: r.publishedAt,
+    url: r.url,
+    media: parseReleaseMedia(r.media, mediaOrigin),
+  }));
+
   return c.json({
     org,
     sources: activeSources,
     existingContent: existing?.content ?? null,
-    selected,
+    selected: selectedShaped,
     totalAvailable,
     windowDays,
   });
