@@ -65,19 +65,11 @@ const SKILL_DIRS = [
   "classify-media-relevance",
 ];
 
-/**
- * Managed-agents memory stores created idempotently per environment.
- * Store IDs are recorded in the config file under `memoryStores.<key>`
- * and surfaced to workers via env vars in their wrangler.jsonc.
- */
-function memoryStoreEnvVarFor(key: string): string {
-  return key === "errata" ? "MEMORY_STORE_ERRATA_ID" : "MEMORY_STORE_TOOL_NOTES_ID";
-}
-
 const MEMORY_STORES = [
   {
     key: "errata",
     name: "releases-errata",
+    envVar: "MEMORY_STORE_ERRATA_ID",
     description:
       "Per-organization corrections and observations layered over playbook notes. " +
       "Paths: /orgs/<org_id>/errata.md (trusted rules), " +
@@ -87,6 +79,7 @@ const MEMORY_STORES = [
   {
     key: "toolNotes",
     name: "releases-tool-notes",
+    envVar: "MEMORY_STORE_TOOL_NOTES_ID",
     description:
       "Global harness and MCP tool quirks learned in session. " +
       "Paths: /tools/<tool>.md, /mcp/<server>/<tool>.md, /harness/notes.md. " +
@@ -517,54 +510,48 @@ async function main() {
   }
 
   // ── 1b. Sync memory stores ───────────────────────────────────
-  // Idempotent: looks up by display name (with env suffix), creates if
-  // missing, records ID in config. Never updates name/description on
-  // existing stores — edit those in the console if needed.
+  // Never updates name/description on existing stores — edit those in the
+  // Anthropic console if needed.
 
   if (syncMemoryStores) {
     console.log("── Memory Stores ────────────────────────────────");
-    const remote = await listMemoryStores(apiKey);
-    const byName = new Map(remote.map((s) => [s.name, s]));
-    const storeIds: Record<string, string> = { ...config.memoryStores };
+    config.memoryStores ??= {};
+    const allCached = MEMORY_STORES.every((def) => config.memoryStores?.[def.key]);
+    const byName = allCached
+      ? new Map<string, ApiMemoryStore>()
+      : new Map((await listMemoryStores(apiKey)).map((s) => [s.name, s]));
 
     for (const def of MEMORY_STORES) {
       const displayName = `${def.name}${titleSuffix}`;
-      const existing = byName.get(displayName);
-      const cached = config.memoryStores?.[def.key];
-      const existingId = existing?.id ?? cached;
+      const existingId = byName.get(displayName)?.id ?? config.memoryStores[def.key];
 
       if (existingId) {
         console.log(`✓ ${displayName} (${existingId}) — exists`);
-        storeIds[def.key] = existingId;
+        config.memoryStores[def.key] = existingId;
+      } else if (dryRun) {
+        console.log(`+ ${displayName} — (would create memory store)`);
       } else {
         console.log(`+ ${displayName} — creating`);
-        if (!dryRun) {
-          // oxlint-disable-next-line no-await-in-loop -- sequential for deterministic logging
-          const created = await createMemoryStore(apiKey, displayName, def.description);
-          storeIds[def.key] = created.id;
-          console.log(`  ✓ Created ${created.id}`);
-        } else {
-          console.log(`  (would create memory store)`);
-        }
+        // oxlint-disable-next-line no-await-in-loop -- writes run sequentially so a mid-loop failure leaves a recoverable partial state
+        const created = await createMemoryStore(apiKey, displayName, def.description);
+        config.memoryStores[def.key] = created.id;
+        console.log(`  ✓ Created ${created.id}`);
       }
     }
 
-    const missingInWrangler = Object.entries(storeIds).filter(([key, id]) => {
-      const present = readWranglerVar(memoryStoreEnvVarFor(key));
-      return id && present !== id;
-    });
+    const missingInWrangler = MEMORY_STORES.map((def) => ({
+      envVar: def.envVar,
+      id: config.memoryStores![def.key],
+    })).filter(({ envVar, id }) => id && readWranglerVar(envVar) !== id);
     if (missingInWrangler.length > 0) {
       console.log();
-      console.log("  ℹ wrangler.jsonc vars to set for the discovery + api workers:");
-      for (const [key, id] of missingInWrangler) {
-        console.log(`    "${memoryStoreEnvVarFor(key)}": "${id}"`);
+      console.log("  ℹ wrangler.jsonc vars to set for the discovery worker:");
+      for (const { envVar, id } of missingInWrangler) {
+        console.log(`    "${envVar}": "${id}"`);
       }
     }
 
-    if (!dryRun) {
-      config.memoryStores = storeIds as SkillConfig["memoryStores"];
-      saveConfig(configPath, config);
-    }
+    if (!dryRun) saveConfig(configPath, config);
     console.log();
   }
 
