@@ -34,7 +34,7 @@ import {
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 
-type ToolResult = { content: [{ type: "text"; text: string }] };
+export type ToolResult = { content: [{ type: "text"; text: string }] };
 
 function text(t: string): ToolResult {
   return { content: [{ type: "text" as const, text: t }] };

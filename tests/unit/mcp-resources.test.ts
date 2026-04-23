@@ -1,0 +1,209 @@
+import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
+import { organizations, products, sources } from "@buildinternet/releases-core/schema";
+import { newOrgId, newProductId, newSourceId } from "@buildinternet/releases-core/id";
+import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { asD1, createMcpTestClient } from "../mcp-test-helpers.js";
+import { registerResources } from "../../workers/mcp/src/resources.js";
+
+const linkResources = (db: TestDatabase["db"]) =>
+  createMcpTestClient(registerResources, asD1(db), "");
+
+async function seed(db: TestDatabase["db"]) {
+  const vercel = { id: newOrgId(), name: "Vercel", slug: "vercel" };
+  const supabase = { id: newOrgId(), name: "Supabase", slug: "supabase" };
+  const verbatim = { id: newOrgId(), name: "Verbatim", slug: "verbatim" };
+  // Display name "Cloudflare" diverges from slug "cf-workers" — lets us test
+  // name-only matches that slug-only completion would miss.
+  const cloudflare = { id: newOrgId(), name: "Cloudflare", slug: "cf-workers" };
+  await db.insert(organizations).values([
+    { id: vercel.id, name: vercel.name, slug: vercel.slug },
+    { id: supabase.id, name: supabase.name, slug: supabase.slug },
+    { id: verbatim.id, name: verbatim.name, slug: verbatim.slug },
+    { id: cloudflare.id, name: cloudflare.name, slug: cloudflare.slug },
+  ]);
+  await db.insert(products).values([
+    { id: newProductId(), orgId: vercel.id, name: "Next.js", slug: "nextjs" },
+    { id: newProductId(), orgId: vercel.id, name: "Turborepo", slug: "turborepo" },
+    { id: newProductId(), orgId: supabase.id, name: "Supabase", slug: "supabase-product" },
+    // Mid-string "turbo" — lets us assert prefix matches rank ahead of substring.
+    { id: newProductId(), orgId: vercel.id, name: "Alphaturbo", slug: "alphaturbo" },
+  ]);
+  await db.insert(sources).values([
+    {
+      id: newSourceId(),
+      orgId: vercel.id,
+      name: "Next.js Releases",
+      slug: "nextjs-releases",
+      type: "github",
+      url: "https://github.com/vercel/next.js/releases",
+    },
+    {
+      id: newSourceId(),
+      orgId: vercel.id,
+      name: "Next.js Canary",
+      slug: "nextjs-canary",
+      type: "github",
+      url: "https://github.com/vercel/next.js/commits/canary",
+    },
+    {
+      id: newSourceId(),
+      orgId: supabase.id,
+      name: "Supabase Changelog",
+      slug: "supabase-changelog",
+      type: "scrape",
+      url: "https://supabase.com/changelog",
+    },
+  ]);
+}
+
+describe("MCP resources + completion", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+
+  afterAll(() => {
+    fixture.cleanup();
+  });
+
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  it("advertises org, product, and source templates with URI patterns", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const { resourceTemplates } = await link.client.listResourceTemplates();
+      const byName = new Map(resourceTemplates.map((t) => [t.name, t.uriTemplate]));
+      expect(byName.get("organization")).toBe("releases://org/{orgSlug}");
+      expect(byName.get("product")).toBe("releases://product/{productSlug}");
+      expect(byName.get("source")).toBe("releases://source/{sourceSlug}");
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("returns an empty resources/list — discovery is completion-only", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const { resources } = await link.client.listResources();
+      expect(resources).toEqual([]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("reads an organization by releases://org/{slug}", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.readResource({ uri: "releases://org/vercel" });
+      expect(result.contents).toHaveLength(1);
+      const first = result.contents[0];
+      expect(first.uri).toBe("releases://org/vercel");
+      expect(first.mimeType).toBe("text/markdown");
+      if (!("text" in first)) throw new Error("expected text content, got blob");
+      expect(first.text).toContain("Vercel");
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("completes orgSlug by prefix (ver → vercel, verbatim)", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://org/{orgSlug}" },
+        argument: { name: "orgSlug", value: "ver" },
+      });
+      const values = result.completion.values.toSorted();
+      expect(values).toEqual(["verbatim", "vercel"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("completes sourceSlug even though the template has no list callback", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://source/{sourceSlug}" },
+        argument: { name: "sourceSlug", value: "nextjs" },
+      });
+      const values = result.completion.values.toSorted();
+      expect(values).toEqual(["nextjs-canary", "nextjs-releases"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("returns an empty completion when nothing matches", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://org/{orgSlug}" },
+        argument: { name: "orgSlug", value: "zzzz" },
+      });
+      expect(result.completion.values).toEqual([]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("matches the display name when the slug does not contain the needle", async () => {
+    // "cf-workers" does not contain "cloud" but its display name is "Cloudflare".
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://org/{orgSlug}" },
+        argument: { name: "orgSlug", value: "cloud" },
+      });
+      expect(result.completion.values).toEqual(["cf-workers"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("matches substrings anywhere, not just prefixes", async () => {
+    // "base" appears mid-slug for supabase-product and at-end for supabase.
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
+        argument: { name: "productSlug", value: "base" },
+      });
+      expect(result.completion.values.toSorted()).toEqual(["supabase-product"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("ranks prefix matches ahead of mid-string substring matches", async () => {
+    // "turborepo" (prefix) should come before "alphaturbo" (substring).
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
+        argument: { name: "productSlug", value: "turbo" },
+      });
+      expect(result.completion.values).toEqual(["turborepo", "alphaturbo"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("strips LIKE wildcards so user-supplied % / _ cannot widen the match", async () => {
+    const link = await linkResources(fixture.db);
+    try {
+      // Stripping `%` and `_` leaves "bc", which no org/name contains.
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://org/{orgSlug}" },
+        argument: { name: "orgSlug", value: "%_b_c%" },
+      });
+      expect(result.completion.values).toEqual([]);
+    } finally {
+      await link.close();
+    }
+  });
+});
