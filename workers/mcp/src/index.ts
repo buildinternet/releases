@@ -1,4 +1,5 @@
 import { createMcpHandler } from "agents/mcp";
+import { isHtmlRequest, renderLandingPage } from "./landing.js";
 import { createServer, type Env } from "./mcp-agent.js";
 
 /** Custom header carrying the staging shared secret. Mirrors workers/api. */
@@ -47,7 +48,21 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
   const unauthorized = await checkStagingKey(request, env);
   if (unauthorized) return unauthorized;
 
-  if (url.pathname === "/") {
+  if (url.pathname === "/" && request.method === "GET") {
+    if (isHtmlRequest(request)) {
+      // Always advertise https for real hosts — Cloudflare terminates TLS at
+      // the edge, and a plain-http URL would be wrong to copy/paste. Leave
+      // localhost alone so `bun run dev:mcp` still shows a working URL.
+      const isLocal = url.hostname === "localhost" || url.hostname === "127.0.0.1";
+      const scheme = isLocal ? url.protocol.replace(":", "") : "https";
+      const mcpUrl = `${scheme}://${url.host}/mcp`;
+      return new Response(renderLandingPage(mcpUrl), {
+        headers: {
+          "Content-Type": "text/html; charset=utf-8",
+          "Cache-Control": "public, max-age=300",
+        },
+      });
+    }
     return Response.json({
       name: "Releases MCP Server",
       description: "Changelog registry — search releases, compare products, and get AI summaries",
