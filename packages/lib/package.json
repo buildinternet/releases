@@ -19,6 +19,7 @@
     "./errors": "./src/errors.ts",
     "./formatters": "./src/formatters.ts",
     "./logger": "./src/logger.ts",
+    "./ma-rate-limit": "./src/ma-rate-limit.ts",
     "./media": "./src/media.ts",
     "./media-url": "./src/media-url.ts",
     "./source-edit": "./src/source-edit.ts",

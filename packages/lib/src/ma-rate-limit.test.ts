@@ -6,10 +6,7 @@ import {
   AuthenticationError,
 } from "@anthropic-ai/sdk";
 import type { ErrorType } from "@anthropic-ai/sdk/resources/shared";
-import {
-  classifyMaRateLimitError,
-  buildMaRateLimitErrorMessage,
-} from "../../workers/discovery/src/managed-agents-session";
+import { classifyMaRateLimitError, buildMaRateLimitErrorMessage } from "./ma-rate-limit";
 
 function makeRateLimitError(opts: { type?: ErrorType; retryAfter?: string } = {}): RateLimitError {
   const type = opts.type ?? "rate_limit_error";
