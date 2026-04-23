@@ -1,5 +1,13 @@
-import { sql } from "drizzle-orm";
+import { asc, desc, sql, type Column, type SQL } from "drizzle-orm";
 import { sources, releases } from "@buildinternet/releases-core/schema";
+
+/**
+ * Returns `[col IS NULL, col ASC|DESC]` — a two-key ORDER BY that sinks NULLs
+ * to the bottom regardless of direction. Callers append their own tiebreakers.
+ */
+export function nullsLastOrderBy(col: Column, dir: "asc" | "desc"): SQL[] {
+  return [sql`${col} IS NULL`, dir === "asc" ? asc(col) : desc(col)];
+}
 
 /** Exclude hidden sources: (is_hidden = 0 OR is_hidden IS NULL) */
 export const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;

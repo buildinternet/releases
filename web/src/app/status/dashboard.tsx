@@ -9,6 +9,7 @@ import {
 } from "@/components/fetch-log-shared";
 import { FetchLogList } from "@/components/fetch-log-list";
 import { useFetchLog } from "@/components/use-fetch-log";
+import { SortHeader, type SortState } from "@/components/sort-header";
 import { DAY_MS } from "@/lib/cadence";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
@@ -84,6 +85,16 @@ interface FetchTriggerResult {
 
 type Tab = "sessions" | "fetch-log" | "sources" | "orgs" | "cron";
 type DateRange = "today" | "week" | "month" | "all";
+
+type SourceSortField =
+  | "name"
+  | "org"
+  | "type"
+  | "latest_date"
+  | "last_fetched_at"
+  | "fetch_priority"
+  | "median_gap_days";
+type FetchLogSortField = "createdAt" | "durationMs";
 
 const TABS: { value: Tab; label: string }[] = [
   { value: "sessions", label: "Sessions" },
@@ -196,6 +207,14 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [sessionLogs, setSessionLogs] = useState<Record<string, string[]>>({});
   const [sessionStdout, setSessionStdout] = useState<Record<string, string[]>>({});
   const [allSources, setAllSources] = useState<SourceEntry[]>([]);
+  const [sourceSort, setSourceSort] = useState<SortState<SourceSortField>>({
+    field: "name",
+    dir: "asc",
+  });
+  const [fetchLogSort, setFetchLogSort] = useState<SortState<FetchLogSortField>>({
+    field: "createdAt",
+    dir: "desc",
+  });
   const [sessionPage, setSessionPage] = useState(0);
   const pageSize = 25;
   const fetchLogPrependRef = useRef<((entry: FetchLogEntry) => void) | null>(null);
@@ -230,15 +249,25 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     hydrate();
   }, [hydrate]);
 
-  // Fetch sources once on mount (not tied to date range — requires auth)
+  // Fetch sources when sort changes (server-side sort triggers a refetch).
+  // TODO: `limit=500` is a stopgap. Once the source count crosses the cap,
+  // the Sources tab needs real server-side pagination (envelope=true) and
+  // server-side type/stale/q filters so we stop shipping the whole table to
+  // the client, and OrgsTable needs its own rollup endpoint instead of
+  // aggregating sources in the browser.
   useEffect(() => {
-    fetch(`/api/proxy/sources`)
+    const params = new URLSearchParams({
+      limit: "500",
+      sort: sourceSort.field,
+      dir: sourceSort.dir,
+    });
+    fetch(`/api/proxy/sources?${params}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((src) => {
         if (src) setAllSources(src as SourceEntry[]);
       })
       .catch(() => {});
-  }, []);
+  }, [sourceSort]);
 
   // Handle incoming WebSocket messages
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -528,8 +557,17 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
         />
       )}
-      {tab === "fetch-log" && <FetchLogTable after={after} prependRef={fetchLogPrependRef} />}
-      {tab === "sources" && <SourcesTable sources={allSources} />}
+      {tab === "fetch-log" && (
+        <FetchLogTable
+          after={after}
+          prependRef={fetchLogPrependRef}
+          sort={fetchLogSort}
+          onSortChange={setFetchLogSort}
+        />
+      )}
+      {tab === "sources" && (
+        <SourcesTable sources={allSources} sort={sourceSort} onSortChange={setSourceSort} />
+      )}
       {tab === "orgs" && <OrgsTable sources={allSources} />}
       {tab === "cron" && <CronRunsTab />}
     </div>
@@ -901,15 +939,21 @@ function SessionLogPanel({
 function FetchLogTable({
   after,
   prependRef,
+  sort,
+  onSortChange,
 }: {
   after: string | null;
   prependRef: React.RefObject<((entry: FetchLogEntry) => void) | null>;
+  sort: SortState<FetchLogSortField>;
+  onSortChange: (next: SortState<FetchLogSortField>) => void;
 }) {
   const [filter, setFilter] = useState<FetchLogStatusFilter>("all");
   const { entries, totalCount, statusCounts, hasMore, loading, error, loadMore, prepend } =
     useFetchLog({
       after,
       status: filter,
+      sort: sort.field,
+      dir: sort.dir,
     });
 
   useEffect(() => {
@@ -949,6 +993,8 @@ function FetchLogTable({
       filter={filter}
       onFilterChange={setFilter}
       onLoadMore={loadMore}
+      sort={sort}
+      onSortChange={onSortChange}
       formatTime={(iso) => formatTime(new Date(iso).getTime())}
       showOrg
     />
@@ -957,7 +1003,15 @@ function FetchLogTable({
 
 type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 
-function SourcesTable({ sources }: { sources: SourceEntry[] }) {
+function SourcesTable({
+  sources,
+  sort,
+  onSortChange,
+}: {
+  sources: SourceEntry[];
+  sort: SortState<SourceSortField>;
+  onSortChange: (next: SortState<SourceSortField>) => void;
+}) {
   const [filter, setFilter] = useState<SourceTypeFilter>("all");
   const [query, setQuery] = useState("");
   const [staleOnly, setStaleOnly] = useState(false);
@@ -965,6 +1019,14 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
   const [results, setResults] = useState<Record<string, FetchTriggerResult>>({});
   const [page, setPage] = useState(0);
   const perPage = 25;
+
+  const handleSortChange = useCallback(
+    (next: SortState<SourceSortField>) => {
+      setPage(0);
+      onSortChange(next);
+    },
+    [onSortChange],
+  );
 
   const { countByType, staleCount } = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -1084,13 +1146,35 @@ function SourcesTable({ sources }: { sources: SourceEntry[] }) {
       </div>
 
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
-        <div className="grid grid-cols-[2fr_1fr_1fr_1.4fr_0.9fr_1.2fr_auto] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
-          <div>Name</div>
-          <div>Org</div>
-          <div>Type</div>
-          <div>Last Release</div>
-          <div>Priority</div>
-          <div>Cadence</div>
+        <div className="grid grid-cols-[2fr_1fr_1fr_1.4fr_0.9fr_1.2fr_auto] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium">
+          <SortHeader field="name" current={sort} onChange={handleSortChange}>
+            Name
+          </SortHeader>
+          <SortHeader field="org" current={sort} onChange={handleSortChange}>
+            Org
+          </SortHeader>
+          <SortHeader field="type" current={sort} onChange={handleSortChange}>
+            Type
+          </SortHeader>
+          <SortHeader
+            field="latest_date"
+            current={sort}
+            onChange={handleSortChange}
+            defaultDir="desc"
+          >
+            Last Release
+          </SortHeader>
+          <SortHeader field="fetch_priority" current={sort} onChange={handleSortChange}>
+            Priority
+          </SortHeader>
+          <SortHeader
+            field="median_gap_days"
+            current={sort}
+            onChange={handleSortChange}
+            defaultDir="desc"
+          >
+            Cadence
+          </SortHeader>
           <div></div>
         </div>
         {paginated.map((src) => {

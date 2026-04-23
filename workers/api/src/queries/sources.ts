@@ -41,13 +41,48 @@ export async function countSourcesForList(db: D1Db, whereClause?: SQL): Promise<
   return rows[0]?.total ?? 0;
 }
 
+export const SOURCE_SORT_FIELDS = [
+  "name",
+  "org",
+  "type",
+  "latest_date",
+  "last_fetched_at",
+  "fetch_priority",
+  "median_gap_days",
+] as const;
+export type SourceSortField = (typeof SOURCE_SORT_FIELDS)[number];
+export type SortDir = "asc" | "desc";
+
+// NULLs float to the bottom regardless of direction so blank values don't
+// dominate the page the user is looking at.
+function sourceOrderBy(sort: SourceSortField, dir: SortDir): SQL {
+  const d = dir === "asc" ? sql`ASC` : sql`DESC`;
+  switch (sort) {
+    case "name":
+      return sql`sources.name ${d}`;
+    case "org":
+      return sql`organizations.name IS NULL, organizations.name ${d}, sources.name ASC`;
+    case "type":
+      return sql`sources.type ${d}, sources.name ASC`;
+    case "latest_date":
+      return sql`rs.latest_date IS NULL, rs.latest_date ${d}, sources.name ASC`;
+    case "last_fetched_at":
+      return sql`sources.last_fetched_at IS NULL, sources.last_fetched_at ${d}, sources.name ASC`;
+    case "fetch_priority":
+      return sql`sources.fetch_priority IS NULL, sources.fetch_priority ${d}, sources.name ASC`;
+    case "median_gap_days":
+      return sql`sources.median_gap_days IS NULL, sources.median_gap_days ${d}, sources.name ASC`;
+  }
+}
+
 export async function getSourcesWithStats(
   db: D1Db,
   whereClause?: SQL,
-  opts?: { limit?: number; offset?: number },
+  opts?: { limit?: number; offset?: number; sort?: SourceSortField; dir?: SortDir },
 ): Promise<SourceListRow[]> {
   const limitClause = opts?.limit != null ? sql`LIMIT ${opts.limit}` : sql``;
   const offsetClause = opts?.offset != null && opts.offset > 0 ? sql`OFFSET ${opts.offset}` : sql``;
+  const orderBy = sourceOrderBy(opts?.sort ?? "name", opts?.dir ?? "asc");
   return db.all<SourceListRow>(sql`
     SELECT
       sources.*,
@@ -78,7 +113,7 @@ export async function getSourcesWithStats(
       GROUP BY r.source_id
     ) rs ON rs.source_id = sources.id
     ${whereClause ? sql`WHERE ${whereClause}` : sql``}
-    ORDER BY sources.name
+    ORDER BY ${orderBy}
     ${limitClause} ${offsetClause}
   `);
 }

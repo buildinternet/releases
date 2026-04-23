@@ -180,6 +180,11 @@ export const sources = sqliteTable(
     index("idx_sources_org").on(table.orgId),
     index("idx_sources_org_hidden").on(table.orgId, table.isHidden),
     index("idx_sources_product").on(table.productId),
+    // Back the /status Sources-tab ORDER BY variants — the admin dashboard
+    // sorts by name, last_fetched_at, and median_gap_days.
+    index("idx_sources_name").on(table.name),
+    index("idx_sources_last_fetched_at").on(table.lastFetchedAt),
+    index("idx_sources_median_gap_days").on(table.medianGapDays),
   ],
 );
 

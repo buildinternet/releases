@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import { FetchStatusBadge, formatFetchDuration } from "@/components/fetch-log-shared";
+import { SortHeader, type SortState } from "@/components/sort-header";
+
+type CronRunSortField = "startedAt" | "durationMs" | "cronName";
 
 type CronRun = {
   id: string;
@@ -38,16 +41,27 @@ function formatStartedAt(iso: string): string {
 export function CronRunsTab() {
   const [rows, setRows] = useState<CronRun[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState<CronRunSortField>>({
+    field: "startedAt",
+    dir: "desc",
+  });
 
   useEffect(() => {
-    fetch(`/api/proxy/admin/cron-runs?limit=50`)
+    setRows(null);
+    setErr(null);
+    const params = new URLSearchParams({
+      limit: "50",
+      sort: sort.field,
+      dir: sort.dir,
+    });
+    fetch(`/api/proxy/admin/cron-runs?${params}`)
       .then(async (r) => {
         if (!r.ok) throw new Error(`${r.status}`);
         return r.json();
       })
       .then((data: CronRun[]) => setRows(data))
       .catch((e) => setErr(e instanceof Error ? e.message : String(e)));
-  }, []);
+  }, [sort]);
 
   if (err) return <div className="text-red-500 text-xs">Error loading cron runs: {err}</div>;
   if (!rows) return <div className="text-stone-500 text-xs">Loading...</div>;
@@ -56,12 +70,18 @@ export function CronRunsTab() {
 
   return (
     <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
-      <div className="grid grid-cols-[1.5fr_1.5fr_0.8fr_1fr_1.5fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400">
-        <div>Cron</div>
-        <div>Started</div>
-        <div>Duration</div>
-        <div>Status</div>
-        <div>Outcome</div>
+      <div className="grid grid-cols-[1.5fr_1.5fr_0.8fr_1fr_1.5fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium">
+        <SortHeader field="cronName" current={sort} onChange={setSort}>
+          Cron
+        </SortHeader>
+        <SortHeader field="startedAt" current={sort} onChange={setSort} defaultDir="desc">
+          Started
+        </SortHeader>
+        <SortHeader field="durationMs" current={sort} onChange={setSort} defaultDir="desc">
+          Duration
+        </SortHeader>
+        <div className="uppercase tracking-wider text-stone-400">Status</div>
+        <div className="uppercase tracking-wider text-stone-400">Outcome</div>
       </div>
       {rows.map((r) => (
         <CronRunRow key={r.id} row={r} />

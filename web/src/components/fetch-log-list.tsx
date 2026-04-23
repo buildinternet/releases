@@ -11,6 +11,8 @@ import {
   formatFetchDuration,
   FETCH_LOG_FILTER_BUTTONS,
 } from "./fetch-log-shared";
+import { SortHeader, type SortState } from "./sort-header";
+import type { FetchLogSortField } from "./use-fetch-log";
 
 interface Props {
   entries: FetchLogEntry[];
@@ -21,6 +23,8 @@ interface Props {
   filter: FetchLogStatusFilter;
   onFilterChange: (value: FetchLogStatusFilter) => void;
   onLoadMore: () => void;
+  sort: SortState<FetchLogSortField>;
+  onSortChange: (next: SortState<FetchLogSortField>) => void;
   /** How to render a fetch row's timestamp — dashboard uses a timezone-aware format; org pages use a "today? time : date time" short form. */
   formatTime: (iso: string) => string;
   /** When true, show the org name under the source (for surfaces that span orgs). */
@@ -38,6 +42,8 @@ export function FetchLogList({
   filter,
   onFilterChange,
   onLoadMore,
+  sort,
+  onSortChange,
   formatTime,
   showOrg = false,
   className,
@@ -72,10 +78,20 @@ export function FetchLogList({
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
         <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
           <div>Source</div>
-          <div>Time</div>
+          <SortHeader field="createdAt" current={sort} onChange={onSortChange} defaultDir="desc">
+            Time
+          </SortHeader>
           <div>Status</div>
           <div>Result</div>
-          <div className="text-right">Duration</div>
+          <SortHeader
+            field="durationMs"
+            current={sort}
+            onChange={onSortChange}
+            defaultDir="desc"
+            alignRight
+          >
+            Duration
+          </SortHeader>
         </div>
         {entries.map((log) => {
           const isExpanded = expandedIds.has(log.id);

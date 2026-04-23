@@ -44,6 +44,8 @@ import {
   hydrateMediaUrls,
   parseReleaseMedia,
   parseBoolParam,
+  parseEnumParam,
+  parseSortDir,
 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { authMiddleware } from "../middleware/auth.js";
@@ -57,6 +59,7 @@ import {
   getSourceReleasesPaginated,
   getSourceActivityBuckets,
   getSourceHeatmapData,
+  SOURCE_SORT_FIELDS,
 } from "../queries/sources.js";
 import { notDisabled } from "../queries/shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
@@ -165,8 +168,11 @@ sourceRoutes.get("/sources", async (c) => {
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
   const wantsEnvelope = c.req.query("envelope") === "true";
 
+  const sort = parseEnumParam(c.req.query("sort"), SOURCE_SORT_FIELDS, "name");
+  const dir = parseSortDir(c.req.query("dir"), "asc");
+
   const [rows, totalItems] = await Promise.all([
-    getSourcesWithStats(db, whereClause, { limit, offset }),
+    getSourcesWithStats(db, whereClause, { limit, offset, sort, dir }),
     wantsEnvelope ? countSourcesForList(db, whereClause) : Promise.resolve(null),
   ]);
 

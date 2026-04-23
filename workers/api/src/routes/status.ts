@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, sql, gte, lte } from "drizzle-orm";
+import { and, asc, desc, eq, sql, gte, lte, type SQL } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   FETCH_LOG_STATUSES,
@@ -10,7 +10,8 @@ import {
   usageLog,
 } from "@buildinternet/releases-core/schema";
 import type { Env } from "../index.js";
-import { getStatusHub } from "../utils.js";
+import { getStatusHub, parseEnumParam, parseSortDir } from "../utils.js";
+import { nullsLastOrderBy } from "../queries/shared.js";
 import { encodeCursor, decodeCursor } from "./fetch-log-cursor.js";
 
 export const statusRoutes = new Hono<Env>();
@@ -21,6 +22,8 @@ statusRoutes.get("/status/ws", async (c) => {
   }
   return getStatusHub(c.env).fetch(c.req.raw);
 });
+
+const FETCH_LOG_SORT_FIELDS = ["createdAt", "durationMs"] as const;
 
 statusRoutes.get("/status/fetch-log", async (c) => {
   const db = createDb(c.env.DB);
@@ -33,7 +36,16 @@ statusRoutes.get("/status/fetch-log", async (c) => {
   const status = (FETCH_LOG_STATUSES as readonly string[]).includes(statusParam ?? "")
     ? (statusParam as FetchLogStatus)
     : undefined;
-  const cursorToken = c.req.query("cursor");
+  const sort = parseEnumParam(c.req.query("sort"), FETCH_LOG_SORT_FIELDS, "createdAt");
+  const dir = parseSortDir(c.req.query("dir"));
+
+  // Cursor pagination is only wired for the default (createdAt desc) sort —
+  // any other sort pulls a single window capped at `limit` and omits
+  // `nextCursor`, because re-ranking across pages (e.g. slowest fetches) is
+  // rarely paged through and the cursor shape would have to carry the sort
+  // key.
+  const useCursor = sort === "createdAt" && dir === "desc";
+  const cursorToken = useCursor ? c.req.query("cursor") : undefined;
   const cursor = cursorToken ? decodeCursor(cursorToken) : null;
 
   // Scope predicates — apply to both counts and the page.
@@ -50,6 +62,12 @@ statusRoutes.get("/status/fetch-log", async (c) => {
       sql`(${fetchLog.createdAt}, ${fetchLog.id}) < (${cursor.createdAt}, ${cursor.id})`,
     );
   }
+
+  const dirFn = dir === "asc" ? asc : desc;
+  const orderBy: SQL[] =
+    sort === "durationMs"
+      ? [...nullsLastOrderBy(fetchLog.durationMs, dir), desc(fetchLog.createdAt), desc(fetchLog.id)]
+      : [dirFn(fetchLog.createdAt), dirFn(fetchLog.id)];
 
   const rows = await db
     .select({
@@ -72,14 +90,14 @@ statusRoutes.get("/status/fetch-log", async (c) => {
     .leftJoin(sources, sql`${fetchLog.sourceId} = ${sources.id}`)
     .leftJoin(organizations, sql`${sources.orgId} = ${organizations.id}`)
     .where(pagePredicates.length > 0 ? and(...pagePredicates) : undefined)
-    .orderBy(desc(fetchLog.createdAt), desc(fetchLog.id))
+    .orderBy(...orderBy)
     .limit(limit + 1);
 
   const hasMore = rows.length > limit;
   const entries = hasMore ? rows.slice(0, limit) : rows;
   const last = entries[entries.length - 1];
   const nextCursor =
-    hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
+    useCursor && hasMore && last ? encodeCursor({ createdAt: last.createdAt, id: last.id }) : null;
 
   // Count query runs only on the first page (no cursor). The grouped
   // rollup gives us both the per-status counts and the scope-wide total.
