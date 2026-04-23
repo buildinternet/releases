@@ -138,7 +138,7 @@ async function writeFetchLog(
   },
 ): Promise<void> {
   await env.apiFetcher
-    .fetch("https://api/v1/fetch-log", {
+    .fetch("https://api/v1/admin/logs/fetch", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

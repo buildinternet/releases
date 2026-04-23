@@ -7,7 +7,7 @@ import type { Env } from "../index.js";
 
 export const usageLogRoutes = new Hono<Env>();
 
-usageLogRoutes.get("/usage-log/stats", async (c) => {
+usageLogRoutes.get("/admin/logs/usage/stats", async (c) => {
   const db = createDb(c.env.DB);
   const days = parseInt(c.req.query("days") ?? "7", 10);
   const since = daysAgoIso(days);
@@ -59,7 +59,7 @@ usageLogRoutes.get("/usage-log/stats", async (c) => {
   return c.json({ totals, byOperation, byModel, bySource });
 });
 
-usageLogRoutes.post("/usage-log", async (c) => {
+usageLogRoutes.post("/admin/logs/usage", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json();
 

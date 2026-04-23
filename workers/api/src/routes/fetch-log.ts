@@ -7,7 +7,7 @@ import type { Env } from "../index.js";
 
 export const fetchLogRoutes = new Hono<Env>();
 
-fetchLogRoutes.get("/fetch-log", async (c) => {
+fetchLogRoutes.get("/admin/logs/fetch", async (c) => {
   const db = createDb(c.env.DB);
   const sourceSlug = c.req.query("source");
   const limit = parseInt(c.req.query("limit") ?? "20", 10);
@@ -29,7 +29,7 @@ fetchLogRoutes.get("/fetch-log", async (c) => {
   return c.json(logs);
 });
 
-fetchLogRoutes.post("/fetch-log", async (c) => {
+fetchLogRoutes.post("/admin/logs/fetch", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json();
 

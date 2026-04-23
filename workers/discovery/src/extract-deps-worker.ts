@@ -96,7 +96,7 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
     async logUsage(entry: UsageEntry): Promise<void> {
       // Fire-and-forget; usage logging shouldn't fail the extraction.
       env.apiFetcher
-        .fetch("https://api/v1/usage-log", {
+        .fetch("https://api/v1/admin/logs/usage", {
           method: "POST",
           headers: jsonHeaders(),
           body: JSON.stringify({

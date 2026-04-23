@@ -173,8 +173,6 @@ for (const r of publicReadRoutes) {
 // Admin-only routes: all methods require auth.
 const adminRoutes = [
   "sessions",
-  "fetch-log",
-  "usage-log",
   "blocked-urls",
   "evaluate",
   "status/fetch-log",
@@ -182,6 +180,7 @@ const adminRoutes = [
   "status/event",
   "admin/embed/status",
   "admin/cron-runs",
+  "admin/logs",
   "webhooks",
   "workflows",
 ];
