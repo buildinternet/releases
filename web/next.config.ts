@@ -33,6 +33,9 @@ const nextConfig: NextConfig = {
     };
     return config;
   },
+  async redirects() {
+    return [{ source: "/mcp", destination: "/docs/api/mcp", statusCode: 302 }];
+  },
   async headers() {
     return [
       {
