@@ -3,6 +3,9 @@ import {
   generatePlaybookHeader,
   assemblePlaybook,
   extractNotesFromLegacyPlaybook,
+  parsePlaybookNotes,
+  serializePlaybookNotes,
+  loadFetchQuirks,
 } from "@releases/ai-internal/playbook";
 import type { Source } from "@buildinternet/releases-core/schema";
 
@@ -233,5 +236,136 @@ _No agent notes yet. Agents can append observations here._
 `;
 
     expect(extractNotesFromLegacyPlaybook(content)).toBeNull();
+  });
+});
+
+describe("parsePlaybookNotes", () => {
+  it("returns null frontmatter and empty body for null/empty input", () => {
+    expect(parsePlaybookNotes(null)).toEqual({ frontmatter: null, body: "" });
+    expect(parsePlaybookNotes("")).toEqual({ frontmatter: null, body: "" });
+  });
+
+  it("returns null frontmatter and verbatim body when no fence is present", () => {
+    const notes = "### Fetch instructions\n\nFetch weekly on Mondays.";
+    expect(parsePlaybookNotes(notes)).toEqual({ frontmatter: null, body: notes });
+  });
+
+  it("parses a frontmatter fence and returns the body separately", () => {
+    const notes = `---
+fetchQuirks:
+  brex:
+    changeDetector: etag
+    rationale: ETag stable across HEADs
+---
+
+### Fetch instructions
+
+Details below.`;
+
+    const { frontmatter, body } = parsePlaybookNotes(notes);
+    expect(frontmatter).toEqual({
+      fetchQuirks: {
+        brex: {
+          changeDetector: "etag",
+          rationale: "ETag stable across HEADs",
+        },
+      },
+    });
+    expect(body).toBe("### Fetch instructions\n\nDetails below.");
+  });
+
+  it("returns null frontmatter when YAML is invalid, keeping the original notes as body", () => {
+    const notes = `---
+fetchQuirks: : : oops
+---
+
+Body here`;
+    const { frontmatter, body } = parsePlaybookNotes(notes);
+    expect(frontmatter).toBeNull();
+    expect(body).toBe(notes);
+  });
+
+  it("returns null frontmatter when the schema rejects (bad detector name)", () => {
+    const notes = `---
+fetchQuirks:
+  brex:
+    changeDetector: not-a-detector
+    rationale: x
+---
+`;
+    const { frontmatter } = parsePlaybookNotes(notes);
+    expect(frontmatter).toBeNull();
+  });
+});
+
+describe("serializePlaybookNotes", () => {
+  it("omits the fence entirely when frontmatter is empty", () => {
+    expect(serializePlaybookNotes(null, "body")).toBe("body");
+    expect(serializePlaybookNotes({}, "body")).toBe("body");
+  });
+
+  it("round-trips frontmatter + body", () => {
+    const frontmatter = {
+      fetchQuirks: {
+        brex: {
+          changeDetector: "etag" as const,
+          rationale: "ETag stable across HEADs",
+        },
+        "brex-developer-api": {
+          changeDetector: "body-hash" as const,
+          rationale: "No HEAD validator; GET body SHA-256 stable",
+          tier: "low" as const,
+        },
+      },
+    };
+    const body = "### Fetch instructions\n\nDetails below.";
+    const serialized = serializePlaybookNotes(frontmatter, body);
+
+    const parsed = parsePlaybookNotes(serialized);
+    expect(parsed.frontmatter).toEqual(frontmatter);
+    expect(parsed.body).toBe(body);
+  });
+
+  it("rejects invalid frontmatter at serialize time", () => {
+    expect(() =>
+      serializePlaybookNotes(
+        // deliberate shape violation
+        { fetchQuirks: { brex: { changeDetector: "etag", rationale: "" } } } as never,
+        "body",
+      ),
+    ).toThrow();
+  });
+});
+
+describe("loadFetchQuirks", () => {
+  it("returns the typed quirk for a known source slug", () => {
+    const notes = `---
+fetchQuirks:
+  brex:
+    changeDetector: etag
+    rationale: ETag stable
+---
+
+body`;
+    expect(loadFetchQuirks(notes, "brex")).toEqual({
+      changeDetector: "etag",
+      rationale: "ETag stable",
+    });
+  });
+
+  it("returns null for unknown slugs", () => {
+    const notes = `---
+fetchQuirks:
+  brex:
+    changeDetector: etag
+    rationale: ETag stable
+---
+`;
+    expect(loadFetchQuirks(notes, "not-there")).toBeNull();
+  });
+
+  it("returns null when notes have no frontmatter at all", () => {
+    expect(loadFetchQuirks("plain notes", "brex")).toBeNull();
+    expect(loadFetchQuirks(null, "brex")).toBeNull();
   });
 });

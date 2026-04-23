@@ -9,11 +9,19 @@
  *   document. Stored separately in the DB. Agents can rewrite, reorganize,
  *   or clear notes at any time.
  *
+ * The notes body may be prefixed with a YAML frontmatter fence carrying
+ * typed configuration that cron code reads directly (e.g. `fetchQuirks` —
+ * per-source change-detector hints). Agents edit the markdown below the
+ * fence; the fence itself round-trips untouched via
+ * `parsePlaybookNotes` / `serializePlaybookNotes`.
+ *
  * The full playbook is assembled at read time by combining header + notes.
  */
 
 import type { Source } from "@buildinternet/releases-core/schema";
 import { getSourceMeta } from "@releases/adapters/source-meta";
+import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
+import { z } from "zod";
 
 export interface ProductInfo {
   id: string;
@@ -179,4 +187,89 @@ export function extractNotesFromLegacyPlaybook(content: string): string | null {
   const notes = notesMatch[1].trim();
   if (notes.startsWith("_No agent notes yet")) return null;
   return notes;
+}
+
+// ── Playbook frontmatter (typed config embedded in notes) ──
+
+export const fetchQuirkSchema = z.object({
+  changeDetector: z.enum(["etag", "content-length", "body-hash", "unreliable"]),
+  rationale: z.string().min(1),
+  tier: z.enum(["normal", "low"]).optional(),
+  changeProbeUrl: z.url().optional(),
+});
+
+export type FetchQuirk = z.infer<typeof fetchQuirkSchema>;
+
+export const playbookFrontmatterSchema = z
+  .object({
+    fetchQuirks: z.record(z.string(), fetchQuirkSchema).optional(),
+  })
+  .strict();
+
+export type PlaybookFrontmatter = z.infer<typeof playbookFrontmatterSchema>;
+
+const FRONTMATTER_FENCE = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n)*([\s\S]*)$/;
+
+/**
+ * Split stored notes into its (optional) YAML frontmatter and free-form body.
+ *
+ * Frontmatter must be at the very top of the notes, delimited by `---` fences
+ * on their own lines. If the fence is missing or the YAML fails to validate,
+ * `frontmatter` is `null` and the full notes string is returned as `body` —
+ * callers treat invalid frontmatter as absent rather than throwing, so a
+ * hand-edit mistake can't take a playbook out of the read path.
+ */
+export function parsePlaybookNotes(notes: string | null | undefined): {
+  frontmatter: PlaybookFrontmatter | null;
+  body: string;
+} {
+  if (!notes) return { frontmatter: null, body: "" };
+
+  const match = notes.match(FRONTMATTER_FENCE);
+  if (!match) return { frontmatter: null, body: notes };
+
+  const [, yamlText, body] = match;
+  let raw: unknown;
+  try {
+    raw = parseYaml(yamlText);
+  } catch {
+    return { frontmatter: null, body: notes };
+  }
+  const result = playbookFrontmatterSchema.safeParse(raw ?? {});
+  if (!result.success) return { frontmatter: null, body: notes };
+
+  return { frontmatter: result.data, body };
+}
+
+/**
+ * Serialize a frontmatter object + markdown body back into a stored notes
+ * string. Omits the fence entirely when the frontmatter is empty so we don't
+ * leave a decorative `---\n---` fragment on every playbook.
+ */
+export function serializePlaybookNotes(
+  frontmatter: PlaybookFrontmatter | null,
+  body: string | null,
+): string {
+  const trimmedBody = body?.trimEnd() ?? "";
+  const hasContent = frontmatter != null && Object.values(frontmatter).some((v) => v !== undefined);
+
+  if (!hasContent) return trimmedBody;
+
+  const validated = playbookFrontmatterSchema.parse(frontmatter);
+  const yaml = stringifyYaml(validated).trimEnd();
+  return trimmedBody.length > 0 ? `---\n${yaml}\n---\n\n${trimmedBody}` : `---\n${yaml}\n---\n`;
+}
+
+/**
+ * Read the typed `fetchQuirks` entry for a given source slug out of stored
+ * playbook notes. Returns `null` when the playbook has no frontmatter, no
+ * `fetchQuirks` map, or no entry for that slug. Phase 2 (#517) reads this in
+ * `pollOne` to route scrape-no-feed / agent sources to a change detector.
+ */
+export function loadFetchQuirks(
+  notes: string | null | undefined,
+  sourceSlug: string,
+): FetchQuirk | null {
+  const { frontmatter } = parsePlaybookNotes(notes);
+  return frontmatter?.fetchQuirks?.[sourceSlug] ?? null;
 }
