@@ -144,7 +144,7 @@ async function adminFetchApi<T>(path: string): Promise<T | null> {
 export const adminApi = {
   orgPlaybook: (slug: string) =>
     adminFetchApi<{ content: string; updatedAt: string } | null>(
-      `/v1/knowledge?scope=playbook&slug=${encodeURIComponent(slug)}`,
+      `/v1/orgs/${encodeURIComponent(slug)}/playbook`,
     ),
 };
 

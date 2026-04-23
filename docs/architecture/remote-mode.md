@@ -4,11 +4,11 @@ The API worker at `workers/api/` is the authoritative data plane — every read 
 
 ## Auth model
 
-GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE) require a Bearer token. The `publicReadAuthMiddleware` in `workers/api/src/middleware/auth.ts` handles this split. Admin-only routes (sessions, fetch-log, usage-log, discover, blocked-urls, aliases, `admin/*`) require auth for all methods.
+GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE) require a Bearer token. The `publicReadAuthMiddleware` in `workers/api/src/middleware/auth.ts` handles this split. Admin-only routes (sessions, fetch-log, usage-log, discover, blocked-urls, `admin/*`) require auth for all methods. The `GET /v1/orgs/:slug/playbook` endpoint is also admin-only (inline `authMiddleware` on the handler) since playbook content is internal.
 
 ## On-demand AI admin endpoints
 
-`POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.
+`POST /v1/workflows/summarize` and `POST /v1/workflows/compare` generate summaries and comparisons via Anthropic on demand. Both are gated by `authMiddleware` and fail with 503 when `ANTHROPIC_API_KEY` is unset. They are distinct from `POST /v1/sources/:slug/summaries`, which upserts a pre-generated row into `release_summaries`. Payload: `summarize` takes exactly one of `source` / `org` (slug or id) plus optional `days` and `instructions`; `compare` takes `sourceA` / `sourceB` plus optional `days`. Each success writes a `usage_log` row tagged with operation `summarize` / `compare`. Prompts live in `workers/api/src/routes/workflows.ts`.
 
 ## Cached latest-releases endpoint
 

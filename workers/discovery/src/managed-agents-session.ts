@@ -618,7 +618,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   ): Promise<string> {
     if (!orgId) return "";
     try {
-      const res = await fetcher.fetch(`https://api/v1/playbook?slug=${encodeURIComponent(orgId)}`, {
+      const res = await fetcher.fetch(`https://api/v1/orgs/${encodeURIComponent(orgId)}/playbook`, {
         headers: { Authorization: `Bearer ${apiKey}` },
       });
       if (!res.ok) return "";

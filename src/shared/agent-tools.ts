@@ -478,7 +478,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (!org) return "Error: organization is required";
 
         if (action === "get") {
-          const result = await api("GET", `/playbook?slug=${encodeURIComponent(org)}`);
+          const result = await api("GET", `/orgs/${encodeURIComponent(org)}/playbook`);
           if (result === "null" || result.trim() === "null") {
             return `No playbook exists yet for "${org}". A playbook will be auto-generated when you add, edit, or remove a source for this org.`;
           }
@@ -492,7 +492,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
 
         if (action === "update_notes") {
           if (input.notes === undefined) return "Error: notes is required for update_notes";
-          return api("PATCH", `/playbook/notes?slug=${encodeURIComponent(org)}`, {
+          return api("PATCH", `/orgs/${encodeURIComponent(org)}/playbook/notes`, {
             notes: String(input.notes),
           });
         }

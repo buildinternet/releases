@@ -1,8 +1,15 @@
-import { eq, inArray } from "drizzle-orm";
-import { tags, sources, organizations, products } from "@buildinternet/releases-core/schema";
+import { eq, inArray, and } from "drizzle-orm";
+import {
+  tags,
+  sources,
+  organizations,
+  products,
+  domainAliases,
+} from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { resolveR2Url } from "@releases/lib/media-url.js";
 import type { MediaItem } from "@releases/lib/api-types";
+import type { createDb } from "./db.js";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/lib/media-url.js";
 
 type RawMediaRow = MediaItem & { r2Key?: string | null };
@@ -56,6 +63,65 @@ export function isConflictError(err: unknown): boolean {
   if (msg.includes("UNIQUE") || msg.includes("unique") || msg.includes("constraint")) return true;
   if (msg.includes("Failed query") && msg.includes("insert into")) return true;
   return false;
+}
+
+type AliasTarget =
+  | { orgId: string; productId?: undefined }
+  | { productId: string; orgId?: undefined };
+
+/**
+ * Replace the owner's alias set with `aliases`. Returns the first domain that
+ * collides with a different owner, or null on success — domain_aliases is
+ * globally unique.
+ */
+export async function replaceAliases(
+  db: ReturnType<typeof createDb>,
+  opts: AliasTarget & { aliases: string[] },
+): Promise<{ conflict: string | null }> {
+  const isOrg = "orgId" in opts && !!opts.orgId;
+  const ownerCol = isOrg ? domainAliases.orgId : domainAliases.productId;
+  const ownerId = isOrg ? opts.orgId! : opts.productId!;
+
+  const deduped = Array.from(new Set(opts.aliases.map((d) => d.trim()).filter(Boolean)));
+
+  const existing = await db
+    .select({ domain: domainAliases.domain })
+    .from(domainAliases)
+    .where(eq(ownerCol, ownerId));
+  const existingSet = new Set(existing.map((r) => r.domain));
+  const nextSet = new Set(deduped);
+
+  const toDelete = [...existingSet].filter((d) => !nextSet.has(d));
+  const toInsert = deduped.filter((d) => !existingSet.has(d));
+
+  if (toInsert.length > 0) {
+    const conflicts = await db
+      .select({ domain: domainAliases.domain })
+      .from(domainAliases)
+      .where(inArray(domainAliases.domain, toInsert));
+    const foreign = conflicts.find((c) => !existingSet.has(c.domain));
+    if (foreign) return { conflict: foreign.domain };
+  }
+
+  if (toDelete.length > 0) {
+    await db
+      .delete(domainAliases)
+      .where(and(eq(ownerCol, ownerId), inArray(domainAliases.domain, toDelete)));
+  }
+
+  if (toInsert.length > 0) {
+    const now = new Date().toISOString();
+    await db.insert(domainAliases).values(
+      toInsert.map((domain) => ({
+        domain,
+        orgId: isOrg ? opts.orgId! : null,
+        productId: isOrg ? null : opts.productId!,
+        createdAt: now,
+      })),
+    );
+  }
+
+  return { conflict: null };
 }
 
 export function getStatusHub(env: { STATUS_HUB: DurableObjectNamespace }) {
