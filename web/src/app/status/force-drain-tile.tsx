@@ -27,7 +27,13 @@ export function ForceDrainTile() {
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/proxy/admin/cron-runs?cron=force-drain-sweep&limit=1")
+    // `since=1970-...` overrides the endpoint's 30-day default window so the
+    // tile keeps reflecting the last known run even after long inactive gaps
+    // (e.g. the flag was on briefly, then disabled for >30d) instead of
+    // silently reverting to "never run".
+    fetch(
+      "/api/proxy/admin/cron-runs?cron=force-drain-sweep&limit=1&since=1970-01-01T00:00:00.000Z",
+    )
       .then((r) => (r.ok ? r.json() : null))
       .then((data: ForceDrainRun[] | null) => {
         if (cancelled) return;
