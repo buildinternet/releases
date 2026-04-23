@@ -5,6 +5,7 @@ import type {
   StatusResponse,
   UpdateRequest,
 } from "./types.js";
+import { discoveryIdentityHeaders } from "./identity.js";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
@@ -118,6 +119,7 @@ export default {
         const apiKey = await env.RELEASED_API_KEY?.get();
         const stagingKey = (await env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
         const guardHeaders: Record<string, string> = {
+          ...discoveryIdentityHeaders(),
           ...(apiKey ? { Authorization: `Bearer ${apiKey}` } : {}),
           ...(stagingKey ? { "X-Releases-Staging-Key": stagingKey } : {}),
         };
