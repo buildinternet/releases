@@ -120,10 +120,15 @@ Here are the {selected.length} most recent releases:
 <content>
 {r.content sliced to first 1000 chars}
 </content>
+<media>
+{for each m in r.media: - {m.type}: {m.r2Url ?? m.url}{m.alt ? ` — ${m.alt}` : ''}}
+</media>
 </release>
 ```
 
-Skip `<version>` / `<title>` / `<date>` lines when the corresponding field is null/empty. Always include `<content>` (truncated to 1000 chars).
+Skip `<version>` / `<title>` / `<date>` lines when the corresponding field is null/empty. Always include `<content>` (truncated to 1000 chars). Skip `<media>` entirely when `r.media` is empty.
+
+`content` and `media[*].r2Url` arrive pre-hydrated to absolute URLs — paste them into the overview body as-is. Don't invent URLs. Don't reference media the source didn't surface.
 
 Drop the parenthesized `({org.description})` when description is empty. Drop the `Tracked sources: …` line when there's only one source.
 
@@ -140,7 +145,7 @@ Optional flags (omit and the CLI re-fetches inputs to derive both):
 - `--release-count <n>` — defaults to `totalAvailable` from inputs
 - `--last-contributing-at <iso>` — defaults to the first selected release's `publishedAt`
 
-The CLI POSTs to `/v1/overview` (existing dumb upsert). Last-write-wins on conflict.
+The CLI POSTs to `/v1/orgs/:slug/overview` (existing dumb upsert). Last-write-wins on conflict.
 
 ## Output Quality Rules
 

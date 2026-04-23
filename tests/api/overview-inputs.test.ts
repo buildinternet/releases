@@ -19,17 +19,18 @@ function mkDb() {
   return db;
 }
 
-function mkApp(db: ReturnType<typeof mkDb>) {
+function mkApp(db: ReturnType<typeof mkDb>, env: Record<string, unknown> = {}) {
   const app = new Hono();
   app.use("*", async (c, next) => {
     (c as any).set("db", db);
+    (c as any).env = { ...(c as any).env, ...env };
     await next();
   });
-  app.route("/overview-inputs", overviewInputs);
+  app.route("/", overviewInputs);
   return app;
 }
 
-describe("GET /v1/overview-inputs", () => {
+describe("GET /v1/orgs/:slug/overview/inputs", () => {
   let db: ReturnType<typeof mkDb>;
   let orgId: string;
   let srcGithubId: string;
@@ -111,7 +112,7 @@ describe("GET /v1/overview-inputs", () => {
     await db.insert(releases).values([...ghRows, ...scRows]);
 
     const app = mkApp(db);
-    const res = await app.request("/overview-inputs?slug=acme&window=365");
+    const res = await app.request("/orgs/acme/overview/inputs?window=365");
     expect(res.status).toBe(200);
 
     const body = (await res.json()) as {
@@ -142,7 +143,7 @@ describe("GET /v1/overview-inputs", () => {
     });
 
     const app = mkApp(db);
-    const res = await app.request("/overview-inputs?slug=acme");
+    const res = await app.request("/orgs/acme/overview/inputs");
     const body = (await res.json()) as { existingContent: string | null };
     expect(body.existingContent).toBe("previous overview body");
   });
@@ -159,7 +160,7 @@ describe("GET /v1/overview-inputs", () => {
     });
 
     const app = mkApp(db);
-    const res = await app.request("/overview-inputs?slug=acme");
+    const res = await app.request("/orgs/acme/overview/inputs");
     const body = (await res.json()) as {
       selected: unknown[];
       totalAvailable: number;
@@ -170,19 +171,47 @@ describe("GET /v1/overview-inputs", () => {
 
   it("404s on missing org", async () => {
     const app = mkApp(db);
-    const res = await app.request("/overview-inputs?slug=nope");
+    const res = await app.request("/orgs/nope/overview/inputs");
     expect(res.status).toBe(404);
-  });
-
-  it("400s when slug missing", async () => {
-    const app = mkApp(db);
-    const res = await app.request("/overview-inputs");
-    expect(res.status).toBe(400);
   });
 
   it("400s on invalid window param", async () => {
     const app = mkApp(db);
-    const res = await app.request("/overview-inputs?slug=acme&window=-1");
+    const res = await app.request("/orgs/acme/overview/inputs?window=-1");
     expect(res.status).toBe(400);
+  });
+
+  it("hydrates media and content URLs on selected releases", async () => {
+    const now = Date.now();
+    await db.insert(releases).values({
+      id: "rel_media",
+      sourceId: srcGithubId,
+      title: "demo",
+      url: "https://github.com/acme/x/releases/demo",
+      content: "See ![shot](/_media/shots/a.png) for details.",
+      media: JSON.stringify([
+        { type: "image", url: "https://orig.example.com/a.png", alt: "shot", r2Key: "shots/a.png" },
+      ]),
+      publishedAt: new Date(now - 1 * 86400_000).toISOString(),
+    });
+
+    const app = mkApp(db, { MEDIA_ORIGIN: "https://cdn.example.com" });
+    const res = await app.request("/orgs/acme/overview/inputs?window=365");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      selected: Array<{
+        id: string;
+        content: string;
+        media: Array<{ type: string; url: string; alt?: string; r2Url?: string }>;
+      }>;
+    };
+
+    const [rel] = body.selected;
+    expect(rel.id).toBe("rel_media");
+    expect(rel.content).toContain("https://cdn.example.com/");
+    expect(rel.content).not.toContain("/_media/");
+    expect(rel.media).toHaveLength(1);
+    expect(rel.media[0].r2Url).toBe("https://cdn.example.com/shots/a.png");
+    expect(rel.media[0].alt).toBe("shot");
   });
 });

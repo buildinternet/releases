@@ -166,7 +166,6 @@ const publicReadRoutes = [
   "products",
   "summaries",
   "knowledge",
-  "overview",
   "tags",
   "related",
   "sitemap",
@@ -194,7 +193,6 @@ const adminRoutes = [
   "admin/cron-runs",
   "webhooks",
   "playbook",
-  "overview-inputs",
   "workflows",
 ];
 for (const r of adminRoutes) {
@@ -254,8 +252,8 @@ v1.route("/", fetchLogRoutes);
 v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
 v1.route("/summaries", summaries);
-v1.route("/overview", overview);
-v1.route("/overview-inputs", overviewInputs);
+v1.route("/", overview);
+v1.route("/", overviewInputs);
 v1.route("/playbook", playbook);
 v1.route("/knowledge", knowledge); // deprecated — alias for overview/playbook
 v1.route("/", discoverRoutes);
