@@ -80,10 +80,10 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
 
     async getOrgPlaybook(orgId: string | null): Promise<string | null> {
       if (!orgId) return null;
-      // The playbook endpoint's `slug` param accepts both slugs and `org_…` IDs
-      // via `orgWhere` in the worker, so we can skip the org→slug lookup.
+      // The :slug param accepts `org_…` IDs via `orgWhere` in the worker,
+      // so we can skip the org→slug lookup.
       const res = await env.apiFetcher.fetch(
-        `https://api/v1/playbook?slug=${encodeURIComponent(orgId)}`,
+        `https://api/v1/orgs/${encodeURIComponent(orgId)}/playbook`,
         { headers: headers() },
       );
       if (!res.ok) return null;

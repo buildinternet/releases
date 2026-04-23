@@ -7,31 +7,17 @@ import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
 
-// GET /summaries?sourceSlug=<slug> — get summaries for a source
-app.get("/", async (c) => {
+app.get("/sources/:slug/summaries", async (c) => {
   const db = createDb(c.env.DB);
-  const sourceSlug = c.req.query("sourceSlug");
-  const sourceId = c.req.query("sourceId");
+  const slug = c.req.param("slug");
   const type = c.req.query("type");
   const year = c.req.query("year");
   const month = c.req.query("month");
 
-  let resolvedSourceId = sourceId;
+  const [source] = await db.select({ id: sources.id }).from(sources).where(sourceWhere(slug));
+  if (!source) return c.json({ error: "Source not found" }, 404);
 
-  if (sourceSlug && !resolvedSourceId) {
-    const [source] = await db
-      .select({ id: sources.id })
-      .from(sources)
-      .where(sourceWhere(sourceSlug));
-    if (!source) return c.json({ error: "Source not found" }, 404);
-    resolvedSourceId = source.id;
-  }
-
-  if (!resolvedSourceId) {
-    return c.json({ error: "sourceSlug or sourceId required" }, 400);
-  }
-
-  const conditions = [eq(releaseSummaries.sourceId, resolvedSourceId)];
+  const conditions = [eq(releaseSummaries.sourceId, source.id)];
   if (type) conditions.push(eq(releaseSummaries.type, type as "rolling" | "monthly"));
   if (year) conditions.push(eq(releaseSummaries.year, parseInt(year)));
   if (month) conditions.push(eq(releaseSummaries.month, parseInt(month)));
@@ -45,28 +31,36 @@ app.get("/", async (c) => {
   return c.json(rows);
 });
 
-// POST /summaries — upsert a summary
-app.post("/", async (c) => {
+app.post("/sources/:slug/summaries", async (c) => {
   const db = createDb(c.env.DB);
-  const body = await c.req.json();
+  const slug = c.req.param("slug");
+  const body = await c.req.json<{
+    type: "rolling" | "monthly";
+    year?: number | null;
+    month?: number | null;
+    windowDays?: number | null;
+    summary: string;
+    releaseCount: number;
+  }>();
 
-  const { sourceId, orgId, type, year, month, windowDays, summary, releaseCount } = body;
-
-  if (!type || !summary || releaseCount == null) {
+  if (!body.type || !body.summary || body.releaseCount == null) {
     return c.json({ error: "Missing required fields" }, 400);
   }
+
+  const [source] = await db.select({ id: sources.id }).from(sources).where(sourceWhere(slug));
+  if (!source) return c.json({ error: "Source not found" }, 404);
 
   await db
     .insert(releaseSummaries)
     .values({
-      sourceId: sourceId ?? null,
-      orgId: orgId ?? null,
-      type,
-      year: year ?? null,
-      month: month ?? null,
-      windowDays: windowDays ?? null,
-      summary,
-      releaseCount,
+      sourceId: source.id,
+      orgId: null,
+      type: body.type,
+      year: body.year ?? null,
+      month: body.month ?? null,
+      windowDays: body.windowDays ?? null,
+      summary: body.summary,
+      releaseCount: body.releaseCount,
     })
     .onConflictDoUpdate({
       target: [
@@ -77,9 +71,9 @@ app.post("/", async (c) => {
         releaseSummaries.month,
       ],
       set: {
-        summary,
-        releaseCount,
-        windowDays: windowDays ?? null,
+        summary: body.summary,
+        releaseCount: body.releaseCount,
+        windowDays: body.windowDays ?? null,
         generatedAt: new Date().toISOString(),
       },
     });

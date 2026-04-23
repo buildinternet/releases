@@ -25,6 +25,7 @@ import {
   hydrateMediaUrls,
   resolveR2Url,
   parseBoolParam,
+  replaceAliases,
 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
@@ -365,6 +366,7 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
     description?: string | null;
     category?: string | null;
     tags?: string[];
+    aliases?: string[];
   }>();
 
   if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
@@ -408,6 +410,18 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
         .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
         .onConflictDoNothing();
     }
+  }
+
+  if (body.aliases !== undefined) {
+    const { conflict } = await replaceAliases(db, { orgId: org.id, aliases: body.aliases });
+    if (conflict)
+      return c.json(
+        {
+          error: "conflict",
+          message: `Domain alias "${conflict}" already claimed by another org or product`,
+        },
+        409,
+      );
   }
 
   // Re-embed if semantically meaningful fields changed (name/description/

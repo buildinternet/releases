@@ -207,16 +207,15 @@ Same degradation and anchor-exclusion semantics as `/v1/related/releases`.
 
 ## Summaries
 
-### `GET /v1/summaries`
+### `GET /v1/sources/:slug/summaries`
 
 Get cached AI summaries for a source.
 
-| Param        | Description                             |
-| ------------ | --------------------------------------- |
-| `sourceSlug` | Source slug (required, or use sourceId) |
-| `type`       | `rolling` or `monthly`                  |
-| `year`       | Filter by year (for monthly summaries)  |
-| `month`      | Filter by month                         |
+| Param   | Description                            |
+| ------- | -------------------------------------- |
+| `type`  | `rolling` or `monthly`                 |
+| `year`  | Filter by year (for monthly summaries) |
+| `month` | Filter by month                        |
 
 ---
 

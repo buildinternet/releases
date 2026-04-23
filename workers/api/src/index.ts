@@ -23,13 +23,11 @@ import { streamRoutes } from "./routes/stream.js";
 import { mountWebhooksReplay } from "./routes/webhooks-replay.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
-import knowledge from "./routes/knowledge.js";
 import overview from "./routes/overview.js";
 import overviewInputs from "./routes/overview-inputs.js";
 import playbook from "./routes/playbook.js";
 import { productRoutes } from "./routes/products.js";
 import { discoverRoutes } from "./routes/discover.js";
-import { aliasRoutes } from "./routes/aliases.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
@@ -164,8 +162,6 @@ const publicReadRoutes = [
   "search",
   "releases",
   "products",
-  "summaries",
-  "knowledge",
   "tags",
   "related",
   "sitemap",
@@ -176,8 +172,6 @@ for (const r of publicReadRoutes) {
 }
 
 // Admin-only routes: all methods require auth.
-// Playbook content (auto-generated header + agent notes) is internal —
-// only authenticated CLI/agent callers should be able to read it.
 const adminRoutes = [
   "sessions",
   "fetch-log",
@@ -185,14 +179,12 @@ const adminRoutes = [
   "blocked-urls",
   "discover",
   "evaluate",
-  "aliases",
   "status/fetch-log",
   "status/usage",
   "status/event",
   "admin/embed/status",
   "admin/cron-runs",
   "webhooks",
-  "playbook",
   "workflows",
 ];
 for (const r of adminRoutes) {
@@ -251,13 +243,11 @@ v1.route("/", relatedRoutes);
 v1.route("/", fetchLogRoutes);
 v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
-v1.route("/summaries", summaries);
+v1.route("/", summaries);
 v1.route("/", overview);
 v1.route("/", overviewInputs);
-v1.route("/playbook", playbook);
-v1.route("/knowledge", knowledge); // deprecated — alias for overview/playbook
+v1.route("/", playbook);
 v1.route("/", discoverRoutes);
-v1.route("/", aliasRoutes);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);

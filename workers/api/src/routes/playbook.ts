@@ -8,19 +8,16 @@ import {
   products,
 } from "@buildinternet/releases-core/schema";
 import { generatePlaybookHeader } from "@releases/ai-internal/playbook";
+import { authMiddleware } from "../middleware/auth.js";
 import { newKnowledgePageId, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
 
-// GET /playbook?slug=<orgSlug> — get assembled playbook for an org
-app.get("/", async (c) => {
+// Playbook content is internal — force admin auth even on GET.
+app.get("/orgs/:slug/playbook", authMiddleware, async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.query("slug");
-
-  if (!slug) {
-    return c.json({ error: "slug required" }, 400);
-  }
+  const slug = c.req.param("slug");
 
   const [org] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(slug));
   if (!org) return c.json(null);
@@ -35,13 +32,11 @@ app.get("/", async (c) => {
   return c.json(row);
 });
 
-// PATCH /playbook/notes?slug=<orgSlug> — update playbook notes
-app.patch("/notes", async (c) => {
+app.patch("/orgs/:slug/playbook/notes", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.query("slug");
+  const slug = c.req.param("slug");
   const body = await c.req.json<{ notes: string }>();
 
-  if (!slug) return c.json({ error: "slug query param required" }, 400);
   if (body.notes === undefined) return c.json({ error: "notes field required" }, 400);
 
   const [org] = await db

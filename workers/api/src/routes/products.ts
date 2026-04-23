@@ -8,11 +8,18 @@ import {
   orgAccounts,
   tags,
   productTags,
+  domainAliases,
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
-import { isConflictError, getOrCreateTagsD1, productWhere, orgWhere } from "../utils.js";
+import {
+  isConflictError,
+  getOrCreateTagsD1,
+  productWhere,
+  orgWhere,
+  replaceAliases,
+} from "../utils.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
@@ -173,26 +180,37 @@ productRoutes.get("/products/:identifier", async (c) => {
 
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-  const productSources = await db
-    .select({
-      id: sources.id,
-      slug: sources.slug,
-      name: sources.name,
-      type: sources.type,
-      url: sources.url,
-    })
-    .from(sources)
-    .where(eq(sources.productId, product.id))
-    .orderBy(sources.name);
+  const [productSources, tagRows, aliasRows] = await Promise.all([
+    db
+      .select({
+        id: sources.id,
+        slug: sources.slug,
+        name: sources.name,
+        type: sources.type,
+        url: sources.url,
+      })
+      .from(sources)
+      .where(eq(sources.productId, product.id))
+      .orderBy(sources.name),
+    db
+      .select({ name: tags.name })
+      .from(productTags)
+      .innerJoin(tags, eq(productTags.tagId, tags.id))
+      .where(eq(productTags.productId, product.id))
+      .orderBy(tags.name),
+    db
+      .select({ domain: domainAliases.domain })
+      .from(domainAliases)
+      .where(eq(domainAliases.productId, product.id))
+      .orderBy(domainAliases.domain),
+  ]);
 
-  const tagRows = await db
-    .select({ name: tags.name })
-    .from(productTags)
-    .innerJoin(tags, eq(productTags.tagId, tags.id))
-    .where(eq(productTags.productId, product.id))
-    .orderBy(tags.name);
-
-  return c.json({ ...product, sources: productSources, tags: tagRows.map((t) => t.name) });
+  return c.json({
+    ...product,
+    sources: productSources,
+    tags: tagRows.map((t) => t.name),
+    aliases: aliasRows.map((a) => a.domain),
+  });
 });
 
 // Create product
@@ -281,6 +299,7 @@ productRoutes.patch("/products/:slug", async (c) => {
     description?: string | null;
     category?: string | null;
     tags?: string[];
+    aliases?: string[];
   }>();
 
   const [product] = await db.select().from(products).where(productWhere(slug));
@@ -296,7 +315,7 @@ productRoutes.patch("/products/:slug", async (c) => {
   }
   if (body.category !== undefined) updates.category = body.category;
 
-  if (Object.keys(updates).length === 0 && body.tags === undefined) {
+  if (Object.keys(updates).length === 0 && body.tags === undefined && body.aliases === undefined) {
     return c.json(product);
   }
 
@@ -319,6 +338,21 @@ productRoutes.patch("/products/:slug", async (c) => {
         .values(tagRows.map((t) => ({ productId: product.id, tagId: t.id, createdAt: now })))
         .onConflictDoNothing();
     }
+  }
+
+  if (body.aliases !== undefined) {
+    const { conflict } = await replaceAliases(db, {
+      productId: product.id,
+      aliases: body.aliases,
+    });
+    if (conflict)
+      return c.json(
+        {
+          error: "conflict",
+          message: `Domain alias "${conflict}" already claimed by another org or product`,
+        },
+        409,
+      );
   }
 
   const semanticChanged =

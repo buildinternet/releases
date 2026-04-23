@@ -112,7 +112,7 @@ async function runCleanup(t: (typeof TASKS)[number], phase: "pre" | "post"): Pro
   };
 
   async function snapshotNotes(orgSlug: string): Promise<void> {
-    const url = `${baseUrl}/v1/playbook?slug=${encodeURIComponent(orgSlug)}`;
+    const url = `${baseUrl}/v1/orgs/${encodeURIComponent(orgSlug)}/playbook`;
     try {
       const res = await fetcher.fetch(url, { headers: authHeaders });
       if (!res.ok) {
@@ -135,7 +135,7 @@ async function runCleanup(t: (typeof TASKS)[number], phase: "pre" | "post"): Pro
       return;
     }
     const notes = playbookSnapshots.get(orgSlug) ?? "";
-    const url = `${baseUrl}/v1/playbook/notes?slug=${encodeURIComponent(orgSlug)}`;
+    const url = `${baseUrl}/v1/orgs/${encodeURIComponent(orgSlug)}/playbook/notes`;
     try {
       const res = await fetcher.fetch(url, {
         method: "PATCH",
