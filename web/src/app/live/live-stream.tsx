@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
+import { CliCommand } from "@/components/cli-command";
 import { LocalTimestamp } from "@/components/local-timestamp";
+import { useFaviconBadge } from "@/hooks/use-favicon-badge";
 import { useReleaseStream, type LiveRelease } from "@/hooks/use-release-stream";
 
 type StatusTone = "live" | "polling" | "reconnecting";
 
-const UNREAD_FAVICON = "/favicon-unread.svg";
 const BADGE_CAP = 9;
 
 function statusLabel(
@@ -53,7 +54,8 @@ function ReleaseCard({ release }: { release: LiveRelease }) {
 
 /**
  * Track releases that arrived while the tab was hidden. Resets to 0 when the
- * tab becomes visible again. Drives the favicon/title badge.
+ * tab becomes visible again. Drives the title prefix and (via hasUnseen) the
+ * favicon badge.
  */
 function useUnreadCount(releaseIds: string[]): number {
   const [unread, setUnread] = useState(0);
@@ -98,7 +100,7 @@ function useUnreadCount(releaseIds: string[]): number {
   return unread;
 }
 
-function useDocumentBadge(unread: number) {
+function useDocumentTitleBadge(unread: number) {
   useEffect(() => {
     const originalTitle = document.title;
     if (unread > 0) {
@@ -108,17 +110,6 @@ function useDocumentBadge(unread: number) {
       document.title = originalTitle.replace(/^\(\d+\+?\)\s*/, "");
     }
   }, [unread]);
-
-  useEffect(() => {
-    const link = document.querySelector<HTMLLinkElement>('link[rel~="icon"]');
-    if (!link) return;
-    const original = link.dataset.originalHref ?? link.href;
-    link.dataset.originalHref = original;
-    link.href = unread > 0 ? UNREAD_FAVICON : original;
-    return () => {
-      link.href = original;
-    };
-  }, [unread]);
 }
 
 export function LiveStream({ apiUrl }: { apiUrl: string }) {
@@ -126,18 +117,25 @@ export function LiveStream({ apiUrl }: { apiUrl: string }) {
   const status = statusLabel(connected, mode);
   const releaseIds = releases.map((r) => r.id);
   const unread = useUnreadCount(releaseIds);
-  useDocumentBadge(unread);
+  useDocumentTitleBadge(unread);
+  useFaviconBadge({ connected, hasUnseen: unread > 0 });
 
   return (
     <div className="space-y-4">
-      <div
-        className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-400"
-        role="status"
-        aria-live="polite"
-      >
-        <StatusDot tone={status.tone} />
-        <span>{status.label}</span>
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div
+          className="flex items-center gap-2 text-xs text-stone-600 dark:text-stone-400"
+          role="status"
+          aria-live="polite"
+        >
+          <StatusDot tone={status.tone} />
+          <span>{status.label}</span>
+        </div>
+        <CliCommand command="npx @buildinternet/releases tail -f" className="" />
       </div>
+      <p className="text-xs text-stone-500 dark:text-stone-400">
+        Prefer your terminal? Run the command above to stream new releases as they arrive.
+      </p>
 
       {releases.length === 0 ? (
         <p className="text-sm text-stone-500 dark:text-stone-400">Waiting for the next release…</p>

@@ -42,7 +42,7 @@ export default async function SearchPage({
         <p className="mt-2 text-[12px] text-stone-400 dark:text-stone-500">
           From the CLI:{" "}
           <InlineCopyCode
-            code={`npx -y @buildinternet/releases search "${(q?.trim() || "vercel").replace(/"/g, '\\"')}"`}
+            code={`npx @buildinternet/releases search "${(q?.trim() || "vercel").replace(/"/g, '\\"')}"`}
           />
         </p>
         <Suspense>
