@@ -13,6 +13,7 @@ import { SortHeader, type SortState } from "@/components/sort-header";
 import { DAY_MS } from "@/lib/cadence";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
+import { ForceDrainTile } from "./force-drain-tile";
 
 interface SessionState {
   sessionId: string;
@@ -496,6 +497,9 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           )}
         </div>
       )}
+
+      {/* Force-drain sweep summary (#518) */}
+      <ForceDrainTile />
 
       {/* Date range + Tabs */}
       <div className="flex items-center justify-between border-b border-stone-200 dark:border-stone-800 mb-4">
