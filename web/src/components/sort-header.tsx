@@ -16,7 +16,7 @@ interface Props<F extends string> {
   defaultDir?: SortDir;
   onChange: (next: SortState<F>) => void;
   className?: string;
-  /** Renders to the right of the arrow (e.g. right-aligned numeric columns). */
+  /** Right-align the label+arrow inside the grid cell (for numeric columns). */
   alignRight?: boolean;
   children: ReactNode;
 }
@@ -31,7 +31,6 @@ export function SortHeader<F extends string>({
   children,
 }: Props<F>) {
   const active = current.field === field;
-  const arrow = active ? (current.dir === "asc" ? "▲" : "▼") : "↕";
 
   const handleClick = () => {
     if (!active) {
@@ -45,14 +44,28 @@ export function SortHeader<F extends string>({
     <button
       type="button"
       onClick={handleClick}
-      className={`flex items-center gap-1 uppercase tracking-wider transition-colors hover:text-stone-700 dark:hover:text-stone-200 ${
+      className={`flex items-center gap-1.5 p-0 uppercase tracking-wider transition-colors hover:text-stone-700 dark:hover:text-stone-200 ${
         active ? "text-stone-700 dark:text-stone-200" : "text-stone-400 dark:text-stone-500"
-      } ${alignRight ? "ml-auto" : ""} ${className ?? ""}`}
+      } ${alignRight ? "justify-end" : ""} ${className ?? ""}`}
     >
       <span>{children}</span>
-      <span aria-hidden className={`text-[9px] ${active ? "opacity-100" : "opacity-30"}`}>
-        {arrow}
-      </span>
+      <SortIndicator active={active} dir={current.dir} />
     </button>
+  );
+}
+
+// Stacked up/down triangles, drawn as SVG so the glyphs don't get replaced
+// with color emoji by the OS font stack. The inactive triangle on each row is
+// rendered at low opacity to keep spacing identical across the three states.
+function SortIndicator({ active, dir }: { active: boolean; dir: SortDir }) {
+  const upActive = active && dir === "asc";
+  const downActive = active && dir === "desc";
+  const dim = "opacity-25";
+  const lit = "opacity-100";
+  return (
+    <svg width="7" height="10" viewBox="0 0 7 10" aria-hidden className="shrink-0 fill-current">
+      <path d="M3.5 0 L7 4 L0 4 Z" className={upActive ? lit : dim} />
+      <path d="M3.5 10 L0 6 L7 6 Z" className={downActive ? lit : dim} />
+    </svg>
   );
 }
