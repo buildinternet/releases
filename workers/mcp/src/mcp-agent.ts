@@ -20,6 +20,8 @@ import {
   summarizeChanges,
   compareProducts,
 } from "./tools.js";
+import { registerResources } from "./resources.js";
+import { registerPrompts } from "./prompts.js";
 
 type SecretBinding = { get(): Promise<string> };
 
@@ -50,10 +52,41 @@ export interface Env {
   STAGING_ACCESS_KEY?: SecretBinding;
 }
 
+/**
+ * Shared tool annotation hints. Every tool this server exposes is read-only
+ * against the registry DB — none mutate state. The AI-backed tools flip
+ * `idempotentHint` off because LLM output varies across identical calls.
+ * `openWorldHint: false` reflects that all data comes from our own registry;
+ * tools don't reach out to arbitrary external systems at call time.
+ */
+const READ_ONLY_HINTS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: true,
+  openWorldHint: false,
+} as const;
+
+const AI_READ_HINTS = {
+  readOnlyHint: true,
+  destructiveHint: false,
+  idempotentHint: false,
+  openWorldHint: false,
+} as const;
+
+/**
+ * `title` appears twice in a tool registration — once as the top-level
+ * display name (MCP 2025-11-25 spec) and once inside `annotations.title`
+ * (older field older clients still read). Build both from a single string
+ * so they can't drift.
+ */
+function titled(title: string, hints: typeof READ_ONLY_HINTS | typeof AI_READ_HINTS) {
+  return { title, annotations: { title, ...hints } };
+}
+
 export function createServer(env: Env, ctx?: ExecutionContext) {
   const server = new McpServer({
     name: "releases",
-    version: "0.10.0",
+    version: "0.11.0",
   });
 
   const db = createDb(env.DB);
@@ -91,6 +124,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "search_releases",
     {
+      ...titled("Search releases", READ_ONLY_HINTS),
       description:
         "Search indexed release notes. Defaults to hybrid retrieval (FTS5 + semantic vectors fused via RRF). Results carry a `kind` discriminator so agents can branch on `release` vs `changelog_chunk` hits. When Vectorize or the embedding provider is unavailable, the tool silently degrades to lexical FTS and flags the result.",
       inputSchema: {
@@ -127,6 +161,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "search_registry",
     {
+      ...titled("Search registry", READ_ONLY_HINTS),
       description:
         "Semantic search across the registry — returns orgs, products, or sources that match the query by meaning, not just keyword. Useful when you know what kind of thing you're looking for ('observability vendor with open-source agent') but not its exact name. Falls back to LIKE-based lexical search when Vectorize is unavailable.",
       inputSchema: {
@@ -144,6 +179,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_latest_releases",
     {
+      ...titled("Get latest releases", READ_ONLY_HINTS),
       description: "Get the most recent releases, optionally filtered by product or organization",
       inputSchema: {
         product: z.string().optional().describe("Filter to a specific product slug"),
@@ -172,6 +208,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "list_sources",
     {
+      ...titled("List sources", READ_ONLY_HINTS),
       description: "List all indexed changelog sources",
       inputSchema: {
         organization: z
@@ -186,6 +223,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "list_organizations",
     {
+      ...titled("List organizations", READ_ONLY_HINTS),
       description: "List all indexed organizations, optionally filtered",
       inputSchema: {
         query: z
@@ -201,6 +239,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_organization",
     {
+      ...titled("Get organization", READ_ONLY_HINTS),
       description:
         "Get detailed information about a single organization including accounts, tags, sources, products, aliases, and a short preview of its AI-generated overview when one exists. Use `get_organization_overview` to read the full overview text.",
       inputSchema: {
@@ -213,6 +252,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_organization_overview",
     {
+      ...titled("Get organization overview", READ_ONLY_HINTS),
       description:
         "Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections. Returned with a generated-at timestamp and a stale warning if the overview is older than 30 days. Use this when the user wants the narrative summary for an org, not the raw release list.",
       inputSchema: {
@@ -225,6 +265,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_source",
     {
+      ...titled("Get source", READ_ONLY_HINTS),
       description:
         "Detail for a single indexed source: organization, optional product linkage, release count (excluding suppressed), last-fetched timestamp, and whether a tracked CHANGELOG file is available for get_source_changelog. Use this after list_sources or search_releases when the user wants to understand one source in depth (e.g. 'tell me about the apollo-client source').",
       inputSchema: {
@@ -237,6 +278,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_source_changelog",
     {
+      ...titled("Get source CHANGELOG", READ_ONLY_HINTS),
       description:
         "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root. Supports heading-aligned slicing by chars (`limit`) or by tokens (`tokens`, cl100k_base) for LLM context budgeting. Every response includes `totalTokens` for the whole file and, in token mode, `sliceTokens` for the returned chunk. `totalTokens` is an exact cl100k_base count for files under 256KB and an approximation (`ceil(totalChars / 4)`) for larger files; `sliceTokens` is always exact. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
       inputSchema: {
@@ -273,6 +315,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_release",
     {
+      ...titled("Get release", READ_ONLY_HINTS),
       description:
         "Fetch the full content of a single release by id. Release ids are returned by search_releases / get_latest_releases — pass them here to read the whole entry (e.g. to quote a specific Next.js release note). Accepts the full rel_<nanoid> form or the bare 21-char nanoid.",
       inputSchema: {
@@ -285,6 +328,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "list_products",
     {
+      ...titled("List products", READ_ONLY_HINTS),
       description:
         "List products — the optional grouping layer between organizations and sources. Multi-product orgs (e.g. Vercel → Next.js, Turborepo) expose their lineup here. Pass an organization filter to scope to one org; omit it to see every indexed product.",
       inputSchema: {
@@ -300,6 +344,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_product",
     {
+      ...titled("Get product", READ_ONLY_HINTS),
       description:
         "Detail for a single product including its organization, category, tags, and the sources grouped under it. Use when the user asks about a specific product (e.g. 'what sources does Next.js have?' on Vercel) rather than the whole organization.",
       inputSchema: {
@@ -313,6 +358,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
     server.registerTool(
       "summarize_changes",
       {
+        ...titled("Summarize changes", AI_READ_HINTS),
         description: "Get an AI-generated summary of recent changes for a product",
         inputSchema: {
           product: z.string().describe("Product slug"),
@@ -334,6 +380,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
     server.registerTool(
       "compare_products",
       {
+        ...titled("Compare products", AI_READ_HINTS),
         description: "Compare recent changes between two products",
         inputSchema: {
           products: z.array(z.string()).describe("Array of two product slugs to compare"),
@@ -346,6 +393,9 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
       }),
     );
   }
+
+  registerResources(server, db, mediaOrigin);
+  registerPrompts(server, db, { aiTools: env.ENABLE_AI_TOOLS === "true" });
 
   return server;
 }
