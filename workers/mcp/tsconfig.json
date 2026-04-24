@@ -10,9 +10,9 @@
     "paths": {
       "@anthropic-ai/sdk": ["../../node_modules/@anthropic-ai/sdk"],
       "@anthropic-ai/sdk/*": ["../../node_modules/@anthropic-ai/sdk/*"],
+      "@buildinternet/releases-api-types": ["../../packages/api-types/src/api-types.ts"],
       "@buildinternet/releases-core/*": ["../../packages/core/src/*"],
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*"],
-      "@releases/api-types": ["../../packages/api-types/src/api-types.ts"],
       "@releases/core-internal/*": ["../../packages/core-internal/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*"],

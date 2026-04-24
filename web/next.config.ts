@@ -11,7 +11,11 @@ try {
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, ".."),
-  transpilePackages: ["@buildinternet/releases-core", "@releases/api-types", "@releases/rendering"],
+  transpilePackages: [
+    "@buildinternet/releases-core",
+    "@buildinternet/releases-api-types",
+    "@releases/rendering",
+  ],
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "github.com", pathname: "/*.png" },
@@ -23,7 +27,7 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: path.resolve(__dirname, ".."),
     resolveAlias: {
-      "@releases/api-types": "../packages/api-types/src/api-types.ts",
+      "@buildinternet/releases-api-types": "../packages/api-types/src/api-types.ts",
       "@releases/lib/*": "../packages/lib/src/*",
       "@releases/rendering/*": "../packages/rendering/src/*",
     },
@@ -31,7 +35,10 @@ const nextConfig: NextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      "@releases/api-types": path.resolve(__dirname, "../packages/api-types/src/api-types.ts"),
+      "@buildinternet/releases-api-types": path.resolve(
+        __dirname,
+        "../packages/api-types/src/api-types.ts",
+      ),
       "@releases/lib": path.resolve(__dirname, "../packages/lib/src"),
       "@releases/rendering": path.resolve(__dirname, "../packages/rendering/src"),
     };

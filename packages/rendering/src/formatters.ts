@@ -16,7 +16,7 @@ import type {
   ProductDetail,
   UnifiedSearchResponse,
   OverviewPageItem,
-} from "@releases/api-types";
+} from "@buildinternet/releases-api-types";
 
 // Re-export under the old names for any callers still using them
 export type FormatRelease = ReleaseItem;

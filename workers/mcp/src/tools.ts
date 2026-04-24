@@ -36,7 +36,7 @@ import {
   foldSourcesIntoCatalog,
   type SearchCatalogHit,
   type RawSourceHit,
-} from "@releases/api-types";
+} from "@buildinternet/releases-api-types";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 

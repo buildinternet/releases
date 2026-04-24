@@ -6,7 +6,7 @@ import {
   type FormatSourceDetail,
   type FormatOrgDetail,
 } from "@releases/rendering/formatters";
-import type { KnowledgePageItem, OrgReleaseItem } from "@releases/api-types";
+import type { KnowledgePageItem, OrgReleaseItem } from "@buildinternet/releases-api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 

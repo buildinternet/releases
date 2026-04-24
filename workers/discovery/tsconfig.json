@@ -11,9 +11,9 @@
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
     "paths": {
+      "@buildinternet/releases-api-types": ["../../packages/api-types/src/api-types.ts"],
       "@buildinternet/releases-core/*": ["../../packages/core/src/*"],
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*"],
-      "@releases/api-types": ["../../packages/api-types/src/api-types.ts"],
       "@releases/core-internal/*": ["../../packages/core-internal/src/*"],
       "@releases/ai-internal/*": ["../../packages/ai/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],

@@ -11,6 +11,6 @@
     "./media-url": "./src/media-url.ts"
   },
   "dependencies": {
-    "@releases/api-types": "workspace:*"
+    "@buildinternet/releases-api-types": "workspace:*"
   }
 }
