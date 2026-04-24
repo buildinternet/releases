@@ -12,6 +12,7 @@ import { sha256Hex } from "@releases/core-internal/hash";
 import { AdapterError } from "@releases/lib/errors";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { getSourceMeta } from "@releases/adapters/source-meta";
 import { extractFromBody } from "./extract-from-body.js";
 import {
   DIRECT_FETCH_SYSTEM_PROMPT,
@@ -110,6 +111,10 @@ export async function runDirectFetchExtraction(
       systemPrompt: DIRECT_FETCH_SYSTEM_PROMPT,
       userMessage: `Extract all changelog/release entries from this content (canonical source URL: ${source.url}, fetched from: ${opts.fetchUrl}):`,
       guidance: opts.guidance,
+      sourceUrl: source.url,
+      fetchUrl: opts.fetchUrl,
+      useToolLoop:
+        deps.extractToolLoopEnabled || getSourceMeta(source).extractStrategy === "toolloop",
     },
     deps,
   );
@@ -121,8 +126,19 @@ export async function runDirectFetchExtraction(
     outputTokens: result.totalOutput,
     sourceSlug: source.slug,
     releaseCount: result.entries.length,
+    extractionMode: result.mode,
+    toolRounds: result.toolRounds,
+    toolChars: result.toolChars,
+    fallbackReason: result.fallbackReason,
+    cacheReadTokens: result.cacheReadTokens,
+    cacheWriteTokens: result.cacheWriteTokens,
   });
 
+  logger.info(
+    `Extract mode=${result.mode} rounds=${result.toolRounds ?? "-"} ` +
+      `toolChars=${result.toolChars ?? "-"} cacheRead=${result.cacheReadTokens} ` +
+      `cacheWrite=${result.cacheWriteTokens} entries=${result.entries.length}`,
+  );
   logger.info(
     `Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`,
   );

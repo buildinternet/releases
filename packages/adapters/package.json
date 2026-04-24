@@ -20,6 +20,8 @@
     "@anthropic-ai/sdk": "^0.91.0",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/core-internal": "workspace:*",
-    "@releases/lib": "workspace:*"
+    "@releases/lib": "workspace:*",
+    "jsonpath-plus": "^10.4.0",
+    "partial-json": "^0.1.7"
   }
 }

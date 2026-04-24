@@ -4,7 +4,12 @@
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
-import type { ReleaseType, Source } from "@buildinternet/releases-core/schema";
+import type {
+  ReleaseType,
+  Source,
+  UsageExtractionMode,
+  UsageFallbackReason,
+} from "@buildinternet/releases-core/schema";
 
 export interface ExtractedEntry {
   version?: string;
@@ -37,6 +42,12 @@ export interface UsageEntry {
   outputTokens: number;
   sourceSlug: string;
   releaseCount: number;
+  extractionMode?: UsageExtractionMode;
+  toolRounds?: number | null;
+  toolChars?: number | null;
+  fallbackReason?: UsageFallbackReason | null;
+  cacheReadTokens?: number;
+  cacheWriteTokens?: number;
 }
 
 /**
@@ -54,6 +65,13 @@ export interface ExtractDeps {
   logger: ExtractLogger;
   cloudflare: { accountId: string; apiToken: string } | null;
   repo: ExtractRepo;
+  /**
+   * When true AND the body exceeds LARGE_BODY_TOKEN_THRESHOLD, extract-from-body
+   * routes through the tool-use loop instead of inlining the body. Gated off by
+   * default; flip EXTRACT_TOOLLOOP_ENABLED=true in the worker env to enable globally.
+   * Per-source override: set source.metadata.extractStrategy = "toolloop".
+   */
+  extractToolLoopEnabled: boolean;
 }
 
 export interface ExtractRepo {

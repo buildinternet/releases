@@ -336,3 +336,43 @@ export function mapEntries(entries: ExtractedEntry[], opts: MapEntriesOptions): 
       };
     });
 }
+
+// ── Tool-loop constants (large-body extraction path) ─────────────────
+export const MAX_BODY_CHARS_TOOLLOOP = 2_000_000;
+export const MAX_ROUNDS = 8;
+export const MAX_TOTAL_TOOL_CHARS = 80_000;
+
+export const TOOLLOOP_SYSTEM_PROMPT = `You are a changelog parser operating in tool-use mode. The body of a URL is NOT included in this conversation — it is available through tools.
+
+Use \`query_json\` for JSONPath queries into structured content, or \`get_slice\` for byte-range reads (both JSON and HTML). Both return at most 20K chars per call; if a match set is larger, a remainder marker is included.
+
+When you have enough information, call \`extract_releases\` with all the entries you found. That ends the extraction.`;
+
+export const getSliceTool: Anthropic.Tool = {
+  name: "get_slice",
+  description: "Return a substring of the body. Clamps out-of-bounds args; capped at 20K chars.",
+  input_schema: {
+    type: "object",
+    properties: {
+      start: { type: "integer", description: "Starting char offset (0-indexed)." },
+      length: { type: "integer", description: "Number of chars to return." },
+    },
+    required: ["start", "length"],
+  },
+};
+
+export const queryJsonTool: Anthropic.Tool = {
+  name: "query_json",
+  description:
+    "Run a JSONPath expression against the body. Returns matched subtree as JSON text, capped at 20K chars.",
+  input_schema: {
+    type: "object",
+    properties: {
+      path: {
+        type: "string",
+        description: "JSONPath expression, e.g. $.result.data.nodes[*]",
+      },
+    },
+    required: ["path"],
+  },
+};

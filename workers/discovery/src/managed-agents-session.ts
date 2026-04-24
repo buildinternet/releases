@@ -201,6 +201,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   apiFetcher: fetcher,
                   apiKey: releasesApiKey,
                   sessionId,
+                  extractToolLoopEnabled: this.env.EXTRACT_TOOLLOOP_ENABLED,
                 },
                 sourceIdentifier,
               );

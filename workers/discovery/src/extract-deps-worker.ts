@@ -20,6 +20,7 @@ export interface WorkerDepsEnv {
   apiFetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   apiKey: string;
   sessionId?: string;
+  extractToolLoopEnabled?: boolean;
 }
 
 /** Default model for agent-style extraction in workers. Sonnet-class. */
@@ -106,6 +107,12 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
             outputTokens: entry.outputTokens,
             sourceSlug: entry.sourceSlug,
             releaseCount: entry.releaseCount,
+            extractionMode: entry.extractionMode,
+            toolRounds: entry.toolRounds,
+            toolChars: entry.toolChars,
+            fallbackReason: entry.fallbackReason,
+            cacheReadTokens: entry.cacheReadTokens,
+            cacheWriteTokens: entry.cacheWriteTokens,
           }),
         })
         .catch(() => {});
@@ -137,5 +144,6 @@ export function buildWorkerExtractDeps(env: WorkerDepsEnv): ExtractDeps {
     logger: workerLogger,
     cloudflare,
     repo: buildWorkerRepo(env),
+    extractToolLoopEnabled: env.extractToolLoopEnabled ?? false,
   };
 }
