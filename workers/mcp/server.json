@@ -7,7 +7,7 @@
     "url": "https://github.com/buildinternet/releases",
     "source": "github"
   },
-  "version": "0.11.0",
+  "version": "0.12.0",
   "remotes": [
     {
       "type": "streamable-http",
