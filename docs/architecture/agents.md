@@ -5,7 +5,7 @@ Two Anthropic managed agents handle changelog work, sharing the same tools (`AGE
 - **Discovery agent** (`claude-sonnet-4-6`) — Onboarding, evaluation, and judgment-heavy tasks. System prompt: `src/shared/discovery-prompt.ts`.
 - **Worker agent** (`claude-haiku-4-5`) — Fetches, updates, and mechanical operations at ~3x lower cost. System prompt: `src/shared/worker-prompt.ts`. The discovery worker DO routes `mode: "update"` sessions to this agent via `ANTHROPIC_WORKER_AGENT_ID`.
 
-Both agents are deployed via `bun run deploy:agents`. Use `deploy:agents:discovery` or `deploy:agents:worker` to target one. Agent IDs and config state live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
+Both agents are auto-deployed by `.github/workflows/deploy-managed-agents.yml` on any push to `main` that touches `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, or `scripts/sync-agent-skills.ts` — live Anthropic state stays in lockstep with `main`. For local / ad-hoc deploys: `bun run deploy:agents` (both), `deploy:agents:discovery`, or `deploy:agents:worker`. Agent IDs and skill mappings live in `scripts/agent-skills.json` (prod) and `scripts/agent-skills.staging.json` (staging).
 
 ### Per-environment agents
 
@@ -30,7 +30,7 @@ bun run deploy:agents:discovery -- --env staging    # discovery only
 bun run deploy:agents:worker -- --env staging       # worker only
 ```
 
-The `deploy-managed-agents.yml` workflow exposes the same selector as a `workflow_dispatch` input.
+The `deploy-managed-agents.yml` workflow exposes the same selector as a `workflow_dispatch` input for manual deploys (environment/deploy-scope/agent-scope). Automatic push deploys always target production with `deploy=both`, `agent=all`.
 
 **Follow-up (not yet done):** there's no CLI/API surface to trigger a staging discovery session against `releases-discovery-staging` — the worker is service-bound from `releases-api-staging` but we haven't threaded an `--env staging` flag through the CLI's onboard/update commands. Track via issue #447.
 
@@ -82,7 +82,7 @@ sequenceDiagram
 
 ### Where to look
 
-- **Add / edit a custom tool** — append to `AGENT_TOOLS` in `src/shared/agent-tools.ts`, add a `case` to `createTypedExecutor` mapping it to a REST call, then `bun run deploy:agents` to sync both managed agents.
+- **Add / edit a custom tool** — append to `AGENT_TOOLS` in `src/shared/agent-tools.ts`, add a `case` to `createTypedExecutor` mapping it to a REST call. Merging to `main` auto-deploys both managed agents; `bun run deploy:agents` is only needed for local iteration or staging.
 - **Add / edit an MCP tool** — register it inside `createServer` in `workers/mcp/src/mcp-agent.ts`, deploy the `mcp` worker.
 - **DO interception point** — `workers/discovery/src/managed-agents-session.ts`, the `agent.custom_tool_use` case inside `runSession()`.
 

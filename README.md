@@ -174,7 +174,7 @@ WebMCP is intentionally a lightweight tool subset — it does not mirror resourc
 - **Storage** — Cloudflare D1 (FTS5 + vector indexes via Vectorize). The API worker is the sole data plane.
 - **Adapters** — GitHub Releases API, RSS/Atom/JSON Feed parser, and Cloudflare browser-rendering fallback for pages without feeds (`packages/adapters/`).
 - **AI Layer** — changelog parsing, summarization, grouping, and overviews run inside the API worker as direct Anthropic SDK calls.
-- **Agents** — discovery + worker agents run as Anthropic-hosted **managed agents**. Agent definitions (system prompt, tools, skills, model) sync via `bun run deploy:agents`.
+- **Agents** — discovery + worker agents run as Anthropic-hosted **managed agents**. Agent definitions (system prompt, tools, skills, model) auto-deploy on merges to `main` whenever the relevant source files change, keeping live agents in lockstep with the repo.
 - **MCP Server** — hosted at `mcp.releases.sh`, read-only tools, no auth required.
 - **API Server** — JSON endpoints with CORS. GET endpoints are public; write operations require a Bearer token.
 - **Web Frontend** — Next.js app in `web/`, deploys on Vercel.
@@ -182,7 +182,7 @@ WebMCP is intentionally a lightweight tool subset — it does not mirror resourc
 
 ## Deployment
 
-Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt. The workflow also exposes `workflow_dispatch` so any worker (or all three) can be redeployed manually from the Actions tab. Managed agents, skills, and D1 migrations stay manual (they change AI behavior or schema and need human review).
+Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt. Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys. D1 migrations stay manual.
 
 To deploy manually from the project root, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env` (Bun autoloads it) and run:
 
@@ -215,7 +215,7 @@ Point the web frontend at the local API worker by setting `RELEASED_API_URL=http
 
 The discovery worker runs **managed agents** (Anthropic-hosted). Sessions are Durable Objects that stream events from the Anthropic API via typed executor tools.
 
-After changing agent tools, system prompt, or skills, run `bun run deploy:agents` to sync both Anthropic-hosted agent definitions. Use `deploy:agents:discovery` or `deploy:agents:worker` to target a single agent. The script tracks content hashes for prompt and tools to avoid unnecessary updates. State is stored in `scripts/agent-skills.json`.
+Agent tools, system prompts, and skills auto-deploy on merges to `main` — `deploy-managed-agents.yml` watches the five paths listed above and pushes prompt + tools + skills + model to both Anthropic-hosted agents. For local iteration, `bun run deploy:agents` does the same push on demand (requires `ANTHROPIC_API_KEY`); use `deploy:agents:discovery` or `deploy:agents:worker` for single-agent deploys, or `-- --env staging` for staging. Agent IDs and skill mappings are stored in `scripts/agent-skills.json`.
 
 Database tools:
 
