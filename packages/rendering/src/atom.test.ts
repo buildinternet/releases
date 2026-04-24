@@ -1,6 +1,6 @@
 import { describe, it, expect } from "bun:test";
 import { sourceToAtom, orgReleasesToAtom } from "./atom.js";
-import type { SourceDetail, OrgReleaseItem } from "./api-types.js";
+import type { SourceDetail, OrgReleaseItem } from "@releases/api-types";
 
 const BASE = "https://releases.sh";
 
@@ -17,6 +17,7 @@ function makeSource(): SourceDetail {
     latestVersion: "v15.0.0",
     latestDate: "2026-04-10T12:34:56Z",
     lastFetchedAt: "2026-04-17T08:00:00Z",
+    lastPolledAt: null,
     trackingSince: "2024-01-01T00:00:00Z",
     releases: [
       {

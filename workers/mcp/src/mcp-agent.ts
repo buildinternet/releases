@@ -1,9 +1,8 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDb } from "./db.js";
-import type Anthropic from "@anthropic-ai/sdk";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
-import { hydrateMediaUrls } from "@releases/lib/media-url.js";
+import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import {
   searchReleases,
   searchRegistry,
@@ -37,7 +36,7 @@ export interface Env {
   RELEASES_INDEX: VectorizeIndex;
   ENTITIES_INDEX: VectorizeIndex;
   CHANGELOG_CHUNKS_INDEX: VectorizeIndex;
-  // Embedding provider config (see packages/lib/src/embeddings.ts).
+  // Embedding provider config (see packages/search/src/embeddings.ts).
   EMBEDDING_PROVIDER?: string;
   VOYAGE_API_KEY?: SecretBinding;
   OPENAI_API_KEY?: SecretBinding;
@@ -105,8 +104,8 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   }
 
   // Lazily resolve the Anthropic client once per server instance
-  let anthropicClient: Anthropic | undefined;
-  async function getAnthropic(): Promise<Anthropic> {
+  let anthropicClient: ReturnType<typeof buildAnthropicClient> | undefined;
+  async function getAnthropic(): Promise<ReturnType<typeof buildAnthropicClient>> {
     if (!anthropicClient) {
       const [apiKey, gatewayToken] = await Promise.all([
         env.ANTHROPIC_API_KEY.get(),

@@ -10,13 +10,15 @@
     "paths": {
       "@buildinternet/releases-core/*": ["../../packages/core/src/*"],
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*"],
+      "@releases/api-types": ["../../packages/api-types/src/api-types.ts"],
       "@releases/core-internal/*": ["../../packages/core-internal/src/*"],
       "@releases/ai-internal/*": ["../../packages/ai/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*"],
+      "@releases/rendering/*": ["../../packages/rendering/src/*"],
+      "@releases/search/*": ["../../packages/search/src/*"],
       "@releases/*": ["../../src/*"]
     }
   },
-  "include": ["src/**/*.ts"],
-  "files": ["../../packages/lib/src/formatters.ts"]
+  "include": ["src/**/*.ts"]
 }

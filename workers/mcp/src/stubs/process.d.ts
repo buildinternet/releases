@@ -1,6 +1,6 @@
 // Minimal `process.env` ambient declaration for the MCP worker.
 //
-// `@releases/lib/embeddings.ts` reads `process.env.EMBEDDING_PROVIDER`
+// `@releases/search/embeddings.ts` reads `process.env.EMBEDDING_PROVIDER`
 // / `VOYAGE_API_KEY` / `OPENAI_API_KEY` at module scope. The CLI side
 // has bun types, the API worker side has bun types via the root
 // workspace, but the MCP worker isn't a workspace and doesn't bundle

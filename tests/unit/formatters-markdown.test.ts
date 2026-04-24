@@ -4,13 +4,13 @@ import {
   orgReleaseFeedToMarkdown,
   productToMarkdown,
   searchToMarkdown,
-} from "@releases/lib/formatters";
+} from "@releases/rendering/formatters";
 import type {
   ReleaseDetail,
   OrgReleaseItem,
   ProductDetail,
   UnifiedSearchResponse,
-} from "@releases/lib/api-types";
+} from "@releases/api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 

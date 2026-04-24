@@ -6,24 +6,11 @@
   "exports": {
     "./anthropic-client": "./src/anthropic-client.ts",
     "./anthropic-errors": "./src/anthropic-errors.ts",
-    "./api-types": "./src/api-types.ts",
-    "./atom": "./src/atom.ts",
-    "./atom-http": "./src/atom-http.ts",
     "./config": "./src/config.ts",
-    "./embed-changelog-pipeline": "./src/embed-changelog-pipeline.ts",
-    "./embed-changelogs": "./src/embed-changelogs.ts",
-    "./embed-entities": "./src/embed-entities.ts",
-    "./embed-releases": "./src/embed-releases.ts",
-    "./embedding-cache": "./src/embedding-cache.ts",
-    "./embeddings": "./src/embeddings.ts",
     "./errors": "./src/errors.ts",
-    "./formatters": "./src/formatters.ts",
     "./logger": "./src/logger.ts",
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
-    "./media": "./src/media.ts",
-    "./media-url": "./src/media-url.ts",
-    "./source-edit": "./src/source-edit.ts",
-    "./vector-search": "./src/vector-search.ts"
+    "./source-edit": "./src/source-edit.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.0",

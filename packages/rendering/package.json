@@ -1,0 +1,16 @@
+{
+  "name": "@releases/rendering",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./atom": "./src/atom.ts",
+    "./atom-http": "./src/atom-http.ts",
+    "./formatters": "./src/formatters.ts",
+    "./media": "./src/media.ts",
+    "./media-url": "./src/media-url.ts"
+  },
+  "dependencies": {
+    "@releases/api-types": "workspace:*"
+  }
+}

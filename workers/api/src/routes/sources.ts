@@ -32,7 +32,7 @@ import {
   buildChangelogResponse,
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
-import type { SourceWithOrg, SourcePatchInput } from "@releases/lib/api-types";
+import type { SourceWithOrg, SourcePatchInput } from "@releases/api-types";
 import {
   getStatusHub,
   sourceWhere,
@@ -49,7 +49,7 @@ import {
 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { authMiddleware } from "../middleware/auth.js";
-import { sourceToMarkdown, releaseToMarkdown } from "@releases/lib/formatters.js";
+import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
 import { getSourceMeta } from "@releases/adapters/feed.js";
 import type { Env } from "../index.js";
@@ -63,8 +63,8 @@ import {
 } from "../queries/sources.js";
 import { notDisabled } from "../queries/shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
-import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
-import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
+import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
+import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
@@ -521,7 +521,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
               })),
               // See note in embedSourceSideEffect about the cast.
               vectorIndex: c.env
-                .RELEASES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+                .RELEASES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
               embedConfig,
               onPersisted: async (ids) => {
                 if (ids.length === 0) return;
@@ -1561,10 +1561,10 @@ async function embedSourceSideEffect(
       ],
       // Cast required: workers-types `VectorizeIndex` declares a narrower
       // metadata value type than the runtime-agnostic interface in
-      // `packages/lib/src/vector-search.ts`. Assignable at runtime, diverges by
+      // `packages/search/src/vector-search.ts`. Assignable at runtime, diverges by
       // variance in the type system.
       vectorIndex:
-        env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+        env.ENTITIES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
       embedConfig,
       onPersisted: async () => {
         await db

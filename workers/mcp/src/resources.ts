@@ -1,5 +1,5 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { hydrateMediaUrls } from "@releases/lib/media-url.js";
+import { hydrateMediaUrls } from "@releases/rendering/media-url.js";
 import type { D1Db } from "./db.js";
 import { getCatalogEntry, getOrganization, getProduct, type ToolResult } from "./tools.js";
 import {

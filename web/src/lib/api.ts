@@ -18,7 +18,7 @@ import type {
   SitemapPayload,
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
-} from "@releases/lib/api-types";
+} from "@releases/api-types";
 
 export type {
   ReleaseSummaryItem,
@@ -32,7 +32,7 @@ export type {
   OrgReleaseItem,
   OverviewPageItem,
   KnowledgePageItem,
-} from "@releases/lib/api-types";
+} from "@releases/api-types";
 
 export type {
   Stats,

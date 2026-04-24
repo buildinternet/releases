@@ -5,9 +5,13 @@ export {
   productToMarkdown,
   overviewToMarkdown,
   knowledgeToMarkdown,
-} from "@releases/lib/formatters";
+} from "@releases/rendering/formatters";
 
-export type { FormatSourceDetail, FormatOrgDetail, FormatOptions } from "@releases/lib/formatters";
+export type {
+  FormatSourceDetail,
+  FormatOrgDetail,
+  FormatOptions,
+} from "@releases/rendering/formatters";
 
 /**
  * Format an ISO date string to a human-readable date.

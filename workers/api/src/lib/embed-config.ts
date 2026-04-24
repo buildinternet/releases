@@ -1,6 +1,6 @@
 /**
  * Build an EmbeddingConfig override from the Worker Env for use by the
- * shared embed helpers under @releases/lib/embed-*.
+ * shared embed helpers under @releases/search/embed-*.
  *
  * Workers don't have process.env, so we pass config explicitly. This helper:
  *   - Resolves the secret binding (VOYAGE_API_KEY or OPENAI_API_KEY)
@@ -16,7 +16,7 @@ import {
   DEFAULT_MODELS,
   type EmbeddingConfig,
   type EmbeddingProvider,
-} from "@releases/lib/embeddings.js";
+} from "@releases/search/embeddings.js";
 
 /** Shape returned by {@link buildEmbedConfig} — `provider` and `model` are always resolved. */
 export type ResolvedEmbedConfig = EmbeddingConfig & {

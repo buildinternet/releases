@@ -20,7 +20,9 @@
     ],
     "paths": {
       "@/*": ["./src/*"],
-      "@releases/lib/*": ["../packages/lib/src/*"]
+      "@releases/api-types": ["../packages/api-types/src/api-types.ts"],
+      "@releases/lib/*": ["../packages/lib/src/*"],
+      "@releases/rendering/*": ["../packages/rendering/src/*"]
     }
   },
   "include": [

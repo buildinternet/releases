@@ -27,9 +27,12 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 
 - `packages/core/` → published as **`@buildinternet/releases-core`** from this monorepo. Pure, runtime-neutral helpers shared with the OSS CLI: DB schema (source of truth), `categories`, `dates`, `changelog-range`, `changelog-slice`, `overview`, `id`, `slug`, `tokens`, `cli-contracts`. Consumed here via `workspace:*`; the OSS CLI pulls the published npm version. Schema changes land here first, then get picked up by the CLI on the next version bump.
 - `packages/core-internal/` → imported as **`@releases/core-internal`**. Private, workspace-only. DB-coupled / worker-only helpers the thin client doesn't need: `release-upsert` (drizzle upsert config), `hash` (node crypto), `webhook-sign` (HMAC for the webhook subsystem).
+- `packages/api-types/` → imported as **`@releases/api-types`**. Private wire protocol package for request/response shapes shared by the API worker, MCP worker, and web frontend.
 - `packages/adapters/` — adapter primitives (`types`, `source-meta`, `content-hash`), the `github`, `cloudflare`, `crawl`, and `feed` adapters. All pure / worker-safe now that the DB-coupled wrappers are gone.
 - `packages/ai/` → imported as **`@releases/ai-internal`**. `evaluate` (URL recommendation + `buildMetadataFromEvaluation`), `playbook` (deterministic markdown generation), `providers` (provider-detection table). Worker-safe.
-- `packages/lib/` — `@releases/lib/*` private (api-types, config, errors, atom, atom-http, formatters, media, media-url, source-edit, embeddings, embedding-cache, vector-search, embed-changelogs, embed-changelog-pipeline, embed-entities, embed-releases). `logger` is published as `@buildinternet/releases-lib/logger`. `api-types` is the shared API response contract — imported by `web/` and all workers.
+- `packages/rendering/` → imported as **`@releases/rendering/*`**. Atom feed helpers, markdown/JSON formatters, and media URL helpers.
+- `packages/search/` → imported as **`@releases/search/*`**. Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog embedding pipelines.
+- `packages/lib/` — slim private utilities (`config`, `errors`, `source-edit`, Anthropic client/error helpers, managed-agent rate limits). `logger` is published as `@buildinternet/releases-lib/logger`.
 
 ## Surviving `src/` tree
 

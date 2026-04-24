@@ -1,4 +1,4 @@
-import type { MediaItem } from "@releases/lib/api-types";
+import type { MediaItem } from "@releases/api-types";
 import type { ReleaseEventPayload } from "./types.js";
 
 /** Minimal inserted-row shape the batch handler + cron fetchOne already build. */

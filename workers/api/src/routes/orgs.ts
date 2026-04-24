@@ -29,7 +29,7 @@ import {
 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
-import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/lib/formatters.js";
+import { orgToMarkdown, orgReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import { assemblePlaybook } from "@releases/ai-internal/playbook";
 import type { Env } from "../index.js";
 import {
@@ -42,7 +42,7 @@ import {
   getOrgReleasesFeed,
 } from "../queries/orgs.js";
 import { notDisabled } from "../queries/shared.js";
-import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
+import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 
 export const orgRoutes = new Hono<Env>();
@@ -1069,7 +1069,7 @@ async function embedOrgSideEffect(
       // type than the shared runtime-agnostic interface. Assignable at
       // runtime; only diverges by type-system variance.
       vectorIndex:
-        env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+        env.ENTITIES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
       embedConfig,
       onPersisted: async () => {
         await db

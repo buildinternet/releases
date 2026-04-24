@@ -3,7 +3,7 @@ import {
   withEmbedCache,
   EMBED_CACHE_TTL_SECONDS,
   type EmbedCacheBinding,
-} from "@releases/lib/embedding-cache";
+} from "@releases/search/embedding-cache";
 
 interface PutCall {
   key: string;

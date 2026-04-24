@@ -23,15 +23,15 @@ import {
   classifyAnthropicError,
 } from "@releases/lib/anthropic-errors.js";
 import { callAnthropic, getAnthropicKey, resolveGatewayOpts } from "../lib/anthropic.js";
-import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/lib/embed-releases.js";
+import { embedAndUpsertReleases, type EmbedReleaseInput } from "@releases/search/embed-releases.js";
 import {
   embedAndUpsertEntities,
   type EmbedEntityInput,
   type EntityKind,
-} from "@releases/lib/embed-entities.js";
-import { embedAndUpsertChangelogFile } from "@releases/lib/embed-changelog-pipeline.js";
+} from "@releases/search/embed-entities.js";
+import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
-import type { VectorizeIndex } from "@releases/lib/vector-search.js";
+import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
 
 export const workflowsRoutes = new Hono<Env>();
@@ -515,7 +515,7 @@ const EMBED_BATCH_CAP = 50;
 
 /**
  * Cast: workers-types `VectorizeIndex` declares a stricter metadata value
- * type than the runtime-agnostic interface in `@releases/lib/vector-search.ts`.
+ * type than the runtime-agnostic interface in `@releases/search/vector-search.ts`.
  * Identical at runtime; only diverges by type-system variance.
  */
 function asSharedIndex(index: unknown): VectorizeIndex {
