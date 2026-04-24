@@ -7,6 +7,7 @@
  */
 
 import Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client";
 import { readFileSync, writeFileSync } from "fs";
 import { resolve } from "path";
 import { config, getDataDir } from "@releases/lib/config";
@@ -242,7 +243,12 @@ export async function runManagedDiscovery(
       });
     })();
 
-  const client = new Anthropic({ apiKey });
+  // Mirror the worker fix in workers/discovery/src/managed-agents-session.ts:
+  // explicit baseURL bypasses ANTHROPIC_BASE_URL env (which the SDK auto-reads
+  // and which can point at AI Gateway). The gateway buffers SSE-over-GET, so
+  // any session that uses events.stream() would deadlock if routed through it.
+  // See #547 and docs/architecture/ai-gateway.md.
+  const client = buildAnthropicClient({ apiKey, baseURL: "https://api.anthropic.com" });
   // Sequential: ensureAgentAndEnv writes the config file that ensureVault reads
   const { agentId, agentVersion, environmentId } = await ensureAgentAndEnv(client);
   const vaultId = await ensureVault(client);

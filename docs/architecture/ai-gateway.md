@@ -8,13 +8,14 @@ Covered when `ANTHROPIC_BASE_URL` is set:
 
 - `workers/api` — `admin-ai` summarize + compare routes, scrape-agent cron preflight
 - `workers/mcp` — AI-backed tools (`summarizeChanges`, `compareProducts`)
-- `workers/discovery` — managed-agents session creation + streaming, extract-deps agent/incremental paths
+- `workers/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
 - `scripts/run-eval-task.ts` — local eval runner
 
 Not covered (by design):
 
 - **Voyage embeddings.** Gateway's supported-provider list excludes Voyage; embedding calls go direct. Behavior unchanged.
-- **Managed-agent internal loop.** Tool use, skill loading, and sub-agent fanout run inside Anthropic's managed-agents environment on their infra. We only proxy the _session create_ and direct SDK calls we originate. Per-tool-call attribution stays in the Anthropic console.
+- **Managed-agent internal loop.** Tool use, skill loading, and sub-agent fanout run inside Anthropic's managed-agents environment on their infra. We only proxy non-streaming SDK calls we originate. Per-tool-call attribution stays in the Anthropic console.
+- **Managed-agents session events stream/send + sessions.create + memory store CRUD.** AI Gateway buffers SSE-over-GET responses until the upstream connection closes (#547), which deadlocks `client.beta.sessions.events.stream(...)` because the agent never receives the initial `user.message`. The managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`) also isn't part of the gateway's documented Anthropic provider scope, so non-Messages paths fall back to authenticated pass-through and reject when the cf-aig-authorization header is missing in some constructor sites (#545). The constructors in `workers/discovery/src/managed-agents-session.ts`, `workers/api/src/routes/errata.ts`, and `src/agent/managed-discovery.ts` (legacy CLI) bypass the gateway by explicitly passing `baseURL: "https://api.anthropic.com"` to the SDK constructor — this overrides the `ANTHROPIC_BASE_URL` env var that the SDK auto-reads, which would otherwise route the call through the gateway. Cost telemetry for session inference still surfaces in the Anthropic console.
 
 ## Configuration
 
@@ -36,7 +37,12 @@ Tokens are account-scoped (not gateway-scoped), so the prod and staging tokens a
 
 ## Shared helper
 
-All five constructor sites route through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `workers/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
+Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `workers/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
+
+Two routing modes:
+
+- **Through the gateway** — pass `baseURL: env.ANTHROPIC_BASE_URL` and `gatewayToken: env.AI_GATEWAY_TOKEN` (when set). The helper attaches the `cf-aig-authorization` header. This is the default for Messages-API call sites listed under Scope above.
+- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Required for the call sites listed under "Not covered" above (`workers/discovery/src/managed-agents-session.ts`, `workers/api/src/routes/errata.ts`, `src/agent/managed-discovery.ts`). New code should follow this pattern any time it touches the managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`).
 
 ## What this PR does not configure
 
