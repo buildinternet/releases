@@ -239,10 +239,23 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             }
           : undefined;
 
+      // The managed-agents session client uses `events.stream(...)` — a
+      // long-lived `GET /v1/sessions/<id>/events/stream` returning
+      // `text/event-stream`. Cloudflare AI Gateway buffers SSE responses on
+      // GET requests until the upstream connection closes (see #547), which
+      // means the SDK's `for await of stream` loop never receives any events,
+      // the agent never gets the initial `user.message`, and the session
+      // sits at `usage.input_tokens: 0` indefinitely. Skip the gateway here
+      // and hit api.anthropic.com directly. Other call sites (admin-ai,
+      // extract-deps) keep using the gateway because they're non-streaming
+      // POSTs that survive the proxy fine.
+      //
+      // We pass `baseURL` explicitly because the SDK auto-reads
+      // `ANTHROPIC_BASE_URL` from env (set in wrangler.jsonc to the gateway
+      // URL); leaving baseURL undefined would let that env value win.
       const client = buildAnthropicClient({
         apiKey: anthropicApiKey,
-        baseURL: anthropicBaseURL,
-        gatewayToken: gatewayToken || undefined,
+        baseURL: "https://api.anthropic.com",
       });
 
       const sessionTitle =

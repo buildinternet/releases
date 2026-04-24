@@ -8,13 +8,14 @@ Covered when `ANTHROPIC_BASE_URL` is set:
 
 - `workers/api` — `admin-ai` summarize + compare routes, scrape-agent cron preflight
 - `workers/mcp` — AI-backed tools (`summarizeChanges`, `compareProducts`)
-- `workers/discovery` — managed-agents session creation + streaming, extract-deps agent/incremental paths
+- `workers/discovery` — extract-deps agent/incremental paths only (managed-agents sessions are routed direct, see below)
 - `scripts/run-eval-task.ts` — local eval runner
 
 Not covered (by design):
 
 - **Voyage embeddings.** Gateway's supported-provider list excludes Voyage; embedding calls go direct. Behavior unchanged.
-- **Managed-agent internal loop.** Tool use, skill loading, and sub-agent fanout run inside Anthropic's managed-agents environment on their infra. We only proxy the _session create_ and direct SDK calls we originate. Per-tool-call attribution stays in the Anthropic console.
+- **Managed-agent internal loop.** Tool use, skill loading, and sub-agent fanout run inside Anthropic's managed-agents environment on their infra. We only proxy non-streaming SDK calls we originate. Per-tool-call attribution stays in the Anthropic console.
+- **Managed-agents session events stream/send + sessions.create + memory store CRUD.** AI Gateway buffers SSE-over-GET responses until the upstream connection closes (#547), which deadlocks `client.beta.sessions.events.stream(...)` because the agent never receives the initial `user.message`. The managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`) also isn't part of the gateway's documented Anthropic provider scope, so non-Messages paths fall back to authenticated pass-through and reject when the cf-aig-authorization header is missing in some constructor sites (#545). Both `workers/discovery/src/managed-agents-session.ts` and `workers/api/src/routes/errata.ts` build the SDK client without a `baseURL` to bypass the gateway entirely. Cost telemetry for session inference still surfaces in the Anthropic console.
 
 ## Configuration
 
