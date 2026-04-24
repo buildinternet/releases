@@ -1,8 +1,19 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hydrateMediaUrls } from "@releases/lib/media-url.js";
 import type { D1Db } from "./db.js";
-import { getOrganization, getProduct, getSource, type ToolResult } from "./tools.js";
-import { completeOrgSlug, completeProductSlug, completeSourceSlug } from "./slug-completion.js";
+import {
+  getCatalogEntry,
+  getOrganization,
+  getProduct,
+  getSource,
+  type ToolResult,
+} from "./tools.js";
+import {
+  completeCatalogSlug,
+  completeOrgSlug,
+  completeProductSlug,
+  completeSourceSlug,
+} from "./slug-completion.js";
 
 /** Completion-only: `resources/list` is intentionally empty. See docs/architecture/mcp.md. */
 
@@ -41,6 +52,27 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
     },
   );
 
+  const catalogTemplate = new ResourceTemplate("releases://catalog/{slug}", {
+    list: undefined,
+    complete: {
+      slug: (value) => completeCatalogSlug(db, value),
+    },
+  });
+
+  server.registerResource(
+    "catalog",
+    catalogTemplate,
+    {
+      description:
+        "Catalog entry — a product or standalone source, folded into one addressable surface. URI: releases://catalog/{slug}. Completion spans both product and source slugs. Not enumerable; discover slugs via completion.",
+      mimeType: "text/markdown",
+    },
+    async (uri, variables) => {
+      const slug = String(variables.slug);
+      return toMarkdownContents(uri, await getCatalogEntry(db, { identifier: slug }), mediaOrigin);
+    },
+  );
+
   const productTemplate = new ResourceTemplate("releases://product/{productSlug}", {
     list: undefined,
     complete: {
@@ -53,7 +85,7 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
     productTemplate,
     {
       description:
-        "Product detail — organization, category, tags, and grouped sources. URI: releases://product/{productSlug}. Not enumerable; discover slugs via completion.",
+        "(deprecated) Product detail. Prefer releases://catalog/{slug} — it resolves products and standalone sources via one URI. Kept for one release cycle.",
       mimeType: "text/markdown",
     },
     async (uri, variables) => {
@@ -74,7 +106,7 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
     sourceTemplate,
     {
       description:
-        "Source detail — organization, product linkage, release count, last-fetched, and CHANGELOG availability. URI: releases://source/{sourceSlug}. Not enumerable; discover slugs via completion.",
+        "(deprecated) Source detail. Prefer releases://catalog/{slug} — it resolves products and standalone sources via one URI. Kept for one release cycle.",
       mimeType: "text/markdown",
     },
     async (uri, variables) => {
