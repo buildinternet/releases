@@ -7,13 +7,13 @@
       "dependencies": {
         "@anthropic-ai/claude-agent-sdk": "^0.2.118",
         "@anthropic-ai/sdk": "^0.91.0",
+        "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
         "@buildinternet/releases-lib": "^0.13.2",
         "@buildinternet/releases-skills": "^0.13.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@releases/adapters": "workspace:*",
         "@releases/ai-internal": "workspace:*",
-        "@releases/api-types": "workspace:*",
         "@releases/core-internal": "workspace:*",
         "@releases/lib": "workspace:*",
         "@releases/rendering": "workspace:*",
@@ -59,8 +59,8 @@
       },
     },
     "packages/api-types": {
-      "name": "@releases/api-types",
-      "version": "0.0.0",
+      "name": "@buildinternet/releases-api-types",
+      "version": "0.1.0",
     },
     "packages/core": {
       "name": "@buildinternet/releases-core",
@@ -91,7 +91,7 @@
       "name": "@releases/rendering",
       "version": "0.0.0",
       "dependencies": {
-        "@releases/api-types": "workspace:*",
+        "@buildinternet/releases-api-types": "workspace:*",
       },
     },
     "packages/search": {
@@ -105,8 +105,8 @@
       "name": "releases-web",
       "version": "0.9.2",
       "dependencies": {
+        "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
-        "@releases/api-types": "workspace:*",
         "@releases/rendering": "workspace:*",
         "@shikijs/langs": "^4.0.2",
         "@shikijs/rehype": "^4.0.2",
@@ -169,6 +169,8 @@
     "@babel/runtime": ["@babel/runtime@7.29.2", "", {}, "sha512-JiDShH45zKHWyGe4ZNVRrCjBz8Nh9TMmZG1kh4QTK8hCBTWBi8Da+i7s1fJw7/lYpM4ccepSNfqzZ/QvABBi5g=="],
 
     "@babel/runtime-corejs3": ["@babel/runtime-corejs3@7.29.2", "", { "dependencies": { "core-js-pure": "^3.48.0" } }, "sha512-Lc94FOD5+0aXhdb0Tdg3RUtqT6yWbI/BbFWvlaSJ3gAb9Ks+99nHRDKADVqC37er4eCB0fHyWT+y+K3QOvJKbw=="],
+
+    "@buildinternet/releases-api-types": ["@buildinternet/releases-api-types@workspace:packages/api-types"],
 
     "@buildinternet/releases-core": ["@buildinternet/releases-core@workspace:packages/core"],
 
@@ -463,8 +465,6 @@
     "@releases/adapters": ["@releases/adapters@workspace:packages/adapters"],
 
     "@releases/ai-internal": ["@releases/ai-internal@workspace:packages/ai"],
-
-    "@releases/api-types": ["@releases/api-types@workspace:packages/api-types"],
 
     "@releases/core-internal": ["@releases/core-internal@workspace:packages/core-internal"],
 

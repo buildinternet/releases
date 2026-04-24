@@ -10,7 +10,7 @@ import type {
   OrgReleaseItem,
   ProductDetail,
   UnifiedSearchResponse,
-} from "@releases/api-types";
+} from "@buildinternet/releases-api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 

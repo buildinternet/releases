@@ -8,8 +8,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
-    "@releases/api-types": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@shikijs/langs": "^4.0.2",
     "@shikijs/rehype": "^4.0.2",

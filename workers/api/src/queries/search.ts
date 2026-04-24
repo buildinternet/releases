@@ -1,6 +1,10 @@
 import { sql } from "drizzle-orm";
 import type { D1Db } from "../db.js";
-import type { SearchOrgHit, SearchCatalogHit, RawSourceHit } from "@releases/api-types";
+import type {
+  SearchOrgHit,
+  SearchCatalogHit,
+  RawSourceHit,
+} from "@buildinternet/releases-api-types";
 
 /**
  * Raw release row returned by the search queries. `content` and `media`

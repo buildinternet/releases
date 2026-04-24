@@ -8,7 +8,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { resolveR2Url } from "@releases/rendering/media-url.js";
-import type { MediaItem } from "@releases/api-types";
+import type { MediaItem } from "@buildinternet/releases-api-types";
 import type { createDb } from "./db.js";
 export { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
 

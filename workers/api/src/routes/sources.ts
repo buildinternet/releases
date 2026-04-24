@@ -32,7 +32,7 @@ import {
   buildChangelogResponse,
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
-import type { SourceWithOrg, SourcePatchInput } from "@releases/api-types";
+import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
 import {
   getStatusHub,
   sourceWhere,

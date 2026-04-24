@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useReducer, useRef } from "react";
-import type { LatestRelease, MediaItem } from "@releases/api-types";
+import type { LatestRelease, MediaItem } from "@buildinternet/releases-api-types";
 
 /**
  * Normalized release shape rendered by /live. Bridges the WebSocket event

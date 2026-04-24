@@ -14,7 +14,7 @@ The user-facing CLI (`@buildinternet/releases`) lives in [buildinternet/releases
 - `workers/mcp/` — Remote MCP server at `mcp.releases.sh`.
 - `workers/webhooks/` — Outbound webhook consumer: signs and delivers `release.created` events to subscribed endpoints with HMAC-SHA256, retry/DLQ via Cloudflare Queues, and a 7-day replay window. See [docs/webhooks.md](docs/webhooks.md).
 - `web/` — Next.js frontend for releases.sh.
-- `packages/` — In-tree shared code. `packages/core/` publishes `@buildinternet/releases-core` (schema + pure helpers shared with the OSS CLI). `packages/core-internal/`, `packages/api-types/`, `packages/adapters/`, `packages/ai/`, `packages/rendering/`, `packages/search/`, and the slimmed `packages/lib/` are private workspaces. `packages/lib/src/logger.ts` is also published via the OSS CLI as `@buildinternet/releases-lib/logger`.
+- `packages/` — In-tree shared code. `packages/core/` publishes `@buildinternet/releases-core` (schema + pure helpers shared with the OSS CLI) and `packages/api-types/` publishes `@buildinternet/releases-api-types` (wire protocol types). `packages/core-internal/`, `packages/adapters/`, `packages/ai/`, `packages/rendering/`, `packages/search/`, and the slimmed `packages/lib/` are private workspaces. `packages/lib/src/logger.ts` is also published via the OSS CLI as `@buildinternet/releases-lib/logger`.
 - `src/agent/` — Managed-agents discovery + worker harness (invoked by the discovery worker's Durable Object).
 - `plugins/claude/releases/` — Claude Code plugin (committed copy; skill source of truth is OSS `@buildinternet/releases-skills`).
 

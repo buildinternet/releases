@@ -1,5 +1,5 @@
 import matter from "gray-matter";
-import type { OrgListItem, SourceListItem, Stats } from "@releases/api-types";
+import type { OrgListItem, SourceListItem, Stats } from "@buildinternet/releases-api-types";
 import { loadPage } from "@/lib/docs";
 
 export function homeToMarkdown(args: {

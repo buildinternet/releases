@@ -1,9 +1,22 @@
 {
-  "name": "@releases/api-types",
-  "version": "0.0.0",
-  "private": true,
+  "name": "@buildinternet/releases-api-types",
+  "version": "0.1.0",
+  "description": "Wire protocol — request/response types for the Releases registry API. Shared by web, workers, and clients.",
   "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/buildinternet/releases.git",
+    "directory": "packages/api-types"
+  },
   "exports": {
     ".": "./src/api-types.ts"
+  },
+  "files": [
+    "src",
+    "README.md"
+  ],
+  "publishConfig": {
+    "access": "public"
   }
 }
