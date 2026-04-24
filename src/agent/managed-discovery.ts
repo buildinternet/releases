@@ -17,6 +17,7 @@ import { buildDiscoveryPrompt } from "./discovery.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./discovery.js";
 import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";
 import { AGENT_TOOLS, createTypedExecutor, handleCustomToolUse } from "../shared/agent-tools.js";
+import { buildMemoryStoreResources } from "../shared/memory-store-attach.js";
 
 // ── Cached IDs ────────────────────────────────────────────────────
 
@@ -248,11 +249,18 @@ export async function runManagedDiscovery(
 
   const prompt = buildDiscoveryPrompt(options);
 
+  const memoryResources = buildMemoryStoreResources({
+    mode: "onboard",
+    errataStoreId: process.env.MEMORY_STORE_ERRATA_ID,
+    toolNotesStoreId: process.env.MEMORY_STORE_TOOL_NOTES_ID,
+  });
+
   // Create session with vault for MCP server access
   const session = await client.beta.sessions.create({
     agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
     environment_id: environmentId,
     vault_ids: [vaultId],
+    ...(memoryResources.length > 0 ? { resources: memoryResources } : {}),
     title: `Discovery: ${options.company}`,
   } as any);
 

@@ -25,5 +25,9 @@
   "promptHash": "292cffc072a876cf",
   "toolsHash": "e24ae75869187e0e",
   "workerAgentId": "agent_011CZvdgPKDQ2eRs8gTrLnNA",
-  "workerPromptHash": "051b7121d85d70af"
+  "workerPromptHash": "051b7121d85d70af",
+  "memoryStores": {
+    "errata": "memstore_012MKStcUM7QxW9qPCLQtwwt",
+    "toolNotes": "memstore_01Jc5WAiqp4fwSJUmjR2excj"
+  }
 }
