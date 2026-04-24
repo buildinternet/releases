@@ -1,6 +1,10 @@
 name: Publish @buildinternet/releases-api-types
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/api-types/package.json"
   workflow_dispatch:
     inputs:
       dry-run:
