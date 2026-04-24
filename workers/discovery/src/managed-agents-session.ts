@@ -23,41 +23,12 @@ import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
 import { discoveryIdentityHeaders } from "./identity.js";
-
-/** Staging access gate header — must match workers/api/src/middleware/staging-access.ts. */
-const STAGING_KEY_HEADER = "X-Releases-Staging-Key";
-
-/**
- * Wrap a Fetcher so every outbound request carries the staging access key.
- * Returns the fetcher unchanged when `stagingKey` is empty (prod/local).
- */
-function withStagingHeader(fetcher: Fetcher, stagingKey: string): Fetcher {
-  if (!stagingKey) return fetcher;
-  return {
-    fetch: (input: RequestInfo | URL, init?: RequestInit) => {
-      const req = input instanceof Request ? input : new Request(input, init);
-      req.headers.set(STAGING_KEY_HEADER, stagingKey);
-      return fetcher.fetch(req, init);
-    },
-  } as Fetcher;
-}
-
-/**
- * Wrap a Fetcher so every outbound request carries the discovery worker's
- * identity headers (User-Agent, X-Requested-With). These surface in Cloudflare
- * Analytics on the API edge so staging traffic is distinguishable from real
- * visitors. Harmless on service-binding fetches.
- */
-function withDiscoveryIdentity(fetcher: Fetcher): Fetcher {
-  const identity = discoveryIdentityHeaders();
-  return {
-    fetch: (input: RequestInfo | URL, init?: RequestInit) => {
-      const req = input instanceof Request ? input : new Request(input, init);
-      for (const [k, v] of Object.entries(identity)) req.headers.set(k, v);
-      return fetcher.fetch(req, init);
-    },
-  } as Fetcher;
-}
+import {
+  STAGING_KEY_HEADER,
+  withStagingHeader,
+  withDiscoveryIdentity,
+  directApiFetcher,
+} from "./fetch-wrappers.js";
 
 // ── MA 429 rate-limit retry loop ─────────────────────────────────────────────
 //
@@ -196,15 +167,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         return;
       }
 
-      const baseFetcher = this.env.API_WORKER ?? {
-        fetch: (input: RequestInfo | URL, init?: RequestInit) =>
-          globalThis.fetch(
-            typeof input === "string"
-              ? input.replace("https://api", this.env.RELEASED_API_URL.replace(/\/+$/, ""))
-              : input,
-            init,
-          ),
-      };
+      // Direct fetch used when no service binding is present (local dev /
+      // tests). Rewrites the placeholder `https://api/...` host to
+      // `RELEASED_API_URL`, handling string, URL, and Request inputs — by the
+      // time this fetcher is invoked, the wrappers above have already upgraded
+      // strings into Request objects.
+      const baseFetcher = this.env.API_WORKER ?? directApiFetcher(this.env.RELEASED_API_URL);
       const fetcher = withDiscoveryIdentity(
         withStagingHeader(baseFetcher as Fetcher, await this.getStagingKey()),
       );
