@@ -703,6 +703,13 @@ export async function handleCustomToolUse(
     return false;
   }
 
+  // Surface to worker logs so a platform-registered tool that we no longer
+  // define (or a hallucinated name) shows up in `wrangler tail` / Axiom —
+  // rather than only in the Anthropic session event log. The agent still
+  // gets a structured error via sendResult.
+  console.error(
+    `[agent-tools] Unknown tool dispatched: ${toolName}. Known: ${API_TOOL_NAMES.join(", ")}.`,
+  );
   await ctx.sendResult(toolUseId, `Unknown tool: ${toolName}`);
   return false;
 }
