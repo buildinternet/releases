@@ -25,12 +25,12 @@ import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import type { RawRelease } from "@releases/adapters/types.js";
-import { normalizeMediaUrl } from "@releases/lib/media-url.js";
-import { embedAndUpsertChangelogFile } from "@releases/lib/embed-changelog-pipeline.js";
+import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
+import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
-import type { VectorizeIndex } from "@releases/lib/vector-search.js";
-import { embedAndUpsertReleases } from "@releases/lib/embed-releases.js";
+import type { VectorizeIndex } from "@releases/search/vector-search.js";
+import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
@@ -401,7 +401,7 @@ export interface FetchOneEnv {
    * Optional Vectorize bindings for semantic-search side effects. Typed as
    * `unknown` because the workers-types `VectorizeIndex` declares a stricter
    * metadata value type than the runtime-agnostic interface in
-   * `@releases/lib/vector-search.js`. Identical at runtime but the variance
+   * `@releases/search/vector-search.js`. Identical at runtime but the variance
    * prevents structural assignment; helpers below cast at the call site.
    */
   RELEASES_INDEX?: unknown;
@@ -1167,7 +1167,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
 //
 // These helpers hydrate DB rows, build the embed config from Worker secrets,
 // push vectors to Vectorize, and mark the rows as embedded. All failures are
-// swallowed by the shared helpers in @releases/lib/embed-* so the callers never
+// swallowed by the shared helpers in @releases/search/embed-* so the callers never
 // need to try/catch.
 
 export async function embedReleasesForSource(

@@ -16,7 +16,7 @@ import type {
   ProductDetail,
   UnifiedSearchResponse,
   OverviewPageItem,
-} from "./api-types.js";
+} from "@releases/api-types";
 
 // Re-export under the old names for any callers still using them
 export type FormatRelease = ReleaseItem;

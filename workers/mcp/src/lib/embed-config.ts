@@ -5,7 +5,7 @@
  * provider + API key and never wires a workers-ai binding.
  */
 
-// Types inlined from `@releases/lib/embeddings.js`. That module reads
+// Types inlined from `@releases/search/embeddings.js`. That module reads
 // `process.env` at import time, which would force the MCP worker's
 // tsconfig to pull in node/bun types. The real `embedBatch` is
 // dynamic-imported from `search-hybrid.ts` at runtime.
@@ -16,7 +16,7 @@ interface EmbeddingConfig {
   apiKey?: string;
 }
 
-/** Kept in sync with DEFAULT_MODELS in packages/lib/src/embeddings.ts. */
+/** Kept in sync with DEFAULT_MODELS in packages/search/src/embeddings.ts. */
 const DEFAULT_MODELS: Record<EmbeddingProvider, string> = {
   voyage: "voyage-4-lite",
   openai: "text-embedding-3-small",

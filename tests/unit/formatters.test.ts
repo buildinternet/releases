@@ -5,8 +5,8 @@ import {
   knowledgeToMarkdown,
   type FormatSourceDetail,
   type FormatOrgDetail,
-} from "@releases/lib/formatters";
-import type { KnowledgePageItem, OrgReleaseItem } from "@releases/lib/api-types";
+} from "@releases/rendering/formatters";
+import type { KnowledgePageItem, OrgReleaseItem } from "@releases/api-types";
 
 // ── Fixtures ───────────────────────────────────────────────────────
 

@@ -7,10 +7,10 @@ import {
   domainAliases,
 } from "@buildinternet/releases-core/schema";
 import { toSlug } from "@buildinternet/releases-core/slug";
-import { resolveR2Url } from "@releases/lib/media-url.js";
-import type { MediaItem } from "@releases/lib/api-types";
+import { resolveR2Url } from "@releases/rendering/media-url.js";
+import type { MediaItem } from "@releases/api-types";
 import type { createDb } from "./db.js";
-export { hydrateMediaUrls, resolveR2Url } from "@releases/lib/media-url.js";
+export { hydrateMediaUrls, resolveR2Url } from "@releases/rendering/media-url.js";
 
 type RawMediaRow = MediaItem & { r2Key?: string | null };
 

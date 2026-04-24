@@ -11,7 +11,7 @@ import type { PollAndFetchWorkflowEnv } from "../../workers/api/src/workflows/po
  * Test harness for the Workflows-based poll-and-fetch path.
  *
  * Stubs are intentionally localized — earlier drafts used `mock.module(...)`
- * on `@releases/lib/embed-releases` and `@releases/adapters/feed` but those
+ * on `@releases/search/embed-releases` and `@releases/adapters/feed` but those
  * mocks leaked into sibling test files that import the same modules directly.
  * Instead, we stub `globalThis.fetch` for the two external endpoints and pass
  * a fake `VectorizeIndex` binding — no module-level mocks.

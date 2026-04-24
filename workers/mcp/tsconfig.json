@@ -8,11 +8,16 @@
     "lib": ["ESNext"],
     "types": ["@cloudflare/workers-types"],
     "paths": {
+      "@anthropic-ai/sdk": ["../../node_modules/@anthropic-ai/sdk"],
+      "@anthropic-ai/sdk/*": ["../../node_modules/@anthropic-ai/sdk/*"],
       "@buildinternet/releases-core/*": ["../../packages/core/src/*"],
       "@buildinternet/releases-lib/*": ["../../packages/lib/src/*"],
+      "@releases/api-types": ["../../packages/api-types/src/api-types.ts"],
       "@releases/core-internal/*": ["../../packages/core-internal/src/*"],
       "@releases/adapters/*": ["../../packages/adapters/src/*"],
       "@releases/lib/*": ["../../packages/lib/src/*"],
+      "@releases/rendering/*": ["../../packages/rendering/src/*"],
+      "@releases/search/*": ["../../packages/search/src/*"],
       "@releases/*": ["../../src/*"],
       "drizzle-orm": ["../../node_modules/drizzle-orm"],
       "drizzle-orm/*": ["../../node_modules/drizzle-orm/*"]

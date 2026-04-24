@@ -3,7 +3,7 @@ import { sql, count } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { mediaAssets } from "@buildinternet/releases-core/schema";
 import { authMiddleware } from "../middleware/auth.js";
-import type { UploadResult } from "@releases/lib/media.js";
+import type { UploadResult } from "@releases/rendering/media";
 
 type Env = {
   Bindings: {

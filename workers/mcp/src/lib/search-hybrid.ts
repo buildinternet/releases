@@ -16,13 +16,13 @@ import {
 import {
   hybridSearch,
   type VectorizeIndex as HybridVectorizeIndex,
-} from "@releases/lib/vector-search.js";
-import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/lib/embeddings.js";
-import { withEmbedCache, type EmbedCacheBinding } from "@releases/lib/embedding-cache.js";
+} from "@releases/search/vector-search.js";
+import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/search/embeddings.js";
+import { withEmbedCache, type EmbedCacheBinding } from "@releases/search/embedding-cache.js";
 import { buildEmbedConfig } from "./embed-config.js";
 import type { D1Db } from "../db.js";
 
-// `@releases/lib/embeddings.js` touches `process.env` at module scope;
+// `@releases/search/embeddings.js` touches `process.env` at module scope;
 // we shim `process` in `src/stubs/process.d.ts` so the MCP worker's
 // tsconfig type-checks without node/bun type packages. At runtime the
 // Workers runtime exposes `process.env = {}` and the embeddings module

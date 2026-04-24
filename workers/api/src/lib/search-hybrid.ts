@@ -1,7 +1,7 @@
 /**
  * Worker-side hybrid search helper.
  *
- * Wraps `hybridSearch` from `@releases/lib/vector-search.js` with closures
+ * Wraps `hybridSearch` from `@releases/search/vector-search.js` with closures
  * over the D1 binding (for FTS), the Vectorize bindings (for vectors),
  * and the embedding config (built from env). After `hybridSearch` returns
  * ranked IDs, this module hydrates them back into D1 rows so the caller
@@ -24,9 +24,9 @@ import {
 import {
   hybridSearch,
   type VectorizeIndex as HybridVectorizeIndex,
-} from "@releases/lib/vector-search.js";
-import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/lib/embeddings.js";
-import { withEmbedCache, type EmbedCacheBinding } from "@releases/lib/embedding-cache.js";
+} from "@releases/search/vector-search.js";
+import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/search/embeddings.js";
+import { withEmbedCache, type EmbedCacheBinding } from "@releases/search/embedding-cache.js";
 import { searchReleasesFts } from "../queries/search.js";
 import { buildEmbedConfig } from "./embed-config.js";
 import type { D1Db } from "../db.js";

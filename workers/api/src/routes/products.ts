@@ -21,7 +21,7 @@ import {
   replaceAliases,
 } from "../utils.js";
 import type { Env } from "../index.js";
-import { embedAndUpsertEntities, type EntityKind } from "@releases/lib/embed-entities.js";
+import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 
 export const productRoutes = new Hono<Env>();
@@ -468,7 +468,7 @@ async function embedProductSideEffect(
       // Cast: workers-types VectorizeIndex has a stricter metadata value
       // type than the shared runtime-agnostic interface.
       vectorIndex:
-        env.ENTITIES_INDEX as unknown as import("@releases/lib/vector-search.js").VectorizeIndex,
+        env.ENTITIES_INDEX as unknown as import("@releases/search/vector-search.js").VectorizeIndex,
       embedConfig,
       onPersisted: async () => {
         await db

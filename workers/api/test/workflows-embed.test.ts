@@ -4,7 +4,7 @@
 // backlog, and the 503 fallback when EMBEDDING_PROVIDER is unconfigured.
 // Happy-path coverage (actually calling embedAndUpsertReleases/-Entities/
 // -ChangelogFile) is skipped deliberately — mocking those modules with
-// `mock.module` bleeds into packages/lib/src/embed-*.test.ts and turns
+// `mock.module` bleeds into packages/search/src/embed-*.test.ts and turns
 // 23 unit tests red. If a future refactor introduces dependency injection
 // for the embed helpers, add happy-path cases then.
 import { describe, it, expect } from "bun:test";
