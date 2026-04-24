@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { type OrgActivity, type OrgHeatmap, type SourceListItem, type OrgDetail } from "@/lib/api";
+import {
+  type OrgActivity,
+  type OrgHeatmap,
+  type OverviewPageItem,
+  type SourceListItem,
+  type OrgDetail,
+} from "@/lib/api";
+import { OverviewView } from "@/components/overview-view";
 import { type WeeklyBucket, WEEK_MS, DAY_MS, parseBuckets, fmtInterval } from "@/lib/cadence";
 import { SourceCard, type SourceCadenceData } from "@/components/source-card";
 import { RangeNavigator, type SourceBucketEntry } from "@/components/range-navigator";
@@ -37,6 +44,7 @@ interface ReleaseTimelineProps {
   sources: SourceListItem[];
   products: OrgDetail["products"];
   trackingSince?: string | null;
+  overview?: OverviewPageItem | null;
 }
 
 function ProductGroupedSources({
@@ -103,6 +111,7 @@ export function ReleaseTimeline({
   sources,
   products,
   trackingSince,
+  overview,
 }: ReleaseTimelineProps) {
   const [viewMode, setViewMode] = useState<ViewMode>(heatmap ? "heatmap" : "chart");
 
@@ -330,7 +339,13 @@ export function ReleaseTimeline({
     });
   }, [sortedSources, cadenceMap]);
 
-  if (cardData.length === 0) return null;
+  if (cardData.length === 0) {
+    return overview ? (
+      <div className="mt-5 mb-2">
+        <OverviewView page={overview} />
+      </div>
+    ) : null;
+  }
 
   const cadenceLabel = fmtCadence(summaryStats.avgPerWeek, summaryStats.avgPerMonth);
   const heatmapHighlightDays = highlightDaysForPreset(rangePreset);
@@ -399,6 +414,8 @@ export function ReleaseTimeline({
   return (
     <div className="mt-5 mb-2">
       {timelineCard}
+
+      {overview && <OverviewView page={overview} />}
 
       <div className="mt-5">
         {products.length > 0 ? (

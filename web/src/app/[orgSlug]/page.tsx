@@ -227,9 +227,10 @@ export default async function OrgPage({
                     sources={org.sources}
                     products={org.products}
                     trackingSince={org.trackingSince}
+                    overview={org.overview}
                   />
                 )}
-                {org.overview && <OverviewView page={org.overview} />}
+                {!activity && org.overview && <OverviewView page={org.overview} />}
               </>
             )}
           </div>
