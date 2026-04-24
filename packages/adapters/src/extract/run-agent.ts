@@ -10,7 +10,7 @@ import { AdapterError } from "@releases/lib/errors";
 import { fetchCloudflareMarkdown } from "../cloudflare.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
-import { extractFromBody } from "./extract-from-body.js";
+import { extractFromBody, type ExtractFromBodyResult } from "./extract-from-body.js";
 import {
   extractReleasesToolFull,
   WEBFETCH_SYSTEM_PROMPT,
@@ -47,12 +47,7 @@ export async function runAgentExtraction(
 
   logger.info(`Running agent extraction for ${source.url} (model: ${agentModel})...`);
 
-  let result: {
-    entries: ExtractedEntry[];
-    totalInput: number;
-    totalOutput: number;
-    hitMaxTokens: boolean;
-  };
+  let result: ExtractFromBodyResult;
   // Tracks the content hash from any Cloudflare-rendered body, recorded
   // after extraction so a failed run doesn't lock out retries.
   let pendingContentHash: string | null = null;
@@ -80,6 +75,8 @@ export async function runAgentExtraction(
         systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
         userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
         guidance: opts.guidance,
+        sourceUrl: source.url,
+        fetchUrl: source.url,
       },
       deps,
     );
@@ -87,7 +84,16 @@ export async function runAgentExtraction(
   } else {
     try {
       const webResult = await runWebFetchLoop(source.url, opts.guidance, deps);
-      result = { ...webResult, hitMaxTokens: false };
+      result = {
+        ...webResult,
+        hitMaxTokens: false,
+        mode: "oneshot" as const,
+        toolRounds: null,
+        toolChars: null,
+        fallbackReason: null,
+        cacheReadTokens: 0,
+        cacheWriteTokens: 0,
+      };
     } catch (err) {
       throw new AdapterError(
         "agent",
@@ -118,19 +124,29 @@ export async function runAgentExtraction(
               systemPrompt: CLOUDFLARE_SYSTEM_PROMPT,
               userMessage: `Extract all changelog/release entries from this page (source URL: ${source.url}):`,
               guidance: opts.guidance,
+              sourceUrl: source.url,
+              fetchUrl: source.url,
             },
             deps,
           );
+          // Always account for the Cloudflare call's spend in the usage log,
+          // regardless of which result wins — otherwise usage_log under-reports
+          // when web_fetch beats Cloudflare and we discard cfResult.entries.
+          result.totalInput += cfResult.totalInput;
+          result.totalOutput += cfResult.totalOutput;
+          result.cacheReadTokens += cfResult.cacheReadTokens;
+          result.cacheWriteTokens += cfResult.cacheWriteTokens;
+          result.hitMaxTokens = result.hitMaxTokens || cfResult.hitMaxTokens;
+
           if (cfResult.entries.length > result.entries.length) {
             logger.info(
               `Cloudflare found ${cfResult.entries.length} entries (vs ${result.entries.length}) — using Cloudflare results`,
             );
-            result = {
-              entries: cfResult.entries,
-              totalInput: result.totalInput + cfResult.totalInput,
-              totalOutput: result.totalOutput + cfResult.totalOutput,
-              hitMaxTokens: cfResult.hitMaxTokens,
-            };
+            result.entries = cfResult.entries;
+            result.mode = cfResult.mode;
+            result.toolRounds = cfResult.toolRounds;
+            result.toolChars = cfResult.toolChars;
+            result.fallbackReason = cfResult.fallbackReason;
             pendingContentHash = contentHash;
           }
           // If web_fetch beat Cloudflare we deliberately leave pendingContentHash
@@ -156,8 +172,19 @@ export async function runAgentExtraction(
     outputTokens: result.totalOutput,
     sourceSlug: source.slug,
     releaseCount: result.entries.length,
+    extractionMode: result.mode,
+    toolRounds: result.toolRounds,
+    toolChars: result.toolChars,
+    fallbackReason: result.fallbackReason,
+    cacheReadTokens: result.cacheReadTokens,
+    cacheWriteTokens: result.cacheWriteTokens,
   });
 
+  logger.info(
+    `Extract mode=${result.mode} rounds=${result.toolRounds ?? "-"} ` +
+      `toolChars=${result.toolChars ?? "-"} cacheRead=${result.cacheReadTokens} ` +
+      `cacheWrite=${result.cacheWriteTokens} entries=${result.entries.length}`,
+  );
   logger.info(
     `Total: ${result.totalInput.toLocaleString()} input + ${result.totalOutput.toLocaleString()} output tokens`,
   );

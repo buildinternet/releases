@@ -225,6 +225,24 @@ export const releases = sqliteTable(
   ],
 );
 
+export const USAGE_EXTRACTION_MODES = [
+  "oneshot",
+  "toolloop",
+  "toolloop:partial",
+  "toolloop:no_sketch",
+  "fallback_to_oneshot",
+] as const;
+export type UsageExtractionMode = (typeof USAGE_EXTRACTION_MODES)[number];
+
+export const USAGE_FALLBACK_REASONS = [
+  "max_rounds",
+  "tool_error",
+  "no_terminal_call",
+  "max_tokens",
+  "sdk_error",
+] as const;
+export type UsageFallbackReason = (typeof USAGE_FALLBACK_REASONS)[number];
+
 export const usageLog = sqliteTable("usage_log", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   operation: text("operation").notNull(),
@@ -233,6 +251,12 @@ export const usageLog = sqliteTable("usage_log", {
   outputTokens: integer("output_tokens").notNull(),
   sourceSlug: text("source_slug"),
   releaseCount: integer("release_count"),
+  extractionMode: text("extraction_mode").$type<UsageExtractionMode>(),
+  toolRounds: integer("tool_rounds"),
+  toolChars: integer("tool_chars"),
+  fallbackReason: text("fallback_reason").$type<UsageFallbackReason>(),
+  cacheReadTokens: integer("cache_read_tokens"),
+  cacheWriteTokens: integer("cache_write_tokens"),
   createdAt: text("created_at")
     .notNull()
     .$defaultFn(() => new Date().toISOString()),

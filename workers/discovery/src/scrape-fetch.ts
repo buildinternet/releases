@@ -51,6 +51,8 @@ export interface ScrapeEnv {
   apiFetcher: { fetch: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response> };
   apiKey: string;
   sessionId?: string;
+  /** "true" to enable tool-loop extraction for large bodies globally. */
+  extractToolLoopEnabled?: string;
 }
 
 // ── API helpers ────────────────────────────────────────────────────
@@ -195,6 +197,7 @@ export async function scrapeFetch(env: ScrapeEnv, sourceIdentifier: string): Pro
     apiFetcher: env.apiFetcher,
     apiKey: env.apiKey,
     sessionId: env.sessionId,
+    extractToolLoopEnabled: (env.extractToolLoopEnabled ?? "false") === "true",
   });
 
   const meta = getSourceMeta(source);

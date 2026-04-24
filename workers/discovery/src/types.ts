@@ -71,4 +71,6 @@ export interface Env {
   /** Managed-agents memory stores — attached as read-write mounts. See #537. */
   MEMORY_STORE_ERRATA_ID?: string;
   MEMORY_STORE_TOOL_NOTES_ID?: string;
+  /** "true" to enable tool-loop extraction for large bodies globally. */
+  EXTRACT_TOOLLOOP_ENABLED?: string;
 }

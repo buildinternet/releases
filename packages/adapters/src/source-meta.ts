@@ -79,6 +79,12 @@ export interface SourceMetadata {
   fetchUrl?: string;
   fetchEtag?: string;
   fetchLastModified?: string;
+
+  /**
+   * Force the extract path: `"toolloop"` to run tool-use extraction even when
+   * the body is small; omitted to use the default threshold-based gate.
+   */
+  extractStrategy?: "toolloop";
 }
 
 /** Parse the JSON metadata blob from a source row. */

@@ -1,9 +1,31 @@
 import { Hono } from "hono";
 import { sql, gte, and, isNotNull } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { usageLog } from "@buildinternet/releases-core/schema";
+import {
+  usageLog,
+  USAGE_EXTRACTION_MODES,
+  USAGE_FALLBACK_REASONS,
+  type UsageExtractionMode,
+  type UsageFallbackReason,
+} from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type { Env } from "../index.js";
+
+function validateExtractionMode(v: unknown): UsageExtractionMode | null {
+  return typeof v === "string" && (USAGE_EXTRACTION_MODES as readonly string[]).includes(v)
+    ? (v as UsageExtractionMode)
+    : null;
+}
+
+function validateFallbackReason(v: unknown): UsageFallbackReason | null {
+  return typeof v === "string" && (USAGE_FALLBACK_REASONS as readonly string[]).includes(v)
+    ? (v as UsageFallbackReason)
+    : null;
+}
+
+function toIntOrNull(v: unknown): number | null {
+  return typeof v === "number" && Number.isInteger(v) ? v : null;
+}
 
 export const usageLogRoutes = new Hono<Env>();
 
@@ -72,6 +94,12 @@ usageLogRoutes.post("/admin/logs/usage", async (c) => {
       outputTokens: body.outputTokens,
       sourceSlug: body.sourceSlug ?? null,
       releaseCount: body.releaseCount ?? null,
+      extractionMode: validateExtractionMode(body.extractionMode),
+      toolRounds: toIntOrNull(body.toolRounds),
+      toolChars: toIntOrNull(body.toolChars),
+      fallbackReason: validateFallbackReason(body.fallbackReason),
+      cacheReadTokens: toIntOrNull(body.cacheReadTokens),
+      cacheWriteTokens: toIntOrNull(body.cacheWriteTokens),
     })
     .returning();
 
