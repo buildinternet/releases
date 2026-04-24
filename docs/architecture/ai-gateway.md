@@ -37,7 +37,12 @@ Tokens are account-scoped (not gateway-scoped), so the prod and staging tokens a
 
 ## Shared helper
 
-All five constructor sites route through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `workers/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
+Every Anthropic SDK constructor goes through `buildAnthropicClient()` in [`packages/lib/src/anthropic-client.ts`](../../packages/lib/src/anthropic-client.ts). The helper is a pure factory — callers that want per-isolate caching (currently just `workers/api/src/lib/anthropic.ts`) wrap it. Errors propagate unchanged so `@releases/lib/anthropic-errors` classification works identically with or without the gateway in front.
+
+Two routing modes:
+
+- **Through the gateway** — pass `baseURL: env.ANTHROPIC_BASE_URL` and `gatewayToken: env.AI_GATEWAY_TOKEN` (when set). The helper attaches the `cf-aig-authorization` header. This is the default for Messages-API call sites listed under Scope above.
+- **Direct, bypassing the gateway** — pass `baseURL: "https://api.anthropic.com"` explicitly. The explicit value overrides the `ANTHROPIC_BASE_URL` env var (which the SDK auto-reads if `baseURL` is omitted), forcing the call straight to Anthropic. Required for the call sites listed under "Not covered" above (`workers/discovery/src/managed-agents-session.ts`, `workers/api/src/routes/errata.ts`, `src/agent/managed-discovery.ts`). New code should follow this pattern any time it touches the managed-agents API surface (`/v1/sessions/*`, `/v1/memory_stores/*`).
 
 ## What this PR does not configure
 

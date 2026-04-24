@@ -6,7 +6,7 @@
 // target for observations that have proved stable across runs.
 
 import { Hono } from "hono";
-import Anthropic from "@anthropic-ai/sdk";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 import type { Env } from "../index.js";
 
 export const errataRoutes = new Hono<Env>();
@@ -45,7 +45,8 @@ errataRoutes.put("/errata/:orgId", async (c) => {
   // (the SDK would otherwise auto-pick up `ANTHROPIC_BASE_URL` from env). The
   // gateway runs in authenticated mode and rejects non-Messages paths with 401
   // when the cf-aig-authorization header is absent. Hit Anthropic directly.
-  const client = new Anthropic({
+  // See docs/architecture/ai-gateway.md.
+  const client = buildAnthropicClient({
     apiKey,
     baseURL: "https://api.anthropic.com",
     defaultHeaders: { "anthropic-beta": BETA_HEADER },
