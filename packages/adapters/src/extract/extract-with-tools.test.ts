@@ -382,6 +382,85 @@ describe("extractWithTools — fallback triggers", () => {
     ).rejects.toMatchObject({ name: "LoopFallbackError", reason: "no_terminal_call" });
   });
 
+  test("malformed main-loop terminal (releases not an array) fires LoopFallbackError('tool_error')", async () => {
+    const client = mockAnthropicClient([
+      {
+        stop_reason: "tool_use",
+        content: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "extract_releases",
+            input: { releases: "not-an-array" },
+            caller: { type: "direct" as const },
+          },
+        ],
+        usage: { input_tokens: 100, output_tokens: 10 },
+      },
+    ]);
+
+    await expect(
+      extractWithTools(
+        {
+          body: JSON.stringify({ a: 1 }),
+          systemPrompt: "test",
+          userMessage: "Extract from:",
+          sourceUrl: "https://x.test",
+          fetchUrl: "https://x.test/feed.json",
+        },
+        makeDeps(client),
+      ),
+    ).rejects.toMatchObject({ name: "LoopFallbackError", reason: "tool_error" });
+  });
+
+  test("malformed force-emit terminal (releases not an array) fires LoopFallbackError('tool_error')", async () => {
+    const keepQueryingResponse = {
+      stop_reason: "tool_use" as const,
+      content: [
+        {
+          type: "tool_use" as const,
+          id: "tx",
+          name: "get_slice",
+          input: { start: 0, length: 10 },
+          caller: { type: "direct" as const },
+        },
+      ],
+      usage: { input_tokens: 500, output_tokens: 50 },
+    };
+    const malformedEmitResponse = {
+      stop_reason: "tool_use" as const,
+      content: [
+        {
+          type: "tool_use" as const,
+          id: "tfinal",
+          name: "extract_releases",
+          input: { releases: { not: "an array" } },
+          caller: { type: "direct" as const },
+        },
+      ],
+      usage: { input_tokens: 600, output_tokens: 100 },
+    };
+
+    // Drain the main loop, then malformed force-emit response.
+    const client = mockAnthropicClient([
+      ...Array.from({ length: MAX_ROUNDS }, () => keepQueryingResponse),
+      malformedEmitResponse,
+    ]);
+
+    await expect(
+      extractWithTools(
+        {
+          body: "abcdefghij",
+          systemPrompt: "test",
+          userMessage: "Extract from:",
+          sourceUrl: "https://x.test",
+          fetchUrl: "https://x.test/",
+        },
+        makeDeps(client),
+      ),
+    ).rejects.toMatchObject({ name: "LoopFallbackError", reason: "tool_error" });
+  });
+
   test("max_tokens in a round fires LoopFallbackError('max_tokens')", async () => {
     const client = mockAnthropicClient([
       {

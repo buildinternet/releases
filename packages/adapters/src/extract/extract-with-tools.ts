@@ -133,14 +133,17 @@ export async function extractWithTools(
     const terminal = toolUses.find((t) => t.name === "extract_releases");
     if (terminal) {
       const input = terminal.input as { releases?: unknown };
-      const entries = Array.isArray(input?.releases) ? (input.releases as ExtractedEntry[]) : [];
       if (!Array.isArray(input?.releases)) {
+        // Malformed terminal is a contract failure, not "no releases found" —
+        // returning empty here would commit the content hash and block retries.
+        // Throw so extract-from-body.ts can run the one-shot fallback.
         deps.logger.warn(
-          `extract_releases terminal call had malformed input (releases not an array) — returning empty entries`,
+          `extract_releases terminal call had malformed input (releases not an array) — falling back to one-shot`,
         );
+        throw new LoopFallbackError("tool_error", makePartial());
       }
       return {
-        entries,
+        entries: input.releases as ExtractedEntry[],
         totalInput,
         totalOutput,
         cacheReadTokens,
@@ -238,14 +241,17 @@ export async function extractWithTools(
   );
   if (forceTerminal) {
     const input = forceTerminal.input as { releases?: unknown };
-    const entries = Array.isArray(input?.releases) ? (input.releases as ExtractedEntry[]) : [];
     if (!Array.isArray(input?.releases)) {
+      // Same reasoning as the main-loop terminal: a malformed force-emit is a
+      // contract failure, so fall back to one-shot rather than silently returning
+      // empty entries and committing the content hash.
       deps.logger.warn(
-        `force-emit extract_releases had malformed input (releases not an array) — returning empty entries`,
+        `force-emit extract_releases had malformed input (releases not an array) — falling back to one-shot`,
       );
+      throw new LoopFallbackError("tool_error", makePartial());
     }
     return {
-      entries,
+      entries: input.releases as ExtractedEntry[],
       totalInput,
       totalOutput,
       cacheReadTokens,
