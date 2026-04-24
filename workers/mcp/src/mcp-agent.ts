@@ -12,10 +12,7 @@ import {
   listSources,
   listOrganizations,
   getOrganization,
-  getOrganizationOverview,
-  getSourceChangelog,
   getRelease,
-  getSource,
   listProducts,
   getProduct,
   listCatalog,
@@ -279,12 +276,42 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
     {
       ...titled("Get catalog entry", READ_ONLY_HINTS),
       description:
-        "Detail for a single catalog entry — accepts either a product (slug or prod_ id) or a source (slug or src_ id). Returns the union of product / source detail fields depending on the entry kind. Use after `list_catalog` or `search` when the user wants to go deep on one entry.",
+        "Detail for a single catalog entry — accepts either a product (slug or prod_ id) or a source (slug or src_ id). Returns the union of product / source detail fields depending on the entry kind. Source entries list tracked CHANGELOG files by path and byte size. Pass `include_changelog: true` to inline the root CHANGELOG, or `changelog_path` / `changelog_offset` / `changelog_limit` / `changelog_tokens` to embed a specific file or slice — heading-aligned, supports per-package files in monorepos (e.g. `packages/next/CHANGELOG.md`), and emits `totalTokens` / `sliceTokens` for LLM context budgeting. Files over 1MB are flagged as truncated so you know the tail is missing.",
       inputSchema: {
         identifier: z.string().describe("Catalog entry identifier: slug, prod_ id, or src_ id"),
+        include_changelog: z
+          .boolean()
+          .optional()
+          .describe(
+            "When true, inline the root tracked CHANGELOG for a source-kind entry. Ignored for products.",
+          ),
+        changelog_path: z
+          .string()
+          .optional()
+          .describe(
+            "Specific CHANGELOG path for a source-kind entry (e.g. 'packages/next/CHANGELOG.md'). Passing this implies include_changelog.",
+          ),
+        changelog_offset: z
+          .number()
+          .optional()
+          .describe(
+            "Character offset into the selected CHANGELOG. Snapped forward to the next heading unless 0. Passing this implies include_changelog.",
+          ),
+        changelog_limit: z
+          .number()
+          .optional()
+          .describe(
+            "Target slice size in characters. Slice ends at a heading boundary. Defaults to 40000 when slicing without a token budget. Passing this implies include_changelog.",
+          ),
+        changelog_tokens: z
+          .number()
+          .optional()
+          .describe(
+            "Target slice size in tokens (cl100k_base). Takes precedence over changelog_limit. Recommended brackets: 2000, 5000, 10000, 20000. Passing this implies include_changelog.",
+          ),
       },
     },
-    async (params) => getCatalogEntry(db, params),
+    withMedia(async (params) => getCatalogEntry(db, params)),
   );
 
   server.registerTool(
@@ -323,75 +350,18 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
     {
       ...titled("Get organization", READ_ONLY_HINTS),
       description:
-        "Get detailed information about a single organization including accounts, tags, sources, products, aliases, and a short preview of its AI-generated overview when one exists. Use `get_organization_overview` to read the full overview text.",
+        "Get detailed information about a single organization — accounts, tags, sources, products, aliases. When an AI-generated overview exists the response includes a short preview; pass `include_overview: true` to inline the full briefing (with a stale warning if it's older than 30 days).",
       inputSchema: {
         identifier: z.string().describe("Organization slug, domain, name, or account handle"),
-      },
-    },
-    async (params) => getOrganization(db, params),
-  );
-
-  server.registerTool(
-    "get_organization_overview",
-    {
-      ...titled("Get organization overview", READ_ONLY_HINTS),
-      description:
-        "Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections. Returned with a generated-at timestamp and a stale warning if the overview is older than 30 days. Use this when the user wants the narrative summary for an org, not the raw release list.",
-      inputSchema: {
-        identifier: z.string().describe("Organization slug, domain, name, or account handle"),
-      },
-    },
-    async (params) => getOrganizationOverview(db, params),
-  );
-
-  server.registerTool(
-    "get_source",
-    {
-      ...titled("Get source (deprecated)", READ_ONLY_HINTS),
-      description:
-        "Deprecated — use `get_catalog_entry` instead. Detail for a single indexed source: organization, optional product linkage, release count (excluding suppressed), last-fetched timestamp, and whether a tracked CHANGELOG file is available for get_source_changelog.",
-      inputSchema: {
-        identifier: z.string().describe("Source slug (e.g. 'apollo-client') or src_ id"),
-      },
-    },
-    async (params) => getSource(db, params),
-  );
-
-  server.registerTool(
-    "get_source_changelog",
-    {
-      ...titled("Get source CHANGELOG", READ_ONLY_HINTS),
-      description:
-        "Read a tracked CHANGELOG file for a GitHub source. Monorepos expose per-package files (e.g. `packages/next/CHANGELOG.md`) alongside the root CHANGELOG — pass `path` to read a specific one, omit it to get the root. Supports heading-aligned slicing by chars (`limit`) or by tokens (`tokens`, cl100k_base) for LLM context budgeting. Every response includes `totalTokens` for the whole file and, in token mode, `sliceTokens` for the returned chunk. `totalTokens` is an exact cl100k_base count for files under 256KB and an approximation (`ceil(totalChars / 4)`) for larger files; `sliceTokens` is always exact. Files over 1MB are truncated at fetch time; the response flags this so you know the tail is missing.",
-      inputSchema: {
-        source: z.string().describe("Source slug or ID (e.g. 'apollo-client' or 'src_...')"),
-        path: z
-          .string()
+        include_overview: z
+          .boolean()
           .optional()
           .describe(
-            "Specific file path to read (e.g. 'packages/next/CHANGELOG.md'). Defaults to the root CHANGELOG.",
-          ),
-        offset: z
-          .number()
-          .optional()
-          .describe(
-            "Character offset into the selected file. Snapped forward to the next heading unless 0.",
-          ),
-        limit: z
-          .number()
-          .optional()
-          .describe(
-            "Target slice size in characters. The slice ends at a heading boundary. Defaults to 40000 when slicing without a token budget.",
-          ),
-        tokens: z
-          .number()
-          .optional()
-          .describe(
-            "Target slice size in tokens (cl100k_base). Takes precedence over `limit`. Recommended brackets: 2000, 5000, 10000, 20000.",
+            "When true, inline the full AI-generated overview instead of the default first-paragraph preview.",
           ),
       },
     },
-    withMedia(async (params) => getSourceChangelog(db, params)),
+    withMedia(async (params) => getOrganization(db, params)),
   );
 
   server.registerTool(

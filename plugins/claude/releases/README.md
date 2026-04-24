@@ -37,7 +37,7 @@ List catalog entries — products and standalone sources folded into one list wi
 
 ### get_catalog_entry
 
-Detail for a single catalog entry. Accepts a product identifier (slug or `prod_` id) or a source identifier (slug or `src_` id); dispatches on entity type and returns the appropriate detail shape.
+Detail for a single catalog entry. Accepts a product identifier (slug or `prod_` id) or a source identifier (slug or `src_` id); dispatches on entity type and returns the appropriate detail shape. Source entries list tracked CHANGELOG files by path and byte size. Pass `include_changelog: true` to inline the root CHANGELOG, or `changelog_path` to target a specific file (e.g. `packages/next/CHANGELOG.md`). Heading-aligned slicing via `changelog_offset` + `changelog_limit` (chars) or `changelog_tokens` (cl100k_base). Every embedded-slice response reports `totalTokens` for budget planning; token-mode calls also report `sliceTokens`. Chain successive calls via the returned `nextOffset` to page through large files. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
 
 ### get_latest_releases
 
@@ -47,21 +47,13 @@ Get the most recent releases, optionally filtered by product, organization, or r
 
 Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid.
 
-### get_source_changelog
-
-Return the canonical `CHANGELOG.md` (or `CHANGES`/`HISTORY`/`RELEASES`/`NEWS`) stored for a GitHub source. The file is refreshed on every fetch. Supports heading-aligned slicing by chars (`offset` + `limit`) or tokens (`tokens`, cl100k_base). Every response includes `totalTokens` for budget planning; token-mode calls also return `sliceTokens`. Chain successive calls via the returned `nextOffset` to page through large files without blowing out the context window. Recommended token brackets: 2000 / 5000 / 10000 / 20000.
-
 ### list_organizations
 
 List all indexed organizations, with optional search.
 
 ### get_organization
 
-Get detailed information about a single organization. Includes a short preview of the AI-generated overview when one exists, with a stale warning if it's older than 30 days.
-
-### get_organization_overview
-
-Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections.
+Get detailed information about a single organization. Includes a preview of the AI-generated overview when one exists (with a stale warning if it's older than 30 days). Pass `include_overview: true` to inline the full briefing — a short narrative that distills recent changelog activity into themed sections.
 
 ### summarize_changes
 
@@ -73,7 +65,7 @@ Compare recent release activity between two products.
 
 ### Deprecated shims
 
-One release cycle: `search_releases`, `search_registry`, `list_sources`, `get_source`, `list_products`, `get_product`. Their titles are suffixed `(deprecated)` and descriptions point at the replacement above.
+One release cycle: `search_releases`, `search_registry`, `list_sources`, `list_products`, `get_product`. Their titles are suffixed `(deprecated)` and descriptions point at the replacement above.
 
 ## Usage Examples
 

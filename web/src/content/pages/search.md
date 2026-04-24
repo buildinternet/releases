@@ -18,7 +18,7 @@ const result = await navigator.modelContext.callTool("search_releases", {
 });
 ```
 
-Other read-only tools are exposed the same way: `list_organizations`, `get_organization`, `get_source`, `get_release`, and `open_search_page` (navigates the current tab to the HTML results).
+Other read-only tools are exposed the same way: `list_organizations`, `get_organization`, `get_catalog_entry`, `get_release`, and `open_search_page` (navigates the current tab to the HTML results).
 
 ## Remote MCP server
 

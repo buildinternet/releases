@@ -116,7 +116,10 @@ describe("MCP prompts + completion", () => {
         arguments: { organization: "vercel" },
       });
       const text = firstText(result.messages[0]);
-      expect(text).toContain("get_organization_overview");
+      // Overview now rides on get_organization with the include_overview flag.
+      expect(text).toContain("get_organization");
+      expect(text).toContain("include_overview");
+      expect(text).not.toContain("get_organization_overview");
       expect(text).toContain("get_latest_releases");
       expect(text).toContain("vercel");
       expect(text).toContain("14");

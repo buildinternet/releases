@@ -120,7 +120,7 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
             role: "user",
             content: {
               type: "text",
-              text: `Catch me up on ${organization}. First call \`get_organization_overview\` with identifier=${q(organization)} to read the narrative briefing. Then call \`get_latest_releases\` with organization=${q(organization)} and enough entries to cover the last ${window} days. Present the overview first, then a chronological list of the recent releases grouped by product.`,
+              text: `Catch me up on ${organization}. First call \`get_organization\` with identifier=${q(organization)} and include_overview: true to read the narrative briefing. Then call \`get_latest_releases\` with organization=${q(organization)} and enough entries to cover the last ${window} days. Present the overview first, then a chronological list of the recent releases grouped by product.`,
             },
           },
         ],
