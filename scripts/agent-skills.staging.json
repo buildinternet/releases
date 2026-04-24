@@ -25,5 +25,9 @@
   "workerAgentId": "agent_011CaHHqcTEy9WDeLPzqsmHP",
   "promptHash": "435192864078e9a1",
   "toolsHash": "526c9fb57a4ec7a6",
-  "workerPromptHash": "948b9d57f3cbe27f"
+  "workerPromptHash": "948b9d57f3cbe27f",
+  "memoryStores": {
+    "errata": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",
+    "toolNotes": "memstore_01WQCrdDEjNKGfURRswhWBkb"
+  }
 }

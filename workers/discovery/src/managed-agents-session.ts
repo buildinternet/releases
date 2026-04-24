@@ -19,6 +19,7 @@ import {
 } from "@releases/lib/ma-rate-limit.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
+import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
 import { discoveryIdentityHeaders } from "./identity.js";
@@ -248,10 +249,17 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         mode === "update" ? `Update: ${params.company}` : `Discovery: ${params.company}`;
 
       const vaultId = this.env.ANTHROPIC_VAULT_ID;
+      const memoryResources = buildMemoryStoreResources({
+        mode,
+        orgId: params.orgId,
+        errataStoreId: this.env.MEMORY_STORE_ERRATA_ID,
+        toolNotesStoreId: this.env.MEMORY_STORE_TOOL_NOTES_ID,
+      });
       const sessionCreateParams = {
         agent: { type: "agent", id: agentId, ...(agentVersion ? { version: agentVersion } : {}) },
         environment_id: environmentId,
         ...(vaultId ? { vault_ids: [vaultId] } : {}),
+        ...(memoryResources.length > 0 ? { resources: memoryResources } : {}),
         title: sessionTitle,
       };
 

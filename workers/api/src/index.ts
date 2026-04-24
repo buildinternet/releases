@@ -30,6 +30,7 @@ import { productRoutes } from "./routes/products.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
+import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
@@ -134,6 +135,8 @@ export type Env = {
     // Staging-only shared secret — see middleware/staging-access.ts. Absent
     // everywhere outside `[env.staging]`, so the gate no-ops for prod/local.
     STAGING_ACCESS_KEY?: SecretBinding;
+    // Errata memory store ID — destination for POST /v1/errata/:orgId. See #537.
+    MEMORY_STORE_ERRATA_ID?: string;
   };
 };
 
@@ -194,6 +197,7 @@ const adminRoutes = [
   "admin/embed/status",
   "admin/cron-runs",
   "admin/logs",
+  "errata",
   "webhooks",
   "workflows",
 ];
@@ -260,6 +264,7 @@ v1.route("/", playbook);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
+v1.route("/", errataRoutes);
 v1.route("/", webhooksRoutes);
 v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);

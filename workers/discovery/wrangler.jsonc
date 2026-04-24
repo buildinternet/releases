@@ -25,6 +25,10 @@
     "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU",
     "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB",
     "ANTHROPIC_WORKER_AGENT_ID": "agent_011CZvdgPKDQ2eRs8gTrLnNA",
+    // Memory stores attached to every session (#537). IDs created via
+    // `bun scripts/sync-agent-skills.ts --memory-stores`.
+    "MEMORY_STORE_ERRATA_ID": "memstore_012MKStcUM7QxW9qPCLQtwwt",
+    "MEMORY_STORE_TOOL_NOTES_ID": "memstore_01Jc5WAiqp4fwSJUmjR2excj",
     // Route direct Anthropic SDK calls (extract-deps + managed-agents-session
     // request helpers) through Cloudflare AI Gateway. The managed-agents
     // internal loop runs on Anthropic's infra and stays off-gateway.
@@ -103,6 +107,8 @@
         "ANTHROPIC_ENVIRONMENT_ID": "env_015c9WRKAWFfSqAV6tsAj6Qf",
         "ANTHROPIC_VAULT_ID": "vlt_011CaHHvBA7pA6GDwRHJa4TN",
         "ANTHROPIC_WORKER_AGENT_ID": "agent_011CaHHqcTEy9WDeLPzqsmHP",
+        "MEMORY_STORE_ERRATA_ID": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",
+        "MEMORY_STORE_TOOL_NOTES_ID": "memstore_01WQCrdDEjNKGfURRswhWBkb",
         // Route Anthropic SDK calls through Cloudflare AI Gateway.
         // See docs/architecture/ai-gateway.md. Flip on prod after staging burn-in.
         "ANTHROPIC_BASE_URL": "https://gateway.ai.cloudflare.com/v1/b082600d280d44fd5da3501bc1bffe2f/releases-staging/anthropic",

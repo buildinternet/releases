@@ -69,6 +69,10 @@
     // run the helper in shadow mode (log-only); flip to "true" after a
     // week of parity-check logs. See #408.
     "INVALIDATION_ENABLED": "false",
+    // Managed-agents errata memory store — destination for POST /v1/errata/:orgId
+    // writes. Discovery worker binds tool-notes separately; the API worker only
+    // touches errata. See #537.
+    "MEMORY_STORE_ERRATA_ID": "memstore_012MKStcUM7QxW9qPCLQtwwt",
     // Route Anthropic SDK calls through Cloudflare AI Gateway.
     // See docs/architecture/ai-gateway.md. Gateway runs in authenticated
     // mode — the AI_GATEWAY_TOKEN secret below must be bound.
@@ -239,6 +243,7 @@
         "EMAIL_FROM": "notifications@releases.sh",
         "ADMIN_BASE_URL": "https://api-staging.releases.sh",
         "INVALIDATION_ENABLED": "false",
+        "MEMORY_STORE_ERRATA_ID": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",
         // Staging-only: emit X-Robots-Tag: noindex on every response and
         // serve a deny-all /robots.txt. Belt-and-suspenders against the
         // staging hostname getting crawled while it sits unprotected.
