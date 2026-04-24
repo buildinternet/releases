@@ -16,6 +16,7 @@
     "deploy:agents": "bun scripts/sync-agent-skills.ts",
     "deploy:agents:discovery": "bun scripts/sync-agent-skills.ts --discovery",
     "deploy:agents:worker": "bun scripts/sync-agent-skills.ts --worker",
+    "deploy:agents:hashes": "bun scripts/sync-agent-skills.ts --hashes-only",
     "deploy:skills": "bun scripts/sync-agent-skills.ts --skills",
     "deploy": "bun run deploy:api && bun run deploy:discovery && bun run deploy:mcp",
     "db:generate": "drizzle-kit generate",

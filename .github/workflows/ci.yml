@@ -82,3 +82,80 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+  check-agent-tools-drift:
+    name: Agent tools / prompt drift check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - run: bun install --frozen-lockfile
+
+      - name: Check agent tools and prompt hashes
+        run: |
+          TOOLS_HASH=$(bun -e "
+            import { AGENT_TOOLS } from './src/shared/agent-tools.js';
+            import { createHash } from 'crypto';
+            console.log(createHash('sha256').update(JSON.stringify(AGENT_TOOLS)).digest('hex').slice(0, 16));
+          ")
+          PROMPT_HASH=$(bun -e "
+            import { buildDiscoverySystemPrompt } from './src/shared/discovery-prompt.js';
+            import { CATEGORIES } from '@buildinternet/releases-core/categories';
+            import { createHash } from 'crypto';
+            const p = buildDiscoverySystemPrompt({ evaluateAvailable: true, categories: CATEGORIES });
+            console.log(createHash('sha256').update(p).digest('hex').slice(0, 16));
+          ")
+          WORKER_HASH=$(bun -e "
+            import { buildWorkerSystemPrompt } from './src/shared/worker-prompt.js';
+            import { CATEGORIES } from '@buildinternet/releases-core/categories';
+            import { createHash } from 'crypto';
+            const p = buildWorkerSystemPrompt({ categories: CATEGORIES });
+            console.log(createHash('sha256').update(p).digest('hex').slice(0, 16));
+          ")
+
+          echo "Computed hashes:"
+          echo "  toolsHash:        $TOOLS_HASH"
+          echo "  promptHash:       $PROMPT_HASH"
+          echo "  workerPromptHash: $WORKER_HASH"
+
+          FAIL=0
+          for CFG in scripts/agent-skills.json scripts/agent-skills.staging.json; do
+            STORED_TOOLS=$(bun -e "import cfg from './${CFG}' assert { type: 'json' }; console.log(cfg.toolsHash ?? '')")
+            STORED_PROMPT=$(bun -e "import cfg from './${CFG}' assert { type: 'json' }; console.log(cfg.promptHash ?? '')")
+            STORED_WORKER=$(bun -e "import cfg from './${CFG}' assert { type: 'json' }; console.log(cfg.workerPromptHash ?? '')")
+
+            echo ""
+            echo "${CFG}:"
+            echo "  toolsHash        stored=${STORED_TOOLS}  computed=${TOOLS_HASH}"
+            echo "  promptHash       stored=${STORED_PROMPT}  computed=${PROMPT_HASH}"
+            echo "  workerPromptHash stored=${STORED_WORKER}  computed=${WORKER_HASH}"
+
+            if [ "$STORED_TOOLS" != "$TOOLS_HASH" ] || [ "$STORED_PROMPT" != "$PROMPT_HASH" ] || [ "$STORED_WORKER" != "$WORKER_HASH" ]; then
+              echo "  DRIFT DETECTED in ${CFG}" >&2
+              FAIL=1
+            fi
+          done
+
+          if [ "$FAIL" = "1" ]; then
+            echo "" >&2
+            echo "One or more hash fields in scripts/agent-skills*.json are out of date." >&2
+            echo "If you edited agent-tools.ts, discovery-prompt.ts, or worker-prompt.ts," >&2
+            echo "update the JSON hashes before merging:" >&2
+            echo "" >&2
+            echo "  # No Anthropic credentials required:" >&2
+            echo "  bun run deploy:agents:hashes" >&2
+            echo "  bun run deploy:agents:hashes -- --env staging" >&2
+            echo "" >&2
+            echo "  # Or, if you have ANTHROPIC_API_KEY and want a live deploy:" >&2
+            echo "  bun run deploy:agents" >&2
+            echo "  bun run deploy:agents -- --env staging" >&2
+            exit 1
+          fi
+
+          echo ""
+          echo "All hash fields are up to date."

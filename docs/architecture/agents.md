@@ -83,6 +83,7 @@ sequenceDiagram
 ### Where to look
 
 - **Add / edit a custom tool** — append to `AGENT_TOOLS` in `src/shared/agent-tools.ts`, add a `case` to `createTypedExecutor` mapping it to a REST call, then `bun run deploy:agents` to sync both managed agents.
+- **Drift guard (CI)** — CI computes SHA-256 prefixes of `AGENT_TOOLS`, the discovery prompt, and the worker prompt, and checks them against `scripts/agent-skills.json` and `scripts/agent-skills.staging.json`. Any PR that edits `agent-tools.ts`, `discovery-prompt.ts`, or `worker-prompt.ts` without updating the JSON hashes will fail CI. Update hashes without a live deploy: `bun run deploy:agents:hashes && bun run deploy:agents:hashes -- --env staging` (no `ANTHROPIC_API_KEY` required).
 - **Add / edit an MCP tool** — register it inside `createServer` in `workers/mcp/src/mcp-agent.ts`, deploy the `mcp` worker.
 - **DO interception point** — `workers/discovery/src/managed-agents-session.ts`, the `agent.custom_tool_use` case inside `runSession()`.
 

@@ -10,6 +10,7 @@
  *   bun scripts/sync-agent-skills.ts                  # deploy skills, agents, memory stores (prod)
  *   bun scripts/sync-agent-skills.ts --env staging    # deploy against staging agents
  *   bun scripts/sync-agent-skills.ts --dry-run        # preview without changes
+ *   bun scripts/sync-agent-skills.ts --hashes-only    # rewrite hash fields in the JSON without calling Anthropic
  *   bun scripts/sync-agent-skills.ts --skills         # skills only
  *   bun scripts/sync-agent-skills.ts --agent          # prompt/tools/model only
  *   bun scripts/sync-agent-skills.ts --memory-stores  # memory stores only
@@ -397,6 +398,7 @@ function hash(input: string): string {
 
 async function main() {
   const dryRun = process.argv.includes("--dry-run");
+  const hashesOnly = process.argv.includes("--hashes-only");
   const skillsOnly = process.argv.includes("--skills");
   const agentOnly = process.argv.includes("--agent");
   const memoryStoresOnly = process.argv.includes("--memory-stores");
@@ -427,6 +429,41 @@ async function main() {
   const deployEnv = envArg as DeployEnv;
   const configPath = configPathFor(deployEnv);
   const titleSuffix = displayTitleSuffixFor(deployEnv);
+
+  // ── --hashes-only: rewrite JSON hash fields without calling Anthropic ──
+  // Use this when source files change but you don't have ANTHROPIC_API_KEY
+  // (e.g. in a PR branch). The CI check in check-agent-tools-drift.yml reads
+  // these values, so they must match the source before merge.
+  if (hashesOnly) {
+    const config = loadConfig(configPath);
+    if (!config) {
+      throw new Error(`Config not found at ${configPath} — run the full deploy first`);
+    }
+    const discoveryPrompt = buildDiscoverySystemPrompt({
+      evaluateAvailable: true,
+      categories: CATEGORIES,
+    });
+    const workerPrompt = buildWorkerSystemPrompt({ categories: CATEGORIES });
+    const newToolsHash = hash(JSON.stringify(AGENT_TOOLS));
+    const newPromptHash = hash(discoveryPrompt);
+    const newWorkerPromptHash = hash(workerPrompt);
+    console.log(`Environment:      ${deployEnv}`);
+    console.log(`toolsHash:        ${config.toolsHash ?? "(none)"} → ${newToolsHash}`);
+    console.log(`promptHash:       ${config.promptHash ?? "(none)"} → ${newPromptHash}`);
+    console.log(
+      `workerPromptHash: ${config.workerPromptHash ?? "(none)"} → ${newWorkerPromptHash}`,
+    );
+    config.toolsHash = newToolsHash;
+    config.promptHash = newPromptHash;
+    config.workerPromptHash = newWorkerPromptHash;
+    if (!dryRun) {
+      saveConfig(configPath, config);
+      console.log(`\nWrote ${configPath}`);
+    } else {
+      console.log("\n(dry run — not written)");
+    }
+    return;
+  }
 
   const apiKey = getApiKey();
   const configOnDisk = loadConfig(configPath);
