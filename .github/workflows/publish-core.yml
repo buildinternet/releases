@@ -1,6 +1,10 @@
 name: Publish @buildinternet/releases-core
 
 on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/core/package.json"
   workflow_dispatch:
     inputs:
       dry-run:
