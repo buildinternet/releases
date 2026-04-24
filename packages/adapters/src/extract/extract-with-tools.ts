@@ -191,8 +191,14 @@ export async function extractWithTools(
       }
 
       if (resultText.length > remaining) {
+        const suffix = "\n[truncated — tool-result budget exhausted]";
+        // Reserve room for the suffix inside `remaining` so toolChars doesn't
+        // overshoot MAX_TOTAL_TOOL_CHARS on truncation. If remaining is so
+        // small that suffix alone would exceed it, skip the suffix entirely.
         resultText =
-          resultText.slice(0, remaining) + "\n[truncated — tool-result budget exhausted]";
+          remaining > suffix.length
+            ? resultText.slice(0, remaining - suffix.length) + suffix
+            : resultText.slice(0, remaining);
       }
       toolChars += resultText.length;
       toolResults.push({ type: "tool_result", tool_use_id: tu.id, content: resultText });

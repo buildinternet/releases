@@ -129,22 +129,24 @@ export async function runAgentExtraction(
             },
             deps,
           );
+          // Always account for the Cloudflare call's spend in the usage log,
+          // regardless of which result wins — otherwise usage_log under-reports
+          // when web_fetch beats Cloudflare and we discard cfResult.entries.
+          result.totalInput += cfResult.totalInput;
+          result.totalOutput += cfResult.totalOutput;
+          result.cacheReadTokens += cfResult.cacheReadTokens;
+          result.cacheWriteTokens += cfResult.cacheWriteTokens;
+          result.hitMaxTokens = result.hitMaxTokens || cfResult.hitMaxTokens;
+
           if (cfResult.entries.length > result.entries.length) {
             logger.info(
               `Cloudflare found ${cfResult.entries.length} entries (vs ${result.entries.length}) — using Cloudflare results`,
             );
-            result = {
-              entries: cfResult.entries,
-              totalInput: result.totalInput + cfResult.totalInput,
-              totalOutput: result.totalOutput + cfResult.totalOutput,
-              hitMaxTokens: cfResult.hitMaxTokens,
-              mode: cfResult.mode,
-              toolRounds: cfResult.toolRounds,
-              toolChars: cfResult.toolChars,
-              fallbackReason: cfResult.fallbackReason,
-              cacheReadTokens: result.cacheReadTokens + cfResult.cacheReadTokens,
-              cacheWriteTokens: result.cacheWriteTokens + cfResult.cacheWriteTokens,
-            };
+            result.entries = cfResult.entries;
+            result.mode = cfResult.mode;
+            result.toolRounds = cfResult.toolRounds;
+            result.toolChars = cfResult.toolChars;
+            result.fallbackReason = cfResult.fallbackReason;
             pendingContentHash = contentHash;
           }
           // If web_fetch beat Cloudflare we deliberately leave pendingContentHash

@@ -207,7 +207,7 @@ describe("buildJsonSketch — strict parse", () => {
 
 - [ ] **Step 2: Run the tests — expect failure**
 
-Run: `cd /Users/zachdunn/Code/releases && bun test packages/adapters/src/extract/preview-builder.test.ts`
+Run from the repo root: `bun test packages/adapters/src/extract/preview-builder.test.ts`
 Expected: FAIL — `buildJsonSketch is not a function` / module not found.
 
 - [ ] **Step 3: Implement `buildJsonSketch` with strict-parse logic**
