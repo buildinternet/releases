@@ -361,7 +361,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           ),
       },
     },
-    async (params) => getOrganization(db, params),
+    withMedia(async (params) => getOrganization(db, params)),
   );
 
   server.registerTool(

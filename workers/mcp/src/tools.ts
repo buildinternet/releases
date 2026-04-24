@@ -952,6 +952,7 @@ async function renderSourceDetail(
         and(
           eq(releases.sourceId, src.id),
           or(isNull(releases.suppressed), eq(releases.suppressed, false)),
+          sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`,
         ),
       ),
     // Metadata-only. `content` can be up to 1MB per row on monorepos with
@@ -1291,6 +1292,14 @@ export async function getCatalogEntry(
     limit: params.changelog_limit,
     tokens: params.changelog_tokens,
   };
+  // When the caller passes any changelog param, products can't satisfy the
+  // request — flip the ambiguous-slug preference so sources win the tie.
+  const changelogRequested =
+    params.include_changelog === true ||
+    params.changelog_path !== undefined ||
+    params.changelog_offset !== undefined ||
+    params.changelog_limit !== undefined ||
+    params.changelog_tokens !== undefined;
   const entityType = getEntityType(params.identifier);
 
   if (entityType === "product") {
@@ -1312,6 +1321,7 @@ export async function getCatalogEntry(
     resolveProduct(db, params.identifier),
     resolveSource(db, params.identifier),
   ]);
+  if (changelogRequested && src) return renderSourceDetail(db, src, changelog);
   if (prod) return renderProductDetail(db, prod);
   if (src) return renderSourceDetail(db, src, changelog);
 
