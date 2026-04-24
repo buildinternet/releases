@@ -41,11 +41,22 @@ errataRoutes.put("/errata/:orgId", async (c) => {
 
   const apiKey = await c.env.ANTHROPIC_API_KEY?.get();
   if (!apiKey) return c.json({ error: "ANTHROPIC_API_KEY not bound" }, 500);
-  const client = new Anthropic({ apiKey, defaultHeaders: { "anthropic-beta": BETA_HEADER } });
+  // Memory-store CRUD isn't Messages-API inference, so skip the AI Gateway
+  // (the SDK would otherwise auto-pick up `ANTHROPIC_BASE_URL` from env). The
+  // gateway runs in authenticated mode and rejects non-Messages paths with 401
+  // when the cf-aig-authorization header is absent. Hit Anthropic directly.
+  const client = new Anthropic({
+    apiKey,
+    baseURL: "https://api.anthropic.com",
+    defaultHeaders: { "anthropic-beta": BETA_HEADER },
+  });
 
   const path = `/orgs/${orgId}/errata.md`;
+  // Listing with `depth` requires `order_by` per the Anthropic API. Drop both —
+  // a single path_prefix scan ordered by path is fine here, since each org's
+  // errata directory holds at most a handful of memories.
   const existing = await client.beta.memoryStores.memories
-    .list(storeId, { path_prefix: path, depth: 1 })
+    .list(storeId, { path_prefix: path, order_by: "path" })
     .then((page) => page.data.find((m) => m.type === "memory" && m.path === path));
 
   if (existing && "id" in existing && existing.id) {
