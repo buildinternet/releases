@@ -28,13 +28,28 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_sources\` + web search.
 
 ### Custom tools (writes + utilities)
-Tool names are exact — do not paraphrase or invent synonyms.
 
-- **manage_source** — Create, modify, remove, or fetch a source. Action: add/edit/remove/fetch. Type is auto-detected on add when omitted.
-- **manage_org** — Create/edit orgs. Valid categories are listed below.
-- **manage_product** — Create/edit products.
-- **manage_playbook** — Read or update an org's playbook notes. Action: get/update_notes. Re-reading is rarely needed during fetch sessions — the playbook is already inlined above the task.
+Tool names are **exact**. The action lives in the input \`action\` field, NOT in the tool name. There is no \`fetch_source\`, \`edit_source\`, \`add_source\`, \`edit_org\`, \`bash\`, or \`curl\` available. Inventing tool names fails.
+
+- **manage_source** — Create, modify, remove, or fetch a source. Required input field: \`action\` ∈ {\`add\`, \`edit\`, \`remove\`, \`fetch\`}.
+- **manage_org** — Create or edit organizations. \`action\` ∈ {\`add\`, \`edit\`, \`tag_add\`, \`link_account\`}.
+- **manage_product** — Create or edit products. \`action\` ∈ {\`add\`, \`edit\`, \`tag_add\`}.
+- **manage_playbook** — Read or update an org's playbook notes. \`action\` ∈ {\`get\`, \`update_notes\`}. Re-reading is rarely needed during fetch sessions — the playbook is already inlined above the task.
 - **exclude_url** — Ignore or block a URL.
+
+#### Correct invocation shape
+
+\`\`\`
+tool: manage_source
+input: { "action": "fetch", "identifier": "src_abc123" }
+\`\`\`
+
+\`\`\`
+tool: manage_source
+input: { "action": "edit", "identifier": "src_abc123", "url": "https://new-url" }
+\`\`\`
+
+Never invoke \`fetch_source\`, \`edit_source\`, or any other per-action name — those tools do not exist. If you are unsure which action applies, call \`manage_source\` with \`action: "fetch"\` by default.
 
 ## Available Categories
 

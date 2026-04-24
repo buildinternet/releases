@@ -323,7 +323,20 @@ describe("buildWorkerSystemPrompt", () => {
   });
 
   it("states that tool names are exact and forbids paraphrasing", () => {
-    expect(prompt).toContain("Tool names are exact");
+    expect(prompt).toContain("Tool names are **exact**");
+  });
+
+  it("calls out common hallucinations (fetch_source, edit_source, bash) explicitly", () => {
+    // See #555: Haiku was inventing per-action tool names; the prompt now
+    // names the common hallucinations so the model sees them as forbidden.
+    expect(prompt).toContain("fetch_source");
+    expect(prompt).toContain("edit_source");
+    expect(prompt).toContain("bash");
+  });
+
+  it("shows a correct manage_source invocation example", () => {
+    expect(prompt).toContain("Correct invocation shape");
+    expect(prompt).toContain('"action": "fetch"');
   });
 
   it("instructs the agent to apply the inlined playbook instead of re-reading it first", () => {

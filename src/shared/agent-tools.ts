@@ -311,6 +311,61 @@ export const API_TOOL_NAMES: string[] = AGENT_TOOLS.filter(
   .map((t) => t.name)
   .filter((n) => n !== "releases_report_state");
 
+/**
+ * Hallucination safety net. Haiku (and occasionally Sonnet) splits multi-action
+ * tools like `manage_source(action=fetch)` into a single tool name like
+ * `fetch_source`, ignoring the prompt's "Tool names are exact" instruction.
+ * When the model produces one of these aliases, dispatch to the real tool with
+ * the mapped action merged into input.
+ *
+ * Log every alias hit so we can measure prevalence and eventually delete these
+ * entries if/when the model stops drifting (or we move this workload to
+ * Sonnet). See #555.
+ */
+export const TOOL_NAME_ALIASES: Record<
+  string,
+  { tool: string; mergeInput: Record<string, unknown> }
+> = {
+  // manage_source
+  fetch_source: { tool: "manage_source", mergeInput: { action: "fetch" } },
+  edit_source: { tool: "manage_source", mergeInput: { action: "edit" } },
+  add_source: { tool: "manage_source", mergeInput: { action: "add" } },
+  remove_source: { tool: "manage_source", mergeInput: { action: "remove" } },
+  delete_source: { tool: "manage_source", mergeInput: { action: "remove" } },
+  update_source: { tool: "manage_source", mergeInput: { action: "edit" } },
+  // manage_org
+  edit_org: { tool: "manage_org", mergeInput: { action: "edit" } },
+  add_org: { tool: "manage_org", mergeInput: { action: "add" } },
+  update_org: { tool: "manage_org", mergeInput: { action: "edit" } },
+  // manage_product
+  edit_product: { tool: "manage_product", mergeInput: { action: "edit" } },
+  add_product: { tool: "manage_product", mergeInput: { action: "add" } },
+  update_product: { tool: "manage_product", mergeInput: { action: "edit" } },
+  // manage_playbook
+  get_playbook: { tool: "manage_playbook", mergeInput: { action: "get" } },
+  read_playbook: { tool: "manage_playbook", mergeInput: { action: "get" } },
+  update_playbook: { tool: "manage_playbook", mergeInput: { action: "update_notes" } },
+  edit_playbook: { tool: "manage_playbook", mergeInput: { action: "update_notes" } },
+};
+
+/**
+ * Resolve a hallucinated tool name to the real tool + merged input, or return
+ * null if the name is not a known alias.
+ *
+ * Precedence: the alias's fixed params (e.g. `action: "fetch"`) win over the
+ * model-supplied input. Treat the alias name itself as the source of truth for
+ * the action — if the model passed a conflicting action, it's part of the
+ * same drift and the alias fixes it.
+ */
+export function resolveToolAlias(
+  name: string,
+  input: Record<string, unknown>,
+): { tool: string; input: Record<string, unknown> } | null {
+  const alias = TOOL_NAME_ALIASES[name];
+  if (!alias) return null;
+  return { tool: alias.tool, input: { ...input, ...alias.mergeInput } };
+}
+
 // ── Typed executor ───────────────────────────────────────────────────
 
 export interface APIClientOptions {
@@ -655,10 +710,10 @@ export async function handleCustomToolUse(
   event: { id: string; name: string; input?: Record<string, unknown> },
   ctx: ToolDispatchContext,
 ): Promise<boolean> {
-  const { name: toolName, input: toolInput = {}, id: toolUseId } = event;
+  const { name: rawName, input: rawInput = {}, id: toolUseId } = event;
 
-  if (toolName === "releases_report_state") {
-    const reported = toolInput.state;
+  if (rawName === "releases_report_state") {
+    const reported = rawInput.state;
     if (reported && typeof reported === "object") {
       const state = reported as Record<string, unknown>;
       state["updatedAt"] = new Date().toISOString();
@@ -666,6 +721,18 @@ export async function handleCustomToolUse(
     }
     await ctx.sendResult(toolUseId, "State captured successfully.");
     return true;
+  }
+
+  // Hallucination rescue: if the model invented an action-suffixed name like
+  // `fetch_source`, map it to the real `manage_source(action=fetch)` before
+  // dispatching. Log every hit so we can measure drift frequency. See #555.
+  const resolved = resolveToolAlias(rawName, rawInput);
+  const toolName = resolved?.tool ?? rawName;
+  const toolInput = resolved?.input ?? rawInput;
+  if (resolved) {
+    console.warn(
+      `[agent-tools] Tool alias rescued: ${rawName} → ${toolName}(${JSON.stringify(resolved.input).slice(0, 200)})`,
+    );
   }
 
   if (API_TOOL_NAMES.includes(toolName)) {
@@ -704,12 +771,15 @@ export async function handleCustomToolUse(
   }
 
   // Surface to worker logs so a platform-registered tool that we no longer
-  // define (or a hallucinated name) shows up in `wrangler tail` / Axiom —
-  // rather than only in the Anthropic session event log. The agent still
-  // gets a structured error via sendResult.
+  // define (or a hallucinated name with no alias) shows up in `wrangler tail` /
+  // Axiom — rather than only in the Anthropic session event log. The agent
+  // still gets a structured error via sendResult.
   console.error(
-    `[agent-tools] Unknown tool dispatched: ${toolName}. Known: ${API_TOOL_NAMES.join(", ")}.`,
+    `[agent-tools] Unknown tool dispatched: ${rawName}. Known: ${API_TOOL_NAMES.join(", ")}.`,
   );
-  await ctx.sendResult(toolUseId, `Unknown tool: ${toolName}`);
+  await ctx.sendResult(
+    toolUseId,
+    `Unknown tool: ${rawName}. Available tools: ${API_TOOL_NAMES.join(", ")}. Retry with one of these names — multi-action tools (manage_source, manage_org, manage_product, manage_playbook) take an "action" parameter in input, not in the name.`,
+  );
   return false;
 }
