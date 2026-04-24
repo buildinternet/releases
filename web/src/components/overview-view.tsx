@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { OverviewPageItem } from "@/lib/api";
@@ -29,10 +29,12 @@ function stripLeadingH1(content: string): string {
 
 export function OverviewView({ page }: OverviewViewProps) {
   const contentRef = useRef<HTMLDivElement>(null);
+  const contentId = useId();
   const [overflows, setOverflows] = useState(false);
   const [expanded, setExpanded] = useState(false);
 
   useEffect(() => {
+    setExpanded(false);
     const el = contentRef.current;
     if (!el) return;
     const check = () => {
@@ -67,6 +69,7 @@ export function OverviewView({ page }: OverviewViewProps) {
         <div className="relative">
           <div
             ref={contentRef}
+            id={contentId}
             className={proseClasses}
             style={clamped ? { maxHeight: `${CLAMP_HEIGHT_PX}px`, overflow: "hidden" } : undefined}
           >
@@ -89,6 +92,8 @@ export function OverviewView({ page }: OverviewViewProps) {
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
+            aria-expanded={expanded}
+            aria-controls={contentId}
             className="mt-3 text-[12px] font-medium text-stone-500 hover:text-stone-700 dark:text-stone-400 dark:hover:text-stone-200 transition-colors"
           >
             {expanded ? "Show less" : "Show more"}

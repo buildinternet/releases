@@ -339,7 +339,13 @@ export function ReleaseTimeline({
     });
   }, [sortedSources, cadenceMap]);
 
-  if (cardData.length === 0) return null;
+  if (cardData.length === 0) {
+    return overview ? (
+      <div className="mt-5 mb-2">
+        <OverviewView page={overview} />
+      </div>
+    ) : null;
+  }
 
   const cadenceLabel = fmtCadence(summaryStats.avgPerWeek, summaryStats.avgPerMonth);
   const heatmapHighlightDays = highlightDaysForPreset(rangePreset);
