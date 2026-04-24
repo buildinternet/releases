@@ -34,7 +34,6 @@
 
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
-import { createHash } from "crypto";
 import { buildDiscoverySystemPrompt } from "../src/shared/discovery-prompt.js";
 import { buildWorkerSystemPrompt } from "../src/shared/worker-prompt.js";
 import { AGENT_TOOLS } from "../src/shared/agent-tools.js";
@@ -113,10 +112,7 @@ interface SkillMapping {
 interface SkillConfig {
   skills: SkillMapping;
   agentId: string;
-  promptHash?: string;
-  toolsHash?: string;
   workerAgentId?: string;
-  workerPromptHash?: string;
   memoryStores?: {
     errata?: string;
     toolNotes?: string;
@@ -387,12 +383,6 @@ async function createMemoryStore(
   return (await res.json()) as ApiMemoryStore;
 }
 
-// ── Hashing ─────────────────────────────────────────────────────
-
-function hash(input: string): string {
-  return createHash("sha256").update(input).digest("hex").slice(0, 16);
-}
-
 // ── Main ─────────────────────────────────────────────────────────
 
 async function main() {
@@ -557,59 +547,37 @@ async function main() {
 
   // ── 2. Sync agents ─────────────────────────────────────────────
 
-  const currentToolsHash = hash(JSON.stringify(AGENT_TOOLS));
-
   interface AgentSyncParams {
     label: string;
     agentId: string;
     prompt: string;
-    promptHash: string;
-    cachedPromptHash: string | undefined;
     model: string;
     remoteAgent: { version: number; model: { id: string } };
     onSuccess: () => void;
   }
 
-  /** Diff an agent's prompt/tools/model/skills against remote and apply updates. */
+  /**
+   * Push prompt + tools + model + skills to an agent.
+   *
+   * Always pushes system prompt and tools — the skip-if-hash-matches
+   * optimization was removed when we switched to auto-deploy-on-push
+   * (#552). The workflow only runs when one of the source files actually
+   * changed, so there's nothing to skip; trading one idempotent API call
+   * for zero local state drift.
+   */
   async function syncAgentConfig(params: AgentSyncParams): Promise<void> {
-    const {
-      label,
-      agentId: id,
-      prompt,
-      promptHash,
-      cachedPromptHash,
-      model,
-      remoteAgent,
-      onSuccess,
-    } = params;
+    const { label, agentId: id, prompt, model, remoteAgent, onSuccess } = params;
     const payload: {
       skills?: typeof skillIds;
-      system?: string;
-      tools?: unknown[];
+      system: string;
+      tools: unknown[];
       model?: string;
-    } = {};
-    const changes: string[] = [];
-
-    if (skillsChanged > 0) {
-      payload.skills = skillIds;
-      changes.push(`${skillsChanged} skill(s)`);
-    }
-
-    if (cachedPromptHash !== promptHash) {
-      console.log(`  System prompt: changed (${cachedPromptHash ?? "none"} → ${promptHash})`);
-      payload.system = prompt;
-      changes.push("system prompt");
-    } else {
-      console.log(`  System prompt: up to date (${promptHash})`);
-    }
-
-    if (config.toolsHash !== currentToolsHash) {
-      console.log(`  Tools: changed (${config.toolsHash ?? "none"} → ${currentToolsHash})`);
-      payload.tools = [...AGENT_TOOLS];
-      changes.push(`${AGENT_TOOLS.length} tools`);
-    } else {
-      console.log(`  Tools: up to date (${currentToolsHash})`);
-    }
+    } = {
+      skills: skillIds,
+      system: prompt,
+      tools: [...AGENT_TOOLS],
+    };
+    const changes = [`${skillIds.length} skill(s)`, "system prompt", `${AGENT_TOOLS.length} tools`];
 
     if (remoteAgent.model.id !== model) {
       console.log(`  Model: changed (${remoteAgent.model.id} → ${model})`);
@@ -617,11 +585,6 @@ async function main() {
       changes.push("model");
     } else {
       console.log(`  Model: up to date (${model})`);
-    }
-
-    if (Object.keys(payload).length === 0) {
-      console.log(`${label} up to date — no changes needed.`);
-      return;
     }
 
     console.log(`Updating ${label.toLowerCase()}: ${changes.join(", ")}...`);
@@ -642,20 +605,15 @@ async function main() {
       evaluateAvailable: true,
       categories: CATEGORIES,
     });
-    const discoveryPromptHash = hash(discoveryPrompt);
 
     await syncAgentConfig({
       label: "Discovery agent",
       agentId,
       prompt: discoveryPrompt,
-      promptHash: discoveryPromptHash,
-      cachedPromptHash: config.promptHash,
       model: process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6",
       remoteAgent: agent!,
       onSuccess: () => {
         config.agentId = agentId;
-        config.promptHash = discoveryPromptHash;
-        config.toolsHash = currentToolsHash;
       },
     });
     console.log();
@@ -667,7 +625,6 @@ async function main() {
     console.log("── Worker Agent ─────────────────────────────────");
     const workerModel = process.env.RELEASED_WORKER_AGENT_MODEL || "claude-haiku-4-5";
     const workerPrompt = buildWorkerSystemPrompt({ categories: CATEGORIES });
-    const workerPromptHash = hash(workerPrompt);
     const workerAgentId = getWorkerAgentId(deployEnv, config);
 
     if (workerAgentId) {
@@ -676,14 +633,10 @@ async function main() {
         label: "Worker agent",
         agentId: workerAgentId,
         prompt: workerPrompt,
-        promptHash: workerPromptHash,
-        cachedPromptHash: config.workerPromptHash,
         model: workerModel,
         remoteAgent: workerAgent,
         onSuccess: () => {
           config.workerAgentId = workerAgentId;
-          config.workerPromptHash = workerPromptHash;
-          config.toolsHash = currentToolsHash;
         },
       });
     } else {
@@ -697,7 +650,6 @@ async function main() {
           ...(skillIds.length > 0 ? { skills: skillIds } : {}),
         });
         config.workerAgentId = created.id;
-        config.workerPromptHash = workerPromptHash;
         saveConfig(configPath, config);
         console.log(`✓ Worker agent created: ${created.id} (v${created.version})`);
         console.log(`  Add to wrangler.jsonc: "ANTHROPIC_WORKER_AGENT_ID": "${created.id}"`);
@@ -728,13 +680,10 @@ async function main() {
       changes.push(`${skillsChanged} skill(s)`);
     }
 
-    // Override agents aren't tracked in the config, so we don't know their
-    // prior tools hash. Always push current AGENT_TOOLS — cheaper than being
-    // wrong, and overrides are invoked rarely.
     payload.tools = [...AGENT_TOOLS];
     changes.push(`${AGENT_TOOLS.length} tools`);
 
-    console.log(`  Tools: pushing current (${currentToolsHash})`);
+    console.log(`  Tools: pushing current`);
     console.log(`  System prompt: preserved (override never rewrites)`);
     console.log(`  Model: preserved (${overrideAgent.model.id})`);
 

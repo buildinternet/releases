@@ -1,6 +1,19 @@
 name: Deploy Managed Agents
 
 on:
+  # Auto-deploy on any push to main that touches agent config or skills.
+  # Keeps live Anthropic-hosted agents in lockstep with main — prevents the
+  # "code changed but agent still registered with old prompt/tools" drift that
+  # caused #549 / #555. Push deploys always target production; use
+  # workflow_dispatch for staging or targeted deploys.
+  push:
+    branches: [main]
+    paths:
+      - src/shared/agent-tools.ts
+      - src/shared/worker-prompt.ts
+      - src/shared/discovery-prompt.ts
+      - src/agent/skills/**
+      - scripts/sync-agent-skills.ts
   workflow_dispatch:
     inputs:
       environment:
@@ -19,12 +32,20 @@ on:
         options: [all, discovery, worker]
         default: all
 
+# Queue concurrent runs per env instead of cancelling — an interrupted deploy
+# can leave prod with a partially-applied agent config.
+concurrency:
+  group: deploy-managed-agents-${{ github.event.inputs.environment || 'production' }}
+  cancel-in-progress: false
+
 env:
   BUN_VERSION: "1.3.11"
-  # Choice-typed inputs: values are constrained to the allowlist above, so
-  # interpolating them into run: commands is safe. Surfaced here via env to
-  # keep the job steps readable.
-  DEPLOY_ENV: ${{ inputs.environment }}
+  # On push, deploy everything to production. On workflow_dispatch, honor the
+  # chosen inputs. Choice-typed inputs are constrained to the allowlists above,
+  # so interpolating them into run: commands is safe.
+  DEPLOY_ENV: ${{ github.event.inputs.environment || 'production' }}
+  DEPLOY_TARGET: ${{ github.event.inputs.deploy || 'both' }}
+  AGENT_TARGET: ${{ github.event.inputs.agent || 'all' }}
 
 jobs:
   deploy:
@@ -46,25 +67,25 @@ jobs:
       - run: bun install --frozen-lockfile
 
       - name: Deploy skills
-        if: ${{ inputs.deploy == 'both' || inputs.deploy == 'skills' }}
+        if: ${{ env.DEPLOY_TARGET == 'both' || env.DEPLOY_TARGET == 'skills' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: bun run deploy:skills -- --env "$DEPLOY_ENV"
 
       - name: Deploy agents (both)
-        if: ${{ (inputs.deploy == 'both' || inputs.deploy == 'agents') && inputs.agent == 'all' }}
+        if: ${{ (env.DEPLOY_TARGET == 'both' || env.DEPLOY_TARGET == 'agents') && env.AGENT_TARGET == 'all' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: bun run deploy:agents -- --env "$DEPLOY_ENV"
 
       - name: Deploy discovery agent
-        if: ${{ (inputs.deploy == 'both' || inputs.deploy == 'agents') && inputs.agent == 'discovery' }}
+        if: ${{ (env.DEPLOY_TARGET == 'both' || env.DEPLOY_TARGET == 'agents') && env.AGENT_TARGET == 'discovery' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: bun run deploy:agents:discovery -- --env "$DEPLOY_ENV"
 
       - name: Deploy worker agent
-        if: ${{ (inputs.deploy == 'both' || inputs.deploy == 'agents') && inputs.agent == 'worker' }}
+        if: ${{ (env.DEPLOY_TARGET == 'both' || env.DEPLOY_TARGET == 'agents') && env.AGENT_TARGET == 'worker' }}
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: bun run deploy:agents:worker -- --env "$DEPLOY_ENV"
