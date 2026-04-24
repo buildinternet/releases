@@ -31,7 +31,7 @@ Search changelogs and release notes from the Releases.sh registry.
 ## How It Works
 
 1. Searches `list_organizations` to resolve the product name to a known org or product
-2. If a query is provided, uses `search_releases` filtered to that org
+2. If a query is provided, uses `search` with `type: ["releases"]` filtered via `organization`
 3. If no query, uses `get_latest_releases` to show the most recent entries
 4. With `--compare`, uses `compare_products` on both product slugs
 5. Results include version numbers, dates, and key changes from release notes

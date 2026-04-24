@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { D1Db } from "../db.js";
-import type { SearchOrgHit, SearchProductHit, RawSourceHit } from "@releases/lib/api-types";
+import type { SearchOrgHit, SearchCatalogHit, RawSourceHit } from "@releases/lib/api-types";
 
 /**
  * Raw release row returned by the search queries. `content` and `media`
@@ -43,9 +43,10 @@ export async function searchProducts(
   db: D1Db,
   pattern: string,
   limit: number,
-): Promise<SearchProductHit[]> {
-  return db.all<SearchProductHit>(sql`
-    SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category
+): Promise<SearchCatalogHit[]> {
+  return db.all<SearchCatalogHit>(sql`
+    SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category,
+           'product' as kind
     FROM products p
     LEFT JOIN organizations o ON o.id = p.org_id
     LEFT JOIN domain_aliases da ON da.product_id = p.id

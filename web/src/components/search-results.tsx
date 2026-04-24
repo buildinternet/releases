@@ -7,7 +7,7 @@ import remarkGfm from "remark-gfm";
 import type {
   UnifiedSearchResponse,
   SearchOrgHit,
-  SearchProductHit,
+  SearchCatalogHit,
   SearchReleaseHit,
   SearchChunkHit,
 } from "@/lib/api";
@@ -343,7 +343,7 @@ export function SearchResults({
   );
 
   const hasResults =
-    results && (results.orgs.length > 0 || results.products.length > 0 || rankedHits.length > 0);
+    results && (results.orgs.length > 0 || results.catalog.length > 0 || rankedHits.length > 0);
 
   const showOrgs = filter === "all" || filter === "orgs";
   const showProducts = filter === "all" || filter === "products";
@@ -352,7 +352,7 @@ export function SearchResults({
   const filteredHasResults =
     results &&
     ((showOrgs && results.orgs.length > 0) ||
-      (showProducts && results.products.length > 0) ||
+      (showProducts && results.catalog.length > 0) ||
       (showReleases && rankedHits.length > 0));
 
   return (
@@ -414,13 +414,13 @@ export function SearchResults({
           )}
 
           {/* Products */}
-          {showProducts && results.products.length > 0 && (
+          {showProducts && results.catalog.length > 0 && (
             <section>
               <h2 className="text-xs font-medium uppercase tracking-wider text-stone-400 mb-3">
                 Products
               </h2>
               <div className="space-y-2">
-                {results.products.map((p: SearchProductHit) => {
+                {results.catalog.map((p: SearchCatalogHit) => {
                   const href =
                     p.kind === "source" && p.sourceSlug
                       ? p.orgSlug

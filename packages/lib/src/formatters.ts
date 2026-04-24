@@ -480,10 +480,10 @@ export function searchToMarkdown(results: UnifiedSearchResponse, opts: FormatOpt
     lines.push("");
   }
 
-  if (results.products.length > 0) {
+  if (results.catalog.length > 0) {
     lines.push("## Products");
     lines.push("");
-    for (const p of results.products) {
+    for (const p of results.catalog) {
       const orgInfo = p.orgSlug ? ` (${p.orgName})` : "";
       const viewSlug = p.kind === "source" && p.sourceSlug ? p.sourceSlug : `product/${p.slug}`;
       const url =
@@ -509,7 +509,7 @@ export function searchToMarkdown(results: UnifiedSearchResponse, opts: FormatOpt
     lines.push("");
   }
 
-  if (results.orgs.length === 0 && results.products.length === 0 && results.releases.length === 0) {
+  if (results.orgs.length === 0 && results.catalog.length === 0 && results.releases.length === 0) {
     lines.push("No results found.");
     lines.push("");
   }

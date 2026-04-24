@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { searchToMarkdown } from "@releases/lib/formatters.js";
-import { foldSourcesIntoProducts } from "@releases/lib/api-types";
+import { foldSourcesIntoCatalog } from "@releases/lib/api-types";
 import type { Env } from "../index.js";
 import type { SearchReleaseHit, MediaItem } from "@releases/lib/api-types";
 import { createDb } from "../db.js";
@@ -87,7 +87,7 @@ searchRoutes.get("/search", async (c) => {
     searchProducts(db, pattern, limit),
     searchSources(db, pattern, limit),
   ]);
-  const products = foldSourcesIntoProducts(rawProducts, rawSources);
+  const catalog = foldSourcesIntoCatalog(rawProducts, rawSources);
 
   // When mode==="lexical" we keep the legacy path bit-for-bit (including
   // the cascading enrichment from matched entities) to preserve the cache
@@ -97,17 +97,17 @@ searchRoutes.get("/search", async (c) => {
       () => [] as RawSearchReleaseRow[],
     );
     let rawReleases = ftsRows;
-    if (rawReleases.length === 0 && (orgs.length > 0 || products.length > 0)) {
+    if (rawReleases.length === 0 && (orgs.length > 0 || catalog.length > 0)) {
       rawReleases = await searchReleasesFromMatchedEntities(
         db,
         orgs.map((o) => o.slug),
-        products.filter((p) => p.kind !== "source").map((p) => p.slug),
+        catalog.filter((p) => p.kind !== "source").map((p) => p.slug),
         limit,
         { includeCoverage },
       );
     }
     const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
-    const result = { query: q, orgs, products, sources: [], releases };
+    const result = { query: q, orgs, catalog, products: catalog, sources: [], releases };
     if (wantsMarkdown(c)) return markdownResponse(c, searchToMarkdown(result));
     return c.json(result);
   }
@@ -173,7 +173,8 @@ searchRoutes.get("/search", async (c) => {
   const result = {
     query: q,
     orgs,
-    products,
+    catalog,
+    products: catalog,
     sources: [],
     releases,
     chunks,

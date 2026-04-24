@@ -27,9 +27,17 @@ This skips the MCP connection, agents, and `/releases` command that the full plu
 
 ## Available MCP Tools
 
-### search_releases
+### search
 
-Full-text search across all indexed release notes. Filter by product, organization, or release `type`.
+Unified search across organizations, the catalog (products + standalone sources), and release content. Pass `type: ("orgs"|"catalog"|"releases")[]` to narrow which sections to return and skip expensive paths; pass `entity` (product slug / `prod_` id or source slug / `src_` id) to scope release results. Hybrid retrieval (FTS5 + semantic vectors via RRF) by default; falls back to lexical and flags `degraded` when Vectorize is unavailable.
+
+### list_catalog
+
+List catalog entries — products and standalone sources folded into one list with a `kind: "product"|"source"` discriminator per row. Scope with an optional `organization` filter.
+
+### get_catalog_entry
+
+Detail for a single catalog entry. Accepts a product identifier (slug or `prod_` id) or a source identifier (slug or `src_` id); dispatches on entity type and returns the appropriate detail shape.
 
 ### get_latest_releases
 
@@ -38,14 +46,6 @@ Get the most recent releases, optionally filtered by product, organization, or r
 ### get_release
 
 Fetch the full content of a single release by id. Accepts a `rel_` prefix or a bare nanoid.
-
-### list_sources
-
-List all indexed changelog sources, optionally scoped to one organization.
-
-### get_source
-
-Detail for a single source including org/product linkage, release count, last-fetched timestamp, and whether a CHANGELOG file is stored.
 
 ### get_source_changelog
 
@@ -63,14 +63,6 @@ Get detailed information about a single organization. Includes a short preview o
 
 Read the full AI-generated overview for an organization — a short briefing that distills recent changelog activity into themed sections.
 
-### list_products
-
-List products, optionally scoped to one organization.
-
-### get_product
-
-Detail for a single product with its organization, category, tags, and the sources grouped under it.
-
 ### summarize_changes
 
 AI-generated summary of recent changes for a product.
@@ -78,6 +70,10 @@ AI-generated summary of recent changes for a product.
 ### compare_products
 
 Compare recent release activity between two products.
+
+### Deprecated shims
+
+One release cycle: `search_releases`, `search_registry`, `list_sources`, `get_source`, `list_products`, `get_product`. Their titles are suffixed `(deprecated)` and descriptions point at the replacement above.
 
 ## Usage Examples
 

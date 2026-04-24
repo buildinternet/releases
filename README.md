@@ -121,22 +121,21 @@ VS Code, Windsurf, Zed, and other stdio-only clients:
 
 **MCP Tools:**
 
-| Tool                        | Description                                                                                                                                                                          |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `search_releases`           | Hybrid lexical + semantic search across releases and CHANGELOG chunks (filter by product, org, `type`, or `mode`); each hit carries a `kind` discriminator                           |
-| `search_registry`           | Vector-backed search across orgs, products, and sources                                                                                                                              |
-| `get_latest_releases`       | Most recent releases (filter by product, org, or `type`)                                                                                                                             |
-| `get_release`               | Full content of a single release by id (accepts `rel_` prefix or bare nanoid)                                                                                                        |
-| `summarize_changes`         | AI summary of a product's recent changes (gated)                                                                                                                                     |
-| `compare_products`          | AI comparison between two products (gated)                                                                                                                                           |
-| `list_sources`              | List all tracked sources                                                                                                                                                             |
-| `get_source`                | Detail for a single source with org/product linkage, release count, and whether a CHANGELOG file is stored                                                                           |
-| `get_source_changelog`      | Canonical `CHANGELOG.md` stored for a GitHub source, with heading-aligned `offset` + `limit` (chars) or `tokens` (cl100k_base) slicing for Context7-style paging through large files |
-| `list_organizations`        | List all organizations with their linked sources                                                                                                                                     |
-| `get_organization`          | Detailed view of a single org (accounts, tags, sources, products, aliases)                                                                                                           |
-| `get_organization_overview` | Full AI-generated narrative briefing for an organization, with a stale warning if older than 30 days                                                                                 |
-| `list_products`             | List products, optionally scoped to one organization                                                                                                                                 |
-| `get_product`               | Detail for a single product with its organization, tags, and the sources grouped under it                                                                                            |
+| Tool                        | Description                                                                                                                                                                           |
+| --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `search`                    | Unified search across orgs, catalog (products + standalone sources), and release content. Pass `type: ("orgs"\|"catalog"\|"releases")[]` to skip sections; `entity` to scope releases |
+| `list_catalog`              | Products and standalone sources folded into one list, each row tagged with a `kind: "product"\|"source"` discriminator                                                                |
+| `get_catalog_entry`         | Detail for a catalog entry — dispatches on slug / `prod_` / `src_` id and returns the union of product / source fields                                                                |
+| `get_latest_releases`       | Most recent releases (filter by product, org, or `type`)                                                                                                                              |
+| `get_release`               | Full content of a single release by id (accepts `rel_` prefix or bare nanoid)                                                                                                         |
+| `summarize_changes`         | AI summary of a product's recent changes (gated)                                                                                                                                      |
+| `compare_products`          | AI comparison between two products (gated)                                                                                                                                            |
+| `get_source_changelog`      | Canonical `CHANGELOG.md` stored for a GitHub source, with heading-aligned `offset` + `limit` (chars) or `tokens` (cl100k_base) slicing for Context7-style paging through large files  |
+| `list_organizations`        | List all organizations with their linked sources                                                                                                                                      |
+| `get_organization`          | Detailed view of a single org (accounts, tags, sources, products, aliases)                                                                                                            |
+| `get_organization_overview` | Full AI-generated narrative briefing for an organization, with a stale warning if older than 30 days                                                                                  |
+
+**Deprecated shims** (one release cycle): `search_releases`, `search_registry`, `list_sources`, `get_source`, `list_products`, `get_product` — each titled `(deprecated)` and pointing callers at the replacement above.
 
 Every tool carries MCP annotations (`readOnlyHint`, `idempotentHint`, `openWorldHint`, and a display `title`) so clients can surface them correctly in low-trust modes.
 
@@ -162,7 +161,7 @@ All three templates are completion-only — `resources/list` returns empty so th
 
 #### In-browser (WebMCP)
 
-When a visitor loads `releases.sh` in a browser that implements the emerging [WebMCP](https://webmachinelearning.github.io/webmcp/) API (Chrome's Early Preview Program today), the web app registers a read-only subset of the MCP tools on `navigator.modelContext` so browser-side AI agents can query the registry without setting up a remote MCP connection. Currently exposed: `search_releases`, `list_organizations`, `get_organization`, `get_source`, `get_release`, plus an `open_search_page` navigation helper. Implementation: `web/src/components/webmcp-provider.tsx`.
+When a visitor loads `releases.sh` in a browser that implements the emerging [WebMCP](https://webmachinelearning.github.io/webmcp/) API (Chrome's Early Preview Program today), the web app registers a read-only subset of the MCP tools on `navigator.modelContext` so browser-side AI agents can query the registry without setting up a remote MCP connection. Currently exposed: `search`, `list_organizations`, `get_organization`, `get_catalog_entry`, `get_release`, plus an `open_search_page` navigation helper. Implementation: `web/src/components/webmcp-provider.tsx`.
 
 WebMCP is intentionally a lightweight tool subset — it does not mirror resources, prompts, or the AI tools. If you add, rename, or change a read-only tool in `workers/mcp/src/tools.ts`, update the WebMCP provider in the same PR so the tool subset doesn't drift. The OSS CLI's stdio bridge (`releases admin mcp serve`) proxies to the hosted MCP server, so it picks up tool changes automatically once the worker redeploys. Write/admin tools stay remote-only — the browser can't hold an API key safely.
 

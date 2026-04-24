@@ -31,6 +31,11 @@ import {
   isOverviewStale,
   overviewPreview,
 } from "@buildinternet/releases-core/overview";
+import {
+  foldSourcesIntoCatalog,
+  type SearchCatalogHit,
+  type RawSourceHit,
+} from "@releases/lib/api-types";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 
@@ -118,6 +123,41 @@ async function resolveProduct(db: D1Db, identifier: string) {
       : eq(products.slug, identifier);
   const rows = await db.select().from(products).where(condition).limit(1);
   return rows.length > 0 ? rows[0] : null;
+}
+
+/**
+ * Resolve a catalog identifier (source slug / `src_` id, product slug /
+ * `prod_` id, or an ambiguous slug) to the set of source IDs to filter on.
+ * Returns `null` when nothing matches so callers can echo the identifier
+ * back in the error.
+ */
+async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<string[] | null> {
+  const entityType = getEntityType(identifier);
+
+  if (entityType === "source") {
+    const src = await resolveSource(db, identifier);
+    return src ? [src.id] : null;
+  }
+
+  if (entityType === "product") {
+    const prod = await resolveProduct(db, identifier);
+    if (!prod) return null;
+    const rows = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.productId, prod.id));
+    return rows.map((r) => r.id);
+  }
+
+  // Ambiguous slug: one query against sources joined to their optional
+  // product — matches either directly (source slug) or transitively
+  // (every source under a product with that slug).
+  const rows = await db.all<{ id: string }>(sql`
+    SELECT s.id as id FROM sources s
+    LEFT JOIN products p ON p.id = s.product_id
+    WHERE s.slug = ${identifier} OR p.slug = ${identifier}
+  `);
+  return rows.length > 0 ? rows.map((r) => r.id) : null;
 }
 
 // ── search_releases ──────────────────────────────────────────────────
@@ -983,7 +1023,13 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
 export async function getSource(db: D1Db, params: { identifier: string }): Promise<ToolResult> {
   const src = await resolveSource(db, params.identifier);
   if (!src) return text(`No source found matching "${params.identifier}"`);
+  return renderSourceDetail(db, src);
+}
 
+async function renderSourceDetail(
+  db: D1Db,
+  src: Awaited<ReturnType<typeof resolveSource>> & object,
+): Promise<ToolResult> {
   const [orgRows, productRows, relCountRows, changelogRows] = await Promise.all([
     src.orgId
       ? db
@@ -1079,7 +1125,13 @@ export async function listProducts(
 export async function getProduct(db: D1Db, params: { identifier: string }): Promise<ToolResult> {
   const product = await resolveProduct(db, params.identifier);
   if (!product) return text(`No product found matching "${params.identifier}"`);
+  return renderProductDetail(db, product);
+}
 
+async function renderProductDetail(
+  db: D1Db,
+  product: Awaited<ReturnType<typeof resolveProduct>> & object,
+): Promise<ToolResult> {
   const [orgRows, productSources, tagRows] = await Promise.all([
     db
       .select({ slug: organizations.slug, name: organizations.name })
@@ -1129,4 +1181,401 @@ export async function getProduct(db: D1Db, params: { identifier: string }): Prom
   }
 
   return text(lines.join("\n"));
+}
+
+// ── list_catalog ─────────────────────────────────────────────────────
+
+/**
+ * Render-only shape for `list_catalog` — extends the wire `SearchCatalogHit`
+ * with fields listCatalog surfaces in its detail view but the web doesn't
+ * need (description, url, lastFetchedAt).
+ */
+type CatalogEntry = SearchCatalogHit & {
+  description: string | null;
+  url: string | null;
+  lastFetchedAt?: string | null;
+};
+
+export async function listCatalog(
+  db: D1Db,
+  params: { organization?: string },
+): Promise<ToolResult> {
+  let orgId: string | undefined;
+  if (params.organization) {
+    const org = await findOrg(db, params.organization);
+    if (!org) return text(`No organization found matching "${params.organization}"`);
+    orgId = org.id;
+  }
+
+  const [productRows, orphanSourceRows] = await Promise.all([
+    db.all<{
+      slug: string;
+      name: string;
+      url: string | null;
+      description: string | null;
+      category: string | null;
+      orgSlug: string | null;
+      orgName: string | null;
+    }>(sql`
+      SELECT p.slug, p.name, p.url, p.description, p.category,
+             o.slug as orgSlug, o.name as orgName
+      FROM products p
+      LEFT JOIN organizations o ON o.id = p.org_id
+      ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
+      ORDER BY p.name
+    `),
+    db.all<{
+      slug: string;
+      name: string;
+      type: string;
+      url: string | null;
+      lastFetchedAt: string | null;
+      orgSlug: string | null;
+      orgName: string | null;
+    }>(sql`
+      SELECT s.slug, s.name, s.type, s.url, s.last_fetched_at as lastFetchedAt,
+             o.slug as orgSlug, o.name as orgName
+      FROM sources s
+      LEFT JOIN organizations o ON o.id = s.org_id
+      WHERE s.product_id IS NULL
+        AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+        ${orgId ? sql`AND s.org_id = ${orgId}` : sql``}
+      ORDER BY s.name
+    `),
+  ]);
+
+  const entries: CatalogEntry[] = [
+    ...productRows.map(
+      (p): CatalogEntry => ({
+        slug: p.slug,
+        name: p.name,
+        orgSlug: p.orgSlug,
+        orgName: p.orgName,
+        category: p.category,
+        description: p.description,
+        url: p.url,
+        kind: "product",
+      }),
+    ),
+    ...orphanSourceRows.map(
+      (s): CatalogEntry => ({
+        slug: s.slug,
+        name: s.name,
+        orgSlug: s.orgSlug,
+        orgName: s.orgName,
+        category: null,
+        description: null,
+        url: s.url,
+        kind: "source",
+        sourceType: s.type,
+        lastFetchedAt: s.lastFetchedAt,
+      }),
+    ),
+  ];
+
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+
+  if (entries.length === 0) return text("No catalog entries found.");
+
+  const result = entries
+    .map((e) => {
+      const parts = [`**${e.name}** _(${e.kind})_`, `  Slug: ${e.slug}`];
+      if (e.orgSlug) parts.push(`  Organization: ${e.orgName ?? e.orgSlug} (${e.orgSlug})`);
+      if (e.category) parts.push(`  Category: ${e.category}`);
+      if (e.url) parts.push(`  URL: ${e.url}`);
+      if (e.description) parts.push(`  Description: ${e.description}`);
+      if (e.kind === "source") {
+        parts.push(`  Source type: ${e.sourceType}`);
+        parts.push(`  Last fetched: ${e.lastFetchedAt ?? "Never"}`);
+      }
+      return parts.join("\n");
+    })
+    .join("\n\n");
+
+  return text(result);
+}
+
+// ── get_catalog_entry ────────────────────────────────────────────────
+
+export async function getCatalogEntry(
+  db: D1Db,
+  params: { identifier: string },
+): Promise<ToolResult> {
+  const entityType = getEntityType(params.identifier);
+
+  if (entityType === "product") {
+    const prod = await resolveProduct(db, params.identifier);
+    return prod
+      ? renderProductDetail(db, prod)
+      : text(`No product found matching "${params.identifier}"`);
+  }
+  if (entityType === "source") {
+    const src = await resolveSource(db, params.identifier);
+    return src
+      ? renderSourceDetail(db, src)
+      : text(`No source found matching "${params.identifier}"`);
+  }
+
+  // Ambiguous slug: try product first (products typically have shorter,
+  // flatter slugs users reach for; sources carry repo-style slugs).
+  const [prod, src] = await Promise.all([
+    resolveProduct(db, params.identifier),
+    resolveSource(db, params.identifier),
+  ]);
+  if (prod) return renderProductDetail(db, prod);
+  if (src) return renderSourceDetail(db, src);
+
+  return text(`No catalog entry found matching "${params.identifier}"`);
+}
+
+// ── search (unified) ─────────────────────────────────────────────────
+
+export type SearchType = "orgs" | "catalog" | "releases";
+
+/**
+ * `type` here is the input-filter parameter (which sections to return).
+ * Catalog entries in the response still carry a `kind` discriminator —
+ * `type` stays on the input so it doesn't shadow `sources.type`.
+ */
+export async function search(
+  db: D1Db,
+  params: {
+    query: string;
+    type?: SearchType[];
+    organization?: string;
+    entity?: string;
+    limit?: number;
+    mode?: SearchReleasesMode;
+    include_coverage?: boolean;
+  },
+  searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
+  ctx?: ExecutionContext,
+): Promise<ToolResult> {
+  const wanted = new Set<SearchType>(
+    params.type && params.type.length > 0 ? params.type : ["orgs", "catalog", "releases"],
+  );
+  const limit = params.limit ?? 20;
+  const mode: SearchReleasesMode = params.mode ?? "hybrid";
+  const includeCoverage = params.include_coverage === true;
+  const pattern = `%${params.query}%`;
+
+  let orgScope: Awaited<ReturnType<typeof findOrg>> = null;
+  if (params.organization) {
+    orgScope = await findOrg(db, params.organization);
+    if (!orgScope) return text(`No organization found matching "${params.organization}"`);
+  }
+
+  let entitySourceIds: string[] | null = null;
+  if (params.entity) {
+    entitySourceIds = await resolveEntityToSourceIds(db, params.entity);
+    if (!entitySourceIds) return text(`No catalog entry found matching "${params.entity}"`);
+    if (entitySourceIds.length === 0) {
+      return text(`No sources found under "${params.entity}".`);
+    }
+  }
+
+  const orgsP: Promise<
+    Array<{ slug: string; name: string; domain: string | null; category: string | null }>
+  > = wanted.has("orgs")
+    ? orgScope
+      ? Promise.resolve([
+          {
+            slug: orgScope.slug,
+            name: orgScope.name,
+            domain: orgScope.domain,
+            category: orgScope.category,
+          },
+        ])
+      : db.all(sql`
+          SELECT DISTINCT o.slug, o.name, o.domain, o.category
+          FROM organizations o
+          LEFT JOIN domain_aliases da ON da.org_id = o.id
+          WHERE o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
+            OR da.domain LIKE ${pattern}
+          ORDER BY o.name LIMIT ${limit}
+        `)
+    : Promise.resolve([]);
+
+  const catalogP: Promise<SearchCatalogHit[]> = wanted.has("catalog")
+    ? (async () => {
+        const [productRows, sourceRows] = await Promise.all([
+          db.all<SearchCatalogHit>(sql`
+            SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName,
+                   p.category, 'product' as kind
+            FROM products p
+            LEFT JOIN organizations o ON o.id = p.org_id
+            LEFT JOIN domain_aliases da ON da.product_id = p.id
+            WHERE (p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern})
+              ${orgScope ? sql`AND p.org_id = ${orgScope.id}` : sql``}
+            ORDER BY p.name LIMIT ${limit}
+          `),
+          db.all<RawSourceHit>(sql`
+            SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
+                   p.slug as productSlug, p.name as productName, p.category as productCategory
+            FROM sources s
+            LEFT JOIN products p ON p.id = s.product_id
+            LEFT JOIN organizations o ON o.id = s.org_id
+            WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
+              AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
+              ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
+            ORDER BY s.name LIMIT ${limit}
+          `),
+        ]);
+        return foldSourcesIntoCatalog(productRows, sourceRows);
+      })()
+    : Promise.resolve([]);
+
+  type LexicalReleaseRow = {
+    id: string;
+    title: string;
+    summary: string;
+    version: string | null;
+    type: string;
+    publishedAt: string | null;
+    sourceSlug: string;
+    sourceName: string;
+  };
+  type HybridSection = {
+    mode: "hybrid";
+    hybrid: Awaited<ReturnType<typeof import("./lib/search-hybrid.js").runHybridSearch>>;
+  };
+  type ReleaseSection = HybridSection | { mode: "lexical"; rows: LexicalReleaseRow[] } | null;
+
+  const releasesP: Promise<ReleaseSection> = wanted.has("releases")
+    ? (async () => {
+        // Entity filter narrows further than org filter; org filter expands
+        // to every source under the org.
+        let sourceIds = entitySourceIds ?? undefined;
+        if (!sourceIds && orgScope) {
+          const rows = await db
+            .select({ id: sources.id })
+            .from(sources)
+            .where(eq(sources.orgId, orgScope.id));
+          sourceIds = rows.map((r) => r.id);
+        }
+
+        if (mode !== "lexical" && searchEnv) {
+          const { runHybridSearch } = await import("./lib/search-hybrid.js");
+          const hybrid = await runHybridSearch(
+            searchEnv,
+            db,
+            {
+              query: params.query,
+              topK: limit,
+              mode,
+              // Single-source goes through the hybrid helper's narrow
+              // `sourceId` path; multi-source uses the list form.
+              sourceId: sourceIds?.length === 1 ? sourceIds[0] : undefined,
+              orgSourceIds: sourceIds && sourceIds.length > 1 ? sourceIds : undefined,
+              includeCoverage,
+            },
+            ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {},
+          );
+          return { mode: "hybrid", hybrid };
+        }
+
+        const rows = await db.all<LexicalReleaseRow>(sql`
+          SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
+                 r.version, r.title, r.type,
+                 COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
+                 r.published_at as publishedAt
+          FROM releases_fts
+          JOIN releases r ON r.rowid = releases_fts.rowid
+          JOIN sources s ON s.id = r.source_id
+          WHERE releases_fts MATCH ${params.query}
+            AND (r.suppressed IS NULL OR r.suppressed = 0)
+            AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+            ${includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`}
+            ${
+              sourceIds
+                ? sql`AND r.source_id IN (${sql.join(
+                    sourceIds.map((id) => sql`${id}`),
+                    sql`, `,
+                  )})`
+                : sql``
+            }
+          ORDER BY rank LIMIT ${limit}
+        `);
+        return { mode: "lexical", rows };
+      })()
+    : Promise.resolve(null);
+
+  const [orgs, catalog, releaseResult] = await Promise.all([orgsP, catalogP, releasesP]);
+
+  const sections: string[] = [];
+
+  if (releaseResult?.mode === "hybrid" && releaseResult.hybrid.degraded) {
+    sections.push(
+      `⚠ Semantic search unavailable (${releaseResult.hybrid.degradedReason ?? "unknown"}); falling back to lexical.`,
+    );
+  }
+
+  if (orgs.length > 0) {
+    const lines = [
+      "## Organizations",
+      ...orgs.map((o) => `- **${o.name}** (${o.slug})${o.category ? ` — ${o.category}` : ""}`),
+    ];
+    sections.push(lines.join("\n"));
+  }
+
+  if (catalog.length > 0) {
+    const lines = [
+      "## Catalog",
+      ...catalog.map((e) => {
+        const org = e.orgSlug ? ` — ${e.orgName ?? e.orgSlug}` : "";
+        return `- [${e.kind}] **${e.name}** (${e.slug})${org}`;
+      }),
+    ];
+    sections.push(lines.join("\n"));
+  }
+
+  if (releaseResult?.mode === "hybrid" && releaseResult.hybrid.hits.length > 0) {
+    const lines: string[] = ["## Releases"];
+    for (const hit of releaseResult.hybrid.hits) {
+      if (hit.kind === "release") {
+        const r = hit.release;
+        lines.push(
+          [
+            `- [release] **${r.title}**`,
+            `  id: ${r.id}`,
+            `  source: ${r.source.name} (${r.source.slug}) | ${r.publishedAt ?? "N/A"}`,
+            r.version ? `  version: ${r.version}` : null,
+            `  ${r.summary}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
+      } else {
+        const c = hit.chunk;
+        lines.push(
+          [
+            `- [changelog_chunk] ${c.source.name} (${c.source.slug})`,
+            `  file: ${c.file_path} @ offset=${c.offset} length=${c.length}`,
+            c.heading ? `  heading: ${c.heading}` : null,
+            `  ${c.snippet}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
+        );
+      }
+    }
+    sections.push(lines.join("\n"));
+  } else if (releaseResult?.mode === "lexical" && releaseResult.rows.length > 0) {
+    const lines: string[] = ["## Releases"];
+    for (const r of releaseResult.rows) {
+      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      lines.push(
+        `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`,
+      );
+    }
+    sections.push(lines.join("\n"));
+  }
+
+  const hadDegradeNotice =
+    releaseResult?.mode === "hybrid" && releaseResult.hybrid.degraded === true;
+  if (sections.length === 0 || (sections.length === 1 && hadDegradeNotice)) {
+    sections.push("No results found.");
+  }
+
+  return text(sections.join("\n\n"));
 }
