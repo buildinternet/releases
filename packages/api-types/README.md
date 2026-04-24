@@ -15,19 +15,16 @@ npm install @buildinternet/releases-api-types
 ## Usage
 
 ```ts
-import type {
-  OrgListItem,
-  ReleaseItem,
-  SearchCatalogHit,
-  ListResponse,
-} from "@buildinternet/releases-api-types";
+import type { OrgListItem } from "@buildinternet/releases-api-types";
 
 async function listOrgs(): Promise<OrgListItem[]> {
   const res = await fetch("https://api.releases.sh/v1/orgs");
-  const json = (await res.json()) as { items: OrgListItem[] };
-  return json.items;
+  return (await res.json()) as OrgListItem[];
 }
 ```
+
+Some list endpoints wrap results in a `ListResponse<T>` envelope (`{ items, pagination }`) — that contract lives in
+`@buildinternet/releases-core/cli-contracts`. Check the route docs at [releases.sh/docs/api](https://releases.sh/docs/api) for the exact shape per endpoint.
 
 ## Versioning
 
