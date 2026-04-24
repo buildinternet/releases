@@ -24,7 +24,7 @@ Ingest is automatic on writes and never blocks them. The release batch insert, o
 
 ## Search modes
 
-The unified MCP `search` tool (and `GET /v1/search`) accepts `mode: "lexical"|"semantic"|"hybrid"` for release retrieval and defaults to `hybrid`. Release hits carry a `kind: "release"|"changelog_chunk"` discriminator — chunk hits include `sourceSlug`, `chunkOffset`, and `chunkLength` so agents can chain into `get_source_changelog({ slug, offset, limit })` to read surrounding context. The hybrid path degrades to lexical with `degraded: true` + `degradedReason` set if Vectorize bindings or the embedding API are unavailable. Pass `type: ["orgs", "catalog"]` to skip the release-vector path when you only need registry lookups; pass `type: ["releases"]` to skip the entity-vector path. Deprecated shims `search_releases` and `search_registry` still exist for one release cycle.
+The unified MCP `search` tool (and `GET /v1/search`) accepts `mode: "lexical"|"semantic"|"hybrid"` for release retrieval and defaults to `hybrid`. Release hits carry a `kind: "release"|"changelog_chunk"` discriminator — chunk hits include `sourceSlug`, `chunkOffset`, and `chunkLength` so agents can chain into `get_catalog_entry({ identifier: sourceSlug, changelog_offset: chunkOffset, changelog_limit: chunkLength * 3 })` to read surrounding context. The hybrid path degrades to lexical with `degraded: true` + `degradedReason` set if Vectorize bindings or the embedding API are unavailable. Pass `type: ["orgs", "catalog"]` to skip the release-vector path when you only need registry lookups; pass `type: ["releases"]` to skip the entity-vector path. Deprecated shims `search_releases` and `search_registry` still exist for one release cycle.
 
 ## Query embedding cache
 

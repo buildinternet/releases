@@ -279,7 +279,7 @@ async function hydrateChunks(
     // Judgment call: cap snippets at 2000 chars to keep MCP tool output
     // bounded. Real chunks are typically ~800–1600 chars; rollups can
     // overshoot. Callers that need the full slice can reach for
-    // get_source_changelog with offset+limit.
+    // get_catalog_entry with changelog_offset+changelog_limit.
     const rawSnippet = content.slice(row.offset, row.offset + row.length);
     const snippet = rawSnippet.length > 2000 ? `${rawSnippet.slice(0, 2000)}…` : rawSnippet;
     out.set(row.vectorId, {

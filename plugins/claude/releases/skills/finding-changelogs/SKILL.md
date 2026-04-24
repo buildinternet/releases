@@ -29,16 +29,16 @@ If the entries don't look like releases, the feed is likely the wrong one. Look 
 
 Well-known files > Link relations > Feeds > GitHub Releases API > raw markdown > page scraping.
 
-For `github` sources, the fetch pipeline ingests tagged releases **and** the repo's canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md` at the repo root) on every fetch pass — the file is surfaced in the web UI as a separate tab, exposed via the `get_source_changelog` MCP tool, and is often the richer source when a project ships entries that never became tagged releases. The refresh piggybacks on each GitHub fetch with a content-hash short-circuit, so stored files stay in sync with tagged releases. You don't need to add a second source for the CHANGELOG file; the github adapter handles both.
+For `github` sources, the fetch pipeline ingests tagged releases **and** the repo's canonical `CHANGELOG.md` (or `CHANGES.md` / `HISTORY.md` / `RELEASES.md` / `NEWS.md` at the repo root) on every fetch pass — the file is surfaced in the web UI as a separate tab, embedded on demand by the `get_catalog_entry` MCP tool, and is often the richer source when a project ships entries that never became tagged releases. The refresh piggybacks on each GitHub fetch with a content-hash short-circuit, so stored files stay in sync with tagged releases. You don't need to add a second source for the CHANGELOG file; the github adapter handles both.
 
 ### Reading a tracked CHANGELOG
 
-Once a github source is tracked, its CHANGELOG is readable via `GET /v1/sources/:slug/changelog` (REST), the `get_source_changelog` MCP tool, or `releases admin source changelog <slug>` (CLI). All three support heading-aligned slicing in two modes:
+Once a github source is tracked, its CHANGELOG is readable via `GET /v1/sources/:slug/changelog` (REST), the `get_catalog_entry` MCP tool with `include_changelog: true` (or any slicing param — see below), or `releases admin source changelog <slug>` (CLI). All three support heading-aligned slicing in two modes:
 
-- **Token mode** (preferred for agent context budgeting) — pass `tokens` / `--tokens` with a cl100k_base budget. The response carries `sliceTokens` (actual count of the returned chunk) and `totalTokens` (whole file) so you can plan context precisely. Recommended brackets: 2000 / 5000 / 10000 / 20000.
-- **Char mode** — pass `limit` / `--limit` for character budgets. Same snap/overshoot rules.
+- **Token mode** (preferred for agent context budgeting) — pass `changelog_tokens` / `--tokens` with a cl100k_base budget. The response carries `sliceTokens` (actual count of the returned chunk) and `totalTokens` (whole file) so you can plan context precisely. Recommended brackets: 2000 / 5000 / 10000 / 20000.
+- **Char mode** — pass `changelog_limit` / `--limit` for character budgets. Same snap/overshoot rules.
 
-`tokens` wins when both are passed. Chain successive calls via the returned `nextOffset` to page through big files (e.g. Apollo Client's 700KB CHANGELOG) without pulling the whole thing at once. Every response includes `totalTokens` upfront, so you can budget the number of calls before you start reading.
+Tokens win when both are passed. Use `changelog_path` to target a specific file in monorepos (e.g. `packages/next/CHANGELOG.md`); omit it for the root. Chain successive calls via the returned `nextOffset` (passed as `changelog_offset`) to page through big files (e.g. Apollo Client's 700KB CHANGELOG) without pulling the whole thing at once. The default `get_catalog_entry` response lists every tracked file with its byte size so you know what's available before reading.
 
 ## Well-Known Files & Link Relations
 

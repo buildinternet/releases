@@ -1,9 +1,29 @@
 import { describe, it, expect, beforeAll, afterAll, beforeEach } from "bun:test";
-import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
-import { newOrgId, newProductId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
+import { eq } from "drizzle-orm";
+import {
+  organizations,
+  products,
+  sources,
+  releases,
+  knowledgePages,
+  sourceChangelogFiles,
+} from "@buildinternet/releases-core/schema";
+import {
+  newOrgId,
+  newProductId,
+  newSourceId,
+  newReleaseId,
+  newKnowledgePageId,
+  newSourceChangelogFileId,
+} from "@buildinternet/releases-core/id";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
 import { asD1 } from "../mcp-test-helpers.js";
-import { listCatalog, getCatalogEntry, search } from "../../workers/mcp/src/tools.js";
+import {
+  listCatalog,
+  getCatalogEntry,
+  getOrganization,
+  search,
+} from "../../workers/mcp/src/tools.js";
 
 function resultText(r: { content: Array<{ type: string; text?: string }> }): string {
   const first = r.content[0];
@@ -153,6 +173,200 @@ describe("get_catalog_entry", () => {
       await getCatalogEntry(asD1(fixture.db), { identifier: "nothing-matches" }),
     );
     expect(text).toContain('No catalog entry found matching "nothing-matches"');
+  });
+
+  it("lists tracked changelog files for a source without embedding content by default", async () => {
+    const [srcRow] = await fixture.db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.slug, "anthropic-releases"))
+      .limit(1);
+    await fixture.db.insert(sourceChangelogFiles).values([
+      {
+        id: newSourceChangelogFileId(),
+        sourceId: srcRow.id,
+        path: "CHANGELOG.md",
+        filename: "CHANGELOG.md",
+        url: "https://github.com/anthropic/example/blob/main/CHANGELOG.md",
+        rawUrl: "https://raw.githubusercontent.com/anthropic/example/main/CHANGELOG.md",
+        content: "# CHANGELOG\n\n## v1.0.0\n\n- UNIQUE_MARKER_ROOT body line\n",
+        contentHash: "hash-root",
+        bytes: 128,
+      },
+      {
+        id: newSourceChangelogFileId(),
+        sourceId: srcRow.id,
+        path: "packages/core/CHANGELOG.md",
+        filename: "CHANGELOG.md",
+        url: "https://github.com/anthropic/example/blob/main/packages/core/CHANGELOG.md",
+        rawUrl:
+          "https://raw.githubusercontent.com/anthropic/example/main/packages/core/CHANGELOG.md",
+        content: "# core CHANGELOG\n\n## v0.1.0\n\n- UNIQUE_MARKER_CORE body line\n",
+        contentHash: "hash-core",
+        bytes: 64,
+      },
+    ]);
+
+    const text = resultText(
+      await getCatalogEntry(asD1(fixture.db), { identifier: "anthropic-releases" }),
+    );
+    expect(text).toContain("CHANGELOG.md");
+    expect(text).toContain("packages/core/CHANGELOG.md");
+    // Sizes surface in the listing.
+    expect(text).toContain("128");
+    // Body content must NOT be embedded in the default response.
+    expect(text).not.toContain("UNIQUE_MARKER_ROOT");
+    expect(text).not.toContain("UNIQUE_MARKER_CORE");
+    // Advertise how to expand.
+    expect(text).toContain("include_changelog");
+  });
+
+  it("embeds the root changelog slice when include_changelog is true", async () => {
+    const [srcRow] = await fixture.db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.slug, "anthropic-releases"))
+      .limit(1);
+    await fixture.db.insert(sourceChangelogFiles).values({
+      id: newSourceChangelogFileId(),
+      sourceId: srcRow.id,
+      path: "CHANGELOG.md",
+      filename: "CHANGELOG.md",
+      url: "https://github.com/anthropic/example/blob/main/CHANGELOG.md",
+      rawUrl: "https://raw.githubusercontent.com/anthropic/example/main/CHANGELOG.md",
+      content: "# CHANGELOG\n\n## v1.0.0\n\n- UNIQUE_MARKER_ROOT body line\n",
+      contentHash: "hash-root",
+      bytes: 64,
+    });
+
+    const text = resultText(
+      await getCatalogEntry(asD1(fixture.db), {
+        identifier: "anthropic-releases",
+        include_changelog: true,
+      }),
+    );
+    expect(text).toContain("UNIQUE_MARKER_ROOT");
+  });
+
+  it("routes to a specific path when changelog_path is passed", async () => {
+    const [srcRow] = await fixture.db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.slug, "anthropic-releases"))
+      .limit(1);
+    await fixture.db.insert(sourceChangelogFiles).values([
+      {
+        id: newSourceChangelogFileId(),
+        sourceId: srcRow.id,
+        path: "CHANGELOG.md",
+        filename: "CHANGELOG.md",
+        url: "https://example.com/CHANGELOG.md",
+        rawUrl: "https://example.com/CHANGELOG.md",
+        content: "# root\n\n- UNIQUE_MARKER_ROOT\n",
+        contentHash: "h1",
+        bytes: 32,
+      },
+      {
+        id: newSourceChangelogFileId(),
+        sourceId: srcRow.id,
+        path: "packages/core/CHANGELOG.md",
+        filename: "CHANGELOG.md",
+        url: "https://example.com/packages/core/CHANGELOG.md",
+        rawUrl: "https://example.com/packages/core/CHANGELOG.md",
+        content: "# core\n\n- UNIQUE_MARKER_CORE\n",
+        contentHash: "h2",
+        bytes: 32,
+      },
+    ]);
+
+    const text = resultText(
+      await getCatalogEntry(asD1(fixture.db), {
+        identifier: "anthropic-releases",
+        changelog_path: "packages/core/CHANGELOG.md",
+      }),
+    );
+    // Passing a slicing param is sufficient to embed; no need to also pass include_changelog.
+    expect(text).toContain("UNIQUE_MARKER_CORE");
+    expect(text).not.toContain("UNIQUE_MARKER_ROOT");
+  });
+
+  it("does not show changelog sections for product-kind entries", async () => {
+    const text = resultText(await getCatalogEntry(asD1(fixture.db), { identifier: "nextjs" }));
+    expect(text).not.toContain("include_changelog");
+    expect(text).not.toContain("CHANGELOG.md");
+  });
+});
+
+describe("get_organization (overview consolidation)", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  const longOverview = [
+    "Vercel has shipped a wave of infrastructure updates across the last quarter.",
+    "",
+    "In particular, the team has focused on Next.js 15 async APIs, Turbopack stability",
+    "improvements, and a new observability surface called OTEL_MARKER_LATE that only",
+    "appears deep in the overview body. The briefing then continues with a long list",
+    "of smaller rollouts that would not fit in an inline preview.",
+  ].join("\n");
+
+  it("shows a preview of the overview by default and hints at the expand flag", async () => {
+    const [org] = await fixture.db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, "vercel"))
+      .limit(1);
+    await fixture.db.insert(knowledgePages).values({
+      id: newKnowledgePageId(),
+      scope: "org",
+      orgId: org.id,
+      content: longOverview,
+      releaseCount: 12,
+    });
+
+    const text = resultText(await getOrganization(asD1(fixture.db), { identifier: "vercel" }));
+    expect(text).toContain("**Overview**");
+    // Preview includes the opening sentence.
+    expect(text).toContain("Vercel has shipped");
+    // The late marker lives past the first paragraph and must be trimmed.
+    expect(text).not.toContain("OTEL_MARKER_LATE");
+    // Tell the caller how to expand.
+    expect(text).toContain("include_overview");
+  });
+
+  it("inlines the full overview when include_overview is true", async () => {
+    const [org] = await fixture.db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, "vercel"))
+      .limit(1);
+    await fixture.db.insert(knowledgePages).values({
+      id: newKnowledgePageId(),
+      scope: "org",
+      orgId: org.id,
+      content: longOverview,
+      releaseCount: 12,
+    });
+
+    const text = resultText(
+      await getOrganization(asD1(fixture.db), {
+        identifier: "vercel",
+        include_overview: true,
+      }),
+    );
+    expect(text).toContain("OTEL_MARKER_LATE");
+    // When fully inlined, the preview-expansion hint should not appear.
+    expect(text).not.toContain("Pass `include_overview`");
   });
 });
 

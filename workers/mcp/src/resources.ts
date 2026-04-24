@@ -1,13 +1,7 @@
 import { ResourceTemplate, type McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { hydrateMediaUrls } from "@releases/lib/media-url.js";
 import type { D1Db } from "./db.js";
-import {
-  getCatalogEntry,
-  getOrganization,
-  getProduct,
-  getSource,
-  type ToolResult,
-} from "./tools.js";
+import { getCatalogEntry, getOrganization, getProduct, type ToolResult } from "./tools.js";
 import {
   completeCatalogSlug,
   completeOrgSlug,
@@ -111,7 +105,7 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
     },
     async (uri, variables) => {
       const slug = String(variables.sourceSlug);
-      return toMarkdownContents(uri, await getSource(db, { identifier: slug }), mediaOrigin);
+      return toMarkdownContents(uri, await getCatalogEntry(db, { identifier: slug }), mediaOrigin);
     },
   );
 }

@@ -49,7 +49,7 @@ Search across all indexed releases to find specific features, breaking changes, 
 **Result shape:** release hits carry a `kind` discriminator:
 
 - `kind: "release"` — a normal release row, use as-is.
-- `kind: "changelog_chunk"` — a passage from a stored CHANGELOG.md file. The hit includes `sourceSlug`, `chunkOffset`, and `chunkLength`. Chain into `get_source_changelog({ slug: sourceSlug, offset: chunkOffset, limit: chunkLength * 3 })` to read the surrounding section before quoting it. Chunk hits often surface older or more granular notes than what's in the indexed release rows, so they're useful for "when did X first ship" questions.
+- `kind: "changelog_chunk"` — a passage from a stored CHANGELOG.md file. The hit includes `sourceSlug`, `chunkOffset`, and `chunkLength`. Chain into `get_catalog_entry({ identifier: sourceSlug, changelog_offset: chunkOffset, changelog_limit: chunkLength * 3 })` to read the surrounding section before quoting it. Chunk hits often surface older or more granular notes than what's in the indexed release rows, so they're useful for "when did X first ship" questions.
 
 For org/product/source discovery (e.g. "find observability vendors with edge offerings"), pass `type: ["orgs", "catalog"]` to `search` — the catalog path is vector-backed on the entity index and matches on description and category, not just slug substring.
 

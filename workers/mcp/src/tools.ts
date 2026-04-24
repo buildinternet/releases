@@ -23,6 +23,7 @@ import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/
 import {
   buildChangelogResponse,
   formatChangelogSliceLine,
+  hasRangeParams,
   resolveChangelogRangeParams,
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
@@ -605,10 +606,11 @@ export async function listOrganizations(
 
 export async function getOrganization(
   db: D1Db,
-  params: { identifier: string },
+  params: { identifier: string; include_overview?: boolean },
 ): Promise<ToolResult> {
   const org = await findOrg(db, params.identifier);
   if (!org) return text(`No organization found matching "${params.identifier}"`);
+  const includeOverview = params.include_overview === true;
 
   const [accounts, tagRows, orgSources, orgProducts, aliases, overviewRow] = await Promise.all([
     db
@@ -673,10 +675,12 @@ export async function getOrganization(
         `⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`,
       );
     }
-    lines.push(overviewPreview(overview.content));
-    lines.push(
-      `_Use \`get_organization_overview\` with identifier "${org.slug}" to read the full overview._`,
-    );
+    if (includeOverview) {
+      lines.push(overview.content);
+    } else {
+      lines.push(overviewPreview(overview.content));
+      lines.push("_Pass `include_overview: true` to read the full overview._");
+    }
   }
 
   lines.push("");
@@ -723,119 +727,6 @@ export async function getOrganization(
   }
 
   return text(lines.join("\n"));
-}
-
-// ── get_organization_overview ────────────────────────────────────────
-
-export async function getOrganizationOverview(
-  db: D1Db,
-  params: { identifier: string },
-): Promise<ToolResult> {
-  const org = await findOrg(db, params.identifier);
-  if (!org) return text(`No organization found matching "${params.identifier}"`);
-
-  const [overview] = await db
-    .select({
-      content: knowledgePages.content,
-      generatedAt: knowledgePages.generatedAt,
-      updatedAt: knowledgePages.updatedAt,
-      releaseCount: knowledgePages.releaseCount,
-      lastContributingReleaseAt: knowledgePages.lastContributingReleaseAt,
-    })
-    .from(knowledgePages)
-    .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
-    .limit(1);
-
-  if (!overview?.content) {
-    return text(`No overview available for ${org.name} (${org.slug}).`);
-  }
-
-  const stale = isOverviewStale(overview.generatedAt);
-  const ageLabel = timeAgo(overview.generatedAt) ?? "unknown";
-
-  const header: string[] = [
-    `**${org.name} — overview**`,
-    `Generated ${ageLabel} · ${overview.releaseCount} releases`,
-  ];
-  if (stale) {
-    header.push(
-      `⚠ Overview is older than ${OVERVIEW_STALE_DAYS} days — may not reflect recent releases.`,
-    );
-  }
-  header.push("");
-  header.push(overview.content);
-
-  return text(header.join("\n"));
-}
-
-// ── get_source_changelog ─────────────────────────────────────────────
-
-export async function getSourceChangelog(
-  db: D1Db,
-  params: { source: string; path?: string; offset?: number; limit?: number; tokens?: number },
-): Promise<ToolResult> {
-  const source = await resolveSource(db, params.source);
-  if (!source) return text(`No source found matching "${params.source}"`);
-
-  const allRows = await db
-    .select()
-    .from(sourceChangelogFiles)
-    .where(eq(sourceChangelogFiles.sourceId, source.id))
-    .orderBy(sourceChangelogFiles.path);
-  if (allRows.length === 0) {
-    return text(
-      `No CHANGELOG file is tracked for "${source.slug}". Only GitHub sources expose this.`,
-    );
-  }
-
-  const selected = selectChangelogFile(allRows, params.path ?? null);
-  if (!selected) {
-    const available = allRows.map((r) => `- ${r.path}`).join("\n");
-    return text(
-      `No CHANGELOG file found at path "${params.path}" for "${source.slug}". Available files:\n${available}`,
-    );
-  }
-
-  const files = allRows.map((r) => ({
-    path: r.path,
-    filename: r.filename,
-    url: r.url,
-    bytes: r.bytes,
-    fetchedAt: r.fetchedAt,
-  }));
-
-  const response = buildChangelogResponse(
-    selected,
-    resolveChangelogRangeParams({
-      offset: params.offset,
-      limit: params.limit,
-      tokens: params.tokens,
-    }),
-    files,
-  );
-
-  const header: string[] = [
-    `**${source.name}** — ${response.path}`,
-    `Source: ${response.url}`,
-    formatChangelogSliceLine(response),
-  ];
-  if (response.truncated) {
-    header.push(
-      `⚠ TRUNCATED: upstream file exceeds 1MB cap, content cut at byte ${response.truncatedAt}. Tail is missing.`,
-    );
-  }
-  if (files.length > 1) {
-    header.push("");
-    header.push(`Files tracked for this source (${files.length}):`);
-    for (const f of files) {
-      header.push(`  ${f.path === response.path ? "*" : " "} ${f.path} (${f.bytes} bytes)`);
-    }
-    header.push("Pass `path` to read a different file.");
-  }
-  header.push("");
-  header.push(response.content);
-
-  return text(header.join("\n"));
 }
 
 // ── summarize_changes ────────────────────────────────────────────────
@@ -1018,19 +909,28 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
   return text(lines.join("\n"));
 }
 
-// ── get_source ───────────────────────────────────────────────────────
+// ── renderSourceDetail ───────────────────────────────────────────────
 
-export async function getSource(db: D1Db, params: { identifier: string }): Promise<ToolResult> {
-  const src = await resolveSource(db, params.identifier);
-  if (!src) return text(`No source found matching "${params.identifier}"`);
-  return renderSourceDetail(db, src);
+/**
+ * Options for inlining a CHANGELOG slice in a source-detail response.
+ * Any field set flips the renderer from "list files" mode to "embed
+ * a slice". `include` is the zero-param embed trigger: it only adds
+ * information when the caller passes no path/offset/limit/tokens.
+ */
+interface ChangelogRenderOptions {
+  include?: boolean;
+  path?: string;
+  offset?: number;
+  limit?: number;
+  tokens?: number;
 }
 
 async function renderSourceDetail(
   db: D1Db,
   src: Awaited<ReturnType<typeof resolveSource>> & object,
+  changelog?: ChangelogRenderOptions,
 ): Promise<ToolResult> {
-  const [orgRows, productRows, relCountRows, changelogRows] = await Promise.all([
+  const [orgRows, productRows, relCountRows, changelogMeta] = await Promise.all([
     src.orgId
       ? db
           .select({ slug: organizations.slug, name: organizations.name })
@@ -1054,17 +954,27 @@ async function renderSourceDetail(
           or(isNull(releases.suppressed), eq(releases.suppressed, false)),
         ),
       ),
+    // Metadata-only. `content` can be up to 1MB per row on monorepos with
+    // many package CHANGELOGs — only pulled when the caller embeds a slice.
     db
-      .select({ id: sourceChangelogFiles.id })
+      .select({
+        id: sourceChangelogFiles.id,
+        path: sourceChangelogFiles.path,
+        filename: sourceChangelogFiles.filename,
+        url: sourceChangelogFiles.url,
+        rawUrl: sourceChangelogFiles.rawUrl,
+        bytes: sourceChangelogFiles.bytes,
+        tokens: sourceChangelogFiles.tokens,
+        fetchedAt: sourceChangelogFiles.fetchedAt,
+      })
       .from(sourceChangelogFiles)
       .where(eq(sourceChangelogFiles.sourceId, src.id))
-      .limit(1),
+      .orderBy(sourceChangelogFiles.path),
   ]);
 
   const org = orgRows[0] ?? null;
   const product = productRows[0] ?? null;
   const releaseCount = Number(relCountRows[0]?.n ?? 0);
-  const hasChangelog = changelogRows.length > 0;
 
   const lines: string[] = [];
   lines.push(`**Source: ${src.name}**`);
@@ -1074,7 +984,73 @@ async function renderSourceDetail(
   lines.push(`Product: ${product ? `${product.name} (${product.slug})` : "none"}`);
   lines.push(`Release count: ${releaseCount}`);
   lines.push(`Last fetched: ${src.lastFetchedAt ?? "Never"}`);
-  lines.push(`Changelog file stored: ${hasChangelog ? "yes" : "no"}`);
+
+  if (changelogMeta.length === 0) {
+    lines.push("Changelog files tracked: none");
+    return text(lines.join("\n"));
+  }
+
+  lines.push("");
+  lines.push(`Changelog files tracked (${changelogMeta.length}):`);
+  for (const f of changelogMeta) {
+    lines.push(`  - ${f.path} (${f.bytes} bytes)`);
+  }
+
+  const rangeParams = resolveChangelogRangeParams({
+    offset: changelog?.offset,
+    limit: changelog?.limit,
+    tokens: changelog?.tokens,
+  });
+  const wantEmbed =
+    changelog?.include === true || changelog?.path !== undefined || hasRangeParams(rangeParams);
+
+  if (!wantEmbed) {
+    lines.push(
+      "Pass `include_changelog: true` to inline the root CHANGELOG. Set `changelog_path` to target a specific file, or `changelog_offset` / `changelog_limit` / `changelog_tokens` to slice.",
+    );
+    return text(lines.join("\n"));
+  }
+
+  const selected = selectChangelogFile(changelogMeta, changelog?.path ?? null);
+  if (!selected) {
+    lines.push("");
+    lines.push(
+      `No CHANGELOG file found at path "${changelog?.path}". Use one of the paths listed above.`,
+    );
+    return text(lines.join("\n"));
+  }
+
+  const [contentRow] = await db
+    .select({ content: sourceChangelogFiles.content })
+    .from(sourceChangelogFiles)
+    .where(eq(sourceChangelogFiles.id, selected.id))
+    .limit(1);
+
+  const files = changelogMeta.map((r) => ({
+    path: r.path,
+    filename: r.filename,
+    url: r.url,
+    bytes: r.bytes,
+    fetchedAt: r.fetchedAt,
+  }));
+
+  const response = buildChangelogResponse(
+    { ...selected, content: contentRow?.content ?? "" },
+    rangeParams,
+    files,
+  );
+
+  lines.push("");
+  lines.push(`**${response.path}**`);
+  lines.push(`Source: ${response.url}`);
+  lines.push(formatChangelogSliceLine(response));
+  if (response.truncated) {
+    lines.push(
+      `⚠ TRUNCATED: upstream file exceeds 1MB cap, content cut at byte ${response.truncatedAt}. Tail is missing.`,
+    );
+  }
+  lines.push("");
+  lines.push(response.content);
 
   return text(lines.join("\n"));
 }
@@ -1299,8 +1275,22 @@ export async function listCatalog(
 
 export async function getCatalogEntry(
   db: D1Db,
-  params: { identifier: string },
+  params: {
+    identifier: string;
+    include_changelog?: boolean;
+    changelog_path?: string;
+    changelog_offset?: number;
+    changelog_limit?: number;
+    changelog_tokens?: number;
+  },
 ): Promise<ToolResult> {
+  const changelog: ChangelogRenderOptions = {
+    include: params.include_changelog,
+    path: params.changelog_path,
+    offset: params.changelog_offset,
+    limit: params.changelog_limit,
+    tokens: params.changelog_tokens,
+  };
   const entityType = getEntityType(params.identifier);
 
   if (entityType === "product") {
@@ -1312,7 +1302,7 @@ export async function getCatalogEntry(
   if (entityType === "source") {
     const src = await resolveSource(db, params.identifier);
     return src
-      ? renderSourceDetail(db, src)
+      ? renderSourceDetail(db, src, changelog)
       : text(`No source found matching "${params.identifier}"`);
   }
 
@@ -1323,7 +1313,7 @@ export async function getCatalogEntry(
     resolveSource(db, params.identifier),
   ]);
   if (prod) return renderProductDetail(db, prod);
-  if (src) return renderSourceDetail(db, src);
+  if (src) return renderSourceDetail(db, src, changelog);
 
   return text(`No catalog entry found matching "${params.identifier}"`);
 }
