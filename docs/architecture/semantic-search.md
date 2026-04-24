@@ -6,9 +6,9 @@ Hybrid FTS5 + Cloudflare Vectorize search across three indexes, fused with Recip
 
 All 512-dim cosine, bound on both the API and MCP workers:
 
-- `releases-v1` — one vector per release (title + content), used by `search_releases`
-- `entities-v1` — one vector per org/product/source (name + description + category + domain), used by `search_registry`
-- `changelog-chunks-v1` — heading-aware ~500-token chunks of stored CHANGELOG.md files, interleaved with release hits in `search_releases` results
+- `releases-v1` — one vector per release (title + content), used by the `search` tool's release path
+- `entities-v1` — one vector per org/product/source (name + description + category + domain), used by the `search` tool's catalog path
+- `changelog-chunks-v1` — heading-aware ~500-token chunks of stored CHANGELOG.md files, interleaved with release hits in `search` results
 
 ## Provisioning
 
@@ -24,7 +24,7 @@ Ingest is automatic on writes and never blocks them. The release batch insert, o
 
 ## Search modes
 
-`search_releases` (MCP + `GET /v1/search`) accepts `mode: "lexical"|"semantic"|"hybrid"` and defaults to `hybrid`. Every hit carries a `kind: "release"|"changelog_chunk"` discriminator — chunk hits include `sourceSlug`, `chunkOffset`, and `chunkLength` so agents can chain into `get_source_changelog({ slug, offset, limit })` to read surrounding context. Pass `mode: "lexical"` for back-compat with the old shape. The hybrid path degrades to lexical with `degraded: true` + `degradedReason` set if Vectorize bindings or the embedding API are unavailable. New tool: `search_registry` for vector-backed org/product/source lookup.
+The unified MCP `search` tool (and `GET /v1/search`) accepts `mode: "lexical"|"semantic"|"hybrid"` for release retrieval and defaults to `hybrid`. Release hits carry a `kind: "release"|"changelog_chunk"` discriminator — chunk hits include `sourceSlug`, `chunkOffset`, and `chunkLength` so agents can chain into `get_source_changelog({ slug, offset, limit })` to read surrounding context. The hybrid path degrades to lexical with `degraded: true` + `degradedReason` set if Vectorize bindings or the embedding API are unavailable. Pass `type: ["orgs", "catalog"]` to skip the release-vector path when you only need registry lookups; pass `type: ["releases"]` to skip the entity-vector path. Deprecated shims `search_releases` and `search_registry` still exist for one release cycle.
 
 ## Query embedding cache
 

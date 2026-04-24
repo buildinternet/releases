@@ -19,7 +19,7 @@ async function SearchContent({ q }: { q?: string }) {
     try {
       results = await api.search(q);
     } catch {
-      results = { query: q, orgs: [], products: [], sources: [], releases: [] };
+      results = { query: q, orgs: [], catalog: [], products: [], sources: [], releases: [] };
     }
   }
 

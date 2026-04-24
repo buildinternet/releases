@@ -45,6 +45,7 @@ describe("MCP tool annotations", () => {
   it("exposes the public read-only tool surface", () => {
     const names = tools.map((t) => t.name).toSorted();
     expect(names).toEqual([
+      "get_catalog_entry",
       "get_latest_releases",
       "get_organization",
       "get_organization_overview",
@@ -52,9 +53,11 @@ describe("MCP tool annotations", () => {
       "get_release",
       "get_source",
       "get_source_changelog",
+      "list_catalog",
       "list_organizations",
       "list_products",
       "list_sources",
+      "search",
       "search_registry",
       "search_releases",
     ]);

@@ -54,21 +54,31 @@ const feedReleases: OrgReleaseItem[] = [
   },
 ];
 
+const searchCatalog: UnifiedSearchResponse["catalog"] = [
+  {
+    slug: "react",
+    name: "React",
+    orgSlug: "meta",
+    orgName: "Meta",
+    category: "frontend",
+    kind: "product",
+  },
+  {
+    slug: "react-native",
+    name: "React Native",
+    orgSlug: "meta",
+    orgName: "Meta",
+    category: null,
+    kind: "source",
+    sourceSlug: "react-native",
+  },
+];
+
 const searchResults: UnifiedSearchResponse = {
   query: "react",
   orgs: [{ slug: "meta", name: "Meta", domain: "meta.com", avatarUrl: null, category: "ai" }],
-  products: [
-    { slug: "react", name: "React", orgSlug: "meta", orgName: "Meta", category: "frontend" },
-    {
-      slug: "react-native",
-      name: "React Native",
-      orgSlug: "meta",
-      orgName: "Meta",
-      category: null,
-      kind: "source",
-      sourceSlug: "react-native",
-    },
-  ],
+  catalog: searchCatalog,
+  products: searchCatalog,
   sources: [],
   releases: [
     {
@@ -274,6 +284,7 @@ describe("searchToMarkdown", () => {
     const empty: UnifiedSearchResponse = {
       query: "nothing",
       orgs: [],
+      catalog: [],
       products: [],
       sources: [],
       releases: [],
@@ -290,6 +301,7 @@ describe("searchToMarkdown", () => {
     const partial: UnifiedSearchResponse = {
       query: "test",
       orgs: [],
+      catalog: [],
       products: [],
       sources: [],
       releases: [

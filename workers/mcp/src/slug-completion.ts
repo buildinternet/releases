@@ -52,3 +52,25 @@ export const completeProductSlug = (db: D1Db, value: string) =>
 
 export const completeSourceSlug = (db: D1Db, value: string) =>
   completeBySlugOrName(db, sources, sources.slug, sources.name, value);
+
+/**
+ * Union product + source slug completion for the unified catalog resource.
+ * Fires both lookups in parallel; slug collisions across the two spaces are
+ * de-duped (products win). Capped at COMPLETE_LIMIT so the MCP client doesn't
+ * receive more than expected.
+ */
+export async function completeCatalogSlug(db: D1Db, value: string): Promise<string[]> {
+  const [productSlugs, sourceSlugs] = await Promise.all([
+    completeProductSlug(db, value),
+    completeSourceSlug(db, value),
+  ]);
+  const seen = new Set<string>();
+  const merged: string[] = [];
+  for (const slug of [...productSlugs, ...sourceSlugs]) {
+    if (seen.has(slug)) continue;
+    seen.add(slug);
+    merged.push(slug);
+    if (merged.length >= COMPLETE_LIMIT) break;
+  }
+  return merged;
+}

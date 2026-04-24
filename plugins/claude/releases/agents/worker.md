@@ -12,9 +12,9 @@ You are a worker agent for the Releases.sh registry. Your job is to execute fetc
 
 Connected via the Releases MCP server:
 
-- **search_releases** — Hybrid lexical + semantic search across releases and CHANGELOG chunks (default `mode: "hybrid"`); each hit carries a `kind: "release"|"changelog_chunk"` discriminator
+- **search** — Unified search across orgs, catalog (products + standalone sources), and release content. Pass `type: ["releases"]` to skip entity lookups; release hits carry a `kind: "release"|"changelog_chunk"` discriminator.
 - **get_latest_releases** — Recent releases for a product or organization
-- **list_sources** — List indexed changelog sources
+- **list_catalog** — List catalog entries (products + standalone sources) with `kind` discriminator
 - **list_organizations** — Search/list organizations
 - **get_organization** — Detailed view of a single org
 

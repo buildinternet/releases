@@ -288,17 +288,26 @@ export interface SearchOrgHit {
   category: string | null;
 }
 
-export interface SearchProductHit {
+/**
+ * Unified catalog entry — either a product row or a standalone source
+ * presented as product-shaped. `kind` routes clicks to the right URL but
+ * the two forms are otherwise interchangeable for display. `kind` (not
+ * `type`) because source rows already carry `type: github|scrape|feed|agent`
+ * on the wire.
+ */
+export interface SearchCatalogHit {
   slug: string;
   name: string;
   orgSlug: string | null;
   orgName: string | null;
   category: string | null;
-  /** Distinguishes standalone sources folded into the products list */
-  kind?: "product" | "source";
-  /** For source-kind entries: the source slug (used for URL routing) */
+  kind: "product" | "source";
   sourceSlug?: string;
+  sourceType?: string;
 }
+
+/** @deprecated Use SearchCatalogHit. */
+export type SearchProductHit = SearchCatalogHit;
 
 export interface SearchSourceHit {
   slug: string;
@@ -309,32 +318,35 @@ export interface SearchSourceHit {
   productSlug: string | null;
 }
 
-/** Extended source hit with product metadata for folding into products list */
 export interface RawSourceHit extends SearchSourceHit {
   productName?: string;
   productCategory?: string;
 }
 
-/** Fold raw source hits into the products list, deduplicating against existing products */
-export function foldSourcesIntoProducts(
-  existingProducts: SearchProductHit[],
+/**
+ * Fold source hits into the catalog list. Sources under a matched product
+ * are dropped (product wins); orphan sources become `kind: "source"`.
+ */
+export function foldSourcesIntoCatalog(
+  existingProducts: SearchCatalogHit[],
   rawSources: RawSourceHit[],
-): SearchProductHit[] {
-  const products = [...existingProducts];
-  const seen = new Set(products.map((p) => p.slug));
+): SearchCatalogHit[] {
+  const result: SearchCatalogHit[] = existingProducts.map((p) => ({ ...p, kind: "product" }));
+  const seen = new Set(result.map((p) => p.slug));
   for (const s of rawSources) {
     if (s.productSlug) {
       if (seen.has(s.productSlug)) continue;
-      products.push({
+      result.push({
         slug: s.productSlug,
         name: s.productName ?? s.name,
         orgSlug: s.orgSlug,
         orgName: s.orgName,
         category: s.productCategory ?? null,
+        kind: "product",
       });
       seen.add(s.productSlug);
     } else {
-      products.push({
+      result.push({
         slug: s.slug,
         name: s.name,
         orgSlug: s.orgSlug,
@@ -342,11 +354,15 @@ export function foldSourcesIntoProducts(
         category: null,
         kind: "source",
         sourceSlug: s.slug,
+        sourceType: s.type,
       });
     }
   }
-  return products;
+  return result;
 }
+
+/** @deprecated Use foldSourcesIntoCatalog. */
+export const foldSourcesIntoProducts = foldSourcesIntoCatalog;
 
 export interface SearchReleaseHit {
   id: string;
@@ -399,7 +415,10 @@ export interface SearchChunkHit {
 export interface UnifiedSearchResponse {
   query: string;
   orgs: SearchOrgHit[];
-  products: SearchProductHit[];
+  /** Products and standalone sources folded into a single list. */
+  catalog: SearchCatalogHit[];
+  /** @deprecated Use `catalog`. Kept as an alias populated with the same array. */
+  products: SearchCatalogHit[];
   sources: SearchSourceHit[];
   releases: SearchReleaseHit[];
   /** Present on hybrid/semantic responses; omitted on pure lexical. */

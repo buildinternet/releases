@@ -52,10 +52,10 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
 
     mc.registerTool(
       {
-        name: "search_releases",
-        title: "Search releases",
+        name: "search",
+        title: "Search",
         description:
-          "Search product releases, organizations, products, and sources indexed by releases.sh. Use this to find recent changes, features, or breaking changes across tracked companies.",
+          "Unified search across organizations, the catalog (products + standalone sources), and release content on releases.sh. Returns a single envelope with `orgs`, `catalog`, `releases`, and `chunks` — use `catalog` entries' `kind: 'product' | 'source'` discriminator to branch on entry shape.",
         inputSchema: {
           type: "object",
           properties: {
@@ -116,14 +116,14 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
 
     mc.registerTool(
       {
-        name: "get_source",
-        title: "Get changelog source",
+        name: "get_catalog_entry",
+        title: "Get catalog entry",
         description:
-          "Fetch a changelog source by slug, including its most recent releases. Use after `search_releases` or `list_organizations` to drill into a specific product.",
+          "Fetch a catalog entry by slug — accepts either a product slug or a source slug. Returns recent releases alongside entry detail. Use after `search` or `list_organizations` to drill into a specific product or source.",
         inputSchema: {
           type: "object",
           properties: {
-            slug: { type: "string", description: "Source slug." },
+            slug: { type: "string", description: "Catalog entry slug (product or source)." },
             page: { type: "integer", minimum: 1, default: 1 },
             pageSize: { type: "integer", minimum: 1, maximum: 100, default: 20 },
           },
@@ -135,6 +135,9 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
           const page = Number(input.page ?? 1);
           const pageSize = Number(input.pageSize ?? 20);
           if (!slug) throw new Error("`slug` is required");
+          // The web API still routes on /v1/sources/:slug for now — catalog
+          // entries resolve as sources in the HTTP API until the catalog
+          // unification reaches the API surface too.
           return apiFetch(
             `/v1/sources/${encodeURIComponent(slug)}?page=${page}&pageSize=${pageSize}`,
           );

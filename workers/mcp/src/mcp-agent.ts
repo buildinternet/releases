@@ -7,6 +7,7 @@ import { hydrateMediaUrls } from "@releases/lib/media-url.js";
 import {
   searchReleases,
   searchRegistry,
+  search,
   getLatestReleases,
   listSources,
   listOrganizations,
@@ -17,6 +18,8 @@ import {
   getSource,
   listProducts,
   getProduct,
+  listCatalog,
+  getCatalogEntry,
   summarizeChanges,
   compareProducts,
 } from "./tools.js";
@@ -122,11 +125,58 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   }
 
   server.registerTool(
+    "search",
+    {
+      ...titled("Search", READ_ONLY_HINTS),
+      description: [
+        "Unified search across the registry and release content. Returns up to three sections — organizations, catalog entries (products + standalone sources folded into one list), and releases with CHANGELOG chunks interleaved by relevance.",
+        "",
+        "Use `type` to narrow the surfaces you want and skip the expensive paths. For example, pass `type: ['catalog']` to look up a known entity by name (fast, registry-only); pass `type: ['releases']` when you only care about release content and want to avoid entity lookups. Omit `type` to search all three.",
+        "",
+        "Use `entity` (product slug / prod_ id OR source slug / src_ id) to scope release results to one catalog entry. Product identifiers expand to every source under the product. Use `organization` to scope to a whole org. Release retrieval defaults to hybrid (FTS5 + semantic vectors fused via RRF); it silently degrades to lexical when vector infra is unavailable and flags the result.",
+      ].join("\n"),
+      inputSchema: {
+        query: z.string().describe("Search query"),
+        type: z
+          .array(z.enum(["orgs", "catalog", "releases"]))
+          .optional()
+          .describe(
+            "Which sections to return. Omit to return all three. Use to skip expensive paths — e.g. ['catalog'] for registry-only lookups, ['releases'] for pure release search.",
+          ),
+        organization: z
+          .string()
+          .optional()
+          .describe("Scope release results to sources belonging to this organization"),
+        entity: z
+          .string()
+          .optional()
+          .describe(
+            "Scope release results to one catalog entry. Accepts a product slug / prod_ id (expands to every source under the product) or a source slug / src_ id.",
+          ),
+        limit: z.number().optional().describe("Max results per section (default 20)"),
+        mode: z
+          .enum(["lexical", "semantic", "hybrid"])
+          .optional()
+          .describe(
+            "Release-retrieval strategy. 'hybrid' (default) fuses FTS + vector results. 'lexical' is legacy FTS only. 'semantic' is vectors only. Falls back to lexical if vector infra is unavailable.",
+          ),
+        include_coverage: z
+          .boolean()
+          .optional()
+          .describe(
+            "Include releases grouped as coverage of another (e.g. marketing posts that re-announce a platform release). Defaults to false so each underlying launch appears once.",
+          ),
+      },
+    },
+    withMedia(async (params) => search(db, params, env, ctx)),
+  );
+
+  server.registerTool(
     "search_releases",
     {
-      ...titled("Search releases", READ_ONLY_HINTS),
+      ...titled("Search releases (deprecated)", READ_ONLY_HINTS),
       description:
-        "Search indexed release notes. Defaults to hybrid retrieval (FTS5 + semantic vectors fused via RRF). Results carry a `kind` discriminator so agents can branch on `release` vs `changelog_chunk` hits. When Vectorize or the embedding provider is unavailable, the tool silently degrades to lexical FTS and flags the result.",
+        "Deprecated — use `search` with `type: ['releases']` instead. Search indexed release notes with hybrid retrieval (FTS5 + semantic vectors fused via RRF). Results carry a `kind` discriminator so agents can branch on `release` vs `changelog_chunk` hits.",
       inputSchema: {
         query: z.string().describe("Search query"),
         product: z.string().optional().describe("Filter to a specific product slug"),
@@ -161,9 +211,9 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "search_registry",
     {
-      ...titled("Search registry", READ_ONLY_HINTS),
+      ...titled("Search registry (deprecated)", READ_ONLY_HINTS),
       description:
-        "Semantic search across the registry — returns orgs, products, or sources that match the query by meaning, not just keyword. Useful when you know what kind of thing you're looking for ('observability vendor with open-source agent') but not its exact name. Falls back to LIKE-based lexical search when Vectorize is unavailable.",
+        "Deprecated — use `search` with `type: ['orgs', 'catalog']` instead. Semantic search across the registry returning orgs, products, or sources that match the query by meaning, not just keyword. Falls back to LIKE-based lexical search when Vectorize is unavailable.",
       inputSchema: {
         query: z.string().describe("Natural-language search query"),
         kind: z
@@ -206,10 +256,42 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   );
 
   server.registerTool(
+    "list_catalog",
+    {
+      ...titled("List catalog", READ_ONLY_HINTS),
+      description: [
+        "List catalog entries — products and standalone sources combined into one list with a `kind: 'product' | 'source'` discriminator per row. This replaces the need to call `list_products` and `list_sources` separately.",
+        "",
+        "Orgs that group multiple sources under a product (e.g. Vercel → Next.js, Turborepo) surface those products; orgs with a single source that isn't part of a product surface it directly as a `kind: 'source'` entry. Either shape is a reasonable thing to pass to `search(entity: ...)`.",
+      ].join("\n"),
+      inputSchema: {
+        organization: z
+          .string()
+          .optional()
+          .describe("Organization slug, domain, name, or org_ id to scope to"),
+      },
+    },
+    async (params) => listCatalog(db, params),
+  );
+
+  server.registerTool(
+    "get_catalog_entry",
+    {
+      ...titled("Get catalog entry", READ_ONLY_HINTS),
+      description:
+        "Detail for a single catalog entry — accepts either a product (slug or prod_ id) or a source (slug or src_ id). Returns the union of product / source detail fields depending on the entry kind. Use after `list_catalog` or `search` when the user wants to go deep on one entry.",
+      inputSchema: {
+        identifier: z.string().describe("Catalog entry identifier: slug, prod_ id, or src_ id"),
+      },
+    },
+    async (params) => getCatalogEntry(db, params),
+  );
+
+  server.registerTool(
     "list_sources",
     {
-      ...titled("List sources", READ_ONLY_HINTS),
-      description: "List all indexed changelog sources",
+      ...titled("List sources (deprecated)", READ_ONLY_HINTS),
+      description: "Deprecated — use `list_catalog` instead. List all indexed changelog sources.",
       inputSchema: {
         organization: z
           .string()
@@ -265,9 +347,9 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_source",
     {
-      ...titled("Get source", READ_ONLY_HINTS),
+      ...titled("Get source (deprecated)", READ_ONLY_HINTS),
       description:
-        "Detail for a single indexed source: organization, optional product linkage, release count (excluding suppressed), last-fetched timestamp, and whether a tracked CHANGELOG file is available for get_source_changelog. Use this after list_sources or search_releases when the user wants to understand one source in depth (e.g. 'tell me about the apollo-client source').",
+        "Deprecated — use `get_catalog_entry` instead. Detail for a single indexed source: organization, optional product linkage, release count (excluding suppressed), last-fetched timestamp, and whether a tracked CHANGELOG file is available for get_source_changelog.",
       inputSchema: {
         identifier: z.string().describe("Source slug (e.g. 'apollo-client') or src_ id"),
       },
@@ -328,9 +410,9 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "list_products",
     {
-      ...titled("List products", READ_ONLY_HINTS),
+      ...titled("List products (deprecated)", READ_ONLY_HINTS),
       description:
-        "List products — the optional grouping layer between organizations and sources. Multi-product orgs (e.g. Vercel → Next.js, Turborepo) expose their lineup here. Pass an organization filter to scope to one org; omit it to see every indexed product.",
+        "Deprecated — use `list_catalog` instead. List products — the optional grouping layer between organizations and sources.",
       inputSchema: {
         organization: z
           .string()
@@ -344,9 +426,9 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   server.registerTool(
     "get_product",
     {
-      ...titled("Get product", READ_ONLY_HINTS),
+      ...titled("Get product (deprecated)", READ_ONLY_HINTS),
       description:
-        "Detail for a single product including its organization, category, tags, and the sources grouped under it. Use when the user asks about a specific product (e.g. 'what sources does Next.js have?' on Vercel) rather than the whole organization.",
+        "Deprecated — use `get_catalog_entry` instead. Detail for a single product including its organization, category, tags, and the sources grouped under it.",
       inputSchema: {
         identifier: z.string().describe("Product slug (e.g. 'nextjs') or prod_ id"),
       },
