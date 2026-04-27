@@ -7,6 +7,7 @@ import {
 import { deliver } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
+import { sendWebhookAlert, type EmailEnv } from "./email.js";
 
 export const DLQ_QUEUE = "webhook-dlq";
 
@@ -17,6 +18,12 @@ export interface Env {
   PER_SUB_RATE_LIMITER: RateLimit;
   DELIVERY_TIMEOUT_MS: string;
   AUTO_DISABLE_THRESHOLD: string;
+  // Email alert bindings (see workers/webhooks/src/email.ts).
+  // Absent → alert emails silently no-op.
+  SEND_EMAIL?: { send(message: unknown): Promise<void> };
+  EMAIL_NOTIFY_ENABLED?: string;
+  EMAIL_NOTIFY_TO?: string;
+  EMAIL_FROM?: string;
 }
 
 /** Build a synthetic AE attempt for branches with no live HTTP result (skipped/dlq/auto_disabled). */
@@ -39,8 +46,21 @@ function syntheticAttempt(
 }
 
 export default {
-  async queue(batch: MessageBatch<DeliveryMessage>, env: Env): Promise<void> {
+  async queue(
+    batch: MessageBatch<DeliveryMessage>,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
+    const alertEnv: EmailEnv = {
+      SEND_EMAIL: env.SEND_EMAIL,
+      EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
+      EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
+      EMAIL_FROM: env.EMAIL_FROM,
+    };
+
     if (batch.queue === DLQ_QUEUE) {
+      // Aggregate per subscription for a compact summary email.
+      const bySubId = new Map<string, { count: number; lastError: string | null }>();
       for (const msg of batch.messages) {
         console.warn(
           `[webhook-dlq] sub=${msg.body.subscriptionId} release=${msg.body.event.release.id} attempts=${msg.attempts}`,
@@ -50,7 +70,34 @@ export default {
           syntheticAttempt(msg.body, msg.attempts, "dlq"),
         );
         msg.ack();
+
+        const entry = bySubId.get(msg.body.subscriptionId) ?? { count: 0, lastError: null };
+        entry.count += 1;
+        // Delivery messages don't carry the last error at DLQ time — use a placeholder.
+        entry.lastError = "max retries exceeded";
+        bySubId.set(msg.body.subscriptionId, entry);
       }
+
+      // Send one alert per DLQ batch — DLQ batches are infrequent; no dedup needed.
+      if (bySubId.size > 0) {
+        const totalMsgs = [...bySubId.values()].reduce((s, e) => s + e.count, 0);
+        const lines = [`${totalMsgs} message(s) reached the DLQ in this batch.`, ""];
+        for (const [subId, info] of bySubId) {
+          lines.push(
+            `  sub=${subId}  messages=${info.count}  lastError=${info.lastError ?? "unknown"}`,
+          );
+        }
+        // Background — let the runtime keep the worker alive until the email
+        // settles, but never block the queue handler.
+        ctx.waitUntil(
+          sendWebhookAlert(
+            alertEnv,
+            `[alert] webhook DLQ: ${totalMsgs} messages`,
+            lines.join("\n"),
+          ).catch(() => undefined),
+        );
+      }
+
       return;
     }
 
@@ -114,9 +161,9 @@ export default {
         });
         // oxlint-disable-next-line no-await-in-loop -- webhook delivery; re-fetch subscription to check auto-disable threshold
         const fresh = await getWebhookSubscriptionById(db, body.subscriptionId);
-        if (fresh && fresh.consecutiveFailures >= threshold) {
+        if (fresh && fresh.enabled && fresh.consecutiveFailures >= threshold) {
           // oxlint-disable-next-line no-await-in-loop -- webhook delivery; auto-disable subscription after threshold failures
-          await setWebhookSubscriptionEnabled(
+          const flipped = await setWebhookSubscriptionEnabled(
             db,
             body.subscriptionId,
             false,
@@ -126,6 +173,25 @@ export default {
             env.WEBHOOK_DELIVERIES_AE,
             syntheticAttempt(body, msg.attempts, "auto_disabled"),
           );
+          // Alert #2: notify once per auto-disable event. Gated on the actual
+          // enabled→disabled transition so concurrent batch messages past the
+          // threshold don't each fire an email.
+          if (flipped) {
+            const alertBody = [
+              `Subscription ID: ${fresh.id}`,
+              `URL: ${fresh.url}`,
+              `Org ID: ${fresh.orgId ?? "n/a"}`,
+              `Consecutive failures: ${fresh.consecutiveFailures}`,
+              `Last error: ${result.errorMessage ?? "unknown"}`,
+            ].join("\n");
+            ctx.waitUntil(
+              sendWebhookAlert(
+                alertEnv,
+                `[alert] webhook subscription auto-disabled: ${fresh.id}`,
+                alertBody,
+              ).catch(() => undefined),
+            );
+          }
         }
         if (result.outcome === "perm_fail") {
           msg.ack();

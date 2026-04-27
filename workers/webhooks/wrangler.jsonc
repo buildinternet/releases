@@ -21,6 +21,11 @@
   "vars": {
     "DELIVERY_TIMEOUT_MS": "10000",
     "AUTO_DISABLE_THRESHOLD": "50",
+    // Email alert bindings (see workers/webhooks/src/email.ts).
+    // Gated by EMAIL_NOTIFY_ENABLED; absent SEND_EMAIL → silent no-op.
+    "EMAIL_NOTIFY_ENABLED": "true",
+    "EMAIL_NOTIFY_TO": "zach@releases.sh",
+    "EMAIL_FROM": "notifications@releases.sh",
   },
   "d1_databases": [
     {
@@ -56,6 +61,9 @@
       "secret_name": "WEBHOOK_HMAC_MASTER",
     },
   ],
+  // Email send binding for Tier-1 alert notifications.
+  // Omitting `destination_address` keeps it open to any verified recipient.
+  "send_email": [{ "name": "SEND_EMAIL" }],
   "unsafe": {
     "bindings": [
       {
