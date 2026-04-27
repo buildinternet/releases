@@ -13,6 +13,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
+import { workflowFailures } from "../db/schema-workflow-failures.js";
 import {
   fetchOne,
   pollOne,
@@ -216,18 +217,28 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       if (!isNotFound) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.error(`[poll-fetch-workflow] ${sourceId} failed at ${currentStep}: ${errorMsg}`);
-        // Best-effort D1 write — record this failure for the summary workflow.
-        // Uses raw D1 (not drizzle) to avoid importing the schema here.
+        // Best-effort: record this failure for the summary workflow. Don't
+        // mask the original error if the write fails.
         try {
-          const failureId = `wf-fail-${scheduledTime}-${sourceId}`;
-          await env.DB.prepare(
-            `INSERT OR REPLACE INTO workflow_failures (id, scheduled_time, source_id, step_name, error, created_at)
-             VALUES (?, ?, ?, ?, ?, datetime('now'))`,
-          )
-            .bind(failureId, scheduledTime, sourceId, currentStep, errorMsg)
-            .run();
+          await db
+            .insert(workflowFailures)
+            .values({
+              id: `wf-fail-${scheduledTime}-${sourceId}`,
+              scheduledTime,
+              sourceId,
+              stepName: currentStep,
+              error: errorMsg,
+              createdAt: new Date().toISOString(),
+            })
+            .onConflictDoUpdate({
+              target: workflowFailures.id,
+              set: {
+                stepName: currentStep,
+                error: errorMsg,
+                createdAt: new Date().toISOString(),
+              },
+            });
         } catch (dbErr) {
-          // Non-fatal — don't mask the original error.
           console.warn(
             `[poll-fetch-workflow] failed to record failure row: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
           );

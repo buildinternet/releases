@@ -1,17 +1,17 @@
 import { describe, it, expect } from "bun:test";
 import { sendAlert, type AlertEnv } from "../../workers/api/src/lib/send-alert.js";
 
-// Minimal sendEmail mock (replaces the cloudflare:email lazy-import path).
-// We test sendAlert's own logic; sendEmail itself is tested separately.
+// Stand-in for the Cloudflare email binding. Real send goes through
+// `cloudflare:email`, which lazy-imports inside `email.ts` — these tests
+// exercise the dedup/prefix logic, not the email transport itself.
+const fakeBinding = { send: async () => {} };
 
 function makeEnv(overrides: Partial<AlertEnv> = {}): AlertEnv {
   return {
+    SEND_EMAIL: fakeBinding,
     EMAIL_NOTIFY_ENABLED: "true",
     EMAIL_NOTIFY_TO: "admin@example.com",
     EMAIL_FROM: "notifications@releases.sh",
-    // Default: no SEND_EMAIL binding → sendEmail returns { sent: false, reason: "no_binding" }
-    // That's fine — we test the dedup logic even when email is skipped.
-    SEND_EMAIL: undefined,
     ALERT_DEDUP_KV: undefined,
     ...overrides,
   };
@@ -19,35 +19,38 @@ function makeEnv(overrides: Partial<AlertEnv> = {}): AlertEnv {
 
 describe("sendAlert", () => {
   it("returns false when SEND_EMAIL binding is missing", async () => {
-    const result = await sendAlert(makeEnv(), {
+    const result = await sendAlert(makeEnv({ SEND_EMAIL: undefined }), {
       subject: "[alert] test",
       body: "test body",
     });
     expect(result).toBe(false);
   });
 
+  it("returns false when EMAIL_NOTIFY_ENABLED is 'false'", async () => {
+    const result = await sendAlert(makeEnv({ EMAIL_NOTIFY_ENABLED: "false" }), {
+      subject: "[alert] test",
+      body: "body",
+    });
+    expect(result).toBe(false);
+  });
+
   it("prepends [alert] prefix when missing", async () => {
-    // Verify the prefix logic by observing the KV key written during dedup.
     const kvKeys: string[] = [];
     const fakeKV: KVNamespace = {
       get: async (key: string) => {
         kvKeys.push(`get:${key}`);
         return null;
       },
-      put: async (key: string, _value: string, _opts?: unknown) => {
+      put: async (key: string) => {
         kvKeys.push(`put:${key}`);
       },
     } as unknown as KVNamespace;
 
-    await sendAlert(
-      { ...makeEnv(), ALERT_DEDUP_KV: fakeKV },
-      {
-        subject: "no prefix subject",
-        body: "body",
-      },
-    );
+    await sendAlert(makeEnv({ ALERT_DEDUP_KV: fakeKV }), {
+      subject: "no prefix subject",
+      body: "body",
+    });
 
-    // The KV key should use the normalized subject with [alert] prefix.
     expect(kvKeys.some((k) => k.includes("[alert] no prefix subject"))).toBe(true);
   });
 
@@ -58,51 +61,53 @@ describe("sendAlert", () => {
         kvKeys.push(`get:${key}`);
         return null;
       },
-      put: async (key: string, _value: string, _opts?: unknown) => {
+      put: async (key: string) => {
         kvKeys.push(`put:${key}`);
       },
     } as unknown as KVNamespace;
 
-    await sendAlert(
-      { ...makeEnv(), ALERT_DEDUP_KV: fakeKV },
-      {
-        subject: "[alert] already prefixed",
-        body: "body",
-      },
-    );
+    await sendAlert(makeEnv({ ALERT_DEDUP_KV: fakeKV }), {
+      subject: "[alert] already prefixed",
+      body: "body",
+    });
 
-    // Should not double-prefix
     const putKey = kvKeys.find((k) => k.startsWith("put:"));
-    expect(putKey).toBeDefined();
     expect(putKey).toBe("put:alert:[alert] already prefixed");
     expect(putKey).not.toContain("[alert] [alert]");
   });
 
   it("deduplicates within 1h (KV hit)", async () => {
     const fakeKV: KVNamespace = {
-      get: async (_key: string) => "1", // Already set → deduped
+      get: async () => "1",
       put: async () => {},
     } as unknown as KVNamespace;
 
-    const result = await sendAlert(
-      { ...makeEnv(), ALERT_DEDUP_KV: fakeKV },
-      {
-        subject: "[alert] cron crashed: retier-cron",
-        body: "error details",
-      },
-    );
+    const result = await sendAlert(makeEnv({ ALERT_DEDUP_KV: fakeKV }), {
+      subject: "[alert] cron crashed: retier-cron",
+      body: "error details",
+    });
 
     expect(result).toBe(false);
   });
 
-  it("proceeds when KV is absent (no dedup)", async () => {
-    // Without KV, dedup is skipped. Email will fail (no_binding) but no exception.
-    const result = await sendAlert(makeEnv({ ALERT_DEDUP_KV: undefined }), {
-      subject: "[alert] cron crashed: poll-fetch-cron",
-      body: "error",
+  it("skips KV ops when the email path is a no-op", async () => {
+    let kvTouched = false;
+    const fakeKV: KVNamespace = {
+      get: async () => {
+        kvTouched = true;
+        return null;
+      },
+      put: async () => {
+        kvTouched = true;
+      },
+    } as unknown as KVNamespace;
+
+    await sendAlert(makeEnv({ SEND_EMAIL: undefined, ALERT_DEDUP_KV: fakeKV }), {
+      subject: "[alert] test",
+      body: "body",
     });
-    // Returns false because SEND_EMAIL is also absent — but no throw.
-    expect(result).toBe(false);
+
+    expect(kvTouched).toBe(false);
   });
 
   it("continues after KV failure and attempts email", async () => {
@@ -113,14 +118,13 @@ describe("sendAlert", () => {
       put: async () => {},
     } as unknown as KVNamespace;
 
-    // Should not throw, should fall through to email attempt (which fails due to no binding).
-    const result = await sendAlert(
-      { ...makeEnv(), ALERT_DEDUP_KV: brokenKV },
-      {
-        subject: "[alert] test",
-        body: "body",
-      },
-    );
-    expect(result).toBe(false); // email still fails (no SEND_EMAIL), but no throw
+    const result = await sendAlert(makeEnv({ ALERT_DEDUP_KV: brokenKV }), {
+      subject: "[alert] test",
+      body: "body",
+    });
+    // Email lazy-imports `cloudflare:email` which is unavailable in tests;
+    // sendEmail throws, sendAlert catches → false. The KV failure didn't
+    // short-circuit the attempt.
+    expect(result).toBe(false);
   });
 });

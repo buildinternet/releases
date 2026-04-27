@@ -1,17 +1,26 @@
 /**
- * Summary workflow for the poll-and-fetch fan-out. One instance is kicked per
- * hourly cron fire. It sleeps 10 minutes (allowing all per-source workflow
- * instances time to either complete or exhaust retries and record a failure),
- * then queries `workflow_failures` for that scheduledTime and sends one
- * `[alert]` email if any failures were recorded.
+ * Summary workflow for the poll-and-fetch fan-out. Kicked once per hourly
+ * fan-out. Sleeps the settle window so per-source instances have time to
+ * complete or exhaust retries, then queries `workflow_failures` for that
+ * scheduledTime and emits one aggregated alert if any sources failed.
  *
- * One email per cron fire regardless of how many sources failed — keeps the
- * inbox manageable during a widespread provider outage.
+ * One email per cron fire regardless of failure count — keeps the inbox
+ * manageable during a widespread provider outage.
  */
 
 import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep } from "cloudflare:workers";
+import { drizzle } from "drizzle-orm/d1";
+import { asc, eq } from "drizzle-orm";
+import { workflowFailures } from "../db/schema-workflow-failures.js";
 import { sendAlert, type AlertEnv } from "../lib/send-alert.js";
+
+/**
+ * Window between fan-out and summary alert. Must exceed the per-source
+ * workflow's max retry envelope so retried instances have time to either
+ * succeed or land a row in `workflow_failures` before we read.
+ */
+const SETTLE_WINDOW = "10 minutes";
 
 export type PollFetchSummaryEnv = AlertEnv & {
   DB: D1Database;
@@ -23,12 +32,6 @@ export type PollFetchSummaryParams = {
   scheduledTime: number;
 };
 
-type FailureRow = {
-  source_id: string;
-  step_name: string;
-  error: string;
-};
-
 export class PollFetchSummaryWorkflow extends WorkflowEntrypoint<
   PollFetchSummaryEnv,
   PollFetchSummaryParams
@@ -36,19 +39,19 @@ export class PollFetchSummaryWorkflow extends WorkflowEntrypoint<
   async run(event: WorkflowEvent<PollFetchSummaryParams>, step: WorkflowStep): Promise<void> {
     const { scheduledTime } = event.payload;
 
-    // Give per-source instances time to finish or exhaust retries.
-    await step.sleep("wait-for-workflows", "10 minutes");
+    await step.sleep("wait-for-workflows", SETTLE_WINDOW);
 
     const failures = await step.do("query-failures", async () => {
-      const result = await this.env.DB.prepare(
-        `SELECT source_id, step_name, error
-         FROM workflow_failures
-         WHERE scheduled_time = ?
-         ORDER BY created_at ASC`,
-      )
-        .bind(scheduledTime)
-        .all<FailureRow>();
-      return result.results ?? [];
+      const db = drizzle(this.env.DB);
+      return await db
+        .select({
+          sourceId: workflowFailures.sourceId,
+          stepName: workflowFailures.stepName,
+          error: workflowFailures.error,
+        })
+        .from(workflowFailures)
+        .where(eq(workflowFailures.scheduledTime, scheduledTime))
+        .orderBy(asc(workflowFailures.createdAt));
     });
 
     if (failures.length === 0) {
@@ -64,7 +67,7 @@ export class PollFetchSummaryWorkflow extends WorkflowEntrypoint<
       "",
     ];
     for (const f of failures) {
-      lines.push(`  source=${f.source_id}  step=${f.step_name}  error=${f.error}`);
+      lines.push(`  source=${f.sourceId}  step=${f.stepName}  error=${f.error}`);
     }
 
     await step.do("send-alert", async () => {
