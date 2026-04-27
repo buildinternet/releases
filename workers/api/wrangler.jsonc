@@ -154,6 +154,13 @@
       "binding": "POLL_AND_FETCH_WORKFLOW",
       "class_name": "PollAndFetchWorkflow",
     },
+    {
+      // One instance per hourly cron fire; sleeps 10 min then sends a
+      // single [alert] email listing all sources that exhausted retries.
+      "name": "poll-fetch-summary",
+      "binding": "POLL_FETCH_SUMMARY_WORKFLOW",
+      "class_name": "PollFetchSummaryWorkflow",
+    },
   ],
   "routes": [{ "pattern": "api.releases.sh", "custom_domain": true }],
   "triggers": {
@@ -310,6 +317,11 @@
           "name": "poll-and-fetch-staging",
           "binding": "POLL_AND_FETCH_WORKFLOW",
           "class_name": "PollAndFetchWorkflow",
+        },
+        {
+          "name": "poll-fetch-summary-staging",
+          "binding": "POLL_FETCH_SUMMARY_WORKFLOW",
+          "class_name": "PollFetchSummaryWorkflow",
         },
       ],
       // Empty cron list. Without this override, Wrangler inherits the

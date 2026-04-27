@@ -45,6 +45,7 @@ export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
 export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
+export { PollFetchSummaryWorkflow } from "./workflows/poll-fetch-summary.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -77,6 +78,10 @@ export type Env = {
     // inlining `pollAndFetch()` in `ctx.waitUntil`. See issue #486.
     POLL_FETCH_USE_WORKFLOW?: string;
     POLL_AND_FETCH_WORKFLOW?: Workflow;
+    // Summary workflow kicked once per hourly fan-out. Sleeps 10 min then
+    // emails any failures recorded in `workflow_failures` by per-source
+    // instances. Optional — absent → no alert (safe default).
+    POLL_FETCH_SUMMARY_WORKFLOW?: Workflow;
     // Feature flag: when "true", poll-and-fetch widens its candidate set to
     // include scrape/agent sources with no feedUrl and routes them through
     // change-detector branches defined in the org playbook's `fetchQuirks`
@@ -493,5 +498,22 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
     const chunk = params.slice(i, i + CREATE_BATCH_MAX);
     // oxlint-disable-next-line no-await-in-loop -- sequential to stay under control-plane rate; per-instance work runs in parallel anyway
     await env.POLL_AND_FETCH_WORKFLOW!.createBatch(chunk);
+  }
+
+  // Kick one summary instance per fan-out. It sleeps 10 min then queries
+  // workflow_failures for this scheduledTime and sends one alert if any
+  // sources failed. Absent binding → silently skip.
+  if (env.POLL_FETCH_SUMMARY_WORKFLOW) {
+    try {
+      await env.POLL_FETCH_SUMMARY_WORKFLOW.create({
+        id: `poll-fetch-summary-${scheduledTime}`,
+        params: { scheduledTime },
+      });
+    } catch (err) {
+      // Non-fatal — don't let summary wiring failure block the fan-out.
+      console.warn(
+        `[poll-fetch-cron] failed to create summary workflow: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 }

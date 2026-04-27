@@ -1,4 +1,4 @@
-import { describe, it, expect, mock } from "bun:test";
+import { describe, it, expect } from "bun:test";
 import { sendAlert, type AlertEnv } from "../../workers/api/src/lib/send-alert.js";
 
 // Minimal sendEmail mock (replaces the cloudflare:email lazy-import path).
@@ -27,29 +27,7 @@ describe("sendAlert", () => {
   });
 
   it("prepends [alert] prefix when missing", async () => {
-    let capturedSubject = "";
-    const fakeBinding = {
-      send: mock(async () => {}),
-    };
-
-    // Patch: inject a fake SEND_EMAIL that captures the subject via a spy on sendEmail.
-    // Since sendEmail lazy-imports cloudflare:email, we test the prefix logic directly
-    // on the subject passed through by stubbing at the sendEmail level via a fresh env.
-    // The simplest approach: pass disabled env, check that the subject arg is normalized.
-    // (Integration-level test for the actual send is covered by email.ts tests.)
-
-    // Test that sendAlert normalizes a subject without prefix
-    const calls: string[] = [];
-    const patchedEnv: AlertEnv = {
-      ...makeEnv(),
-      // Intercept via a custom no-op that records what subject would have been.
-    };
-
-    // Since sendEmail is imported and not easily mockable without module mocking,
-    // we verify the prefix logic by checking the console output path. The canonical
-    // test is: if EMAIL_NOTIFY_ENABLED is "false", sendEmail returns disabled and
-    // sendAlert returns false — but the subject normalization happens before that.
-    // We verify it via a KV spy instead.
+    // Verify the prefix logic by observing the KV key written during dedup.
     const kvKeys: string[] = [];
     const fakeKV: KVNamespace = {
       get: async (key: string) => {

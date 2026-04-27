@@ -104,100 +104,136 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       return;
     }
 
-    const { sourceId } = event.payload;
+    const { sourceId, scheduledTime } = event.payload;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const db: any = env._drizzleOverride ?? drizzle(env.DB);
 
-    // Load the source row. Missing → NonRetryableError (source was deleted
-    // between cron fan-out and workflow start — nothing to do).
-    const source = await step.do("load-source", async () => {
-      const [row]: Source[] = await db.select().from(sources).where(eq(sources.id, sourceId));
-      if (!row) throw new NonRetryableError(`source ${sourceId} not found`);
-      return row;
-    });
+    // Track the last step name so the failure row has useful context.
+    let currentStep = "load-source";
 
-    const now = new Date();
-    const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";
-
-    // Poll phase: HEAD check (feed sources) or mark-changed (github). For
-    // scrape-no-feed / agent sources the flag opens a quirks-driven detector
-    // branch inside pollOne (#517). Playbook notes are loaded per instance
-    // so the step doesn't pin a large payload onto workflow state.
-    const pollResult = await step.do("poll-head-check", RETRY_POLL, async () => {
-      const notesByOrg =
-        changeDetectEnabled && (source.type === "scrape" || source.type === "agent")
-          ? await loadPlaybookNotesForSources(db, [source])
-          : new Map<string, string | null>();
-      return await pollOne(db, source, now, {
-        changeDetectEnabled,
-        playbookNotes: source.orgId ? (notesByOrg.get(source.orgId) ?? null) : null,
+    try {
+      // Load the source row. Missing → NonRetryableError (source was deleted
+      // between cron fan-out and workflow start — nothing to do).
+      const source = await step.do("load-source", async () => {
+        const [row]: Source[] = await db.select().from(sources).where(eq(sources.id, sourceId));
+        if (!row) throw new NonRetryableError(`source ${sourceId} not found`);
+        return row;
       });
-    });
 
-    if (!pollResult.changed) {
-      console.log(`[poll-fetch-workflow] ${source.slug}: no change detected`);
-      return;
-    }
+      const now = new Date();
+      const changeDetectEnabled = env.SCRAPE_CHANGE_DETECT_ENABLED === "true";
 
-    // Fetch + parse + insert + bookkeeping. `skipSideEffects` suppresses the
-    // inline embed + CHANGELOG refresh so each runs as its own retriable
-    // step below. fetchOne still handles FeedHttpError / consecutiveErrors
-    // backoff internally.
-    const fetchEnv = await resolveFetchEnv(env);
-    const fetchResult = await step.do("fetch-and-persist", RETRY_FETCH, async () => {
-      const result = await fetchOne(db, source, fetchEnv, { skipSideEffects: true });
-      // Surface fetch errors so the step retries. The inline path already
-      // recorded fetch_log + source counter updates, so retry is safe.
-      if (result.status === "error") {
-        throw new Error(`fetch ${source.slug}: ${result.error ?? "unknown"}`);
-      }
-      return result;
-    });
-
-    // Embed new releases. Retry-heavy — this is the failure mode the workflow
-    // exists to solve. `throwOnError` makes the embed helper re-throw after
-    // logging so the step picks up the failure.
-    const insertedIds = fetchResult.insertedIds ?? [];
-    if (insertedIds.length > 0 && env.RELEASES_INDEX) {
-      await step.do("embed-releases", RETRY_EMBED, async () => {
-        await embedReleasesForSource(db, source, insertedIds, fetchEnv, { throwOnError: true });
-      });
-    }
-
-    // Refresh GitHub CHANGELOG mirror + embed chunks. Runs in two steps so a
-    // retry on embed doesn't re-fetch the repo tree. `skipEmbed` defers the
-    // embed loop to the next step.
-    if (source.type === "github") {
-      const refreshResult = await step.do("refresh-changelog-file", RETRY_FETCH, async () => {
-        return await refreshChangelogFile(db, source, fetchEnv.GITHUB_TOKEN, fetchEnv, {
-          skipEmbed: true,
+      // Poll phase: HEAD check (feed sources) or mark-changed (github). For
+      // scrape-no-feed / agent sources the flag opens a quirks-driven detector
+      // branch inside pollOne (#517). Playbook notes are loaded per instance
+      // so the step doesn't pin a large payload onto workflow state.
+      currentStep = "poll-head-check";
+      const pollResult = await step.do("poll-head-check", RETRY_POLL, async () => {
+        const notesByOrg =
+          changeDetectEnabled && (source.type === "scrape" || source.type === "agent")
+            ? await loadPlaybookNotesForSources(db, [source])
+            : new Map<string, string | null>();
+        return await pollOne(db, source, now, {
+          changeDetectEnabled,
+          playbookNotes: source.orgId ? (notesByOrg.get(source.orgId) ?? null) : null,
         });
       });
 
-      if (refreshResult.changedFiles.length > 0 && env.CHANGELOG_CHUNKS_INDEX) {
-        await step.do("embed-changelog-chunks", RETRY_EMBED, async () => {
-          for (const file of refreshResult.changedFiles) {
-            // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
-            await embedChangelogFileForSource(db, source, file, fetchEnv, { throwOnError: true });
-          }
+      if (!pollResult.changed) {
+        console.log(`[poll-fetch-workflow] ${source.slug}: no change detected`);
+        return;
+      }
+
+      // Fetch + parse + insert + bookkeeping. `skipSideEffects` suppresses the
+      // inline embed + CHANGELOG refresh so each runs as its own retriable
+      // step below. fetchOne still handles FeedHttpError / consecutiveErrors
+      // backoff internally.
+      currentStep = "fetch-and-persist";
+      const fetchEnv = await resolveFetchEnv(env);
+      const fetchResult = await step.do("fetch-and-persist", RETRY_FETCH, async () => {
+        const result = await fetchOne(db, source, fetchEnv, { skipSideEffects: true });
+        // Surface fetch errors so the step retries. The inline path already
+        // recorded fetch_log + source counter updates, so retry is safe.
+        if (result.status === "error") {
+          throw new Error(`fetch ${source.slug}: ${result.error ?? "unknown"}`);
+        }
+        return result;
+      });
+
+      // Embed new releases. Retry-heavy — this is the failure mode the workflow
+      // exists to solve. `throwOnError` makes the embed helper re-throw after
+      // logging so the step picks up the failure.
+      currentStep = "embed-releases";
+      const insertedIds = fetchResult.insertedIds ?? [];
+      if (insertedIds.length > 0 && env.RELEASES_INDEX) {
+        await step.do("embed-releases", RETRY_EMBED, async () => {
+          await embedReleasesForSource(db, source, insertedIds, fetchEnv, { throwOnError: true });
         });
       }
-    }
 
-    // Purge latest-cache when we actually inserted rows. Per-source
-    // invalidation replaces the cron-aggregated call (see #486) — KV writes
-    // are cheap and idempotent.
-    if (fetchResult.releasesInserted > 0) {
-      await step.do("invalidate-latest-cache", async () => {
-        await invalidateLatestCache(env, {
-          nReleases: fetchResult.releasesInserted,
-          sourceId: source.id,
+      // Refresh GitHub CHANGELOG mirror + embed chunks. Runs in two steps so a
+      // retry on embed doesn't re-fetch the repo tree. `skipEmbed` defers the
+      // embed loop to the next step.
+      if (source.type === "github") {
+        currentStep = "refresh-changelog-file";
+        const refreshResult = await step.do("refresh-changelog-file", RETRY_FETCH, async () => {
+          return await refreshChangelogFile(db, source, fetchEnv.GITHUB_TOKEN, fetchEnv, {
+            skipEmbed: true,
+          });
         });
-      });
-    }
 
-    console.log(
-      `[poll-fetch-workflow] ${source.slug}: done (inserted=${fetchResult.releasesInserted}, found=${fetchResult.releasesFound})`,
-    );
+        if (refreshResult.changedFiles.length > 0 && env.CHANGELOG_CHUNKS_INDEX) {
+          currentStep = "embed-changelog-chunks";
+          await step.do("embed-changelog-chunks", RETRY_EMBED, async () => {
+            for (const file of refreshResult.changedFiles) {
+              // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
+              await embedChangelogFileForSource(db, source, file, fetchEnv, { throwOnError: true });
+            }
+          });
+        }
+      }
+
+      // Purge latest-cache when we actually inserted rows. Per-source
+      // invalidation replaces the cron-aggregated call (see #486) — KV writes
+      // are cheap and idempotent.
+      if (fetchResult.releasesInserted > 0) {
+        await step.do("invalidate-latest-cache", async () => {
+          await invalidateLatestCache(env, {
+            nReleases: fetchResult.releasesInserted,
+            sourceId: source.id,
+          });
+        });
+      }
+
+      console.log(
+        `[poll-fetch-workflow] ${source.slug}: done (inserted=${fetchResult.releasesInserted}, found=${fetchResult.releasesFound})`,
+      );
+    } catch (err) {
+      // Skip NonRetryableError for missing source — that's an expected race
+      // (source deleted between fan-out and workflow start), not a failure.
+      const isNotFound =
+        err instanceof NonRetryableError && String(err.message).includes("not found");
+      if (!isNotFound) {
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[poll-fetch-workflow] ${sourceId} failed at ${currentStep}: ${errorMsg}`);
+        // Best-effort D1 write — record this failure for the summary workflow.
+        // Uses raw D1 (not drizzle) to avoid importing the schema here.
+        try {
+          const failureId = `wf-fail-${scheduledTime}-${sourceId}`;
+          await env.DB.prepare(
+            `INSERT OR REPLACE INTO workflow_failures (id, scheduled_time, source_id, step_name, error, created_at)
+             VALUES (?, ?, ?, ?, ?, datetime('now'))`,
+          )
+            .bind(failureId, scheduledTime, sourceId, currentStep, errorMsg)
+            .run();
+        } catch (dbErr) {
+          // Non-fatal — don't mask the original error.
+          console.warn(
+            `[poll-fetch-workflow] failed to record failure row: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
+          );
+        }
+      }
+      throw err;
+    }
   }
 }
