@@ -384,6 +384,10 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     `[scrape-agent-cron] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`,
   );
 
+  // Legacy rollback path: emails dispatch counts only. Result aggregation
+  // (releases inserted per org) lives in the Workflows path, which can sleep
+  // 30min for sessions to settle; the scheduled() handler that calls this
+  // function can't.
   await sendCronReport(
     env,
     buildReport(env, {
@@ -404,7 +408,7 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   );
 }
 
-type ReportBody = Omit<CronReport, "cronName" | "adminBaseUrl">;
+export type ReportBody = Omit<CronReport, "cronName" | "adminBaseUrl">;
 
 export function buildReport(env: SweepEnv, body: ReportBody): CronReport {
   return { cronName: CRON_NAME, adminBaseUrl: env.ADMIN_BASE_URL, ...body };

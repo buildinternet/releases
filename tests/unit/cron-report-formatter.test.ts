@@ -132,4 +132,123 @@ describe("formatCronReport", () => {
     expect(text).toContain("- ma_1");
     expect(text).toContain("- ma_2");
   });
+
+  it("subject includes inserted count when results are attached", () => {
+    const { subject } = formatCronReport({
+      ...baseReport,
+      results: {
+        sessionsWithNoActivity: 0,
+        perOrg: [
+          {
+            orgSlug: "x",
+            orgName: "X",
+            sourcesFetched: 5,
+            releasesFound: 12,
+            releasesInserted: 8,
+            errors: 0,
+          },
+        ],
+        settleWindowMinutes: 30,
+      },
+    });
+    expect(subject).toBe("scrape-agent-sweep: done — 3/3 dispatched → 8 inserted");
+  });
+
+  it("subject omits inserted segment when results are absent", () => {
+    const { subject } = formatCronReport(baseReport);
+    expect(subject).toBe("scrape-agent-sweep: done — 3/3 dispatched");
+  });
+
+  it("text body includes per-org breakdown sorted by inserted desc", () => {
+    const { text } = formatCronReport({
+      ...baseReport,
+      results: {
+        sessionsWithNoActivity: 1,
+        perOrg: [
+          {
+            orgSlug: "acme",
+            orgName: "Acme",
+            sourcesFetched: 3,
+            releasesFound: 12,
+            releasesInserted: 8,
+            errors: 0,
+          },
+          {
+            orgSlug: "beta",
+            orgName: "Beta",
+            sourcesFetched: 1,
+            releasesFound: 3,
+            releasesInserted: 2,
+            errors: 1,
+          },
+        ],
+        settleWindowMinutes: 30,
+      },
+    });
+    expect(text).toContain("Results (after 30min settle):");
+    expect(text).toContain("Releases inserted:  10");
+    expect(text).toContain("Still running:      1 session");
+    expect(text).toContain("- acme: fetched=3 found=12 inserted=8");
+    expect(text).toContain("- beta: fetched=1 found=3 inserted=2 errors=1");
+    // acme listed before beta (sorted by inserted desc)
+    expect(text.indexOf("- acme")).toBeLessThan(text.indexOf("- beta"));
+  });
+
+  it("html body renders results table and escapes org slugs", () => {
+    const { html } = formatCronReport({
+      ...baseReport,
+      results: {
+        sessionsWithNoActivity: 0,
+        perOrg: [
+          {
+            orgSlug: "<evil>",
+            orgName: "Bad",
+            sourcesFetched: 1,
+            releasesFound: 3,
+            releasesInserted: 2,
+            errors: 0,
+          },
+        ],
+        settleWindowMinutes: 30,
+      },
+    });
+    expect(html).toContain("Results");
+    expect(html).toContain("(after 30min settle)");
+    expect(html).not.toContain("<evil>");
+    expect(html).toContain("&lt;evil&gt;");
+  });
+
+  it("text body omits 'Still running' when all sessions reported activity", () => {
+    const { text } = formatCronReport({
+      ...baseReport,
+      results: {
+        sessionsWithNoActivity: 0,
+        perOrg: [
+          {
+            orgSlug: "x",
+            orgName: "X",
+            sourcesFetched: 1,
+            releasesFound: 1,
+            releasesInserted: 1,
+            errors: 0,
+          },
+        ],
+        settleWindowMinutes: 30,
+      },
+    });
+    expect(text).not.toContain("Still running");
+  });
+
+  it("text body uses singular 'session' for one inactive session", () => {
+    const { text } = formatCronReport({
+      ...baseReport,
+      results: {
+        sessionsWithNoActivity: 1,
+        perOrg: [],
+        settleWindowMinutes: 30,
+      },
+    });
+    expect(text).toContain("Still running:      1 session");
+    expect(text).not.toContain("1 sessions");
+  });
 });

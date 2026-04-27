@@ -7,6 +7,28 @@ import type { FinalizeRunParams } from "../db/cron-runs-dao.js";
 
 export type CronReportStatus = FinalizeRunParams["status"];
 
+export type CronReportResultsOrg = {
+  orgSlug: string;
+  orgName: string;
+  sourcesFetched: number;
+  releasesFound: number;
+  releasesInserted: number;
+  errors: number;
+};
+
+/**
+ * Optional roll-up of what the dispatched sessions actually did, attached
+ * after a settle window in the workflow path. Absent on the immediate
+ * dispatched-only emails (preflight aborts, the inline cron fallback).
+ */
+export type CronReportResults = {
+  perOrg: CronReportResultsOrg[];
+  /** Count of dispatched sessions with no fetch_log rows yet (still running). */
+  sessionsWithNoActivity: number;
+  /** Wall-clock window the aggregator covered (informational). */
+  settleWindowMinutes: number;
+};
+
 export type CronReport = {
   cronName: string;
   runId: string;
@@ -22,6 +44,7 @@ export type CronReport = {
   notes?: string | null;
   sessionsStarted?: string[];
   dispatchErrorDetail?: Array<{ orgSlug: string; error: string }>;
+  results?: CronReportResults;
   /** Base URL for cron-run detail links in the body (no trailing slash). */
   adminBaseUrl?: string;
 };
@@ -49,6 +72,30 @@ function formatDuration(ms: number | null): string {
   return `${m}m${rem}s`;
 }
 
+function totalReleasesInserted(r: CronReportResults): number {
+  let n = 0;
+  for (const o of r.perOrg) n += o.releasesInserted;
+  return n;
+}
+
+function totalReleasesFound(r: CronReportResults): number {
+  let n = 0;
+  for (const o of r.perOrg) n += o.releasesFound;
+  return n;
+}
+
+function totalSourcesFetched(r: CronReportResults): number {
+  let n = 0;
+  for (const o of r.perOrg) n += o.sourcesFetched;
+  return n;
+}
+
+function totalErrors(r: CronReportResults): number {
+  let n = 0;
+  for (const o of r.perOrg) n += o.errors;
+  return n;
+}
+
 function escapeHtml(s: string): string {
   return s
     .replace(/&/g, "&amp;")
@@ -60,7 +107,11 @@ function escapeHtml(s: string): string {
 
 export function formatCronReport(report: CronReport): FormattedReport {
   const prefix = SEVERITY_PREFIX[report.status];
-  const subject = `${prefix}${report.cronName}: ${report.status} — ${report.dispatched}/${report.candidates} dispatched`;
+  const dispatchedSegment = `${report.dispatched}/${report.candidates} dispatched`;
+  const resultsSegment = report.results
+    ? ` → ${totalReleasesInserted(report.results)} inserted`
+    : "";
+  const subject = `${prefix}${report.cronName}: ${report.status} — ${dispatchedSegment}${resultsSegment}`;
 
   const lines: string[] = [];
   lines.push(`Cron: ${report.cronName}`);
@@ -74,6 +125,31 @@ export function formatCronReport(report: CronReport): FormattedReport {
   lines.push(`Dispatched:       ${report.dispatched}`);
   lines.push(`Skipped (cap):    ${report.skippedOverCap}`);
   lines.push(`Dispatch errors:  ${report.dispatchErrors}`);
+
+  if (report.results) {
+    const r = report.results;
+    lines.push("");
+    lines.push(`Results (after ${r.settleWindowMinutes}min settle):`);
+    lines.push(`  Sources fetched:    ${totalSourcesFetched(r)}`);
+    lines.push(`  Releases found:     ${totalReleasesFound(r)}`);
+    lines.push(`  Releases inserted:  ${totalReleasesInserted(r)}`);
+    lines.push(`  Fetch errors:       ${totalErrors(r)}`);
+    if (r.sessionsWithNoActivity > 0) {
+      lines.push(
+        `  Still running:      ${r.sessionsWithNoActivity} session${r.sessionsWithNoActivity === 1 ? "" : "s"}`,
+      );
+    }
+    if (r.perOrg.length > 0) {
+      lines.push("");
+      lines.push("Per org:");
+      for (const o of r.perOrg) {
+        const errSeg = o.errors > 0 ? ` errors=${o.errors}` : "";
+        lines.push(
+          `  - ${o.orgSlug}: fetched=${o.sourcesFetched} found=${o.releasesFound} inserted=${o.releasesInserted}${errSeg}`,
+        );
+      }
+    }
+  }
 
   if (report.notes) {
     lines.push("");
@@ -120,6 +196,27 @@ export function formatCronReport(report: CronReport): FormattedReport {
   htmlRows.push(row("Skipped (cap)", String(report.skippedOverCap)));
   htmlRows.push(row("Dispatch errors", String(report.dispatchErrors)));
 
+  let resultsHtml = "";
+  if (report.results) {
+    const r = report.results;
+    const stillRunning =
+      r.sessionsWithNoActivity > 0
+        ? `<tr><td style="padding:4px 12px 4px 0;color:#64748b;">Still running</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${r.sessionsWithNoActivity} session${r.sessionsWithNoActivity === 1 ? "" : "s"}</td></tr>`
+        : "";
+    const orgRows = r.perOrg
+      .map((o) => {
+        const errSeg =
+          o.errors > 0 ? ` <span style="color:#dc2626;">errors=${o.errors}</span>` : "";
+        return `<tr><td style="padding:4px 12px 4px 0;font-family:ui-monospace,monospace;">${escapeHtml(o.orgSlug)}</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.sourcesFetched} fetched</td><td style="padding:4px 12px 4px 0;color:#64748b;">${o.releasesFound} found</td><td style="padding:4px 0;"><strong>${o.releasesInserted}</strong> inserted${errSeg}</td></tr>`;
+      })
+      .join("");
+    const orgTable =
+      r.perOrg.length > 0
+        ? `<h3 style="margin-top:24px;">Per org</h3><table style="border-collapse:collapse;font-size:14px;">${orgRows}</table>`
+        : "";
+    resultsHtml = `<h3 style="margin-top:24px;">Results <span style="font-weight:400;color:#64748b;">(after ${r.settleWindowMinutes}min settle)</span></h3><table style="border-collapse:collapse;font-size:14px;"><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Sources fetched</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalSourcesFetched(r)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Releases found</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalReleasesFound(r)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Releases inserted</td><td style="padding:4px 0;font-family:ui-monospace,monospace;"><strong>${totalReleasesInserted(r)}</strong></td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Fetch errors</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalErrors(r)}</td></tr>${stillRunning}</table>${orgTable}`;
+  }
+
   let errorsHtml = "";
   if (report.dispatchErrorDetail && report.dispatchErrorDetail.length > 0) {
     const items = report.dispatchErrorDetail
@@ -143,6 +240,7 @@ export function formatCronReport(report: CronReport): FormattedReport {
 <html><body style="font-family:system-ui,sans-serif;color:#0f172a;max-width:640px;">
 <h2 style="color:${statusColor};margin-bottom:8px;">${escapeHtml(report.cronName)} — ${escapeHtml(report.status)}</h2>
 <table style="border-collapse:collapse;font-size:14px;">${htmlRows.join("")}</table>
+${resultsHtml}
 ${notesHtml}
 ${errorsHtml}
 ${detailLink}

@@ -28,10 +28,13 @@ import type {
   DispatchResult,
   OrgGroup,
   PreflightAction,
+  ReportBody,
   SweepEnv,
 } from "../cron/scrape-agent-sweep.js";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
 import { sendCronReport } from "../lib/notifications.js";
+import { aggregateSweepResults } from "../lib/sweep-results.js";
+import type { CronReportResults } from "../lib/cron-report.js";
 
 /**
  * Workflow env. Secrets stay as SecretBinding here and are resolved inside
@@ -87,6 +90,19 @@ const RETRY_DISPATCH = {
   retries: { limit: 3, delay: "30 seconds", backoff: "exponential" },
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
+
+const RETRY_AGGREGATE = {
+  retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
+} satisfies WorkflowStepConfig;
+
+/**
+ * How long to wait between dispatching managed-agent sessions and emailing
+ * the results. Sessions auto-error after 15min of no progress (StatusHub
+ * STALE_SESSION_MS), so 30min comfortably captures most healthy runs while
+ * bounding the cron's wall-clock cost. Sessions still active at the cutoff
+ * are reported as "still running" rather than blocking the email.
+ */
+const SETTLE_WINDOW_MINUTES = 30;
 
 /** Shared fields between dispatch and report env shapes. */
 function baseEnvFields(env: ScrapeAgentSweepWorkflowEnv) {
@@ -268,14 +284,14 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
           })
         : undefined;
 
-    await step.do("finalize-done", async () => {
+    const finalized: ReportBody = await step.do("finalize-done", async () => {
       const derived = deriveSweepStatus({
         candidates: rows.length,
         dispatchResults,
         strandedCount,
       });
       const sessionsStarted = dispatchResults.flatMap((r) => (r.ok ? [r.sessionId] : []));
-      const dispatchErrors = dispatchResults.flatMap((r) =>
+      const dispatchErrorDetail = dispatchResults.flatMap((r) =>
         !r.ok ? [{ orgSlug: r.orgSlug, error: r.error }] : [],
       );
       const endedAtMs = Date.now();
@@ -287,33 +303,46 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
         candidates: rows.length,
         dispatched: sessionsStarted.length,
         skippedOverCap,
-        dispatchErrors: dispatchErrors.length,
+        dispatchErrors: dispatchErrorDetail.length,
         sessionsStarted,
-        dispatchErrorDetail: dispatchErrors,
+        dispatchErrorDetail,
         notes: derived.notes ?? null,
       });
       console.log(
-        `[scrape-agent-workflow] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`,
+        `[scrape-agent-workflow] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrorDetail.length} skipped=${skippedOverCap}`,
       );
+      return {
+        runId,
+        startedAt,
+        endedAt,
+        durationMs: endedAtMs - new Date(startedAt).getTime(),
+        status: derived.status,
+        abortReason: derived.abortReason,
+        candidates: rows.length,
+        dispatched: sessionsStarted.length,
+        skippedOverCap,
+        dispatchErrors: dispatchErrorDetail.length,
+        notes: derived.notes ?? null,
+        sessionsStarted,
+        dispatchErrorDetail,
+      };
+    });
+
+    // Sessions were dispatched async and write their fetch_log rows over the
+    // next 5–15min. Sleep the settle window before rolling up what they did.
+    // Skip the sleep if nothing was dispatched — there's nothing to wait on.
+    let results: CronReportResults | undefined;
+    if ((finalized.sessionsStarted?.length ?? 0) > 0) {
+      await step.sleep("settle", `${SETTLE_WINDOW_MINUTES} minutes`);
+      results = await step.do("aggregate-results", RETRY_AGGREGATE, async () => {
+        const r = await aggregateSweepResults(db, finalized.sessionsStarted ?? []);
+        return { ...r, settleWindowMinutes: SETTLE_WINDOW_MINUTES };
+      });
+    }
+
+    await step.do("send-report", async () => {
       const reportEnv = resolveReportEnv(env);
-      await sendCronReport(
-        reportEnv,
-        buildReport(reportEnv, {
-          runId,
-          startedAt,
-          endedAt,
-          durationMs: endedAtMs - new Date(startedAt).getTime(),
-          status: derived.status,
-          abortReason: derived.abortReason,
-          candidates: rows.length,
-          dispatched: sessionsStarted.length,
-          skippedOverCap,
-          dispatchErrors: dispatchErrors.length,
-          notes: derived.notes ?? null,
-          sessionsStarted,
-          dispatchErrorDetail: dispatchErrors,
-        }),
-      );
+      await sendCronReport(reportEnv, buildReport(reportEnv, { ...finalized, results }));
     });
   }
 }
