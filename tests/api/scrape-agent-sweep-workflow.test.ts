@@ -3,7 +3,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { desc } from "drizzle-orm";
 import { applyMigrations } from "../db-helper";
-import { sources, organizations } from "@buildinternet/releases-core/schema";
+import { sources, organizations, fetchLog } from "@buildinternet/releases-core/schema";
 import { cronRuns } from "../../workers/api/src/db/schema-cron";
 import {
   ScrapeAgentSweepWorkflow,
@@ -185,6 +185,66 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
     expect(stepNames).toContain("dispatch-b");
     expect(stepNames).toContain("dispatch-c");
     expect(stepNames).toContain("finalize-done");
+    // Result-aggregation pipeline runs after dispatch.
+    expect(stepNames).toContain("aggregate-results");
+    expect(stepNames).toContain("send-report");
+  });
+
+  it("aggregates fetch_log rows for dispatched sessions before sending report", async () => {
+    const db = mkDb();
+    let dispatchCount = 0;
+    const env = mkEnv({
+      DISCOVERY_WORKER: {
+        fetch: async () => {
+          dispatchCount++;
+          return new Response(JSON.stringify({ sessionId: `ma-${dispatchCount}` }), {
+            status: 202,
+          });
+        },
+      } as ScrapeAgentSweepWorkflowEnv["DISCOVERY_WORKER"],
+      _drizzleOverride: db,
+    });
+    // Seed fetch_log with rows for the session IDs dispatch will mint
+    // (ma-1, ma-2, ma-3 in dispatch order: orgs a, b, c).
+    db.insert(fetchLog)
+      .values([
+        {
+          sourceId: "src_1",
+          sessionId: "ma-1",
+          releasesFound: 5,
+          releasesInserted: 3,
+          status: "success",
+        },
+        {
+          sourceId: "src_2",
+          sessionId: "ma-2",
+          releasesFound: 2,
+          releasesInserted: 2,
+          status: "success",
+        },
+        // ma-3 has no fetch_log rows → reported as still running.
+      ])
+      .run();
+    const records = await runWorkflow(env);
+    const aggregateStep = records.find((r) => r.name === "aggregate-results");
+    expect(aggregateStep?.ok).toBe(true);
+    expect(records.find((r) => r.name === "send-report")?.ok).toBe(true);
+  });
+
+  it("skips settle + aggregate steps when no sessions were dispatched", async () => {
+    const db = mkDb();
+    // All dispatches fail with non-retryable 401 → zero successful sessions.
+    const env = mkEnv({
+      DISCOVERY_WORKER: {
+        fetch: async () => new Response("{}", { status: 401 }),
+      } as ScrapeAgentSweepWorkflowEnv["DISCOVERY_WORKER"],
+      _drizzleOverride: db,
+    });
+    const records = await runWorkflow(env);
+    const stepNames = records.map((r) => r.name);
+    expect(stepNames).not.toContain("aggregate-results");
+    // send-report still runs so the operator hears about the dispatch_failed run.
+    expect(stepNames).toContain("send-report");
   });
 
   it("pre-flight auth failure: aborts with no dispatches", async () => {

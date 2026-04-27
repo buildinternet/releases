@@ -290,7 +290,11 @@ describe("forceDrainSweep", () => {
   it("flag on + no candidates → writes a healthy-quiet cron_runs note", async () => {
     const db = mkDb();
     seedOrg(db, "org_x");
-    seedSource(db, { id: "src_fresh", slug: "fresh", orgId: "org_x", lastFetchedAt: FRESH });
+    // forceDrainSweep uses real wall-clock — seed against now() so the
+    // "fresh" fixture stays inside the 72h threshold regardless of the
+    // hardcoded NOW used by the pickCandidates-injected tests above.
+    const realFresh = new Date(Date.now() - 1 * 3600_000).toISOString();
+    seedSource(db, { id: "src_fresh", slug: "fresh", orgId: "org_x", lastFetchedAt: realFresh });
 
     await forceDrainSweep({
       DB: null as any,
