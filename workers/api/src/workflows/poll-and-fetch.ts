@@ -206,6 +206,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       // invalidation replaces the cron-aggregated call (see #486) — KV writes
       // are cheap and idempotent.
       if (fetchResult.releasesInserted > 0) {
+        currentStep = "invalidate-latest-cache";
         await step.do("invalidate-latest-cache", async () => {
           await invalidateLatestCache(env, {
             nReleases: fetchResult.releasesInserted,
