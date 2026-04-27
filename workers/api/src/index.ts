@@ -39,6 +39,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { retierSources } from "./cron/retier.js";
 import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 import { forceDrainSweep } from "./cron/force-drain-sweep.js";
+import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -130,6 +131,10 @@ export type Env = {
     EMAIL_NOTIFY_TO?: string;
     EMAIL_FROM?: string;
     ADMIN_BASE_URL?: string;
+    // Optional KV namespace for Tier-1 alert dedup (1h TTL per subject).
+    // Reuses an existing KV binding — no new resource needed.
+    // See src/lib/send-alert.ts.
+    ALERT_DEDUP_KV?: KVNamespace;
     // Staging-only kill switch — see middleware/indexing.ts.
     INDEXING_DISABLED?: string;
     // Staging-only shared secret — see middleware/staging-access.ts. Absent
@@ -294,6 +299,15 @@ export default {
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
     // Daily retier job runs at 03:00 UTC; scrape-no-feed agent sweep at 01:00 UTC;
     // force-drain for stranded sources at 04:00 UTC; poll-and-fetch hourly.
+    // Build the alert env once; shared by all four cron dispatch sites.
+    const alertEnv: AlertEnv = {
+      SEND_EMAIL: env.SEND_EMAIL,
+      EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
+      EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
+      EMAIL_FROM: env.EMAIL_FROM,
+      ALERT_DEDUP_KV: env.ALERT_DEDUP_KV,
+    };
+
     if (event.cron === "0 4 * * *") {
       ctx.waitUntil(
         loggedDispatch(
@@ -305,6 +319,7 @@ export default {
             FORCE_DRAIN_STALE_HOURS: env.FORCE_DRAIN_STALE_HOURS,
             FORCE_SWEEP_MAX_SESSIONS: env.FORCE_SWEEP_MAX_SESSIONS,
           }),
+          alertEnv,
         ),
       );
       return;
@@ -317,6 +332,7 @@ export default {
             DB: env.DB,
             CRON_ENABLED: env.CRON_ENABLED,
           }),
+          alertEnv,
         ),
       );
       return;
@@ -344,6 +360,7 @@ export default {
               id: `scrape-agent-sweep-${event.scheduledTime}`,
               params: { scheduledTime: event.scheduledTime },
             }),
+            alertEnv,
           ),
         );
         return;
@@ -373,6 +390,7 @@ export default {
             EMAIL_FROM: env.EMAIL_FROM,
             ADMIN_BASE_URL: env.ADMIN_BASE_URL,
           }),
+          alertEnv,
         ),
       );
       return;
@@ -389,7 +407,7 @@ export default {
         return;
       }
       ctx.waitUntil(
-        loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env, event.scheduledTime)),
+        loggedDispatch("poll-fetch-cron", fanOutPollAndFetch(env, event.scheduledTime), alertEnv),
       );
       return;
     }
@@ -412,6 +430,7 @@ export default {
           LATEST_CACHE: env.LATEST_CACHE,
           INVALIDATION_ENABLED: env.INVALIDATION_ENABLED,
         }),
+        alertEnv,
       ),
     );
   },
@@ -422,14 +441,27 @@ export default {
  * with our tag instead of vanishing into `ctx.waitUntil`'s swallow. Returns
  * a Promise<void> that always resolves — swallowing stays; logging is what's
  * new. See issue #486 postmortem.
+ *
+ * When `alertEnv` is provided and the promise rejects, also fires a Tier-1
+ * [alert] email via `sendAlert()` (fire-and-forget, deduplicated per 1h).
  */
-function loggedDispatch(tag: string, p: Promise<unknown>): Promise<void> {
+function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): Promise<void> {
   return p
     .then(() => undefined)
     .catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
       console.error(`[${tag}] dispatch failed: ${message}`, stack ?? "");
+      if (alertEnv) {
+        const body = [`Cron tag: ${tag}`, `Error: ${message}`, stack ? `\nStack:\n${stack}` : ""]
+          .filter(Boolean)
+          .join("\n");
+        // Fire-and-forget — never block or throw in the catch handler.
+        sendAlert(alertEnv, {
+          subject: `[alert] cron crashed: ${tag}`,
+          body,
+        }).catch(() => undefined);
+      }
     });
 }
 

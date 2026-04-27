@@ -95,6 +95,9 @@
   // KV namespaces. LATEST_CACHE fronts GET /v1/releases/latest with a
   // 300s TTL (keys: latest:v1:<sorted-qs>). Optional — `withLatestCache`
   // degrades to pass-through when the binding is absent.
+  // ALERT_DEDUP_KV stores 1h dedup keys for Tier-1 alert emails (keys:
+  // alert:<subject>). Reuses the LATEST_CACHE namespace to avoid provisioning
+  // a new resource — alert keys use a distinct prefix so they never collide.
   "kv_namespaces": [
     {
       "binding": "EMBED_CACHE",
@@ -103,6 +106,11 @@
     },
     {
       "binding": "LATEST_CACHE",
+      "id": "178c70f9abd940478d5b5a053bf123bb",
+      "preview_id": "832712867aff4c91bc11bb3cecd7da9e",
+    },
+    {
+      "binding": "ALERT_DEDUP_KV",
       "id": "178c70f9abd940478d5b5a053bf123bb",
       "preview_id": "832712867aff4c91bc11bb3cecd7da9e",
     },
@@ -261,9 +269,11 @@
       ],
       // KV reuses the preview namespaces — those already exist and aren't
       // bound to prod. Keeps `wrangler dev` and staging in the same cache.
+      // ALERT_DEDUP_KV shares the LATEST_CACHE namespace (distinct key prefix).
       "kv_namespaces": [
         { "binding": "EMBED_CACHE", "id": "7737ccafd37a43fc9d2365c9a2d7ebca" },
         { "binding": "LATEST_CACHE", "id": "832712867aff4c91bc11bb3cecd7da9e" },
+        { "binding": "ALERT_DEDUP_KV", "id": "832712867aff4c91bc11bb3cecd7da9e" },
       ],
       // Prod R2 bucket is read-shared; staging writes go nowhere destructive
       // because CRON_ENABLED=false prevents the ingest paths that call put().
