@@ -19,8 +19,15 @@ import { sendAlert, type AlertEnv } from "../lib/send-alert.js";
  * Window between fan-out and summary alert. Must exceed the per-source
  * workflow's max retry envelope so retried instances have time to either
  * succeed or land a row in `workflow_failures` before we read.
+ *
+ * Worst-case envelope per `poll-and-fetch.ts`:
+ *   fetch:  3 retries × 5 min timeout + 30s/60s/120s backoff ≈ 19 min
+ *   embed:  5 retries × 5 min timeout + 30s..8min backoff    ≈ 36 min
+ *   refresh+embed (github sources only):                      ≈ 25 min
+ * 30 min is comfortably above the fetch window and the realistic
+ * embed-failure window (full retry storms past 30 min are pathological).
  */
-const SETTLE_WINDOW = "10 minutes";
+const SETTLE_WINDOW = "30 minutes";
 
 export type PollFetchSummaryEnv = AlertEnv & {
   DB: D1Database;

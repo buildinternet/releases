@@ -57,14 +57,23 @@ export async function updateWebhookSubscriptionSummary(
   }
 }
 
+/**
+ * Flip a subscription's enabled state. Returns true when the row actually
+ * transitioned (caller can use this to fire one-shot side-effects like an
+ * auto-disable alert without duplicating across concurrent batch messages).
+ */
 export async function setWebhookSubscriptionEnabled(
   db: D1Db,
   id: string,
   enabled: boolean,
   reason: string | null,
-): Promise<void> {
+): Promise<boolean> {
+  const cur = await getWebhookSubscriptionById(db, id);
+  if (!cur) return false;
+  if (cur.enabled === enabled) return false;
   await db
     .update(webhookSubscriptions)
     .set({ enabled, disabledReason: enabled ? null : reason })
     .where(eq(webhookSubscriptions.id, id));
+  return true;
 }

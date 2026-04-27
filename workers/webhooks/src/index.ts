@@ -46,7 +46,11 @@ function syntheticAttempt(
 }
 
 export default {
-  async queue(batch: MessageBatch<DeliveryMessage>, env: Env): Promise<void> {
+  async queue(
+    batch: MessageBatch<DeliveryMessage>,
+    env: Env,
+    ctx: ExecutionContext,
+  ): Promise<void> {
     const alertEnv: EmailEnv = {
       SEND_EMAIL: env.SEND_EMAIL,
       EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
@@ -83,12 +87,15 @@ export default {
             `  sub=${subId}  messages=${info.count}  lastError=${info.lastError ?? "unknown"}`,
           );
         }
-        // Fire-and-forget — never block the queue handler.
-        sendWebhookAlert(
-          alertEnv,
-          `[alert] webhook DLQ: ${totalMsgs} messages`,
-          lines.join("\n"),
-        ).catch(() => undefined);
+        // Background — let the runtime keep the worker alive until the email
+        // settles, but never block the queue handler.
+        ctx.waitUntil(
+          sendWebhookAlert(
+            alertEnv,
+            `[alert] webhook DLQ: ${totalMsgs} messages`,
+            lines.join("\n"),
+          ).catch(() => undefined),
+        );
       }
 
       return;
@@ -154,9 +161,9 @@ export default {
         });
         // oxlint-disable-next-line no-await-in-loop -- webhook delivery; re-fetch subscription to check auto-disable threshold
         const fresh = await getWebhookSubscriptionById(db, body.subscriptionId);
-        if (fresh && fresh.consecutiveFailures >= threshold) {
+        if (fresh && fresh.enabled && fresh.consecutiveFailures >= threshold) {
           // oxlint-disable-next-line no-await-in-loop -- webhook delivery; auto-disable subscription after threshold failures
-          await setWebhookSubscriptionEnabled(
+          const flipped = await setWebhookSubscriptionEnabled(
             db,
             body.subscriptionId,
             false,
@@ -166,20 +173,25 @@ export default {
             env.WEBHOOK_DELIVERIES_AE,
             syntheticAttempt(body, msg.attempts, "auto_disabled"),
           );
-          // Alert #2: notify once per auto-disable event.
-          const alertBody = [
-            `Subscription ID: ${fresh.id}`,
-            `URL: ${fresh.url}`,
-            `Org ID: ${fresh.orgId ?? "n/a"}`,
-            `Consecutive failures: ${fresh.consecutiveFailures}`,
-            `Last error: ${result.errorMessage ?? "unknown"}`,
-          ].join("\n");
-          // Fire-and-forget — do not block delivery processing or throw.
-          sendWebhookAlert(
-            alertEnv,
-            `[alert] webhook subscription auto-disabled: ${fresh.id}`,
-            alertBody,
-          ).catch(() => undefined);
+          // Alert #2: notify once per auto-disable event. Gated on the actual
+          // enabled→disabled transition so concurrent batch messages past the
+          // threshold don't each fire an email.
+          if (flipped) {
+            const alertBody = [
+              `Subscription ID: ${fresh.id}`,
+              `URL: ${fresh.url}`,
+              `Org ID: ${fresh.orgId ?? "n/a"}`,
+              `Consecutive failures: ${fresh.consecutiveFailures}`,
+              `Last error: ${result.errorMessage ?? "unknown"}`,
+            ].join("\n");
+            ctx.waitUntil(
+              sendWebhookAlert(
+                alertEnv,
+                `[alert] webhook subscription auto-disabled: ${fresh.id}`,
+                alertBody,
+              ).catch(() => undefined),
+            );
+          }
         }
         if (result.outcome === "perm_fail") {
           msg.ack();

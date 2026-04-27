@@ -73,6 +73,14 @@ const RETRY_EMBED = {
 } satisfies WorkflowStepConfig;
 
 /**
+ * Sentinel for "source row was deleted between fan-out and workflow start".
+ * Matched verbatim in the catch handler so unrelated NonRetryableErrors that
+ * happen to mention "not found" (e.g. a 404 from a downstream API) still get
+ * recorded as workflow failures rather than silently swallowed.
+ */
+const SOURCE_DELETED_SENTINEL = "load-source: source row deleted";
+
+/**
  * Resolve the FetchOneEnv slice — embedding + GitHub + vector bindings — once
  * and cache it across steps. Secrets are fetched lazily inside steps that
  * need them (none of them here land in the workflow's persisted state because
@@ -117,7 +125,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       // between cron fan-out and workflow start — nothing to do).
       const source = await step.do("load-source", async () => {
         const [row]: Source[] = await db.select().from(sources).where(eq(sources.id, sourceId));
-        if (!row) throw new NonRetryableError(`source ${sourceId} not found`);
+        if (!row) throw new NonRetryableError(SOURCE_DELETED_SENTINEL);
         return row;
       });
 
@@ -210,11 +218,12 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         `[poll-fetch-workflow] ${source.slug}: done (inserted=${fetchResult.releasesInserted}, found=${fetchResult.releasesFound})`,
       );
     } catch (err) {
-      // Skip NonRetryableError for missing source — that's an expected race
-      // (source deleted between fan-out and workflow start), not a failure.
-      const isNotFound =
-        err instanceof NonRetryableError && String(err.message).includes("not found");
-      if (!isNotFound) {
+      // Skip the deleted-source race specifically — sentinel match (not a
+      // substring scan) so unrelated NonRetryableErrors mentioning "not found"
+      // still get recorded.
+      const isDeletedSourceRace =
+        err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL;
+      if (!isDeletedSourceRace) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.error(`[poll-fetch-workflow] ${sourceId} failed at ${currentStep}: ${errorMsg}`);
         // Best-effort: record this failure for the summary workflow. Don't

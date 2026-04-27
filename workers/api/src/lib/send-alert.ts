@@ -32,16 +32,18 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
 
   const subject = input.subject.startsWith("[alert]") ? input.subject : `[alert] ${input.subject}`;
 
-  if (env.ALERT_DEDUP_KV) {
+  // Check (but don't yet write) the dedup key. We only commit the dedup record
+  // after a successful send — otherwise a transient send failure would poison
+  // the dedup window for an hour and silently swallow retries.
+  const dedupKey = env.ALERT_DEDUP_KV ? `alert:${subject}` : null;
+  if (env.ALERT_DEDUP_KV && dedupKey) {
     try {
-      const dedupKey = `alert:${subject}`;
       const existing = await env.ALERT_DEDUP_KV.get(dedupKey);
       if (existing !== null) return false;
-      await env.ALERT_DEDUP_KV.put(dedupKey, "1", { expirationTtl: DEDUP_TTL_SECONDS });
     } catch (err) {
       // KV failure is non-fatal — let the email attempt proceed.
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[send-alert] KV dedup error (continuing): ${msg}`);
+      console.warn(`[send-alert] KV dedup read error (continuing): ${msg}`);
     }
   }
 
@@ -50,6 +52,16 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
     if (!result.sent) {
       console.log(`[send-alert] skipped (${result.reason}): ${subject}`);
       return false;
+    }
+    if (env.ALERT_DEDUP_KV && dedupKey) {
+      try {
+        await env.ALERT_DEDUP_KV.put(dedupKey, "1", { expirationTtl: DEDUP_TTL_SECONDS });
+      } catch (err) {
+        // Log but don't undo the send — duplicate emails within the window
+        // are preferable to mis-reporting send success.
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[send-alert] KV dedup write error (sent ok): ${msg}`);
+      }
     }
     console.log(`[send-alert] sent: ${subject}`);
     return true;

@@ -62,7 +62,7 @@ function deliveryMsg(subId = "whk_1") {
 describe("queue handler", () => {
   it("acks messages routed to the dlq", async () => {
     const b = batch([deliveryMsg()], DLQ_QUEUE);
-    await worker.queue(b as any, fakeEnv() as any);
+    await worker.queue(b as any, fakeEnv() as any, fakeCtx());
     expect(b.acked.length).toBe(1);
   });
 
@@ -71,7 +71,14 @@ describe("queue handler", () => {
     const env = fakeEnv({
       PER_SUB_RATE_LIMITER: { limit: async () => ({ success: false }) },
     });
-    await worker.queue(b as any, env as any);
+    await worker.queue(b as any, env as any, fakeCtx());
     expect(b.retried.length).toBe(1);
   });
 });
+
+function fakeCtx(): ExecutionContext {
+  return {
+    waitUntil: () => {},
+    passThroughOnException: () => {},
+  } as unknown as ExecutionContext;
+}

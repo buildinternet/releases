@@ -71,9 +71,9 @@ describe("sendAlert", () => {
       body: "body",
     });
 
-    const putKey = kvKeys.find((k) => k.startsWith("put:"));
-    expect(putKey).toBe("put:alert:[alert] already prefixed");
-    expect(putKey).not.toContain("[alert] [alert]");
+    const getKey = kvKeys.find((k) => k.startsWith("get:"));
+    expect(getKey).toBe("get:alert:[alert] already prefixed");
+    expect(getKey).not.toContain("[alert] [alert]");
   });
 
   it("deduplicates within 1h (KV hit)", async () => {
@@ -108,6 +108,27 @@ describe("sendAlert", () => {
     });
 
     expect(kvTouched).toBe(false);
+  });
+
+  it("does not write dedup record when sendEmail fails", async () => {
+    // sendEmail() will throw because `cloudflare:email` isn't available in
+    // tests. The dedup KV.put must not be called — otherwise a transient
+    // send failure would suppress retries for an hour.
+    let putCalls = 0;
+    const fakeKV: KVNamespace = {
+      get: async () => null,
+      put: async () => {
+        putCalls += 1;
+      },
+    } as unknown as KVNamespace;
+
+    const result = await sendAlert(makeEnv({ ALERT_DEDUP_KV: fakeKV }), {
+      subject: "[alert] transient send failure",
+      body: "body",
+    });
+
+    expect(result).toBe(false);
+    expect(putCalls).toBe(0);
   });
 
   it("continues after KV failure and attempts email", async () => {
