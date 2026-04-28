@@ -5,9 +5,6 @@ import { SortHeader, type SortState } from "@/components/sort-header";
 
 // ---- Types ----------------------------------------------------------------
 
-type SearchSurface = "web" | "mcp" | "api";
-type SearchMode = "lexical" | "semantic" | "hybrid";
-
 interface RawSearchQuery {
   id: string;
   timestamp: number;
@@ -59,7 +56,7 @@ function formatDuration(ms: number | null): string {
 }
 
 function surfaceColor(surface: string): string {
-  switch (surface as SearchSurface) {
+  switch (surface) {
     case "web":
       return "text-blue-500";
     case "mcp":
@@ -72,7 +69,7 @@ function surfaceColor(surface: string): string {
 }
 
 function modeColor(mode: string | null): string {
-  switch (mode as SearchMode | null) {
+  switch (mode) {
     case "hybrid":
       return "text-green-600";
     case "semantic":
@@ -84,11 +81,25 @@ function modeColor(mode: string | null): string {
   }
 }
 
+// ---- Shared status helpers ------------------------------------------------
+
+function LoadingState(): React.ReactElement {
+  return <div className="text-stone-500 text-xs">Loading...</div>;
+}
+
+function ErrorState({ message }: { message: string }): React.ReactElement {
+  return <div className="text-red-500 text-xs">{message}</div>;
+}
+
+function EmptyState(): React.ReactElement {
+  return <div className="text-stone-500 text-xs">No queries recorded yet.</div>;
+}
+
 // ---- Top queries section --------------------------------------------------
 
 type TopSortField = "count" | "lastSeen" | "query";
 
-function TopQueriesTable() {
+function TopQueriesTable(): React.ReactElement {
   const [rows, setRows] = useState<TopQuery[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState<TopSortField>>({ field: "count", dir: "desc" });
@@ -105,32 +116,23 @@ function TopQueriesTable() {
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   }, []);
 
-  const sorted: TopQuery[] =
-    rows == null
-      ? []
-      : rows.toSorted((a, b) => {
-          const dir = sort.dir === "asc" ? 1 : -1;
-          switch (sort.field) {
-            case "count":
-              return (a.count - b.count) * dir;
-            case "lastSeen":
-              return (a.lastSeen - b.lastSeen) * dir;
-            case "query":
-              return a.query.localeCompare(b.query) * dir;
-            default:
-              return 0;
-          }
-        });
+  if (err) return <ErrorState message={`Error loading top queries: ${err}`} />;
+  if (!rows) return <LoadingState />;
+  if (rows.length === 0) return <EmptyState />;
 
-  if (err) {
-    return <div className="text-red-500 text-xs">Error loading top queries: {err}</div>;
-  }
-  if (!rows) {
-    return <div className="text-stone-500 text-xs">Loading...</div>;
-  }
-  if (rows.length === 0) {
-    return <div className="text-stone-500 text-xs">No queries recorded yet.</div>;
-  }
+  const sorted = rows.toSorted((a, b) => {
+    const dir = sort.dir === "asc" ? 1 : -1;
+    switch (sort.field) {
+      case "count":
+        return (a.count - b.count) * dir;
+      case "lastSeen":
+        return (a.lastSeen - b.lastSeen) * dir;
+      case "query":
+        return a.query.localeCompare(b.query) * dir;
+      default:
+        return 0;
+    }
+  });
 
   return (
     <div>
@@ -170,7 +172,7 @@ function TopQueriesTable() {
 
 type RecentSortField = "timestamp" | "durationMs" | "surface" | "mode";
 
-function RecentQueriesTable() {
+function RecentQueriesTable(): React.ReactElement {
   const [rows, setRows] = useState<RawSearchQuery[] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [sort, setSort] = useState<SortState<RecentSortField>>({
@@ -190,34 +192,25 @@ function RecentQueriesTable() {
       .catch((e: unknown) => setErr(e instanceof Error ? e.message : String(e)));
   }, []);
 
-  const sorted: RawSearchQuery[] =
-    rows == null
-      ? []
-      : rows.toSorted((a, b) => {
-          const dir = sort.dir === "asc" ? 1 : -1;
-          switch (sort.field) {
-            case "timestamp":
-              return (a.timestamp - b.timestamp) * dir;
-            case "durationMs":
-              return ((a.durationMs ?? 0) - (b.durationMs ?? 0)) * dir;
-            case "surface":
-              return a.surface.localeCompare(b.surface) * dir;
-            case "mode":
-              return (a.mode ?? "").localeCompare(b.mode ?? "") * dir;
-            default:
-              return 0;
-          }
-        });
+  if (err) return <ErrorState message={`Error loading recent queries: ${err}`} />;
+  if (!rows) return <LoadingState />;
+  if (rows.length === 0) return <EmptyState />;
 
-  if (err) {
-    return <div className="text-red-500 text-xs">Error loading recent queries: {err}</div>;
-  }
-  if (!rows) {
-    return <div className="text-stone-500 text-xs">Loading...</div>;
-  }
-  if (rows.length === 0) {
-    return <div className="text-stone-500 text-xs">No queries recorded yet.</div>;
-  }
+  const sorted = rows.toSorted((a, b) => {
+    const dir = sort.dir === "asc" ? 1 : -1;
+    switch (sort.field) {
+      case "timestamp":
+        return (a.timestamp - b.timestamp) * dir;
+      case "durationMs":
+        return ((a.durationMs ?? 0) - (b.durationMs ?? 0)) * dir;
+      case "surface":
+        return a.surface.localeCompare(b.surface) * dir;
+      case "mode":
+        return (a.mode ?? "").localeCompare(b.mode ?? "") * dir;
+      default:
+        return 0;
+    }
+  });
 
   return (
     <div>
@@ -276,7 +269,7 @@ function RecentQueriesTable() {
 
 // ---- Tab root -------------------------------------------------------------
 
-export function SearchQueriesTab() {
+export function SearchQueriesTab(): React.ReactElement {
   return (
     <div className="space-y-8">
       <TopQueriesTable />
