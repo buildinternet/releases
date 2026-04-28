@@ -37,6 +37,13 @@ import { aggregateSweepResults } from "../lib/sweep-results.js";
 import type { CronReportResults } from "../lib/cron-report.js";
 import { getTopSearchQueries } from "../lib/search-queries-top.js";
 import type { TopSearchRow } from "../lib/search-queries-top.js";
+import {
+  evaluateNoResultsAlert,
+  formatNoResultsAlertBody,
+  getNoResultsStats,
+  parseThresholds,
+} from "../lib/search-no-results.js";
+import { sendAlert, type AlertEnv } from "../lib/send-alert.js";
 
 /**
  * Workflow env. Secrets stay as SecretBinding here and are resolved inside
@@ -63,6 +70,11 @@ export type ScrapeAgentSweepWorkflowEnv = {
   EMAIL_NOTIFY_TO?: string;
   EMAIL_FROM?: string;
   ADMIN_BASE_URL?: string;
+  /** Shared 1h dedup KV for Tier-1/Tier-2 alert emails. */
+  ALERT_DEDUP_KV?: KVNamespace;
+  /** Tier-2 no-results alert thresholds. Defaults: 20% over 50+ queries. */
+  SEARCH_NO_RESULTS_THRESHOLD_PCT?: string;
+  SEARCH_NO_RESULTS_MIN_VOLUME?: string;
   /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
   _drizzleOverride?: unknown;
 };
@@ -101,10 +113,16 @@ const RETRY_TOP_SEARCHES = {
   retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
 } satisfies WorkflowStepConfig;
 
+const RETRY_NO_RESULTS = {
+  retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
+} satisfies WorkflowStepConfig;
+
 /** How many hours back the top-searches digest covers. */
 const TOP_SEARCHES_WINDOW_HOURS = 24;
 /** Maximum number of search-query rows to include in the email digest. */
 const TOP_SEARCHES_LIMIT = 20;
+/** Window for the no-results alert evaluation; matches the digest window. */
+const NO_RESULTS_WINDOW_HOURS = 24;
 
 /**
  * How long to wait between dispatching managed-agent sessions and emailing
@@ -371,6 +389,36 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
         buildReport(reportEnv, { ...finalized, results, topSearches }),
       );
     });
+
+    // The alert is purely informational and runs after the report has already
+    // been sent — never let an aggregation hiccup escalate into a workflow
+    // failure that would trigger workflow-level retries.
+    await step
+      .do("no-results-alert", RETRY_NO_RESULTS, async () => {
+        const thresholds = parseThresholds(env);
+        const since = Date.now() - NO_RESULTS_WINDOW_HOURS * 3_600_000;
+        const stats = await getNoResultsStats(db, { since });
+        const decision = evaluateNoResultsAlert(stats, thresholds);
+        if (!decision.fire) {
+          console.log(`[scrape-agent-workflow] no-results-alert skipped: ${decision.reason}`);
+          return;
+        }
+        const alertEnv: AlertEnv = {
+          SEND_EMAIL: env.SEND_EMAIL,
+          EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
+          EMAIL_NOTIFY_TO: env.EMAIL_NOTIFY_TO,
+          EMAIL_FROM: env.EMAIL_FROM,
+          ALERT_DEDUP_KV: env.ALERT_DEDUP_KV,
+        };
+        await sendAlert(alertEnv, {
+          subject: `search no-results rate ${(decision.ratio * 100).toFixed(1)}%`,
+          body: formatNoResultsAlertBody(stats, decision, thresholds),
+        });
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[scrape-agent-workflow] no-results-alert failed: ${msg}`);
+      });
   }
 }
 

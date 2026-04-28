@@ -188,6 +188,11 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
     // Result-aggregation pipeline runs after dispatch.
     expect(stepNames).toContain("aggregate-results");
     expect(stepNames).toContain("send-report");
+    // No-results alert step runs after the report is sent. The default thresholds
+    // (50+ queries, 20%) won't trip on an empty seeded DB, so the step should
+    // succeed with a "skipped" decision rather than raising.
+    expect(stepNames).toContain("no-results-alert");
+    expect(records.find((r) => r.name === "no-results-alert")?.ok).toBe(true);
   });
 
   it("aggregates fetch_log rows for dispatched sessions before sending report", async () => {
