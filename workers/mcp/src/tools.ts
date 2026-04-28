@@ -42,6 +42,23 @@ import type Anthropic from "@anthropic-ai/sdk";
 
 export type ToolResult = { content: [{ type: "text"; text: string }] };
 
+/**
+ * Per-section hit counts emitted by the search tools so `withSearchLog` in
+ * `mcp-agent.ts` can populate `search_queries` rows with the same fields the
+ * web/api surface logs (orgHits, catalogHits, releaseHits, chunkHits,
+ * degraded). Search-tool functions return this alongside the rendered text
+ * — see `SearchToolReturn`.
+ */
+export type SearchCounts = {
+  orgHits?: number;
+  catalogHits?: number;
+  releaseHits?: number;
+  chunkHits?: number;
+  degraded?: boolean;
+};
+
+export type SearchToolReturn = { result: ToolResult; counts: SearchCounts };
+
 function text(t: string): ToolResult {
   return { content: [{ type: "text" as const, text: t }] };
 }
@@ -179,28 +196,38 @@ export async function searchReleases(
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   // ^ MCP's own hybrid helper lives at workers/mcp/src/lib/search-hybrid.ts
   ctx?: ExecutionContext,
-): Promise<ToolResult> {
+): Promise<SearchToolReturn> {
   const maxResults = params.limit ?? 20;
   const typeFilter = params.type;
   const mode: SearchReleasesMode = params.mode ?? "hybrid";
   const includeCoverage = params.include_coverage === true;
+  const empty: SearchCounts = { releaseHits: 0, chunkHits: 0 };
 
   let orgSourceIds: string[] | undefined;
   if (params.organization) {
     const org = await findOrg(db, params.organization);
-    if (!org) return text(`No organization found matching "${params.organization}"`);
+    if (!org) {
+      return {
+        result: text(`No organization found matching "${params.organization}"`),
+        counts: empty,
+      };
+    }
     const orgSources = await db
       .select({ id: sources.id })
       .from(sources)
       .where(eq(sources.orgId, org.id));
     orgSourceIds = orgSources.map((s) => s.id);
-    if (orgSourceIds.length === 0) return text("No sources found for this organization.");
+    if (orgSourceIds.length === 0) {
+      return { result: text("No sources found for this organization."), counts: empty };
+    }
   }
 
   let sourceId: string | undefined;
   if (params.product) {
     const source = await resolveSource(db, params.product);
-    if (!source) return text(`No product found with slug "${params.product}"`);
+    if (!source) {
+      return { result: text(`No product found with slug "${params.product}"`), counts: empty };
+    }
     sourceId = source.id;
   }
 
@@ -224,11 +251,23 @@ export async function searchReleases(
       ctx ? { waitUntil: ctx.waitUntil.bind(ctx) } : {},
     );
 
+    let releaseHits = 0;
+    let chunkHits = 0;
+    for (const hit of result.hits) {
+      if (hit.kind === "release") releaseHits++;
+      else chunkHits++;
+    }
+    const counts: SearchCounts = {
+      releaseHits,
+      chunkHits,
+      degraded: result.degraded === true,
+    };
+
     if (result.hits.length === 0) {
       const degradeNote = result.degraded
         ? ` (degraded: ${result.degradedReason ?? "unknown"})`
         : "";
-      return text(`No releases found matching the query.${degradeNote}`);
+      return { result: text(`No releases found matching the query.${degradeNote}`), counts };
     }
 
     const header = result.degraded
@@ -268,7 +307,7 @@ export async function searchReleases(
       }
     }
 
-    return text(header + lines.join("\n\n---\n\n"));
+    return { result: text(header + lines.join("\n\n---\n\n")), counts };
   }
 
   // Lexical fallback (also used when mode==="lexical").
@@ -306,16 +345,19 @@ export async function searchReleases(
     ORDER BY rank LIMIT ${maxResults}
   `);
 
-  if (rows.length === 0) return text("No releases found matching the query.");
+  const lexicalCounts: SearchCounts = { releaseHits: rows.length, chunkHits: 0 };
+  if (rows.length === 0) {
+    return { result: text("No releases found matching the query."), counts: lexicalCounts };
+  }
 
-  const result = rows
+  const lexicalText = rows
     .map((r) => {
       const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
       return `[release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`;
     })
     .join("\n\n---\n\n");
 
-  return text(result);
+  return { result: text(lexicalText), counts: lexicalCounts };
 }
 
 // ── search_registry ──────────────────────────────────────────────────
@@ -327,7 +369,7 @@ export async function searchRegistry(
   params: { query: string; kind?: RegistryKind; limit?: number },
   searchEnv: import("./lib/search-hybrid.js").HybridSearchEnv,
   ctx?: ExecutionContext,
-): Promise<ToolResult> {
+): Promise<SearchToolReturn> {
   const { runRegistrySearch } = await import("./lib/search-hybrid.js");
   const result = await runRegistrySearch(
     searchEnv,
@@ -404,10 +446,27 @@ export async function searchRegistry(
     if (orgRows.length + productRows.length + sourceRows.length === 0) {
       out.push("No registry entries found.");
     }
-    return text(out.join("\n\n"));
+    // Mirror the web/api log shape: `org` rows count toward `orgHits`;
+    // products + sources merge into the catalog section.
+    const counts: SearchCounts = {
+      orgHits: orgRows.length,
+      catalogHits: productRows.length + sourceRows.length,
+      degraded: true,
+    };
+    return { result: text(out.join("\n\n")), counts };
   }
 
-  if (result.hits.length === 0) return text("No registry entries found.");
+  let orgHits = 0;
+  let catalogHits = 0;
+  for (const h of result.hits) {
+    if (h.kind === "org") orgHits++;
+    else catalogHits++;
+  }
+  const counts: SearchCounts = { orgHits, catalogHits, degraded: false };
+
+  if (result.hits.length === 0) {
+    return { result: text("No registry entries found."), counts };
+  }
 
   const lines = result.hits.map((h) => {
     const parts = [`[${h.kind}] **${h.name}**`, `  id: ${h.id}`, `  slug: ${h.slug}`];
@@ -415,7 +474,7 @@ export async function searchRegistry(
     if (h.description) parts.push(`  ${h.description}`);
     return parts.join("\n");
   });
-  return text(lines.join("\n\n"));
+  return { result: text(lines.join("\n\n")), counts };
 }
 
 // ── get_latest_releases ──────────────────────────────────────────────
@@ -1350,7 +1409,7 @@ export async function search(
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
   ctx?: ExecutionContext,
-): Promise<ToolResult> {
+): Promise<SearchToolReturn> {
   const wanted = new Set<SearchType>(
     params.type && params.type.length > 0 ? params.type : ["orgs", "catalog", "releases"],
   );
@@ -1358,19 +1417,27 @@ export async function search(
   const mode: SearchReleasesMode = params.mode ?? "hybrid";
   const includeCoverage = params.include_coverage === true;
   const pattern = `%${params.query}%`;
+  const empty: SearchCounts = { orgHits: 0, catalogHits: 0, releaseHits: 0, chunkHits: 0 };
 
   let orgScope: Awaited<ReturnType<typeof findOrg>> = null;
   if (params.organization) {
     orgScope = await findOrg(db, params.organization);
-    if (!orgScope) return text(`No organization found matching "${params.organization}"`);
+    if (!orgScope) {
+      return {
+        result: text(`No organization found matching "${params.organization}"`),
+        counts: empty,
+      };
+    }
   }
 
   let entitySourceIds: string[] | null = null;
   if (params.entity) {
     entitySourceIds = await resolveEntityToSourceIds(db, params.entity);
-    if (!entitySourceIds) return text(`No catalog entry found matching "${params.entity}"`);
+    if (!entitySourceIds) {
+      return { result: text(`No catalog entry found matching "${params.entity}"`), counts: empty };
+    }
     if (entitySourceIds.length === 0) {
-      return text(`No sources found under "${params.entity}".`);
+      return { result: text(`No sources found under "${params.entity}".`), counts: empty };
     }
   }
 
@@ -1577,5 +1644,23 @@ export async function search(
     sections.push("No results found.");
   }
 
-  return text(sections.join("\n\n"));
+  let releaseHits = 0;
+  let chunkHits = 0;
+  if (releaseResult?.mode === "hybrid") {
+    for (const hit of releaseResult.hybrid.hits) {
+      if (hit.kind === "release") releaseHits++;
+      else chunkHits++;
+    }
+  } else if (releaseResult?.mode === "lexical") {
+    releaseHits = releaseResult.rows.length;
+  }
+  const counts: SearchCounts = {
+    orgHits: orgs.length,
+    catalogHits: catalog.length,
+    releaseHits,
+    chunkHits,
+    degraded: hadDegradeNotice,
+  };
+
+  return { result: text(sections.join("\n\n")), counts };
 }

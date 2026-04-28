@@ -386,18 +386,22 @@ describe("search (unified)", () => {
 
   it("returns all three sections by default when each has matches", async () => {
     // Lexical mode stays purely in-DB so no Vectorize bindings are needed.
-    const text = resultText(await search(asD1(fixture.db), { query: "next", mode: "lexical" }));
+    const text = resultText(
+      (await search(asD1(fixture.db), { query: "next", mode: "lexical" })).result,
+    );
     expect(text).toContain("## Catalog");
     expect(text).toContain("Next.js");
   });
 
   it("restricts to catalog only when type filter is passed", async () => {
     const text = resultText(
-      await search(asD1(fixture.db), {
-        query: "next",
-        type: ["catalog"],
-        mode: "lexical",
-      }),
+      (
+        await search(asD1(fixture.db), {
+          query: "next",
+          type: ["catalog"],
+          mode: "lexical",
+        })
+      ).result,
     );
     expect(text).toContain("## Catalog");
     expect(text).not.toContain("## Releases");
@@ -405,12 +409,14 @@ describe("search (unified)", () => {
 
   it("narrows release results via entity filter (product slug)", async () => {
     const text = resultText(
-      await search(asD1(fixture.db), {
-        query: "async",
-        type: ["releases"],
-        entity: "nextjs",
-        mode: "lexical",
-      }),
+      (
+        await search(asD1(fixture.db), {
+          query: "async",
+          type: ["releases"],
+          entity: "nextjs",
+          mode: "lexical",
+        })
+      ).result,
     );
     expect(text).toContain("Next.js 15");
     expect(text).not.toContain("Claude 4 release");
@@ -418,12 +424,14 @@ describe("search (unified)", () => {
 
   it("narrows release results via entity filter (source slug)", async () => {
     const text = resultText(
-      await search(asD1(fixture.db), {
-        query: "Claude",
-        type: ["releases"],
-        entity: "anthropic-releases",
-        mode: "lexical",
-      }),
+      (
+        await search(asD1(fixture.db), {
+          query: "Claude",
+          type: ["releases"],
+          entity: "anthropic-releases",
+          mode: "lexical",
+        })
+      ).result,
     );
     expect(text).toContain("Claude 4 release");
     expect(text).not.toContain("Next.js 15");
@@ -431,12 +439,22 @@ describe("search (unified)", () => {
 
   it("returns a friendly message when the entity filter doesn't match", async () => {
     const text = resultText(
-      await search(asD1(fixture.db), {
-        query: "anything",
-        entity: "never-heard-of-it",
-        mode: "lexical",
-      }),
+      (
+        await search(asD1(fixture.db), {
+          query: "anything",
+          entity: "never-heard-of-it",
+          mode: "lexical",
+        })
+      ).result,
     );
     expect(text).toContain('No catalog entry found matching "never-heard-of-it"');
+  });
+
+  it("populates per-section hit counts", async () => {
+    const out = await search(asD1(fixture.db), { query: "next", mode: "lexical" });
+    expect(out.counts.orgHits).toBeGreaterThanOrEqual(0);
+    expect(out.counts.catalogHits).toBeGreaterThan(0);
+    expect(out.counts.releaseHits).toBeGreaterThanOrEqual(0);
+    expect(out.counts.chunkHits).toBe(0);
   });
 });
