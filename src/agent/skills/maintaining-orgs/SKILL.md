@@ -93,7 +93,7 @@ Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each
 
 Prompt template:
 
-````
+```
 Regenerate the AI overview for the `{slug}` org in the Releases registry.
 The `releases` CLI is installed and authenticated against production.
 Invoke the `regenerating-overviews` skill for the prompt and workflow.
@@ -114,7 +114,7 @@ Output rules — these are not negotiable:
 
 Acceptable shape (for reference — do not copy verbatim):
 
-```markdown
+~~~markdown
 **Vercel** focused on AI Gateway GA and Cache Components in the last 90 days.
 
 **AI Gateway shipped GA** with bring-your-own-key, request caching, and per-
@@ -126,7 +126,7 @@ canonical API.
 **Cache Components became stable** in Next.js 16. `use cache` directives now
 participate in PPR, and `unstable_cache` is deprecated in favor of
 `cacheTag` / `cacheLife`. The migration codemod handles ~80% of call sites.
-```
+~~~
 
 Return in your final message:
   - Slug, Selected/Total
@@ -134,7 +134,7 @@ Return in your final message:
   - The generated markdown in a fenced code block (required when generated).
 
 Do not attempt to upload. The parent session handles writes.
-````
+```
 
 ### Tracking results
 
