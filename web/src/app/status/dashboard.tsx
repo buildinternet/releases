@@ -13,6 +13,7 @@ import { SortHeader, type SortState } from "@/components/sort-header";
 import { DAY_MS } from "@/lib/cadence";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
+import { SearchQueriesTab } from "./search-queries-tab";
 import { ForceDrainTile } from "./force-drain-tile";
 
 interface SessionState {
@@ -84,7 +85,7 @@ interface FetchTriggerResult {
   type?: string;
 }
 
-type Tab = "sessions" | "fetch-log" | "sources" | "orgs" | "cron";
+type Tab = "sessions" | "fetch-log" | "sources" | "orgs" | "cron" | "searches";
 type DateRange = "today" | "week" | "month" | "all";
 
 type SourceSortField =
@@ -103,6 +104,7 @@ const TABS: { value: Tab; label: string }[] = [
   { value: "sources", label: "Sources" },
   { value: "orgs", label: "Orgs" },
   { value: "cron", label: "Cron" },
+  { value: "searches", label: "Searches" },
 ];
 const DEFAULT_TAB: Tab = "sessions";
 
@@ -574,6 +576,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       )}
       {tab === "orgs" && <OrgsTable sources={allSources} />}
       {tab === "cron" && <CronRunsTab />}
+      {tab === "searches" && <SearchQueriesTab />}
     </div>
   );
 }
