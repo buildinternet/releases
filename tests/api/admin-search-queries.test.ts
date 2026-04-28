@@ -25,6 +25,8 @@ function mkApp(db: any) {
 const NOW = Date.now();
 
 async function seed(db: any) {
+  // userAgent must be non-null and non-bot so rows survive the default
+  // ?bots=exclude filter added to the admin route (commit a8140b7).
   await db.insert(searchQueries).values([
     {
       id: "sq_1",
@@ -32,6 +34,7 @@ async function seed(db: any) {
       surface: "web",
       query: "next.js",
       clientKind: "external",
+      userAgent: "TestClient/1.0",
     },
     {
       id: "sq_2",
@@ -39,6 +42,7 @@ async function seed(db: any) {
       surface: "web",
       query: "next.js",
       clientKind: "external",
+      userAgent: "TestClient/1.0",
     },
     {
       id: "sq_3",
@@ -46,6 +50,7 @@ async function seed(db: any) {
       surface: "mcp",
       query: "kubernetes",
       clientKind: "external",
+      userAgent: "TestClient/1.0",
     },
     {
       id: "sq_old",
@@ -53,6 +58,7 @@ async function seed(db: any) {
       surface: "web",
       query: "stale",
       clientKind: "external",
+      userAgent: "TestClient/1.0",
     },
   ]);
 }
