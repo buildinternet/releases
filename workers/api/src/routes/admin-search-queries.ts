@@ -10,7 +10,7 @@
  *
  * Both endpoints accept `?bots=exclude|include|only` (default: exclude) to
  * filter rows by `user_agent`. Bot detection uses substring matching on
- * `bot`, `crawl`, `spider`, `slurp` plus an empty-UA check.
+ * `bot`, `crawl`, `spider`, `slurp` plus a NULL/empty-UA check.
  */
 import { Hono } from "hono";
 import { and, desc, eq, gt, isNull, not, like, or, sql, type SQL } from "drizzle-orm";
@@ -67,9 +67,13 @@ function parseBots(raw: string | undefined): BotsParam | null {
 function botCondition(mode: BotsParam): SQL | null {
   if (mode === "include") return null;
 
-  // A row is a "bot" if its UA is NULL or matches any of the substring patterns.
+  // A row is a "bot" if its UA is NULL/empty or matches any of the substring patterns.
   const patternMatches = BOT_UA_PATTERNS.map((p) => like(searchQueries.userAgent, p));
-  const isBotRow = or(isNull(searchQueries.userAgent), ...patternMatches) as SQL;
+  const isBotRow = or(
+    isNull(searchQueries.userAgent),
+    eq(searchQueries.userAgent, ""),
+    ...patternMatches,
+  ) as SQL;
 
   return mode === "only" ? isBotRow : not(isBotRow);
 }
