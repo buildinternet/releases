@@ -93,24 +93,48 @@ Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each
 
 Prompt template:
 
-```
+````
 Regenerate the AI overview for the `{slug}` org in the Releases registry.
 The `releases` CLI is installed and authenticated against production.
 Invoke the `regenerating-overviews` skill for the prompt and workflow.
 
   1. (If scrape/agent sources) skim `releases admin playbook {slug}`.
-  2. `releases admin source fetch --org {slug} --json` if needed.
+  2. `releases admin source fetch --org {slug} --json --wait 600` if needed.
+     If exit code != 0, STOP and report the error verbatim — do not generate
+     from older data.
   3. `releases admin overview-inputs {slug} --json`. If `selected` is empty,
      stop and report "empty-window".
   4. Generate the markdown inline per the skill.
 
+Output rules — these are not negotiable:
+  - 250 words target. 300 words is the HARD CEILING. Strip until it fits.
+  - No markdown headings (`#`, `##`, …). The UI renders the org header.
+  - Return ONLY the markdown inside a fenced code block. No preamble, no
+    word-count notes, no "Here you go", no commentary after.
+
+Acceptable shape (for reference — do not copy verbatim):
+
+```markdown
+**Vercel** focused on AI Gateway GA and Cache Components in the last 90 days.
+
+**AI Gateway shipped GA** with bring-your-own-key, request caching, and per-
+project budget caps. Pricing tiers are now metered per million tokens; the
+free tier covers experimentation but not production traffic. Vercel SDK 6.0
+removes the legacy `experimental_streamText` export — `streamText` is the
+canonical API.
+
+**Cache Components became stable** in Next.js 16. `use cache` directives now
+participate in PPR, and `unstable_cache` is deprecated in favor of
+`cacheTag` / `cacheLife`. The migration codemod handles ~80% of call sites.
+```
+
 Return in your final message:
   - Slug, Selected/Total
-  - Status: generated | empty-window
+  - Status: generated | empty-window | fetch-error
   - The generated markdown in a fenced code block (required when generated).
 
 Do not attempt to upload. The parent session handles writes.
-```
+````
 
 ### Tracking results
 
