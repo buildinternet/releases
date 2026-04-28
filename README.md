@@ -189,7 +189,7 @@ The web frontend tags requests as `web` via the `X-Releases-Surface` header so a
 
 ## Deployment
 
-Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt. Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys. D1 migrations stay manual.
+Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt, fans out across `production` and `staging`, and runs `wrangler d1 migrations apply` against each environment's DB before the new code starts serving (so additive schema lands first). Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys.
 
 To deploy manually from the project root, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env` (Bun autoloads it) and run:
 
