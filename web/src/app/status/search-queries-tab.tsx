@@ -219,9 +219,7 @@ function RecentQueriesTable(): React.ReactElement {
       </h3>
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
         <div className="grid grid-cols-[3fr_0.6fr_0.6fr_0.9fr_1.5fr_0.7fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium">
-          <SortHeader field="timestamp" current={sort} onChange={setSort} defaultDir="desc">
-            Query
-          </SortHeader>
+          <div className="uppercase tracking-wider text-stone-400">Query</div>
           <SortHeader field="surface" current={sort} onChange={setSort}>
             Surface
           </SortHeader>
@@ -229,17 +227,29 @@ function RecentQueriesTable(): React.ReactElement {
             Mode
           </SortHeader>
           <div className="uppercase tracking-wider text-stone-400">Hits</div>
-          <div className="uppercase tracking-wider text-stone-400">When</div>
+          <SortHeader field="timestamp" current={sort} onChange={setSort} defaultDir="desc">
+            When
+          </SortHeader>
           <SortHeader field="durationMs" current={sort} onChange={setSort} defaultDir="desc">
             Duration
           </SortHeader>
         </div>
         {sorted.map((row) => {
-          const totalHits = (row.orgHits ?? 0) + (row.catalogHits ?? 0) + (row.releaseHits ?? 0);
+          const totalHits =
+            (row.orgHits ?? 0) +
+            (row.catalogHits ?? 0) +
+            (row.releaseHits ?? 0) +
+            (row.chunkHits ?? 0);
+          const hasHitFields =
+            row.orgHits != null ||
+            row.catalogHits != null ||
+            row.releaseHits != null ||
+            row.chunkHits != null;
           const hitsDetail = [
             row.orgHits != null && `${row.orgHits} org`,
             row.catalogHits != null && `${row.catalogHits} cat`,
             row.releaseHits != null && `${row.releaseHits} rel`,
+            row.chunkHits != null && `${row.chunkHits} chunk`,
           ]
             .filter(Boolean)
             .join(" · ");
@@ -255,7 +265,7 @@ function RecentQueriesTable(): React.ReactElement {
               <div className={`capitalize ${surfaceColor(row.surface)}`}>{row.surface}</div>
               <div className={`capitalize ${modeColor(row.mode)}`}>{row.mode ?? "—"}</div>
               <div className="text-stone-500" title={hitsDetail || undefined}>
-                {totalHits > 0 ? totalHits : "—"}
+                {hasHitFields ? totalHits : "—"}
               </div>
               <div className="text-stone-500">{formatTimestamp(row.timestamp)}</div>
               <div className="text-stone-500">{formatDuration(row.durationMs)}</div>
