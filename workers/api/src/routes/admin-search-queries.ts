@@ -27,6 +27,12 @@ function parseSurface(v: string | undefined): string | null {
   return (SEARCH_SURFACES as readonly string[]).includes(v) ? v : null;
 }
 
+function parseLimit(raw: string | undefined): number {
+  const parsed = parseInt(raw ?? "", 10);
+  const fallback = Number.isFinite(parsed) ? parsed : 100;
+  return Math.max(1, Math.min(fallback, 500));
+}
+
 const DEFAULT_WINDOW_MS = 7 * 86_400_000;
 
 /**
@@ -50,7 +56,7 @@ function parseSinceMs(raw: string | undefined): number {
 
 adminSearchQueriesRoutes.get("/admin/search-queries", async (c) => {
   const db = getDb(c);
-  const limit = Math.min(parseInt(c.req.query("limit") ?? "100", 10) || 100, 500);
+  const limit = parseLimit(c.req.query("limit"));
   const surface = parseSurface(c.req.query("surface"));
   const since = parseSinceMs(c.req.query("since") ?? undefined);
 
@@ -69,7 +75,7 @@ adminSearchQueriesRoutes.get("/admin/search-queries", async (c) => {
 
 adminSearchQueriesRoutes.get("/admin/search-queries/top", async (c) => {
   const db = getDb(c);
-  const limit = Math.min(parseInt(c.req.query("limit") ?? "100", 10) || 100, 500);
+  const limit = parseLimit(c.req.query("limit"));
   const surface = parseSurface(c.req.query("surface"));
   const since = parseSinceMs(c.req.query("since") ?? undefined);
 
