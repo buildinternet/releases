@@ -21,6 +21,8 @@ import {
 } from "./tools.js";
 import { registerResources } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
+import { logMcpSearch, type McpSearchCommand } from "./lib/log-search.js";
+import type { SearchMode } from "@buildinternet/releases-core/schema";
 
 type SecretBinding = { get(): Promise<string> };
 
@@ -44,6 +46,8 @@ export interface Env {
   EMBED_CACHE?: KVNamespace;
   /** Staging-only: disables indexing (X-Robots-Tag + deny-all /robots.txt). */
   INDEXING_DISABLED?: string;
+  /** When "true", search-tool calls skip writing to `search_queries`. */
+  SEARCH_QUERY_LOG_DISABLED?: string;
   /**
    * Staging-only shared secret. When bound, every request must carry a
    * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
@@ -100,6 +104,43 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
         result.content[0].text = hydrateMediaUrls(result.content[0].text, mediaOrigin);
       }
       return result;
+    };
+  }
+
+  /**
+   * Wrap a search tool handler so the query text + timing land in
+   * `search_queries`. `command` distinguishes the tool used; the helper
+   * stores it in the `types` column. Logging never blocks the response and
+   * never propagates errors — a fire-and-forget side effect.
+   */
+  function withSearchLog<
+    T extends {
+      query: string;
+      mode?: SearchMode;
+      organization?: string;
+      entity?: string;
+    },
+  >(
+    command: McpSearchCommand,
+    handler: (params: T) => Promise<ToolResult>,
+  ): (params: T) => Promise<ToolResult> {
+    return async (params: T) => {
+      const startedAt = Date.now();
+      try {
+        return await handler(params);
+      } finally {
+        const log = logMcpSearch(env, {
+          command,
+          query: params.query,
+          mode: params.mode ?? null,
+          types: [command],
+          organization: params.organization ?? null,
+          entity: params.entity ?? null,
+          durationMs: Date.now() - startedAt,
+        });
+        if (ctx) ctx.waitUntil(log);
+        else void log;
+      }
     };
   }
 
@@ -164,7 +205,10 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           ),
       },
     },
-    withMedia(async (params) => search(db, params, env, ctx)),
+    withSearchLog(
+      "search",
+      withMedia(async (params) => search(db, params, env, ctx)),
+    ),
   );
 
   server.registerTool(
@@ -201,7 +245,10 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           ),
       },
     },
-    withMedia(async (params) => searchReleases(db, params, env, ctx)),
+    withSearchLog(
+      "search_releases",
+      withMedia(async (params) => searchReleases(db, params, env, ctx)),
+    ),
   );
 
   server.registerTool(
@@ -219,7 +266,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
         limit: z.number().optional().describe("Max results to return (default 20)"),
       },
     },
-    async (params) => searchRegistry(db, params, env, ctx),
+    withSearchLog("search_registry", async (params) => searchRegistry(db, params, env, ctx)),
   );
 
   server.registerTool(

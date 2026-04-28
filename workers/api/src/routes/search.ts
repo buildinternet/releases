@@ -14,7 +14,9 @@ import {
   type RawSearchReleaseRow,
 } from "../queries/search.js";
 import { runHybridSearch, type HybridMode } from "../lib/search-hybrid.js";
+import { logSearch } from "../lib/log-search.js";
 import { hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
+import type { SearchSurface } from "@buildinternet/releases-core/schema";
 
 /**
  * Lift a raw SQL row to the wire shape. JSON-parses media, rewrites any
@@ -71,6 +73,7 @@ searchRoutes.get("/search", async (c) => {
     return c.json({ error: "bad_request", message: "Missing required query parameter: q" }, 400);
   }
 
+  const startedAt = Date.now();
   const limit = parseInt(c.req.query("limit") ?? "20", 10);
   const offset = parseInt(c.req.query("offset") ?? "0", 10);
   const mode = parseMode(c.req.query("mode"));
@@ -78,6 +81,12 @@ searchRoutes.get("/search", async (c) => {
   const db = createDb(c.env.DB);
   const pattern = `%${q}%`;
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+
+  // The web frontend sets `X-Releases-Surface: web` so we can attribute hits
+  // through the API to the public site rather than to direct API consumers.
+  const surface: SearchSurface = c.req.header("x-releases-surface") === "web" ? "web" : "api";
+  const userAgent = c.req.header("user-agent") ?? null;
+  const anonId = c.req.header("x-releases-anon-id") ?? null;
 
   // Entity lookups stay lexical — semantic lives behind /search_registry on
   // MCP. The /search endpoint keeps its historical shape so orgs/products
@@ -108,6 +117,19 @@ searchRoutes.get("/search", async (c) => {
     }
     const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
     const result = { query: q, orgs, catalog, products: catalog, sources: [], releases };
+    c.executionCtx.waitUntil(
+      logSearch(c.env, {
+        surface,
+        query: q,
+        mode: "lexical",
+        orgHits: orgs.length,
+        catalogHits: catalog.length,
+        releaseHits: releases.length,
+        durationMs: Date.now() - startedAt,
+        anonId,
+        userAgent,
+      }),
+    );
     if (wantsMarkdown(c)) return markdownResponse(c, searchToMarkdown(result));
     return c.json(result);
   }
@@ -182,6 +204,22 @@ searchRoutes.get("/search", async (c) => {
     degraded: hybrid.degraded,
     ...(hybrid.degradedReason ? { degradedReason: hybrid.degradedReason } : {}),
   };
+
+  c.executionCtx.waitUntil(
+    logSearch(c.env, {
+      surface,
+      query: q,
+      mode: hybrid.mode,
+      orgHits: orgs.length,
+      catalogHits: catalog.length,
+      releaseHits: releases.length,
+      chunkHits: chunks.length,
+      degraded: hybrid.degraded === true,
+      durationMs: Date.now() - startedAt,
+      anonId,
+      userAgent,
+    }),
+  );
 
   if (wantsMarkdown(c)) {
     return markdownResponse(c, searchToMarkdown(result));

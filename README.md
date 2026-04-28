@@ -163,6 +163,15 @@ When a visitor loads `releases.sh` in a browser that implements the emerging [We
 
 WebMCP is intentionally a lightweight tool subset — it does not mirror resources, prompts, or the AI tools. If you add, rename, or change a read-only tool in `workers/mcp/src/tools.ts`, update the WebMCP provider in the same PR so the tool subset doesn't drift. The OSS CLI's stdio bridge (`releases admin mcp serve`) proxies to the hosted MCP server, so it picks up tool changes automatically once the worker redeploys. Write/admin tools stay remote-only — the browser can't hold an API key safely.
 
+#### Search-query observability
+
+Every call to `/v1/search` and the MCP `search` / `search_releases` / `search_registry` tools writes a row to the `search_queries` table — query text (truncated to 200 chars), surface (`web` | `mcp` | `api`), retrieval mode, per-section result counts, and duration. Inspect via:
+
+- `GET /v1/admin/search-queries?since=7d&surface=mcp` — paginated raw rows, newest first. Bearer-auth.
+- `GET /v1/admin/search-queries/top?since=30d` — grouped by query, count desc.
+
+The web frontend tags requests as `web` via the `X-Releases-Surface` header so admin reads can split visitor searches from direct API consumers. This log is intentionally separate from `telemetry_events`, which carries only command names and stays PII-clean for the OSS CLI contract. Set `SEARCH_QUERY_LOG_DISABLED=true` on the API or MCP worker to disable writes without removing call sites.
+
 ---
 
 ---

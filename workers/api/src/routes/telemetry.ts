@@ -6,23 +6,13 @@ import {
   TELEMETRY_SURFACES,
 } from "@buildinternet/releases-core/schema";
 import { newTelemetryEventId } from "@buildinternet/releases-core/id";
+import { sanitizeString, sanitizeInt } from "../lib/sanitize.js";
 import type { Env } from "../index.js";
 
 export const telemetryRoutes = new Hono<Env>();
 
 const MAX_STRING = 200;
 const MAX_COMMAND = 120;
-
-function sanitizeString(v: unknown, max: number): string | null {
-  if (typeof v !== "string") return null;
-  const trimmed = v.trim().slice(0, max);
-  return trimmed.length > 0 ? trimmed : null;
-}
-
-function sanitizeInt(v: unknown): number | null {
-  if (typeof v !== "number" || !Number.isFinite(v)) return null;
-  return Math.trunc(v);
-}
 
 function sanitizeClientKind(v: unknown): string {
   if (typeof v !== "string") return "external";
