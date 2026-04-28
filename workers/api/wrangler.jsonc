@@ -73,6 +73,9 @@
     // writes. Discovery worker binds tool-notes separately; the API worker only
     // touches errata. See #537.
     "MEMORY_STORE_ERRATA_ID": "memstore_012MKStcUM7QxW9qPCLQtwwt",
+    // Retention window for `search_queries` rows. Rows older than this many days
+    // are deleted by the nightly 05:00 UTC sweep (see issue #575). Default 90.
+    "SEARCH_QUERY_RETENTION_DAYS": "90",
     // Route Anthropic SDK calls through Cloudflare AI Gateway.
     // See docs/architecture/ai-gateway.md. Gateway runs in authenticated
     // mode — the AI_GATEWAY_TOKEN secret below must be bound.
@@ -168,7 +171,8 @@
     // Daily at 01:00 UTC: drain scrape-no-feed sources via managed-agents.
     // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
     // Daily at 04:00 UTC: force-drain stranded scrape/agent sources (#518).
-    "crons": ["0 * * * *", "0 1 * * *", "0 3 * * *", "0 4 * * *"],
+    // Daily at 05:00 UTC: delete search_queries rows older than SEARCH_QUERY_RETENTION_DAYS (#575).
+    "crons": ["0 * * * *", "0 1 * * *", "0 3 * * *", "0 4 * * *", "0 5 * * *"],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
   "unsafe": {
@@ -259,6 +263,8 @@
         "ADMIN_BASE_URL": "https://api-staging.releases.sh",
         "INVALIDATION_ENABLED": "false",
         "MEMORY_STORE_ERRATA_ID": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",
+        // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #575.
+        "SEARCH_QUERY_RETENTION_DAYS": "90",
         // Staging-only: emit X-Robots-Tag: noindex on every response and
         // serve a deny-all /robots.txt. Belt-and-suspenders against the
         // staging hostname getting crawled while it sits unprotected.
