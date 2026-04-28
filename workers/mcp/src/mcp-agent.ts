@@ -18,6 +18,7 @@ import {
   getCatalogEntry,
   summarizeChanges,
   compareProducts,
+  type SearchToolReturn,
 } from "./tools.js";
 import { registerResources } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
@@ -108,10 +109,12 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
   }
 
   /**
-   * Wrap a search tool handler so the query text + timing land in
-   * `search_queries`. `command` distinguishes the tool used; the helper
-   * stores it in the `types` column. Logging never blocks the response and
-   * never propagates errors — a fire-and-forget side effect.
+   * Wrap a search tool handler so the query text, timing, and per-section
+   * hit counts land in `search_queries`. The handler returns the rendered
+   * `ToolResult` plus a `counts` object; this wrapper logs the counts,
+   * hydrates portable media URLs in the rendered text, and returns just
+   * the `ToolResult` to satisfy the MCP SDK's tool signature. Logging is
+   * fire-and-forget — never blocks the response, never propagates errors.
    */
   function withSearchLog<
     T extends {
@@ -122,12 +125,18 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
     },
   >(
     command: McpSearchCommand,
-    handler: (params: T) => Promise<ToolResult>,
+    handler: (params: T) => Promise<SearchToolReturn>,
   ): (params: T) => Promise<ToolResult> {
     return async (params: T) => {
       const startedAt = Date.now();
+      let counts: SearchToolReturn["counts"] = {};
       try {
-        return await handler(params);
+        const out = await handler(params);
+        counts = out.counts;
+        if (mediaOrigin && out.result.content[0]?.text) {
+          out.result.content[0].text = hydrateMediaUrls(out.result.content[0].text, mediaOrigin);
+        }
+        return out.result;
       } finally {
         const log = logMcpSearch(env, {
           command,
@@ -136,6 +145,11 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           types: [command],
           organization: params.organization ?? null,
           entity: params.entity ?? null,
+          orgHits: counts.orgHits ?? null,
+          catalogHits: counts.catalogHits ?? null,
+          releaseHits: counts.releaseHits ?? null,
+          chunkHits: counts.chunkHits ?? null,
+          degraded: counts.degraded ?? null,
           durationMs: Date.now() - startedAt,
         });
         if (ctx) ctx.waitUntil(log);
@@ -205,10 +219,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           ),
       },
     },
-    withSearchLog(
-      "search",
-      withMedia(async (params) => search(db, params, env, ctx)),
-    ),
+    withSearchLog("search", async (params) => search(db, params, env, ctx)),
   );
 
   server.registerTool(
@@ -245,10 +256,7 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           ),
       },
     },
-    withSearchLog(
-      "search_releases",
-      withMedia(async (params) => searchReleases(db, params, env, ctx)),
-    ),
+    withSearchLog("search_releases", async (params) => searchReleases(db, params, env, ctx)),
   );
 
   server.registerTool(
