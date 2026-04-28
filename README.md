@@ -170,6 +170,8 @@ Every call to `/v1/search` and the MCP `search` / `search_releases` / `search_re
 - `GET /v1/admin/search-queries?since=7d&surface=mcp` — paginated raw rows, newest first. Bearer-auth.
 - `GET /v1/admin/search-queries/top?since=30d` — grouped by query, count desc.
 
+Both endpoints accept `?bots=exclude|include|only` (default: `exclude`). `exclude` hides rows where `user_agent` is empty or matches common crawler patterns (`%bot%`, `%crawl%`, `%spider%`, `%slurp%`). `include` returns all rows (pre-filter behavior). `only` returns just the bot rows, useful for tuning the heuristic.
+
 The web frontend tags requests as `web` via the `X-Releases-Surface` header so admin reads can split visitor searches from direct API consumers. This log is intentionally separate from `telemetry_events`, which carries only command names and stays PII-clean for the OSS CLI contract. Set `SEARCH_QUERY_LOG_DISABLED=true` on the API or MCP worker to disable writes without removing call sites.
 
 ---
