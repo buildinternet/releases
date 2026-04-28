@@ -7,9 +7,13 @@
  * Two endpoints:
  *   GET /admin/search-queries        — paginated raw rows (newest first)
  *   GET /admin/search-queries/top    — top queries grouped by text
+ *
+ * Both endpoints accept `?bots=exclude|include|only` (default: exclude) to
+ * filter rows by `user_agent`. Bot detection uses substring matching on
+ * `bot`, `crawl`, `spider`, `slurp` plus a NULL/empty-UA check.
  */
 import { Hono } from "hono";
-import { and, desc, eq, gt, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, not, like, or, sql, type SQL } from "drizzle-orm";
 import { searchQueries, SEARCH_SURFACES } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
@@ -36,6 +40,45 @@ function parseLimit(raw: string | undefined): number {
 const DEFAULT_WINDOW_MS = 7 * 86_400_000;
 
 /**
+ * Known bot/crawler substrings used for UA filtering.
+ * Named bots (Googlebot, bingbot, etc.) all match the generic `bot` substring,
+ * so we keep only the four minimal patterns that cover the full heuristic list.
+ * The empty-UA case is handled separately via `isNull`.
+ *
+ * Full named list for documentation / future tuning:
+ *   Googlebot, bingbot, AhrefsBot, SemrushBot, MJ12bot, DuckDuckBot,
+ *   BLEXBot, DotBot, PetalBot — all caught by `%bot%`.
+ */
+const BOT_UA_PATTERNS = ["%bot%", "%crawl%", "%spider%", "%slurp%"] as const;
+
+type BotsParam = "exclude" | "include" | "only";
+
+function parseBots(raw: string | undefined): BotsParam | null {
+  if (!raw || raw === "exclude") return "exclude";
+  if (raw === "include") return "include";
+  if (raw === "only") return "only";
+  return null; // invalid value → caller returns 400
+}
+
+/**
+ * Returns a SQL predicate that keeps only bot rows (`only`), excludes them
+ * (`exclude`), or returns nothing extra (`include` — caller omits the condition).
+ */
+function botCondition(mode: BotsParam): SQL | null {
+  if (mode === "include") return null;
+
+  // A row is a "bot" if its UA is NULL/empty or matches any of the substring patterns.
+  const patternMatches = BOT_UA_PATTERNS.map((p) => like(searchQueries.userAgent, p));
+  const isBotRow = or(
+    isNull(searchQueries.userAgent),
+    eq(searchQueries.userAgent, ""),
+    ...patternMatches,
+  ) as SQL;
+
+  return mode === "only" ? isBotRow : not(isBotRow);
+}
+
+/**
  * Accepts `7d` / `12h` / `30m` shorthand or an absolute ISO-8601 string.
  * Bare integers are intentionally rejected — `since=1000` is ambiguous
  * (1000 ms past epoch, or "1 second ago"?) and the wrong reading silently
@@ -59,9 +102,18 @@ adminSearchQueriesRoutes.get("/admin/search-queries", async (c) => {
   const limit = parseLimit(c.req.query("limit"));
   const surface = parseSurface(c.req.query("surface"));
   const since = parseSinceMs(c.req.query("since") ?? undefined);
+  const botsMode = parseBots(c.req.query("bots"));
+  if (botsMode === null) {
+    return c.json(
+      { error: "invalid_param", message: "bots must be exclude, include, or only" },
+      400,
+    );
+  }
 
   const conditions: SQL[] = [gt(searchQueries.timestamp, since)];
   if (surface) conditions.push(eq(searchQueries.surface, surface));
+  const bc = botCondition(botsMode);
+  if (bc) conditions.push(bc);
 
   const rows = await db
     .select()
@@ -78,9 +130,18 @@ adminSearchQueriesRoutes.get("/admin/search-queries/top", async (c) => {
   const limit = parseLimit(c.req.query("limit"));
   const surface = parseSurface(c.req.query("surface"));
   const since = parseSinceMs(c.req.query("since") ?? undefined);
+  const botsMode = parseBots(c.req.query("bots"));
+  if (botsMode === null) {
+    return c.json(
+      { error: "invalid_param", message: "bots must be exclude, include, or only" },
+      400,
+    );
+  }
 
   const conditions: SQL[] = [gt(searchQueries.timestamp, since)];
   if (surface) conditions.push(eq(searchQueries.surface, surface));
+  const bc = botCondition(botsMode);
+  if (bc) conditions.push(bc);
 
   const countExpr = sql<number>`count(*)`.as("count");
   const rows = await db
