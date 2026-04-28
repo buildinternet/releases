@@ -29,6 +29,14 @@ interface SessionState {
   startedAt: number;
   lastUpdatedAt: number;
   error?: string;
+  /** Where the error originated. `provider` = managed-agents service; `us` = our code. */
+  errorSource?: "provider" | "us";
+  /** Provider error type (e.g. `unknown_error`, `model_overloaded_error`). */
+  errorType?: string;
+  /** Stop reason from the final `session.status_idle` (e.g. `retries_exhausted`). */
+  stopReason?: string;
+  /** Provider `session.error` events observed before terminal. */
+  retryCount?: number;
   warnings?: string[];
   usage?: { inputTokens?: number; outputTokens?: number };
   dismissed?: boolean;
@@ -344,10 +352,19 @@ export class StatusHub extends DurableObject {
         this.bufferStdoutLine(sid, `${timestamp} [${stream}] ${event.line}`);
       }
     } else if (event.type === "session:error") {
+      const classification: Partial<
+        Pick<SessionState, "errorSource" | "errorType" | "stopReason" | "retryCount">
+      > = {};
+      if (event.errorSource)
+        classification.errorSource = event.errorSource as SessionState["errorSource"];
+      if (event.errorType) classification.errorType = event.errorType as string;
+      if (event.stopReason) classification.stopReason = event.stopReason as string;
+      if (typeof event.retryCount === "number") classification.retryCount = event.retryCount;
       const existing = await this.ctx.storage.get<SessionState>(`session:${event.sessionId}`);
       if (existing) {
         existing.status = "error";
         existing.error = event.error as string;
+        Object.assign(existing, classification);
         existing.lastUpdatedAt = now;
         if (event.usage && typeof event.usage === "object") {
           existing.usage = event.usage as SessionState["usage"];
@@ -363,6 +380,7 @@ export class StatusHub extends DurableObject {
           type: (event.sessionType as SessionState["type"]) ?? "update",
           status: "error",
           error: event.error as string,
+          ...classification,
           startedAt: now,
           lastUpdatedAt: now,
           activeSources: [],
@@ -400,6 +418,7 @@ export class StatusHub extends DurableObject {
       if (session.status === "running" && now - lastUpdate > STALE_SESSION_MS) {
         session.status = "error";
         session.error = "Session timed out (no updates received)";
+        session.errorSource = "us";
         session.lastUpdatedAt = now;
         // oxlint-disable-next-line no-await-in-loop -- sequential DO storage write: session state updated in place during iteration
         await this.ctx.storage.put(`session:${session.sessionId}`, session);

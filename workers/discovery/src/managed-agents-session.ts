@@ -47,6 +47,12 @@ function delay(ms: number): Promise<void> {
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+import {
+  classifyProviderSessionError,
+  isRetriesExhaustedIdle,
+  type SessionErrorClassification,
+} from "./session-error-classify.js";
+
 function truncate(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(0, maxLength) + "…";
@@ -260,7 +266,12 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             const structured = buildMaRateLimitErrorMessage(classification, rateLimitRetries);
             console.error(`[managed-agents] ${structured}`);
             // oxlint-disable-next-line no-await-in-loop -- fail() must complete before return
-            await this.fail(sessionId, params.company, structured, releasesApiKey);
+            await this.fail(sessionId, params.company, structured, releasesApiKey, undefined, {
+              errorSource: "provider",
+              errorType: classification.errorType ?? "rate_limit",
+              retryCount: rateLimitRetries,
+              message: structured,
+            });
             return;
           }
           rateLimitRetries++;
@@ -310,6 +321,15 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       let toolCallCount = 0;
       let toolErrors = 0;
       let lastAgentMessage = "";
+      // Track provider session.error events so a subsequent retries_exhausted
+      // status_idle can attribute the failure to the upstream incident rather
+      // than falling through to our-side "no tools called" detection.
+      let providerErrorCount = 0;
+      let lastProviderError: SessionErrorClassification | null = null;
+      // Set when the loop already emitted a terminal session:error event.
+      // Suppresses the post-loop fallback that would otherwise double-fire a
+      // less-specific "no tools called" failure on top of the classified one.
+      let terminalFailed = false;
       const deadline = Date.now() + SESSION_TIMEOUT_MS;
       const timeoutId = setTimeout(() => {
         try {
@@ -417,6 +437,35 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
             case "session.status_idle":
               if ((event as any).stop_reason?.type === "requires_action") continue;
+              if (isRetriesExhaustedIdle(event)) {
+                // Attribute to the last provider error we saw so the failure
+                // shows "managed-agents · <type>" instead of falling through
+                // to our-side "no tools called" detection below.
+                const classification: SessionErrorClassification = lastProviderError
+                  ? {
+                      ...lastProviderError,
+                      stopReason: "retries_exhausted",
+                      retryCount: providerErrorCount,
+                    }
+                  : {
+                      errorSource: "provider",
+                      stopReason: "retries_exhausted",
+                      retryCount: providerErrorCount,
+                      message: "Managed-agents retry budget exhausted",
+                    };
+                console.error(
+                  `[managed-agents] retries_exhausted after ${providerErrorCount} provider error(s)`,
+                );
+                await this.fail(
+                  sessionId,
+                  params.company,
+                  classification.message,
+                  releasesApiKey,
+                  undefined,
+                  classification,
+                );
+                terminalFailed = true;
+              }
               done = true;
               break;
 
@@ -425,14 +474,24 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               break;
 
             case "session.error": {
-              const errDetail = (event as any).error ?? JSON.stringify(event);
-              console.error(`[managed-agents] Session error: ${errDetail}`);
+              providerErrorCount++;
+              const classification = classifyProviderSessionError(event) ?? {
+                errorSource: "provider" as const,
+                message: `Session error: ${JSON.stringify(event)}`,
+              };
+              lastProviderError = classification;
+              console.error(
+                `[managed-agents] Session error (${classification.errorType ?? "unknown"}): ${classification.message}`,
+              );
               await this.fail(
                 sessionId,
                 params.company,
-                `Session error: ${errDetail}`,
+                classification.message,
                 releasesApiKey,
+                undefined,
+                { ...classification, retryCount: providerErrorCount - 1 },
               );
+              terminalFailed = true;
               done = true;
               break;
             }
@@ -447,6 +506,17 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         } catch {
           /* closed */
         }
+      }
+
+      // Skip the post-loop fallback failures when the loop already emitted a
+      // classified session:error — otherwise the fallback overwrites it.
+      if (terminalFailed) {
+        try {
+          await (client.beta.sessions as any).archive(session.id);
+        } catch {
+          /* non-critical */
+        }
+        return;
       }
 
       // Retrieve final session for usage tracking (also logged in CLI's managed-discovery.ts)
@@ -541,15 +611,26 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     error: string,
     cachedApiKey?: string,
     usage?: { inputTokens?: number; outputTokens?: number },
+    classification?: SessionErrorClassification,
   ): Promise<void> {
     await this.ctx.storage.put("status", "error");
     await this.ctx.storage.put("error", error);
+    // Default unclassified failures to errorSource: "us" — keeps the wire
+    // contract on every error event without requiring every call site to opt
+    // in. Provider-side paths pass `classification` explicitly.
+    const errorSource = classification?.errorSource ?? "us";
     await this.notifyStatusHub(
       {
         type: "session:error",
         sessionId,
         company,
         error,
+        errorSource,
+        ...(classification?.errorType ? { errorType: classification.errorType } : {}),
+        ...(classification?.stopReason ? { stopReason: classification.stopReason } : {}),
+        ...(classification?.retryCount !== undefined
+          ? { retryCount: classification.retryCount }
+          : {}),
         ...(usage ? { usage } : {}),
       },
       cachedApiKey,
