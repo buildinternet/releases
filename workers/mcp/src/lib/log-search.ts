@@ -85,7 +85,9 @@ export async function logMcpSearch(env: McpLogSearchEnv, input: McpLogSearchInpu
   try {
     const db = drizzle(env.DB);
     await db.insert(searchQueries).values(row);
-  } catch {
-    // Never break a tool response on a logging failure.
+  } catch (err) {
+    // Never break a tool response on a logging failure, but surface to
+    // tail logs so a future schema drift doesn't silently drop every row.
+    console.error("[search-log] insert failed", err);
   }
 }
