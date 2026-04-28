@@ -356,7 +356,7 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
       RETRY_TOP_SEARCHES,
       async (): Promise<TopSearchRow[]> => {
         const since = Date.now() - TOP_SEARCHES_WINDOW_HOURS * 3_600_000;
-        return getTopSearchQueries(db, { since, limit: TOP_SEARCHES_LIMIT, excludeBots: true });
+        return getTopSearchQueries(db, { since, limit: TOP_SEARCHES_LIMIT });
       },
     );
 

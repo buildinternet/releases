@@ -108,13 +108,13 @@ describe("getTopSearchQueries", () => {
     expect(rows[0].query).toBe("human query");
   });
 
-  it("includes bot rows when excludeBots is false", async () => {
+  it("includes bot rows when botsMode is include", async () => {
     const db = mkDb();
     await seed(db, [
       { id: "sq_bot", timestamp: NOW - 1000, query: "bot query", userAgent: "Googlebot/2.1" },
       { id: "sq_human", timestamp: NOW - 2000, query: "human query", userAgent: "Mozilla/5.0" },
     ]);
-    const rows = await getTopSearchQueries(db, { since: NOW - 86_400_000, excludeBots: false });
+    const rows = await getTopSearchQueries(db, { since: NOW - 86_400_000, botsMode: "include" });
     expect(rows).toHaveLength(2);
   });
 

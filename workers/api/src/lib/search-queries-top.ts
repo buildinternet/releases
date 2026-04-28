@@ -1,10 +1,4 @@
-/**
- * Shared helper for fetching top search queries grouped by text.
- * Used by both the admin route (`GET /v1/admin/search-queries/top`) and the
- * nightly sweep email so both callers share the same SQL and bot-filtering
- * logic without going through an HTTP hop.
- */
-import { and, desc, gt, isNull, not, like, or, eq, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, isNull, not, like, or, sql, type SQL } from "drizzle-orm";
 import { searchQueries } from "@buildinternet/releases-core/schema";
 
 export type TopSearchRow = {
@@ -13,21 +7,21 @@ export type TopSearchRow = {
   lastSeen: number;
 };
 
-/** Known bot/crawler UA substrings — mirrors the admin route's BOT_UA_PATTERNS. */
+export type BotsMode = "exclude" | "include" | "only";
+
+// NULL/empty UA + known bot patterns. Named bots (Googlebot, bingbot, etc.)
+// all match the generic `%bot%` substring.
 const BOT_UA_PATTERNS = ["%bot%", "%crawl%", "%spider%", "%slurp%"] as const;
 
-/**
- * Returns a SQL predicate that excludes bot rows (NULL/empty UA or matching a
- * known bot pattern). Pass `false` to include all rows (no filter applied).
- */
-function buildBotExcludeCondition(): SQL {
+export function buildBotCondition(mode: BotsMode): SQL | null {
+  if (mode === "include") return null;
   const patternMatches = BOT_UA_PATTERNS.map((p) => like(searchQueries.userAgent, p));
   const isBotRow = or(
     isNull(searchQueries.userAgent),
     eq(searchQueries.userAgent, ""),
     ...patternMatches,
   ) as SQL;
-  return not(isBotRow);
+  return mode === "only" ? isBotRow : not(isBotRow);
 }
 
 export interface TopSearchesOptions {
@@ -35,12 +29,16 @@ export interface TopSearchesOptions {
   since: number;
   /** Maximum number of rows to return. Defaults to 20. */
   limit?: number;
-  /** Whether to exclude bot/crawler rows. Defaults to `true`. */
-  excludeBots?: boolean;
+  /**
+   * Bot/crawler filtering mode. Defaults to `"exclude"`.
+   * `"only"` returns bot-only rows; `"include"` skips the filter entirely.
+   */
+  botsMode?: BotsMode;
+  /** Narrow to a single search surface (`web`, `mcp`, `api`). */
+  surface?: string;
 }
 
 /**
- * Fetch the top search queries grouped by text, ordered by count desc.
  * `db` is typed `any` so this helper accepts both the D1 drizzle instance and
  * the bun:sqlite drizzle used in tests — the consuming code owns the concrete
  * type. Matches the convention used in `sweep-results.ts`.
@@ -51,12 +49,12 @@ export async function getTopSearchQueries(
   opts: TopSearchesOptions,
 ): Promise<TopSearchRow[]> {
   const limit = opts.limit ?? 20;
-  const excludeBots = opts.excludeBots ?? true;
+  const botsMode = opts.botsMode ?? "exclude";
 
   const conditions: SQL[] = [gt(searchQueries.timestamp, opts.since)];
-  if (excludeBots) {
-    conditions.push(buildBotExcludeCondition());
-  }
+  if (opts.surface) conditions.push(eq(searchQueries.surface, opts.surface));
+  const bc = buildBotCondition(botsMode);
+  if (bc) conditions.push(bc);
 
   const countExpr = sql<number>`count(*)`.as("count");
   const rows = await db

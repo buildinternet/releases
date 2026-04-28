@@ -13,10 +13,12 @@
  * `bot`, `crawl`, `spider`, `slurp` plus a NULL/empty-UA check.
  */
 import { Hono } from "hono";
-import { and, desc, eq, gt, isNull, not, like, or, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gt, type SQL } from "drizzle-orm";
 import { searchQueries, SEARCH_SURFACES } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
+import { buildBotCondition, getTopSearchQueries } from "../lib/search-queries-top.js";
+import type { BotsMode } from "../lib/search-queries-top.js";
 
 export const adminSearchQueriesRoutes = new Hono<Env>();
 
@@ -39,43 +41,11 @@ function parseLimit(raw: string | undefined): number {
 
 const DEFAULT_WINDOW_MS = 7 * 86_400_000;
 
-/**
- * Known bot/crawler substrings used for UA filtering.
- * Named bots (Googlebot, bingbot, etc.) all match the generic `bot` substring,
- * so we keep only the four minimal patterns that cover the full heuristic list.
- * The empty-UA case is handled separately via `isNull`.
- *
- * Full named list for documentation / future tuning:
- *   Googlebot, bingbot, AhrefsBot, SemrushBot, MJ12bot, DuckDuckBot,
- *   BLEXBot, DotBot, PetalBot — all caught by `%bot%`.
- */
-const BOT_UA_PATTERNS = ["%bot%", "%crawl%", "%spider%", "%slurp%"] as const;
-
-type BotsParam = "exclude" | "include" | "only";
-
-function parseBots(raw: string | undefined): BotsParam | null {
+function parseBots(raw: string | undefined): BotsMode | null {
   if (!raw || raw === "exclude") return "exclude";
   if (raw === "include") return "include";
   if (raw === "only") return "only";
   return null; // invalid value → caller returns 400
-}
-
-/**
- * Returns a SQL predicate that keeps only bot rows (`only`), excludes them
- * (`exclude`), or returns nothing extra (`include` — caller omits the condition).
- */
-function botCondition(mode: BotsParam): SQL | null {
-  if (mode === "include") return null;
-
-  // A row is a "bot" if its UA is NULL/empty or matches any of the substring patterns.
-  const patternMatches = BOT_UA_PATTERNS.map((p) => like(searchQueries.userAgent, p));
-  const isBotRow = or(
-    isNull(searchQueries.userAgent),
-    eq(searchQueries.userAgent, ""),
-    ...patternMatches,
-  ) as SQL;
-
-  return mode === "only" ? isBotRow : not(isBotRow);
 }
 
 /**
@@ -112,7 +82,7 @@ adminSearchQueriesRoutes.get("/admin/search-queries", async (c) => {
 
   const conditions: SQL[] = [gt(searchQueries.timestamp, since)];
   if (surface) conditions.push(eq(searchQueries.surface, surface));
-  const bc = botCondition(botsMode);
+  const bc = buildBotCondition(botsMode);
   if (bc) conditions.push(bc);
 
   const rows = await db
@@ -138,23 +108,11 @@ adminSearchQueriesRoutes.get("/admin/search-queries/top", async (c) => {
     );
   }
 
-  const conditions: SQL[] = [gt(searchQueries.timestamp, since)];
-  if (surface) conditions.push(eq(searchQueries.surface, surface));
-  const bc = botCondition(botsMode);
-  if (bc) conditions.push(bc);
-
-  const countExpr = sql<number>`count(*)`.as("count");
-  const rows = await db
-    .select({
-      query: searchQueries.query,
-      count: countExpr,
-      lastSeen: sql<number>`max(${searchQueries.timestamp})`.as("lastSeen"),
-    })
-    .from(searchQueries)
-    .where(and(...conditions))
-    .groupBy(searchQueries.query)
-    .orderBy(desc(countExpr))
-    .limit(limit);
-
+  const rows = await getTopSearchQueries(db, {
+    since,
+    limit,
+    surface: surface ?? undefined,
+    botsMode,
+  });
   return c.json(rows);
 });
