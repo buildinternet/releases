@@ -15,6 +15,11 @@ import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
 import { ForceDrainTile } from "./force-drain-tile";
+import {
+  formatSessionError,
+  groupProviderIncidents,
+  type IncidentGroup,
+} from "./session-error-display";
 
 interface SessionState {
   sessionId: string;
@@ -40,6 +45,11 @@ interface SessionState {
   startedAt: number;
   lastUpdatedAt?: number;
   error?: string;
+  /** Classification fields populated by the API ≥ #591 (PR A). Older sessions have these undefined; treat undefined as `errorSource: "us"`. */
+  errorSource?: "provider" | "us";
+  errorType?: string;
+  stopReason?: string;
+  retryCount?: number;
   usage?: { inputTokens?: number; outputTokens?: number };
 }
 
@@ -338,7 +348,15 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       setSessions((prev) =>
         prev.map((s) =>
           s.sessionId === (msg.sessionId as string)
-            ? { ...s, status: "error", error: msg.error as string }
+            ? {
+                ...s,
+                status: "error",
+                error: msg.error as string,
+                errorSource: msg.errorSource as SessionState["errorSource"],
+                errorType: msg.errorType as string | undefined,
+                stopReason: msg.stopReason as string | undefined,
+                retryCount: msg.retryCount as number | undefined,
+              }
             : s,
         ),
       );
@@ -627,9 +645,11 @@ function SessionsTable({
 
   const totalPages = Math.ceil(sessions.length / perPage);
   const paginated = sessions.slice(page * perPage, (page + 1) * perPage);
+  const incidents = groupProviderIncidents(sessions);
 
   return (
     <div>
+      <IncidentBanner groups={incidents} />
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
         <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
           <div>Company</div>
@@ -667,7 +687,7 @@ function SessionsTable({
                 </div>
                 <div className="text-stone-500">
                   {session.status === "error" ? (
-                    <span className="text-red-500">{session.error?.slice(0, 40)}</span>
+                    <SessionErrorCell session={session} />
                   ) : session.status === "complete" ? (
                     isUpdate ? (
                       <span className="text-green-600">
@@ -767,6 +787,41 @@ function SessionsTable({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function SessionErrorCell({ session }: { session: SessionState }): ReactNode {
+  const display = formatSessionError(session);
+  if (!display) return null;
+  const colorClass =
+    display.tone === "amber" ? "text-amber-600 dark:text-amber-400" : "text-red-500";
+  return (
+    <span className={colorClass} title={display.tooltip}>
+      {display.label}
+    </span>
+  );
+}
+
+function IncidentBanner({ groups }: { groups: IncidentGroup[] }): ReactNode {
+  if (groups.length === 0) return null;
+  return (
+    <div className="mb-3 space-y-2">
+      {groups.map((g) => {
+        const when = new Date(g.startedAt).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+        return (
+          <div
+            key={`${g.errorType}-${g.startedAt}`}
+            className="px-3 py-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs text-amber-900 dark:text-amber-200"
+          >
+            <span className="font-medium">managed-agents incident</span> · {g.count} sessions ·{" "}
+            {g.errorType} · started {when}
+          </div>
+        );
+      })}
     </div>
   );
 }
