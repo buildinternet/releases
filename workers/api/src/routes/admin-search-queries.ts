@@ -76,16 +76,17 @@ adminSearchQueriesRoutes.get("/admin/search-queries/top", async (c) => {
   const conditions: SQL[] = [gt(searchQueries.timestamp, since)];
   if (surface) conditions.push(eq(searchQueries.surface, surface));
 
+  const countExpr = sql<number>`count(*)`.as("count");
   const rows = await db
     .select({
       query: searchQueries.query,
-      count: sql<number>`count(*)`.as("count"),
+      count: countExpr,
       lastSeen: sql<number>`max(${searchQueries.timestamp})`.as("lastSeen"),
     })
     .from(searchQueries)
     .where(and(...conditions))
     .groupBy(searchQueries.query)
-    .orderBy(desc(sql`count(*)`))
+    .orderBy(desc(countExpr))
     .limit(limit);
 
   return c.json(rows);

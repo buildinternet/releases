@@ -39,6 +39,9 @@ export interface McpLogSearchEnv {
   SEARCH_QUERY_LOG_DISABLED?: string;
 }
 
+// Same shape as `sanitizeString` in `workers/api/src/lib/sanitize.ts` —
+// duplicated because workers can't share source. If the MCP worker ever
+// pulls in a shared private package, fold both into one.
 function trimOrNull(v: unknown, max: number): string | null {
   if (typeof v !== "string") return null;
   const t = v.trim().slice(0, max);
