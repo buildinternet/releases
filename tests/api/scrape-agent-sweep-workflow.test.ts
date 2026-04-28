@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { desc } from "drizzle-orm";
+import { desc, sql } from "drizzle-orm";
 import { applyMigrations } from "../db-helper";
 import { sources, organizations, fetchLog } from "@buildinternet/releases-core/schema";
 import { cronRuns } from "../../workers/api/src/db/schema-cron";
@@ -228,6 +228,23 @@ describe("ScrapeAgentSweepWorkflow (E2E)", () => {
     const records = await runWorkflow(env);
     const aggregateStep = records.find((r) => r.name === "aggregate-results");
     expect(aggregateStep?.ok).toBe(true);
+    expect(records.find((r) => r.name === "send-report")?.ok).toBe(true);
+  });
+
+  it("send-report still runs when top-searches retries exhaust", async () => {
+    const db = mkDb();
+    const env = mkEnv({
+      DISCOVERY_WORKER: {
+        fetch: async () => new Response(JSON.stringify({ sessionId: "ma-x" }), { status: 202 }),
+      } as ScrapeAgentSweepWorkflowEnv["DISCOVERY_WORKER"],
+      _drizzleOverride: db,
+    });
+    // Drop the search_queries table out from under the helper so it always throws.
+    db.run(sql`DROP TABLE search_queries`);
+    const records = await runWorkflow(env);
+    const topSearchesStep = records.find((r) => r.name === "top-searches");
+    expect(topSearchesStep?.ok).toBe(false);
+    // The digest is non-blocking — the operator still gets the daily email.
     expect(records.find((r) => r.name === "send-report")?.ok).toBe(true);
   });
 

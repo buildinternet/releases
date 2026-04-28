@@ -351,14 +351,18 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
       });
     }
 
-    const topSearches: TopSearchRow[] = await step.do(
-      "top-searches",
-      RETRY_TOP_SEARCHES,
-      async (): Promise<TopSearchRow[]> => {
+    // The digest is a nice-to-have — never block the daily email on a failed
+    // helper. After retries exhaust, swallow the error and omit the section.
+    const topSearches: TopSearchRow[] | undefined = await step
+      .do("top-searches", RETRY_TOP_SEARCHES, async (): Promise<TopSearchRow[]> => {
         const since = Date.now() - TOP_SEARCHES_WINDOW_HOURS * 3_600_000;
         return getTopSearchQueries(db, { since, limit: TOP_SEARCHES_LIMIT });
-      },
-    );
+      })
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.warn(`[scrape-agent-workflow] top-searches failed (omitting section): ${msg}`);
+        return undefined;
+      });
 
     await step.do("send-report", async () => {
       const reportEnv = resolveReportEnv(env);
