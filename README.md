@@ -172,6 +172,8 @@ Every call to `/v1/search` and the MCP `search` / `search_releases` / `search_re
 
 The web frontend tags requests as `web` via the `X-Releases-Surface` header so admin reads can split visitor searches from direct API consumers. This log is intentionally separate from `telemetry_events`, which carries only command names and stays PII-clean for the OSS CLI contract. Set `SEARCH_QUERY_LOG_DISABLED=true` on the API or MCP worker to disable writes without removing call sites.
 
+Rows are retained for **90 days** by default. A nightly cron at 05:00 UTC deletes rows older than the configured window, keeping the table bounded and reducing exposure of user-typed query text. Override with `SEARCH_QUERY_RETENTION_DAYS` in `workers/api/wrangler.jsonc`.
+
 ---
 
 ---

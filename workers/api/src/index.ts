@@ -40,6 +40,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { retierSources } from "./cron/retier.js";
 import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 import { forceDrainSweep } from "./cron/force-drain-sweep.js";
+import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 
 export { StatusHub } from "./status-hub.js";
@@ -146,6 +147,9 @@ export type Env = {
     // When "true", `/v1/search` and the MCP search tools skip writing rows to
     // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
     SEARCH_QUERY_LOG_DISABLED?: string;
+    // Retention window for `search_queries` rows. Rows older than this many days
+    // are deleted by the nightly 05:00 UTC sweep. Default 90.
+    SEARCH_QUERY_RETENTION_DAYS?: string;
     // Staging-only shared secret — see middleware/staging-access.ts. Absent
     // everywhere outside `[env.staging]`, so the gate no-ops for prod/local.
     STAGING_ACCESS_KEY?: SecretBinding;
@@ -309,8 +313,9 @@ export default {
   fetch: app.fetch,
   async scheduled(event: ScheduledEvent, env: Env["Bindings"], ctx: ExecutionContext) {
     // Daily retier job runs at 03:00 UTC; scrape-no-feed agent sweep at 01:00 UTC;
-    // force-drain for stranded sources at 04:00 UTC; poll-and-fetch hourly.
-    // Build the alert env once; shared by all four cron dispatch sites.
+    // force-drain for stranded sources at 04:00 UTC; search-queries retention
+    // sweep at 05:00 UTC; poll-and-fetch hourly.
+    // Build the alert env once; shared by all five cron dispatch sites.
     const alertEnv: AlertEnv = {
       SEND_EMAIL: env.SEND_EMAIL,
       EMAIL_NOTIFY_ENABLED: env.EMAIL_NOTIFY_ENABLED,
@@ -319,6 +324,20 @@ export default {
       ALERT_DEDUP_KV: env.ALERT_DEDUP_KV,
     };
 
+    if (event.cron === "0 5 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "sweep-search-queries-cron",
+          sweepSearchQueries({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            SEARCH_QUERY_RETENTION_DAYS: env.SEARCH_QUERY_RETENTION_DAYS,
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
     if (event.cron === "0 4 * * *") {
       ctx.waitUntil(
         loggedDispatch(
