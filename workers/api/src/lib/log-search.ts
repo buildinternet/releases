@@ -91,7 +91,8 @@ export async function logSearch(env: LogSearchEnv, input: LogSearchInput): Promi
   try {
     const db = drizzle(env.DB);
     await db.insert(searchQueries).values(row);
-  } catch {
+  } catch (err) {
     // Never break a search response on a logging failure.
+    console.error("[search-log] insert failed", err);
   }
 }

@@ -85,7 +85,8 @@ export async function logMcpSearch(env: McpLogSearchEnv, input: McpLogSearchInpu
   try {
     const db = drizzle(env.DB);
     await db.insert(searchQueries).values(row);
-  } catch {
+  } catch (err) {
     // Never break a tool response on a logging failure.
+    console.error("[search-log] insert failed", err);
   }
 }
