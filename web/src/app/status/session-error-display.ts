@@ -5,8 +5,11 @@
  */
 
 export interface ClassifiedSession {
+  sessionId?: string;
   status: "running" | "complete" | "error" | "cancelled";
   startedAt: number;
+  /** When the session reached its terminal state. Falls back to startedAt for incident bucketing. */
+  errorAt?: number;
   error?: string;
   errorSource?: "provider" | "us";
   errorType?: string;
@@ -60,8 +63,12 @@ export function formatSessionError(session: ClassifiedSession): ErrorDisplay | n
 export interface IncidentGroup {
   errorType: string;
   count: number;
+  /** Earliest error time in the cluster. */
   startedAt: number;
+  /** Latest error time in the cluster. */
   endedAt: number;
+  /** Session IDs rolled up into this incident — caller filters them out of the rows list. */
+  sessionIds: string[];
 }
 
 const INCIDENT_WINDOW_MS = 60_000;
@@ -88,12 +95,13 @@ export function groupProviderIncidents(sessions: ClassifiedSession[]): IncidentG
 
   const groups: IncidentGroup[] = [];
   for (const [errorType, list] of byType) {
-    list.sort((a, b) => a.startedAt - b.startedAt);
+    list.sort((a, b) => incidentTime(a) - incidentTime(b));
     let current: ClassifiedSession[] = [];
     for (const s of list) {
+      const t = incidentTime(s);
       if (
         current.length === 0 ||
-        s.startedAt - current[current.length - 1].startedAt <= INCIDENT_WINDOW_MS
+        t - incidentTime(current[current.length - 1]) <= INCIDENT_WINDOW_MS
       ) {
         current.push(s);
       } else {
@@ -112,11 +120,19 @@ export function groupProviderIncidents(sessions: ClassifiedSession[]): IncidentG
   return groups;
 }
 
+/** Prefer the terminal timestamp; sessions without one (legacy / not yet propagated) fall back to startedAt. */
+function incidentTime(s: ClassifiedSession): number {
+  return s.errorAt ?? s.startedAt;
+}
+
 function toGroup(errorType: string, sessions: ClassifiedSession[]): IncidentGroup {
   return {
     errorType,
     count: sessions.length,
-    startedAt: sessions[0].startedAt,
-    endedAt: sessions[sessions.length - 1].startedAt,
+    startedAt: incidentTime(sessions[0]),
+    endedAt: incidentTime(sessions[sessions.length - 1]),
+    sessionIds: sessions
+      .map((s) => s.sessionId)
+      .filter((id): id is string => typeof id === "string"),
   };
 }

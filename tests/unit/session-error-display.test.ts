@@ -27,7 +27,17 @@ describe("formatSessionError", () => {
     });
   });
 
-  it("treats unknown errorSource as our-side", () => {
+  it("treats sessions with no errorSource as our-side (legacy / pre-#591 sessions)", () => {
+    const { errorSource: _ignored, ...withoutSource } = {
+      ...baseError,
+      error: "Session timed out",
+    };
+    const display = formatSessionError(withoutSource);
+    expect(display?.tone).toBe("red");
+    expect(display?.label).toBe("Session timed out");
+  });
+
+  it("treats explicit errorSource: 'us' as our-side", () => {
     const display = formatSessionError({
       ...baseError,
       errorSource: "us",
@@ -63,10 +73,13 @@ describe("formatSessionError", () => {
   });
 });
 
-function s(startedAt: number, errorType?: string): ClassifiedSession {
+let nextId = 0;
+function s(startedAt: number, errorType?: string, errorAt?: number): ClassifiedSession {
   return {
+    sessionId: `sess_${nextId++}`,
     status: "error",
     startedAt,
+    ...(errorAt !== undefined ? { errorAt } : {}),
     ...(errorType ? { errorSource: "provider" as const, errorType } : {}),
   };
 }
@@ -81,18 +94,32 @@ describe("groupProviderIncidents", () => {
   });
 
   it("groups 3+ provider errors of the same type within 60s", () => {
-    const groups = groupProviderIncidents([
+    const sessions = [
       s(t, "unknown_error"),
       s(t + 1_000, "unknown_error"),
       s(t + 30_000, "unknown_error"),
-    ]);
+    ];
+    const groups = groupProviderIncidents(sessions);
     expect(groups).toHaveLength(1);
-    expect(groups[0]).toEqual({
+    expect(groups[0]).toMatchObject({
       errorType: "unknown_error",
       count: 3,
       startedAt: t,
       endedAt: t + 30_000,
     });
+    expect(groups[0].sessionIds).toEqual(sessions.map((x) => x.sessionId!));
+  });
+
+  it("buckets by errorAt (terminal time) when present, not startedAt", () => {
+    // Sessions started 10 minutes apart but failed within seconds of each other —
+    // upstream incident, should still group.
+    const groups = groupProviderIncidents([
+      s(t, "unknown_error", t + 600_000),
+      s(t + 60_000, "unknown_error", t + 600_500),
+      s(t + 120_000, "unknown_error", t + 601_000),
+    ]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]).toMatchObject({ count: 3, startedAt: t + 600_000, endedAt: t + 601_000 });
   });
 
   it("starts a new group across a 60s gap", () => {

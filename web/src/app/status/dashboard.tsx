@@ -50,6 +50,8 @@ interface SessionState {
   errorType?: string;
   stopReason?: string;
   retryCount?: number;
+  /** Stamped client-side when the session:error event arrives, so incident bucketing reflects when it failed (not when it started). */
+  errorAt?: number;
   usage?: { inputTokens?: number; outputTokens?: number };
 }
 
@@ -356,6 +358,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
                 errorType: msg.errorType as string | undefined,
                 stopReason: msg.stopReason as string | undefined,
                 retryCount: msg.retryCount as number | undefined,
+                errorAt: s.errorAt ?? Date.now(),
               }
             : s,
         ),
@@ -643,13 +646,21 @@ function SessionsTable({
     );
   }
 
-  const totalPages = Math.ceil(sessions.length / perPage);
-  const paginated = sessions.slice(page * perPage, (page + 1) * perPage);
   const incidents = groupProviderIncidents(sessions);
+  const rolledUp = new Set(incidents.flatMap((g) => g.sessionIds));
+  const visible = rolledUp.size > 0 ? sessions.filter((s) => !rolledUp.has(s.sessionId)) : sessions;
+  const totalPages = Math.max(1, Math.ceil(visible.length / perPage));
+  const paginated = visible.slice(page * perPage, (page + 1) * perPage);
 
   return (
     <div>
       <IncidentBanner groups={incidents} />
+      {visible.length === 0 && incidents.length > 0 && (
+        <div className="text-sm text-stone-400 dark:text-stone-500 py-4 text-center">
+          All sessions in view are rolled up into the incident{incidents.length > 1 ? "s" : ""}{" "}
+          above.
+        </div>
+      )}
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
         <div className="grid grid-cols-[2fr_1.5fr_1fr_1.5fr_1fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium uppercase tracking-wider text-stone-400 dark:text-stone-500">
           <div>Company</div>
