@@ -7,6 +7,10 @@ import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { parseArgs } from "../../src/shared/parse-args.js";
 import { buildDiscoverySystemPrompt } from "../../src/shared/discovery-prompt.js";
 import { buildWorkerSystemPrompt } from "../../src/shared/worker-prompt.js";
+import {
+  classifyProviderSessionError,
+  isRetriesExhaustedIdle,
+} from "../../workers/discovery/src/session-error-classify.js";
 
 /**
  * Unit tests for managed-discovery module internals.
@@ -394,6 +398,82 @@ describe("tool error detection via result prefix", () => {
 
   it("does not flag unknown tool responses", () => {
     expect(isError("Unknown tool: bad_tool")).toBe(false);
+  });
+});
+
+// ── Provider session error classification ──
+
+describe("classifyProviderSessionError", () => {
+  it("classifies an unknown_error session.error event", () => {
+    const event = {
+      type: "session.error",
+      error: {
+        type: "unknown_error",
+        message: "An internal service error occurred.",
+        retry_status: { type: "retrying" },
+      },
+    };
+    expect(classifyProviderSessionError(event)).toEqual({
+      errorSource: "provider",
+      errorType: "unknown_error",
+      message: "An internal service error occurred.",
+    });
+  });
+
+  it("classifies a model_overloaded_error session.error event", () => {
+    const event = {
+      type: "session.error",
+      error: { type: "model_overloaded_error", message: "Model overloaded." },
+    };
+    expect(classifyProviderSessionError(event)).toEqual({
+      errorSource: "provider",
+      errorType: "model_overloaded_error",
+      message: "Model overloaded.",
+    });
+  });
+
+  it("falls back to a generic message when error.message is missing", () => {
+    const event = { type: "session.error", error: { type: "unknown_error" } };
+    expect(classifyProviderSessionError(event)?.message).toBe("Unknown managed-agents error");
+  });
+
+  it("returns null for non-session.error events", () => {
+    expect(classifyProviderSessionError({ type: "agent.message" })).toBeNull();
+    expect(classifyProviderSessionError({ type: "session.status_idle" })).toBeNull();
+    expect(classifyProviderSessionError(null)).toBeNull();
+    expect(classifyProviderSessionError(undefined)).toBeNull();
+  });
+});
+
+describe("isRetriesExhaustedIdle", () => {
+  it("matches status_idle with retries_exhausted stop_reason", () => {
+    expect(
+      isRetriesExhaustedIdle({
+        type: "session.status_idle",
+        stop_reason: { type: "retries_exhausted" },
+      }),
+    ).toBe(true);
+  });
+
+  it("does not match status_idle with end_turn or requires_action", () => {
+    expect(
+      isRetriesExhaustedIdle({
+        type: "session.status_idle",
+        stop_reason: { type: "end_turn" },
+      }),
+    ).toBe(false);
+    expect(
+      isRetriesExhaustedIdle({
+        type: "session.status_idle",
+        stop_reason: { type: "requires_action", event_ids: [] },
+      }),
+    ).toBe(false);
+  });
+
+  it("does not match other event types", () => {
+    expect(isRetriesExhaustedIdle({ type: "session.error" })).toBe(false);
+    expect(isRetriesExhaustedIdle({ type: "session.status_terminated" })).toBe(false);
+    expect(isRetriesExhaustedIdle(null)).toBe(false);
   });
 });
 

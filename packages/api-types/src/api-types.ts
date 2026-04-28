@@ -663,6 +663,13 @@ export interface UsageStatsResponse {
 
 // ── Sessions ──
 
+/**
+ * Where the session error originated.
+ * - `provider`: managed-agents service / Anthropic-side (e.g. unknown_error, model_overloaded, retries_exhausted)
+ * - `us`: this codebase / our agent setup (e.g. parser failure, no tools called, timeout)
+ */
+export type SessionErrorSource = "provider" | "us";
+
 export interface Session {
   sessionId: string;
   company: string;
@@ -677,6 +684,14 @@ export interface Session {
   startedAt: number;
   lastUpdatedAt: number;
   error?: string;
+  /** Where the error originated. Absent on legacy sessions; treat as `"us"`. */
+  errorSource?: SessionErrorSource;
+  /** Provider error type (e.g. `unknown_error`, `model_overloaded_error`). */
+  errorType?: string;
+  /** Stop reason from the final `session.status_idle` event (e.g. `retries_exhausted`). */
+  stopReason?: string;
+  /** Number of provider `session.error` events observed before terminal. */
+  retryCount?: number;
   activeSources?: string[];
   cancelRequested?: boolean;
 }
