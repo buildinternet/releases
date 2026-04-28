@@ -92,8 +92,7 @@ export async function logSearch(env: LogSearchEnv, input: LogSearchInput): Promi
     const db = drizzle(env.DB);
     await db.insert(searchQueries).values(row);
   } catch (err) {
-    // Never break a search response on a logging failure, but surface to
-    // tail logs so a future schema drift doesn't silently drop every row.
+    // Never break a search response on a logging failure.
     console.error("[search-log] insert failed", err);
   }
 }
