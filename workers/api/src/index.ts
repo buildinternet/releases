@@ -30,6 +30,7 @@ import { productRoutes } from "./routes/products.js";
 import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
+import { adminSearchQueriesRoutes } from "./routes/admin-search-queries.js";
 import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
@@ -142,6 +143,9 @@ export type Env = {
     ALERT_DEDUP_KV?: KVNamespace;
     // Staging-only kill switch — see middleware/indexing.ts.
     INDEXING_DISABLED?: string;
+    // When "true", `/v1/search` and the MCP search tools skip writing rows to
+    // `search_queries`. Default off → logging on. See workers/api/src/lib/log-search.ts.
+    SEARCH_QUERY_LOG_DISABLED?: string;
     // Staging-only shared secret — see middleware/staging-access.ts. Absent
     // everywhere outside `[env.staging]`, so the gate no-ops for prod/local.
     STAGING_ACCESS_KEY?: SecretBinding;
@@ -207,6 +211,7 @@ const adminRoutes = [
   "admin/embed/status",
   "admin/cron-runs",
   "admin/logs",
+  "admin/search-queries",
   "errata",
   "webhooks",
   "workflows",
@@ -274,6 +279,7 @@ v1.route("/", playbook);
 v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
+v1.route("/", adminSearchQueriesRoutes);
 v1.route("/", errataRoutes);
 v1.route("/", webhooksRoutes);
 v1.route("/", workflowsRoutes);

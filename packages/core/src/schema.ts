@@ -16,6 +16,7 @@ import {
   newSourceChangelogFileId,
   newSourceChangelogChunkId,
   newTelemetryEventId,
+  newSearchQueryId,
   newWebhookSubscriptionId,
 } from "./id.js";
 
@@ -350,6 +351,53 @@ export const telemetryEvents = sqliteTable(
 
 export type TelemetryEvent = typeof telemetryEvents.$inferSelect;
 export type NewTelemetryEvent = typeof telemetryEvents.$inferInsert;
+
+export const SEARCH_SURFACES = ["web", "mcp", "api"] as const;
+export type SearchSurface = (typeof SEARCH_SURFACES)[number];
+
+export const SEARCH_MODES = ["lexical", "semantic", "hybrid"] as const;
+export type SearchMode = (typeof SEARCH_MODES)[number];
+
+/**
+ * Records the *content* of search queries — what users typed — separately from
+ * `telemetry_events`, which only tracks command names. The shapes diverge on
+ * purpose: telemetry is intentionally PII-clean, search-query rows carry free
+ * text. Keep the split so the OSS CLI's telemetry contract stays narrow.
+ */
+export const searchQueries = sqliteTable(
+  "search_queries",
+  {
+    id: text("id").primaryKey().$defaultFn(newSearchQueryId),
+    timestamp: integer("timestamp").notNull(),
+    surface: text("surface").notNull(),
+    clientKind: text("client_kind").notNull().default("external"),
+    query: text("query").notNull(),
+    mode: text("mode"),
+    types: text("types"),
+    organization: text("organization"),
+    entity: text("entity"),
+    orgHits: integer("org_hits"),
+    catalogHits: integer("catalog_hits"),
+    releaseHits: integer("release_hits"),
+    chunkHits: integer("chunk_hits"),
+    degraded: integer("degraded", { mode: "boolean" }),
+    durationMs: integer("duration_ms"),
+    anonId: text("anon_id"),
+    sessionId: text("session_id"),
+    userAgent: text("user_agent"),
+  },
+  (table) => [
+    index("idx_search_queries_timestamp").on(table.timestamp),
+    index("idx_search_queries_surface_timestamp").on(table.surface, table.timestamp),
+    // (timestamp, query) covers `/admin/search-queries/top`'s
+    // `WHERE timestamp > ? GROUP BY query` access pattern; SQLite range-scans
+    // on the leading column then aggregates without an extra sort.
+    index("idx_search_queries_timestamp_query").on(table.timestamp, table.query),
+  ],
+);
+
+export type SearchQuery = typeof searchQueries.$inferSelect;
+export type NewSearchQuery = typeof searchQueries.$inferInsert;
 
 export const ignoredUrls = sqliteTable(
   "ignored_urls",

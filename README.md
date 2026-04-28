@@ -163,6 +163,15 @@ When a visitor loads `releases.sh` in a browser that implements the emerging [We
 
 WebMCP is intentionally a lightweight tool subset — it does not mirror resources, prompts, or the AI tools. If you add, rename, or change a read-only tool in `workers/mcp/src/tools.ts`, update the WebMCP provider in the same PR so the tool subset doesn't drift. The OSS CLI's stdio bridge (`releases admin mcp serve`) proxies to the hosted MCP server, so it picks up tool changes automatically once the worker redeploys. Write/admin tools stay remote-only — the browser can't hold an API key safely.
 
+#### Search-query observability
+
+Every call to `/v1/search` and the MCP `search` / `search_releases` / `search_registry` tools writes a row to the `search_queries` table — query text (truncated to 200 chars), surface (`web` | `mcp` | `api`), retrieval mode, per-section result counts, and duration. Inspect via:
+
+- `GET /v1/admin/search-queries?since=7d&surface=mcp` — paginated raw rows, newest first. Bearer-auth.
+- `GET /v1/admin/search-queries/top?since=30d` — grouped by query, count desc.
+
+The web frontend tags requests as `web` via the `X-Releases-Surface` header so admin reads can split visitor searches from direct API consumers. This log is intentionally separate from `telemetry_events`, which carries only command names and stays PII-clean for the OSS CLI contract. Set `SEARCH_QUERY_LOG_DISABLED=true` on the API or MCP worker to disable writes without removing call sites.
+
 ---
 
 ---
@@ -180,7 +189,7 @@ WebMCP is intentionally a lightweight tool subset — it does not mirror resourc
 
 ## Deployment
 
-Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt. Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys. D1 migrations stay manual.
+Workers auto-deploy on merges to `main` via `.github/workflows/deploy-workers.yml` — the workflow path-filters so only the workers whose code changed are rebuilt, fans out across `production` and `staging`, and runs `wrangler d1 migrations apply` against each environment's DB before the new code starts serving (so additive schema lands first). Managed agents + skills auto-deploy the same way via `.github/workflows/deploy-managed-agents.yml`, path-filtered on `src/shared/agent-tools.ts`, `src/shared/worker-prompt.ts`, `src/shared/discovery-prompt.ts`, `src/agent/skills/**`, and `scripts/sync-agent-skills.ts`. Both workflows expose `workflow_dispatch` for manual redeploys.
 
 To deploy manually from the project root, set `CLOUDFLARE_ACCOUNT_ID` and `CLOUDFLARE_API_TOKEN` in `.env` (Bun autoloads it) and run:
 

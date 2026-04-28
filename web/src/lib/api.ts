@@ -78,6 +78,9 @@ export function webApiHeaders(extra?: Record<string, string>): Record<string, st
   const headers: Record<string, string> = {
     "User-Agent": WEB_USER_AGENT,
     "X-Requested-With": WEB_REQUESTED_WITH,
+    // Lets the API attribute requests to the public site rather than direct
+    // API consumers — read by the search-query log on /v1/search.
+    "X-Releases-Surface": "web",
   };
   if (PROXY_KEY) headers["X-Releases-Proxy-Key"] = PROXY_KEY;
   if (extra) Object.assign(headers, extra);
