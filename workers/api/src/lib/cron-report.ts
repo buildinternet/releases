@@ -4,6 +4,7 @@
  * without pulling in the `cloudflare:email` module.
  */
 import type { FinalizeRunParams } from "../db/cron-runs-dao.js";
+import type { TopSearchRow } from "./search-queries-top.js";
 
 export type CronReportStatus = FinalizeRunParams["status"];
 
@@ -45,6 +46,11 @@ export type CronReport = {
   sessionsStarted?: string[];
   dispatchErrorDetail?: Array<{ orgSlug: string; error: string }>;
   results?: CronReportResults;
+  /**
+   * Top search queries over the last 24h (bot-filtered). Populated by the
+   * `top-searches` step in the workflow; absent on aborted/inline runs.
+   */
+  topSearches?: TopSearchRow[];
   /** Base URL for cron-run detail links in the body (no trailing slash). */
   adminBaseUrl?: string;
 };
@@ -151,6 +157,19 @@ export function formatCronReport(report: CronReport): FormattedReport {
     }
   }
 
+  if (report.topSearches !== undefined) {
+    lines.push("");
+    lines.push("Top searches (last 24h):");
+    if (report.topSearches.length === 0) {
+      lines.push("  (no search traffic)");
+    } else {
+      for (const s of report.topSearches) {
+        const ts = new Date(s.lastSeen).toISOString();
+        lines.push(`  - ${s.query} (${s.count}x, last seen ${ts})`);
+      }
+    }
+  }
+
   if (report.notes) {
     lines.push("");
     lines.push(`Notes: ${report.notes}`);
@@ -217,6 +236,21 @@ export function formatCronReport(report: CronReport): FormattedReport {
     resultsHtml = `<h3 style="margin-top:24px;">Results <span style="font-weight:400;color:#64748b;">(after ${r.settleWindowMinutes}min settle)</span></h3><table style="border-collapse:collapse;font-size:14px;"><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Sources fetched</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalSourcesFetched(r)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Releases found</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalReleasesFound(r)}</td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Releases inserted</td><td style="padding:4px 0;font-family:ui-monospace,monospace;"><strong>${totalReleasesInserted(r)}</strong></td></tr><tr><td style="padding:4px 12px 4px 0;color:#64748b;">Fetch errors</td><td style="padding:4px 0;font-family:ui-monospace,monospace;">${totalErrors(r)}</td></tr>${stillRunning}</table>${orgTable}`;
   }
 
+  let topSearchesHtml = "";
+  if (report.topSearches !== undefined) {
+    if (report.topSearches.length === 0) {
+      topSearchesHtml = `<h3 style="margin-top:24px;">Top searches <span style="font-weight:400;color:#64748b;">(last 24h)</span></h3><p style="color:#64748b;font-size:14px;">No search traffic.</p>`;
+    } else {
+      const searchRows = report.topSearches
+        .map((s) => {
+          const ts = new Date(s.lastSeen).toISOString();
+          return `<tr><td style="padding:4px 12px 4px 0;font-family:ui-monospace,monospace;">${escapeHtml(s.query)}</td><td style="padding:4px 12px 4px 0;color:#64748b;text-align:right;">${s.count}x</td><td style="padding:4px 0;color:#64748b;font-size:12px;">${escapeHtml(ts)}</td></tr>`;
+        })
+        .join("");
+      topSearchesHtml = `<h3 style="margin-top:24px;">Top searches <span style="font-weight:400;color:#64748b;">(last 24h)</span></h3><table style="border-collapse:collapse;font-size:14px;">${searchRows}</table>`;
+    }
+  }
+
   let errorsHtml = "";
   if (report.dispatchErrorDetail && report.dispatchErrorDetail.length > 0) {
     const items = report.dispatchErrorDetail
@@ -241,6 +275,7 @@ export function formatCronReport(report: CronReport): FormattedReport {
 <h2 style="color:${statusColor};margin-bottom:8px;">${escapeHtml(report.cronName)} — ${escapeHtml(report.status)}</h2>
 <table style="border-collapse:collapse;font-size:14px;">${htmlRows.join("")}</table>
 ${resultsHtml}
+${topSearchesHtml}
 ${notesHtml}
 ${errorsHtml}
 ${detailLink}

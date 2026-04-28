@@ -35,6 +35,8 @@ import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/c
 import { sendCronReport } from "../lib/notifications.js";
 import { aggregateSweepResults } from "../lib/sweep-results.js";
 import type { CronReportResults } from "../lib/cron-report.js";
+import { getTopSearchQueries } from "../lib/search-queries-top.js";
+import type { TopSearchRow } from "../lib/search-queries-top.js";
 
 /**
  * Workflow env. Secrets stay as SecretBinding here and are resolved inside
@@ -94,6 +96,15 @@ const RETRY_DISPATCH = {
 const RETRY_AGGREGATE = {
   retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
 } satisfies WorkflowStepConfig;
+
+const RETRY_TOP_SEARCHES = {
+  retries: { limit: 2, delay: "10 seconds", backoff: "exponential" },
+} satisfies WorkflowStepConfig;
+
+/** How many hours back the top-searches digest covers. */
+const TOP_SEARCHES_WINDOW_HOURS = 24;
+/** Maximum number of search-query rows to include in the email digest. */
+const TOP_SEARCHES_LIMIT = 20;
 
 /**
  * How long to wait between dispatching managed-agent sessions and emailing
@@ -340,9 +351,21 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
       });
     }
 
+    const topSearches: TopSearchRow[] = await step.do(
+      "top-searches",
+      RETRY_TOP_SEARCHES,
+      async (): Promise<TopSearchRow[]> => {
+        const since = Date.now() - TOP_SEARCHES_WINDOW_HOURS * 3_600_000;
+        return getTopSearchQueries(db, { since, limit: TOP_SEARCHES_LIMIT, excludeBots: true });
+      },
+    );
+
     await step.do("send-report", async () => {
       const reportEnv = resolveReportEnv(env);
-      await sendCronReport(reportEnv, buildReport(reportEnv, { ...finalized, results }));
+      await sendCronReport(
+        reportEnv,
+        buildReport(reportEnv, { ...finalized, results, topSearches }),
+      );
     });
   }
 }
