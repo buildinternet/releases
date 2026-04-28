@@ -251,4 +251,53 @@ describe("formatCronReport", () => {
     expect(text).toContain("Still running:      1 session");
     expect(text).not.toContain("1 sessions");
   });
+
+  // Top-searches section
+  it("text body omits top-searches section when topSearches is absent", () => {
+    const { text } = formatCronReport(baseReport);
+    expect(text).not.toContain("Top searches");
+  });
+
+  it("text body renders 'no traffic' line when topSearches is empty", () => {
+    const { text } = formatCronReport({ ...baseReport, topSearches: [] });
+    expect(text).toContain("Top searches (last 24h):");
+    expect(text).toContain("(no search traffic)");
+  });
+
+  it("text body lists query, count, and timestamp for each top search", () => {
+    const lastSeen = new Date("2026-04-28T01:00:00.000Z").getTime();
+    const { text } = formatCronReport({
+      ...baseReport,
+      topSearches: [
+        { query: "next.js", count: 5, lastSeen },
+        { query: "kubernetes", count: 2, lastSeen },
+      ],
+    });
+    expect(text).toContain("Top searches (last 24h):");
+    expect(text).toContain("- next.js (5x, last seen 2026-04-28T01:00:00.000Z)");
+    expect(text).toContain("- kubernetes (2x, last seen 2026-04-28T01:00:00.000Z)");
+  });
+
+  it("html body omits top-searches section when topSearches is absent", () => {
+    const { html } = formatCronReport(baseReport);
+    expect(html).not.toContain("Top searches");
+  });
+
+  it("html body renders 'No search traffic' when topSearches is empty", () => {
+    const { html } = formatCronReport({ ...baseReport, topSearches: [] });
+    expect(html).toContain("Top searches");
+    expect(html).toContain("No search traffic");
+  });
+
+  it("html body renders search rows and escapes query text", () => {
+    const lastSeen = new Date("2026-04-28T01:00:00.000Z").getTime();
+    const { html } = formatCronReport({
+      ...baseReport,
+      topSearches: [{ query: "<script>xss</script>", count: 3, lastSeen }],
+    });
+    expect(html).toContain("Top searches");
+    expect(html).not.toContain("<script>xss</script>");
+    expect(html).toContain("&lt;script&gt;xss&lt;/script&gt;");
+    expect(html).toContain("3x");
+  });
 });
