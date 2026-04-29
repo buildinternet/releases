@@ -9,8 +9,8 @@
         "@anthropic-ai/sdk": "^0.91.1",
         "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
-        "@buildinternet/releases-lib": "^0.20.0",
-        "@buildinternet/releases-skills": "^0.20.0",
+        "@buildinternet/releases-lib": "^0.20.2",
+        "@buildinternet/releases-skills": "^0.20.2",
         "@modelcontextprotocol/sdk": "^1.29.0",
         "@releases/adapters": "workspace:*",
         "@releases/ai-internal": "workspace:*",
@@ -174,9 +174,9 @@
 
     "@buildinternet/releases-core": ["@buildinternet/releases-core@workspace:packages/core"],
 
-    "@buildinternet/releases-lib": ["@buildinternet/releases-lib@0.20.0", "", {}, "sha512-6oQNZsOghNByQVV9OQk1sInX4WU7ljkucA+VmeihL+TBS1MLE5h30GVJd6ll2kCtsg95dtCesccgBJy6SHl/WA=="],
+    "@buildinternet/releases-lib": ["@buildinternet/releases-lib@0.20.2", "", {}, "sha512-FY94b7iJj/TPR7oi3oulNAHQ5LvwKBZcLa2RHynR4aH35uXa9G22TbgYwxf/Uow8JWvq3HqykA151ZseK3PIkw=="],
 
-    "@buildinternet/releases-skills": ["@buildinternet/releases-skills@0.20.0", "", {}, "sha512-SWvXUhp3OMYPH3K0u4POlsRQtHRvXAOmTgOS43iW6ck/YkfC1xjG+8hnlXo+SZHuI5D8VzCegj6sWzens3q7bQ=="],
+    "@buildinternet/releases-skills": ["@buildinternet/releases-skills@0.20.2", "", {}, "sha512-mHF0FKUuYlREFIltzDvny91t3d4RY3/R4oL9bTnlHazurNunF77bvg7/wA0P4mr1tD3NjAg12zSr1vZtfaVTMw=="],
 
     "@bytecodealliance/preview2-shim": ["@bytecodealliance/preview2-shim@0.17.6", "", {}, "sha512-n3cM88gTen5980UOBAD6xDcNNL3ocTK8keab21bpx1ONdA+ARj7uD1qoFxOWCyKlkpSi195FH+GeAut7Oc6zZw=="],
 
