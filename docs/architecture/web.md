@@ -24,6 +24,24 @@ Next.js's `opengraph-image.tsx` file convention (one per route segment, cascadin
 
 Dynamic routes carry `revalidate = 86400` so first-render cost amortizes across 24h of CDN hits; static routes (`/`, `/docs/*`) render at build. Tests in `tests/unit/og-helpers.test.ts`.
 
+## On-demand lookup field in search responses
+
+`GET /v1/search` (lexical + hybrid) and the MCP `search` / `search_releases` tools include a `lookup` field when the query parses as a `{org}/{repo}` GitHub coordinate **and** the in-DB search returned zero hits (no orgs, no catalog entries, no release/changelog-chunk hits). When either condition fails, the route skips the lookup call and `lookup` is `null`. Shape:
+
+```ts
+lookup: {
+  status: "indexed" | "existing" | "empty" | "not_found" | "deferred";
+  source?: { id, slug, name, url, discovery };
+  releases?: Release[];        // inline preview; present on indexed / existing
+  relatedOrg: {                // "did you mean" rail; null when org is unknown
+    org: { id, slug, name };
+    sources: Source[];         // top-5 sibling sources by recent activity
+  } | null;
+} | null
+```
+
+`lookup` is `null` when the query was not coordinate-shaped or when existing search hits were found. Web rendering of this field (source card + inline releases + relatedOrg rail) is a follow-up to issue #611.
+
 ## Org overviews
 
 AI-generated knowledge pages (`knowledge_pages` table, scope `org`) summarize recent changelog activity into themed sections. Generation prompt + word target (~120-250, hard ceiling 300) lives in the API worker (`workers/api/src/routes/overview.ts`; the discovery worker and `regenerating-overviews` skill handle the generation side). Surfaces: `releases admin org show` prints a preview + generated-at, `releases org overview <slug>` (public, no auth) prints the full body, MCP exposes both preview and full body through a single `get_organization` tool — the default response shows a preview and callers pass `include_overview: true` to inline the full briefing. Staleness threshold is `OVERVIEW_STALE_DAYS = 30` from `@buildinternet/releases-core/overview`; past the threshold every surface still shows the overview but adds a `⚠ older than 30 days` warning. The web's `OverviewView` strips a leading `# Heading` defensively in case the model violates the no-headings rule.

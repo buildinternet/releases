@@ -14,7 +14,8 @@
     "./feed": "./src/feed.ts",
     "./extract": "./src/extract/index.ts",
     "./extract/shared": "./src/extract/shared.ts",
-    "./extract/types": "./src/extract/types.ts"
+    "./extract/types": "./src/extract/types.ts",
+    "./github-probe": "./src/github-probe.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",

@@ -160,7 +160,7 @@ git commit -m "feat(schema): add discovery column to organizations and sources"
 
 **Files:**
 
-- Create: `workers/api/src/lib/lookup-coordinate.ts`
+- Create: `packages/core/src/lookup-coordinate.ts` (importable as `@buildinternet/releases-core/lookup-coordinate`)
 - Create: `tests/unit/lookup-coordinate.test.ts`
 
 - [ ] **Step 1: Write the failing test**

@@ -22,6 +22,8 @@ There is intentionally **no single-command "refresh in one step"** today. Compos
 - After onboarding: first full fetch + overview for a newly added org
 - Spot checks: "is Stripe up to date?"
 
+> **On-demand orgs** (`discovery = 'on_demand'`) are hidden stubs materialized by the on-demand lookup endpoint. They get embeddings and cron fetches but no overviews or summarization. When selecting orgs for maintenance, exclude them: `releases admin org list --json | jq '[.[] | select(.discovery != "on_demand")]'`. If you want to promote an on-demand org to curated so it gets full treatment, use `manage_org` action "edit" with `discovery: 'curated'` (or any equivalent admin edit).
+
 ## Single Org Update
 
 Two steps:

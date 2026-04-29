@@ -72,7 +72,7 @@ Return `relatedOrg` only when the org match is unambiguous (exact slug match, ex
 
 ## Components
 
-### 1. `packages/adapters/src/github.ts` — `probeRepo` helper
+### 1. `packages/adapters/src/github-probe.ts` — `probeRepo` helper
 
 New function: `probeRepo(org, repo) → { exists, archived, hasReleases, defaultBranch, hasChangelog }`. Single `HEAD /repos/{owner}/{repo}` call (existing auth/rate-limit handling). For repos that exist, follow up with a lightweight content listing to detect `CHANGELOG.md`. Used by Step 3.
 
@@ -102,7 +102,7 @@ Response shape (success):
 }
 ```
 
-### 3. `workers/api/src/lib/lookup-coordinate.ts` (new)
+### 3. `packages/core/src/lookup-coordinate.ts` (importable as `@buildinternet/releases-core/lookup-coordinate`)
 
 Pure parser: `"acme/random-sdk"` → `{ provider: "github", org: "acme", repo: "random-sdk" }` or `null`. Centralizes the regex (`^[A-Za-z0-9._-]+/[A-Za-z0-9._-]+$`) so search routes and the lookup handler stay in sync.
 
@@ -112,15 +112,15 @@ Performs the Step 0 org resolution. Returns `{ org, sources }` or `null`. Reused
 
 ### 5. Negative-result cache
 
-KV namespace (reuse an existing one or add `LOOKUP_NEG_CACHE`). Key: `lookup:github:{org}/{repo}`. Value: `{ status: "not_found" | "empty", checkedAt, expiresAt }`. TTL: **24h** for `not_found`, **6h** for `empty` (empty repos are more likely to gain content). Step 1 short-circuits on hit.
+KV namespace (reuse `LATEST_CACHE`). Key: `lookup:{provider}:{org}/{repo}` (lowercased). Value: `{ status: "not_found" | "empty", checkedAt }` — expiry is enforced via the KV `expirationTtl` (no in-payload `expiresAt`). TTLs: **24h** for `not_found`, **6h** for `empty` (empty repos are more likely to gain content). Step 1 short-circuits on hit. Implementation in `workers/api/src/lib/lookup-neg-cache.ts`.
 
 ### 6. Search wiring
 
-In `workers/api/src/routes/search.ts`, after the existing fallback enrichment misses, parse the query as a coordinate and call into the lookup handler in-process. Same in MCP `search` and `search_releases` tools (`workers/mcp/src/tools.ts`). The lookup payload merges into the search response under a new `lookup` field; clients render it as a source card with inline releases (or the appropriate empty/not-found card with the `relatedOrg` rail).
+In `workers/api/src/routes/search.ts`, after the existing fallback enrichment misses, parse the query as a coordinate and call into the lookup handler in-process. The MCP wiring lives in `workers/mcp/src/mcp-agent.ts`: a single `maybeLookup(out, query)` helper is invoked from the `search` and `search_releases` tool registrations after `searchTool(...)` reports zero hits. It POSTs to the API service binding (`env.API.fetch("https://internal/v1/lookups", ...)`) with `Authorization: Bearer ${RELEASED_API_KEY}` (and the staging gate header in staging). The lookup payload is rendered into the tool's text response so MCP clients see the result inline.
 
 ### 7. Schema migration
 
-Add `sources.discovery` (`text`, nullable, indexed) with values `curated` / `agent` / `on_demand`. Backfill existing rows to `curated`. No change to `metadata` shape — on-demand details land under `metadata.lookup`:
+Add `sources.discovery` (`text`, NOT NULL DEFAULT `'curated'`, indexed) with allowed values `curated` / `agent` / `on_demand`. The DEFAULT clause backfills existing rows to `curated`. No change to `metadata` shape — on-demand details land under `metadata.lookup`:
 
 ```json
 {
@@ -213,7 +213,7 @@ The `discovery = 'on_demand'` column is the single queryable handle that admin t
   - 404 / 403 / archived.
   - Rate-limit response → deferred.
   - 5xx → deferred.
-- **Integration:** idempotency — calling `/v1/lookups` twice in quick succession produces one source row (UNIQUE on `source_id, url` already enforces this; verify the handler doesn't double-insert the source row itself).
+- **Integration:** idempotency — calling `/v1/lookups` twice in quick succession produces one `sources` row. Note: the existing `UNIQUE(source_id, url)` constraint is on the `releases` table (per-source release dedup); it does **not** cover the `sources` table itself. The handler is responsible for guarding against a double source insert (currently: a `SELECT … WHERE url = ?` short-circuit at the top of `runLookup` plus an `onConflictDoNothing` slug-collision retry on the insert).
 - **Integration:** `relatedOrg` rail appears in 404 and `empty` responses when the org is known.
 - **Integration:** AI gating — on-demand source insert does not trigger overview generation; verify by asserting no row in `knowledge_pages` with `scope='org'` for the on-demand org.
 - **Smoke (CLI):** `releases search 'vercel/next.js'` against a fresh staging DB → expect inline preview + cache promotion on second search.

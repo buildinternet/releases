@@ -32,6 +32,11 @@ export async function regeneratePlaybook(
   try {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
     if (!org) return;
+    if (org.discovery === "on_demand") {
+      // On-demand orgs skip playbook generation by design (spec: AI gating).
+      // Promotion to 'curated' clears this gate.
+      return;
+    }
 
     const orgSources = await db.select().from(sources).where(eq(sources.orgId, orgId));
     if (orgSources.length === 0) return;

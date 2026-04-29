@@ -18,6 +18,8 @@ Run `./scripts/create-vectorize-indexes.sh` once per account (idempotent). The d
 
 Ingest is automatic on writes and never blocks them. The release batch insert, org/product/source POST/PATCH paths, and `refreshChangelogFile` all wrap embedding generation in `waitUntil` + try/catch — missing bindings, missing API key, or a provider error fall through silently and the row stays with `embedded_at = NULL` for backfill to pick up later. Entity PATCH is gated on the embed-relevant fields actually changing so poll-driven metadata bumps don't re-embed.
 
+**On-demand sources** (created by `POST /v1/lookups`, `discovery = 'on_demand'`) get embeddings too: the lookup handler wraps release embedding in `waitUntil` just like the cron path. This ensures that a second search for the same coordinate resolves through normal semantic search rather than triggering another lookup. Org overview and summarization workflows skip on-demand orgs (same `discovery` column gate); only embeddings run.
+
 ## Backfill + debugging
 
 `releases admin embed status` is the first stop — it reports per-table embedded vs unembedded counts via `GET /v1/admin/embed/status`. Run `releases admin embed releases|entities|changelogs` to backfill in 50-row batches against the matching `POST /v1/workflows/embed-{releases,entities,changelogs}` route. The status GET stays under `/admin/embed/status`; the three backfill POSTs live under `/workflows/` and are gated by `authMiddleware` via the `"workflows"` allowlist entry.

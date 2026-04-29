@@ -3,7 +3,11 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { searchToMarkdown } from "@releases/rendering/formatters.js";
 import { foldSourcesIntoCatalog } from "@buildinternet/releases-api-types";
 import type { Env } from "../index.js";
-import type { SearchReleaseHit, MediaItem } from "@buildinternet/releases-api-types";
+import type {
+  SearchReleaseHit,
+  MediaItem,
+  LookupResultPayload,
+} from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import {
   searchOrgs,
@@ -17,6 +21,9 @@ import { runHybridSearch, type HybridMode } from "../lib/search-hybrid.js";
 import { logSearch } from "../lib/log-search.js";
 import { hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
 import type { SearchSurface } from "@buildinternet/releases-core/schema";
+import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { runLookup } from "./lookups.js";
+import { embedSourceSideEffect } from "./sources.js";
 
 /**
  * Lift a raw SQL row to the wire shape. JSON-parses media, rewrites any
@@ -60,6 +67,35 @@ function hydrateReleaseHit(
   };
 }
 
+/**
+ * Project the internal LookupResponse (full Drizzle row shape) down to the
+ * slim wire type so `UnifiedSearchResponse` type-checks cleanly.
+ */
+function toLookupPayload(
+  lookup: Awaited<ReturnType<typeof runLookup>> | null,
+): LookupResultPayload | null {
+  if (!lookup) return null;
+  return {
+    status: lookup.status,
+    source: lookup.source
+      ? {
+          id: lookup.source.id,
+          slug: lookup.source.slug,
+          name: lookup.source.name,
+          url: lookup.source.url,
+          discovery: lookup.source.discovery ?? "curated",
+        }
+      : undefined,
+    releases: lookup.releases?.map((r) => ({
+      id: r.id,
+      version: r.version ?? null,
+      title: r.title,
+      publishedAt: r.publishedAt ?? null,
+    })),
+    relatedOrg: lookup.relatedOrg,
+  };
+}
+
 export const searchRoutes = new Hono<Env>();
 
 function parseMode(raw: string | undefined): HybridMode {
@@ -87,6 +123,21 @@ searchRoutes.get("/search", async (c) => {
   const surface: SearchSurface = c.req.header("x-releases-surface") === "web" ? "web" : "api";
   const userAgent = c.req.header("user-agent") ?? null;
   const anonId = c.req.header("x-releases-anon-id") ?? null;
+
+  // Parse once — reused by both the lexical and hybrid branches below.
+  const coordinate = parseCoordinate(q);
+
+  // Trigger embedding as a side effect when a new source was just indexed.
+  // The try/catch guards against test environments that have no ExecutionContext.
+  function maybeEmbed(lookup: Awaited<ReturnType<typeof runLookup>> | null): void {
+    if (lookup?.status === "indexed" && lookup.source) {
+      try {
+        c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, lookup.source.id));
+      } catch {
+        // No ExecutionContext in test environments — embedding is best-effort.
+      }
+    }
+  }
 
   // Entity lookups stay lexical — semantic lives behind /search_registry on
   // MCP. The /search endpoint keeps its historical shape so orgs/products
@@ -116,7 +167,24 @@ searchRoutes.get("/search", async (c) => {
       );
     }
     const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
-    const result = { query: q, orgs, catalog, products: catalog, sources: [], releases };
+
+    // On-demand GitHub lookup: fire when the query is a bare org/repo coordinate
+    // and the lexical search returned no entities or releases.
+    let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
+    if (coordinate && rawReleases.length === 0 && orgs.length === 0 && catalog.length === 0) {
+      lookup = await runLookup(c.env, db, coordinate);
+      maybeEmbed(lookup);
+    }
+
+    const result = {
+      query: q,
+      orgs,
+      catalog,
+      products: catalog,
+      sources: [],
+      releases,
+      lookup: toLookupPayload(lookup),
+    };
     c.executionCtx.waitUntil(
       logSearch(c.env, {
         surface,
@@ -192,6 +260,20 @@ searchRoutes.get("/search", async (c) => {
       score: h.score,
     }));
 
+  // On-demand GitHub lookup: fire when the query is a bare org/repo coordinate
+  // and the hybrid search returned no entities, releases, or chunks.
+  let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
+  if (
+    coordinate &&
+    releases.length === 0 &&
+    chunks.length === 0 &&
+    orgs.length === 0 &&
+    catalog.length === 0
+  ) {
+    lookup = await runLookup(c.env, db, coordinate);
+    maybeEmbed(lookup);
+  }
+
   const result = {
     query: q,
     orgs,
@@ -203,6 +285,7 @@ searchRoutes.get("/search", async (c) => {
     mode: hybrid.mode,
     degraded: hybrid.degraded,
     ...(hybrid.degradedReason ? { degradedReason: hybrid.degradedReason } : {}),
+    lookup: toLookupPayload(lookup),
   };
 
   c.executionCtx.waitUntil(

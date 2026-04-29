@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, gte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, ne, or } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
@@ -56,9 +56,15 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
       slug: organizations.slug,
       name: organizations.name,
       description: organizations.description,
+      discovery: organizations.discovery,
     })
     .from(organizations)
-    .where(orgWhere(slug));
+    .where(
+      and(
+        orgWhere(slug),
+        or(isNull(organizations.discovery), ne(organizations.discovery, "on_demand")),
+      ),
+    );
   if (!org) return c.json({ error: "not_found" }, 404);
 
   // Active sources only — skip hidden + paused.

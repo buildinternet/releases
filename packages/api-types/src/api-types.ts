@@ -412,6 +412,42 @@ export interface SearchChunkHit {
   score: number;
 }
 
+// ── Lookup (on-demand GitHub index) ──
+
+export type LookupStatus = "indexed" | "existing" | "empty" | "not_found" | "deferred";
+
+/**
+ * Slim wire payload embedded in a search response when the query is a GitHub
+ * coordinate (org/repo) and no existing entity matched. The server performs an
+ * on-demand lookup and includes the result here so the client can surface a
+ * "just indexed" or "not found" rail without a second round trip.
+ */
+export interface LookupResultPayload {
+  status: LookupStatus;
+  source?: {
+    id: string;
+    slug: string;
+    name: string;
+    url: string;
+    discovery: "curated" | "agent" | "on_demand";
+  };
+  releases?: Array<{
+    id: string;
+    version: string | null;
+    title: string;
+    publishedAt: string | null;
+  }>;
+  /**
+   * Unambiguous "did you mean" rail: the curated org that owns GitHub repos
+   * under the same org segment, plus its top sources. Null when the org
+   * segment matches multiple curated orgs or none.
+   */
+  relatedOrg: {
+    org: { id: string; slug: string; name: string };
+    sources: Array<{ id: string; slug: string; name: string; url: string }>;
+  } | null;
+}
+
 export interface UnifiedSearchResponse {
   query: string;
   orgs: SearchOrgHit[];
@@ -429,6 +465,11 @@ export interface UnifiedSearchResponse {
   degraded?: boolean;
   /** Human-readable reason for degradation (e.g., missing Vectorize binding). */
   degradedReason?: string;
+  /**
+   * On-demand lookup result. Present when the query parsed as a GitHub
+   * `org/repo` coordinate and no existing entities matched. Null otherwise.
+   */
+  lookup?: LookupResultPayload | null;
 }
 
 // ── Overview Pages ──

@@ -90,6 +90,20 @@ sequenceDiagram
 
 A single write tool in MCP would expose destructive operations to every unauthenticated caller of `mcp.releases.sh`. Adding principal resolution + per-org scoping to the MCP server is real work that depends on a staging auth story (issue #455) and vault-credential → principal mapping. Folding writes into MCP is planned but not scheduled.
 
+### Discovery column and on-demand rows
+
+The `discovery` column (text, nullable, indexed) on both `organizations` and `sources` records the origin of each row:
+
+| Value         | Set by                                                          |
+| ------------- | --------------------------------------------------------------- |
+| `'curated'`   | Manual admin operations; backfilled on all pre-existing rows    |
+| `'agent'`     | Discovery agent via `manage_source` / `manage_org` custom tools |
+| `'on_demand'` | `POST /v1/lookups` (on-demand GitHub coordinate lookup)         |
+
+Agent-created rows (`discovery = 'agent'`) are treated as curated for AI-feature purposes — they get org overviews, summarization, and playbook regen just like manually added rows. On-demand rows (`discovery = 'on_demand'`) skip all AI features except embeddings; they fold into the normal smart-fetch cron at `low` tier once materialized.
+
+If an agent encounters a source or org with `discovery = 'on_demand'` in the DB, it can promote it to curated by calling `manage_source` / `manage_org` action "edit" — no special promotion command exists; updating any field (e.g. name, description) with an explicit `discovery: 'curated'` value is the promotion ceremony.
+
 ### Skills vs. playbooks
 
 Agents operate on three layers of fetch guidance:

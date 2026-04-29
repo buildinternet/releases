@@ -24,6 +24,50 @@ import { registerResources } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
 import { logMcpSearch, type McpSearchCommand } from "./lib/log-search.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
+import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { logger } from "@buildinternet/releases-lib/logger";
+import type { LookupResultPayload } from "@buildinternet/releases-api-types";
+
+/**
+ * Render the lookup payload as a markdown rail appended to the tool's text
+ * response. Each branch tells the caller what just happened so the LLM can
+ * surface "I just indexed X for you" without a second tool call.
+ */
+function renderLookupRail(lookup: LookupResultPayload): string {
+  const lines: string[] = ["", "---", "", "## On-demand lookup"];
+  switch (lookup.status) {
+    case "indexed":
+      lines.push(
+        `Just indexed \`${lookup.source?.url ?? lookup.source?.slug ?? "(unknown)"}\` — ${
+          lookup.releases?.length ?? 0
+        } release(s) ingested. Re-run the search to retrieve the new content.`,
+      );
+      break;
+    case "existing":
+      lines.push(
+        `Found existing source \`${lookup.source?.slug ?? "(unknown)"}\` for this coordinate.`,
+      );
+      break;
+    case "empty":
+      lines.push(
+        `Repo \`${lookup.source?.url ?? "(unknown)"}\` exists but has no releases or CHANGELOG yet.`,
+      );
+      break;
+    case "not_found":
+      lines.push("Repo not found on GitHub.");
+      break;
+    case "deferred":
+      lines.push("Lookup deferred — GitHub returned a transient error. Try again shortly.");
+      break;
+  }
+  if (lookup.relatedOrg) {
+    lines.push("", `Did you mean from **${lookup.relatedOrg.org.name}**?`);
+    for (const s of lookup.relatedOrg.sources.slice(0, 5)) {
+      lines.push(`- \`${s.slug}\` — ${s.name}`);
+    }
+  }
+  return lines.join("\n");
+}
 
 type SecretBinding = { get(): Promise<string> };
 
@@ -49,6 +93,14 @@ export interface Env {
   INDEXING_DISABLED?: string;
   /** When "true", search-tool calls skip writing to `search_queries`. */
   SEARCH_QUERY_LOG_DISABLED?: string;
+  /** Service binding to the API worker — used for on-demand /v1/lookups calls. */
+  API?: Fetcher;
+  /**
+   * Bearer token presented to the API worker on the lookup-fallback path
+   * (`maybeLookup`). The /v1/lookups route is admin-gated, so without this
+   * the fallback returns 401. Bound from Secrets Store in both prod + staging.
+   */
+  RELEASED_API_KEY?: SecretBinding;
   /**
    * Staging-only shared secret. When bound, every request must carry a
    * matching `X-Releases-Staging-Key` header. See workers/mcp/src/index.ts.
@@ -158,6 +210,51 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
     };
   }
 
+  /**
+   * Fire an on-demand lookup via the API service binding when the query looks
+   * like a GitHub coordinate and the primary search returned nothing. Renders
+   * the result into the tool's text response so MCP clients see it inline.
+   * Silently degrades when the binding is absent (local dev / staging without API).
+   */
+  async function maybeLookup(out: SearchToolReturn, query: string): Promise<void> {
+    if (!env.API) return;
+    const coord = parseCoordinate(query);
+    if (!coord) return;
+    try {
+      const headers: Record<string, string> = { "content-type": "application/json" };
+      // /v1/lookups is admin-gated — present a Bearer for the API auth middleware.
+      const apiKey = (await env.RELEASED_API_KEY?.get().catch(() => "")) ?? "";
+      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+      // Service-binding requests still flow through the API worker's middleware
+      // pipeline, which includes the staging access gate. Attach the staging
+      // key when bound (no-op in prod/local where the binding is absent).
+      const stagingKey = (await env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
+      if (stagingKey) headers["X-Releases-Staging-Key"] = stagingKey;
+      const res = await env.API.fetch(
+        new Request("https://internal/v1/lookups", {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            provider: coord.provider,
+            coordinate: `${coord.org}/${coord.repo}`,
+          }),
+        }),
+      );
+      if (!res.ok) {
+        logger.error("[mcp-lookup] fallback non-ok", { status: res.status });
+        return;
+      }
+      const lookup = (await res.json()) as LookupResultPayload;
+      const rail = renderLookupRail(lookup);
+      const block = out.result.content[0];
+      if (rail && block?.type === "text") {
+        block.text = block.text ? `${block.text}\n\n${rail}` : rail;
+      }
+    } catch (err) {
+      logger.error("[mcp-lookup] fallback failed", err);
+    }
+  }
+
   // Lazily resolve the Anthropic client once per server instance
   let anthropicClient: ReturnType<typeof buildAnthropicClient> | undefined;
   async function getAnthropic(): Promise<ReturnType<typeof buildAnthropicClient>> {
@@ -219,7 +316,17 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           ),
       },
     },
-    withSearchLog("search", async (params) => search(db, params, env, ctx)),
+    withSearchLog("search", async (params) => {
+      const out = await search(db, params, env, ctx);
+      const { counts } = out;
+      const hasResults =
+        (counts.orgHits ?? 0) > 0 ||
+        (counts.catalogHits ?? 0) > 0 ||
+        (counts.releaseHits ?? 0) > 0 ||
+        (counts.chunkHits ?? 0) > 0;
+      if (!hasResults) await maybeLookup(out, params.query);
+      return out;
+    }),
   );
 
   server.registerTool(
@@ -256,7 +363,13 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           ),
       },
     },
-    withSearchLog("search_releases", async (params) => searchReleases(db, params, env, ctx)),
+    withSearchLog("search_releases", async (params) => {
+      const out = await searchReleases(db, params, env, ctx);
+      if ((out.counts.releaseHits ?? 0) === 0 && (out.counts.chunkHits ?? 0) === 0) {
+        await maybeLookup(out, params.query);
+      }
+      return out;
+    }),
   );
 
   server.registerTool(

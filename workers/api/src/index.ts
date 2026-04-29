@@ -16,6 +16,7 @@ import { relatedRoutes } from "./routes/related.js";
 import { fetchLogRoutes } from "./routes/fetch-log.js";
 import { usageLogRoutes } from "./routes/usage-log.js";
 import { ignoreRoutes } from "./routes/ignore.js";
+import { lookupRoutes } from "./routes/lookups.js";
 import { statusRoutes } from "./routes/status.js";
 import { sessionRoutes } from "./routes/sessions.js";
 import { mediaRoutes } from "./routes/media.js";
@@ -204,7 +205,10 @@ for (const r of publicReadRoutes) {
   v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
 }
 
-// Admin-only routes: all methods require auth.
+// Admin-only routes: all methods require auth. /v1/lookups is here (not in
+// publicReadRoutes) because the route only exposes a side-effecting POST —
+// public GETs aren't a thing on it. MCP fallbacks present a Bearer via the
+// API service binding (see workers/mcp/src/mcp-agent.ts maybeLookup).
 const adminRoutes = [
   "sessions",
   "evaluate",
@@ -219,6 +223,7 @@ const adminRoutes = [
   "errata",
   "webhooks",
   "workflows",
+  "lookups",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -276,6 +281,7 @@ v1.route("/", relatedRoutes);
 v1.route("/", fetchLogRoutes);
 v1.route("/", usageLogRoutes);
 v1.route("/", ignoreRoutes);
+v1.route("/", lookupRoutes);
 v1.route("/", summaries);
 v1.route("/", overview);
 v1.route("/", overviewInputs);
