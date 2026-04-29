@@ -15,7 +15,7 @@ export interface DiscoveryPromptOptions {
 export function buildDiscoverySystemPrompt(opts: DiscoveryPromptOptions): string {
   const evaluateNote = opts.evaluateAvailable
     ? ""
-    : "\nNOTE: The evaluate_url tool is not available in this mode. Use list_sources to find sources and manage_source(action=fetch) to validate them.";
+    : "\nNOTE: The evaluate_url tool is not available in this mode. Use list_catalog to find sources and manage_source(action=fetch) to validate them.";
 
   return `You manage changelog sources for Releases. You find, evaluate, add, fetch, and validate changelog sources using the available tools.
 
@@ -25,15 +25,16 @@ You have two kinds of tools:
 
 ### MCP tools (reads — provided by the Releases MCP server)
 These tools are auto-discovered from the MCP server. Use them for all read operations:
-- **search_releases** — Full-text search across releases
+- **search** — Unified hybrid lexical + semantic search across orgs, the catalog (products + standalone sources), and releases. Catalog hits carry \`kind: "product"|"source"\`; release hits carry \`kind: "release"|"changelog_chunk"\`. (\`search_registry\` and \`search_releases\` still exist as deprecated aliases.)
 - **get_latest_releases** — Recent releases for a product or organization
-- **list_sources** — List indexed changelog sources
+- **list_catalog** — List catalog entries (products + standalone sources) with a \`kind\` discriminator. Replaces \`list_products\` + \`list_sources\` (both kept as deprecated aliases).
+- **get_catalog_entry** — Detail for a single catalog entry. Replaces \`get_product\` + \`get_source\` (both kept as deprecated aliases).
 - **list_organizations** — Search/list organizations
 - **get_organization** — Detailed view of a single org (accounts, tags, sources, products, aliases)
 - **summarize_changes** — AI-generated summary of recent changes for a product
 - **compare_products** — AI comparison between two products
 
-If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_sources\` + web search.
+If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_catalog\` + web search.
 
 ### Custom tools (writes + utilities)
 ${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method (optional dry-run; manage_source(add) auto-evaluates when type is omitted)\n" : ""}- **manage_source** — Create, modify, remove, or fetch a source. Params: action (add/edit/remove/fetch), url, name, identifier, type, organization, feed_url, is_primary, fetch_priority. On action=add, type is auto-detected when omitted.
@@ -57,8 +58,8 @@ Some organizations ship multiple distinct products. When you discover sources th
 
 ## Onboarding Workflow
 
-1. **Pre-check** — call \`list_organizations\` with the company name to check if the org already exists, then call \`list_sources\` to check for existing sources. If sources already exist, report the current state and stop — do not re-discover or add duplicates.
-2. **Discover** — use web search and list_sources to find changelog URLs, feeds, and GitHub repos (evaluate_url is optional; manage_source(add) auto-evaluates when type is omitted).
+1. **Pre-check** — call \`list_organizations\` with the company name to check if the org already exists, then call \`list_catalog\` to check for existing sources. If sources already exist, report the current state and stop — do not re-discover or add duplicates.
+2. **Discover** — use web search and \`list_catalog\` to find changelog URLs, feeds, and GitHub repos (evaluate_url is optional; manage_source(add) auto-evaluates when type is omitted).
 3. **Add** — add sources with \`manage_source\` action=add; omit \`type\` to let the server infer it (feed discovery, provider detection) or pass it explicitly when you already know.
 4. **Validate** — fetch each source with \`manage_source\` action=fetch and check the results
 5. **Assess content depth** — for feed sources, check if pages have richer content than feeds

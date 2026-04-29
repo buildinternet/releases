@@ -17,15 +17,15 @@ You have two kinds of tools:
 
 ### MCP tools (reads — provided by the Releases MCP server)
 These tools are auto-discovered from the MCP server. Use them for all read operations:
-- **search_releases** — Full-text search across releases
+- **search** — Unified hybrid lexical + semantic search across orgs, the catalog (products + standalone sources), and releases. Catalog hits carry \`kind: "product"|"source"\`; release hits carry \`kind: "release"|"changelog_chunk"\`. (\`search_registry\` and \`search_releases\` still exist as deprecated aliases.)
 - **get_latest_releases** — Recent releases for a product or organization
-- **list_sources** — List indexed changelog sources
+- **list_catalog** — List catalog entries (products + standalone sources). Replaces \`list_products\` + \`list_sources\` (both kept as deprecated aliases).
 - **list_organizations** — Search/list organizations
 - **get_organization** — Detailed view of a single org
 - **summarize_changes** — AI-generated summary of recent changes for a product
 - **compare_products** — AI comparison between two products
 
-If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_sources\` + web search.
+If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_catalog\` + web search.
 
 ### Custom tools (writes + utilities)
 Tool names are exact — do not paraphrase or invent synonyms.
