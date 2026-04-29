@@ -606,7 +606,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
           const body: Record<string, unknown> = { pattern: url };
           if (input.block_type) body.type = input.block_type;
           if (input.reason) body.reason = input.reason;
-          return api("POST", "/blocked-urls", body);
+          return api("POST", "/admin/blocklist", body);
         }
 
         return `Error: unknown action "${action}"`;
