@@ -1,7 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from "bun:test";
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from "fs";
-import { join } from "path";
-import { tmpdir } from "os";
+import { describe, it, expect } from "bun:test";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { parseArgs } from "../../src/shared/parse-args.js";
@@ -47,69 +44,6 @@ describe("prompt hashing", () => {
     const base = `categories: ${CATEGORIES.join(", ")}`;
     const modified = `categories: ${[...CATEGORIES, "new-category"].join(", ")}`;
     expect(hashPrompt(base)).not.toBe(hashPrompt(modified));
-  });
-});
-
-// ── Config file read/write (mirrors loadCachedConfig/saveCachedConfig) ──
-
-describe("managed agent config persistence", () => {
-  const testDir = join(tmpdir(), `managed-agents-test-${Date.now()}`);
-  const configPath = join(testDir, "managed-agents.json");
-
-  beforeEach(() => {
-    mkdirSync(testDir, { recursive: true });
-  });
-
-  afterEach(() => {
-    rmSync(testDir, { recursive: true, force: true });
-  });
-
-  const sampleConfig = {
-    agentId: "agent_test123",
-    agentVersion: 1,
-    environmentId: "env_test456",
-    updatedAt: "2026-04-09T00:00:00.000Z",
-    promptHash: "abc123def456",
-  };
-
-  it("round-trips config through JSON", () => {
-    writeFileSync(configPath, JSON.stringify(sampleConfig, null, 2));
-    const loaded = JSON.parse(readFileSync(configPath, "utf8"));
-    expect(loaded).toEqual(sampleConfig);
-  });
-
-  it("returns null for missing file", () => {
-    try {
-      readFileSync(join(testDir, "nonexistent.json"), "utf8");
-      expect(true).toBe(false); // should not reach
-    } catch {
-      // Expected — loadCachedConfig returns null on error
-    }
-  });
-
-  it("returns null for invalid JSON", () => {
-    writeFileSync(configPath, "not valid json{{{");
-    try {
-      JSON.parse(readFileSync(configPath, "utf8"));
-      expect(true).toBe(false);
-    } catch {
-      // Expected — loadCachedConfig returns null on parse error
-    }
-  });
-
-  it("preserves promptHash for cache invalidation", () => {
-    const cfg = { ...sampleConfig, promptHash: "deadbeef12345678" };
-    writeFileSync(configPath, JSON.stringify(cfg, null, 2));
-    const loaded = JSON.parse(readFileSync(configPath, "utf8"));
-    expect(loaded.promptHash).toBe("deadbeef12345678");
-  });
-
-  it("handles missing promptHash (legacy config)", () => {
-    const legacy = { ...sampleConfig };
-    delete (legacy as any).promptHash;
-    writeFileSync(configPath, JSON.stringify(legacy, null, 2));
-    const loaded = JSON.parse(readFileSync(configPath, "utf8"));
-    expect(loaded.promptHash).toBeUndefined();
   });
 });
 
@@ -262,43 +196,6 @@ describe("buildDiscoverySystemPrompt", () => {
       categories: CATEGORIES,
     });
     expect(prompt).toContain(CATEGORIES[0]);
-  });
-});
-
-// ── Session timeout (mirrors SESSION_TIMEOUT_MS constant) ──
-
-describe("session timeout", () => {
-  const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
-
-  it("is 15 minutes", () => {
-    expect(SESSION_TIMEOUT_MS).toBe(900_000);
-  });
-
-  it("matches the remote discovery polling timeout", () => {
-    // Remote path uses MAX_POLL_TIME = 15 * 60 * 1000 in onboard.ts
-    const MAX_POLL_TIME = 15 * 60 * 1000;
-    expect(SESSION_TIMEOUT_MS).toBe(MAX_POLL_TIME);
-  });
-});
-
-// ── Status event emission (mirrors emitStatus helper) ──
-
-describe("status event mapping", () => {
-  it("maps to valid StatusHub event types", () => {
-    const validTypes = ["session:start", "session:progress", "session:complete", "session:error"];
-    for (const type of validTypes) {
-      const event = { type, sessionId: "sess_123", company: "Acme" };
-      expect(validTypes).toContain(event.type);
-    }
-  });
-
-  it("includes sessionId and company in all events", () => {
-    const partial = { type: "session:progress" as const, step: "discovery" };
-    const event = { ...partial, sessionId: "sess_123", company: "Acme" };
-    expect(event.sessionId).toBe("sess_123");
-    expect(event.company).toBe("Acme");
-    expect(event.type).toBe("session:progress");
-    expect(event.step).toBe("discovery");
   });
 });
 
