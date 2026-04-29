@@ -31,6 +31,7 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
+import { RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
@@ -176,25 +177,30 @@ interface PollResult {
 }
 
 /**
- * Batch-load playbook notes for every distinct org represented in `due`.
- * Returns a map keyed by `orgId`; orgs with no playbook row map to `null`.
- * The cost is one D1 query no matter how many sources are due.
+ * Batch-load playbook notes for every distinct org represented in `sourceLike`.
+ * Returns a map keyed by `orgId`; orgs with no playbook row are absent from
+ * the map. Accepts any row shape with an `orgId` field so callers don't need
+ * to materialize a full `Source` to use it.
  */
 export async function loadPlaybookNotesForSources(
   db: ReturnType<typeof drizzle>,
-  due: Source[],
+  sourceLike: ReadonlyArray<{ orgId: string | null }>,
 ): Promise<Map<string, string | null>> {
-  const orgIds = [...new Set(due.map((s) => s.orgId).filter((id): id is string => !!id))];
+  const orgIds = [...new Set(sourceLike.map((s) => s.orgId).filter((id): id is string => !!id))];
   const result = new Map<string, string | null>();
   if (orgIds.length === 0) return result;
 
-  const rows = await db
-    .select({ orgId: knowledgePages.orgId, notes: knowledgePages.notes })
-    .from(knowledgePages)
-    .where(and(eq(knowledgePages.scope, "playbook"), inArray(knowledgePages.orgId, orgIds)));
-
-  for (const row of rows) {
-    if (row.orgId) result.set(row.orgId, row.notes);
+  // D1 caps prepared statements at 100 bound parameters; chunk the IN list.
+  for (let i = 0; i < orgIds.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+    const slice = orgIds.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+    // oxlint-disable-next-line no-await-in-loop -- D1 chunked select (100 bind param limit)
+    const rows = await db
+      .select({ orgId: knowledgePages.orgId, notes: knowledgePages.notes })
+      .from(knowledgePages)
+      .where(and(eq(knowledgePages.scope, "playbook"), inArray(knowledgePages.orgId, slice)));
+    for (const row of rows) {
+      if (row.orgId) result.set(row.orgId, row.notes);
+    }
   }
   return result;
 }
@@ -1180,19 +1186,28 @@ export async function embedReleasesForSource(
   const embedConfig = await buildEmbedConfig(env);
   if (!embedConfig || !env.RELEASES_INDEX) return;
 
-  const rowsToEmbed = await db
-    .select({
-      id: releases.id,
-      title: releases.title,
-      content: releases.content,
-      contentSummary: releases.contentSummary,
-      version: releases.version,
-      publishedAt: releases.publishedAt,
-      sourceId: releases.sourceId,
-      type: releases.type,
-    })
-    .from(releases)
-    .where(inArray(releases.id, releaseIds));
+  // D1 caps prepared statements at 100 bound parameters; chunk the IN list.
+  const selectRow = (slice: string[]) =>
+    db
+      .select({
+        id: releases.id,
+        title: releases.title,
+        content: releases.content,
+        contentSummary: releases.contentSummary,
+        version: releases.version,
+        publishedAt: releases.publishedAt,
+        sourceId: releases.sourceId,
+        type: releases.type,
+      })
+      .from(releases)
+      .where(inArray(releases.id, slice));
+  type EmbedRow = Awaited<ReturnType<typeof selectRow>>[number];
+  const rowsToEmbed: EmbedRow[] = [];
+  for (let i = 0; i < releaseIds.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+    // oxlint-disable-next-line no-await-in-loop -- D1 chunked select (100 bind param limit)
+    const part = await selectRow(releaseIds.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE));
+    rowsToEmbed.push(...part);
+  }
 
   // Load org category for metadata filtering.
   let category: string | null = null;
@@ -1220,8 +1235,10 @@ export async function embedReleasesForSource(
     onPersisted: async (ids) => {
       if (ids.length === 0) return;
       const now = new Date().toISOString();
-      for (let i = 0; i < ids.length; i += 100) {
-        const slice = ids.slice(i, i + 100);
+      // UPDATE adds a SET binding, so 100 IDs would push the statement to 101
+      // params and 500 against D1. RELEASES_ID_IN_CHUNK_SIZE (90) leaves room.
+      for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+        const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
         // oxlint-disable-next-line no-await-in-loop -- D1 chunked update (100 bind param limit)
         await db.update(releases).set({ embeddedAt: now }).where(inArray(releases.id, slice));
       }
