@@ -66,9 +66,9 @@ ignoreRoutes.delete("/orgs/:slug/ignored-urls/:url", async (c) => {
   return c.json({ deleted: true });
 });
 
-// ── Global blocked URLs: /blocked-urls ──
+// ── Global blocked URLs: /admin/blocklist ──
 
-ignoreRoutes.get("/blocked-urls", async (c) => {
+ignoreRoutes.get("/admin/blocklist", async (c) => {
   const db = createDb(c.env.DB);
 
   const singleUrl = c.req.query("url");
@@ -98,7 +98,7 @@ ignoreRoutes.get("/blocked-urls", async (c) => {
   return c.json(rows);
 });
 
-ignoreRoutes.post("/blocked-urls", async (c) => {
+ignoreRoutes.post("/admin/blocklist", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ pattern: string; type?: "exact" | "domain"; reason?: string }>();
 
@@ -118,7 +118,7 @@ ignoreRoutes.post("/blocked-urls", async (c) => {
   return c.json({ blocked: true }, 201);
 });
 
-ignoreRoutes.delete("/blocked-urls/:pattern", async (c) => {
+ignoreRoutes.delete("/admin/blocklist/:pattern", async (c) => {
   const db = createDb(c.env.DB);
   const pattern = decodeURIComponent(c.req.param("pattern"));
 

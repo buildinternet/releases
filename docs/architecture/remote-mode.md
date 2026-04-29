@@ -4,7 +4,7 @@ The API worker at `workers/api/` is the authoritative data plane — every read 
 
 ## Auth model
 
-GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE) require a Bearer token. The `publicReadAuthMiddleware` in `workers/api/src/middleware/auth.ts` handles this split. Admin-only routes (sessions, `admin/*`, `workflows/*`, blocked-urls) require auth for all methods. The `GET /v1/orgs/:slug/playbook` endpoint is also admin-only (inline `authMiddleware` on the handler) since playbook content is internal.
+GET endpoints are public (no auth required). Write operations (POST/PATCH/DELETE) require a Bearer token. The `publicReadAuthMiddleware` in `workers/api/src/middleware/auth.ts` handles this split. Admin-only routes (sessions, `admin/*`, `workflows/*`) require auth for all methods. The `GET /v1/orgs/:slug/playbook` endpoint is also admin-only (inline `authMiddleware` on the handler) since playbook content is internal.
 
 ## On-demand AI admin endpoints
 

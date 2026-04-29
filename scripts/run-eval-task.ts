@@ -236,7 +236,7 @@ async function runCleanup(t: (typeof TASKS)[number], phase: "pre" | "post"): Pro
         return cleanupFetch("DELETE", `/orgs/${encodeURIComponent(args.slug)}`);
       }
       if (kind === "unblock_url") {
-        return cleanupFetch("DELETE", `/blocked-urls/${encodeURIComponent(args.pattern)}`);
+        return cleanupFetch("DELETE", `/admin/blocklist/${encodeURIComponent(args.pattern)}`);
       }
       if (kind === "unignore_url") {
         return cleanupFetch(
