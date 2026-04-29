@@ -17,7 +17,7 @@
     "./extract/types": "./src/extract/types.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.0",
+    "@anthropic-ai/sdk": "^0.91.1",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
