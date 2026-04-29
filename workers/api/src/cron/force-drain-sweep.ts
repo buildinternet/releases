@@ -22,10 +22,11 @@
 
 import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
-import { sources, knowledgePages } from "@buildinternet/releases-core/schema";
+import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { loadFetchQuirks } from "@releases/ai-internal/playbook";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
+import { loadPlaybookNotesForSources } from "./poll-fetch.js";
 
 export const CRON_NAME = "force-drain-sweep";
 export const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000;
@@ -102,17 +103,7 @@ export async function pickCandidates(
       ),
     );
 
-  const orgIds = [...new Set(rows.map((r) => r.orgId).filter((id): id is string => !!id))];
-  const playbookByOrg = new Map<string, string | null>();
-  if (orgIds.length > 0) {
-    const playbooks: Array<{ orgId: string | null; notes: string | null }> = await db
-      .select({ orgId: knowledgePages.orgId, notes: knowledgePages.notes })
-      .from(knowledgePages)
-      .where(and(eq(knowledgePages.scope, "playbook"), inArray(knowledgePages.orgId, orgIds)));
-    for (const p of playbooks) {
-      if (p.orgId) playbookByOrg.set(p.orgId, p.notes);
-    }
-  }
+  const playbookByOrg = await loadPlaybookNotesForSources(db, rows);
 
   const scored: Candidate[] = [];
   for (const r of rows) {

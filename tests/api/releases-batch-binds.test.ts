@@ -1,8 +1,8 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { inArray } from "drizzle-orm";
-import { releases } from "@buildinternet/releases-core/schema";
+import { and, eq, inArray } from "drizzle-orm";
+import { releases, knowledgePages } from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import {
   D1_MAX_BINDINGS,
@@ -65,6 +65,21 @@ describe("releases id-IN bind budget", () => {
       .update(releases)
       .set({ embeddedAt: "2026-01-01" })
       .where(inArray(releases.id, ids))
+      .toSQL();
+    expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+});
+
+describe("knowledge_pages playbook id-IN bind budget", () => {
+  // loadPlaybookNotesForSources runs SELECT ... WHERE scope='playbook' AND
+  // orgId IN (chunk). The scope eq adds one extra bind on top of the IN.
+  const ids = Array.from({ length: RELEASES_ID_IN_CHUNK_SIZE }, (_, i) => `org_${i}`);
+
+  it("SELECT ... WHERE scope=? AND orgId IN (chunk) stays under the cap", () => {
+    const q = db
+      .select({ orgId: knowledgePages.orgId, notes: knowledgePages.notes })
+      .from(knowledgePages)
+      .where(and(eq(knowledgePages.scope, "playbook"), inArray(knowledgePages.orgId, ids)))
       .toSQL();
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
   });
