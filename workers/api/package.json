@@ -13,7 +13,7 @@
     "mimetext": "^3.0.24"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260426.1",
+    "@cloudflare/workers-types": "^4.20260429.1",
     "wrangler": "^4.86.0"
   }
 }
