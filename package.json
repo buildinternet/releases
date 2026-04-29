@@ -59,10 +59,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.118",
+    "@anthropic-ai/claude-agent-sdk": "0.2.118",
     "@buildinternet/releases-core": "workspace:*",
-    "@buildinternet/releases-lib": "^0.13.2",
-    "@buildinternet/releases-skills": "^0.13.2",
+    "@buildinternet/releases-lib": "0.13.2",
+    "@buildinternet/releases-skills": "0.13.2",
     "@buildinternet/releases-api-types": "workspace:*",
     "@releases/adapters": "workspace:*",
     "@releases/ai-internal": "workspace:*",
@@ -70,23 +70,23 @@
     "@releases/lib": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@releases/search": "workspace:*",
-    "@anthropic-ai/sdk": "^0.91.0",
-    "@modelcontextprotocol/sdk": "^1.29.0",
-    "dayjs": "^1.11.20",
-    "drizzle-orm": "^0.45.2",
-    "js-tiktoken": "^1.0.21",
-    "nanoid": "^5.1.9",
-    "zod": "^4.3.6"
+    "@anthropic-ai/sdk": "0.91.0",
+    "@modelcontextprotocol/sdk": "1.29.0",
+    "dayjs": "1.11.20",
+    "drizzle-orm": "0.45.2",
+    "js-tiktoken": "1.0.21",
+    "nanoid": "5.1.9",
+    "zod": "4.3.6"
   },
   "devDependencies": {
-    "@types/bun": "^1.3.12",
-    "drizzle-kit": "^0.31.10",
-    "hono": "^4.12.14",
-    "husky": "^9.1.7",
-    "lint-staged": "^16.4.0",
-    "oxlint": "^1.60.0",
-    "prettier": "^3.8.3",
-    "typescript": "^6.0.3",
-    "wrangler": "^4.83.0"
+    "@types/bun": "1.3.12",
+    "drizzle-kit": "0.31.10",
+    "hono": "4.12.14",
+    "husky": "9.1.7",
+    "lint-staged": "16.4.0",
+    "oxlint": "1.60.0",
+    "prettier": "3.8.3",
+    "typescript": "6.0.3",
+    "wrangler": "4.83.0"
   }
 }

@@ -8,12 +8,12 @@
     "db:migrate:remote": "wrangler d1 migrations apply released-db --remote"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.0",
-    "hono": "^4.12.14",
-    "mimetext": "^3.0.24"
+    "@anthropic-ai/sdk": "0.91.0",
+    "hono": "4.12.14",
+    "mimetext": "3.0.24"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260417.1",
-    "wrangler": "^4.83.0"
+    "@cloudflare/workers-types": "4.20260417.1",
+    "wrangler": "4.83.0"
   }
 }

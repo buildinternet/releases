@@ -30,8 +30,8 @@
     "access": "public"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
-    "js-tiktoken": "^1.0.21",
-    "nanoid": "^5.1.7"
+    "drizzle-orm": "0.45.2",
+    "js-tiktoken": "1.0.21",
+    "nanoid": "5.1.7"
   }
 }

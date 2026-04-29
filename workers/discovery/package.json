@@ -8,12 +8,12 @@
     "deploy": "wrangler deploy"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.0",
+    "@anthropic-ai/sdk": "0.91.0",
     "@cloudflare/sandbox": "latest"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20260417.1",
-    "wrangler": "^4.83.0",
-    "typescript": "^6.0.3"
+    "@cloudflare/workers-types": "4.20260417.1",
+    "wrangler": "4.83.0",
+    "typescript": "6.0.3"
   }
 }
