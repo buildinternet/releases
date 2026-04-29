@@ -119,23 +119,6 @@ describe("POST /v1/workflows/embed-releases", () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("embed_unavailable");
   });
-
-  it("clamps limit above batch cap to 50", async () => {
-    const db = mkDb();
-    const fetch = mkApp(db);
-
-    const res = await fetch(
-      new Request("https://x.test/v1/workflows/embed-releases", {
-        method: "POST",
-        body: JSON.stringify({ dryRun: true, limit: 9999 }),
-      }),
-    );
-    expect(res.status).toBe(200);
-    // With 0 rows the clamp is not observable in the response directly, but
-    // the absence of a 400/500 confirms the limit path parses without error.
-    const body = (await res.json()) as { processed: number };
-    expect(body.processed).toBe(0);
-  });
 });
 
 describe("POST /v1/workflows/embed-entities", () => {

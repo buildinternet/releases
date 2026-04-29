@@ -1,5 +1,8 @@
 import { describe, it, expect, beforeAll, afterAll } from "bun:test";
-import { buildChangelogResponse } from "@buildinternet/releases-core/changelog-slice";
+import {
+  buildChangelogResponse,
+  selectChangelogFile,
+} from "@buildinternet/releases-core/changelog-slice";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { eq } from "drizzle-orm";
 import {
@@ -9,34 +12,15 @@ import {
   type SourceChangelogFile,
 } from "@buildinternet/releases-core/schema";
 
-// This test mirrors the server-side logic of `handleSourceChangelog`
-// (src/api/routes/sources.ts) and `GET /v1/sources/:slug/changelog` in
-// workers/api/src/routes/sources.ts without going through the getDb()
-// singleton — both handlers share the same resolution rules:
-//   - omitted path → prefer root CHANGELOG.md, fall back to first by path
-//   - unknown path → 404 sentinel
-//   - known path → return that row
-//   - response carries `files` index + `truncated` flag
-// Touching the singleton requires resetting mode.ts caches, which is
-// brittle across parallel test files.
+// This test exercises the response-building path used by both
+// `handleSourceChangelog` (src/api/routes/sources.ts) and
+// `GET /v1/sources/:slug/changelog` (workers/api/src/routes/sources.ts).
+// It uses the canonical `selectChangelogFile` from the core package to pick
+// the row, then asserts on the `buildChangelogResponse` output — the part
+// that's unique to the worker layer. The not-found sentinels are covered
+// by the core package's own tests.
 
 const MB = 1024 * 1024;
-
-type ChangelogSelectResult = "not_found_source" | "not_found_path" | SourceChangelogFile;
-
-function selectChangelog(
-  allRows: SourceChangelogFile[],
-  requestedPath: string | null,
-): ChangelogSelectResult {
-  if (allRows.length === 0) return "not_found_source";
-  if (requestedPath) {
-    const match = allRows.find((r) => r.path === requestedPath);
-    if (!match) return "not_found_path";
-    return match;
-  }
-  const root = allRows.find((r) => !r.path.includes("/"));
-  return root ?? allRows[0];
-}
 
 let tdb: TestDatabase;
 let sourceId: string;
@@ -104,13 +88,16 @@ function buildFiles(rows: SourceChangelogFile[]) {
   }));
 }
 
+function selectOrFail(rows: SourceChangelogFile[], path: string | null): SourceChangelogFile {
+  const selected = selectChangelogFile(rows, path);
+  if (!selected) throw new Error("expected row");
+  return selected;
+}
+
 describe("source changelog route resolution", () => {
   it("returns the root file when path is omitted", () => {
     const rows = fetchAll();
-    const selected = selectChangelog(rows, null);
-    expect(selected).not.toBe("not_found_source");
-    expect(selected).not.toBe("not_found_path");
-    if (typeof selected === "string") return;
+    const selected = selectOrFail(rows, null);
     const res = buildChangelogResponse(selected, { offset: null, limit: null }, buildFiles(rows));
     expect(res.path).toBe("CHANGELOG.md");
     expect(res.truncated).toBe(false);
@@ -118,8 +105,7 @@ describe("source changelog route resolution", () => {
 
   it("includes a files index for every tracked file", () => {
     const rows = fetchAll();
-    const selected = selectChangelog(rows, null);
-    if (typeof selected === "string") throw new Error("expected row");
+    const selected = selectOrFail(rows, null);
     const res = buildChangelogResponse(selected, { offset: null, limit: null }, buildFiles(rows));
     expect(res.files.map((f) => f.path).toSorted()).toEqual([
       "CHANGELOG.md",
@@ -133,36 +119,23 @@ describe("source changelog route resolution", () => {
 
   it("resolves path=<known> to the requested file", () => {
     const rows = fetchAll();
-    const selected = selectChangelog(rows, "packages/alpha/CHANGELOG.md");
-    if (typeof selected === "string") throw new Error("expected row");
+    const selected = selectOrFail(rows, "packages/alpha/CHANGELOG.md");
     const res = buildChangelogResponse(selected, { offset: null, limit: null }, buildFiles(rows));
     expect(res.path).toBe("packages/alpha/CHANGELOG.md");
     expect(res.content).toBe("# alpha\n");
   });
 
-  it("returns not_found_path for an unknown path", () => {
-    const rows = fetchAll();
-    const selected = selectChangelog(rows, "packages/missing/CHANGELOG.md");
-    expect(selected).toBe("not_found_path");
-  });
-
   it("flags truncated=true when bytes === 1MB", () => {
     const rows = fetchAll();
-    const selected = selectChangelog(rows, "packages/huge/CHANGELOG.md");
-    if (typeof selected === "string") throw new Error("expected row");
+    const selected = selectOrFail(rows, "packages/huge/CHANGELOG.md");
     const res = buildChangelogResponse(selected, { offset: null, limit: null }, buildFiles(rows));
     expect(res.truncated).toBe(true);
     expect(res.truncatedAt).toBe(MB);
   });
 
-  it("returns not_found_source for empty row set", () => {
-    expect(selectChangelog([], null)).toBe("not_found_source");
-  });
-
   it("falls back to live encoding when row.tokens is null", () => {
     const rows = fetchAll();
-    const selected = selectChangelog(rows, "CHANGELOG.md");
-    if (typeof selected === "string") throw new Error("expected row");
+    const selected = selectOrFail(rows, "CHANGELOG.md");
     const res = buildChangelogResponse(
       { ...selected, tokens: null },
       { offset: null, limit: null },
@@ -175,8 +148,7 @@ describe("source changelog route resolution", () => {
 
   it("honors the tokens range param end-to-end through buildChangelogResponse", () => {
     const rows = fetchAll();
-    const selected = selectChangelog(rows, "CHANGELOG.md");
-    if (typeof selected === "string") throw new Error("expected row");
+    const selected = selectOrFail(rows, "CHANGELOG.md");
     const res = buildChangelogResponse(
       selected,
       { offset: null, limit: null, tokens: "100" },

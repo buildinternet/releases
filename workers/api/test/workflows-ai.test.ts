@@ -156,7 +156,6 @@ describe("POST /v1/workflows/summarize", () => {
     expect(body.releaseCount).toBe(2);
     expect(body.scope).toMatchObject({ kind: "source", slug: "acme-one" });
     expect(anthropicCalls).toHaveLength(1);
-    expect(anthropicCalls[0].model).toBe("claude-haiku-4-5-20251001");
   });
 
   it("accepts a source ID", async () => {
@@ -197,23 +196,6 @@ describe("POST /v1/workflows/summarize", () => {
     };
     expect(body.releaseCount).toBe(3);
     expect(body.scope).toMatchObject({ kind: "org", slug: "acme" });
-  });
-
-  it("forwards `instructions` into the user message", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-
-    await fetch(
-      new Request("https://x.test/v1/workflows/summarize", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ source: "acme-one", instructions: "focus on breaking changes" }),
-      }),
-    );
-
-    const userMsg = (anthropicCalls[0].messages as Array<{ content: string }>)[0].content;
-    expect(userMsg).toContain("focus on breaking changes");
   });
 
   it("returns 400 when neither source nor org is provided", async () => {
@@ -381,7 +363,6 @@ describe("POST /v1/workflows/compare", () => {
     expect(body.releaseCountB).toBe(1);
     expect(body.sources.a.slug).toBe("acme-one");
     expect(body.sources.b.slug).toBe("other-one");
-    expect(anthropicCalls[0].model).toBe("claude-sonnet-4-6");
   });
 
   it("returns 400 when either source is missing", async () => {

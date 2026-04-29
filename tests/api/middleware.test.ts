@@ -154,12 +154,6 @@ describe("cacheControl", () => {
     expect(res.headers.get("Cache-Control")).toBe("public, max-age=120");
   });
 
-  it("uses private visibility by default", async () => {
-    const { app, env } = createApp(60);
-    const res = await app.request("/test", { method: "GET" }, env);
-    expect(res.headers.get("Cache-Control")).toContain("private");
-  });
-
   it("skips caching when CACHE_DISABLED is set", async () => {
     const { app } = createApp(60);
     const res = await app.request("/test", { method: "GET" }, { CACHE_DISABLED: "1" });

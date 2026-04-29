@@ -80,25 +80,15 @@ describe("prepareSearchLogRow", () => {
 });
 
 describe("prepareMcpSearchLogRow", () => {
-  it("defaults the types array to the command name", () => {
+  // Generic shape (truncation, blank check, mode validation) is covered by
+  // prepareSearchLogRow above. The MCP variant only adds one unique branch:
+  // the `types` array defaults to the command name when not supplied.
+  it("defaults the types array to the command name and pins surface=mcp", () => {
     const row = prepareMcpSearchLogRow({
       command: "search",
       query: "vercel",
     });
     expect(row!.types).toBe(JSON.stringify(["search"]));
     expect(row!.surface).toBe("mcp");
-  });
-
-  it("preserves an explicit types array", () => {
-    const row = prepareMcpSearchLogRow({
-      command: "search_releases",
-      query: "vercel",
-      types: ["search_releases", "releases"],
-    });
-    expect(row!.types).toBe(JSON.stringify(["search_releases", "releases"]));
-  });
-
-  it("returns null for blank queries", () => {
-    expect(prepareMcpSearchLogRow({ command: "search", query: " " })).toBeNull();
   });
 });

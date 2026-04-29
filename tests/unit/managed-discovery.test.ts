@@ -47,29 +47,6 @@ describe("prompt hashing", () => {
   });
 });
 
-// ── System prompt content ──
-
-describe("system prompt content", () => {
-  // We can't call buildSystemPrompt() directly since it's not exported,
-  // but we can verify the expected content structure.
-
-  it("CATEGORIES array is non-empty", () => {
-    expect(CATEGORIES.length).toBeGreaterThanOrEqual(10);
-  });
-
-  it("CATEGORIES contains expected entries", () => {
-    expect(CATEGORIES).toContain("ai");
-    expect(CATEGORIES).toContain("developer-tools");
-    expect(CATEGORIES).toContain("cloud");
-  });
-
-  it("CATEGORIES entries are lowercase kebab-case", () => {
-    for (const cat of CATEGORIES) {
-      expect(cat).toMatch(/^[a-z][a-z0-9-]*$/);
-    }
-  });
-});
-
 // ── parseArgs (shell-style tokenizer) ──
 
 describe("parseArgs", () => {

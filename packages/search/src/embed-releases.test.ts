@@ -24,16 +24,11 @@ function fakeVoyageFetch() {
   return { fetchImpl, calls };
 }
 
-function fakeVectorize(
-  opts: {
-    upsertThrows?: boolean;
-  } = {},
-) {
+function fakeVectorize() {
   const upserted: any[] = [];
   const deleted: string[] = [];
   const index: VectorizeIndex = {
     async upsert(v: any[]) {
-      if (opts.upsertThrows) throw new Error("vectorize boom");
       upserted.push(...v);
       return { mutationId: "m1" };
     },
@@ -46,17 +41,6 @@ function fakeVectorize(
     },
   } as VectorizeIndex;
   return { index, upserted, deleted };
-}
-
-function captureLogger() {
-  const warns: string[] = [];
-  const errors: string[] = [];
-  return {
-    warn: (...args: unknown[]) => warns.push(args.map(String).join(" ")),
-    error: (...args: unknown[]) => errors.push(args.map(String).join(" ")),
-    warns,
-    errors,
-  };
 }
 
 const baseRelease: EmbedReleaseInput = {
@@ -160,59 +144,9 @@ describe("embedAndUpsertReleases", () => {
     expect(meta.release_type).toBe("feature");
   });
 
-  test("embedding failure → logs, does NOT throw, does NOT call onPersisted", async () => {
-    const fetchImpl = (async () =>
-      new Response("nope", { status: 400 })) as unknown as typeof fetch;
-    const vec = fakeVectorize();
-    const logger = captureLogger();
-    let persistedCalled = false;
-    await embedAndUpsertReleases({
-      releases: [baseRelease],
-      vectorIndex: vec.index,
-      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl, maxRetries: 0 },
-      onPersisted: async () => {
-        persistedCalled = true;
-      },
-      logger,
-    });
-    expect(vec.upserted.length).toBe(0);
-    expect(persistedCalled).toBe(false);
-    expect(logger.warns.some((w) => w.includes("embed pipeline failed"))).toBe(true);
-  });
-
-  test("upsert failure → logs, does NOT throw, does NOT call onPersisted", async () => {
-    const { fetchImpl } = fakeVoyageFetch();
-    const vec = fakeVectorize({ upsertThrows: true });
-    const logger = captureLogger();
-    let persistedCalled = false;
-    await embedAndUpsertReleases({
-      releases: [baseRelease],
-      vectorIndex: vec.index,
-      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
-      onPersisted: async () => {
-        persistedCalled = true;
-      },
-      logger,
-    });
-    expect(persistedCalled).toBe(false);
-    expect(logger.warns.some((w) => w.includes("Vectorize upsert failed"))).toBe(true);
-  });
-
-  test("onPersisted callback failure is caught and logged", async () => {
-    const { fetchImpl } = fakeVoyageFetch();
-    const vec = fakeVectorize();
-    const logger = captureLogger();
-    await embedAndUpsertReleases({
-      releases: [baseRelease],
-      vectorIndex: vec.index,
-      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
-      onPersisted: async () => {
-        throw new Error("db down");
-      },
-      logger,
-    });
-    expect(logger.warns.some((w) => w.includes("onPersisted callback failed"))).toBe(true);
-  });
+  // Embed/upsert/onPersisted error-branch coverage lives in
+  // embed-changelog-pipeline.test.ts — the same swallow-and-log contract
+  // applies across all three pipelines.
 
   test("multi-release batch: ids in order, each gets its own vector slot", async () => {
     const { fetchImpl } = fakeVoyageFetch();
