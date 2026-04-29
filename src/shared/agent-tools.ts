@@ -13,10 +13,10 @@ import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { assemblePlaybook } from "@releases/ai-internal/playbook";
 
 // ── Tool input types ─────────────────────────────────────────────────
-// Read tools (list_sources, list_organizations, get_latest_releases,
-// search_releases, summarize_changes, compare_products) are provided by the
-// MCP server at mcp.releases.sh via vault credentials. Only write, utility,
-// and session tools remain as custom tools here.
+// Read tools (list_catalog, get_catalog_entry, list_organizations,
+// get_latest_releases, search, summarize_changes, compare_products) are
+// provided by the MCP server at mcp.releases.sh via vault credentials.
+// Only write, utility, and session tools remain as custom tools here.
 
 export interface ManageOrgInput {
   action: "add" | "edit" | "tag_add" | "link_account";
@@ -108,10 +108,10 @@ export type AgentToolCall =
 export const AGENT_TOOLS = [
   { type: "agent_toolset_20260401", default_config: { enabled: true } },
 
-  // Read tools (list_sources, list_organizations, get_latest_releases,
-  // search_releases, summarize_changes, compare_products) are served by the
-  // MCP server via vault credentials. The custom surface below is writes,
-  // utilities, and session tools.
+  // Read tools (list_catalog, get_catalog_entry, list_organizations,
+  // get_latest_releases, search, summarize_changes, compare_products) are
+  // served by the MCP server via vault credentials. The custom surface below
+  // is writes, utilities, and session tools.
 
   // ── Consolidated write tools (prefer these) ──
   {
