@@ -47,6 +47,7 @@ const searchPreviewComponents: Record<string, any> = {
 /* eslint-enable @typescript-eslint/no-explicit-any */
 import { SourceTypeIcon } from "./source-type-icon";
 import { FallbackImage } from "./fallback-image";
+import { LookupRail } from "./lookup-rail";
 import { formatDate } from "@/lib/formatters";
 
 type SearchFilter = "all" | "orgs" | "products" | "releases";
@@ -342,8 +343,14 @@ export function SearchResults({
     [results],
   );
 
+  const lookup = results?.lookup ?? null;
+
   const hasResults =
-    results && (results.orgs.length > 0 || results.catalog.length > 0 || rankedHits.length > 0);
+    results &&
+    (results.orgs.length > 0 ||
+      results.catalog.length > 0 ||
+      rankedHits.length > 0 ||
+      lookup !== null);
 
   const showOrgs = filter === "all" || filter === "orgs";
   const showProducts = filter === "all" || filter === "products";
@@ -375,11 +382,13 @@ export function SearchResults({
         </div>
       )}
 
+      {lookup && query && <LookupRail query={query} payload={lookup} />}
+
       {results && !hasResults && (
         <p className="mt-8 text-stone-500">No results for &ldquo;{query}&rdquo;</p>
       )}
 
-      {results && hasResults && !filteredHasResults && (
+      {results && hasResults && !filteredHasResults && !lookup && (
         <p className="mt-8 text-stone-500">
           No {filter} found for &ldquo;{query}&rdquo;
         </p>
