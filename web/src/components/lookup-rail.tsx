@@ -202,6 +202,10 @@ function RelatedOrgRail({
   query: string;
 }) {
   const orgSegment = query.split("/")[0] ?? "";
+  // Compare against the slug, not the display name — "Vercel" vs "vercel"
+  // would otherwise always look like a mismatch and show the suffix.
+  const showGithubSuffix =
+    !!orgSegment && orgSegment.toLowerCase() !== relatedOrg.org.slug.toLowerCase();
   return (
     <div className="mt-4 pt-4 border-t border-stone-200 dark:border-stone-800">
       <p className="text-[12px] text-stone-500 dark:text-stone-400 mb-2">
@@ -213,7 +217,7 @@ function RelatedOrgRail({
         >
           {relatedOrg.org.name}
         </Link>
-        {orgSegment && orgSegment !== relatedOrg.org.name && (
+        {showGithubSuffix && (
           <>
             {" "}
             (<code className="text-[12px]">{orgSegment}</code> on GitHub)
