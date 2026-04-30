@@ -1521,7 +1521,7 @@ sourceRoutes.post("/releases/:id/unsuppress", async (c) => {
 // Called via c.executionCtx.waitUntil so the HTTP response never blocks on
 // embedding. Embedding failure never fails the write.
 
-async function embedSourceSideEffect(
+export async function embedSourceSideEffect(
   env: Env["Bindings"],
   db: ReturnType<typeof createDb>,
   sourceId: string,

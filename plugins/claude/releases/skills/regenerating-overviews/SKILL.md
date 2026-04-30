@@ -19,6 +19,8 @@ No managed-agent task exists for this today. You — the Claude Code instance re
 - After significant source mutations: a new active source landed, an old one was hidden
 - After backfilling a window of releases: stale overview no longer reflects current focus
 
+**Skip on-demand orgs.** If `org.discovery === 'on_demand'`, do not regenerate — the API-side overview workflow already gates on this column, and generating an overview for an org that hasn't been curated wastes tokens. When doing a batch sweep, filter these out before dispatching sub-agents: `releases admin org list --json | jq '[.[] | select(.discovery != "on_demand")]'`.
+
 ## Workflow
 
 Three steps. Each step is a single CLI invocation; no other tools needed.

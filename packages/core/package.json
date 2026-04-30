@@ -17,6 +17,7 @@
     "./changelog-slice": "./src/changelog-slice.ts",
     "./overview": "./src/overview.ts",
     "./id": "./src/id.ts",
+    "./lookup-coordinate": "./src/lookup-coordinate.ts",
     "./slug": "./src/slug.ts",
     "./reserved-slugs": "./src/reserved-slugs.ts",
     "./tokens": "./src/tokens.ts",

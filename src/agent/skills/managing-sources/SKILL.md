@@ -210,6 +210,16 @@ Use `--render` when you know a source needs JavaScript execution. Use `--no-rend
 
 After adding a new scrape source with an unknown provider, check the first fetch results. If content is complete, consider setting `--no-render` and noting the provider behavior in the playbook.
 
+## On-Demand Sources
+
+The on-demand lookup endpoint (`POST /v1/lookups`) can materialize a hidden source row for any `{org}/{repo}` GitHub coordinate a user searches for. These rows carry `discovery = 'on_demand'` and `isHidden = true`. They fold into the normal cron fetch at `low` priority but skip AI features (overviews, summarization, playbook regen).
+
+If you encounter a source with `discovery = 'on_demand'` during an agent task:
+
+- Do not re-add it — it already exists (you'd get a slug collision).
+- To promote it to a fully indexed curated source: `manage_source` action "edit" with `discovery: 'curated'` and flip `isHidden` to false. Also edit the name if it was auto-generated from the coordinate.
+- The org created alongside the source may also be `discovery = 'on_demand'`. Promote it with `manage_org` action "edit" with `discovery: 'curated'`.
+
 ## Duplicate Detection
 
 Before adding sources, search for overlapping URLs.

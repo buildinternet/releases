@@ -39,6 +39,9 @@ export const organizations = sqliteTable("organizations", {
     .$defaultFn(() => new Date().toISOString()),
   metadata: text("metadata").default("{}"),
   embeddedAt: text("embedded_at"),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
+    .notNull()
+    .default("curated"),
 });
 
 export const orgAccounts = sqliteTable(
@@ -176,6 +179,9 @@ export const sources = sqliteTable(
     isPrimary: integer("is_primary", { mode: "boolean" }).default(false),
     isHidden: integer("is_hidden", { mode: "boolean" }).default(false),
     embeddedAt: text("embedded_at"),
+    discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
+      .notNull()
+      .default("curated"),
   },
   (table) => [
     index("idx_sources_org").on(table.orgId),

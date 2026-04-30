@@ -233,10 +233,42 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
 
   if (source) {
     const [src] = await db
-      .select({ id: sources.id, slug: sources.slug, name: sources.name })
+      .select({
+        id: sources.id,
+        slug: sources.slug,
+        name: sources.name,
+        orgId: sources.orgId,
+        discovery: sources.discovery,
+      })
       .from(sources)
       .where(sourceWhere(source));
     if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+    // Gate: on-demand sources (and their parent orgs) are excluded from
+    // summarization. Check src-level discovery first so a future promotion
+    // workflow that flips a single source can keep the gate without
+    // touching the parent org row.
+    if (src.discovery === "on_demand") {
+      return c.json(
+        { error: "not_supported", message: "Summarization is not available for on-demand sources" },
+        422,
+      );
+    }
+    if (src.orgId) {
+      const [parentOrg] = await db
+        .select({ discovery: organizations.discovery })
+        .from(organizations)
+        .where(eq(organizations.id, src.orgId));
+      if (parentOrg?.discovery === "on_demand") {
+        return c.json(
+          {
+            error: "not_supported",
+            message: "Summarization is not available for on-demand orgs",
+          },
+          422,
+        );
+      }
+    }
 
     const rows = await db
       .select({
@@ -261,10 +293,24 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
     scope = { kind: "source", id: src.id, slug: src.slug, name: src.name };
   } else {
     const [o] = await db
-      .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
+      .select({
+        id: organizations.id,
+        slug: organizations.slug,
+        name: organizations.name,
+        discovery: organizations.discovery,
+      })
       .from(organizations)
       .where(orgWhere(org!));
     if (!o) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+    if (o.discovery === "on_demand") {
+      return c.json(
+        {
+          error: "not_supported",
+          message: "Summarization is not available for on-demand orgs",
+        },
+        422,
+      );
+    }
 
     const rows = await db
       .select({

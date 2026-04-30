@@ -52,9 +52,12 @@
       "preview_id": "7737ccafd37a43fc9d2365c9a2d7ebca",
     },
   ],
+  "services": [{ "binding": "API", "service": "releases-api" }],
   "routes": [{ "pattern": "mcp.releases.sh", "custom_domain": true }],
   // Secrets are managed in Cloudflare's Secrets Store. VOYAGE_API_KEY is
   // required for semantic search — the embed path no-ops if it's missing.
+  // RELEASED_API_KEY lets the lookup-fallback (`maybeLookup` in mcp-agent.ts)
+  // present a Bearer to the API worker's admin-gated /v1/lookups route.
   "secrets_store_secrets": [
     {
       "binding": "ANTHROPIC_API_KEY",
@@ -70,6 +73,11 @@
       "binding": "AI_GATEWAY_TOKEN",
       "store_id": "a887a71cab084105b79706df23380723",
       "secret_name": "AI_GATEWAY_TOKEN",
+    },
+    {
+      "binding": "RELEASED_API_KEY",
+      "store_id": "a887a71cab084105b79706df23380723",
+      "secret_name": "RELEASED_API_KEY",
     },
   ],
   // ── Staging environment ──────────────────────────────────────────────
@@ -101,6 +109,7 @@
           "database_id": "68d44939-feab-4fcb-8f4f-19778ca1dee8",
         },
       ],
+      "services": [{ "binding": "API", "service": "releases-api-staging" }],
       "kv_namespaces": [{ "binding": "EMBED_CACHE", "id": "7737ccafd37a43fc9d2365c9a2d7ebca" }],
       "secrets_store_secrets": [
         {
@@ -122,6 +131,11 @@
           "binding": "AI_GATEWAY_TOKEN",
           "store_id": "a887a71cab084105b79706df23380723",
           "secret_name": "AI_GATEWAY_TOKEN_STAGING",
+        },
+        {
+          "binding": "RELEASED_API_KEY",
+          "store_id": "a887a71cab084105b79706df23380723",
+          "secret_name": "RELEASED_API_KEY",
         },
       ],
     },
