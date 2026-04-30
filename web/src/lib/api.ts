@@ -19,6 +19,7 @@ import type {
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
 } from "@buildinternet/releases-api-types";
+import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 
 export type {
   ReleaseSummaryItem,
@@ -32,6 +33,8 @@ export type {
   OrgReleaseItem,
   OverviewPageItem,
   KnowledgePageItem,
+  LookupResultPayload,
+  LookupStatus,
 } from "@buildinternet/releases-api-types";
 
 export type {
@@ -165,10 +168,15 @@ export const api = {
     fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),
   sourceDetail: (slug: string, page = 1, pageSize = 20) =>
     fetchApi<SourceDetail>(`/v1/sources/${slug}?page=${page}&pageSize=${pageSize}`),
-  search: (q: string, limit = 20, offset = 0) =>
-    fetchApi<UnifiedSearchResponse>(
-      `/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}`,
-    ),
+  search: (q: string, limit = 20, offset = 0) => {
+    // Coordinate-shaped queries skip the hybrid semantic rail so the API's
+    // on-demand lookup fallback can fire — otherwise weakly-matched chunks
+    // suppress it.
+    const mode = parseCoordinate(q.trim()) ? "&mode=lexical" : "";
+    return fetchApi<UnifiedSearchResponse>(
+      `/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${mode}`,
+    );
+  },
   sourceActivity: (slug: string, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
