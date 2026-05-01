@@ -968,37 +968,42 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
       .from(sourceChangelogChunks)
       .where(eq(sourceChangelogChunks.sourceChangelogFileId, file.id));
 
-    let applied = false;
-    // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
-    await embedAndUpsertChangelogFile({
-      file: {
-        id: file.id,
-        sourceId: file.sourceId,
-        content: file.content,
-        contentHash: file.contentHash,
-      },
-      existingChunks,
-      vectorIndex: asSharedIndex(c.env.CHANGELOG_CHUNKS_INDEX),
-      embedConfig,
-      onDiff: async ({ diff }) => {
-        await applyOnDiff(db, {
-          fileId: file.id,
+    // Use throwOnError so a Vectorize-side failure (chunks left at
+    // vectorId=null) reports as `failed`. The backfill route exists
+    // specifically to set vectorIds, so "D1 staged but vectors never
+    // committed" should not count as a success.
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
+      await embedAndUpsertChangelogFile({
+        file: {
+          id: file.id,
           sourceId: file.sourceId,
-          diff,
-        });
-        applied = true;
-      },
-      onVectorsCommitted: async ({ committed }) => {
-        await setChunkVectorIds(db, {
-          fileId: file.id,
-          now: new Date().toISOString(),
-          embedded: committed,
-        });
-      },
-    });
-
-    if (applied) succeeded += 1;
-    else failed += 1;
+          content: file.content,
+          contentHash: file.contentHash,
+        },
+        existingChunks,
+        vectorIndex: asSharedIndex(c.env.CHANGELOG_CHUNKS_INDEX),
+        embedConfig,
+        throwOnError: true,
+        onDiff: async ({ diff }) => {
+          await applyOnDiff(db, {
+            fileId: file.id,
+            sourceId: file.sourceId,
+            diff,
+          });
+        },
+        onVectorsCommitted: async ({ committed }) => {
+          await setChunkVectorIds(db, {
+            fileId: file.id,
+            now: new Date().toISOString(),
+            embedded: committed,
+          });
+        },
+      });
+      succeeded += 1;
+    } catch {
+      failed += 1;
+    }
   }
 
   return c.json({

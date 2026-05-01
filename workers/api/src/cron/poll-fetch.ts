@@ -35,7 +35,7 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
-import { RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { RELEASES_ID_IN_CHUNK_SIZE, CHANGELOG_CHUNK_INSERT_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
@@ -1349,9 +1349,12 @@ export async function applyOnDiff(
       vectorId: null,
       embeddedAt: null,
     }));
-    // 9 columns × 11 rows = 99 binds, under D1's 100/statement cap.
-    for (let i = 0; i < values.length; i += 11) {
-      insertOps.push(db.insert(sourceChangelogChunks).values(values.slice(i, i + 11)));
+    for (let i = 0; i < values.length; i += CHANGELOG_CHUNK_INSERT_CHUNK_SIZE) {
+      insertOps.push(
+        db
+          .insert(sourceChangelogChunks)
+          .values(values.slice(i, i + CHANGELOG_CHUNK_INSERT_CHUNK_SIZE)),
+      );
     }
   }
 
