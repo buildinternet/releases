@@ -54,7 +54,7 @@ Key commands:
 3. **Add** — Add sources with `releases admin source add` using appropriate types. When creating an org, always include `--description` with a brief one-sentence product description.
 4. **Validate** — Fetch each source with `releases admin source fetch <slug> --dry-run` first, then real fetch. Check results with `releases tail <slug> --json`.
 5. **Assess content depth** — For feed sources, check if pages have richer content than feed summaries.
-6. **Write the playbook** — The playbook is a per-org skill you're authoring for future fetch agents. Same shape as the global skills you use yourself — imperative instructions an LLM will follow when pulling updates from this org. After validating sources, run `releases admin playbook <org>` to read current state, then update notes with `releases admin playbook <org> --notes "..."`. Cover extraction patterns, known quirks, and source coverage.
+6. **Write the playbook** — Follow the playbook authoring rubric in the `managing-sources` skill (Playbooks → Writing good agent notes). The playbook is a per-org skill you're authoring for future fetch agents — durable target-shaped facts only. Adapter/harness errors and raw onboarding observations route to memory stores, not the playbook. After validating sources, run `releases admin playbook <org>` to read current state, then update notes with `releases admin playbook <org> --notes "..."` using the three canonical sections (`### Fetch instructions`, `### Traps`, `### Coverage`).
 7. **Report** — Summarize what was found, including how many releases were persisted.
 
 ## Source Selection

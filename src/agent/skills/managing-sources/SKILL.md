@@ -129,35 +129,93 @@ Each playbook has two layers:
 
 ### Writing good agent notes
 
-Write notes like a **skill for the agent that will fetch from this org** — imperative, action-oriented, concise. The reader is an agent about to do work; tell it what to do and what to watch for, not what things are.
+The same rubric you would use to author any skill in this corpus applies here. A playbook is durable, instruction-shaped guidance for a future fetch agent that has never seen this org before. It is not a status report, not a bug log, not a record of what happened during onboarding.
 
-Organize notes under these headings:
+#### Three layers — route facts to the right home
 
-**`### Fetch instructions`** — One paragraph per source. Use imperative voice:
+Three different shapes of information end up needing a home during onboarding and fetching. Each has its own destination. Routing facts to the wrong one is the most common authoring mistake.
 
-- What to do: "Set version=null", "Parse `<h2>` elements as version boundaries", "No filtering needed"
-- What to expect: cadence, content quality, whether rendering is needed
-- When to skip or deprioritize: "Only fetch when looking for launch announcements specifically"
-- Cite version format examples where useful (e.g., "semver like 2.1.98")
+| Shape of fact                                                                                                                                                                                                                         | Home                                                                                                                                                 | Read by                                                      |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Target-shaped, durable, org-specific (DOM hooks, IP blocks, repo splits, monorepo patterns, version format, scope decisions).                                                                                                         | **Playbook** — `manage_playbook(action=update_notes)`.                                                                                               | Every future fetch agent for this org.                       |
+| Org-specific raw observation, possibly noisy or single-session (a redirect chain you saw, a candidate URL you probed, a quirk you suspect but haven't confirmed).                                                                     | **`releases-errata` memory store**, `/orgs/<org_id>/observations.md` for resolved orgs, `/discovery/global.md` for cross-org / pre-resolution notes. | Future discovery and fetch agents in managed-agent sessions. |
+| Harness-shaped or adapter-shaped — any fact that's true about _our_ code, MCP tool, or fetcher rather than the target. ("Adapter X errors with Y", "MCP tool Z arrived as custom_tool_use", "fetch returns 0 even with feedUrl set"). | **`releases-tool-notes` memory store**, `/tools/<tool>.md`, `/mcp/<server>/<tool>.md`, `/harness/notes.md`.                                          | Future managed-agent sessions across all orgs.               |
 
-**`### Traps`** — Concise warnings with **bolded trigger labels**:
+If you have memory stores attached, log to the right store and **leave the playbook out of it**. If you don't (e.g. local Claude Code sub-agents), drop facts that don't pass the playbook keep test — don't relocate them into the playbook just because there's nowhere else to put them.
 
-- Each trap is a bullet with a bold label and a one-sentence explanation
-- Example: `**Doubled paths on Platform**: Relative doc links get prefixed with the source URL, producing doubled paths.`
-- Include disabled sources with "Don't re-discover" warnings so agents don't re-evaluate them
-- Only include traps that would cause wasted work or bad data — skip informational notes
+#### The keep test
 
-**`### Coverage`** — Two or three sentences max:
+Before you write a sentence in the playbook, ask: **would a brand-new fetch agent six months from now, fetching this org from a clean harness, still need this fact?**
 
-- Which sources are canonical vs supplementary
-- Whether active sources cover the org's full release surface
-- Any known gaps worth noting
+If yes — keep it. If no — drop it (or, in a managed-agent session, route it to errata or tool-notes).
 
-**`### Release cadence`** — Call out rollup publishers explicitly. Some orgs don't ship incremental changelog entries at all — they publish seasonal, quarterly, or annual **rollup** pages that collect many features into one banner post or microsite (e.g. Shopify Editions, Brex Fall Release, Ramp quarterly blog). When this is the case, say so in the notes and tell the parser to classify matching pages as `type: rollup`. Example:
+| Keep                                                                                                                           | Drop                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Network or platform behavior of the target (IP blocks, geo gates, auth walls).                                                 | Transient errors that happened during onboarding.                                                                                              |
+| Page-structure facts the parser needs (DOM hooks, version-keyed headings, date format).                                        | Symptoms of bugs in our adapters or harness ("returns 'Missing feedUrl in metadata' even though it's set"). Those go to `releases-tool-notes`. |
+| Site-wide vs scoped feed gotchas (the `<link rel="alternate">` resolves to the wrong feed; force a specific URL and feedType). | Notes that pause a source pending an internal fix ("Re-evaluate after harness fix", "Do not re-enable until X is investigated").               |
+| Org / repo naming history and split (`googleapis` vs `google-gemini`, deprecated mirror repos).                                | Anything phrased as a follow-up engineering task.                                                                                              |
+| Monorepo / per-package release-tag patterns; what the real artifact is (CHANGELOG.md vs Releases).                             | Speculation about why something failed if you have no evidence.                                                                                |
+| Pre-release / nightly tag noise that's expected and ongoing.                                                                   | Self-reporting that the agent should "investigate" or "look into" something later.                                                             |
+| Scope decisions: which sources are canonical, which siblings to skip and why (mirror site, marketing blog, archived repo).     | Restating what's already in the auto-generated header (source list, last-fetched dates).                                                       |
+| Cadence and content depth as observed signals (cite real examples).                                                            | Cadence claims with no observed basis ("probably ships weekly").                                                                               |
 
-> Ramp publishes quarterly rollups at `/blog/new-on-ramp-q*-*` and monthly editions at `/blog/new-on-ramp-*-edition`. Classify all entries from this source as `type: rollup` — individual features within a rollup are not separately indexed.
+Do not direct the agent to file issues, write to a notes field elsewhere, or trigger any follow-up engineering process from inside the playbook. Issue tracking is a separate, human concern. Agents do not self-report engineering work in the body.
 
-The `parsing-changelogs` skill ("Classifying Rollups" section) covers what rollups look like and when to set the `type` field. Your job in the playbook is to capture the org-specific signal so future fetches don't have to re-derive it from the page.
+#### Sections
+
+The body has three sections, in order. Use these exact headings — no fourth section, no renamed headings.
+
+**`### Fetch instructions`** — One short paragraph per active source. Imperative voice. Tell the next agent what to do and what to expect:
+
+- What the source is (one phrase).
+- The artifact that matters (tagged releases, CHANGELOG.md, scrape DOM hook, scoped RSS).
+- Version format with one real example from observed data.
+- Cadence as observed (cite a real number — "100 releases since 2025-09" beats "active").
+- Any per-source flag that's already set or should stay set (`renderRequired: false`, crawl mode, paused).
+
+If a source is paused, say why in target-specific terms ("archived and superseded by X", "low star count, lower than the canonical Y SDK"). Do **not** say "paused pending bug fix" — that's a tool-notes concern, not a playbook fact.
+
+If the org publishes seasonal, quarterly, or annual **rollup** pages instead of incremental entries (Shopify Editions, Brex Fall Release, Ramp quarterly blog), say so here and tell the parser to classify matching pages as `type: rollup`. Example: _"Ramp publishes quarterly rollups at `/blog/new-on-ramp-q*-*` and monthly editions at `/blog/new-on-ramp-*-edition`. Classify all entries from this source as `type: rollup`."_ The `parsing-changelogs` skill ("Classifying Rollups" section) covers what rollups look like; the playbook captures the org-specific signal.
+
+Skip purely-restated metadata. The reader can already see the URL and type in the auto-generated header.
+
+**`### Traps`** — Bullet list. Each bullet starts with a **bolded trigger label** describing the situation, then a short imperative explaining what to do.
+
+Only include traps that pass the keep test. Good traps name a property of the **target** that would cause a future fetch to do the wrong thing:
+
+- **Site-wide feed hijack:** the `<link rel="alternate">` on every doc page resolves to the global blog feed. Set `feedUrl` explicitly to the section `index.xml` and force `feedType=atom`.
+- **Per-package release tags:** the GitHub Releases API returns thousands of stale per-package pre-releases. Use the root CHANGELOG.md as the primary artifact instead of tags.
+- **Provider IP block:** the SSR page is parseable in a browser but our fetcher's egress IPs are blocked. Leave at normal priority — the underlying URL is still correct.
+- **Deprecated mirror repo:** `org/foo-deprecated` is archived; the canonical repo lives at `org/foo`. Don't re-add the mirror.
+- **Doubled paths on Platform:** relative doc links get prefixed with the source URL, producing doubled paths. Strip the prefix before recording.
+- **Don't re-discover:** include disabled sources with this label so future runs don't re-evaluate them.
+
+Do not include adapter or harness bugs ("feed returns 'Missing feedType in metadata'") — route to `releases-tool-notes`. Do not include onboarding-time errors not tied to a target property. Do not include future engineering work the agent thinks should happen.
+
+**`### Coverage`** — Two to four sentences. Which sources are canonical, what's covered, what's intentionally skipped (with a one-clause reason — "blog feed is site-wide marketing", "mobile SDKs live under a different org"). Optionally a short cadence summary if it varies meaningfully across sources.
+
+Do **not** list "missing" sources as a to-do. If a surface isn't worth tracking, say it's out of scope and why. If a surface is worth tracking but doesn't exist yet ("API changelog is currently a 404"), one sentence noting that the URL was probed and what the next agent should re-check is fine.
+
+#### Voice
+
+- Imperative. "Set version=null", "Parse `<h2>` as version boundaries", "Skip nightly tags". Not "we should…" or "the agent could…".
+- Concrete examples from real data, not invented ones.
+- No first-person plural. No narration of the onboarding session.
+- No timestamps inside the body — "as of May 2026", "this morning", "during onboarding". The header carries time. Body content is meant to be true on every future read.
+- No references to internal team process — issue numbers, ticket IDs, "the team will fix this", "see issue #N". The playbook is an LLM-facing skill, not a project board.
+
+#### When the truth is "we don't know yet"
+
+It's fine to write a short trap that records a real, durable target property even if you couldn't fully exploit it during onboarding — for example, "the API changelog is a static HTML page with no feed; rely on scrape" or "developer changelog URL returned 404 — re-check on next visit." That's target-shaped.
+
+It is **not** fine to write "fetch returned an error during onboarding so we paused it." That's session-shaped and adapter-shaped. If a source is failing for reasons you can't attribute to the target, pause the source without an explanation in the playbook body — the source's own state already records that it's paused. In a managed-agent session, log the underlying tool error to `releases-tool-notes`.
+
+#### Reading first
+
+Always call `manage_playbook(action=get)` before writing. Preserve durable trap entries from prior runs. If you're rewriting a section, fold prior facts that still pass the keep test into the new draft instead of dropping them.
+
+In a managed-agent session, also read `releases-errata` `/orgs/<org_id>/observations.md` (and `/discovery/global.md` if it predates the org being resolved) before writing. Some of those observations may have stabilized into facts worth promoting into the playbook; others are still hints and stay in errata.
 
 ### Levels of playbook quality
 

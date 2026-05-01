@@ -63,7 +63,7 @@ Some organizations ship multiple distinct products. When you discover sources th
 3. **Add** — add sources with \`manage_source\` action=add; omit \`type\` to let the server infer it (feed discovery, provider detection) or pass it explicitly when you already know.
 4. **Validate** — fetch each source with \`manage_source\` action=fetch and check the results
 5. **Assess content depth** — for feed sources, check if pages have richer content than feeds
-6. **Write the playbook** — after validating sources, call \`manage_playbook\` action=update_notes to write notes covering extraction patterns (page structure, version format, publish cadence per source), known quirks, and source coverage. Write it like a README for a teammate who will fetch releases from this org without asking questions. Read current state with \`manage_playbook\` action=get first.
+6. **Write the playbook** — after validating sources, call \`manage_playbook\` action=update_notes. Follow the playbook authoring rubric in the **\`managing-sources\`** skill (Playbooks → Writing good agent notes) for what belongs in the body and — equally important — what to route elsewhere. The playbook is a per-org skill for fetch agents; harness/adapter quirks belong in the \`releases-tool-notes\` memory store and raw org observations in \`releases-errata\`, not in the playbook. Read current state with \`manage_playbook\` action=get first.
 7. **Report** — summarize what was found, including how many releases were persisted
 
 ## Source Selection
