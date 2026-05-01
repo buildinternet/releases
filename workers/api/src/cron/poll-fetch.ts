@@ -1246,6 +1246,43 @@ export async function embedReleasesForSource(
   });
 }
 
+/**
+ * Two-phase update for unchanged chunks. The schema has UNIQUE(file, offset),
+ * so when a prepend shifts every chunk a one-pass UPDATE loop can briefly
+ * collide with a sibling chunk that hasn't moved yet. Park each row at a
+ * unique negative offset first, then set the final offsets, and run the
+ * whole sequence inside `db.batch` so a crash mid-flight can't leave rows
+ * stuck at negative offsets — D1 commits the transaction atomically.
+ */
+export async function applyChunkOffsetUpdates(
+  db: ReturnType<typeof drizzle>,
+  unchanged: ReadonlyArray<{
+    id: string;
+    chunk: { offset: number; length: number; tokens: number; heading: string | null };
+  }>,
+): Promise<void> {
+  if (unchanged.length === 0) return;
+  const parkOps = unchanged.map((u, i) =>
+    db
+      .update(sourceChangelogChunks)
+      .set({ offset: -1 - i })
+      .where(eq(sourceChangelogChunks.id, u.id)),
+  );
+  const finalOps = unchanged.map((u) =>
+    db
+      .update(sourceChangelogChunks)
+      .set({
+        offset: u.chunk.offset,
+        length: u.chunk.length,
+        tokens: u.chunk.tokens,
+        heading: u.chunk.heading,
+      })
+      .where(eq(sourceChangelogChunks.id, u.id)),
+  );
+  const ops = [...parkOps, ...finalOps] as [(typeof parkOps)[number], ...typeof parkOps];
+  await db.batch(ops);
+}
+
 export async function embedChangelogFileForSource(
   db: ReturnType<typeof drizzle>,
   source: Source,
@@ -1298,19 +1335,7 @@ export async function embedChangelogFileForSource(
       }
 
       // 2. Update unchanged rows to reflect the new offset/heading/length.
-      //    One-at-a-time is fine — the diff is usually small.
-      for (const u of diff.unchanged) {
-        // oxlint-disable-next-line no-await-in-loop -- sequential per-chunk offset update (diff is typically small)
-        await db
-          .update(sourceChangelogChunks)
-          .set({
-            offset: u.chunk.offset,
-            length: u.chunk.length,
-            tokens: u.chunk.tokens,
-            heading: u.chunk.heading,
-          })
-          .where(eq(sourceChangelogChunks.id, u.id));
-      }
+      await applyChunkOffsetUpdates(db, diff.unchanged);
 
       // 3. Insert new rows. Rows whose embed succeeded get vectorId +
       //    embeddedAt; the rest land with vectorId = NULL so the backfill

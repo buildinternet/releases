@@ -2,8 +2,7 @@ import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { join, dirname } from "path";
 import { fileURLToPath } from "url";
-import { mkdtempSync, rmSync, readdirSync, readFileSync } from "fs";
-import { tmpdir } from "os";
+import { readdirSync, readFileSync } from "fs";
 import * as schema from "@buildinternet/releases-core/schema";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -32,22 +31,34 @@ export function applyMigrations(sqlite: Database): void {
   }
 }
 
+/**
+ * Snapshot of a fully-migrated empty SQLite, captured once per process. Each
+ * createTestDb call deserialises this buffer instead of re-reading and
+ * re-executing every migration file — the per-test cost drops from ~hundreds
+ * of ms (and occasional 5s hook timeouts) to a single buffer copy.
+ */
+let migratedSnapshot: Uint8Array | null = null;
+
+function getMigratedSnapshot(): Uint8Array {
+  if (migratedSnapshot) return migratedSnapshot;
+  const seed = new Database(":memory:");
+  seed.run("PRAGMA foreign_keys=ON");
+  applyMigrations(seed);
+  migratedSnapshot = seed.serialize();
+  seed.close();
+  return migratedSnapshot;
+}
+
 export function createTestDb(): TestDatabase {
-  const tmpDir = mkdtempSync(join(tmpdir(), "releases-test-"));
-  const dbPath = join(tmpDir, "test.db");
-  const sqlite = new Database(dbPath);
-  sqlite.run("PRAGMA journal_mode=WAL");
+  const sqlite = Database.deserialize(getMigratedSnapshot());
   sqlite.run("PRAGMA foreign_keys=ON");
   const db = drizzle(sqlite, { schema });
 
-  applyMigrations(sqlite);
-
   return {
     db,
-    dbPath,
+    dbPath: ":memory:",
     cleanup: () => {
       sqlite.close();
-      rmSync(tmpDir, { recursive: true, force: true });
     },
   };
 }
