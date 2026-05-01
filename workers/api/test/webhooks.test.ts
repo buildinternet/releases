@@ -80,6 +80,12 @@ mock.module("../src/webhooks/queries.js", () => ({
     sub.secretVersion += 1;
     return sub.secretVersion;
   },
+  // Included so this mock doesn't strip the export. Bun's mock.module is
+  // process-global; if a later test file imports queries.ts and finds this
+  // export missing, it dies with "Export named 'matchWebhookSubscriptions'
+  // not found in module …/webhooks/queries.ts".
+  matchWebhookSubscriptions: async (_db: unknown, orgIds: string[]) =>
+    orgIds.length === 0 ? [] : store.filter((s) => s.enabled && orgIds.includes(s.orgId)),
 }));
 
 // Imports must follow mock.module so the route picks up the stub.
