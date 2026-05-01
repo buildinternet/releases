@@ -30,7 +30,7 @@ import {
   type EntityKind,
 } from "@releases/search/embed-entities.js";
 import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
-import { applyOnDiff } from "../cron/poll-fetch.js";
+import { applyOnDiff, setChunkVectorIds } from "../cron/poll-fetch.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
@@ -980,15 +980,20 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
       existingChunks,
       vectorIndex: asSharedIndex(c.env.CHANGELOG_CHUNKS_INDEX),
       embedConfig,
-      onDiff: async ({ diff, embedded }) => {
+      onDiff: async ({ diff }) => {
         await applyOnDiff(db, {
           fileId: file.id,
           sourceId: file.sourceId,
-          now: new Date().toISOString(),
           diff,
-          embedded,
         });
         applied = true;
+      },
+      onVectorsCommitted: async ({ committed }) => {
+        await setChunkVectorIds(db, {
+          fileId: file.id,
+          now: new Date().toISOString(),
+          embedded: committed,
+        });
       },
     });
 

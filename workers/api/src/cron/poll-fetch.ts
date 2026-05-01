@@ -1302,27 +1302,24 @@ export async function applyChunkOffsetUpdates(
 /**
  * Apply a chunk-diff to D1 in a single atomic batch: stale rows are deleted,
  * unchanged rows park-and-shift to their new offsets, and new rows are
- * inserted. UNIQUE(source_changelog_file_id, offset) makes interleaving
- * across phases hazardous; folding everything into one `db.batch` means a
- * crash mid-flight (worker death, transient D1 error) leaves D1 unchanged
- * rather than stranding stale rows that block subsequent inserts.
+ * inserted with `vectorId = null` / `embeddedAt = null`. The follow-up
+ * UPDATE that sets `vectorId` runs in {@link setChunkVectorIds} after the
+ * Vectorize upsert confirms — see issue #620 for why this split exists.
  *
- * Vectorize writes happen separately upstream and are not part of this
- * transaction. Retry safety relies on `buildVectorId` (in
- * `@releases/search/embed-changelogs`) being deterministic so a re-run
- * upserts the same vector IDs.
+ * Folding the three phases into one `db.batch` means a crash mid-flight
+ * leaves D1 unchanged rather than stranding stale rows that block
+ * subsequent inserts via the `UNIQUE(source_changelog_file_id, offset)`
+ * constraint.
  */
 export async function applyOnDiff(
   db: ReturnType<typeof drizzle>,
   params: {
     fileId: string;
     sourceId: string;
-    now: string;
     diff: DiffResult;
-    embedded: EmbeddedChunk[];
   },
 ): Promise<void> {
-  const { fileId, sourceId, now, diff, embedded } = params;
+  const { fileId, sourceId, diff } = params;
 
   const deleteOps = [];
   if (diff.toDelete.length > 0) {
@@ -1341,29 +1338,61 @@ export async function applyOnDiff(
 
   const insertOps = [];
   if (diff.toInsert.length > 0) {
-    const embeddedByHash = new Map(embedded.map((e) => [e.chunk.contentHash, e]));
-    const values = diff.toInsert.map((chunk) => {
-      const match = embeddedByHash.get(chunk.contentHash);
-      return {
-        sourceChangelogFileId: fileId,
-        sourceId,
-        offset: chunk.offset,
-        length: chunk.length,
-        tokens: chunk.tokens,
-        contentHash: chunk.contentHash,
-        heading: chunk.heading,
-        vectorId: match?.vectorId ?? null,
-        embeddedAt: match ? now : null,
-      };
-    });
-    // 11 columns × 9 rows = 99 binds, under D1's 100/statement cap.
-    for (let i = 0; i < values.length; i += 9) {
-      insertOps.push(db.insert(sourceChangelogChunks).values(values.slice(i, i + 9)));
+    const values = diff.toInsert.map((chunk) => ({
+      sourceChangelogFileId: fileId,
+      sourceId,
+      offset: chunk.offset,
+      length: chunk.length,
+      tokens: chunk.tokens,
+      contentHash: chunk.contentHash,
+      heading: chunk.heading,
+      vectorId: null,
+      embeddedAt: null,
+    }));
+    // 9 columns × 11 rows = 99 binds, under D1's 100/statement cap.
+    for (let i = 0; i < values.length; i += 11) {
+      insertOps.push(db.insert(sourceChangelogChunks).values(values.slice(i, i + 11)));
     }
   }
 
   const ops = [...deleteOps, ...updateOps, ...insertOps];
   if (ops.length === 0) return;
+  await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
+}
+
+/**
+ * Follow-up UPDATE that promotes staged chunks (`vectorId = null` after
+ * {@link applyOnDiff}) to "embedded" once the Vectorize upsert confirms.
+ * Matches by `(source_changelog_file_id, content_hash)` — `applyOnDiff`
+ * stages each new chunk with its content hash, and `buildVectorId` is
+ * deterministic so the vectorId lines up.
+ *
+ * Failure here is recoverable: the chunks stay with `vectorId = null` and
+ * the existing embed-backfill job picks them up. The next embed run
+ * produces the same vectorId and the upsert is idempotent. See #620.
+ */
+export async function setChunkVectorIds(
+  db: ReturnType<typeof drizzle>,
+  params: {
+    fileId: string;
+    now: string;
+    embedded: EmbeddedChunk[];
+  },
+): Promise<void> {
+  const { fileId, now, embedded } = params;
+  if (embedded.length === 0) return;
+
+  const ops = embedded.map((e) =>
+    db
+      .update(sourceChangelogChunks)
+      .set({ vectorId: e.vectorId, embeddedAt: now })
+      .where(
+        and(
+          eq(sourceChangelogChunks.sourceChangelogFileId, fileId),
+          eq(sourceChangelogChunks.contentHash, e.chunk.contentHash),
+        ),
+      ),
+  );
   await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
 }
 
@@ -1405,13 +1434,18 @@ export async function embedChangelogFileForSource(
     vectorIndex: env.CHANGELOG_CHUNKS_INDEX as VectorizeIndex,
     embedConfig,
     throwOnError: opts?.throwOnError ?? false,
-    onDiff: async ({ diff, embedded }) => {
+    onDiff: async ({ diff }) => {
       await applyOnDiff(db, {
         fileId: file.fileId,
         sourceId: source.id,
-        now: new Date().toISOString(),
         diff,
-        embedded,
+      });
+    },
+    onVectorsCommitted: async ({ committed }) => {
+      await setChunkVectorIds(db, {
+        fileId: file.fileId,
+        now: new Date().toISOString(),
+        embedded: committed,
       });
     },
   });

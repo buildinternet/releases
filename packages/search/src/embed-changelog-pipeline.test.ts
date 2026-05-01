@@ -81,12 +81,13 @@ function bigDoc(sections: string[]): string {
 }
 
 describe("embedAndUpsertChangelogFile", () => {
-  test("unchanged content → zero embed calls, zero upserts, zero deletes, onDiff with empty insert list", async () => {
+  test("unchanged content → zero embed calls, zero upserts, zero deletes, onDiff with empty pending list, no commit callback", async () => {
     const content = bigDoc(["v3", "v2", "v1"]);
     const existing = existingFromContent(FILE_ID, content);
     const { fetchImpl, calls } = fakeVoyageFetch();
     const vec = fakeVectorize();
     const diffs: any[] = [];
+    const commits: any[] = [];
     await embedAndUpsertChangelogFile({
       file: { id: FILE_ID, sourceId: SOURCE_ID, content, contentHash: "h" },
       existingChunks: existing,
@@ -95,6 +96,9 @@ describe("embedAndUpsertChangelogFile", () => {
       onDiff: async (p) => {
         diffs.push(p);
       },
+      onVectorsCommitted: async (p) => {
+        commits.push(p);
+      },
     });
     expect(calls.length).toBe(0);
     expect(vec.upserted.length).toBe(0);
@@ -102,51 +106,53 @@ describe("embedAndUpsertChangelogFile", () => {
     expect(diffs.length).toBe(1);
     expect(diffs[0].diff.toInsert).toEqual([]);
     expect(diffs[0].diff.toDelete).toEqual([]);
-    expect(diffs[0].embedded).toEqual([]);
+    expect(diffs[0].pending).toEqual([]);
     expect(diffs[0].diff.unchanged.length).toBeGreaterThan(0);
+    expect(commits.length).toBe(0);
   });
 
-  test("new chunks added → embed call covers exactly the new chunks, upserts carry standard metadata", async () => {
-    // Going from a 1-chunk doc to a multi-chunk doc. Note: due to overlap
-    // re-hashing, prior chunks may also re-hash and show up in toInsert/
-    // toDelete — that's a chunker artifact, not the pipeline's job. The
-    // contract this test enforces is: embed call count and inputs match the
-    // diff's toInsert exactly, and upserts carry the right metadata.
+  test("new chunks added → onDiff fires before Vectorize upsert; onVectorsCommitted fires after", async () => {
     const oldContent = bigDoc(["v1"]);
     const newContent = bigDoc(["v3", "v2", "v1"]);
     const existing = existingFromContent(FILE_ID, oldContent);
     const { fetchImpl, calls } = fakeVoyageFetch();
     const vec = fakeVectorize();
-    const diffs: any[] = [];
+    const events: string[] = [];
+    let pending: any[] = [];
+    let committed: any[] = [];
     await embedAndUpsertChangelogFile({
       file: { id: FILE_ID, sourceId: SOURCE_ID, content: newContent, contentHash: "h" },
       existingChunks: existing,
       vectorIndex: vec.index,
       embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
       onDiff: async (p) => {
-        diffs.push(p);
+        // At this point the upsert MUST NOT have happened yet — that's the
+        // whole point of the D1-first ordering (#620).
+        expect(vec.upserted.length).toBe(0);
+        events.push("onDiff");
+        pending = p.pending;
+      },
+      onVectorsCommitted: async (p) => {
+        // Conversely, the upsert MUST have happened by now.
+        expect(vec.upserted.length).toBeGreaterThan(0);
+        events.push("onVectorsCommitted");
+        committed = p.committed;
       },
     });
+    expect(events).toEqual(["onDiff", "onVectorsCommitted"]);
     expect(calls.length).toBe(1);
-    expect(calls[0].inputs.length).toBeGreaterThan(0);
-    expect(calls[0].inputs.length).toBe(diffs[0].diff.toInsert.length);
-    expect(vec.upserted.length).toBe(diffs[0].diff.toInsert.length);
-    // every upsert payload carries the standard metadata
+    expect(pending.length).toBeGreaterThan(0);
+    expect(committed.length).toBe(pending.length);
+    // Standard metadata on each upsert payload.
     for (const v of vec.upserted) {
       expect(v.metadata.type).toBe("changelog_chunk");
       expect(v.metadata.source_id).toBe(SOURCE_ID);
       expect(v.metadata.source_changelog_file_id).toBe(FILE_ID);
-      expect(typeof v.metadata.offset).toBe("number");
       expect(v.id.startsWith("chunk_")).toBe(true);
     }
-    expect(diffs[0].embedded.length).toBe(diffs[0].diff.toInsert.length);
   });
 
-  test("chunks removed → only stale vectors deleted, no embed calls", async () => {
-    // Use a small old doc that chunks to exactly one piece, and an empty new
-    // doc so the new chunk list is []. This avoids the overlap-window
-    // re-hashing that happens when only some chunks are dropped from a
-    // multi-chunk file.
+  test("chunks removed → only stale vectors deleted, no embed calls, no commit", async () => {
     const oldContent = "## v1\n\nfirst release\n";
     const newContent = "";
     const existing = existingFromContent(FILE_ID, oldContent);
@@ -154,6 +160,7 @@ describe("embedAndUpsertChangelogFile", () => {
     const { fetchImpl, calls } = fakeVoyageFetch();
     const vec = fakeVectorize();
     const diffs: any[] = [];
+    const commits: any[] = [];
     await embedAndUpsertChangelogFile({
       file: { id: FILE_ID, sourceId: SOURCE_ID, content: newContent, contentHash: "h" },
       existingChunks: existing,
@@ -161,24 +168,27 @@ describe("embedAndUpsertChangelogFile", () => {
       embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
       onDiff: async (p) => {
         diffs.push(p);
+      },
+      onVectorsCommitted: async (p) => {
+        commits.push(p);
       },
     });
     expect(calls.length).toBe(0);
     expect(vec.upserted.length).toBe(0);
     expect(vec.deleted.length).toBeGreaterThan(0);
     expect(diffs[0].diff.toDelete.length).toBe(vec.deleted.length);
-    expect(diffs[0].embedded).toEqual([]);
+    expect(diffs[0].pending).toEqual([]);
+    expect(commits.length).toBe(0);
   });
 
-  test("edited chunk → embed only the edited chunk, upsert new vector, delete stale vector", async () => {
+  test("edited chunk → embed only the edited chunk, upsert new vector, delete stale vector, commit fires", async () => {
     const oldContent = bigDoc(["v3", "v2", "v1"]);
-    // Mutate the middle section so its hash changes; surrounding chunks
-    // stay byte-identical.
     const newContent = oldContent.replace("entry 1", "entry 1 EDITED");
     const existing = existingFromContent(FILE_ID, oldContent);
     const { fetchImpl, calls } = fakeVoyageFetch();
     const vec = fakeVectorize();
     const diffs: any[] = [];
+    const commits: any[] = [];
     await embedAndUpsertChangelogFile({
       file: { id: FILE_ID, sourceId: SOURCE_ID, content: newContent, contentHash: "h" },
       existingChunks: existing,
@@ -187,21 +197,27 @@ describe("embedAndUpsertChangelogFile", () => {
       onDiff: async (p) => {
         diffs.push(p);
       },
+      onVectorsCommitted: async (p) => {
+        commits.push(p);
+      },
     });
     expect(calls.length).toBe(1);
     expect(calls[0].inputs.length).toBeGreaterThanOrEqual(1);
     expect(vec.upserted.length).toBe(calls[0].inputs.length);
     expect(vec.deleted.length).toBeGreaterThanOrEqual(1);
-    expect(diffs[0].embedded.length).toBe(vec.upserted.length);
+    expect(diffs[0].pending.length).toBe(vec.upserted.length);
+    expect(commits.length).toBe(1);
+    expect(commits[0].committed.length).toBe(vec.upserted.length);
   });
 
-  test("embed failure → caught, logged, onDiff called with embedded:[]", async () => {
+  test("embed failure → caught, logged, onDiff called with pending:[], no commit", async () => {
     const oldContent = bigDoc(["v1"]);
     const newContent = bigDoc(["v2", "v1"]);
     const existing = existingFromContent(FILE_ID, oldContent);
     const vec = fakeVectorize();
     const logger = captureLogger();
     const diffs: any[] = [];
+    const commits: any[] = [];
     await embedAndUpsertChangelogFile({
       file: { id: FILE_ID, sourceId: SOURCE_ID, content: newContent, contentHash: "h" },
       existingChunks: existing,
@@ -215,16 +231,20 @@ describe("embedAndUpsertChangelogFile", () => {
       onDiff: async (p) => {
         diffs.push(p);
       },
+      onVectorsCommitted: async (p) => {
+        commits.push(p);
+      },
       logger,
     });
     expect(vec.upserted.length).toBe(0);
     expect(diffs.length).toBe(1);
-    expect(diffs[0].embedded).toEqual([]);
+    expect(diffs[0].pending).toEqual([]);
     expect(diffs[0].diff.toInsert.length).toBeGreaterThan(0);
+    expect(commits.length).toBe(0);
     expect(logger.warns.some((w) => w.includes("embed failed"))).toBe(true);
   });
 
-  test("upsert failure → caught, logged, embedded wiped before onDiff", async () => {
+  test("upsert failure → caught, logged, no commit (chunks left with vectorId=null in D1 for backfill)", async () => {
     const oldContent = bigDoc(["v1"]);
     const newContent = bigDoc(["v2", "v1"]);
     const existing = existingFromContent(FILE_ID, oldContent);
@@ -232,6 +252,7 @@ describe("embedAndUpsertChangelogFile", () => {
     const vec = fakeVectorize({ upsertThrows: true });
     const logger = captureLogger();
     const diffs: any[] = [];
+    const commits: any[] = [];
     await embedAndUpsertChangelogFile({
       file: { id: FILE_ID, sourceId: SOURCE_ID, content: newContent, contentHash: "h" },
       existingChunks: existing,
@@ -240,29 +261,70 @@ describe("embedAndUpsertChangelogFile", () => {
       onDiff: async (p) => {
         diffs.push(p);
       },
+      onVectorsCommitted: async (p) => {
+        commits.push(p);
+      },
       logger,
     });
-    expect(diffs[0].embedded).toEqual([]);
-    expect(diffs[0].diff.toInsert.length).toBeGreaterThan(0);
+    // onDiff still fires — the diff (delete + insert NULL) still needs to land.
+    expect(diffs.length).toBe(1);
+    expect(diffs[0].pending.length).toBeGreaterThan(0);
+    // ...but commit does not, because the vectors never landed.
+    expect(commits.length).toBe(0);
     expect(logger.warns.some((w) => w.includes("Vectorize upsert failed"))).toBe(true);
   });
 
-  test("onDiff callback failure is caught and logged", async () => {
-    const content = bigDoc(["v1"]);
-    const existing = existingFromContent(FILE_ID, content);
+  test("onDiff failure aborts the pipeline — Vectorize is NOT touched (#620)", async () => {
+    // The whole point of the D1-first ordering: if D1 staging fails, we
+    // must NOT proceed with Vectorize writes (which would create orphan
+    // vectors with no D1 row pointing back at them).
+    const oldContent = bigDoc(["v1"]);
+    const newContent = bigDoc(["v2", "v1"]);
+    const existing = existingFromContent(FILE_ID, oldContent);
     const { fetchImpl } = fakeVoyageFetch();
     const vec = fakeVectorize();
     const logger = captureLogger();
+    const commits: any[] = [];
     await embedAndUpsertChangelogFile({
-      file: { id: FILE_ID, sourceId: SOURCE_ID, content, contentHash: "h" },
+      file: { id: FILE_ID, sourceId: SOURCE_ID, content: newContent, contentHash: "h" },
       existingChunks: existing,
       vectorIndex: vec.index,
       embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
       onDiff: async () => {
         throw new Error("db down");
       },
+      onVectorsCommitted: async (p) => {
+        commits.push(p);
+      },
       logger,
     });
+    expect(vec.upserted.length).toBe(0);
+    expect(vec.deleted.length).toBe(0);
+    expect(commits.length).toBe(0);
     expect(logger.warns.some((w) => w.includes("onDiff callback failed"))).toBe(true);
+  });
+
+  test("onVectorsCommitted failure is caught and logged", async () => {
+    const oldContent = bigDoc(["v1"]);
+    const newContent = bigDoc(["v2", "v1"]);
+    const existing = existingFromContent(FILE_ID, oldContent);
+    const { fetchImpl } = fakeVoyageFetch();
+    const vec = fakeVectorize();
+    const logger = captureLogger();
+    await embedAndUpsertChangelogFile({
+      file: { id: FILE_ID, sourceId: SOURCE_ID, content: newContent, contentHash: "h" },
+      existingChunks: existing,
+      vectorIndex: vec.index,
+      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
+      onDiff: async () => {},
+      onVectorsCommitted: async () => {
+        throw new Error("db down");
+      },
+      logger,
+    });
+    // The Vectorize upsert still happened — failure was on the D1
+    // follow-up. Backfill recovers because chunks stayed at vectorId=null.
+    expect(vec.upserted.length).toBeGreaterThan(0);
+    expect(logger.warns.some((w) => w.includes("onVectorsCommitted callback failed"))).toBe(true);
   });
 });
