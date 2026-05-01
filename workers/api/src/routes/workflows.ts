@@ -156,9 +156,13 @@ function parseDays(raw: unknown): number | null {
 }
 
 function formatRelease(r: ReleaseInput): string {
-  const header = [r.title, r.version, r.publishedAt].filter(Boolean).join(" | ");
-  const urlLine = r.url ? `<url>${r.url}</url>\n` : "";
-  return `<release>\n<title>${header}</title>\n${urlLine}<content>\n${r.content}\n</content>\n</release>`;
+  const header = [r.title, r.version, r.publishedAt]
+    .filter((s): s is string => typeof s === "string" && s.length > 0)
+    .map(escapeForPromptTag)
+    .join(" | ");
+  const urlLine = r.url ? `<url>${escapeForPromptTag(r.url)}</url>\n` : "";
+  const content = escapeForPromptTag(r.content ?? "");
+  return `<release>\n<title>${header}</title>\n${urlLine}<content>\n${content}\n</content>\n</release>`;
 }
 
 async function logAiUsage(
@@ -357,9 +361,10 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
   }
 
   const releasesText = inputs.map(formatRelease).join("\n\n");
-  const readerInstructionsBlock = body.instructions
-    ? `\n<reader_instructions>${escapeForPromptTag(body.instructions)}</reader_instructions>`
-    : "";
+  const readerInstructionsBlock =
+    typeof body.instructions === "string" && body.instructions.length > 0
+      ? `\n<reader_instructions>${escapeForPromptTag(body.instructions)}</reader_instructions>`
+      : "";
 
   try {
     const result = await callAnthropic(
