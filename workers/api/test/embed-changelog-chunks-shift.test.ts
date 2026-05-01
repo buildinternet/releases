@@ -32,8 +32,23 @@ function mkDb() {
 }
 
 // bun-sqlite handles share the runtime drizzle API with D1 but carry a "sync"
-// type tag, so the helper cast lets the same handle pass through.
-const asD1 = (db: ReturnType<typeof mkDb>) => db as unknown as D1Db;
+// type tag and don't expose .batch. Wrap with a .batch shim that resolves the
+// operations sequentially so SQLite's immediate UNIQUE constraint semantics
+// match D1's behaviour inside a transaction.
+const asD1 = (db: ReturnType<typeof mkDb>): D1Db => {
+  const handle = db as unknown as D1Db & { batch?: unknown };
+  if (!handle.batch) {
+    handle.batch = async (ops: ReadonlyArray<Promise<unknown>>) => {
+      const out: unknown[] = [];
+      for (const op of ops) {
+        // oxlint-disable-next-line no-await-in-loop -- shim mirrors D1 batch ordering
+        out.push(await op);
+      }
+      return out;
+    };
+  }
+  return handle as D1Db;
+};
 
 async function seed(db: ReturnType<typeof mkDb>) {
   await db

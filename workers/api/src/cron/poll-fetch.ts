@@ -1250,7 +1250,9 @@ export async function embedReleasesForSource(
  * Two-phase update for unchanged chunks. The schema has UNIQUE(file, offset),
  * so when a prepend shifts every chunk a one-pass UPDATE loop can briefly
  * collide with a sibling chunk that hasn't moved yet. Park each row at a
- * unique negative offset first, then set the final offsets.
+ * unique negative offset first, then set the final offsets, and run the
+ * whole sequence inside `db.batch` so a crash mid-flight can't leave rows
+ * stuck at negative offsets — D1 commits the transaction atomically.
  */
 export async function applyChunkOffsetUpdates(
   db: ReturnType<typeof drizzle>,
@@ -1259,17 +1261,15 @@ export async function applyChunkOffsetUpdates(
     chunk: { offset: number; length: number; tokens: number; heading: string | null };
   }>,
 ): Promise<void> {
-  for (let i = 0; i < unchanged.length; i++) {
-    const u = unchanged[i];
-    // oxlint-disable-next-line no-await-in-loop -- sequential per-chunk park
-    await db
+  if (unchanged.length === 0) return;
+  const parkOps = unchanged.map((u, i) =>
+    db
       .update(sourceChangelogChunks)
       .set({ offset: -1 - i })
-      .where(eq(sourceChangelogChunks.id, u.id));
-  }
-  for (const u of unchanged) {
-    // oxlint-disable-next-line no-await-in-loop -- sequential per-chunk final update
-    await db
+      .where(eq(sourceChangelogChunks.id, u.id)),
+  );
+  const finalOps = unchanged.map((u) =>
+    db
       .update(sourceChangelogChunks)
       .set({
         offset: u.chunk.offset,
@@ -1277,8 +1277,10 @@ export async function applyChunkOffsetUpdates(
         tokens: u.chunk.tokens,
         heading: u.chunk.heading,
       })
-      .where(eq(sourceChangelogChunks.id, u.id));
-  }
+      .where(eq(sourceChangelogChunks.id, u.id)),
+  );
+  const ops = [...parkOps, ...finalOps] as [(typeof parkOps)[number], ...typeof parkOps];
+  await db.batch(ops);
 }
 
 export async function embedChangelogFileForSource(
