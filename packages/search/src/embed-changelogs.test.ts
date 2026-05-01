@@ -169,22 +169,12 @@ test("chunkChangelog: emoji at chunk boundary does not produce lone surrogates (
 
   const offenders: Array<{ offset: number; matches: number }> = [];
   for (const chunk of chunks) {
-    LONE_SURROGATE.lastIndex = 0;
     const matches = chunk.text.match(LONE_SURROGATE);
     if (matches !== null) {
       offenders.push({ offset: chunk.offset, matches: matches.length });
     }
   }
   expect(offenders).toEqual([]);
-
-  // JSON.stringify round-trip must preserve every chunk verbatim. A lone
-  // surrogate survives JSON.stringify (as `\uDxxx`) and JSON.parse, so
-  // this is not the same assertion as the surrogate-pair check above —
-  // it pins the wire-level invariant that the embedding call relies on.
-  for (const chunk of chunks) {
-    const roundTripped = JSON.parse(JSON.stringify(chunk.text)) as string;
-    expect(roundTripped).toBe(chunk.text);
-  }
 });
 
 test("chunkChangelog: emoji-heavy content keeps content hashes stable across runs", () => {

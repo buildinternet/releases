@@ -138,11 +138,6 @@ export function chunkChangelog(content: string): Chunk[] {
       startOffset = Math.max(slice.offset - CHUNK_CHAR_OVERLAP_STEP, prevStart + 1);
     }
 
-    // String#slice indexes UTF-16 code units, so a back-step that lands on
-    // a low surrogate would yield a chunk whose first char is half a
-    // surrogate pair. JSON.stringify serializes that as `\uDxxx` — valid
-    // JSON but invalid UTF-8 to downstream embedding APIs (Voyage 400s the
-    // whole batch). Step the boundary onto a codepoint edge. See #626.
     startOffset = snapToCodepointBoundary(content, startOffset);
     snappedEnd = snapToCodepointBoundary(content, snappedEnd);
 
