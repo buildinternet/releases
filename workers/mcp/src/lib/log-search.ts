@@ -11,6 +11,7 @@ import {
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
 import { drizzle } from "drizzle-orm/d1";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 export const MAX_QUERY_LEN = 200;
 const MAX_STR = 200;
@@ -120,6 +121,6 @@ export async function logMcpSearch(env: McpLogSearchEnv, input: McpLogSearchInpu
     await db.insert(searchQueries).values(row);
   } catch (err) {
     // Never break a tool response on a logging failure.
-    console.error("[search-log] insert failed", err);
+    logger.error("[search-log] insert failed", { err });
   }
 }

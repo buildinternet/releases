@@ -57,7 +57,7 @@ function formatDuration(ms: number | null): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-type PillTone = "stone" | "blue" | "purple" | "amber" | "emerald" | "indigo";
+type PillTone = "stone" | "blue" | "purple" | "amber" | "emerald" | "indigo" | "rose";
 
 const PILL_TONE: Record<PillTone, string> = {
   stone: "border-stone-300 text-stone-500 dark:border-stone-700 dark:text-stone-400",
@@ -66,6 +66,7 @@ const PILL_TONE: Record<PillTone, string> = {
   amber: "border-amber-300 text-amber-600 dark:border-amber-800 dark:text-amber-500",
   emerald: "border-emerald-300 text-emerald-600 dark:border-emerald-800 dark:text-emerald-500",
   indigo: "border-indigo-300 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400",
+  rose: "border-rose-300 text-rose-600 dark:border-rose-800 dark:text-rose-400",
 };
 
 function surfaceTone(surface: string): PillTone {
@@ -337,6 +338,8 @@ function RecentQueriesTable(): React.ReactElement {
                 ) : null}
                 {row.authed === true ? (
                   <Pill label="auth" tone="emerald" title="Valid Bearer token" />
+                ) : row.authed === false ? (
+                  <Pill label="no auth" tone="rose" title="Unauthenticated request" />
                 ) : null}
               </div>
               <div className={`capitalize ${modeColor(row.mode)}`}>{row.mode ?? "—"}</div>
