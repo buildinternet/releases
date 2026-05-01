@@ -121,20 +121,21 @@ export async function embedAndUpsertChangelogFile(
     return;
   }
 
-  if (diff.toInsert.length > 0) {
+  const toEmbedChunks: Chunk[] = [...diff.toInsert, ...diff.toReembed.map((r) => r.chunk)];
+  if (toEmbedChunks.length > 0) {
     try {
       const { vectors } = await embedBatch(
-        diff.toInsert.map((c) => c.text),
+        toEmbedChunks.map((c) => c.text),
         embedConfig,
       );
-      if (vectors.length === diff.toInsert.length) {
-        embedded = diff.toInsert.map((chunk, i) => ({
+      if (vectors.length === toEmbedChunks.length) {
+        embedded = toEmbedChunks.map((chunk, i) => ({
           chunk,
           vectorId: buildVectorId(file.id, chunk.contentHash),
           vector: vectors[i],
         }));
       } else {
-        const msg = `[embed-changelog-pipeline] vector count mismatch for ${file.id}: ${vectors.length} vs ${diff.toInsert.length}`;
+        const msg = `[embed-changelog-pipeline] vector count mismatch for ${file.id}: ${vectors.length} vs ${toEmbedChunks.length}`;
         logger.warn(msg);
         firstError ??= new Error(msg);
       }

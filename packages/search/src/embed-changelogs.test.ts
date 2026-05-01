@@ -219,6 +219,91 @@ test("diffChunks: new chunks appear in toInsert", () => {
   expect(result.unchanged.length).toBe(next.length);
 });
 
+test("diffChunks: hash-matched existing rows with vectorId=null go to toReembed", () => {
+  const next = chunkChangelog(buildLargeChangelog());
+  expect(next.length).toBeGreaterThan(2);
+
+  // Same shape as asExisting but every row has vectorId=null — simulates
+  // the #622 trap where prior crashes between D1 INSERT and Vectorize
+  // upsert leave chunks indefinitely without a vectorId.
+  const existing: ExistingChunkRow[] = next.map((c, i) => ({
+    id: `row_${i}`,
+    offset: c.offset,
+    contentHash: c.contentHash,
+    vectorId: null,
+  }));
+
+  const result = diffChunks({ existing, next });
+  expect(result.toInsert).toEqual([]);
+  expect(result.toDelete).toEqual([]);
+  expect(result.unchanged).toEqual([]);
+  expect(result.toReembed.length).toBe(next.length);
+  for (let i = 0; i < next.length; i++) {
+    expect(result.toReembed[i].id).toBe(`row_${i}`);
+    expect(result.toReembed[i].chunk.contentHash).toBe(next[i].contentHash);
+  }
+});
+
+test("diffChunks: mixed vectorId state splits between unchanged and toReembed", () => {
+  const next = chunkChangelog(buildLargeChangelog());
+  expect(next.length).toBeGreaterThan(3);
+
+  // Half the existing rows have a vectorId, half don't — covers the
+  // partial-recovery case where some chunks landed in Vectorize and some
+  // didn't.
+  const existing: ExistingChunkRow[] = next.map((c, i) => ({
+    id: `row_${i}`,
+    offset: c.offset,
+    contentHash: c.contentHash,
+    vectorId: i % 2 === 0 ? `vec_${i}` : null,
+  }));
+
+  const result = diffChunks({ existing, next });
+  expect(result.toInsert).toEqual([]);
+  expect(result.toDelete).toEqual([]);
+  // Even-indexed rows have a vectorId → unchanged.
+  expect(result.unchanged.length).toBe(Math.ceil(next.length / 2));
+  // Odd-indexed rows are NULL → toReembed.
+  expect(result.toReembed.length).toBe(Math.floor(next.length / 2));
+  for (const u of result.unchanged) {
+    const idx = Number(u.id.replace("row_", ""));
+    expect(idx % 2).toBe(0);
+  }
+  for (const r of result.toReembed) {
+    const idx = Number(r.id.replace("row_", ""));
+    expect(idx % 2).toBe(1);
+  }
+});
+
+test("diffChunks: duplicate contentHash with one NULL existing splits across toReembed and toInsert", () => {
+  // One existing row at vectorId=null, two `next` chunks with the same
+  // hash. Bucket consumption pairs the first chunk with the existing row
+  // (toReembed) and the second falls through to toInsert. Pinned because
+  // the post-fix `setChunkVectorIds` UPDATE keys on (file, hash) and may
+  // intentionally hit both rows once they coexist in D1.
+  const sharedHash = "deadbeef00000001";
+  const dupChunk: Chunk = {
+    offset: 0,
+    length: 5,
+    text: "hello",
+    tokens: 1,
+    contentHash: sharedHash,
+    heading: null,
+  };
+  const next: Chunk[] = [dupChunk, { ...dupChunk, offset: 5 }];
+  const existing: ExistingChunkRow[] = [
+    { id: "row_a", offset: 0, contentHash: sharedHash, vectorId: null },
+  ];
+
+  const result = diffChunks({ existing, next });
+  expect(result.toReembed.length).toBe(1);
+  expect(result.toReembed[0].id).toBe("row_a");
+  expect(result.toInsert.length).toBe(1);
+  expect(result.toInsert[0].contentHash).toBe(sharedHash);
+  expect(result.unchanged).toEqual([]);
+  expect(result.toDelete).toEqual([]);
+});
+
 test("buildVectorId: deterministic and unique across files/hashes", () => {
   const a1 = buildVectorId("scf_aaa", "0123456789abcdef0123");
   const a2 = buildVectorId("scf_aaa", "0123456789abcdef0123");

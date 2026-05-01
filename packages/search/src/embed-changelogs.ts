@@ -157,6 +157,15 @@ export interface DiffResult {
   toInsert: Chunk[];
   toDelete: Array<{ id: string; vectorId: string | null }>;
   unchanged: Array<{ id: string; chunk: Chunk }>;
+  /**
+   * Existing rows whose contentHash matches a `next` chunk but whose
+   * vectorId is NULL — typically survivors of a prior crash between the
+   * D1 INSERT and the Vectorize upsert (the window #620 documents).
+   * Pipeline embeds these alongside toInsert; the same `(file_id,
+   * content_hash)` UPDATE used for newly-inserted rows promotes them to
+   * `vectorId IS NOT NULL` once Vectorize confirms.
+   */
+  toReembed: Array<{ id: string; chunk: Chunk }>;
 }
 
 /**
@@ -167,8 +176,12 @@ export interface DiffResult {
  *
  * - toInsert: chunks in `next` whose hash is not in `existing`.
  * - toDelete: existing rows whose hash is not in `next`.
- * - unchanged: existing rows whose hash matches a chunk in `next`, paired
- *   with that chunk so callers can update offset/length without re-embedding.
+ * - unchanged: existing rows whose hash matches a chunk in `next` AND
+ *   already have a vectorId, paired with that chunk so callers can
+ *   update offset/length without re-embedding.
+ * - toReembed: existing rows whose hash matches a chunk in `next` but
+ *   have `vectorId IS NULL`. Callers re-embed and run the post-Vectorize
+ *   UPDATE; like `unchanged`, offset/length still need refreshing.
  *
  * Each existing row is consumed at most once; if `next` contains duplicate
  * hashes the unmatched copies fall through to toInsert.
@@ -185,6 +198,7 @@ export function diffChunks(args: { existing: ExistingChunkRow[]; next: Chunk[] }
 
   const toInsert: Chunk[] = [];
   const unchanged: Array<{ id: string; chunk: Chunk }> = [];
+  const toReembed: Array<{ id: string; chunk: Chunk }> = [];
   const consumed = new Set<string>();
 
   for (const chunk of next) {
@@ -192,7 +206,11 @@ export function diffChunks(args: { existing: ExistingChunkRow[]; next: Chunk[] }
     const match = bucket && bucket.length > 0 ? bucket.shift() : undefined;
     if (match) {
       consumed.add(match.id);
-      unchanged.push({ id: match.id, chunk });
+      if (match.vectorId === null) {
+        toReembed.push({ id: match.id, chunk });
+      } else {
+        unchanged.push({ id: match.id, chunk });
+      }
     } else {
       toInsert.push(chunk);
     }
@@ -205,7 +223,7 @@ export function diffChunks(args: { existing: ExistingChunkRow[]; next: Chunk[] }
     }
   }
 
-  return { toInsert, toDelete, unchanged };
+  return { toInsert, toDelete, unchanged, toReembed };
 }
 
 /**
