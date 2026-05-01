@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { SortHeader, type SortState } from "@/components/sort-header";
 
@@ -24,6 +25,7 @@ interface RawSearchQuery {
   anonId: string | null;
   sessionId: string | null;
   userAgent: string | null;
+  authed: boolean | null;
 }
 
 interface TopQuery {
@@ -55,17 +57,70 @@ function formatDuration(ms: number | null): string {
   return `${(ms / 1000).toFixed(1)}s`;
 }
 
-function surfaceColor(surface: string): string {
+type PillTone = "stone" | "blue" | "purple" | "amber" | "emerald" | "indigo" | "rose";
+
+const PILL_TONE: Record<PillTone, string> = {
+  stone: "border-stone-300 text-stone-500 dark:border-stone-700 dark:text-stone-400",
+  blue: "border-blue-300 text-blue-600 dark:border-blue-800 dark:text-blue-400",
+  purple: "border-purple-300 text-purple-600 dark:border-purple-800 dark:text-purple-400",
+  amber: "border-amber-300 text-amber-600 dark:border-amber-800 dark:text-amber-500",
+  emerald: "border-emerald-300 text-emerald-600 dark:border-emerald-800 dark:text-emerald-500",
+  indigo: "border-indigo-300 text-indigo-600 dark:border-indigo-800 dark:text-indigo-400",
+  rose: "border-rose-300 text-rose-600 dark:border-rose-800 dark:text-rose-400",
+};
+
+function surfaceTone(surface: string): PillTone {
   switch (surface) {
     case "web":
-      return "text-blue-500";
+      return "blue";
     case "mcp":
-      return "text-purple-500";
+      return "purple";
     case "api":
-      return "text-amber-500";
+      return "amber";
     default:
-      return "text-stone-400";
+      return "stone";
   }
+}
+
+function clientKindTone(kind: string): PillTone {
+  switch (kind) {
+    case "cli":
+      return "indigo";
+    case "web-server":
+      return "blue";
+    case "mcp-claude":
+      return "purple";
+    default:
+      return "stone";
+  }
+}
+
+/**
+ * `external` is the schema default written when no UA-derived signal was
+ * available. Treat it as "unknown" and hide the pill rather than labelling
+ * unknown traffic with a meaningless bucket.
+ */
+function shouldRenderClientKind(kind: string): boolean {
+  return kind !== "external";
+}
+
+function Pill({
+  label,
+  tone,
+  title,
+}: {
+  label: string;
+  tone: PillTone;
+  title?: string;
+}): React.ReactElement {
+  return (
+    <span
+      className={`inline-flex items-center px-1.5 py-0.5 rounded border text-[10px] uppercase tracking-wide ${PILL_TONE[tone]}`}
+      title={title}
+    >
+      {label}
+    </span>
+  );
 }
 
 function modeColor(mode: string | null): string {
@@ -170,7 +225,7 @@ function TopQueriesTable(): React.ReactElement {
 
 // ---- Recent raw queries section -------------------------------------------
 
-type RecentSortField = "timestamp" | "durationMs" | "surface" | "mode";
+type RecentSortField = "timestamp" | "durationMs" | "surface" | "mode" | "clientKind";
 
 function RecentQueriesTable(): React.ReactElement {
   const [rows, setRows] = useState<RawSearchQuery[] | null>(null);
@@ -205,6 +260,8 @@ function RecentQueriesTable(): React.ReactElement {
         return ((a.durationMs ?? 0) - (b.durationMs ?? 0)) * dir;
       case "surface":
         return a.surface.localeCompare(b.surface) * dir;
+      case "clientKind":
+        return a.clientKind.localeCompare(b.clientKind) * dir;
       case "mode":
         return (a.mode ?? "").localeCompare(b.mode ?? "") * dir;
       default:
@@ -218,10 +275,10 @@ function RecentQueriesTable(): React.ReactElement {
         Recent Queries (last 50)
       </h3>
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
-        <div className="grid grid-cols-[3fr_0.6fr_0.6fr_0.9fr_1.5fr_0.7fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium">
+        <div className="grid grid-cols-[2.4fr_1.4fr_0.6fr_0.7fr_1.4fr_0.7fr] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium">
           <div className="uppercase tracking-wider text-stone-400">Query</div>
-          <SortHeader field="surface" current={sort} onChange={setSort}>
-            Surface
+          <SortHeader field="clientKind" current={sort} onChange={setSort}>
+            Tags
           </SortHeader>
           <SortHeader field="mode" current={sort} onChange={setSort}>
             Mode
@@ -257,12 +314,34 @@ function RecentQueriesTable(): React.ReactElement {
           return (
             <div
               key={row.id}
-              className="grid grid-cols-[3fr_0.6fr_0.6fr_0.9fr_1.5fr_0.7fr] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center"
+              className="grid grid-cols-[2.4fr_1.4fr_0.6fr_0.7fr_1.4fr_0.7fr] px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center"
             >
-              <div className="text-stone-900 dark:text-stone-100 truncate" title={row.query}>
+              <Link
+                href={`/search?q=${encodeURIComponent(row.query)}`}
+                className="text-stone-900 dark:text-stone-100 truncate hover:underline"
+                title={row.query}
+              >
                 {row.query}
+              </Link>
+              <div className="flex flex-wrap gap-1">
+                <Pill
+                  label={row.surface}
+                  tone={surfaceTone(row.surface)}
+                  title={`Transport: ${row.surface}`}
+                />
+                {shouldRenderClientKind(row.clientKind) ? (
+                  <Pill
+                    label={row.clientKind}
+                    tone={clientKindTone(row.clientKind)}
+                    title={`Client: ${row.clientKind}`}
+                  />
+                ) : null}
+                {row.authed === true ? (
+                  <Pill label="auth" tone="emerald" title="Valid Bearer token" />
+                ) : row.authed === false ? (
+                  <Pill label="no auth" tone="rose" title="Unauthenticated request" />
+                ) : null}
               </div>
-              <div className={`capitalize ${surfaceColor(row.surface)}`}>{row.surface}</div>
               <div className={`capitalize ${modeColor(row.mode)}`}>{row.mode ?? "—"}</div>
               <div className="text-stone-500" title={hitsDetail || undefined}>
                 {hasHitFields ? totalHits : "—"}

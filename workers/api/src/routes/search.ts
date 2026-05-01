@@ -19,11 +19,31 @@ import {
 } from "../queries/search.js";
 import { runHybridSearch, type HybridMode } from "../lib/search-hybrid.js";
 import { logSearch } from "../lib/log-search.js";
+import { isValidBearerAuth } from "../middleware/auth.js";
 import { hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
 import type { SearchSurface } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { runLookup } from "./lookups.js";
 import { embedSourceSideEffect } from "./sources.js";
+
+/**
+ * Bucket the User-Agent into a known client kind, or `null` when we have no
+ * explicit signal. We only emit a value when the UA matches one of our own
+ * clients — raw curl / unknown UAs land as `null` and the column falls back
+ * to its schema default at write time. The status UI hides the pill for
+ * default rows so "no signal" reads as absence, not a labelled bucket.
+ *
+ * Derivation is UA-only on purpose: `surface` comes from the spoofable
+ * `X-Releases-Surface` header, so trusting it here would let any caller
+ * claim `web-server`. The web frontend already sends `releases-web/<ver>`
+ * as its UA, so it lands in `web-server` through the UA prefix.
+ */
+function deriveClientKind(userAgent: string | null): string | null {
+  const ua = userAgent ?? "";
+  if (ua.startsWith("releases-cli/")) return "cli";
+  if (ua.startsWith("releases-web/")) return "web-server";
+  return null;
+}
 
 /**
  * Lift a raw SQL row to the wire shape. JSON-parses media, rewrites any
@@ -123,6 +143,10 @@ searchRoutes.get("/search", async (c) => {
   const surface: SearchSurface = c.req.header("x-releases-surface") === "web" ? "web" : "api";
   const userAgent = c.req.header("user-agent") ?? null;
   const anonId = c.req.header("x-releases-anon-id") ?? null;
+  const clientKind = deriveClientKind(userAgent);
+  // Resolve auth synchronously here so the `waitUntil(logSearch(...))` calls
+  // below capture it without re-reading the secret per branch.
+  const authed = await isValidBearerAuth(c);
 
   // Parse once — reused by both the lexical and hybrid branches below.
   const coordinate = parseCoordinate(q);
@@ -188,6 +212,8 @@ searchRoutes.get("/search", async (c) => {
     c.executionCtx.waitUntil(
       logSearch(c.env, {
         surface,
+        clientKind,
+        authed,
         query: q,
         mode: "lexical",
         orgHits: orgs.length,
@@ -291,6 +317,8 @@ searchRoutes.get("/search", async (c) => {
   c.executionCtx.waitUntil(
     logSearch(c.env, {
       surface,
+      clientKind,
+      authed,
       query: q,
       mode: hybrid.mode,
       orgHits: orgs.length,

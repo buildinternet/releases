@@ -11,6 +11,7 @@ import {
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
 import { drizzle } from "drizzle-orm/d1";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 export const MAX_QUERY_LEN = 200;
 const MAX_STR = 200;
@@ -31,6 +32,14 @@ export interface McpLogSearchInput {
   degraded?: boolean | null;
   durationMs?: number | null;
   sessionId?: string | null;
+  /**
+   * UA-derived bucket for the MCP transport — Anthropic-* / claude-* land in
+   * `mcp-claude`. When omitted, `prepareMcpSearchLogRow` falls back to
+   * `deriveMcpClientKind(userAgent)`; if that also returns null the row is
+   * written without `clientKind` and the column's schema default fills in.
+   */
+  clientKind?: string | null;
+  userAgent?: string | null;
   timestamp?: number;
 }
 
@@ -48,6 +57,21 @@ function trimOrNull(v: unknown, max: number): string | null {
   return t.length > 0 ? t : null;
 }
 
+/**
+ * UA-derived MCP client kind. Most managed-agent traffic carries an
+ * `Anthropic-...` UA and Claude Desktop sends `claude-...`; anything else
+ * (custom MCP clients, curl, raw fetch) is unknown and returns `null`, which
+ * lets the column fall back to its schema default rather than mis-labelling
+ * unknown traffic.
+ */
+export function deriveMcpClientKind(userAgent: string | null | undefined): string | null {
+  if (!userAgent) return null;
+  const ua = userAgent.toLowerCase();
+  if (ua.startsWith("claude-") || ua.startsWith("anthropic-") || ua.includes("anthropic"))
+    return "mcp-claude";
+  return null;
+}
+
 export function prepareMcpSearchLogRow(input: McpLogSearchInput): NewSearchQuery | null {
   const query = input.query.trim().slice(0, MAX_QUERY_LEN);
   if (!query) return null;
@@ -57,10 +81,16 @@ export function prepareMcpSearchLogRow(input: McpLogSearchInput): NewSearchQuery
   // Default `types` to the command name so admin queries can filter by tool.
   const typesArr = input.types && input.types.length > 0 ? input.types : [input.command];
 
+  const clientKind =
+    trimOrNull(input.clientKind, 64) ?? deriveMcpClientKind(input.userAgent ?? null);
+
   return {
     timestamp: input.timestamp ?? Date.now(),
     surface: "mcp",
-    clientKind: "external",
+    // Only forward when we identified the client; otherwise let the column
+    // fall back to its schema default — the status UI hides the pill for
+    // default values so "no signal" reads as absence, not a labelled bucket.
+    ...(clientKind ? { clientKind } : {}),
     query,
     mode,
     types: JSON.stringify(typesArr),
@@ -74,7 +104,11 @@ export function prepareMcpSearchLogRow(input: McpLogSearchInput): NewSearchQuery
     durationMs: input.durationMs ?? null,
     anonId: null,
     sessionId: trimOrNull(input.sessionId, 64),
-    userAgent: null,
+    userAgent: trimOrNull(input.userAgent, 256),
+    // MCP transport doesn't carry a Releases API key today; logging NULL
+    // (rather than `false`) keeps the option open if/when Bearer auth lands
+    // on /mcp without a back-fill rewrite.
+    authed: null,
   };
 }
 
@@ -87,6 +121,6 @@ export async function logMcpSearch(env: McpLogSearchEnv, input: McpLogSearchInpu
     await db.insert(searchQueries).values(row);
   } catch (err) {
     // Never break a tool response on a logging failure.
-    console.error("[search-log] insert failed", err);
+    logger.error("[search-log] insert failed", { err });
   }
 }

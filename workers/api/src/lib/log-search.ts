@@ -7,6 +7,7 @@ import {
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
 import { drizzle } from "drizzle-orm/d1";
+import { logger } from "@buildinternet/releases-lib/logger";
 import { sanitizeString } from "./sanitize.js";
 
 export const MAX_QUERY_LEN = 200;
@@ -16,7 +17,7 @@ const MAX_UA = 256;
 export interface LogSearchInput {
   surface: SearchSurface;
   query: string;
-  clientKind?: string;
+  clientKind?: string | null;
   mode?: SearchMode | null;
   types?: readonly string[] | null;
   organization?: string | null;
@@ -30,6 +31,7 @@ export interface LogSearchInput {
   anonId?: string | null;
   sessionId?: string | null;
   userAgent?: string | null;
+  authed?: boolean | null;
   timestamp?: number;
 }
 
@@ -59,10 +61,15 @@ export function prepareSearchLogRow(input: LogSearchInput): NewSearchQuery | nul
   const types =
     Array.isArray(input.types) && input.types.length > 0 ? JSON.stringify(input.types) : null;
 
+  // Only forward clientKind when the caller actually identified the client.
+  // Omitting lets the column fall back to its schema default ("external"),
+  // which the status UI treats as "no signal" and hides from the pill row.
+  const clientKind = sanitizeString(input.clientKind, 64);
+
   return {
     timestamp: input.timestamp ?? Date.now(),
     surface: input.surface,
-    clientKind: sanitizeString(input.clientKind, 64) ?? "external",
+    ...(clientKind ? { clientKind } : {}),
     query,
     mode,
     types,
@@ -77,6 +84,7 @@ export function prepareSearchLogRow(input: LogSearchInput): NewSearchQuery | nul
     anonId: sanitizeString(input.anonId, 64),
     sessionId: sanitizeString(input.sessionId, 64),
     userAgent: sanitizeString(input.userAgent, MAX_UA),
+    authed: input.authed ?? null,
   };
 }
 
@@ -93,6 +101,6 @@ export async function logSearch(env: LogSearchEnv, input: LogSearchInput): Promi
     await db.insert(searchQueries).values(row);
   } catch (err) {
     // Never break a search response on a logging failure.
-    console.error("[search-log] insert failed", err);
+    logger.error("[search-log] insert failed", { err });
   }
 }
