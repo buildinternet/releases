@@ -20,6 +20,7 @@ type StaticRoute = {
 
 const ALWAYS_PUBLIC: StaticRoute[] = [
   { path: "/", changeFrequency: "hourly", priority: 1.0 },
+  { path: "/live", changeFrequency: "always", priority: 0.6 },
   { path: "/search", changeFrequency: "weekly", priority: 0.5 },
 ];
 
