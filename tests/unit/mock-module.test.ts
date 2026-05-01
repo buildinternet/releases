@@ -8,7 +8,7 @@
  *   - excludes `default` from the comparison when it's only present on one side
  */
 import { describe, it, expect, mock, spyOn } from "bun:test";
-import { mockModule } from "../mock-module.ts";
+import { mockModule } from "../mock-module.js";
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
@@ -18,7 +18,11 @@ describe("mockModule", () => {
     // *this* file, which lives in tests/unit/).
     // Its named exports are: applyMigrations, createTestDb, clearAllTables
     // (exported types don't appear as runtime keys).
-    const spy = spyOn(mock, "module");
+    // The spy is no-op'd: calling through to the real mock.module would
+    // globally replace tests/db-helper.ts with our stub for every other test
+    // file in the suite (mock.module is process-global) — so createTestDb in
+    // unrelated tests would return {} and they'd crash.
+    const spy = spyOn(mock, "module").mockImplementation((() => undefined) as never);
     try {
       await mockModule(
         "../db-helper.ts",
@@ -37,16 +41,20 @@ describe("mockModule", () => {
 
   it("throws with a descriptive message when factory is missing exports", async () => {
     // Omit createTestDb and clearAllTables intentionally.
-    await expect(
-      mockModule(
+    let caughtMessage = "";
+    try {
+      await mockModule(
         "../db-helper.ts",
         () => ({
           applyMigrations: () => {},
           // createTestDb and clearAllTables are intentionally absent
         }),
         import.meta.url,
-      ),
-    ).rejects.toThrow(/missing.*export/i);
+      );
+    } catch (err) {
+      caughtMessage = (err as Error).message;
+    }
+    expect(caughtMessage).toMatch(/missing.*export/i);
   });
 
   it("error message names the specific missing exports", async () => {
@@ -67,7 +75,7 @@ describe("mockModule", () => {
   });
 
   it("skips the check and still calls mock.module for un-importable specifiers", async () => {
-    const spy = spyOn(mock, "module");
+    const spy = spyOn(mock, "module").mockImplementation((() => undefined) as never);
     try {
       // "cloudflare:workers" is not importable in the Bun test runtime
       // (it only resolves inside a Cloudflare Worker). The helper should
@@ -95,7 +103,7 @@ describe("mockModule", () => {
   it("does not flag a missing `default` export as an error (TS/CJS interop)", async () => {
     // db-helper.ts has no `default` export, so if the factory doesn't include
     // one either, the check should still pass cleanly.
-    const spy = spyOn(mock, "module");
+    const spy = spyOn(mock, "module").mockImplementation((() => undefined) as never);
     try {
       // Should resolve without throwing.
       await mockModule(

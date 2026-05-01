@@ -24,7 +24,7 @@
  *
  * Usage (in a test file):
  *
- *   import { mockModule } from "../../tests/mock-module.ts";
+ *   import { mockModule } from "../../tests/mock-module.js";
  *
  *   await mockModule(
  *     "../src/webhooks/queries.js",
