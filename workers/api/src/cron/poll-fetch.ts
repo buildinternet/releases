@@ -26,7 +26,11 @@ import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import type { RawRelease } from "@releases/adapters/types.js";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
-import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
+import {
+  embedAndUpsertChangelogFile,
+  type EmbeddedChunk,
+} from "@releases/search/embed-changelog-pipeline.js";
+import type { DiffResult } from "@releases/search/embed-changelogs.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
@@ -1246,22 +1250,21 @@ export async function embedReleasesForSource(
   });
 }
 
+type ChunkOffsetUpdate = DiffResult["unchanged"][number];
+
 /**
- * Two-phase update for unchanged chunks. The schema has UNIQUE(file, offset),
- * so when a prepend shifts every chunk a one-pass UPDATE loop can briefly
- * collide with a sibling chunk that hasn't moved yet. Park each row at a
- * unique negative offset first, then set the final offsets, and run the
- * whole sequence inside `db.batch` so a crash mid-flight can't leave rows
- * stuck at negative offsets — D1 commits the transaction atomically.
+ * Build the park + final UPDATE statements for unchanged chunks. The schema
+ * has UNIQUE(file, offset), so when a prepend shifts every chunk a one-pass
+ * UPDATE loop can briefly collide with a sibling chunk that hasn't moved
+ * yet. Park each row at a unique negative offset first, then set the final
+ * offsets. Returned as plain statements so callers can fold them into a
+ * larger `db.batch`.
  */
-export async function applyChunkOffsetUpdates(
+function buildChunkOffsetUpdateStatements(
   db: ReturnType<typeof drizzle>,
-  unchanged: ReadonlyArray<{
-    id: string;
-    chunk: { offset: number; length: number; tokens: number; heading: string | null };
-  }>,
-): Promise<void> {
-  if (unchanged.length === 0) return;
+  unchanged: ReadonlyArray<ChunkOffsetUpdate>,
+) {
+  if (unchanged.length === 0) return [];
   const parkOps = unchanged.map((u, i) =>
     db
       .update(sourceChangelogChunks)
@@ -1279,8 +1282,89 @@ export async function applyChunkOffsetUpdates(
       })
       .where(eq(sourceChangelogChunks.id, u.id)),
   );
-  const ops = [...parkOps, ...finalOps] as [(typeof parkOps)[number], ...typeof parkOps];
-  await db.batch(ops);
+  return [...parkOps, ...finalOps];
+}
+
+/**
+ * Wrapper that runs the park + final updates as a single atomic batch.
+ * Kept exported for direct unit tests that exercise the offset-shift fix
+ * in isolation; production code calls {@link applyOnDiff} instead.
+ */
+export async function applyChunkOffsetUpdates(
+  db: ReturnType<typeof drizzle>,
+  unchanged: ReadonlyArray<ChunkOffsetUpdate>,
+): Promise<void> {
+  const ops = buildChunkOffsetUpdateStatements(db, unchanged);
+  if (ops.length === 0) return;
+  await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
+}
+
+/**
+ * Apply a chunk-diff to D1 in a single atomic batch: stale rows are deleted,
+ * unchanged rows park-and-shift to their new offsets, and new rows are
+ * inserted. UNIQUE(source_changelog_file_id, offset) makes interleaving
+ * across phases hazardous; folding everything into one `db.batch` means a
+ * crash mid-flight (worker death, transient D1 error) leaves D1 unchanged
+ * rather than stranding stale rows that block subsequent inserts.
+ *
+ * Vectorize writes happen separately upstream and are not part of this
+ * transaction. Retry safety relies on `buildVectorId` (in
+ * `@releases/search/embed-changelogs`) being deterministic so a re-run
+ * upserts the same vector IDs.
+ */
+export async function applyOnDiff(
+  db: ReturnType<typeof drizzle>,
+  params: {
+    fileId: string;
+    sourceId: string;
+    now: string;
+    diff: DiffResult;
+    embedded: EmbeddedChunk[];
+  },
+): Promise<void> {
+  const { fileId, sourceId, now, diff, embedded } = params;
+
+  const deleteOps = [];
+  if (diff.toDelete.length > 0) {
+    const ids = diff.toDelete.map((d) => d.id);
+    // D1 caps bound parameters per statement at 100; RELEASES_ID_IN_CHUNK_SIZE
+    // (90) leaves headroom for the wrapping statement.
+    for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+      const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
+      deleteOps.push(
+        db.delete(sourceChangelogChunks).where(inArray(sourceChangelogChunks.id, slice)),
+      );
+    }
+  }
+
+  const updateOps = buildChunkOffsetUpdateStatements(db, diff.unchanged);
+
+  const insertOps = [];
+  if (diff.toInsert.length > 0) {
+    const embeddedByHash = new Map(embedded.map((e) => [e.chunk.contentHash, e]));
+    const values = diff.toInsert.map((chunk) => {
+      const match = embeddedByHash.get(chunk.contentHash);
+      return {
+        sourceChangelogFileId: fileId,
+        sourceId,
+        offset: chunk.offset,
+        length: chunk.length,
+        tokens: chunk.tokens,
+        contentHash: chunk.contentHash,
+        heading: chunk.heading,
+        vectorId: match?.vectorId ?? null,
+        embeddedAt: match ? now : null,
+      };
+    });
+    // 11 columns × 9 rows = 99 binds, under D1's 100/statement cap.
+    for (let i = 0; i < values.length; i += 9) {
+      insertOps.push(db.insert(sourceChangelogChunks).values(values.slice(i, i + 9)));
+    }
+  }
+
+  const ops = [...deleteOps, ...updateOps, ...insertOps];
+  if (ops.length === 0) return;
+  await db.batch(ops as [(typeof ops)[number], ...typeof ops]);
 }
 
 export async function embedChangelogFileForSource(
@@ -1322,47 +1406,13 @@ export async function embedChangelogFileForSource(
     embedConfig,
     throwOnError: opts?.throwOnError ?? false,
     onDiff: async ({ diff, embedded }) => {
-      const now = new Date().toISOString();
-
-      // 1. Delete stale rows.
-      if (diff.toDelete.length > 0) {
-        const ids = diff.toDelete.map((d) => d.id);
-        for (let i = 0; i < ids.length; i += 100) {
-          const slice = ids.slice(i, i + 100);
-          // oxlint-disable-next-line no-await-in-loop -- D1 chunked delete (100 bind param limit)
-          await db.delete(sourceChangelogChunks).where(inArray(sourceChangelogChunks.id, slice));
-        }
-      }
-
-      // 2. Update unchanged rows to reflect the new offset/heading/length.
-      await applyChunkOffsetUpdates(db, diff.unchanged);
-
-      // 3. Insert new rows. Rows whose embed succeeded get vectorId +
-      //    embeddedAt; the rest land with vectorId = NULL so the backfill
-      //    job can embed them later.
-      const embeddedByHash = new Map(embedded.map((e) => [e.chunk.contentHash, e]));
-      if (diff.toInsert.length > 0) {
-        const values = diff.toInsert.map((chunk) => {
-          const match = embeddedByHash.get(chunk.contentHash);
-          return {
-            sourceChangelogFileId: file.fileId,
-            sourceId: source.id,
-            offset: chunk.offset,
-            length: chunk.length,
-            tokens: chunk.tokens,
-            contentHash: chunk.contentHash,
-            heading: chunk.heading,
-            vectorId: match?.vectorId ?? null,
-            embeddedAt: match ? now : null,
-          };
-        });
-        // D1 caps bound parameters per statement at ~100. This table has
-        // 11 columns, so 9 rows per batch keeps us under the limit.
-        for (let i = 0; i < values.length; i += 9) {
-          // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit; 11 cols → 9 rows/batch)
-          await db.insert(sourceChangelogChunks).values(values.slice(i, i + 9));
-        }
-      }
+      await applyOnDiff(db, {
+        fileId: file.fileId,
+        sourceId: source.id,
+        now: new Date().toISOString(),
+        diff,
+        embedded,
+      });
     },
   });
 }
