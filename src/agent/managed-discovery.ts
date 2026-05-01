@@ -338,6 +338,9 @@ export async function runManagedDiscovery(
             {
               sendResult,
               executor: executeToolCall,
+              getRemainingSessionMs: () => Math.max(0, deadline - Date.now()),
+              sessionId: session.id,
+              agentName: "discovery",
               onStateCapture: (state) => {
                 captured.state = state as unknown as DiscoveryState;
               },
@@ -386,6 +389,15 @@ export async function runManagedDiscovery(
     } catch {
       /* already closed */
     }
+    // Archive in the finally so timeout-abort paths leave the Anthropic
+    // session in a clean state — without this, a stalled tool call locks
+    // subsequent retries with a 400 ("waiting on responses to events …").
+    // See #632. Mirrored by workers/discovery/src/managed-agents-session.ts.
+    try {
+      await client.beta.sessions.archive(session.id);
+    } catch {
+      /* non-critical */
+    }
   }
 
   // Fetch usage for logging
@@ -395,13 +407,6 @@ export async function runManagedDiscovery(
     if (usage) {
       logger.info(`[managed-agents] Session usage: ${JSON.stringify(usage)}`);
     }
-  } catch {
-    // Non-critical
-  }
-
-  // Archive session (non-critical — session will expire naturally if this fails)
-  try {
-    await client.beta.sessions.archive(session.id);
   } catch {
     // Non-critical
   }

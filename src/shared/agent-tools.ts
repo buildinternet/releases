@@ -627,6 +627,35 @@ export function createTypedExecutor(opts: APIClientOptions) {
 
 const MAX_TOOL_OUTPUT = 50_000;
 
+/**
+ * Minimum session budget required to dispatch a scrape fetch. The Cloudflare
+ * Browser Rendering + Haiku parse path is unbounded internally and has been
+ * observed to run for 7+ minutes (#632). Refuse to start a fresh fetch when
+ * less than this remains so the agent can finish remaining work cleanly.
+ */
+const SCRAPE_FETCH_MIN_BUDGET_MS = 2 * 60 * 1000;
+
+/**
+ * MCP-served read tools — `list_organizations`, `search`,
+ * `get_latest_releases`, etc. live on mcp.releases.sh and arrive as
+ * `agent.mcp_tool_use` events when the vault credential is wired up. If the
+ * vault MCP is detached, the agent falls back to emitting them as
+ * `agent.custom_tool_use`, which lands here in the unknown-tool branch. We
+ * log a distinct warning for those names so degraded sessions are
+ * grep-able. Update this list if mcp/src tools change.
+ */
+const KNOWN_MCP_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "list_catalog",
+  "get_catalog_entry",
+  "list_organizations",
+  "get_latest_releases",
+  "search",
+  "search_releases",
+  "search_registry",
+  "summarize_changes",
+  "compare_products",
+]);
+
 export interface ToolDispatchContext {
   /** Send a tool result back to the Anthropic session. */
   sendResult: (toolUseId: string, text: string) => Promise<void>;
@@ -643,6 +672,16 @@ export interface ToolDispatchContext {
    * Returns the result string to send back to the agent.
    */
   onScrapeFetch?: (sourceIdentifier: string) => Promise<string>;
+  /**
+   * Remaining session budget in milliseconds. Used to short-circuit scrape
+   * fetches when the wall-clock deadline is too close for the call to plausibly
+   * finish. When omitted (or returning Infinity) no budget gating is applied.
+   */
+  getRemainingSessionMs?: () => number;
+  /** Anthropic session ID — included in degraded-MCP warning logs. */
+  sessionId?: string;
+  /** Agent name (e.g. "discovery", "worker") — included in degraded-MCP warning logs. */
+  agentName?: string;
 }
 
 /**
@@ -685,11 +724,25 @@ export async function handleCustomToolUse(
       })();
       if (isFlagged) {
         const identifier = String(toolInput.identifier ?? "");
-        try {
-          result = await ctx.onScrapeFetch(identifier);
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          result = `Scrape fetch failed: ${msg}`;
+        const remainingMs = ctx.getRemainingSessionMs?.() ?? Infinity;
+        if (remainingMs < SCRAPE_FETCH_MIN_BUDGET_MS) {
+          // Skip the call: scrapeFetch has no internal wall-clock cap and a
+          // single source has been observed to consume 7+ minutes. Returning
+          // a structured timeout result lets the agent move on cleanly
+          // instead of stalling out the session deadline (#632).
+          result = JSON.stringify({
+            fetched: false,
+            status: "skipped_budget",
+            reason: `Scrape fetch skipped — ${Math.round(remainingMs / 1000)}s remaining in session, need at least ${SCRAPE_FETCH_MIN_BUDGET_MS / 1000}s.`,
+            identifier,
+          });
+        } else {
+          try {
+            result = await ctx.onScrapeFetch(identifier);
+          } catch (err) {
+            const msg = err instanceof Error ? err.message : String(err);
+            result = `Scrape fetch failed: ${msg}`;
+          }
         }
       }
     }
@@ -707,9 +760,26 @@ export async function handleCustomToolUse(
   // define (or a hallucinated name) shows up in `wrangler tail` / Axiom —
   // rather than only in the Anthropic session event log. The agent still
   // gets a structured error via sendResult.
-  console.error(
-    `[agent-tools] Unknown tool dispatched: ${toolName}. Known: ${API_TOOL_NAMES.join(", ")}.`,
-  );
+  //
+  // MCP-served tool names landing here usually mean the vault MCP credential
+  // wasn't attached for the session (the agent fell back to emitting them as
+  // custom tools). Log a distinct warning so degraded sessions are grep-able
+  // — see #632.
+  const ctxSuffix = [
+    ctx.sessionId ? `session=${ctx.sessionId}` : null,
+    ctx.agentName ? `agent=${ctx.agentName}` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
+  if (KNOWN_MCP_TOOL_NAMES.has(toolName)) {
+    console.warn(
+      `[agent-tools] MCP tool "${toolName}" arrived as custom_tool_use — vault MCP likely detached.${ctxSuffix ? ` ${ctxSuffix}` : ""}`,
+    );
+  } else {
+    console.error(
+      `[agent-tools] Unknown tool dispatched: ${toolName}. Known: ${API_TOOL_NAMES.join(", ")}.${ctxSuffix ? ` ${ctxSuffix}` : ""}`,
+    );
+  }
   await ctx.sendResult(toolUseId, `Unknown tool: ${toolName}`);
   return false;
 }

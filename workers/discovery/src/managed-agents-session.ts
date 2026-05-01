@@ -140,6 +140,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     const agentId = useWorker ? workerAgentId : params.agentId;
     const agentVersion = useWorker ? undefined : params.agentVersion;
 
+    // Captured once the Anthropic session is created. Archived in `finally`
+    // below so timeout-abort and unexpected-throw paths leave the session in a
+    // clean state — without it, the un-answered tool event from a stalled
+    // fetch locks subsequent retries with a 400. See #632.
+    let pendingArchive: { client: ReturnType<typeof buildAnthropicClient>; id: string } | null =
+      null;
+
     try {
       // Register the session with StatusHub BEFORE any Anthropic API calls so that
       // the session ID the caller already received is always visible in /v1/sessions.
@@ -283,6 +290,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         }
       }
 
+      pendingArchive = { client, id: session.id };
+
       // Update StatusHub with the Anthropic session ID now that we have it
       await this.notifyStatusHub(
         {
@@ -364,6 +373,9 @@ export class ManagedAgentsSession extends DurableObject<Env> {
                   sendResult,
                   executor,
                   onScrapeFetch: scrapeHandler,
+                  getRemainingSessionMs: () => Math.max(0, deadline - Date.now()),
+                  sessionId: session.id,
+                  agentName: useWorker ? "worker" : "discovery",
                   onStateCapture: (state) => {
                     captured.state = state;
                   },
@@ -510,12 +522,8 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
       // Skip the post-loop fallback failures when the loop already emitted a
       // classified session:error — otherwise the fallback overwrites it.
+      // Session archive runs in the outer finally regardless.
       if (terminalFailed) {
-        try {
-          await (client.beta.sessions as any).archive(session.id);
-        } catch {
-          /* non-critical */
-        }
         return;
       }
 
@@ -535,15 +543,11 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         // Non-critical
       }
 
-      // Archive session (agent + environment are long-lived, not archived).
-      // NOTE: Worker agent (Haiku) sessions show as "terminated" in the Anthropic
-      // console while discovery agent sessions do not — possibly a timing/state
-      // difference. Both paths call archive identically. Monitor if this causes issues.
-      try {
-        await (client.beta.sessions as any).archive(session.id);
-      } catch {
-        /* non-critical */
-      }
+      // Archive runs in the outer `finally` for every exit path — see the
+      // comment on `pendingArchive` at the top of runSession. NOTE: worker
+      // (Haiku) sessions show as "terminated" in the Anthropic console while
+      // discovery sessions do not — possibly a timing/state difference; both
+      // paths archive identically.
 
       if (captured.state) {
         const state = captured.state;
@@ -602,6 +606,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       await this.fail(sessionId, params.company, message);
+    } finally {
+      if (pendingArchive) {
+        try {
+          await (pendingArchive.client.beta.sessions as any).archive(pendingArchive.id);
+        } catch {
+          /* non-critical */
+        }
+      }
     }
   }
 
