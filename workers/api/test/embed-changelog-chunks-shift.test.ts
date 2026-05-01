@@ -21,7 +21,7 @@ import {
   sourceChangelogFiles,
   sourceChangelogChunks,
 } from "@buildinternet/releases-core/schema";
-import { applyChunkOffsetUpdates } from "../src/cron/poll-fetch.js";
+import { applyChunkOffsetUpdates, applyOnDiff } from "../src/cron/poll-fetch.js";
 import type { D1Db } from "../src/db.js";
 
 function mkDb() {
@@ -164,6 +164,140 @@ describe("applyChunkOffsetUpdates", () => {
     const db = mkDb();
     await seed(db);
     await applyChunkOffsetUpdates(asD1(db), []);
+    const rows = await db.select().from(sourceChangelogChunks);
+    expect(rows).toHaveLength(3);
+  });
+});
+
+describe("applyOnDiff", () => {
+  it("reconciles a delete + insert at the same offset in a single batch", async () => {
+    // The middle chunk's content changes entirely: scc_b at offset 200 is
+    // removed and a new chunk takes the same slot. UNIQUE(file, offset)
+    // would reject the insert if the delete had not yet been applied.
+    // Folding both into one batch guarantees the delete is committed
+    // alongside the insert (or neither is).
+    const db = mkDb();
+    await seed(db);
+
+    await applyOnDiff(asD1(db), {
+      fileId: "scf_a",
+      sourceId: "src_a",
+      now: "2026-05-01T00:00:00.000Z",
+      diff: {
+        toDelete: [{ id: "scc_b", vectorId: "vec-old-b" }],
+        unchanged: [
+          {
+            id: "scc_a",
+            chunk: {
+              offset: 100,
+              length: 50,
+              tokens: 10,
+              text: "",
+              contentHash: "h-a",
+              heading: "Old A",
+            },
+          },
+          {
+            id: "scc_c",
+            chunk: {
+              offset: 300,
+              length: 50,
+              tokens: 10,
+              text: "",
+              contentHash: "h-c",
+              heading: "Old C",
+            },
+          },
+        ],
+        toInsert: [
+          {
+            offset: 200,
+            length: 60,
+            tokens: 12,
+            text: "",
+            contentHash: "h-new-b",
+            heading: "New B",
+          },
+        ],
+      },
+      embedded: [
+        {
+          chunk: {
+            offset: 200,
+            length: 60,
+            tokens: 12,
+            text: "",
+            contentHash: "h-new-b",
+            heading: "New B",
+          },
+          vectorId: "vec-new-b",
+          vector: [0.1],
+        },
+      ],
+    });
+
+    const rows = await db
+      .select()
+      .from(sourceChangelogChunks)
+      .where(eq(sourceChangelogChunks.sourceChangelogFileId, "scf_a"))
+      .orderBy(sourceChangelogChunks.offset);
+
+    expect(rows.map((r) => [r.id, r.offset, r.contentHash, r.heading])).toEqual([
+      ["scc_a", 100, "h-a", "Old A"],
+      [expect.not.stringMatching(/^scc_b$/), 200, "h-new-b", "New B"],
+      ["scc_c", 300, "h-c", "Old C"],
+    ]);
+    const newRow = rows.find((r) => r.offset === 200);
+    expect(newRow?.vectorId).toBe("vec-new-b");
+    expect(newRow?.embeddedAt).toBe("2026-05-01T00:00:00.000Z");
+  });
+
+  it("inserts new chunks with vectorId=null when embed is missing", async () => {
+    const db = mkDb();
+    await seed(db);
+
+    // No `embedded` entry for the new chunk → row should land with null
+    // vectorId / embeddedAt so the backfill job can pick it up later.
+    await applyOnDiff(asD1(db), {
+      fileId: "scf_a",
+      sourceId: "src_a",
+      now: "2026-05-01T00:00:00.000Z",
+      diff: {
+        toDelete: [],
+        unchanged: [],
+        toInsert: [
+          {
+            offset: 400,
+            length: 50,
+            tokens: 10,
+            text: "",
+            contentHash: "h-d",
+            heading: "New D",
+          },
+        ],
+      },
+      embedded: [],
+    });
+
+    const rows = await db
+      .select()
+      .from(sourceChangelogChunks)
+      .where(eq(sourceChangelogChunks.contentHash, "h-d"));
+    expect(rows).toHaveLength(1);
+    expect(rows[0].vectorId).toBeNull();
+    expect(rows[0].embeddedAt).toBeNull();
+  });
+
+  it("is a no-op when the diff is empty", async () => {
+    const db = mkDb();
+    await seed(db);
+    await applyOnDiff(asD1(db), {
+      fileId: "scf_a",
+      sourceId: "src_a",
+      now: "2026-05-01T00:00:00.000Z",
+      diff: { toDelete: [], unchanged: [], toInsert: [] },
+      embedded: [],
+    });
     const rows = await db.select().from(sourceChangelogChunks);
     expect(rows).toHaveLength(3);
   });
