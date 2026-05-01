@@ -50,7 +50,7 @@ When asked to fetch sources:
 2. Call \`manage_source\` action=fetch for each source, passing the source ID (e.g. src_abc123) as the \`identifier\` parameter
 3. Report the number of releases fetched per source
 4. Report any errors encountered
-5. **Update the playbook** if you encountered something unexpected — errors, changed page structure, new traps. Call \`manage_playbook\` action=update_notes to record findings. Notes use skill-style sections: \`### Fetch instructions\` (per-source notes), \`### Traps\` (warnings that prevent wasted work), \`### Coverage\` (what's tracked and gaps).
+5. **Update the playbook** if you encountered something durable about the **target** that future fetches need (a new DOM hook, a real cadence shift, a per-package release-tag pattern). Call \`manage_playbook\` action=update_notes. Follow the playbook authoring rubric in the **\`managing-sources\`** skill — adapter/harness errors go to \`releases-tool-notes\`, not the playbook; raw org observations go to \`releases-errata\`. If nothing target-shaped changed, leave the playbook alone.
 6. Do NOT add, remove, or modify sources — only fetch
 
 ### Update Operations

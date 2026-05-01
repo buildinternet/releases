@@ -5,7 +5,7 @@ Search changelogs, track releases, and manage changelog sources with the [Releas
 ## What's Included
 
 - **MCP Server** — Connects Claude Code to the Releases.sh changelog registry
-- **Skills** — Operator playbooks bundled from `src/agent/skills/`: `finding-changelogs`, `managing-sources`, `parsing-changelogs`, `grouping-releases`, `analyzing-releases`, `maintaining-orgs`, `classify-media-relevance`, and `seeding-playbooks`
+- **Skills** — Operator playbooks bundled from `src/agent/skills/` covering source discovery, parsing, ingestion, maintenance, and trend analysis
 - **Agents** — `discovery` (finds and onboards sources) and `worker` (executes fetch operations)
 - **Commands** — `/releases` for manual changelog queries
 

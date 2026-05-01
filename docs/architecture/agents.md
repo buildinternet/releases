@@ -116,13 +116,15 @@ Agents operate on three layers of fetch guidance:
 
 **A playbook is a per-org skill.** Same mental model as the global skill corpus — imperative instructions an LLM follows when fetching — scoped to one organization. When an agent fetches any of an org's sources, it should load that org's playbook into context alongside the global skills. Global skills teach general patterns; the playbook overrides with org-specific behavior (naming conventions, what counts as a release, rollup cadence, cross-source dedup rules); per-source `parseInstructions` add source-specific hints on top.
 
-Playbook notes are written by the discovery/worker agents themselves (via the `seeding-playbooks` skill for bulk creation, or inline during fetch when something new is learned). They're owned by agents, not humans — think "the agent's own notebook for this company," not "operator documentation."
+Playbook notes are written by the discovery/worker agents themselves — inline during onboarding/fetch using the rubric in the `managing-sources` skill (Playbooks → Writing good agent notes), or in bulk via the `seeding-playbooks` skill. They're owned by agents, not humans — think "the agent's own notebook for this company," not "operator documentation."
+
+The rubric defines a three-layer routing rule: target-shaped facts go in the playbook; adapter/harness errors route to the `releases-tool-notes` memory store; raw org observations route to the `releases-errata` store. Agents use it to keep playbooks tight and skill-shaped instead of letting transient bugs and onboarding narration pollute the body. `seeding-playbooks` is the bulk-orchestration wrapper — it dispatches sub-agents that follow the same rubric to write or rewrite many playbooks in parallel.
 
 ## Claude Code Plugin
 
 A Claude Code plugin at `plugins/claude/releases/` exposes the registry for use in Claude Code sessions. It connects to the remote MCP server at `mcp.releases.sh` and adapts the managed agent prompts for CLI-based operation.
 
-**Components:** `.mcp.json` (MCP connection), 2 agents (discovery/worker), 1 command (`/releases`), 8 skills synced from `src/agent/skills/` (`analyzing-releases`, `classify-media-relevance`, `finding-changelogs`, `grouping-releases`, `maintaining-orgs`, `managing-sources`, `parsing-changelogs`, `seeding-playbooks`).
+**Components:** `.mcp.json` (MCP connection), `discovery` and `worker` agents, the `/releases` command, and the operator skill set synced from `src/agent/skills/`.
 
 **Test locally:** `claude --plugin-dir plugins/claude/releases`
 
