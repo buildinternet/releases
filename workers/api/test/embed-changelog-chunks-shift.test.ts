@@ -221,6 +221,7 @@ describe("applyOnDiff", () => {
             heading: "New B",
           },
         ],
+        toReembed: [],
       },
     });
 
@@ -260,6 +261,7 @@ describe("applyOnDiff", () => {
             heading: "New D",
           },
         ],
+        toReembed: [],
       },
     });
 
@@ -278,7 +280,7 @@ describe("applyOnDiff", () => {
     await applyOnDiff(asD1(db), {
       fileId: "scf_a",
       sourceId: "src_a",
-      diff: { toDelete: [], unchanged: [], toInsert: [] },
+      diff: { toDelete: [], unchanged: [], toInsert: [], toReembed: [] },
     });
     const rows = await db.select().from(sourceChangelogChunks);
     expect(rows).toHaveLength(3);
@@ -307,6 +309,7 @@ describe("setChunkVectorIds", () => {
             heading: "New D",
           },
         ],
+        toReembed: [],
       },
     });
 

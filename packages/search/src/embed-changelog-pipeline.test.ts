@@ -304,6 +304,62 @@ describe("embedAndUpsertChangelogFile", () => {
     expect(logger.warns.some((w) => w.includes("onDiff callback failed"))).toBe(true);
   });
 
+  test("toReembed: existing rows with vectorId=null get re-embedded and committed (#622)", async () => {
+    // Reproduces the #622 trap: D1 has chunks for this file but every row
+    // is at `vectorId=null` (a prior crash between INSERT and Vectorize
+    // upsert). Content has not changed since. Pre-fix the pipeline
+    // classified everything as `unchanged` and skipped embedding entirely.
+    // Post-fix the same hashes route into `toReembed` and the pipeline
+    // embeds + upserts + commits them.
+    const content = bigDoc(["v3", "v2", "v1"]);
+    const existing: ExistingChunkRow[] = chunkChangelog(content).map((c, i) => ({
+      id: `row_${i}`,
+      offset: c.offset,
+      contentHash: c.contentHash,
+      vectorId: null,
+    }));
+    expect(existing.length).toBeGreaterThan(0);
+
+    const { fetchImpl, calls } = fakeVoyageFetch();
+    const vec = fakeVectorize();
+    const diffs: any[] = [];
+    const commits: any[] = [];
+    await embedAndUpsertChangelogFile({
+      file: { id: FILE_ID, sourceId: SOURCE_ID, content, contentHash: "h" },
+      existingChunks: existing,
+      vectorIndex: vec.index,
+      embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
+      onDiff: async (p) => {
+        diffs.push(p);
+      },
+      onVectorsCommitted: async (p) => {
+        commits.push(p);
+      },
+    });
+
+    // Embed was called for every existing row (none were classified as
+    // unchanged because all had vectorId=null).
+    expect(calls.length).toBe(1);
+    expect(calls[0].inputs.length).toBe(existing.length);
+    expect(vec.upserted.length).toBe(existing.length);
+    // toInsert stays empty — these aren't fresh chunks, just NULL-vector
+    // existing rows. Behaviorally they take the embed path via toReembed.
+    expect(diffs.length).toBe(1);
+    expect(diffs[0].diff.toInsert).toEqual([]);
+    expect(diffs[0].diff.unchanged).toEqual([]);
+    expect(diffs[0].diff.toReembed.length).toBe(existing.length);
+    expect(diffs[0].pending.length).toBe(existing.length);
+    // Commit fires, draining the rows.
+    expect(commits.length).toBe(1);
+    expect(commits[0].committed.length).toBe(existing.length);
+    // Each upsert payload's vectorId matches buildVectorId — that's what
+    // setChunkVectorIds keys on via (file_id, content_hash).
+    for (const v of vec.upserted) {
+      expect(v.id.startsWith("chunk_")).toBe(true);
+      expect(v.metadata.source_changelog_file_id).toBe(FILE_ID);
+    }
+  });
+
   test("onVectorsCommitted failure is caught and logged", async () => {
     const oldContent = bigDoc(["v1"]);
     const newContent = bigDoc(["v2", "v1"]);

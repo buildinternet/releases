@@ -1334,7 +1334,9 @@ export async function applyOnDiff(
     }
   }
 
-  const updateOps = buildChunkOffsetUpdateStatements(db, diff.unchanged);
+  // Fold both buckets into one park-and-shift batch to avoid
+  // `UNIQUE(file, offset)` collisions between them mid-update.
+  const updateOps = buildChunkOffsetUpdateStatements(db, [...diff.unchanged, ...diff.toReembed]);
 
   const insertOps = [];
   if (diff.toInsert.length > 0) {
@@ -1369,6 +1371,10 @@ export async function applyOnDiff(
  * Matches by `(source_changelog_file_id, content_hash)` — `applyOnDiff`
  * stages each new chunk with its content hash, and `buildVectorId` is
  * deterministic so the vectorId lines up.
+ *
+ * Invariant: the WHERE clause may match more than one row when a file has
+ * multiple chunks with identical text. That is intentional — buildVectorId
+ * is deterministic and the Vectorize upsert is idempotent on that vectorId.
  *
  * Failure here is recoverable: the chunks stay with `vectorId = null` and
  * the existing embed-backfill job picks them up. The next embed run
