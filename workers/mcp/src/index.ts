@@ -70,7 +70,9 @@ async function handle(request: Request, env: Env, ctx: ExecutionContext): Promis
     });
   }
 
-  const server = createServer(env, ctx);
+  const server = createServer(env, ctx, {
+    userAgent: request.headers.get("user-agent"),
+  });
   return createMcpHandler(server)(request, env, ctx);
 }
 

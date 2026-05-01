@@ -22,7 +22,7 @@ import {
 } from "./tools.js";
 import { registerResources } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
-import { logMcpSearch, type McpSearchCommand } from "./lib/log-search.js";
+import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import { logger } from "@buildinternet/releases-lib/logger";
@@ -139,7 +139,17 @@ function titled(title: string, hints: typeof READ_ONLY_HINTS | typeof AI_READ_HI
   return { title, annotations: { title, ...hints } };
 }
 
-export function createServer(env: Env, ctx?: ExecutionContext) {
+export interface CreateServerOptions {
+  /**
+   * Inbound request UA — passed through to `search_queries.user_agent` and
+   * bucketed via `deriveMcpClientKind`. Optional; when omitted (older callers
+   * and tests) rows land with a NULL UA and clientKind falls back to the
+   * column's schema default.
+   */
+  userAgent?: string | null;
+}
+
+export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer({
     name: "releases",
     version: "0.11.0",
@@ -147,6 +157,8 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
 
   const db = createDb(env.DB);
   const mediaOrigin = env.MEDIA_ORIGIN ?? "";
+  const requestUserAgent = opts?.userAgent ?? null;
+  const requestClientKind = deriveMcpClientKind(requestUserAgent);
 
   /** Hydrate portable /_media/ URLs in tool text output. */
   type ToolResult = { content: [{ type: "text"; text: string }] };
@@ -203,6 +215,8 @@ export function createServer(env: Env, ctx?: ExecutionContext) {
           chunkHits: counts.chunkHits ?? null,
           degraded: counts.degraded ?? null,
           durationMs: Date.now() - startedAt,
+          clientKind: requestClientKind,
+          userAgent: requestUserAgent,
         });
         if (ctx) ctx.waitUntil(log);
         else void log;

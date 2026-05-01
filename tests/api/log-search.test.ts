@@ -32,7 +32,9 @@ describe("prepareSearchLogRow", () => {
     expect(row!.mode).toBe("hybrid");
     expect(row!.types).toBe(JSON.stringify(["orgs", "catalog"]));
     expect(row!.releaseHits).toBe(5);
-    expect(row!.clientKind).toBe("external");
+    // No clientKind passed in → omit from the row so the schema default
+    // ("external") fills in. The status UI hides this default in the pill row.
+    expect(row!.clientKind).toBeUndefined();
   });
 
   it("truncates queries longer than MAX_QUERY_LEN", () => {

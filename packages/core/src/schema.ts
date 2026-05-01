@@ -391,6 +391,10 @@ export const searchQueries = sqliteTable(
     anonId: text("anon_id"),
     sessionId: text("session_id"),
     userAgent: text("user_agent"),
+    // Nullable on purpose: NULL = unknown (e.g. transports that never carry
+    // an Authorization header, like MCP today), false = explicitly unauthed,
+    // true = valid Bearer matched RELEASED_API_KEY at request time.
+    authed: integer("authed", { mode: "boolean" }),
   },
   (table) => [
     index("idx_search_queries_timestamp").on(table.timestamp),
