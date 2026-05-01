@@ -34,6 +34,7 @@
       "database_id": "73be1562-d900-4e25-a62b-650ab74488b7",
     },
   ],
+  "routes": [{ "pattern": "webhooks.releases.sh", "custom_domain": true }],
   "queues": {
     "consumers": [
       {
