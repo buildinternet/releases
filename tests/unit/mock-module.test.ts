@@ -19,6 +19,7 @@ import { describe, it, expect, mock, spyOn } from "bun:test";
 import { mockModule } from "../mock-module.js";
 
 const FIXTURE = "./__fixtures__/mock-module-target.ts";
+const FIXTURE_WITH_DEFAULT = "./__fixtures__/mock-module-target-with-default.ts";
 
 // ─── tests ────────────────────────────────────────────────────────────────────
 
@@ -81,25 +82,29 @@ describe("mockModule", () => {
     expect(caughtMessage).toContain("Gamma");
   });
 
-  it("skips the check and still calls mock.module for un-importable specifiers", async () => {
+  it("skips the check and never invokes the factory for un-importable specifiers", async () => {
     const spy = spyOn(mock, "module").mockImplementation((() => undefined) as never);
     try {
       // "cloudflare:workers" is not importable in the Bun test runtime
       // (it only resolves inside a Cloudflare Worker). The helper should
-      // swallow the resolution error, skip the completeness check, and still
-      // delegate to mock.module so the test can proceed normally.
+      // swallow the resolution error, skip the completeness check, and
+      // delegate to mock.module — without ever invoking the factory itself,
+      // since mock.module is responsible for that when registering the mock.
+      // The no-op spy on mock.module means the factory should run zero times.
       // eslint-disable-next-line @typescript-eslint/no-extraneous-class
       class DurableObjectStub {}
       // eslint-disable-next-line @typescript-eslint/no-extraneous-class
       class WorkflowEntrypointStub {}
-      await mockModule(
-        "cloudflare:workers",
-        () => ({
+      let factoryCalled = 0;
+      const factory = () => {
+        factoryCalled++;
+        return {
           DurableObject: DurableObjectStub,
           WorkflowEntrypoint: WorkflowEntrypointStub,
-        }),
-        import.meta.url,
-      );
+        };
+      };
+      await mockModule("cloudflare:workers", factory, import.meta.url);
+      expect(factoryCalled).toBe(0);
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
@@ -107,18 +112,17 @@ describe("mockModule", () => {
   });
 
   it("does not flag a missing `default` export as an error (TS/CJS interop)", async () => {
-    // The fixture has no `default` export, so if the factory doesn't include
-    // one either, the check should still pass cleanly.
+    // The fixture-with-default has both a named export (phi) and a default
+    // export. Omitting `default` from the factory exercises the asymmetric
+    // exclusion at mock-module.ts's `onlyInReal` branch — without a fixture
+    // that actually has `default`, this path would never run.
     const spy = spyOn(mock, "module").mockImplementation((() => undefined) as never);
     try {
       await mockModule(
-        FIXTURE,
+        FIXTURE_WITH_DEFAULT,
         () => ({
-          alpha: () => "stub",
-          beta: 0,
-          // eslint-disable-next-line @typescript-eslint/no-extraneous-class
-          Gamma: class {},
-          // no `default` key — that's fine
+          phi: "stub",
+          // no `default` key — interop quirk; helper should not flag this
         }),
         import.meta.url,
       );
