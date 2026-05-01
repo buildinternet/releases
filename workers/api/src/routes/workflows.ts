@@ -30,6 +30,7 @@ import {
   type EntityKind,
 } from "@releases/search/embed-entities.js";
 import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
+import { applyOnDiff } from "../cron/poll-fetch.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
@@ -980,60 +981,13 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
       vectorIndex: asSharedIndex(c.env.CHANGELOG_CHUNKS_INDEX),
       embedConfig,
       onDiff: async ({ diff, embedded }) => {
-        const now = new Date().toISOString();
-        const embeddedByHash = new Map(embedded.map((e) => [e.chunk.contentHash, e]));
-
-        // Delete stale rows first so their (file_id, offset) slots are free
-        // before we potentially re-insert at the same offset.
-        if (diff.toDelete.length > 0) {
-          const ids = diff.toDelete.map((d) => d.id);
-          for (let i = 0; i < ids.length; i += 50) {
-            // oxlint-disable-next-line no-await-in-loop -- D1 chunked delete (100 bind param limit)
-            await db
-              .delete(sourceChangelogChunks)
-              .where(inArray(sourceChangelogChunks.id, ids.slice(i, i + 50)));
-          }
-        }
-
-        // Update unchanged rows' offset/length/heading in case the surrounding
-        // file shifted — content hash matched so they don't need re-embedding.
-        for (const u of diff.unchanged) {
-          // oxlint-disable-next-line no-await-in-loop -- sequential per-chunk offset update (diff is typically small)
-          await db
-            .update(sourceChangelogChunks)
-            .set({
-              offset: u.chunk.offset,
-              length: u.chunk.length,
-              heading: u.chunk.heading,
-            })
-            .where(eq(sourceChangelogChunks.id, u.id));
-        }
-
-        // Insert the new chunks. Rows whose embedding landed get a vectorId +
-        // embeddedAt; rows whose embedding failed go in with null so the next
-        // backfill run can pick them up.
-        if (diff.toInsert.length > 0) {
-          const inserts = diff.toInsert.map((chunk) => {
-            const e = embeddedByHash.get(chunk.contentHash);
-            return {
-              sourceChangelogFileId: file.id,
-              sourceId: file.sourceId,
-              offset: chunk.offset,
-              length: chunk.length,
-              tokens: chunk.tokens,
-              contentHash: chunk.contentHash,
-              heading: chunk.heading,
-              vectorId: e?.vectorId ?? null,
-              embeddedAt: e ? now : null,
-            };
-          });
-          // D1 caps bound parameters per statement at ~100. This table has
-          // 11 columns, so 9 rows per batch keeps us under the limit.
-          for (let i = 0; i < inserts.length; i += 9) {
-            // oxlint-disable-next-line no-await-in-loop -- D1 chunked insert (100 bind param limit; 11 cols → 9 rows/batch)
-            await db.insert(sourceChangelogChunks).values(inserts.slice(i, i + 9));
-          }
-        }
+        await applyOnDiff(db, {
+          fileId: file.id,
+          sourceId: file.sourceId,
+          now: new Date().toISOString(),
+          diff,
+          embedded,
+        });
         applied = true;
       },
     });

@@ -1250,6 +1250,8 @@ export async function embedReleasesForSource(
   });
 }
 
+type ChunkOffsetUpdate = DiffResult["unchanged"][number];
+
 /**
  * Build the park + final UPDATE statements for unchanged chunks. The schema
  * has UNIQUE(file, offset), so when a prepend shifts every chunk a one-pass
@@ -1260,10 +1262,7 @@ export async function embedReleasesForSource(
  */
 function buildChunkOffsetUpdateStatements(
   db: ReturnType<typeof drizzle>,
-  unchanged: ReadonlyArray<{
-    id: string;
-    chunk: { offset: number; length: number; tokens: number; heading: string | null };
-  }>,
+  unchanged: ReadonlyArray<ChunkOffsetUpdate>,
 ) {
   if (unchanged.length === 0) return [];
   const parkOps = unchanged.map((u, i) =>
@@ -1293,10 +1292,7 @@ function buildChunkOffsetUpdateStatements(
  */
 export async function applyChunkOffsetUpdates(
   db: ReturnType<typeof drizzle>,
-  unchanged: ReadonlyArray<{
-    id: string;
-    chunk: { offset: number; length: number; tokens: number; heading: string | null };
-  }>,
+  unchanged: ReadonlyArray<ChunkOffsetUpdate>,
 ): Promise<void> {
   const ops = buildChunkOffsetUpdateStatements(db, unchanged);
   if (ops.length === 0) return;
