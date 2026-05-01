@@ -166,6 +166,7 @@ app.onError((err, c) => {
   return c.json({ error: "internal_error", message }, 500);
 });
 
+// Public read CORS — wildcard is fine; these endpoints don't accept credentials.
 app.use("*", cors());
 app.use("*", stagingAccessGate());
 app.use("*", blockIndexing());
@@ -228,6 +229,26 @@ const adminRoutes = [
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
   v1.use(`/${r}/*`, authMiddleware, dbHealthCheck);
+}
+
+// Admin / write paths — scope CORS to known first-party origins so the
+// global wildcard (set above on `app`) is overridden for these routes.
+// Browsers already refuse credentialed requests to wildcard origins; this is
+// defense-in-depth. Add staging frontend origins here when one ships.
+// NOTE: This must be registered AFTER app.use("*", cors()) so that Hono's
+// header writes resolve to the stricter value for admin paths.
+const ALLOWED_ADMIN_ORIGINS = [
+  "https://releases.sh",
+  // staging.releases.sh is the expected staging web host once it ships;
+  // add it here when the staging frontend is deployed.
+];
+const adminCors = cors({
+  origin: ALLOWED_ADMIN_ORIGINS,
+  credentials: true,
+});
+for (const r of adminRoutes) {
+  v1.use(`/${r}`, adminCors);
+  v1.use(`/${r}/*`, adminCors);
 }
 
 // Cache-Control for read-heavy GET endpoints
