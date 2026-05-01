@@ -30,7 +30,7 @@ import {
   type EntityKind,
 } from "@releases/search/embed-entities.js";
 import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
-import { applyOnDiff } from "../cron/poll-fetch.js";
+import { applyOnDiff, setChunkVectorIds } from "../cron/poll-fetch.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
@@ -968,32 +968,42 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
       .from(sourceChangelogChunks)
       .where(eq(sourceChangelogChunks.sourceChangelogFileId, file.id));
 
-    let applied = false;
-    // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
-    await embedAndUpsertChangelogFile({
-      file: {
-        id: file.id,
-        sourceId: file.sourceId,
-        content: file.content,
-        contentHash: file.contentHash,
-      },
-      existingChunks,
-      vectorIndex: asSharedIndex(c.env.CHANGELOG_CHUNKS_INDEX),
-      embedConfig,
-      onDiff: async ({ diff, embedded }) => {
-        await applyOnDiff(db, {
-          fileId: file.id,
+    // Use throwOnError so a Vectorize-side failure (chunks left at
+    // vectorId=null) reports as `failed`. The backfill route exists
+    // specifically to set vectorIds, so "D1 staged but vectors never
+    // committed" should not count as a success.
+    try {
+      // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
+      await embedAndUpsertChangelogFile({
+        file: {
+          id: file.id,
           sourceId: file.sourceId,
-          now: new Date().toISOString(),
-          diff,
-          embedded,
-        });
-        applied = true;
-      },
-    });
-
-    if (applied) succeeded += 1;
-    else failed += 1;
+          content: file.content,
+          contentHash: file.contentHash,
+        },
+        existingChunks,
+        vectorIndex: asSharedIndex(c.env.CHANGELOG_CHUNKS_INDEX),
+        embedConfig,
+        throwOnError: true,
+        onDiff: async ({ diff }) => {
+          await applyOnDiff(db, {
+            fileId: file.id,
+            sourceId: file.sourceId,
+            diff,
+          });
+        },
+        onVectorsCommitted: async ({ committed }) => {
+          await setChunkVectorIds(db, {
+            fileId: file.id,
+            now: new Date().toISOString(),
+            embedded: committed,
+          });
+        },
+      });
+      succeeded += 1;
+    } catch {
+      failed += 1;
+    }
   }
 
   return c.json({

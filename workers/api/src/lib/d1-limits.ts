@@ -16,3 +16,9 @@ export const RELEASES_BATCH_CHUNK_SIZE = 7;
 // SET binding, so 90 + 1 = 91 stays comfortably under the cap; a SELECT
 // with 90 ids is 90.
 export const RELEASES_ID_IN_CHUNK_SIZE = 90;
+
+// `source_changelog_chunks` INSERT (vectorId/embeddedAt land null in the
+// D1-first staging — see #620) binds 9 placeholders per row:
+// source_changelog_file_id, source_id, offset, length, tokens, content_hash,
+// heading, vector_id, embedded_at. 11 rows * 9 = 99 bindings.
+export const CHANGELOG_CHUNK_INSERT_CHUNK_SIZE = 11;

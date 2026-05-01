@@ -1,18 +1,23 @@
 /**
  * Chunk + embed + upsert pipeline for CHANGELOG files.
  *
- * The shape here is deliberately "hand off the diff to a caller-provided
- * persistence callback" because the DB driver on each side is different
- * (drizzle over D1 in the Worker vs. bun:sqlite locally, if ever). This
- * module does all the pure work — chunking, diffing, embedding, upserting
- * to Vectorize, deleting stale vectors — and then hands the caller a
- * structured payload with everything they need to update the DB.
+ * Ordering (#620): D1 first with `vectorId = null`, then Vectorize, then a
+ * follow-up D1 UPDATE to set `vectorId`. Both D1 phases run in caller-
+ * supplied callbacks (`onDiff`, `onVectorsCommitted`) so the pipeline
+ * stays driver-agnostic — the API worker uses drizzle/D1 and the OSS CLI
+ * uses bun:sqlite.
  *
- * Failure policy: catches every error and logs it. Never throws. If embed
- * or upsert fails, the `onDiff` callback is still invoked so the caller
- * can at least update offsets / prune rows — just with an empty `embedded`
- * list so the new rows are inserted with `vectorId = null` and the
- * backfill job can pick them up later.
+ * Why D1-first: writing Vectorize first leaves a window where vectors
+ * are live in Vectorize with no D1 row pointing at them — search hits
+ * fail to hydrate and quietly drop. With D1 first, any failure between
+ * the D1 INSERT and the Vectorize UPSERT leaves chunks the existing
+ * `vectorId IS NULL` backfill job already picks up. Vector-side orphans
+ * are at worst storage-only (search hydration filters them out via the
+ * `scc.vector_id` join).
+ *
+ * Failure policy: each phase logs its own errors. The pipeline only
+ * re-throws when `throwOnError = true` (the Workflows path uses this so
+ * each step retries independently).
  */
 
 import { embedBatch, type EmbeddingConfig } from "./embeddings.js";
@@ -42,7 +47,17 @@ export interface EmbeddedChunk {
 
 export interface OnDiffPayload {
   diff: DiffResult;
-  embedded: EmbeddedChunk[];
+  /**
+   * Newly-embedded vectors that are NOT yet in Vectorize. Insert chunk
+   * rows with `vectorId = null` / `embeddedAt = null`; the pipeline
+   * calls `onVectorsCommitted` after Vectorize confirms.
+   */
+  pending: EmbeddedChunk[];
+}
+
+export interface OnVectorsCommittedPayload {
+  /** Vectors that landed in Vectorize. UPDATE the matching rows. */
+  committed: EmbeddedChunk[];
 }
 
 export interface EmbedAndUpsertChangelogFileOptions {
@@ -51,134 +66,159 @@ export interface EmbedAndUpsertChangelogFileOptions {
   vectorIndex: VectorizeIndex;
   embedConfig?: Partial<EmbeddingConfig>;
   /**
-   * Called with the diff plus any successfully-embedded chunks so the caller
-   * can apply DB changes (insert new rows, delete stale rows, update
-   * unchanged rows' offsets). Invoked even on partial embed failure — in
-   * that case `embedded` is the subset that made it through.
+   * Stage-1 callback. Apply the chunk diff to D1 atomically (delete
+   * stale, shift unchanged offsets, insert new with `vectorId = null`).
+   * Invoked even on embed failure (with `pending = []`) so the delete +
+   * offset-update phases still land.
    */
   onDiff: (payload: OnDiffPayload) => Promise<void>;
+  /**
+   * Stage-2 callback, invoked only after `onDiff` succeeded AND the
+   * Vectorize upsert succeeded. Skipped when there is nothing to commit.
+   */
+  onVectorsCommitted: (payload: OnVectorsCommittedPayload) => Promise<void>;
   logger?: EmbedLogger;
   /**
-   * When true, any embed/upsert failure re-throws after logging so the caller
-   * can retry (e.g. from a Cloudflare Workflow step). Default false preserves
-   * the historical fire-and-forget contract. See #486.
+   * When true, any embed/upsert/D1 failure re-throws after logging so
+   * the caller can retry (e.g. from a Cloudflare Workflow step).
    */
   throwOnError?: boolean;
+}
+
+function formatErr(err: unknown): string {
+  const msg = err instanceof Error ? err.message : String(err);
+  if (err instanceof Error && "cause" in err && err.cause) {
+    const cause = err.cause instanceof Error ? err.cause.message : String(err.cause);
+    return `${msg} cause=${cause}`;
+  }
+  return msg;
 }
 
 export async function embedAndUpsertChangelogFile(
   opts: EmbedAndUpsertChangelogFileOptions,
 ): Promise<void> {
-  const { file, existingChunks, vectorIndex, embedConfig, onDiff, throwOnError = false } = opts;
+  const {
+    file,
+    existingChunks,
+    vectorIndex,
+    embedConfig,
+    onDiff,
+    onVectorsCommitted,
+    throwOnError = false,
+  } = opts;
   const logger = opts.logger ?? console;
 
   let diff: DiffResult;
   let embedded: EmbeddedChunk[] = [];
-  let deleteIds: string[] = [];
-  let innerErr: unknown;
+  let firstError: unknown;
 
   try {
     const next = chunkChangelog(file.content);
     diff = diffChunks({ existing: existingChunks, next });
-
-    // 1. Embed the new chunks (if any).
-    if (diff.toInsert.length > 0) {
-      try {
-        const { vectors } = await embedBatch(
-          diff.toInsert.map((c) => c.text),
-          embedConfig,
-        );
-        if (vectors.length === diff.toInsert.length) {
-          embedded = diff.toInsert.map((chunk, i) => ({
-            chunk,
-            vectorId: buildVectorId(file.id, chunk.contentHash),
-            vector: vectors[i],
-          }));
-        } else {
-          const msg = `[embed-changelog-pipeline] vector count mismatch for ${file.id}: ${vectors.length} vs ${diff.toInsert.length}`;
-          logger.warn(msg);
-          innerErr ??= new Error(msg);
-        }
-      } catch (err) {
-        logger.warn(
-          `[embed-changelog-pipeline] embed failed for ${file.id}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-        innerErr ??= err;
-      }
-    }
-
-    // 2. Upsert the embedded vectors.
-    if (embedded.length > 0) {
-      const payload = embedded.map((e) => ({
-        id: e.vectorId,
-        values: e.vector,
-        metadata: {
-          type: "changelog_chunk",
-          source_id: file.sourceId,
-          source_changelog_file_id: file.id,
-          offset: e.chunk.offset,
-          heading: e.chunk.heading ?? "",
-        },
-      }));
-      try {
-        await vectorIndex.upsert(payload);
-      } catch (err) {
-        logger.warn(
-          `[embed-changelog-pipeline] Vectorize upsert failed for ${file.id}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-        // Wipe the embedded list so the caller inserts rows with
-        // vectorId = null rather than lying about what's in Vectorize.
-        embedded = [];
-        innerErr ??= err;
-      }
-    }
-
-    // 3. Delete stale vectors from Vectorize.
-    deleteIds = diff.toDelete
-      .map((d) => d.vectorId)
-      .filter((v): v is string => typeof v === "string" && v.length > 0);
-    if (deleteIds.length > 0) {
-      try {
-        await vectorIndex.deleteByIds(deleteIds);
-      } catch (err) {
-        logger.warn(
-          `[embed-changelog-pipeline] Vectorize delete failed for ${file.id}: ${
-            err instanceof Error ? err.message : String(err)
-          }`,
-        );
-        innerErr ??= err;
-      }
-    }
   } catch (err) {
-    logger.warn(
-      `[embed-changelog-pipeline] pipeline failed for ${file.id}: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    logger.warn(`[embed-changelog-pipeline] chunk/diff failed for ${file.id}: ${formatErr(err)}`);
     if (throwOnError) throw err;
     return;
   }
 
-  // 4. Hand off to caller for DB reconciliation. Outside the outer try so
-  //    DB errors surface via the callback's own error handling.
-  try {
-    await onDiff({ diff, embedded });
-  } catch (err) {
-    const cause =
-      err instanceof Error && "cause" in err && err.cause
-        ? ` cause=${err.cause instanceof Error ? err.cause.message : String(err.cause)}`
-        : "";
-    logger.warn(
-      `[embed-changelog-pipeline] onDiff callback failed for ${file.id}: ${
-        err instanceof Error ? err.message : String(err)
-      }${cause}`,
-    );
-    if (throwOnError) throw err;
+  if (diff.toInsert.length > 0) {
+    try {
+      const { vectors } = await embedBatch(
+        diff.toInsert.map((c) => c.text),
+        embedConfig,
+      );
+      if (vectors.length === diff.toInsert.length) {
+        embedded = diff.toInsert.map((chunk, i) => ({
+          chunk,
+          vectorId: buildVectorId(file.id, chunk.contentHash),
+          vector: vectors[i],
+        }));
+      } else {
+        const msg = `[embed-changelog-pipeline] vector count mismatch for ${file.id}: ${vectors.length} vs ${diff.toInsert.length}`;
+        logger.warn(msg);
+        firstError ??= new Error(msg);
+      }
+    } catch (err) {
+      logger.warn(`[embed-changelog-pipeline] embed failed for ${file.id}: ${formatErr(err)}`);
+      firstError ??= err;
+    }
   }
 
-  if (throwOnError && innerErr) throw innerErr;
+  // Stage D1 first. If this fails we MUST skip the Vectorize writes
+  // below — upserting now would produce orphan vectors, exactly the
+  // failure mode #620 fixes.
+  let diffApplied = false;
+  try {
+    await onDiff({ diff, pending: embedded });
+    diffApplied = true;
+  } catch (err) {
+    logger.warn(
+      `[embed-changelog-pipeline] onDiff callback failed for ${file.id}: ${formatErr(err)}`,
+    );
+    firstError ??= err;
+  }
+
+  if (!diffApplied) {
+    if (throwOnError && firstError) throw firstError;
+    return;
+  }
+
+  // Vectorize upsert and stale-delete are independent — new chunks have
+  // new content hashes by construction, so vectorIds are disjoint from
+  // the IDs in `toDelete`. Run in parallel; each catches its own error.
+  const deleteIds = diff.toDelete
+    .map((d) => d.vectorId)
+    .filter((v): v is string => typeof v === "string" && v.length > 0);
+
+  const doUpsert = async (): Promise<boolean> => {
+    if (embedded.length === 0) return false;
+    const payload = embedded.map((e) => ({
+      id: e.vectorId,
+      values: e.vector,
+      metadata: {
+        type: "changelog_chunk",
+        source_id: file.sourceId,
+        source_changelog_file_id: file.id,
+        offset: e.chunk.offset,
+        heading: e.chunk.heading ?? "",
+      },
+    }));
+    try {
+      await vectorIndex.upsert(payload);
+      return true;
+    } catch (err) {
+      logger.warn(
+        `[embed-changelog-pipeline] Vectorize upsert failed for ${file.id}: ${formatErr(err)}`,
+      );
+      firstError ??= err;
+      return false;
+    }
+  };
+
+  const doDeleteStale = async (): Promise<void> => {
+    if (deleteIds.length === 0) return;
+    try {
+      await vectorIndex.deleteByIds(deleteIds);
+    } catch (err) {
+      logger.warn(
+        `[embed-changelog-pipeline] Vectorize delete failed for ${file.id}: ${formatErr(err)}`,
+      );
+      firstError ??= err;
+    }
+  };
+
+  const [upserted] = await Promise.all([doUpsert(), doDeleteStale()]);
+
+  if (upserted) {
+    try {
+      await onVectorsCommitted({ committed: embedded });
+    } catch (err) {
+      logger.warn(
+        `[embed-changelog-pipeline] onVectorsCommitted callback failed for ${file.id}: ${formatErr(err)}`,
+      );
+      firstError ??= err;
+    }
+  }
+
+  if (throwOnError && firstError) throw firstError;
 }

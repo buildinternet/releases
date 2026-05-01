@@ -21,7 +21,7 @@ import {
   sourceChangelogFiles,
   sourceChangelogChunks,
 } from "@buildinternet/releases-core/schema";
-import { applyChunkOffsetUpdates, applyOnDiff } from "../src/cron/poll-fetch.js";
+import { applyChunkOffsetUpdates, applyOnDiff, setChunkVectorIds } from "../src/cron/poll-fetch.js";
 import type { D1Db } from "../src/db.js";
 
 function mkDb() {
@@ -170,19 +170,21 @@ describe("applyChunkOffsetUpdates", () => {
 });
 
 describe("applyOnDiff", () => {
-  it("reconciles a delete + insert at the same offset in a single batch", async () => {
+  it("reconciles a delete + insert at the same offset in a single batch — new row lands with vectorId=null", async () => {
     // The middle chunk's content changes entirely: scc_b at offset 200 is
     // removed and a new chunk takes the same slot. UNIQUE(file, offset)
     // would reject the insert if the delete had not yet been applied.
     // Folding both into one batch guarantees the delete is committed
     // alongside the insert (or neither is).
+    //
+    // Per #620, the new row lands with vectorId=null — the follow-up
+    // setChunkVectorIds runs only after Vectorize confirms.
     const db = mkDb();
     await seed(db);
 
     await applyOnDiff(asD1(db), {
       fileId: "scf_a",
       sourceId: "src_a",
-      now: "2026-05-01T00:00:00.000Z",
       diff: {
         toDelete: [{ id: "scc_b", vectorId: "vec-old-b" }],
         unchanged: [
@@ -220,20 +222,6 @@ describe("applyOnDiff", () => {
           },
         ],
       },
-      embedded: [
-        {
-          chunk: {
-            offset: 200,
-            length: 60,
-            tokens: 12,
-            text: "",
-            contentHash: "h-new-b",
-            heading: "New B",
-          },
-          vectorId: "vec-new-b",
-          vector: [0.1],
-        },
-      ],
     });
 
     const rows = await db
@@ -248,20 +236,17 @@ describe("applyOnDiff", () => {
       ["scc_c", 300, "h-c", "Old C"],
     ]);
     const newRow = rows.find((r) => r.offset === 200);
-    expect(newRow?.vectorId).toBe("vec-new-b");
-    expect(newRow?.embeddedAt).toBe("2026-05-01T00:00:00.000Z");
+    expect(newRow?.vectorId).toBeNull();
+    expect(newRow?.embeddedAt).toBeNull();
   });
 
-  it("inserts new chunks with vectorId=null when embed is missing", async () => {
+  it("inserts new chunks with vectorId=null so the backfill job can pick them up", async () => {
     const db = mkDb();
     await seed(db);
 
-    // No `embedded` entry for the new chunk → row should land with null
-    // vectorId / embeddedAt so the backfill job can pick it up later.
     await applyOnDiff(asD1(db), {
       fileId: "scf_a",
       sourceId: "src_a",
-      now: "2026-05-01T00:00:00.000Z",
       diff: {
         toDelete: [],
         unchanged: [],
@@ -276,7 +261,6 @@ describe("applyOnDiff", () => {
           },
         ],
       },
-      embedded: [],
     });
 
     const rows = await db
@@ -294,11 +278,153 @@ describe("applyOnDiff", () => {
     await applyOnDiff(asD1(db), {
       fileId: "scf_a",
       sourceId: "src_a",
-      now: "2026-05-01T00:00:00.000Z",
       diff: { toDelete: [], unchanged: [], toInsert: [] },
-      embedded: [],
     });
     const rows = await db.select().from(sourceChangelogChunks);
     expect(rows).toHaveLength(3);
+  });
+});
+
+describe("setChunkVectorIds", () => {
+  it("promotes staged chunks (vectorId=null) once Vectorize confirms", async () => {
+    const db = mkDb();
+    await seed(db);
+
+    // Stage a new chunk at offset 400 via applyOnDiff (vectorId=null).
+    await applyOnDiff(asD1(db), {
+      fileId: "scf_a",
+      sourceId: "src_a",
+      diff: {
+        toDelete: [],
+        unchanged: [],
+        toInsert: [
+          {
+            offset: 400,
+            length: 50,
+            tokens: 10,
+            text: "",
+            contentHash: "h-d",
+            heading: "New D",
+          },
+        ],
+      },
+    });
+
+    const before = await db
+      .select()
+      .from(sourceChangelogChunks)
+      .where(eq(sourceChangelogChunks.contentHash, "h-d"));
+    expect(before[0].vectorId).toBeNull();
+
+    // Now simulate Vectorize confirming and promote the chunk.
+    await setChunkVectorIds(asD1(db), {
+      fileId: "scf_a",
+      now: "2026-05-01T00:00:00.000Z",
+      embedded: [
+        {
+          chunk: {
+            offset: 400,
+            length: 50,
+            tokens: 10,
+            text: "",
+            contentHash: "h-d",
+            heading: "New D",
+          },
+          vectorId: "vec-d",
+          vector: [0.1],
+        },
+      ],
+    });
+
+    const after = await db
+      .select()
+      .from(sourceChangelogChunks)
+      .where(eq(sourceChangelogChunks.contentHash, "h-d"));
+    expect(after[0].vectorId).toBe("vec-d");
+    expect(after[0].embeddedAt).toBe("2026-05-01T00:00:00.000Z");
+  });
+
+  it("is a no-op for an empty embedded list", async () => {
+    const db = mkDb();
+    await seed(db);
+    await setChunkVectorIds(asD1(db), {
+      fileId: "scf_a",
+      now: "2026-05-01T00:00:00.000Z",
+      embedded: [],
+    });
+    const rows = await db.select().from(sourceChangelogChunks);
+    expect(rows.every((r) => r.vectorId === null)).toBe(true);
+  });
+
+  it("only updates rows for the given file id, not collisions on contentHash alone", async () => {
+    // Two files contain a chunk with the same contentHash — promoting
+    // one must not update the other.
+    const db = mkDb();
+    await seed(db);
+    await db.insert(sourceChangelogFiles).values({
+      id: "scf_b",
+      sourceId: "src_a",
+      path: "CHANGELOG.md",
+      filename: "CHANGELOG.md",
+      url: "https://github.com/acme/acme/blob/main/CHANGELOG.md",
+      rawUrl: "https://raw.githubusercontent.com/acme/acme/main/CHANGELOG.md",
+      content: "stub",
+      contentHash: "hash-file-b",
+      bytes: 4,
+      fetchedAt: new Date().toISOString(),
+    });
+    // Both files have a chunk with contentHash "h-shared".
+    await db.insert(sourceChangelogChunks).values([
+      {
+        id: "scc_a_shared",
+        sourceChangelogFileId: "scf_a",
+        sourceId: "src_a",
+        offset: 500,
+        length: 50,
+        tokens: 10,
+        contentHash: "h-shared",
+        heading: "Shared",
+      },
+      {
+        id: "scc_b_shared",
+        sourceChangelogFileId: "scf_b",
+        sourceId: "src_a",
+        offset: 500,
+        length: 50,
+        tokens: 10,
+        contentHash: "h-shared",
+        heading: "Shared",
+      },
+    ]);
+
+    await setChunkVectorIds(asD1(db), {
+      fileId: "scf_a",
+      now: "2026-05-01T00:00:00.000Z",
+      embedded: [
+        {
+          chunk: {
+            offset: 500,
+            length: 50,
+            tokens: 10,
+            text: "",
+            contentHash: "h-shared",
+            heading: "Shared",
+          },
+          vectorId: "vec-shared-a",
+          vector: [0.1],
+        },
+      ],
+    });
+
+    const a = await db
+      .select()
+      .from(sourceChangelogChunks)
+      .where(eq(sourceChangelogChunks.id, "scc_a_shared"));
+    const b = await db
+      .select()
+      .from(sourceChangelogChunks)
+      .where(eq(sourceChangelogChunks.id, "scc_b_shared"));
+    expect(a[0].vectorId).toBe("vec-shared-a");
+    expect(b[0].vectorId).toBeNull();
   });
 });
