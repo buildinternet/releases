@@ -14,6 +14,9 @@ export function Footer() {
           <span>A changelog registry for agents and developers.</span>
         </div>
         <nav className="flex items-center gap-4">
+          <Link href="/live" className="hover:text-stone-700 dark:hover:text-stone-300">
+            Live
+          </Link>
           <Link href="/privacy" className="hover:text-stone-700 dark:hover:text-stone-300">
             Privacy
           </Link>
