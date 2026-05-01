@@ -2,12 +2,17 @@ import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { and, eq, inArray } from "drizzle-orm";
-import { releases, knowledgePages } from "@buildinternet/releases-core/schema";
+import {
+  releases,
+  knowledgePages,
+  sourceChangelogChunks,
+} from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import {
   D1_MAX_BINDINGS,
   RELEASES_BATCH_CHUNK_SIZE,
   RELEASES_ID_IN_CHUNK_SIZE,
+  CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
 } from "../../workers/api/src/lib/d1-limits.js";
 
 // D1 rejects any prepared statement that binds more than D1_MAX_BINDINGS
@@ -67,6 +72,42 @@ describe("releases id-IN bind budget", () => {
       .where(inArray(releases.id, ids))
       .toSQL();
     expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+});
+
+const mockChunk = (i: number) => ({
+  sourceChangelogFileId: "f1",
+  sourceId: "s1",
+  offset: i * 100,
+  length: 100,
+  tokens: 25,
+  contentHash: `h${i}`,
+  heading: null,
+  vectorId: null,
+  embeddedAt: null,
+});
+
+describe("source_changelog_chunks batch insert bind budget", () => {
+  // The chunk INSERT binds 11 placeholders per row — Drizzle materializes
+  // both `id` ($defaultFn newSourceChangelogChunkId) and `created_at`
+  // ($defaultFn ISO timestamp) as bound values, on top of the nine
+  // explicit columns. Pre-fix the constant was 11 (counting only the
+  // explicit columns), so each chunked statement carried 121 binds and
+  // D1 rejected it with "too many SQL variables" the moment a file
+  // produced enough chunks to fill one batch — surfaced in prod for
+  // 28 zero-chunk CHANGELOGs after #624's predicate fix unblocked them.
+  it(`chunk of CHANGELOG_CHUNK_INSERT_CHUNK_SIZE stays under D1's ${D1_MAX_BINDINGS}-bind cap`, () => {
+    const rows = Array.from({ length: CHANGELOG_CHUNK_INSERT_CHUNK_SIZE }, (_, i) => mockChunk(i));
+    const q = db.insert(sourceChangelogChunks).values(rows).toSQL();
+    expect(q.params.length).toBeLessThanOrEqual(D1_MAX_BINDINGS);
+  });
+
+  it("chunk one larger than CHANGELOG_CHUNK_INSERT_CHUNK_SIZE exceeds the cap", () => {
+    const rows = Array.from({ length: CHANGELOG_CHUNK_INSERT_CHUNK_SIZE + 1 }, (_, i) =>
+      mockChunk(i),
+    );
+    const q = db.insert(sourceChangelogChunks).values(rows).toSQL();
+    expect(q.params.length).toBeGreaterThan(D1_MAX_BINDINGS);
   });
 });
 
