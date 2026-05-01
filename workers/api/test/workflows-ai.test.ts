@@ -1,4 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { mockModule } from "../../../tests/mock-module.ts";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
 import { applyMigrations } from "../../../tests/db-helper";
@@ -8,24 +9,28 @@ type AnthropicCall = { model: string; messages: unknown; system: string };
 const anthropicCalls: AnthropicCall[] = [];
 let nextResponseText = "generated text";
 
-mock.module("../src/lib/anthropic.js", () => ({
-  callAnthropic: async (
-    _apiKey: string,
-    req: {
-      model: string;
-      system: string;
-      messages: unknown;
+await mockModule(
+  "../src/lib/anthropic.js",
+  () => ({
+    callAnthropic: async (
+      _apiKey: string,
+      req: {
+        model: string;
+        system: string;
+        messages: unknown;
+      },
+    ) => {
+      anthropicCalls.push({ model: req.model, system: req.system, messages: req.messages });
+      return { text: nextResponseText, inputTokens: 100, outputTokens: 50 };
     },
-  ) => {
-    anthropicCalls.push({ model: req.model, system: req.system, messages: req.messages });
-    return { text: nextResponseText, inputTokens: 100, outputTokens: 50 };
-  },
-  getAnthropicKey: async (env: { ANTHROPIC_API_KEY?: { get(): Promise<string> } }) => {
-    const k = await env.ANTHROPIC_API_KEY?.get();
-    return k && k.length > 0 ? k : null;
-  },
-  resolveGatewayOpts: async () => ({}),
-}));
+    getAnthropicKey: async (env: { ANTHROPIC_API_KEY?: { get(): Promise<string> } }) => {
+      const k = await env.ANTHROPIC_API_KEY?.get();
+      return k && k.length > 0 ? k : null;
+    },
+    resolveGatewayOpts: async () => ({}),
+  }),
+  import.meta.url,
+);
 
 const { Hono } = await import("hono");
 const { workflowsRoutes } = await import("../src/routes/workflows.js");
