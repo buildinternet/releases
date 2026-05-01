@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { safeStringifyJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
@@ -127,7 +128,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
     <div className="min-h-screen">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeStringifyJsonLd(jsonLd) }}
       />
       <Header />
       <div className="max-w-3xl mx-auto px-6">

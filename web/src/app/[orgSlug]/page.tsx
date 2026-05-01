@@ -1,4 +1,5 @@
 import { cache } from "react";
+import { safeStringifyJsonLd } from "@/lib/json-ld";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { api, adminApi, ApiSetupError, type OrgHeatmap, type OrgReleasesResponse } from "@/lib/api";
@@ -147,7 +148,7 @@ export default async function OrgPage({
     <div className="min-h-screen">
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeStringifyJsonLd(jsonLd) }}
       />
       <Header />
       <div className="max-w-4xl mx-auto px-6">
