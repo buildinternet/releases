@@ -16,6 +16,7 @@ import {
   sources,
   releases,
   sourceChangelogFiles,
+  sourceChangelogChunks,
 } from "@buildinternet/releases-core/schema";
 
 const { Hono } = await import("hono");
@@ -191,6 +192,93 @@ describe("POST /v1/workflows/embed-changelogs", () => {
     const body = (await res.json()) as { processed: number; remaining: number };
     expect(body.processed).toBe(0);
     expect(body.remaining).toBe(0);
+  });
+
+  it("dry-run picks up zero-chunk files even when LIMIT excludes them in row order (regression: #624)", async () => {
+    // Pre-fix the route applied LIMIT before the needsWork filter, so
+    // when row order put fully-embedded files first the zero-chunk file
+    // sat past the cutoff and the drain reported processed:0/remaining:0
+    // even with backlog. Setting limit:1 with the zero-chunk file last in
+    // insertion order pins this: pre-fix returns 0, post-fix returns 1.
+    const db = mkDb();
+    await db
+      .insert(organizations)
+      .values({ id: "org_zc", slug: "zc", name: "ZC", category: "developer-tools" });
+    await db.insert(sources).values({
+      id: "src_zc",
+      orgId: "org_zc",
+      slug: "zc-src",
+      name: "ZC Source",
+      type: "github",
+      url: "https://github.com/zc/zc",
+    });
+
+    const now = new Date().toISOString();
+
+    // Six fully-embedded decoy files first (chunks all carry vector_id),
+    // then one zero-chunk file last. Pre-fix the default LIMIT/order put
+    // the zero-chunk file beyond reach; post-fix HAVING filters first
+    // so it surfaces immediately.
+    const decoyIndexes = [0, 1, 2, 3, 4, 5];
+    await Promise.all(
+      decoyIndexes.map((i) =>
+        db.insert(sourceChangelogFiles).values({
+          id: `scf_done_${i}`,
+          sourceId: "src_zc",
+          path: `done-${i}.md`,
+          filename: `done-${i}.md`,
+          url: `https://github.com/zc/zc/blob/main/done-${i}.md`,
+          rawUrl: `https://raw.githubusercontent.com/zc/zc/main/done-${i}.md`,
+          content: "# done",
+          contentHash: `done-${i}`,
+          bytes: 6,
+        }),
+      ),
+    );
+    await Promise.all(
+      decoyIndexes.map((i) =>
+        db.insert(sourceChangelogChunks).values({
+          id: `scc_done_${i}`,
+          sourceChangelogFileId: `scf_done_${i}`,
+          sourceId: "src_zc",
+          offset: 0,
+          length: 6,
+          tokens: 2,
+          contentHash: `done-${i}-h`,
+          heading: null,
+          vectorId: `vec_done_${i}`,
+          embeddedAt: now,
+        }),
+      ),
+    );
+    await db.insert(sourceChangelogFiles).values({
+      id: "scf_empty",
+      sourceId: "src_zc",
+      path: "empty.md",
+      filename: "empty.md",
+      url: "https://github.com/zc/zc/blob/main/empty.md",
+      rawUrl: "https://raw.githubusercontent.com/zc/zc/main/empty.md",
+      content: "# 1.0.0",
+      contentHash: "empty",
+      bytes: 7,
+    });
+
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("https://x.test/v1/workflows/embed-changelogs", {
+        method: "POST",
+        body: JSON.stringify({ dryRun: true, limit: 1 }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      processed: number;
+      remaining: number;
+      dryRun: boolean;
+    };
+    expect(body.dryRun).toBe(true);
+    expect(body.processed).toBe(1);
+    expect(body.remaining).toBe(1);
   });
 
   it("503 when embedding provider is not configured and files need work", async () => {
