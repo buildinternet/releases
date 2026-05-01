@@ -16,11 +16,15 @@ evaluateRoutes.get("/evaluate", async (c) => {
     return c.json({ error: "missing_parameter", message: "url query parameter is required" }, 400);
   }
 
+  let parsed: URL;
   try {
-    // oxlint-disable-next-line no-new -- URL constructor is the standard way to validate URLs
-    new URL(url);
+    parsed = new URL(url);
   } catch {
     return c.json({ error: "invalid_parameter", message: "url must be a valid URL" }, 400);
+  }
+
+  if (parsed.protocol !== "https:") {
+    return c.json({ error: "bad_request", message: "URL must use https" }, 400);
   }
 
   const result = await evaluateChangelog(url);
