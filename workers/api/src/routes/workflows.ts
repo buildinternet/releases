@@ -38,8 +38,6 @@ import type { Env } from "../index.js";
 export const workflowsRoutes = new Hono<Env>();
 
 type TestBody = {
-  /** Override recipient; defaults to EMAIL_NOTIFY_TO. */
-  to?: string;
   /** Fabricated status for the sample cron report. */
   status?: CronReportStatus;
   /** Cron name to impersonate in the report. */
@@ -62,13 +60,18 @@ const VALID_STATUSES = new Set<CronReportStatus>([
 workflowsRoutes.post("/workflows/notifications-test", async (c) => {
   const body = await c.req.json<TestBody>().catch(() => ({}) as TestBody);
 
+  const target = c.env.EMAIL_NOTIFY_TO;
+  if (!target) {
+    return c.json({ error: "misconfigured", message: "EMAIL_NOTIFY_TO not configured" }, 400);
+  }
+
   if (body.plain) {
     const result = await sendEmail(c.env, {
       subject: body.subject ?? "[test] releases notifications",
       text:
         body.body ??
         "Test email from the releases API. If you got this, the send_email binding is wired correctly.",
-      to: body.to,
+      to: target,
     });
     return c.json({ ok: result.sent, result }, result.sent ? 200 : 202);
   }
@@ -105,7 +108,7 @@ workflowsRoutes.post("/workflows/notifications-test", async (c) => {
     adminBaseUrl: c.env.ADMIN_BASE_URL,
   };
 
-  const result = await sendCronReport(c.env, fabricated, body.to ? { to: body.to } : undefined);
+  const result = await sendCronReport(c.env, fabricated, { to: target });
   return c.json(
     {
       ok: "sent" in result && result.sent,
