@@ -145,6 +145,22 @@ describe("voyage", () => {
     expect(body.input[0].length).toBe(32_000);
   });
 
+  test("truncate doesn't leave a lone surrogate at the cut (regression: #626)", async () => {
+    const { fetchImpl, calls } = makeFakeFetch(() =>
+      jsonResponse({ data: [{ embedding: [1], index: 0 }] }),
+    );
+    // Place 🐛 (a surrogate pair) so that the high surrogate sits at index
+    // 31_999 and the low surrogate at index 32_000 — exactly straddling
+    // the truncate cut. Pre-fix, the truncated string ends with a lone
+    // high surrogate; post-fix, it must be a complete codepoint.
+    const long = "x".repeat(31_999) + "🐛" + "y".repeat(20_000);
+    await embedBatch([long], { provider: "voyage", apiKey: "k", fetchImpl });
+    const sent = parseBody(calls[0]).input[0] as string;
+    const lone = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    expect(lone.test(sent)).toBe(false);
+    expect(sent.length).toBe(31_999);
+  });
+
   test("retries on 429", async () => {
     const { fetchImpl, calls } = makeFakeFetch((_, i) => {
       if (i === 0) return new Response("rate limited", { status: 429 });
