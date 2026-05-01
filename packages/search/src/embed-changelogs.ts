@@ -52,6 +52,23 @@ function hashChunk(text: string): string {
 }
 
 /**
+ * Step `offset` backward by one if it lands inside a UTF-16 surrogate pair
+ * (i.e. `content[offset]` is a low surrogate). When used as a slice end,
+ * this drops the orphaned high surrogate sitting at offset-1; when used as
+ * a slice start, it pulls the preceding high surrogate back in. Either way
+ * the resulting boundary is always on a codepoint edge.
+ *
+ * Idempotent and deterministic, so chunk content hashes remain stable
+ * across runs whenever the same boundary is requested.
+ */
+function snapToCodepointBoundary(content: string, offset: number): number {
+  if (offset <= 0 || offset >= content.length) return offset;
+  const codeUnit = content.charCodeAt(offset);
+  if (codeUnit >= 0xdc00 && codeUnit <= 0xdfff) return offset - 1;
+  return offset;
+}
+
+/**
  * Best-effort heading lookup: scan lines from the start of the file and
  * return the most recent `#`/`##`/`###` heading whose line begins at or
  * before `offset`. Returns just the heading text (no leading hashes) or
@@ -106,7 +123,7 @@ export function chunkChangelog(content: string): Chunk[] {
     // 0). That gives us the heading-aligned end of the *previous* chunk and
     // the natural start of *this* one.
     let startOffset = slice.offset;
-    const snappedEnd = slice.offset + slice.content.length;
+    let snappedEnd = slice.offset + slice.content.length;
 
     // Overlap: for chunks after the first, physically extend the start
     // backward by CHUNK_CHAR_OVERLAP_STEP chars so the prior chunk's tail
@@ -120,6 +137,14 @@ export function chunkChangelog(content: string): Chunk[] {
       const prevStart = prev.offset;
       startOffset = Math.max(slice.offset - CHUNK_CHAR_OVERLAP_STEP, prevStart + 1);
     }
+
+    // String#slice indexes UTF-16 code units, so a back-step that lands on
+    // a low surrogate would yield a chunk whose first char is half a
+    // surrogate pair. JSON.stringify serializes that as `\uDxxx` — valid
+    // JSON but invalid UTF-8 to downstream embedding APIs (Voyage 400s the
+    // whole batch). Step the boundary onto a codepoint edge. See #626.
+    startOffset = snapToCodepointBoundary(content, startOffset);
+    snappedEnd = snapToCodepointBoundary(content, snappedEnd);
 
     const text = content.slice(startOffset, snappedEnd);
 

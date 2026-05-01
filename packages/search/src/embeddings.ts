@@ -94,7 +94,15 @@ export function resolveConfig(overrides: Partial<EmbeddingConfig> = {}): Embeddi
 }
 
 function truncate(text: string): string {
-  return text.length > MAX_INPUT_CHARS ? text.slice(0, MAX_INPUT_CHARS) : text;
+  if (text.length <= MAX_INPUT_CHARS) return text;
+  let cut = MAX_INPUT_CHARS;
+  // String#slice indexes UTF-16 code units; if the cut lands between a
+  // high and low surrogate, the trailing high surrogate becomes lone and
+  // JSON.stringify ships it as `\uDxxx` — which Voyage rejects as invalid
+  // UTF-8. Step the cut back one to keep the pair intact. See #626.
+  const trailingCodeUnit = text.charCodeAt(cut - 1);
+  if (trailingCodeUnit >= 0xd800 && trailingCodeUnit <= 0xdbff) cut -= 1;
+  return text.slice(0, cut);
 }
 
 async function sleep(ms: number): Promise<void> {

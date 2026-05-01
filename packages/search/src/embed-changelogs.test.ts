@@ -138,6 +138,79 @@ test("chunkChangelog: heading extraction reflects the most recent heading", () =
   expect(headings.some((h) => h === "Section A" || h === "Section B")).toBe(true);
 });
 
+// Lone surrogate detector: matches a high surrogate not followed by a low
+// surrogate, OR a low surrogate not preceded by a high surrogate. Either
+// indicates a UTF-16 code unit that JSON.stringify will serialize as
+// `\uDxxx` — syntactically valid JSON but invalid UTF-8 when decoded by a
+// downstream embedding API (e.g. Voyage rejects with HTTP 400). See #626.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
+test("chunkChangelog: emoji at chunk boundary does not produce lone surrogates (regression: #626)", () => {
+  // Emoji-heavy synthetic CHANGELOG. Every list item carries a run of 🐛
+  // (a non-BMP codepoint encoded as a UTF-16 surrogate pair) and the
+  // padding length cycles by `i % 7` so the chunker's char-indexed
+  // back-step lands on a different relative position per item. With this
+  // shape, the heading-snapped chunk start minus 200 chars reliably falls
+  // on a low surrogate. Pre-fix, four of six chunks begin with a lone
+  // low surrogate (`\uDC1B`); post-fix, every chunk must be valid UTF-16.
+  const sections: string[] = ["# Project Changelog", ""];
+  for (let s = 1; s <= 5; s++) {
+    sections.push(`## Section ${s}`);
+    sections.push("");
+    for (let i = 0; i < 40; i++) {
+      const pad = "🐛".repeat(20 + (i % 7));
+      sections.push(`- ${pad} entry ${s}.${i}`);
+    }
+    sections.push("");
+  }
+  const content = sections.join("\n");
+  const chunks = chunkChangelog(content);
+  expect(chunks.length).toBeGreaterThan(1);
+
+  const offenders: Array<{ offset: number; matches: number }> = [];
+  for (const chunk of chunks) {
+    LONE_SURROGATE.lastIndex = 0;
+    const matches = chunk.text.match(LONE_SURROGATE);
+    if (matches !== null) {
+      offenders.push({ offset: chunk.offset, matches: matches.length });
+    }
+  }
+  expect(offenders).toEqual([]);
+
+  // JSON.stringify round-trip must preserve every chunk verbatim. A lone
+  // surrogate survives JSON.stringify (as `\uDxxx`) and JSON.parse, so
+  // this is not the same assertion as the surrogate-pair check above —
+  // it pins the wire-level invariant that the embedding call relies on.
+  for (const chunk of chunks) {
+    const roundTripped = JSON.parse(JSON.stringify(chunk.text)) as string;
+    expect(roundTripped).toBe(chunk.text);
+  }
+});
+
+test("chunkChangelog: emoji-heavy content keeps content hashes stable across runs", () => {
+  // Codepoint-safe boundary snapping must be deterministic — the same
+  // input has to produce the same chunk hashes every run, otherwise the
+  // diffChunks fast-path treats every re-fetch as a churn event.
+  const sections: string[] = ["# Project Changelog", ""];
+  for (let s = 1; s <= 4; s++) {
+    sections.push(`## Section ${s}`);
+    sections.push("");
+    for (let i = 0; i < 30; i++) {
+      sections.push(`- 🐛 Item ${s}.${i} ${"🚀 word ".repeat(12)}`);
+    }
+    sections.push("");
+  }
+  const content = sections.join("\n");
+  const a = chunkChangelog(content);
+  const b = chunkChangelog(content);
+  expect(a.length).toBe(b.length);
+  for (let i = 0; i < a.length; i++) {
+    expect(a[i].contentHash).toBe(b[i].contentHash);
+    expect(a[i].offset).toBe(b[i].offset);
+    expect(a[i].length).toBe(b[i].length);
+  }
+});
+
 test("chunkChangelog: hash is deterministic across runs", () => {
   const content = buildLargeChangelog();
   const a = chunkChangelog(content);
