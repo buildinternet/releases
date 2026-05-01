@@ -575,9 +575,12 @@ function clampLimit(n: unknown): number {
   return Math.min(parsed, EMBED_BATCH_CAP);
 }
 
-function needsWork(r: { nullChunks: number | null; totalChunks: number | null }): boolean {
-  return Number(r.totalChunks ?? 0) === 0 || Number(r.nullChunks ?? 0) > 0;
-}
+// SQL fragment that mirrors the JS `needsWork(r)` predicate: a file
+// qualifies if it has zero chunks (never embedded) or any chunk with
+// `vector_id IS NULL` (embed crashed mid-upsert). Pushed into HAVING so
+// LIMIT only sees files that actually need work — without it, LIMIT can
+// return all-embedded files and starve the drain. See #624.
+const NEEDS_WORK_HAVING = sql`COUNT(${sourceChangelogChunks.id}) = 0 OR SUM(CASE WHEN ${sourceChangelogChunks.vectorId} IS NULL THEN 1 ELSE 0 END) > 0`;
 
 // ── POST /workflows/embed-releases ───────────────────────────────────────────
 
@@ -900,15 +903,15 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
   }
 
   // A file needs work if ANY of its chunks have `vector_id IS NULL`, or if
-  // it has zero chunks (never been embedded). We compute this via a LEFT
-  // JOIN + aggregate rather than a correlated subquery for D1 compatibility.
+  // it has zero chunks (never been embedded). The predicate runs in SQL
+  // via HAVING (NEEDS_WORK_HAVING) so LIMIT only counts qualifying files.
   const whereClause = fileConditions.length > 0 ? and(...fileConditions) : undefined;
   const baseSelect = {
     file: sourceChangelogFiles,
     nullChunks: sql<number>`SUM(CASE WHEN ${sourceChangelogChunks.vectorId} IS NULL THEN 1 ELSE 0 END)`,
     totalChunks: sql<number>`COUNT(${sourceChangelogChunks.id})`,
   };
-  const fileRows = await db
+  const todo = await db
     .select(baseSelect)
     .from(sourceChangelogFiles)
     .leftJoin(
@@ -917,12 +920,10 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
     )
     .where(whereClause)
     .groupBy(sourceChangelogFiles.id)
+    .having(NEEDS_WORK_HAVING)
     .limit(limit);
 
-  const todo = fileRows.filter(needsWork);
-
-  // Remaining: total files matching the filter that still need work.
-  // Cheap approximation — recompute the same predicate without the LIMIT.
+  // Remaining: total files that still need work (same predicate, no LIMIT).
   const allFileRows = await db
     .select(baseSelect)
     .from(sourceChangelogFiles)
@@ -931,16 +932,17 @@ workflowsRoutes.post("/workflows/embed-changelogs", async (c) => {
       eq(sourceChangelogChunks.sourceChangelogFileId, sourceChangelogFiles.id),
     )
     .where(whereClause)
-    .groupBy(sourceChangelogFiles.id);
+    .groupBy(sourceChangelogFiles.id)
+    .having(NEEDS_WORK_HAVING);
 
-  const remainingBefore = allFileRows.filter(needsWork).length;
+  const remainingBefore = allFileRows.length;
 
   if (todo.length === 0 || dryRun) {
     return c.json({
       processed: todo.length,
       succeeded: 0,
       failed: 0,
-      remaining: dryRun ? remainingBefore : 0,
+      remaining: remainingBefore,
       dryRun,
     });
   }
