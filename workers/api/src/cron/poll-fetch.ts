@@ -1327,9 +1327,10 @@ export async function applyOnDiff(
   const deleteOps = [];
   if (diff.toDelete.length > 0) {
     const ids = diff.toDelete.map((d) => d.id);
-    // D1 caps bound parameters per statement at 100; chunk the IN list.
-    for (let i = 0; i < ids.length; i += 100) {
-      const slice = ids.slice(i, i + 100);
+    // D1 caps bound parameters per statement at 100; RELEASES_ID_IN_CHUNK_SIZE
+    // (90) leaves headroom for the wrapping statement.
+    for (let i = 0; i < ids.length; i += RELEASES_ID_IN_CHUNK_SIZE) {
+      const slice = ids.slice(i, i + RELEASES_ID_IN_CHUNK_SIZE);
       deleteOps.push(
         db.delete(sourceChangelogChunks).where(inArray(sourceChangelogChunks.id, slice)),
       );
