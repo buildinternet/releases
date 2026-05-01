@@ -10,6 +10,7 @@
     "./errors": "./src/errors.ts",
     "./logger": "./src/logger.ts",
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
+    "./prompt-escape": "./src/prompt-escape.ts",
     "./source-edit": "./src/source-edit.ts"
   },
   "dependencies": {

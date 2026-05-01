@@ -17,6 +17,7 @@ import {
   classifyMaRateLimitError,
   buildMaRateLimitErrorMessage,
 } from "@releases/lib/ma-rate-limit.js";
+import { escapeForPromptTag } from "@releases/lib/prompt-escape.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
 import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.js";
@@ -304,19 +305,36 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
       let prompt: string;
       if (mode === "update") {
-        const idList = (params.sourceIdentifiers ?? []).map((s) => `- ${s}`).join("\n");
+        const idList = (params.sourceIdentifiers ?? [])
+          .map((s) => `- ${escapeForPromptTag(s)}`)
+          .join("\n");
         const playbookBlock = await this.loadPlaybookBlock(fetcher, releasesApiKey, params.orgId);
-        prompt = `Fetch release updates for "${params.company}".${playbookBlock}\n\nSources to fetch:\n${idList}\n\nCall manage_source(action=fetch) for each source using the source ID as the \`identifier\` parameter (e.g. \`{"action": "fetch", "identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.`;
+        prompt = `<task>
+Fetch release updates for the company described in <company>.
+Sources to fetch are listed in <sources>.
+Call manage_source(action=fetch) for each source using the source ID as the \`identifier\` parameter (e.g. \`{"action": "fetch", "identifier": "src_abc123"}\`). Report the total releases found and any errors. Do NOT add, remove, or modify sources — only fetch.
+</task>
+
+<company>${escapeForPromptTag(params.company)}</company>
+<sources>
+${idList}
+</sources>${playbookBlock}`;
       } else {
         const systemContext = buildDiscoverySystemPrompt({
           evaluateAvailable: false,
           categories: CATEGORIES,
         });
-        const hints: string[] = [];
-        if (params.domain) hints.push(`Their website is ${params.domain}.`);
-        if (params.githubOrg) hints.push(`Their GitHub organization is ${params.githubOrg}.`);
-        const hintStr = hints.length > 0 ? " " + hints.join(" ") : "";
-        prompt = `${systemContext}\n\n---\n\nFind and evaluate changelog sources for "${params.company}".${hintStr}`;
+        const domainBlock = params.domain
+          ? `\n<domain>${escapeForPromptTag(params.domain)}</domain>`
+          : "";
+        const githubOrgBlock = params.githubOrg
+          ? `\n<github_org>${escapeForPromptTag(params.githubOrg)}</github_org>`
+          : "";
+        prompt = `${systemContext}\n\n---\n\n<task>
+Find and evaluate changelog sources for the company described in <company>.${domainBlock ? " Their website domain is in <domain>." : ""}${githubOrgBlock ? " Their GitHub organization is in <github_org>." : ""}
+</task>
+
+<company>${escapeForPromptTag(params.company)}</company>${domainBlock}${githubOrgBlock}`;
       }
 
       const stream = await (client.beta.sessions.events as any).stream(session.id);
