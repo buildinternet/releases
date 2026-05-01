@@ -132,10 +132,6 @@ export async function mockModule(
   // Resolve the specifier to an absolute filesystem path.
   const resolvedPath = tryResolve(path, fromDir);
 
-  // Capture the factory's keys up front.
-  const factoryResult = factory();
-  const factoryKeys = new Set(Object.keys(factoryResult));
-
   if (resolvedPath === null) {
     // Specifier is un-resolvable in this environment (e.g. cloudflare:workers).
     // Skip the completeness check and call mock.module with the original path.
@@ -158,6 +154,12 @@ export async function mockModule(
   if (realKeys.size === 0) {
     return mock.module(resolvedPath, factory);
   }
+
+  // Capture the factory's keys only when we're actually going to compare —
+  // factories may have side effects, and `mock.module` will invoke the factory
+  // again when it registers the mock. Pre-invoking on skip-validation paths
+  // would double-fire those side effects.
+  const factoryKeys = new Set(Object.keys(factory()));
 
   // Exclude `default` when it's present on only one side — TS/CJS interop quirk.
   const onlyInReal = !factoryKeys.has("default") && realKeys.has("default");
