@@ -1,4 +1,5 @@
-import { describe, it, expect, mock, beforeEach } from "bun:test";
+import { describe, it, expect, beforeEach } from "bun:test";
+import { mockModule } from "../../../tests/mock-module.ts";
 
 type FakeSub = {
   id: string;
@@ -24,69 +25,69 @@ const queueMessages: unknown[] = [];
 
 // Stub the worker-local query module so the route exercises real validation/
 // signing logic against an in-memory store, without standing up a D1 fake.
-mock.module("../src/webhooks/queries.js", () => ({
-  insertWebhookSubscription: async (
-    _db: unknown,
-    input: { orgId: string; url: string; sourceId: string | null; description: string | null },
-  ) => {
-    const row: FakeSub = {
-      id: `whk_test${String(nextId++).padStart(4, "0")}`,
-      orgId: input.orgId,
-      url: input.url,
-      sourceId: input.sourceId,
-      description: input.description,
-      enabled: true,
-      secretVersion: 1,
-      createdAt: new Date().toISOString(),
-      lastSuccessAt: null,
-      lastErrorAt: null,
-      lastErrorMsg: null,
-      consecutiveFailures: 0,
-      disabledReason: null,
-    };
-    store.push(row);
-    return row;
-  },
-  getWebhookSubscriptionById: async (_db: unknown, id: string) =>
-    store.find((s) => s.id === id) ?? null,
-  listWebhookSubscriptionsByOrg: async (
-    _db: unknown,
-    orgId: string,
-    opts?: { enabledOnly?: boolean },
-  ) => store.filter((s) => s.orgId === orgId && (!opts?.enabledOnly || s.enabled)),
-  updateWebhookSubscription: async (
-    _db: unknown,
-    id: string,
-    updates: Partial<{
-      url: string;
-      description: string | null;
-      enabled: boolean;
-      disabledReason: string | null;
-      consecutiveFailures: number;
-    }>,
-  ) => {
-    const idx = store.findIndex((s) => s.id === id);
-    if (idx === -1) return null;
-    Object.assign(store[idx], updates);
-    return { ...store[idx] };
-  },
-  deleteWebhookSubscription: async (_db: unknown, id: string) => {
-    const idx = store.findIndex((s) => s.id === id);
-    if (idx !== -1) store.splice(idx, 1);
-  },
-  bumpWebhookSecretVersion: async (_db: unknown, id: string) => {
-    const sub = store.find((s) => s.id === id);
-    if (!sub) return null;
-    sub.secretVersion += 1;
-    return sub.secretVersion;
-  },
-  // Included so this mock doesn't strip the export. Bun's mock.module is
-  // process-global; if a later test file imports queries.ts and finds this
-  // export missing, it dies with "Export named 'matchWebhookSubscriptions'
-  // not found in module …/webhooks/queries.ts".
-  matchWebhookSubscriptions: async (_db: unknown, orgIds: string[]) =>
-    orgIds.length === 0 ? [] : store.filter((s) => s.enabled && orgIds.includes(s.orgId)),
-}));
+await mockModule(
+  "../src/webhooks/queries.js",
+  () => ({
+    insertWebhookSubscription: async (
+      _db: unknown,
+      input: { orgId: string; url: string; sourceId: string | null; description: string | null },
+    ) => {
+      const row: FakeSub = {
+        id: `whk_test${String(nextId++).padStart(4, "0")}`,
+        orgId: input.orgId,
+        url: input.url,
+        sourceId: input.sourceId,
+        description: input.description,
+        enabled: true,
+        secretVersion: 1,
+        createdAt: new Date().toISOString(),
+        lastSuccessAt: null,
+        lastErrorAt: null,
+        lastErrorMsg: null,
+        consecutiveFailures: 0,
+        disabledReason: null,
+      };
+      store.push(row);
+      return row;
+    },
+    getWebhookSubscriptionById: async (_db: unknown, id: string) =>
+      store.find((s) => s.id === id) ?? null,
+    listWebhookSubscriptionsByOrg: async (
+      _db: unknown,
+      orgId: string,
+      opts?: { enabledOnly?: boolean },
+    ) => store.filter((s) => s.orgId === orgId && (!opts?.enabledOnly || s.enabled)),
+    updateWebhookSubscription: async (
+      _db: unknown,
+      id: string,
+      updates: Partial<{
+        url: string;
+        description: string | null;
+        enabled: boolean;
+        disabledReason: string | null;
+        consecutiveFailures: number;
+      }>,
+    ) => {
+      const idx = store.findIndex((s) => s.id === id);
+      if (idx === -1) return null;
+      Object.assign(store[idx], updates);
+      return { ...store[idx] };
+    },
+    deleteWebhookSubscription: async (_db: unknown, id: string) => {
+      const idx = store.findIndex((s) => s.id === id);
+      if (idx !== -1) store.splice(idx, 1);
+    },
+    bumpWebhookSecretVersion: async (_db: unknown, id: string) => {
+      const sub = store.find((s) => s.id === id);
+      if (!sub) return null;
+      sub.secretVersion += 1;
+      return sub.secretVersion;
+    },
+    matchWebhookSubscriptions: async (_db: unknown, orgIds: string[]) =>
+      orgIds.length === 0 ? [] : store.filter((s) => s.enabled && orgIds.includes(s.orgId)),
+  }),
+  import.meta.url,
+);
 
 // Imports must follow mock.module so the route picks up the stub.
 const { Hono } = await import("hono");
