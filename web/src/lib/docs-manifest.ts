@@ -27,6 +27,7 @@ type Seed = Pick<DocEntry, "slug" | "section" | "label">;
 const ENTRIES: readonly Seed[] = [
   { slug: "index", section: "Getting Started", label: "Overview" },
   { slug: "installation", section: "Getting Started", label: "Installation" },
+  { slug: "skills", section: "Getting Started", label: "Skills" },
   { slug: "examples", section: "Getting Started", label: "Examples" },
 
   { slug: "cli/browsing", section: "CLI", label: "Browsing & Search" },
