@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { desc, eq } from "drizzle-orm";
+import { desc, eq, sql } from "drizzle-orm";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
@@ -84,6 +84,20 @@ export async function runLookup(
 ): Promise<LookupResponse> {
   const coordinate = `${parsed.org}/${parsed.repo}`;
   const url = `https://github.com/${coordinate}`;
+  // GitHub paths are case-insensitive on redirect, so dedup existing rows
+  // case-insensitively. (The neg-cache helpers already case-fold their
+  // keys, so they take `coordinate` as-is.) `sources.url` is NOT unique,
+  // so when multiple case-variant rows exist we pick deterministically:
+  // exact-case match first, then oldest createdAt as a stable
+  // tie-breaker.
+  const urlLower = url.toLowerCase();
+  const findExistingSource = () =>
+    db
+      .select()
+      .from(sources)
+      .where(sql`LOWER(${sources.url}) = ${urlLower}`)
+      .orderBy(sql`CASE WHEN ${sources.url} = ${url} THEN 0 ELSE 1 END`, sources.createdAt)
+      .limit(1);
   const githubToken = await env.GITHUB_TOKEN?.get();
 
   // Check neg-cache before hitting DB or GitHub.
@@ -97,7 +111,7 @@ export async function runLookup(
 
   // Source already indexed → return it (unless it's an empty stub, which
   // should be re-probed in case the repo has since gained releases).
-  const existing = await db.select().from(sources).where(eq(sources.url, url)).limit(1);
+  const existing = await findExistingSource();
   let existingStub: typeof sources.$inferSelect | undefined;
   if (existing.length > 0) {
     const source = existing[0]!;
@@ -209,7 +223,7 @@ export async function runLookup(
     for (let attempt = 0; attempt < 5; attempt++) {
       if (attempt > 0) {
         // oxlint-disable-next-line no-await-in-loop -- race re-check before next slug
-        const concurrent = await db.select().from(sources).where(eq(sources.url, url)).limit(1);
+        const concurrent = await findExistingSource();
         if (concurrent.length > 0) {
           insertedSource = concurrent[0]!;
           sourceId = insertedSource.id;
@@ -243,7 +257,7 @@ export async function runLookup(
 
     // If all slug attempts collided, fall back to reading the existing row.
     if (!insertedSource) {
-      const rows = await db.select().from(sources).where(eq(sources.url, url)).limit(1);
+      const rows = await findExistingSource();
       if (rows.length > 0) {
         const existingReleases = await db
           .select()

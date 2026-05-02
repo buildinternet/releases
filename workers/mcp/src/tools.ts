@@ -19,6 +19,7 @@ import {
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
+import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import {
   buildChangelogResponse,
@@ -328,7 +329,7 @@ export async function searchReleases(
     FROM releases_fts
     JOIN releases r ON r.rowid = releases_fts.rowid
     JOIN sources s ON s.id = r.source_id
-    WHERE releases_fts MATCH ${params.query}
+    WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       ${includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`}
@@ -1549,7 +1550,7 @@ export async function search(
           FROM releases_fts
           JOIN releases r ON r.rowid = releases_fts.rowid
           JOIN sources s ON s.id = r.source_id
-          WHERE releases_fts MATCH ${params.query}
+          WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
             AND (r.suppressed IS NULL OR r.suppressed = 0)
             AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
             ${includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`}

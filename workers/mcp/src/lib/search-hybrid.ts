@@ -7,6 +7,7 @@
  */
 
 import { sql, inArray } from "drizzle-orm";
+import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import {
   sources,
   organizations,
@@ -124,7 +125,7 @@ async function ftsReleaseIds(
       FROM releases_fts
       JOIN releases r ON r.rowid = releases_fts.rowid
       JOIN sources s ON s.id = r.source_id
-      WHERE releases_fts MATCH ${query}
+      WHERE releases_fts MATCH ${toFtsMatchQuery(query)}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
         ${coverageCondition(opts.includeCoverage)}
