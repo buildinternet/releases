@@ -13,7 +13,7 @@ function isStale(isoDate: string | null | undefined): boolean {
   return ageDays > STALE_AFTER_DAYS;
 }
 
-interface SidebarItem {
+export interface SidebarItem {
   label: string;
   value: ReactNode;
   large?: boolean;
@@ -22,7 +22,7 @@ interface SidebarItem {
   externalLink?: string;
   tooltip?: string;
 }
-interface SidebarSection {
+export interface SidebarSection {
   items: SidebarItem[];
 }
 interface SidebarProps {

@@ -1,5 +1,5 @@
-import { asc, desc, sql, type Column, type SQL } from "drizzle-orm";
-import { sources, releases } from "@buildinternet/releases-core/schema";
+import { asc, desc, ne, or, sql, type Column, type SQL } from "drizzle-orm";
+import { sources, releases, organizations } from "@buildinternet/releases-core/schema";
 
 /**
  * Returns `[col IS NULL, col ASC|DESC]` — a two-key ORDER BY that sinks NULLs
@@ -17,6 +17,12 @@ export const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.s
 
 /** Exclude coverage-side releases — use as a bare Drizzle condition via `and(notCoverage, ...)`. */
 export const notCoverage = sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`;
+
+/** Exclude on-demand orgs (anonymous lookup-materialized rows) from public catalog views. */
+export const orgNotOnDemand = or(
+  ne(organizations.discovery, "on_demand"),
+  sql`${organizations.discovery} IS NULL`,
+);
 
 /** Common row type for source list items with release stats */
 export type SourceWithStats = {

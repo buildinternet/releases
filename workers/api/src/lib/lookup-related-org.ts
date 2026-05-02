@@ -1,5 +1,6 @@
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
+import { orgNotOnDemand } from "../queries/shared.js";
 import type { createDb } from "../db.js";
 
 type Db = ReturnType<typeof createDb>;
@@ -38,12 +39,7 @@ export async function resolveRelatedOrg(
     })
     .from(organizations)
     .innerJoin(sources, eq(sources.orgId, organizations.id))
-    .where(
-      and(
-        sql`${sources.url} LIKE ${urlPattern} ESCAPE '\\'`,
-        or(ne(organizations.discovery, "on_demand"), sql`${organizations.discovery} IS NULL`),
-      ),
-    )
+    .where(and(sql`${sources.url} LIKE ${urlPattern} ESCAPE '\\'`, orgNotOnDemand))
     .limit(2);
 
   let candidates = orgsByUrl;
@@ -53,12 +49,7 @@ export async function resolveRelatedOrg(
     const exactSlugMatches = await db
       .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
       .from(organizations)
-      .where(
-        and(
-          eq(organizations.slug, orgSegment),
-          or(ne(organizations.discovery, "on_demand"), sql`${organizations.discovery} IS NULL`),
-        ),
-      )
+      .where(and(eq(organizations.slug, orgSegment), orgNotOnDemand))
       .limit(2);
     candidates = exactSlugMatches;
   }

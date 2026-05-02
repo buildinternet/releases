@@ -16,6 +16,7 @@ import { PlaybookView } from "@/components/playbook-view";
 import { OrgFetchLogView } from "@/components/org-fetch-log-view";
 import { SourceTable } from "@/components/source-table";
 import { CliCommand } from "@/components/cli-command";
+import { taxonomySidebarSections } from "@/components/taxonomy-chips";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
 
@@ -121,6 +122,7 @@ export default async function OrgPage({
         { label: "Tracking Since", value: formatDate(org.trackingSince) },
       ],
     },
+    ...taxonomySidebarSections({ category: org.category, tags: org.tags }),
   ];
 
   const orgUrl = `https://releases.sh/${orgSlug}`;

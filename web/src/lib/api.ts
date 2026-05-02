@@ -18,6 +18,8 @@ import type {
   SitemapPayload,
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
+  CategoryDetail,
+  TagDetail,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 
@@ -57,6 +59,8 @@ export type {
   SitemapPayload,
   ReleaseCoverageRow,
   ReleaseCoverageResponse,
+  CategoryDetail,
+  TagDetail,
 };
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
@@ -206,6 +210,8 @@ export const api = {
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`, { cache: "no-store" }),
   sourceHeatmap: (slug: string) => fetchApi<SourceHeatmap>(`/v1/sources/${slug}/heatmap`),
   productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
+  categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
+  tagDetail: (slug: string) => fetchApi<TagDetail>(`/v1/tags/${slug}`),
   sourceChangelog: (slug: string, range?: { path?: string; offset?: number; limit?: number }) => {
     const params = new URLSearchParams();
     if (range?.path !== undefined) params.set("path", range.path);
