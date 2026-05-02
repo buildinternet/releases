@@ -84,17 +84,23 @@ import (
     "crypto/sha256"
     "encoding/hex"
     "fmt"
-    "math"
     "strconv"
     "time"
 )
 
 func verify(secret, timestamp, body, sig string) bool {
     ts, err := strconv.ParseInt(timestamp, 10, 64)
-    if err != nil || math.Abs(float64(time.Now().Unix()-ts)) > 300 {
+    if err != nil {
         return false
     }
-    key, _ := hex.DecodeString(secret)
+    diff := time.Now().Unix() - ts
+    if diff < -300 || diff > 300 {
+        return false
+    }
+    key, err := hex.DecodeString(secret)
+    if err != nil {
+        return false
+    }
     m := hmac.New(sha256.New, key)
     m.Write([]byte(fmt.Sprintf("%d.%s", ts, body)))
     expected := "sha256=" + hex.EncodeToString(m.Sum(nil))
