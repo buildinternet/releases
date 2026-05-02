@@ -215,6 +215,7 @@ const publicReadRoutes = [
   "releases",
   "products",
   "tags",
+  "categories",
   "related",
   "sitemap",
 ];

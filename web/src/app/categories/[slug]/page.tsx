@@ -68,7 +68,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
           {title}
         </h1>
         <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-          Organizations and products tagged <span className="font-medium">{detail.slug}</span>.
+          Organizations and products in category <span className="font-medium">{title}</span>.
         </p>
 
         <TaxonomyList orgs={detail.orgs} products={detail.products} />
