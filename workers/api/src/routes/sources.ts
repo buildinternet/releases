@@ -1129,6 +1129,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     orgId: src.orgId,
     org,
     isPrimary: src.isPrimary ?? false,
+    isHidden: Boolean(src.isHidden),
     metadata: src.metadata ?? "{}",
     releaseCount: totalItems,
     releasesLast30Days,

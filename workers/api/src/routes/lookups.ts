@@ -201,14 +201,20 @@ export async function runLookup(
     if (relatedOrg) {
       orgId = relatedOrg.org.id;
     } else {
+      // Org slug is always lowercased — keeps URLs canonical regardless of
+      // the case the user typed in `org/repo`, and matches the convention
+      // curated orgs already follow. The org *name* prefers the canonical
+      // login from the GitHub probe (e.g. `Shopify`) over the typed case.
+      const orgSlug = parsed.org.toLowerCase();
+      const orgName = probe.ownerLogin ?? parsed.org;
       // Upsert org to avoid TOCTOU race under concurrent requests.
       orgId = newOrgId();
       await db
         .insert(organizations)
         .values({
           id: orgId,
-          name: parsed.org,
-          slug: parsed.org,
+          name: orgName,
+          slug: orgSlug,
           discovery: "on_demand",
         })
         .onConflictDoNothing();
@@ -219,13 +225,17 @@ export async function runLookup(
       const [winningOrg] = await db
         .select()
         .from(organizationsActive)
-        .where(eq(organizationsActive.slug, parsed.org))
+        .where(eq(organizationsActive.slug, orgSlug))
         .limit(1);
       orgId = winningOrg!.id;
     }
 
     sourceId = newSourceId();
-    const baseSlug = `${parsed.org}-${parsed.repo}`.toLowerCase();
+    // Slug by repo segment only — `/shopify/toxiproxy` reads cleaner than
+    // `/shopify/shopify-toxiproxy`. The retry loop below handles the rare
+    // case where two repos in the same org slug to the same value.
+    const repoSlug = parsed.repo.toLowerCase();
+    const repoName = probe.repoName ?? parsed.repo;
 
     // Handle slug collision on source insert (try base, then base-2 … base-5).
     // Between retries we re-check by URL so a concurrent request that won the
@@ -242,14 +252,14 @@ export async function runLookup(
           break;
         }
       }
-      const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+      const slug = attempt === 0 ? repoSlug : `${repoSlug}-${attempt + 1}`;
       try {
         // oxlint-disable-next-line no-await-in-loop -- sequential retry on slug collision
         const [row] = await db
           .insert(sources)
           .values({
             id: sourceId,
-            name: coordinate,
+            name: repoName,
             slug,
             type: "github",
             url,

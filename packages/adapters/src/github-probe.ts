@@ -22,6 +22,11 @@ export interface ProbeResult {
   hasReleases: boolean;
   hasChangelog: boolean;
   defaultBranch: string | null;
+  // Canonical case as GitHub stores them — used by the on-demand lookup
+  // path to set org `name` and source `name` regardless of the case the
+  // user typed in the coordinate. Null when the repo was not found.
+  ownerLogin: string | null;
+  repoName: string | null;
 }
 
 export class ProbeRateLimitError extends Error {
@@ -85,9 +90,18 @@ export async function probeRepo(env: ProbeEnv, owner: string, repo: string): Pro
       hasReleases: false,
       hasChangelog: false,
       defaultBranch: null,
+      ownerLogin: null,
+      repoName: null,
     };
   }
-  const repoBody = (await repoRes.json()) as { archived?: boolean; default_branch?: string };
+  const repoBody = (await repoRes.json()) as {
+    archived?: boolean;
+    default_branch?: string;
+    name?: string;
+    owner?: { login?: string };
+  };
+  const ownerLogin = repoBody.owner?.login ?? null;
+  const repoName = repoBody.name ?? null;
 
   // Skip the releases + CHANGELOG calls when the repo is archived. The
   // caller already treats archived as a not_found-equivalent, so the extra
@@ -100,6 +114,8 @@ export async function probeRepo(env: ProbeEnv, owner: string, repo: string): Pro
       hasReleases: false,
       hasChangelog: false,
       defaultBranch: repoBody.default_branch ?? null,
+      ownerLogin,
+      repoName,
     };
   }
 
@@ -116,5 +132,7 @@ export async function probeRepo(env: ProbeEnv, owner: string, repo: string): Pro
     hasReleases: Array.isArray(releasesBody) && releasesBody.length > 0,
     hasChangelog: changelogRes.status === 200,
     defaultBranch: repoBody.default_branch ?? null,
+    ownerLogin,
+    repoName,
   };
 }

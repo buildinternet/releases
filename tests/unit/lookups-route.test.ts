@@ -216,11 +216,21 @@ describe("POST /v1/lookups", () => {
   });
 
   test("indexed path: creates org, source, ingests releases", async () => {
+    // User types mixed-case "ACME/FOO" but GitHub returns canonical
+    // owner.login + repo.name. We assert the lookup uses the canonical
+    // case for display names, lowercases the org slug, and slugs the
+    // source by repo segment only (no `acme-foo` prefix).
     mockFetch((url) => {
-      if (url.endsWith("/repos/acme/foo")) {
-        return new Response(JSON.stringify({ archived: false, default_branch: "main" }), {
-          status: 200,
-        });
+      if (url.toLowerCase().endsWith("/repos/acme/foo")) {
+        return new Response(
+          JSON.stringify({
+            archived: false,
+            default_branch: "main",
+            name: "Foo",
+            owner: { login: "Acme" },
+          }),
+          { status: 200 },
+        );
       }
       if (url.endsWith("/releases?per_page=1")) {
         return new Response(JSON.stringify([{ id: 1 }]), { status: 200 });
@@ -237,7 +247,7 @@ describe("POST /v1/lookups", () => {
               tag_name: "v1.0.0",
               name: "v1.0.0",
               body: "first release",
-              html_url: "https://github.com/acme/foo/releases/tag/v1.0.0",
+              html_url: "https://github.com/Acme/Foo/releases/tag/v1.0.0",
               published_at: "2026-04-01T00:00:00Z",
             },
           ]),
@@ -248,20 +258,27 @@ describe("POST /v1/lookups", () => {
     });
 
     const env = makeEnv(makeKv());
-    const res = await callRoute(env, { provider: "github", coordinate: "acme/foo" });
+    const res = await callRoute(env, { provider: "github", coordinate: "ACME/FOO" });
     expect(res.status).toBe(200);
     const body = (await res.json()) as {
       status: string;
-      source: { discovery: string };
+      source: { discovery: string; name: string; slug: string };
       releases: Array<{ version: string }>;
     };
     expect(body.status).toBe("indexed");
     expect(body.source.discovery).toBe("on_demand");
+    // Canonical repo name from the probe, not the user-typed "FOO".
+    expect(body.source.name).toBe("Foo");
+    // Slug is the repo segment only — `/acme/foo`, not `/acme/acme-foo`.
+    expect(body.source.slug).toBe("foo");
     expect(body.releases.length).toBeGreaterThan(0);
 
+    // Org slug is lowercased; org name uses the canonical owner.login
+    // even though the user typed "ACME".
     const orgs = await testDb.db.select().from(organizations).where(eq(organizations.slug, "acme"));
     expect(orgs).toHaveLength(1);
     expect(orgs[0]?.discovery).toBe("on_demand");
+    expect(orgs[0]?.name).toBe("Acme");
   });
 
   test("empty stub gets promoted to indexed when repo gains releases", async () => {

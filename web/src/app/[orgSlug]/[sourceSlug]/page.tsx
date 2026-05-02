@@ -8,6 +8,7 @@ import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
+import { StateBadge, HIDDEN_BADGE } from "@/components/source-table";
 import { SourceMainContent } from "@/components/source-main-content";
 import { RelatedRail } from "@/components/related-rail";
 import { Suspense } from "react";
@@ -224,6 +225,7 @@ export default async function SourcePage({
             {source.name}
           </h1>
           <SourceTypeIcon type={source.type} size={18} />
+          {source.isHidden && <StateBadge label={HIDDEN_BADGE.label} title={HIDDEN_BADGE.title} />}
         </div>
         <CliCommand identifier={source.slug} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">
