@@ -110,8 +110,14 @@ export async function verifyWithReplayGuard(args: {
   now?: number;
   maxSkewSeconds?: number;
 }): Promise<ReplayGuardResult> {
-  const ts = parseInt(args.timestampHeader, 10);
-  if (!Number.isFinite(ts)) return { valid: false, reason: "invalid_timestamp" };
+  // Strict integer match — parseInt would silently accept "1700000000junk"
+  // and parse just the prefix, which would let a tampered header pass the
+  // window check.
+  if (!/^-?\d+$/.test(args.timestampHeader)) {
+    return { valid: false, reason: "invalid_timestamp" };
+  }
+  const ts = Number(args.timestampHeader);
+  if (!Number.isSafeInteger(ts)) return { valid: false, reason: "invalid_timestamp" };
 
   const nowSec = Math.floor((args.now ?? Date.now()) / 1000);
   const maxSkew = args.maxSkewSeconds ?? MAX_TIMESTAMP_SKEW_SECONDS;

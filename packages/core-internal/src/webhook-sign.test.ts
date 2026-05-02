@@ -124,6 +124,20 @@ describe("verifyWithReplayGuard", () => {
     ).toEqual({ valid: false, reason: "invalid_timestamp" });
   });
 
+  it("numeric-prefix timestamp ('1700000000junk') → invalid_timestamp (parseInt would silently accept the prefix)", async () => {
+    const key = await deriveSigningKey(master, "whk_test", 1);
+    const sig = await signPayload(key, nowSec, body);
+    expect(
+      await verifyWithReplayGuard({
+        rawBody: body,
+        signingKeyHex: key,
+        signatureHeader: sig,
+        timestampHeader: `${nowSec}junk`,
+        now: nowMs,
+      }),
+    ).toEqual({ valid: false, reason: "invalid_timestamp" });
+  });
+
   it("custom maxSkewSeconds: 10 rejects 30 sec skew that would pass the default", async () => {
     const args = await makeArgs(30, { maxSkewSeconds: 10 });
     expect(await verifyWithReplayGuard(args)).toEqual({

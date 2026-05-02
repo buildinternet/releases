@@ -40,12 +40,15 @@ Respond `2xx` within 10 seconds to ack. Anything else triggers retry (5xx) or te
 import crypto from "node:crypto";
 
 function verify(secret, timestamp, body, signature, now = Math.floor(Date.now() / 1000)) {
-  const ts = parseInt(timestamp, 10);
-  if (!Number.isFinite(ts) || Math.abs(now - ts) > 300) return false;
+  if (!/^\d+$/.test(timestamp)) return false;
+  const ts = Number(timestamp);
+  if (!Number.isSafeInteger(ts) || Math.abs(now - ts) > 300) return false;
   const expected =
     "sha256=" +
     crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(`${ts}.${body}`).digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 ```
 
@@ -55,8 +58,12 @@ function verify(secret, timestamp, body, signature, now = Math.floor(Date.now() 
 import hmac, hashlib, time
 
 def verify(secret, timestamp, body, signature, now=None):
-    now = now or int(time.time())
-    ts = int(timestamp)
+    if now is None:
+        now = int(time.time())
+    try:
+        ts = int(timestamp)
+    except (TypeError, ValueError):
+        return False
     if abs(now - ts) > 300:
         return False
     expected = "sha256=" + hmac.new(
