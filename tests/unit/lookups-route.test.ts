@@ -103,6 +103,34 @@ describe("POST /v1/lookups", () => {
     expect(body.source.id).toBe("src_existing");
   });
 
+  test("matches an existing source case-insensitively", async () => {
+    // Existing row stored with canonical case (Shopify/toxiproxy). User
+    // types it lowercased — should still resolve to the same source row,
+    // not insert a duplicate.
+    await testDb.db.insert(organizations).values({
+      id: "org_shopify",
+      name: "Shopify",
+      slug: "shopify",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_canonical",
+      name: "Shopify/toxiproxy",
+      slug: "shopify-toxiproxy",
+      type: "github",
+      url: "https://github.com/Shopify/toxiproxy",
+      orgId: "org_shopify",
+      discovery: "curated",
+    });
+
+    const env = makeEnv(makeKv());
+    const res = await callRoute(env, { provider: "github", coordinate: "shopify/TOXIPROXY" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; source: { id: string } };
+    expect(body.status).toBe("existing");
+    expect(body.source.id).toBe("src_canonical");
+  });
+
   test("returns not_found and writes neg-cache on 404 from GitHub", async () => {
     mockFetch(() => new Response("", { status: 404 }));
     const kv = makeKv();

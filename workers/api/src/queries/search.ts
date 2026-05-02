@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import type { D1Db } from "../db.js";
 import type {
   SearchOrgHit,
@@ -92,6 +93,7 @@ export async function searchReleasesFts(
   offset: number,
   opts: { includeCoverage?: boolean } = {},
 ): Promise<RawSearchReleaseRow[]> {
+  const ftsQuery = toFtsMatchQuery(query);
   return db.all<RawSearchReleaseRow>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
            o.slug as orgSlug, o.name as orgName,
@@ -104,7 +106,7 @@ export async function searchReleasesFts(
     JOIN releases r ON r.rowid = releases_fts.rowid
     JOIN sources s ON s.id = r.source_id
     LEFT JOIN organizations o ON o.id = s.org_id
-    WHERE releases_fts MATCH ${query}
+    WHERE releases_fts MATCH ${ftsQuery}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       ${coverageCondition(opts.includeCoverage)}

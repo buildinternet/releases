@@ -75,4 +75,37 @@ describe("parseCoordinate", () => {
       repo: "repo",
     });
   });
+
+  test("accepts the optional `github:` prefix", () => {
+    expect(parseCoordinate("github:acme/repo")).toEqual({
+      provider: "github",
+      org: "acme",
+      repo: "repo",
+    });
+  });
+
+  test("accepts case-variant `GitHub:` prefix (case-insensitive)", () => {
+    expect(parseCoordinate("GitHub:acme/repo")).toEqual({
+      provider: "github",
+      org: "acme",
+      repo: "repo",
+    });
+  });
+
+  test("preserves the user's case in org and repo segments", () => {
+    expect(parseCoordinate("Shopify/Toxiproxy")).toEqual({
+      provider: "github",
+      org: "Shopify",
+      repo: "Toxiproxy",
+    });
+  });
+
+  test("returns null for unsupported provider prefixes", () => {
+    expect(parseCoordinate("npm:acme/repo")).toBeNull();
+    expect(parseCoordinate("gitlab:acme/repo")).toBeNull();
+  });
+
+  test("returns null for an empty provider prefix", () => {
+    expect(parseCoordinate(":acme/repo")).toBeNull();
+  });
 });
