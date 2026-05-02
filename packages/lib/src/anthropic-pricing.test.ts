@@ -92,6 +92,25 @@ describe("estimateCost", () => {
     expect(ANTHROPIC_PRICING["claude-haiku-4-5"]).toBeDefined();
   });
 
+  it("coerces malformed token counts (NaN, negative, non-number) to zero", () => {
+    const cost = estimateCost(
+      {
+        inputTokens: Number.NaN,
+        cacheWriteTokens: -100,
+        cacheReadTokens: undefined,
+        outputTokens: "1000" as unknown as number,
+      },
+      "claude-sonnet-4-6",
+    );
+    expect(cost).toEqual({
+      inputUsd: 0,
+      cacheWriteUsd: 0,
+      cacheReadUsd: 0,
+      outputUsd: 0,
+      totalUsd: 0,
+    });
+  });
+
   it("normalizes dated model snapshots to their base alias", () => {
     // The Anthropic API returns dated snapshots like `claude-haiku-4-5-20251001`
     // even when a session was created against the alias. Both forms must price.

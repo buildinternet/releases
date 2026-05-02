@@ -357,7 +357,13 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     } else if (msg.type === "session:complete") {
       setSessions((prev) =>
         prev.map((s) =>
-          s.sessionId === (msg.sessionId as string) ? { ...s, status: "complete" } : s,
+          s.sessionId === (msg.sessionId as string)
+            ? {
+                ...s,
+                status: "complete",
+                ...(msg.usage ? { usage: msg.usage as SessionState["usage"] } : {}),
+              }
+            : s,
         ),
       );
     } else if (msg.type === "session:error") {
@@ -373,6 +379,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
                 stopReason: msg.stopReason as string | undefined,
                 retryCount: msg.retryCount as number | undefined,
                 errorAt: s.errorAt ?? Date.now(),
+                ...(msg.usage ? { usage: msg.usage as SessionState["usage"] } : {}),
               }
             : s,
         ),

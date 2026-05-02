@@ -63,6 +63,17 @@ function normalizeModelId(model: string): string {
 }
 
 /**
+ * Coerce a possibly-undefined / NaN / negative token count to a finite
+ * non-negative number. Token counts come from upstream JSON and aren't
+ * type-guaranteed here — without this guard a single bad field would
+ * produce NaN that propagates through every cost field.
+ */
+function sanitizeTokenCount(value: number | undefined): number {
+  if (typeof value !== "number" || !Number.isFinite(value) || value < 0) return 0;
+  return value;
+}
+
+/**
  * Compute an estimated USD cost from token usage + model id. Returns `null`
  * if the model isn't in the pricing table — callers should fall back to
  * showing token counts only. Missing token fields default to 0, which is the
@@ -71,11 +82,14 @@ function normalizeModelId(model: string): string {
 export function estimateCost(usage: TokenUsage, model: string): CostEstimate | null {
   const price = ANTHROPIC_PRICING[normalizeModelId(model)];
   if (!price) return null;
-  const inputUsd = ((usage.inputTokens ?? 0) * price.inputUsdPerMillion) / 1_000_000;
-  const cacheWriteUsd =
-    ((usage.cacheWriteTokens ?? 0) * price.cacheWrite5mUsdPerMillion) / 1_000_000;
-  const cacheReadUsd = ((usage.cacheReadTokens ?? 0) * price.cacheReadUsdPerMillion) / 1_000_000;
-  const outputUsd = ((usage.outputTokens ?? 0) * price.outputUsdPerMillion) / 1_000_000;
+  const sanitizedInputTokens = sanitizeTokenCount(usage.inputTokens);
+  const sanitizedCacheWriteTokens = sanitizeTokenCount(usage.cacheWriteTokens);
+  const sanitizedCacheReadTokens = sanitizeTokenCount(usage.cacheReadTokens);
+  const sanitizedOutputTokens = sanitizeTokenCount(usage.outputTokens);
+  const inputUsd = (sanitizedInputTokens * price.inputUsdPerMillion) / 1_000_000;
+  const cacheWriteUsd = (sanitizedCacheWriteTokens * price.cacheWrite5mUsdPerMillion) / 1_000_000;
+  const cacheReadUsd = (sanitizedCacheReadTokens * price.cacheReadUsdPerMillion) / 1_000_000;
+  const outputUsd = (sanitizedOutputTokens * price.outputUsdPerMillion) / 1_000_000;
   return {
     inputUsd,
     cacheWriteUsd,
