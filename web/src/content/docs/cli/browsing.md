@@ -62,7 +62,22 @@ Full-text search across organizations, products, sources, and releases.
 releases search "breaking change"
 releases search "authentication" --type releases --limit 5
 releases search "vercel" --json
+releases search "vercel/next.js"          # GitHub coordinate — falls back to on-demand lookup
 ```
+
+### On-demand GitHub lookup
+
+When the query is a `{org}/{repo}` coordinate **and** the in-index search returns no hits, the CLI falls back to a GitHub probe and prints a `Lookup` rail above the regular results. Possible statuses:
+
+| Status      | Meaning                                                                               |
+| ----------- | ------------------------------------------------------------------------------------- |
+| `INDEXED`   | We just pulled this repo from GitHub on demand. Inline release preview follows.       |
+| `EXISTING`  | Repo was already tracked. Inline release preview follows.                             |
+| `EMPTY`     | Real repo, but no tagged releases or CHANGELOG yet.                                   |
+| `NOT_FOUND` | No public repo at `github.com/{org}/{repo}` (private, archived, renamed, or missing). |
+| `DEFERRED`  | GitHub rate-limit or 5xx — try again in a moment.                                     |
+
+If the org segment matches a known org but the specific repo doesn't, the CLI shows a "Did you mean" rail listing the top sibling sources for that org. The lookup also surfaces in `--json` output under the `lookup` key.
 
 ### Options
 
