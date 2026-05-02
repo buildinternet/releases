@@ -179,6 +179,51 @@ Hybrid and semantic responses include a ranked `chunks` array interleaved with r
 
 Each chunk hit carries `sourceSlug`, `orgSlug`, `filePath`, `offset`, `length`, `heading`, `snippet`, and `score` so clients can chain into `GET /v1/sources/:slug/changelog?offset=...` for surrounding context.
 
+When the query parses as a `{org}/{repo}` GitHub coordinate **and** the in-index search returned zero hits, the response includes a `lookup` field describing the result of an on-demand probe (see [`POST /v1/lookups`](#post-v1lookups)). `lookup` is `null` when the query is not coordinate-shaped or when existing hits were found.
+
+### `POST /v1/lookups`
+
+Materialize a hidden source on demand from a `{org}/{repo}` GitHub coordinate. Used by `/v1/search` (and the MCP `search` / `search_releases` tools) as a fallback when an in-index search returns no hits, but also callable directly.
+
+```bash
+curl -X POST https://api.releases.sh/v1/lookups \
+  -H "Content-Type: application/json" \
+  -d '{"provider": "github", "coordinate": "org/repo"}'
+```
+
+| Field        | Description                                                                                |
+| ------------ | ------------------------------------------------------------------------------------------ |
+| `provider`   | Currently only `"github"`.                                                                 |
+| `coordinate` | A bare `{org}/{repo}` string. The colon-prefixed `provider:org/repo` form is not accepted. |
+
+Five outcomes:
+
+| `status`    | Meaning                                                                                                  |
+| ----------- | -------------------------------------------------------------------------------------------------------- |
+| `indexed`   | New source was just materialized from GitHub. Inline release preview in `releases`.                      |
+| `existing`  | Repo was already tracked. Inline release preview in `releases`.                                          |
+| `empty`     | Repo exists but has no tagged releases or CHANGELOG yet. Hidden source still created for future polling. |
+| `not_found` | No public repo at `github.com/{org}/{repo}` (private, archived, renamed, or never existed).              |
+| `deferred`  | GitHub rate-limit or 5xx — transient. No negative cache written; safe to retry shortly.                  |
+
+Response shape:
+
+```ts
+{
+  status: "indexed" | "existing" | "empty" | "not_found" | "deferred";
+  source?: { id, slug, name, url, discovery };
+  releases?: Release[];
+  relatedOrg: {
+    org: { id, slug, name };
+    sources: Source[];   // top-5 sibling sources by recent activity
+  } | null;
+}
+```
+
+`relatedOrg` is the "did you mean" rail — populated when the org segment matches a known org but the specific repo doesn't exist or has no releases. It is `null` when the org isn't tracked.
+
+Materialized rows carry `discovery: "on_demand"` and `isHidden: true`. Embeddings still run via `waitUntil` so semantic search picks them up on the next hit; AI features (overviews, summarization, playbook regen) skip on-demand rows. Negative results (`not_found`, `empty`) are cached in KV (`lookup:github:{org}/{repo}`, 24h for `not_found`, 6h for `empty`).
+
 ### `GET /v1/related/releases`
 
 Semantically similar releases for an anchor release. Reuses the release's existing vector — no re-embedding.

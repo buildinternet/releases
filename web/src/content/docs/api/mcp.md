@@ -101,6 +101,21 @@ Read-only tools available on the remote server with no authentication.
 | `list_products` _(dep.)_   | Deprecated — prefer `list_catalog`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 | `get_product` _(dep.)_     | Deprecated — prefer `get_catalog_entry`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 
+### On-demand GitHub lookup
+
+`search` and `search_releases` fall back to an on-demand GitHub lookup when the query is a `{org}/{repo}` coordinate and the in-index search returns no hits. The result is merged under a `lookup` field in the tool response so the agent can see the repo state without a second tool call.
+
+| Field        | Description                                                                                                                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `status`     | `indexed` (newly materialized), `existing` (already tracked), `empty` (real repo, no releases or CHANGELOG yet), `not_found` (no public repo), or `deferred` (GitHub rate-limit or 5xx — try shortly). |
+| `source`     | Source record for the materialized or existing repo. Present on `indexed`, `existing`, and `empty`.                                                                                                    |
+| `releases`   | Inline release preview. Present on `indexed` and `existing`.                                                                                                                                           |
+| `relatedOrg` | "Did you mean" rail — set when the org segment matches a known org but the specific repo doesn't. Lists the org and up to 5 sibling sources.                                                           |
+
+`lookup` is `null` when the query is not coordinate-shaped or when existing search hits were found. Materialized rows are hidden (`discovery: "on_demand"`); a second search for the same coordinate resolves through the normal cache path. Embeddings still run for on-demand sources, so semantic search picks them up on the second hit; AI features (overviews, summarization, playbook regen) skip them.
+
+<!-- admin:start -->
+
 ### Analysis tools
 
 AI-generated summaries and comparisons. Available on the remote server with no authentication.
@@ -109,8 +124,6 @@ AI-generated summaries and comparisons. Available on the remote server with no a
 | ------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `summarize_changes` | AI-generated summary of recent releases for a product. Supports custom lookback window and additional instructions. |
 | `compare_products`  | Head-to-head AI comparison of releases between two products.                                                        |
-
-<!-- admin:start -->
 
 ### Source management tools
 
@@ -141,7 +154,7 @@ Only available on the local server.
 
 <!-- admin:end -->
 
-## Example usage with Claude
+## Example usage
 
 Once configured, you can ask Claude to interact with the release index directly:
 

@@ -2,13 +2,22 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useRef } from "react";
 
 export type DocsNavSection = {
   title: string;
   items: { label: string; href: string }[];
 };
 
-function SectionList({ sections, pathname }: { sections: DocsNavSection[]; pathname: string }) {
+function SectionList({
+  sections,
+  pathname,
+  onItemClick,
+}: {
+  sections: DocsNavSection[];
+  pathname: string;
+  onItemClick?: () => void;
+}) {
   return (
     <>
       {sections.map((section) => (
@@ -23,6 +32,7 @@ function SectionList({ sections, pathname }: { sections: DocsNavSection[]; pathn
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    onClick={onItemClick}
                     className={`block text-sm py-0.5 transition-colors ${
                       active
                         ? "text-stone-900 dark:text-stone-100 font-medium"
@@ -43,12 +53,20 @@ function SectionList({ sections, pathname }: { sections: DocsNavSection[]; pathn
 
 export function DocsNav({ sections }: { sections: DocsNavSection[] }) {
   const pathname = usePathname();
+  const detailsRef = useRef<HTMLDetailsElement>(null);
   const currentLabel =
     sections.flatMap((s) => s.items).find((item) => item.href === pathname)?.label ?? "Docs";
 
+  useEffect(() => {
+    if (detailsRef.current) detailsRef.current.open = false;
+  }, [pathname]);
+
   return (
     <>
-      <details className="md:hidden group border border-stone-200 dark:border-stone-800 rounded-md">
+      <details
+        ref={detailsRef}
+        className="md:hidden group border border-stone-200 dark:border-stone-800 rounded-md"
+      >
         <summary className="flex items-center justify-between px-4 py-2.5 text-sm font-medium cursor-pointer list-none [&::-webkit-details-marker]:hidden">
           <span>{currentLabel}</span>
           <svg
@@ -65,7 +83,13 @@ export function DocsNav({ sections }: { sections: DocsNavSection[] }) {
           </svg>
         </summary>
         <nav className="px-4 pb-4 pt-2 border-t border-stone-200 dark:border-stone-800">
-          <SectionList sections={sections} pathname={pathname} />
+          <SectionList
+            sections={sections}
+            pathname={pathname}
+            onItemClick={() => {
+              if (detailsRef.current) detailsRef.current.open = false;
+            }}
+          />
         </nav>
       </details>
       <nav className="hidden md:block w-[180px] shrink-0 sticky top-6 self-start">
