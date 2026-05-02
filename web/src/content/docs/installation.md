@@ -40,7 +40,7 @@ Download and install the latest binary directly:
 curl -fsSL https://releases.sh/install | bash
 ```
 
-The script detects your platform, downloads the correct binary from npm, and installs it to `/usr/local/bin`. Set `RELEASED_INSTALL_DIR` to change the install location. Windows users should use npm or the GitHub Releases archive below.
+The script detects your platform, downloads the correct binary from npm, and installs it to `/usr/local/bin`. Set `RELEASED_INSTALL_DIR` to change the install location. Windows users should use npm or the GitHub Releases archives below.
 
 ## GitHub Releases (precompiled binaries)
 
