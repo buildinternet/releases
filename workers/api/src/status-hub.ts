@@ -6,6 +6,40 @@ const CLEANUP_INTERVAL_MS = 24 * 60 * 60 * 1000; // run cleanup daily
 const STDOUT_FLUSH_INTERVAL_MS = 2_000; // batch stdout writes to storage
 const STDOUT_MAX_LINES = 1000;
 
+/**
+ * Apply the `?status=`, `?type=`, and `?recent_minutes=` filters from a query
+ * string to a raw session list. Pure so it can be unit-tested without a DO.
+ *
+ * `recent_minutes=N` keeps any session that is currently `running` OR was last
+ * updated within the last N minutes. This is what lets the discovery worker
+ * dedup against retries fired after a session has already finished — see #656.
+ * It deliberately does NOT compose with `status=` (callers should pick one),
+ * but if both are passed `status` filters first then `recent_minutes` further
+ * narrows by recency.
+ */
+export function applySessionFilters(
+  sessions: SessionState[],
+  params: URLSearchParams,
+  now: number,
+): SessionState[] {
+  let out = sessions;
+  const filterStatus = params.get("status");
+  const filterType = params.get("type");
+  const recentMinutesRaw = params.get("recent_minutes");
+  const recentMinutes = recentMinutesRaw ? Number(recentMinutesRaw) : NaN;
+  if (filterStatus) {
+    out = out.filter((s) => s.status === filterStatus);
+  }
+  if (filterType) {
+    out = out.filter((s) => s.type === filterType);
+  }
+  if (Number.isFinite(recentMinutes) && recentMinutes > 0) {
+    const cutoff = now - recentMinutes * 60 * 1000;
+    out = out.filter((s) => s.status === "running" || (s.lastUpdatedAt ?? s.startedAt) >= cutoff);
+  }
+  return out;
+}
+
 interface SessionState {
   sessionId: string;
   company: string;
@@ -119,17 +153,12 @@ export class StatusHub extends DurableObject {
       return new Response(null, { status: 101, webSocket: pair[0] });
     }
 
-    // HTTP endpoint: get sessions, with optional ?status=running&type=onboard filtering
+    // HTTP endpoint: get sessions, with optional ?status=running&type=onboard filtering.
+    // ?recent_minutes=N additionally includes finished sessions whose lastUpdatedAt
+    // is within the window — used by the discovery worker to dedup against retries
+    // that fire after the original session has already transitioned. See #656.
     if (request.method === "GET" && url.pathname === "/sessions") {
-      let sessions = await this.getSessions();
-      const filterStatus = url.searchParams.get("status");
-      const filterType = url.searchParams.get("type");
-      if (filterStatus) {
-        sessions = sessions.filter((s) => s.status === filterStatus);
-      }
-      if (filterType) {
-        sessions = sessions.filter((s) => s.type === filterType);
-      }
+      const sessions = applySessionFilters(await this.getSessions(), url.searchParams, Date.now());
       return new Response(JSON.stringify(sessions), {
         headers: { "Content-Type": "application/json" },
       });
