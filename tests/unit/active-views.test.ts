@@ -166,7 +166,7 @@ describe("active views exclude tombstoned rows", () => {
 });
 
 describe("organizations_public view (#676)", () => {
-  it("excludes rows with discovery = 'on_demand'", async () => {
+  it("excludes rows with discovery = 'on_demand', passes through curated and agent", async () => {
     const db = tdb.db;
     await db.insert(organizations).values([
       { id: "org_curated", name: "Curated Org", slug: "curated-org", discovery: "curated" },
@@ -179,6 +179,7 @@ describe("organizations_public view (#676)", () => {
     expect(ids).toContain("org_curated");
     expect(ids).toContain("org_agent");
     expect(ids).not.toContain("org_ondemand");
+    expect(fromPublic).toHaveLength(2);
   });
 
   it("excludes tombstoned rows (inherits from organizations_active)", async () => {
@@ -198,20 +199,6 @@ describe("organizations_public view (#676)", () => {
     const ids = fromPublic.map((r) => r.id);
     expect(ids).toContain("org_live");
     expect(ids).not.toContain("org_tombstoned");
-  });
-
-  it("includes curated and agent discovery rows", async () => {
-    const db = tdb.db;
-    await db.insert(organizations).values([
-      { id: "org_curated2", name: "Curated", slug: "curated2", discovery: "curated" },
-      { id: "org_agent2", name: "Agent", slug: "agent2", discovery: "agent" },
-    ]);
-
-    const fromPublic = await db.select().from(organizationsPublic);
-    const ids = fromPublic.map((r) => r.id);
-    expect(ids).toContain("org_curated2");
-    expect(ids).toContain("org_agent2");
-    expect(fromPublic).toHaveLength(2);
   });
 
   it("PRAGMA reports organizations_public as a schema view", async () => {
