@@ -12,6 +12,7 @@ import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js
 import {
   organizations,
   organizationsActive,
+  organizationsPublic,
   products,
   productsActive,
   sources,
@@ -161,5 +162,52 @@ describe("active views exclude tombstoned rows", () => {
     expect(rows).toContain("organizations_active");
     expect(rows).toContain("products_active");
     expect(rows).toContain("sources_active");
+  });
+});
+
+describe("organizations_public view (#676)", () => {
+  it("excludes rows with discovery = 'on_demand', passes through curated and agent", async () => {
+    const db = tdb.db;
+    await db.insert(organizations).values([
+      { id: "org_curated", name: "Curated Org", slug: "curated-org", discovery: "curated" },
+      { id: "org_agent", name: "Agent Org", slug: "agent-org", discovery: "agent" },
+      { id: "org_ondemand", name: "On Demand Org", slug: "on-demand-org", discovery: "on_demand" },
+    ]);
+
+    const fromPublic = await db.select().from(organizationsPublic);
+    const ids = fromPublic.map((r) => r.id);
+    expect(ids).toContain("org_curated");
+    expect(ids).toContain("org_agent");
+    expect(ids).not.toContain("org_ondemand");
+    expect(fromPublic).toHaveLength(2);
+  });
+
+  it("excludes tombstoned rows (inherits from organizations_active)", async () => {
+    const db = tdb.db;
+    await db.insert(organizations).values([
+      { id: "org_live", name: "Live", slug: "live-org", discovery: "curated" },
+      {
+        id: "org_tombstoned",
+        name: "Tombstoned",
+        slug: "tombstoned-org",
+        discovery: "curated",
+        deletedAt: new Date().toISOString(),
+      },
+    ]);
+
+    const fromPublic = await db.select().from(organizationsPublic);
+    const ids = fromPublic.map((r) => r.id);
+    expect(ids).toContain("org_live");
+    expect(ids).not.toContain("org_tombstoned");
+  });
+
+  it("PRAGMA reports organizations_public as a schema view", async () => {
+    const rows = tdb.db
+      .all<{
+        name: string;
+        type: string;
+      }>(sql`SELECT name, type FROM sqlite_master WHERE type='view' ORDER BY name`)
+      .map((r) => r.name);
+    expect(rows).toContain("organizations_public");
   });
 });

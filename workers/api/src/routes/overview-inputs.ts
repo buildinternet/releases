@@ -3,7 +3,7 @@ import { and, desc, eq, gte, isNull, ne, or } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
-  organizationsActive,
+  organizationsPublic,
   releases,
   sourcesActive,
 } from "@buildinternet/releases-core/schema";
@@ -14,7 +14,6 @@ import {
   selectReleasesForOverview,
 } from "@buildinternet/releases-core/overview";
 import { authMiddleware } from "../middleware/auth.js";
-import { notOnDemand } from "../queries/shared.js";
 import { hydrateMediaUrls, parseReleaseMedia } from "../utils.js";
 import type { Env } from "../index.js";
 
@@ -52,19 +51,19 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
   }
 
   const orgIdMatch = slug.startsWith("org_")
-    ? eq(organizationsActive.id, slug)
-    : eq(organizationsActive.slug, slug);
+    ? eq(organizationsPublic.id, slug)
+    : eq(organizationsPublic.slug, slug);
 
   const [org] = await db
     .select({
-      id: organizationsActive.id,
-      slug: organizationsActive.slug,
-      name: organizationsActive.name,
-      description: organizationsActive.description,
-      discovery: organizationsActive.discovery,
+      id: organizationsPublic.id,
+      slug: organizationsPublic.slug,
+      name: organizationsPublic.name,
+      description: organizationsPublic.description,
+      discovery: organizationsPublic.discovery,
     })
-    .from(organizationsActive)
-    .where(and(orgIdMatch, notOnDemand(organizationsActive.discovery)));
+    .from(organizationsPublic)
+    .where(orgIdMatch);
   if (!org) return c.json({ error: "not_found" }, 404);
 
   // Active sources only — skip hidden + paused.
