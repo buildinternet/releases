@@ -41,9 +41,9 @@
     // Feature flag for the Workflows-based onboarding tail (see issue #493).
     // When true, `POST /v1/sources` dispatches an `ONBOARD_SOURCE_WORKFLOW`
     // instance for the playbook + embed + backfill chain instead of riding
-    // `c.executionCtx.waitUntil(...)`. Ships "false" — flip to "true" once
-    // the binding has soaked. Rollback: flip to "false".
-    "ONBOARD_USE_WORKFLOW": "false",
+    // `c.executionCtx.waitUntil(...)`. Rollback: flip to "false" — the inline
+    // `waitUntil` fallback is still wired in the route.
+    "ONBOARD_USE_WORKFLOW": "true",
     // Feature flag for scrape-no-feed / agent change detection (#517). When
     // true, `queryDueSources` widens its filter to include type IN
     // ('scrape','agent') AND feedUrl IS NULL, and `pollOne` routes each via
