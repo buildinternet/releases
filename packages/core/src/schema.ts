@@ -29,8 +29,8 @@ export const organizations = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newOrgId),
     name: text("name").notNull(),
-    slug: text("slug").notNull(),
-    domain: text("domain"),
+    slug: text("slug").notNull().unique(),
+    domain: text("domain").unique(),
     description: text("description"),
     category: text("category"),
     avatarUrl: text("avatar_url"),
@@ -45,18 +45,14 @@ export const organizations = sqliteTable(
     discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
       .notNull()
       .default("curated"),
-    // Soft-delete tombstone. Tombstoned rows are excluded from every read path
-    // via notDeleted in queries/shared.ts; the partial unique indexes on slug
-    // and domain ignore them so a re-onboard under the same identifier works.
+    // Soft-delete tombstone (#666). Read paths exclude rows where deleted_at
+    // IS NOT NULL via notDeleted helpers in queries/shared.ts. On tombstone,
+    // the route handler renames slug + domain to mangled forms (slug + "--" +
+    // id) so a re-onboard under the original identifier doesn't collide with
+    // the inline UNIQUE constraint.
     deletedAt: text("deleted_at"),
   },
   (table) => [
-    uniqueIndex("idx_organizations_slug_active")
-      .on(table.slug)
-      .where(sql`${table.deletedAt} IS NULL`),
-    uniqueIndex("idx_organizations_domain_active")
-      .on(table.domain)
-      .where(sql`${table.deletedAt} IS NULL AND ${table.domain} IS NOT NULL`),
     // Backs the nightly tombstone sweep cron's "deleted_at < cutoff" candidate
     // collection. Partial form keeps the index trivially small.
     index("idx_organizations_deleted_at")
@@ -86,7 +82,7 @@ export const products = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newProductId),
     name: text("name").notNull(),
-    slug: text("slug").notNull(),
+    slug: text("slug").notNull().unique(),
     orgId: text("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
@@ -101,9 +97,6 @@ export const products = sqliteTable(
   },
   (table) => [
     index("idx_products_org").on(table.orgId),
-    uniqueIndex("idx_products_slug_active")
-      .on(table.slug)
-      .where(sql`${table.deletedAt} IS NULL`),
     index("idx_products_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),
@@ -182,7 +175,7 @@ export const sources = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newSourceId),
     name: text("name").notNull(),
-    slug: text("slug").notNull(),
+    slug: text("slug").notNull().unique(),
     type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
     url: text("url").notNull(),
     orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
@@ -223,9 +216,6 @@ export const sources = sqliteTable(
     index("idx_sources_name").on(table.name),
     index("idx_sources_last_fetched_at").on(table.lastFetchedAt),
     index("idx_sources_median_gap_days").on(table.medianGapDays),
-    uniqueIndex("idx_sources_slug_active")
-      .on(table.slug)
-      .where(sql`${table.deletedAt} IS NULL`),
     index("idx_sources_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),

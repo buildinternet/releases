@@ -445,9 +445,9 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
   const hard = c.req.query("hard") === "true";
 
   // Slug-based lookups always resolve to the active row even with hard=true:
-  // a slug can have one active row plus N tombstones (partial unique index),
-  // so destructuring the first match would be non-deterministic. To purge a
-  // tombstone, callers use the org_ ID. (CodeRabbit #669.)
+  // tombstones rename the slug ("--<id>" suffix), so a slug match is by
+  // construction the active row. To purge a tombstone, callers use the org_
+  // ID, which is unique whether the row is active or tombstoned.
   const includeDeleted = hard && slug.startsWith("org_");
   const [org] = await db.select().from(organizations).where(orgWhere(slug, { includeDeleted }));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
@@ -458,12 +458,42 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
   }
 
   // Soft delete: tombstone the org and cascade-tombstone its products and
-  // sources so reads filter consistently. The cleanup cron hard-purges rows
-  // older than 30 days.
+  // sources. Slug + domain are mangled to "<value>--<id>" so the inline
+  // UNIQUE constraints don't block a re-onboard under the original
+  // identifier. The cleanup cron hard-purges rows older than 30 days.
   const now = new Date().toISOString();
-  await db.update(organizations).set({ deletedAt: now }).where(eq(organizations.id, org.id));
-  await db.update(products).set({ deletedAt: now }).where(eq(products.orgId, org.id));
-  await db.update(sources).set({ deletedAt: now }).where(eq(sources.orgId, org.id));
+  await db
+    .update(organizations)
+    .set({
+      deletedAt: now,
+      slug: `${org.slug}--${org.id}`,
+      domain: org.domain ? `${org.domain}--${org.id}` : null,
+    })
+    .where(eq(organizations.id, org.id));
+  // Cascade-tombstone children. Slug/domain renaming on each child stays
+  // consistent: child id is unique so the suffix is unique.
+  const orgProducts = await db
+    .select({ id: products.id, slug: products.slug })
+    .from(products)
+    .where(eq(products.orgId, org.id));
+  for (const p of orgProducts) {
+    // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
+    await db
+      .update(products)
+      .set({ deletedAt: now, slug: `${p.slug}--${p.id}` })
+      .where(eq(products.id, p.id));
+  }
+  const orgSources = await db
+    .select({ id: sources.id, slug: sources.slug })
+    .from(sources)
+    .where(eq(sources.orgId, org.id));
+  for (const s of orgSources) {
+    // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
+    await db
+      .update(sources)
+      .set({ deletedAt: now, slug: `${s.slug}--${s.id}` })
+      .where(eq(sources.id, s.id));
+  }
   return c.json({ deleted: true, deletedAt: now });
 });
 

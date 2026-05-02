@@ -429,11 +429,8 @@ productRoutes.delete("/products/:identifier", async (c) => {
   const identifier = c.req.param("identifier");
   const hard = c.req.query("hard") === "true";
 
-  // Slug-based lookups always resolve to the active row even with hard=true:
-  // a slug can have one active row plus N tombstones (partial unique index),
-  // so destructuring the first match would be non-deterministic. To purge a
-  // tombstone, callers use the prod_ ID — which is unique whether the row
-  // is active or tombstoned. (CodeRabbit #669.)
+  // Slug-based lookups always resolve to the active row: tombstones rename
+  // the slug ("--<id>" suffix). To purge a tombstone, callers use prod_ ID.
   const includeDeleted = hard && identifier.startsWith("prod_");
   const [product] = await db
     .select()
@@ -446,8 +443,12 @@ productRoutes.delete("/products/:identifier", async (c) => {
     return c.json({ deleted: true, hard: true });
   }
 
+  // Soft delete: rename slug so the inline UNIQUE doesn't block re-onboarding.
   const now = new Date().toISOString();
-  await db.update(products).set({ deletedAt: now }).where(eq(products.id, product.id));
+  await db
+    .update(products)
+    .set({ deletedAt: now, slug: `${product.slug}--${product.id}` })
+    .where(eq(products.id, product.id));
   return c.json({ deleted: true, deletedAt: now });
 });
 

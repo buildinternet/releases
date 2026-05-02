@@ -1402,10 +1402,8 @@ sourceRoutes.delete("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const hard = c.req.query("hard") === "true";
 
-  // Slug-based lookups always resolve to the active row even with hard=true:
-  // a slug can have one active row plus N tombstones (partial unique index),
-  // so destructuring the first match would be non-deterministic. To purge a
-  // tombstone, callers use the src_ ID. (CodeRabbit #669.)
+  // Slug-based lookups always resolve to the active row: tombstones rename
+  // the slug ("--<id>" suffix). To purge a tombstone, callers use src_ ID.
   const includeDeleted = hard && slug.startsWith("src_");
   const [src] = await db.select().from(sources).where(sourceWhere(slug, { includeDeleted }));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -1418,10 +1416,14 @@ sourceRoutes.delete("/sources/:slug", async (c) => {
     return c.json({ deleted: true, hard: true });
   }
 
-  // Soft delete: tombstone only this source. Releases stay attached so the
-  // cleanup cron can hard-purge them via the existing FK cascade.
+  // Soft delete: tombstone the source. Slug is mangled so the inline UNIQUE
+  // doesn't block a re-onboard under the original slug. Releases stay
+  // attached so the cleanup cron can hard-purge via the existing FK cascade.
   const now = new Date().toISOString();
-  await db.update(sources).set({ deletedAt: now }).where(eq(sources.id, src.id));
+  await db
+    .update(sources)
+    .set({ deletedAt: now, slug: `${src.slug}--${src.id}` })
+    .where(eq(sources.id, src.id));
   if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
   return c.json({ deleted: true, deletedAt: now });
 });
