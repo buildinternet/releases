@@ -39,26 +39,36 @@ Respond `2xx` within 10 seconds to ack. Anything else triggers retry (5xx) or te
 ```js
 import crypto from "node:crypto";
 
-function verify(secret, timestamp, body, signature) {
+function verify(secret, timestamp, body, signature, now = Math.floor(Date.now() / 1000)) {
+  if (!/^\d+$/.test(timestamp)) return false;
+  const ts = Number(timestamp);
+  if (!Number.isSafeInteger(ts) || Math.abs(now - ts) > 300) return false;
   const expected =
     "sha256=" +
-    crypto
-      .createHmac("sha256", Buffer.from(secret, "hex"))
-      .update(`${timestamp}.${body}`)
-      .digest("hex");
-  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(signature));
+    crypto.createHmac("sha256", Buffer.from(secret, "hex")).update(`${ts}.${body}`).digest("hex");
+  const a = Buffer.from(expected);
+  const b = Buffer.from(signature);
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
 }
 ```
 
 ### Python
 
 ```python
-import hmac, hashlib
+import hmac, hashlib, time
 
-def verify(secret, timestamp, body, signature):
+def verify(secret, timestamp, body, signature, now=None):
+    if now is None:
+        now = int(time.time())
+    try:
+        ts = int(timestamp)
+    except (TypeError, ValueError):
+        return False
+    if abs(now - ts) > 300:
+        return False
     expected = "sha256=" + hmac.new(
         bytes.fromhex(secret),
-        f"{timestamp}.{body}".encode(),
+        f"{ts}.{body}".encode(),
         hashlib.sha256,
     ).hexdigest()
     return hmac.compare_digest(expected, signature)
@@ -74,16 +84,33 @@ import (
     "crypto/sha256"
     "encoding/hex"
     "fmt"
+    "strconv"
+    "time"
 )
 
-func verify(secret, ts, body, sig string) bool {
-    key, _ := hex.DecodeString(secret)
+func verify(secret, timestamp, body, sig string) bool {
+    ts, err := strconv.ParseInt(timestamp, 10, 64)
+    if err != nil {
+        return false
+    }
+    diff := time.Now().Unix() - ts
+    if diff < -300 || diff > 300 {
+        return false
+    }
+    key, err := hex.DecodeString(secret)
+    if err != nil {
+        return false
+    }
     m := hmac.New(sha256.New, key)
-    m.Write([]byte(fmt.Sprintf("%s.%s", ts, body)))
+    m.Write([]byte(fmt.Sprintf("%d.%s", ts, body)))
     expected := "sha256=" + hex.EncodeToString(m.Sum(nil))
     return hmac.Equal([]byte(expected), []byte(sig))
 }
 ```
+
+## Replay protection
+
+`X-Releases-Timestamp` is included in the signed input (`"${timestamp}.${body}"`), so the signature covers both the payload and the time it was issued. To prevent an attacker from capturing a valid request and replaying it later, your verifier should reject any request whose timestamp is more than ±5 minutes (300 seconds) from your server's wall clock — before performing the HMAC check. The reference snippets above already do this. A tighter window (e.g. 30 seconds) is fine if your clocks are well-synchronized.
 
 ## Idempotency
 
