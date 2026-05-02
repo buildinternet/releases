@@ -1,4 +1,4 @@
-import { eq, inArray, and } from "drizzle-orm";
+import { eq, inArray, and, isNull } from "drizzle-orm";
 import {
   tags,
   sources,
@@ -33,23 +33,33 @@ export function parseReleaseMedia(raw: string | null, mediaOrigin: string): Medi
   );
 }
 
-/** Resolve a source by ID (src_ prefix) or slug */
-export function sourceWhere(identifier: string) {
-  return identifier.startsWith("src_") ? eq(sources.id, identifier) : eq(sources.slug, identifier);
+/**
+ * Resolve a source by ID (src_ prefix) or slug. Excludes soft-deleted rows by
+ * default (issue #666). Pass `{ includeDeleted: true }` for admin paths that
+ * need to see tombstones — the hard-purge variant of DELETE, restore flows,
+ * etc.
+ */
+export function sourceWhere(identifier: string, opts?: { includeDeleted?: boolean }) {
+  const match = identifier.startsWith("src_")
+    ? eq(sources.id, identifier)
+    : eq(sources.slug, identifier);
+  return opts?.includeDeleted ? match : and(match, isNull(sources.deletedAt));
 }
 
-/** Resolve an org by ID (org_ prefix) or slug */
-export function orgWhere(identifier: string) {
-  return identifier.startsWith("org_")
+/** Resolve an org by ID (org_ prefix) or slug. See sourceWhere for opts. */
+export function orgWhere(identifier: string, opts?: { includeDeleted?: boolean }) {
+  const match = identifier.startsWith("org_")
     ? eq(organizations.id, identifier)
     : eq(organizations.slug, identifier);
+  return opts?.includeDeleted ? match : and(match, isNull(organizations.deletedAt));
 }
 
-/** Resolve a product by ID (prod_ prefix) or slug */
-export function productWhere(identifier: string) {
-  return identifier.startsWith("prod_")
+/** Resolve a product by ID (prod_ prefix) or slug. See sourceWhere for opts. */
+export function productWhere(identifier: string, opts?: { includeDeleted?: boolean }) {
+  const match = identifier.startsWith("prod_")
     ? eq(products.id, identifier)
     : eq(products.slug, identifier);
+  return opts?.includeDeleted ? match : and(match, isNull(products.deletedAt));
 }
 
 /**

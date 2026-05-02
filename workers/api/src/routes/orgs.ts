@@ -442,12 +442,29 @@ orgRoutes.patch("/orgs/:slug", async (c) => {
 orgRoutes.delete("/orgs/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
+  const hard = c.req.query("hard") === "true";
 
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
+  // Hard purge needs to find tombstoned rows too (so a second admin call can
+  // purge an already-soft-deleted org); soft delete only operates on live rows.
+  const [org] = await db
+    .select()
+    .from(organizations)
+    .where(orgWhere(slug, { includeDeleted: hard }));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  await db.delete(organizations).where(eq(organizations.id, org.id));
-  return c.json({ deleted: true });
+  if (hard) {
+    await db.delete(organizations).where(eq(organizations.id, org.id));
+    return c.json({ deleted: true, hard: true });
+  }
+
+  // Soft delete: tombstone the org and cascade-tombstone its products and
+  // sources so reads filter consistently. The cleanup cron hard-purges rows
+  // older than 30 days.
+  const now = new Date().toISOString();
+  await db.update(organizations).set({ deletedAt: now }).where(eq(organizations.id, org.id));
+  await db.update(products).set({ deletedAt: now }).where(eq(products.orgId, org.id));
+  await db.update(sources).set({ deletedAt: now }).where(eq(sources.orgId, org.id));
+  return c.json({ deleted: true, deletedAt: now });
 });
 
 orgRoutes.get("/orgs/:slug/accounts", async (c) => {

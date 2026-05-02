@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 import {
   newSourceId,
@@ -23,26 +24,41 @@ import {
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
 
-export const organizations = sqliteTable("organizations", {
-  id: text("id").primaryKey().$defaultFn(newOrgId),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  domain: text("domain").unique(),
-  description: text("description"),
-  category: text("category"),
-  avatarUrl: text("avatar_url"),
-  createdAt: text("created_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-  updatedAt: text("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-  metadata: text("metadata").default("{}"),
-  embeddedAt: text("embedded_at"),
-  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
-    .notNull()
-    .default("curated"),
-});
+export const organizations = sqliteTable(
+  "organizations",
+  {
+    id: text("id").primaryKey().$defaultFn(newOrgId),
+    name: text("name").notNull(),
+    slug: text("slug").notNull(),
+    domain: text("domain"),
+    description: text("description"),
+    category: text("category"),
+    avatarUrl: text("avatar_url"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    metadata: text("metadata").default("{}"),
+    embeddedAt: text("embedded_at"),
+    discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
+      .notNull()
+      .default("curated"),
+    // Soft-delete tombstone. Tombstoned rows are excluded from every read path
+    // via notDeleted in queries/shared.ts; the partial unique indexes on slug
+    // and domain ignore them so a re-onboard under the same identifier works.
+    deletedAt: text("deleted_at"),
+  },
+  (table) => [
+    uniqueIndex("idx_organizations_slug_active")
+      .on(table.slug)
+      .where(sql`${table.deletedAt} IS NULL`),
+    uniqueIndex("idx_organizations_domain_active")
+      .on(table.domain)
+      .where(sql`${table.deletedAt} IS NULL AND ${table.domain} IS NOT NULL`),
+  ],
+);
 
 export const orgAccounts = sqliteTable(
   "org_accounts",
@@ -65,7 +81,7 @@ export const products = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newProductId),
     name: text("name").notNull(),
-    slug: text("slug").notNull().unique(),
+    slug: text("slug").notNull(),
     orgId: text("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
@@ -76,8 +92,14 @@ export const products = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
     embeddedAt: text("embedded_at"),
+    deletedAt: text("deleted_at"),
   },
-  (table) => [index("idx_products_org").on(table.orgId)],
+  (table) => [
+    index("idx_products_org").on(table.orgId),
+    uniqueIndex("idx_products_slug_active")
+      .on(table.slug)
+      .where(sql`${table.deletedAt} IS NULL`),
+  ],
 );
 
 export const domainAliases = sqliteTable(
@@ -152,7 +174,7 @@ export const sources = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newSourceId),
     name: text("name").notNull(),
-    slug: text("slug").notNull().unique(),
+    slug: text("slug").notNull(),
     type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
     url: text("url").notNull(),
     orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
@@ -182,6 +204,7 @@ export const sources = sqliteTable(
     discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
       .notNull()
       .default("curated"),
+    deletedAt: text("deleted_at"),
   },
   (table) => [
     index("idx_sources_org").on(table.orgId),
@@ -192,6 +215,9 @@ export const sources = sqliteTable(
     index("idx_sources_name").on(table.name),
     index("idx_sources_last_fetched_at").on(table.lastFetchedAt),
     index("idx_sources_median_gap_days").on(table.medianGapDays),
+    uniqueIndex("idx_sources_slug_active")
+      .on(table.slug)
+      .where(sql`${table.deletedAt} IS NULL`),
   ],
 );
 

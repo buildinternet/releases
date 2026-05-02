@@ -426,12 +426,22 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
 productRoutes.delete("/products/:identifier", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
+  const hard = c.req.query("hard") === "true";
 
-  const [product] = await db.select().from(products).where(productWhere(identifier));
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(productWhere(identifier, { includeDeleted: hard }));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-  await db.delete(products).where(eq(products.id, product.id));
-  return c.json({ deleted: true });
+  if (hard) {
+    await db.delete(products).where(eq(products.id, product.id));
+    return c.json({ deleted: true, hard: true });
+  }
+
+  const now = new Date().toISOString();
+  await db.update(products).set({ deletedAt: now }).where(eq(products.id, product.id));
+  return c.json({ deleted: true, deletedAt: now });
 });
 
 // ── Embed side effect ──

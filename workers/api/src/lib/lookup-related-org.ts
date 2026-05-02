@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, or, sql } from "drizzle-orm";
+import { and, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { orgNotOnDemand } from "../queries/shared.js";
 import type { createDb } from "../db.js";
@@ -39,7 +39,14 @@ export async function resolveRelatedOrg(
     })
     .from(organizations)
     .innerJoin(sources, eq(sources.orgId, organizations.id))
-    .where(and(sql`${sources.url} LIKE ${urlPattern} ESCAPE '\\'`, orgNotOnDemand))
+    .where(
+      and(
+        sql`${sources.url} LIKE ${urlPattern} ESCAPE '\\'`,
+        orgNotOnDemand,
+        isNull(organizations.deletedAt),
+        isNull(sources.deletedAt),
+      ),
+    )
     .limit(2);
 
   let candidates = orgsByUrl;
@@ -49,7 +56,9 @@ export async function resolveRelatedOrg(
     const exactSlugMatches = await db
       .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
       .from(organizations)
-      .where(and(eq(organizations.slug, orgSegment), orgNotOnDemand))
+      .where(
+        and(eq(organizations.slug, orgSegment), orgNotOnDemand, isNull(organizations.deletedAt)),
+      )
       .limit(2);
     candidates = exactSlugMatches;
   }
@@ -69,6 +78,7 @@ export async function resolveRelatedOrg(
       and(
         eq(sources.orgId, org.id),
         or(ne(sources.discovery, "on_demand"), sql`${sources.discovery} IS NULL`),
+        isNull(sources.deletedAt),
       ),
     )
     .orderBy(desc(sources.lastFetchedAt))

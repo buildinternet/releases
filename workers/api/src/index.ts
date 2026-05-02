@@ -43,6 +43,7 @@ import { retierSources } from "./cron/retier.js";
 import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
+import { sweepTombstones } from "./cron/sweep-tombstones.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
 import { logEvent } from "@releases/lib/log-event";
 
@@ -159,6 +160,10 @@ export type Env = {
     // Retention window for `search_queries` rows. Rows older than this many days
     // are deleted by the nightly 05:00 UTC sweep. Default 90.
     SEARCH_QUERY_RETENTION_DAYS?: string;
+    // Retention window for soft-deleted org/source/product rows. Tombstoned
+    // rows older than this many days are hard-purged by the nightly 05:30 UTC
+    // sweep. Default 30. See workers/api/src/cron/sweep-tombstones.ts (#666).
+    TOMBSTONE_RETENTION_DAYS?: string;
     // Staging-only shared secret — see middleware/staging-access.ts. Absent
     // everywhere outside `[env.staging]`, so the gate no-ops for prod/local.
     STAGING_ACCESS_KEY?: SecretBinding;
@@ -381,6 +386,21 @@ export default {
             DB: env.DB,
             CRON_ENABLED: env.CRON_ENABLED,
             SEARCH_QUERY_RETENTION_DAYS: env.SEARCH_QUERY_RETENTION_DAYS,
+          }),
+          alertEnv,
+        ),
+      );
+      return;
+    }
+    if (event.cron === "30 5 * * *") {
+      ctx.waitUntil(
+        loggedDispatch(
+          "sweep-tombstones-cron",
+          sweepTombstones({
+            DB: env.DB,
+            CRON_ENABLED: env.CRON_ENABLED,
+            TOMBSTONE_RETENTION_DAYS: env.TOMBSTONE_RETENTION_DAYS,
+            RELEASES_INDEX: env.RELEASES_INDEX,
           }),
           alertEnv,
         ),

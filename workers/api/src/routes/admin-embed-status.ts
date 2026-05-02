@@ -3,7 +3,7 @@
 // entry in the adminRoutes allowlist in workers/api/src/index.ts.
 
 import { Hono } from "hono";
-import { and, count, sql } from "drizzle-orm";
+import { and, count, isNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   releases,
@@ -40,21 +40,21 @@ adminEmbedStatusRoutes.get("/admin/embed/status", async (c) => {
       // Suppressed rows are still counted — the backfill treats them the
       // same; operators who care about suppressed gaps diff against search.
       .where(and(sql`${releases.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(organizations),
+    db.select({ n: count() }).from(organizations).where(isNull(organizations.deletedAt)),
     db
       .select({ n: count() })
       .from(organizations)
-      .where(sql`${organizations.embeddedAt} IS NOT NULL`),
-    db.select({ n: count() }).from(products),
+      .where(and(isNull(organizations.deletedAt), sql`${organizations.embeddedAt} IS NOT NULL`)),
+    db.select({ n: count() }).from(products).where(isNull(products.deletedAt)),
     db
       .select({ n: count() })
       .from(products)
-      .where(sql`${products.embeddedAt} IS NOT NULL`),
-    db.select({ n: count() }).from(sources),
+      .where(and(isNull(products.deletedAt), sql`${products.embeddedAt} IS NOT NULL`)),
+    db.select({ n: count() }).from(sources).where(isNull(sources.deletedAt)),
     db
       .select({ n: count() })
       .from(sources)
-      .where(sql`${sources.embeddedAt} IS NOT NULL`),
+      .where(and(isNull(sources.deletedAt), sql`${sources.embeddedAt} IS NOT NULL`)),
     db.select({ n: count() }).from(sourceChangelogChunks),
     db
       .select({ n: count() })

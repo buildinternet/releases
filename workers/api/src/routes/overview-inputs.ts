@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, gte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, ne } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
@@ -77,6 +77,7 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
         eq(sources.orgId, org.id),
         eq(sources.isHidden, false),
         ne(sources.fetchPriority, "paused"),
+        isNull(sources.deletedAt),
       ),
     );
 

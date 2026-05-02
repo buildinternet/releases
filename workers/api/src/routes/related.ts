@@ -14,7 +14,7 @@
  */
 
 import { Hono } from "hono";
-import { sql, inArray, eq } from "drizzle-orm";
+import { sql, inArray, eq, isNull, and } from "drizzle-orm";
 import { sources, organizations, releases } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import { sourceWhere, parseReleaseMedia } from "../utils.js";
@@ -232,6 +232,7 @@ async function hydrateReleaseNeighbors(
     )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND s.deleted_at IS NULL
   `);
 
   const byId = new Map<string, (typeof rows)[number]>();
@@ -380,7 +381,7 @@ relatedRoutes.get("/related/sources", async (c) => {
       isHidden: sources.isHidden,
     })
     .from(sources)
-    .where(inArray(sources.id, neighborIds));
+    .where(and(inArray(sources.id, neighborIds), isNull(sources.deletedAt)));
 
   const visibleById = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
@@ -400,7 +401,7 @@ relatedRoutes.get("/related/sources", async (c) => {
             avatarUrl: organizations.avatarUrl,
           })
           .from(organizations)
-          .where(inArray(organizations.id, orgIds))
+          .where(and(inArray(organizations.id, orgIds), isNull(organizations.deletedAt)))
       : [];
   const orgById = new Map<string, { slug: string; name: string; avatarUrl: string | null }>();
   for (const o of orgRows)

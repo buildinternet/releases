@@ -29,6 +29,7 @@ export async function getLatestReleasesAcross(
   const wheres: string[] = [
     "(r.suppressed IS NULL OR r.suppressed = 0)",
     "(s.is_hidden = 0 OR s.is_hidden IS NULL)",
+    "s.deleted_at IS NULL",
   ];
   const bindings: (string | number)[] = [];
 

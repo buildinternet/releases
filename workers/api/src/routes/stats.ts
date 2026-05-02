@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { count, gte, desc, eq } from "drizzle-orm";
+import { count, gte, desc, eq, isNull, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -29,13 +29,13 @@ statsRoutes.get("/stats", async (c) => {
     [neverFetched],
     [recentlyFetched],
   ] = await Promise.all([
-    db.select({ n: count() }).from(organizations),
-    db.select({ n: count() }).from(sources),
+    db.select({ n: count() }).from(organizations).where(isNull(organizations.deletedAt)),
+    db.select({ n: count() }).from(sources).where(isNull(sources.deletedAt)),
     db
       .select({ n: count() })
       .from(releases)
       .where(sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
-    db.select({ n: count() }).from(products),
+    db.select({ n: count() }).from(products).where(isNull(products.deletedAt)),
     db
       .select({ n: count() })
       .from(releases)
@@ -45,8 +45,11 @@ statsRoutes.get("/stats", async (c) => {
     db
       .select({ n: count() })
       .from(sources)
-      .where(sql`${sources.lastFetchedAt} IS NULL`),
-    db.select({ n: count() }).from(sources).where(gte(sources.lastFetchedAt, cutoff)),
+      .where(and(isNull(sources.deletedAt), sql`${sources.lastFetchedAt} IS NULL`)),
+    db
+      .select({ n: count() })
+      .from(sources)
+      .where(and(isNull(sources.deletedAt), gte(sources.lastFetchedAt, cutoff))),
   ]);
 
   const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
@@ -67,7 +70,7 @@ statsRoutes.get("/stats", async (c) => {
     .from(sources)
     .leftJoin(releases, eq(releases.sourceId, sources.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(notDisabled)
+    .where(and(notDisabled, isNull(sources.deletedAt)))
     .groupBy(sources.id)
     .orderBy(
       desc(
@@ -90,7 +93,7 @@ statsRoutes.get("/stats", async (c) => {
       createdAt: fetchLog.createdAt,
     })
     .from(fetchLog)
-    .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
+    .innerJoin(sources, and(eq(fetchLog.sourceId, sources.id), isNull(sources.deletedAt)))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .orderBy(desc(fetchLog.createdAt))
     .limit(20);

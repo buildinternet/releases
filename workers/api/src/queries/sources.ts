@@ -36,7 +36,7 @@ export async function countSourcesForList(db: D1Db, whereClause?: SQL): Promise<
     FROM sources
     LEFT JOIN organizations ON organizations.id = sources.org_id
     LEFT JOIN products ON products.id = sources.product_id
-    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
+    ${whereClause ? sql`WHERE ${whereClause} AND sources.deleted_at IS NULL` : sql`WHERE sources.deleted_at IS NULL`}
   `);
   return rows[0]?.total ?? 0;
 }
@@ -112,7 +112,7 @@ export async function getSourcesWithStats(
       WHERE (r.suppressed IS NULL OR r.suppressed = 0)
       GROUP BY r.source_id
     ) rs ON rs.source_id = sources.id
-    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
+    ${whereClause ? sql`WHERE ${whereClause} AND sources.deleted_at IS NULL` : sql`WHERE sources.deleted_at IS NULL`}
     ORDER BY ${orderBy}
     ${limitClause} ${offsetClause}
   `);

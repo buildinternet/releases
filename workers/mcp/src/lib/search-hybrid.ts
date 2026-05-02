@@ -7,7 +7,7 @@
  */
 
 import { logEvent } from "@releases/lib/log-event";
-import { sql, inArray } from "drizzle-orm";
+import { sql, inArray, isNull, and } from "drizzle-orm";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import {
   sources,
@@ -129,6 +129,7 @@ async function ftsReleaseIds(
       WHERE releases_fts MATCH ${toFtsMatchQuery(query)}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+        AND s.deleted_at IS NULL
         ${coverageCondition(opts.includeCoverage)}
       ORDER BY rank LIMIT ${limit}
     `);
@@ -201,6 +202,7 @@ async function hydrateReleases(
     )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND s.deleted_at IS NULL
       ${coverageCondition(opts.includeCoverage)}
   `);
   const map = new Map<string, RawReleaseRow>();
@@ -250,6 +252,7 @@ async function hydrateChunks(
       sql`, `,
     )})
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND s.deleted_at IS NULL
   `);
 
   if (chunkRows.length === 0) return new Map();
@@ -514,7 +517,7 @@ export async function runRegistrySearch(
             category: organizations.category,
           })
           .from(organizations)
-          .where(inArray(organizations.id, orgIds))
+          .where(and(inArray(organizations.id, orgIds), isNull(organizations.deletedAt)))
       : [],
     shouldFetchProducts
       ? db
@@ -526,7 +529,7 @@ export async function runRegistrySearch(
             category: products.category,
           })
           .from(products)
-          .where(inArray(products.id, productIds))
+          .where(and(inArray(products.id, productIds), isNull(products.deletedAt)))
       : [],
     shouldFetchSources
       ? db
@@ -536,7 +539,7 @@ export async function runRegistrySearch(
             name: sources.name,
           })
           .from(sources)
-          .where(inArray(sources.id, sourceIds))
+          .where(and(inArray(sources.id, sourceIds), isNull(sources.deletedAt)))
       : [],
   ]);
 

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and, sql } from "drizzle-orm";
+import { eq, and, isNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
@@ -62,7 +62,10 @@ app.patch("/orgs/:slug/playbook/notes", async (c) => {
     await db.run(sql`UPDATE knowledge_pages SET notes = ${notes}, updated_at = ${now}
       WHERE scope = 'playbook' AND org_id = ${org.id}`);
   } else {
-    const orgSources = await db.select().from(sources).where(eq(sources.orgId, org.id));
+    const orgSources = await db
+      .select()
+      .from(sources)
+      .where(and(eq(sources.orgId, org.id), isNull(sources.deletedAt)));
     const orgProducts = await db
       .select({
         id: products.id,
@@ -71,7 +74,7 @@ app.patch("/orgs/:slug/playbook/notes", async (c) => {
         description: products.description,
       })
       .from(products)
-      .where(eq(products.orgId, org.id));
+      .where(and(eq(products.orgId, org.id), isNull(products.deletedAt)));
 
     const header = generatePlaybookHeader({
       orgName: org.name,
