@@ -29,7 +29,6 @@ export async function getLatestReleasesAcross(
   const wheres: string[] = [
     "(r.suppressed IS NULL OR r.suppressed = 0)",
     "(s.is_hidden = 0 OR s.is_hidden IS NULL)",
-    "s.deleted_at IS NULL",
   ];
   const bindings: (string | number)[] = [];
 
@@ -55,7 +54,7 @@ export async function getLatestReleasesAcross(
            r.published_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
     FROM releases r
-    INNER JOIN sources s ON s.id = r.source_id
+    INNER JOIN sources_active s ON s.id = r.source_id
     WHERE ${whereSql}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,

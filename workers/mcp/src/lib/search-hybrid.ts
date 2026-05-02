@@ -7,12 +7,12 @@
  */
 
 import { logEvent } from "@releases/lib/log-event";
-import { sql, inArray, isNull, and } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import {
-  sources,
-  organizations,
-  products,
+  sourcesActive,
+  organizationsActive,
+  productsActive,
   sourceChangelogFiles,
 } from "@buildinternet/releases-core/schema";
 import {
@@ -125,11 +125,10 @@ async function ftsReleaseIds(
       SELECT r.id as id
       FROM releases_fts
       JOIN releases r ON r.rowid = releases_fts.rowid
-      JOIN sources s ON s.id = r.source_id
+      JOIN sources_active s ON s.id = r.source_id
       WHERE releases_fts MATCH ${toFtsMatchQuery(query)}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-        AND s.deleted_at IS NULL
         ${coverageCondition(opts.includeCoverage)}
       ORDER BY rank LIMIT ${limit}
     `);
@@ -194,15 +193,14 @@ async function hydrateReleases(
            s.name as sourceName,
            o.slug as orgSlug
     FROM releases r
-    JOIN sources s ON s.id = r.source_id
-    LEFT JOIN organizations o ON o.id = s.org_id
+    JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE r.id IN (${sql.join(
       ids.map((id) => sql`${id}`),
       sql`, `,
     )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
       ${coverageCondition(opts.includeCoverage)}
   `);
   const map = new Map<string, RawReleaseRow>();
@@ -246,13 +244,12 @@ async function hydrateChunks(
            s.name as sourceName
     FROM source_changelog_chunks scc
     JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
-    JOIN sources s ON s.id = scc.source_id
+    JOIN sources_active s ON s.id = scc.source_id
     WHERE scc.vector_id IN (${sql.join(
       vectorIds.map((id) => sql`${id}`),
       sql`, `,
     )})
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
   `);
 
   if (chunkRows.length === 0) return new Map();
@@ -510,36 +507,36 @@ export async function runRegistrySearch(
     shouldFetchOrgs
       ? db
           .select({
-            id: organizations.id,
-            slug: organizations.slug,
-            name: organizations.name,
-            description: organizations.description,
-            category: organizations.category,
+            id: organizationsActive.id,
+            slug: organizationsActive.slug,
+            name: organizationsActive.name,
+            description: organizationsActive.description,
+            category: organizationsActive.category,
           })
-          .from(organizations)
-          .where(and(inArray(organizations.id, orgIds), isNull(organizations.deletedAt)))
+          .from(organizationsActive)
+          .where(inArray(organizationsActive.id, orgIds))
       : [],
     shouldFetchProducts
       ? db
           .select({
-            id: products.id,
-            slug: products.slug,
-            name: products.name,
-            description: products.description,
-            category: products.category,
+            id: productsActive.id,
+            slug: productsActive.slug,
+            name: productsActive.name,
+            description: productsActive.description,
+            category: productsActive.category,
           })
-          .from(products)
-          .where(and(inArray(products.id, productIds), isNull(products.deletedAt)))
+          .from(productsActive)
+          .where(inArray(productsActive.id, productIds))
       : [],
     shouldFetchSources
       ? db
           .select({
-            id: sources.id,
-            slug: sources.slug,
-            name: sources.name,
+            id: sourcesActive.id,
+            slug: sourcesActive.slug,
+            name: sourcesActive.name,
           })
-          .from(sources)
-          .where(and(inArray(sources.id, sourceIds), isNull(sources.deletedAt)))
+          .from(sourcesActive)
+          .where(inArray(sourcesActive.id, sourceIds))
       : [],
   ]);
 

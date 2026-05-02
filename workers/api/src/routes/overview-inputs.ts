@@ -1,11 +1,11 @@
 import { Hono } from "hono";
-import { and, desc, eq, gte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, ne, or } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
-  organizations,
+  organizationsActive,
   releases,
-  sources,
+  sourcesActive,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import {
@@ -14,8 +14,8 @@ import {
   selectReleasesForOverview,
 } from "@buildinternet/releases-core/overview";
 import { authMiddleware } from "../middleware/auth.js";
-import { orgNotOnDemand, sourceNotDeleted } from "../queries/shared.js";
-import { hydrateMediaUrls, orgWhere, parseReleaseMedia } from "../utils.js";
+import { notOnDemand } from "../queries/shared.js";
+import { hydrateMediaUrls, parseReleaseMedia } from "../utils.js";
 import type { Env } from "../index.js";
 
 /**
@@ -51,33 +51,39 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
     return c.json({ error: "limit must be a positive integer" }, 400);
   }
 
+  const orgIdMatch = slug.startsWith("org_")
+    ? eq(organizationsActive.id, slug)
+    : eq(organizationsActive.slug, slug);
+
   const [org] = await db
     .select({
-      id: organizations.id,
-      slug: organizations.slug,
-      name: organizations.name,
-      description: organizations.description,
-      discovery: organizations.discovery,
+      id: organizationsActive.id,
+      slug: organizationsActive.slug,
+      name: organizationsActive.name,
+      description: organizationsActive.description,
+      discovery: organizationsActive.discovery,
     })
-    .from(organizations)
-    .where(and(orgWhere(slug), orgNotOnDemand));
+    .from(organizationsActive)
+    .where(and(orgIdMatch, notOnDemand(organizationsActive.discovery)));
   if (!org) return c.json({ error: "not_found" }, 404);
 
   // Active sources only — skip hidden + paused.
   const activeSources = await db
     .select({
-      id: sources.id,
-      slug: sources.slug,
-      name: sources.name,
-      type: sources.type,
+      id: sourcesActive.id,
+      slug: sourcesActive.slug,
+      name: sourcesActive.name,
+      type: sourcesActive.type,
     })
-    .from(sources)
+    .from(sourcesActive)
     .where(
       and(
-        eq(sources.orgId, org.id),
-        eq(sources.isHidden, false),
-        ne(sources.fetchPriority, "paused"),
-        sourceNotDeleted,
+        eq(sourcesActive.orgId, org.id),
+        // is_hidden / fetch_priority are nullable — three-valued SQL logic
+        // would drop legacy NULL rows from a bare eq/ne, so OR in the IS NULL
+        // case so they count as visible / not-paused.
+        or(eq(sourcesActive.isHidden, false), isNull(sourcesActive.isHidden)),
+        or(ne(sourcesActive.fetchPriority, "paused"), isNull(sourcesActive.fetchPriority)),
       ),
     );
 

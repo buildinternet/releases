@@ -12,14 +12,13 @@
  * the caller is signalled via the `degraded` field on the response.
  */
 
-import { sql, inArray, and } from "drizzle-orm";
+import { sql, inArray } from "drizzle-orm";
 import {
-  sources,
-  organizations,
-  products,
+  sourcesActive,
+  organizationsActive,
+  productsActive,
   sourceChangelogFiles,
 } from "@buildinternet/releases-core/schema";
-import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 // sources/orgs/products are used for entity hydration (runRegistrySearch);
 // sourceChangelogFiles is used for batched chunk content reads.
 import {
@@ -196,15 +195,14 @@ async function hydrateReleases(
            o.slug as orgSlug,
            o.name as orgName
     FROM releases r
-    JOIN sources s ON s.id = r.source_id
-    LEFT JOIN organizations o ON o.id = s.org_id
+    JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE r.id IN (${sql.join(
       ids.map((id) => sql`${id}`),
       sql`, `,
     )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
       ${coverageFilter}
   `);
   const map = new Map<string, RawReleaseRow>();
@@ -256,14 +254,13 @@ async function hydrateChunks(
            o.name as orgName
     FROM source_changelog_chunks scc
     JOIN source_changelog_files scf ON scf.id = scc.source_changelog_file_id
-    JOIN sources s ON s.id = scc.source_id
-    LEFT JOIN organizations o ON o.id = s.org_id
+    JOIN sources_active s ON s.id = scc.source_id
+    LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE scc.vector_id IN (${sql.join(
       vectorIds.map((id) => sql`${id}`),
       sql`, `,
     )})
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
   `);
 
   if (chunkRows.length === 0) return new Map();
@@ -569,36 +566,36 @@ export async function runRegistrySearch(
     shouldFetchOrgs
       ? db
           .select({
-            id: organizations.id,
-            slug: organizations.slug,
-            name: organizations.name,
-            description: organizations.description,
-            category: organizations.category,
+            id: organizationsActive.id,
+            slug: organizationsActive.slug,
+            name: organizationsActive.name,
+            description: organizationsActive.description,
+            category: organizationsActive.category,
           })
-          .from(organizations)
-          .where(and(inArray(organizations.id, orgIds), orgNotDeleted))
+          .from(organizationsActive)
+          .where(inArray(organizationsActive.id, orgIds))
       : [],
     shouldFetchProducts
       ? db
           .select({
-            id: products.id,
-            slug: products.slug,
-            name: products.name,
-            description: products.description,
-            category: products.category,
+            id: productsActive.id,
+            slug: productsActive.slug,
+            name: productsActive.name,
+            description: productsActive.description,
+            category: productsActive.category,
           })
-          .from(products)
-          .where(and(inArray(products.id, productIds), productNotDeleted))
+          .from(productsActive)
+          .where(inArray(productsActive.id, productIds))
       : [],
     shouldFetchSources
       ? db
           .select({
-            id: sources.id,
-            slug: sources.slug,
-            name: sources.name,
+            id: sourcesActive.id,
+            slug: sourcesActive.slug,
+            name: sourcesActive.name,
           })
-          .from(sources)
-          .where(and(inArray(sources.id, sourceIds), sourceNotDeleted))
+          .from(sourcesActive)
+          .where(inArray(sourcesActive.id, sourceIds))
       : [],
   ]);
 

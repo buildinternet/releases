@@ -4,12 +4,11 @@ import { createDb } from "../db.js";
 import {
   knowledgePages,
   organizations,
-  sources,
-  products,
+  sourcesActive,
+  productsActive,
 } from "@buildinternet/releases-core/schema";
 import { generatePlaybookHeader } from "@releases/ai-internal/playbook";
 import { authMiddleware } from "../middleware/auth.js";
-import { productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import { newKnowledgePageId, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
@@ -63,19 +62,16 @@ app.patch("/orgs/:slug/playbook/notes", async (c) => {
     await db.run(sql`UPDATE knowledge_pages SET notes = ${notes}, updated_at = ${now}
       WHERE scope = 'playbook' AND org_id = ${org.id}`);
   } else {
-    const orgSources = await db
-      .select()
-      .from(sources)
-      .where(and(eq(sources.orgId, org.id), sourceNotDeleted));
+    const orgSources = await db.select().from(sourcesActive).where(eq(sourcesActive.orgId, org.id));
     const orgProducts = await db
       .select({
-        id: products.id,
-        name: products.name,
-        slug: products.slug,
-        description: products.description,
+        id: productsActive.id,
+        name: productsActive.name,
+        slug: productsActive.slug,
+        description: productsActive.description,
       })
-      .from(products)
-      .where(and(eq(products.orgId, org.id), productNotDeleted));
+      .from(productsActive)
+      .where(eq(productsActive.orgId, org.id));
 
     const header = generatePlaybookHeader({
       orgName: org.name,

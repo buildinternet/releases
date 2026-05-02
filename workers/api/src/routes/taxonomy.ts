@@ -2,32 +2,32 @@ import { Hono } from "hono";
 import { eq, and } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
-  organizations,
-  products,
+  organizationsActive,
+  productsActive,
   tags,
   orgTags,
   productTags,
 } from "@buildinternet/releases-core/schema";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
-import { orgNotOnDemand, orgNotDeleted, productNotDeleted } from "../queries/shared.js";
+import { notOnDemand } from "../queries/shared.js";
 import type { Env } from "../index.js";
 import type { CategoryDetail, TagDetail } from "@buildinternet/releases-api-types";
 
 export const taxonomyRoutes = new Hono<Env>();
 
 const orgFields = {
-  slug: organizations.slug,
-  name: organizations.name,
-  domain: organizations.domain,
-  avatarUrl: organizations.avatarUrl,
+  slug: organizationsActive.slug,
+  name: organizationsActive.name,
+  domain: organizationsActive.domain,
+  avatarUrl: organizationsActive.avatarUrl,
 } as const;
 
 const productFields = {
-  slug: products.slug,
-  name: products.name,
-  description: products.description,
-  orgSlug: organizations.slug,
-  orgName: organizations.name,
+  slug: productsActive.slug,
+  name: productsActive.name,
+  description: productsActive.description,
+  orgSlug: organizationsActive.slug,
+  orgName: organizationsActive.name,
 } as const;
 
 taxonomyRoutes.get("/categories/:slug", async (c) => {
@@ -40,15 +40,17 @@ taxonomyRoutes.get("/categories/:slug", async (c) => {
   const [orgs, productsList] = await Promise.all([
     db
       .select(orgFields)
-      .from(organizations)
-      .where(and(eq(organizations.category, slug), orgNotOnDemand, orgNotDeleted))
-      .orderBy(organizations.name),
+      .from(organizationsActive)
+      .where(
+        and(eq(organizationsActive.category, slug), notOnDemand(organizationsActive.discovery)),
+      )
+      .orderBy(organizationsActive.name),
     db
       .select(productFields)
-      .from(products)
-      .innerJoin(organizations, eq(products.orgId, organizations.id))
-      .where(and(eq(products.category, slug), orgNotOnDemand, orgNotDeleted, productNotDeleted))
-      .orderBy(products.name),
+      .from(productsActive)
+      .innerJoin(organizationsActive, eq(productsActive.orgId, organizationsActive.id))
+      .where(and(eq(productsActive.category, slug), notOnDemand(organizationsActive.discovery)))
+      .orderBy(productsActive.name),
   ]);
 
   const body: CategoryDetail = { slug, orgs, products: productsList };
@@ -67,17 +69,17 @@ taxonomyRoutes.get("/tags/:slug", async (c) => {
   const [orgs, productsList] = await Promise.all([
     db
       .select(orgFields)
-      .from(organizations)
-      .innerJoin(orgTags, eq(orgTags.orgId, organizations.id))
-      .where(and(eq(orgTags.tagId, tag.id), orgNotOnDemand, orgNotDeleted))
-      .orderBy(organizations.name),
+      .from(organizationsActive)
+      .innerJoin(orgTags, eq(orgTags.orgId, organizationsActive.id))
+      .where(and(eq(orgTags.tagId, tag.id), notOnDemand(organizationsActive.discovery)))
+      .orderBy(organizationsActive.name),
     db
       .select(productFields)
-      .from(products)
-      .innerJoin(productTags, eq(productTags.productId, products.id))
-      .innerJoin(organizations, eq(products.orgId, organizations.id))
-      .where(and(eq(productTags.tagId, tag.id), orgNotOnDemand, orgNotDeleted, productNotDeleted))
-      .orderBy(products.name),
+      .from(productsActive)
+      .innerJoin(productTags, eq(productTags.productId, productsActive.id))
+      .innerJoin(organizationsActive, eq(productsActive.orgId, organizationsActive.id))
+      .where(and(eq(productTags.tagId, tag.id), notOnDemand(organizationsActive.discovery)))
+      .orderBy(productsActive.name),
   ]);
 
   const body: TagDetail = { slug: tag.slug, name: tag.name, orgs, products: productsList };

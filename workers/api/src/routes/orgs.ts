@@ -7,6 +7,7 @@ import {
   sources,
   releases,
   products,
+  productsActive,
   tags,
   orgTags,
   domainAliases,
@@ -140,16 +141,16 @@ orgRoutes.get("/orgs/:slug", async (c) => {
 
     db
       .select({
-        id: products.id,
-        slug: products.slug,
-        name: products.name,
-        url: products.url,
-        description: products.description,
-        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id AND s.deleted_at IS NULL)`,
+        id: productsActive.id,
+        slug: productsActive.slug,
+        name: productsActive.name,
+        url: productsActive.url,
+        description: productsActive.description,
+        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
       })
-      .from(products)
-      .where(eq(products.orgId, org.id))
-      .orderBy(products.name),
+      .from(productsActive)
+      .where(eq(productsActive.orgId, org.id))
+      .orderBy(productsActive.name),
 
     db
       .select({ domain: domainAliases.domain })

@@ -3,16 +3,15 @@
 // entry in the adminRoutes allowlist in workers/api/src/index.ts.
 
 import { Hono } from "hono";
-import { and, count, sql } from "drizzle-orm";
+import { count, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   releases,
-  sources,
-  organizations,
-  products,
+  sourcesActive,
+  organizationsActive,
+  productsActive,
   sourceChangelogChunks,
 } from "@buildinternet/releases-core/schema";
-import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import type { Env } from "../index.js";
 
 export const adminEmbedStatusRoutes = new Hono<Env>();
@@ -40,22 +39,22 @@ adminEmbedStatusRoutes.get("/admin/embed/status", async (c) => {
       .from(releases)
       // Suppressed rows are still counted — the backfill treats them the
       // same; operators who care about suppressed gaps diff against search.
-      .where(and(sql`${releases.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(organizations).where(orgNotDeleted),
+      .where(sql`${releases.embeddedAt} IS NOT NULL`),
+    db.select({ n: count() }).from(organizationsActive),
     db
       .select({ n: count() })
-      .from(organizations)
-      .where(and(orgNotDeleted, sql`${organizations.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(products).where(productNotDeleted),
+      .from(organizationsActive)
+      .where(sql`${organizationsActive.embeddedAt} IS NOT NULL`),
+    db.select({ n: count() }).from(productsActive),
     db
       .select({ n: count() })
-      .from(products)
-      .where(and(productNotDeleted, sql`${products.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(sources).where(sourceNotDeleted),
+      .from(productsActive)
+      .where(sql`${productsActive.embeddedAt} IS NOT NULL`),
+    db.select({ n: count() }).from(sourcesActive),
     db
       .select({ n: count() })
-      .from(sources)
-      .where(and(sourceNotDeleted, sql`${sources.embeddedAt} IS NOT NULL`)),
+      .from(sourcesActive)
+      .where(sql`${sourcesActive.embeddedAt} IS NOT NULL`),
     db.select({ n: count() }).from(sourceChangelogChunks),
     db
       .select({ n: count() })

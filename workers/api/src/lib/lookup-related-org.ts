@@ -1,6 +1,6 @@
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
-import { organizations, sources } from "@buildinternet/releases-core/schema";
-import { orgNotDeleted, orgNotOnDemand, sourceNotDeleted } from "../queries/shared.js";
+import { organizationsActive, sourcesActive } from "@buildinternet/releases-core/schema";
+import { notOnDemand } from "../queries/shared.js";
 import type { createDb } from "../db.js";
 
 type Db = ReturnType<typeof createDb>;
@@ -33,18 +33,16 @@ export async function resolveRelatedOrg(
   const urlPattern = `%github.com/${escapeLike(orgSegment)}/%`;
   const orgsByUrl = await db
     .selectDistinct({
-      id: organizations.id,
-      slug: organizations.slug,
-      name: organizations.name,
+      id: organizationsActive.id,
+      slug: organizationsActive.slug,
+      name: organizationsActive.name,
     })
-    .from(organizations)
-    .innerJoin(sources, eq(sources.orgId, organizations.id))
+    .from(organizationsActive)
+    .innerJoin(sourcesActive, eq(sourcesActive.orgId, organizationsActive.id))
     .where(
       and(
-        sql`${sources.url} LIKE ${urlPattern} ESCAPE '\\'`,
-        orgNotOnDemand,
-        orgNotDeleted,
-        sourceNotDeleted,
+        sql`${sourcesActive.url} LIKE ${urlPattern} ESCAPE '\\'`,
+        notOnDemand(organizationsActive.discovery),
       ),
     )
     .limit(2);
@@ -54,9 +52,15 @@ export async function resolveRelatedOrg(
   // If no URL matches, fall back to exact slug match.
   if (candidates.length === 0) {
     const exactSlugMatches = await db
-      .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
-      .from(organizations)
-      .where(and(eq(organizations.slug, orgSegment), orgNotOnDemand, orgNotDeleted))
+      .select({
+        id: organizationsActive.id,
+        slug: organizationsActive.slug,
+        name: organizationsActive.name,
+      })
+      .from(organizationsActive)
+      .where(
+        and(eq(organizationsActive.slug, orgSegment), notOnDemand(organizationsActive.discovery)),
+      )
       .limit(2);
     candidates = exactSlugMatches;
   }
@@ -66,20 +70,19 @@ export async function resolveRelatedOrg(
 
   const orgSources = await db
     .select({
-      id: sources.id,
-      slug: sources.slug,
-      name: sources.name,
-      url: sources.url,
+      id: sourcesActive.id,
+      slug: sourcesActive.slug,
+      name: sourcesActive.name,
+      url: sourcesActive.url,
     })
-    .from(sources)
+    .from(sourcesActive)
     .where(
       and(
-        eq(sources.orgId, org.id),
-        or(ne(sources.discovery, "on_demand"), sql`${sources.discovery} IS NULL`),
-        sourceNotDeleted,
+        eq(sourcesActive.orgId, org.id),
+        or(ne(sourcesActive.discovery, "on_demand"), sql`${sourcesActive.discovery} IS NULL`),
       ),
     )
-    .orderBy(desc(sources.lastFetchedAt))
+    .orderBy(desc(sourcesActive.lastFetchedAt))
     .limit(5);
 
   return { org, sources: orgSources };

@@ -1,8 +1,12 @@
 import { Hono } from "hono";
 import { eq, inArray, max, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
-import { organizations, sources, products, releases } from "@buildinternet/releases-core/schema";
-import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
+import {
+  organizationsActive,
+  sourcesActive,
+  productsActive,
+  releases,
+} from "@buildinternet/releases-core/schema";
 import type { Env } from "../index.js";
 
 export const sitemapRoutes = new Hono<Env>();
@@ -12,14 +16,13 @@ sitemapRoutes.get("/sitemap", async (c) => {
 
   const orgRows = await db
     .select({
-      id: organizations.id,
-      slug: organizations.slug,
-      lastActivity: max(sources.lastFetchedAt),
+      id: organizationsActive.id,
+      slug: organizationsActive.slug,
+      lastActivity: max(sourcesActive.lastFetchedAt),
     })
-    .from(organizations)
-    .leftJoin(sources, and(eq(sources.orgId, organizations.id), sourceNotDeleted))
-    .where(orgNotDeleted)
-    .groupBy(organizations.id);
+    .from(organizationsActive)
+    .leftJoin(sourcesActive, eq(sourcesActive.orgId, organizationsActive.id))
+    .groupBy(organizationsActive.id);
 
   if (orgRows.length === 0) {
     return c.json({ orgs: [], sources: [], products: [] });
@@ -40,24 +43,24 @@ sitemapRoutes.get("/sitemap", async (c) => {
       orgIdChunks.map((chunk) =>
         db
           .select({
-            orgId: sources.orgId,
-            slug: sources.slug,
-            id: sources.id,
-            isHidden: sources.isHidden,
+            orgId: sourcesActive.orgId,
+            slug: sourcesActive.slug,
+            id: sourcesActive.id,
+            isHidden: sourcesActive.isHidden,
           })
-          .from(sources)
-          .where(and(inArray(sources.orgId, chunk), sourceNotDeleted)),
+          .from(sourcesActive)
+          .where(inArray(sourcesActive.orgId, chunk)),
       ),
     ),
     Promise.all(
       orgIdChunks.map((chunk) =>
         db
           .select({
-            orgId: products.orgId,
-            slug: products.slug,
+            orgId: productsActive.orgId,
+            slug: productsActive.slug,
           })
-          .from(products)
-          .where(and(inArray(products.orgId, chunk), productNotDeleted)),
+          .from(productsActive)
+          .where(inArray(productsActive.orgId, chunk)),
       ),
     ),
     Promise.all(
@@ -68,14 +71,8 @@ sitemapRoutes.get("/sitemap", async (c) => {
             latestDate: max(releases.publishedAt),
           })
           .from(releases)
-          .innerJoin(sources, eq(releases.sourceId, sources.id))
-          .where(
-            and(
-              inArray(sources.orgId, chunk),
-              sourceNotDeleted,
-              sql`${releases.publishedAt} IS NOT NULL`,
-            ),
-          )
+          .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
+          .where(and(inArray(sourcesActive.orgId, chunk), sql`${releases.publishedAt} IS NOT NULL`))
           .groupBy(releases.sourceId),
       ),
     ),

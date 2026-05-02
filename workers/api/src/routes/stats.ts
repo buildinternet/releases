@@ -1,16 +1,15 @@
 import { Hono } from "hono";
-import { count, gte, desc, eq, and } from "drizzle-orm";
+import { count, gte, desc, eq } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
-  organizations,
-  sources,
+  organizationsActive,
+  sourcesActive,
   releases,
-  products,
+  productsActive,
   fetchLog,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import type { Env } from "../index.js";
 
 export const statsRoutes = new Hono<Env>();
@@ -30,51 +29,48 @@ statsRoutes.get("/stats", async (c) => {
     [neverFetched],
     [recentlyFetched],
   ] = await Promise.all([
-    db.select({ n: count() }).from(organizations).where(orgNotDeleted),
-    db.select({ n: count() }).from(sources).where(sourceNotDeleted),
+    db.select({ n: count() }).from(organizationsActive),
+    db.select({ n: count() }).from(sourcesActive),
     db
       .select({ n: count() })
       .from(releases)
-      .innerJoin(sources, and(eq(releases.sourceId, sources.id), sourceNotDeleted))
+      .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
       .where(sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
-    db.select({ n: count() }).from(products).where(productNotDeleted),
+    db.select({ n: count() }).from(productsActive),
     db
       .select({ n: count() })
       .from(releases)
-      .innerJoin(sources, and(eq(releases.sourceId, sources.id), sourceNotDeleted))
+      .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
       .where(
         sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff}`,
       ),
     db
       .select({ n: count() })
-      .from(sources)
-      .where(and(sourceNotDeleted, sql`${sources.lastFetchedAt} IS NULL`)),
-    db
-      .select({ n: count() })
-      .from(sources)
-      .where(and(sourceNotDeleted, gte(sources.lastFetchedAt, cutoff))),
+      .from(sourcesActive)
+      .where(sql`${sourcesActive.lastFetchedAt} IS NULL`),
+    db.select({ n: count() }).from(sourcesActive).where(gte(sourcesActive.lastFetchedAt, cutoff)),
   ]);
 
   const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
 
   // Per-source activity (top sources by recent release count, all visible sources)
-  const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
+  const notDisabled = sql`(${sourcesActive.isHidden} = 0 OR ${sourcesActive.isHidden} IS NULL)`;
 
   const perSource = await db
     .select({
-      sourceName: sources.name,
-      sourceSlug: sources.slug,
-      sourceType: sources.type,
-      orgName: organizations.name,
-      lastFetchedAt: sources.lastFetchedAt,
+      sourceName: sourcesActive.name,
+      sourceSlug: sourcesActive.slug,
+      sourceType: sourcesActive.type,
+      orgName: organizationsActive.name,
+      lastFetchedAt: sourcesActive.lastFetchedAt,
       totalReleases: sql<number>`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) THEN 1 END)`,
       recentReleases: sql<number>`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
     })
-    .from(sources)
-    .leftJoin(releases, eq(releases.sourceId, sources.id))
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(notDisabled, sourceNotDeleted))
-    .groupBy(sources.id)
+    .from(sourcesActive)
+    .leftJoin(releases, eq(releases.sourceId, sourcesActive.id))
+    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
+    .where(notDisabled)
+    .groupBy(sourcesActive.id)
     .orderBy(
       desc(
         sql`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
@@ -84,20 +80,20 @@ statsRoutes.get("/stats", async (c) => {
   // Recent fetch activity — join sources + orgs so we can return name/slug/org
   const recentActivity = await db
     .select({
-      sourceName: sources.name,
-      sourceSlug: sources.slug,
-      orgName: organizations.name,
+      sourceName: sourcesActive.name,
+      sourceSlug: sourcesActive.slug,
+      orgName: organizationsActive.name,
       releasesFound: fetchLog.releasesFound,
       releasesInserted: fetchLog.releasesInserted,
-      totalReleases: sql<number>`(SELECT COUNT(*) FROM releases r WHERE r.source_id = ${sources.id} AND (r.suppressed IS NULL OR r.suppressed = 0))`,
+      totalReleases: sql<number>`(SELECT COUNT(*) FROM releases r WHERE r.source_id = ${sourcesActive.id} AND (r.suppressed IS NULL OR r.suppressed = 0))`,
       status: fetchLog.status,
       durationMs: fetchLog.durationMs,
       error: fetchLog.error,
       createdAt: fetchLog.createdAt,
     })
     .from(fetchLog)
-    .innerJoin(sources, and(eq(fetchLog.sourceId, sources.id), sourceNotDeleted))
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
+    .innerJoin(sourcesActive, eq(fetchLog.sourceId, sourcesActive.id))
+    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
     .orderBy(desc(fetchLog.createdAt))
     .limit(20);
 

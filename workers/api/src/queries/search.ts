@@ -36,10 +36,9 @@ export async function searchOrgs(
 ): Promise<SearchOrgHit[]> {
   return db.all<SearchOrgHit>(sql`
     SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
-    FROM organizations o
+    FROM organizations_active o
     LEFT JOIN domain_aliases da ON da.org_id = o.id
-    WHERE o.deleted_at IS NULL
-      AND (o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
+    WHERE (o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
       OR da.domain LIKE ${pattern})
     ORDER BY o.name LIMIT ${limit}
   `);
@@ -53,11 +52,10 @@ export async function searchProducts(
   return db.all<SearchCatalogHit>(sql`
     SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category,
            'product' as kind
-    FROM products p
-    INNER JOIN organizations o ON o.id = p.org_id AND o.deleted_at IS NULL
+    FROM products_active p
+    INNER JOIN organizations_active o ON o.id = p.org_id
     LEFT JOIN domain_aliases da ON da.product_id = p.id
-    WHERE p.deleted_at IS NULL
-      AND (p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern})
+    WHERE (p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern})
     ORDER BY p.name LIMIT ${limit}
   `);
 }
@@ -70,11 +68,10 @@ export async function searchSources(
   return db.all<RawSourceHit>(sql`
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
            p.slug as productSlug, p.name as productName, p.category as productCategory
-    FROM sources s
-    LEFT JOIN organizations o ON o.id = s.org_id AND o.deleted_at IS NULL
-    LEFT JOIN products p ON p.id = s.product_id AND p.deleted_at IS NULL
+    FROM sources_active s
+    LEFT JOIN organizations_active o ON o.id = s.org_id
+    LEFT JOIN products_active p ON p.id = s.product_id
     WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
       AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
     ORDER BY s.name LIMIT ${limit}
   `);
@@ -107,12 +104,11 @@ export async function searchReleasesFts(
            r.published_at as publishedAt
     FROM releases_fts
     JOIN releases r ON r.rowid = releases_fts.rowid
-    JOIN sources s ON s.id = r.source_id
-    LEFT JOIN organizations o ON o.id = s.org_id
+    JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE releases_fts MATCH ${ftsQuery}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
       ${coverageCondition(opts.includeCoverage)}
     ORDER BY rank LIMIT ${limit} OFFSET ${offset}
   `);
@@ -151,12 +147,11 @@ export async function searchReleasesFromMatchedEntities(
            r.media as media,
            r.published_at as publishedAt
     FROM releases r
-    JOIN sources s ON s.id = r.source_id
-    LEFT JOIN organizations o ON o.id = s.org_id
-    LEFT JOIN products p ON p.id = s.product_id
+    JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN organizations_active o ON o.id = s.org_id
+    LEFT JOIN products_active p ON p.id = s.product_id
     WHERE (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
       ${coverageCondition(opts.includeCoverage)}
       AND (${sql.join(conditions, sql` OR `)})
     ORDER BY r.published_at DESC LIMIT ${limit}

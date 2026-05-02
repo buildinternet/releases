@@ -14,10 +14,14 @@
  */
 
 import { Hono } from "hono";
-import { sql, inArray, eq, and } from "drizzle-orm";
-import { sources, organizations, releases } from "@buildinternet/releases-core/schema";
+import { sql, inArray, eq } from "drizzle-orm";
+import {
+  sources,
+  sourcesActive,
+  organizationsActive,
+  releases,
+} from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
-import { orgNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import { sourceWhere, parseReleaseMedia } from "../utils.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
@@ -126,10 +130,10 @@ relatedRoutes.get("/related/releases", async (c) => {
     .select({
       id: releases.id,
       sourceId: releases.sourceId,
-      orgId: sources.orgId,
+      orgId: sourcesActive.orgId,
     })
     .from(releases)
-    .innerJoin(sources, eq(sources.id, releases.sourceId))
+    .innerJoin(sourcesActive, eq(sourcesActive.id, releases.sourceId))
     .where(eq(releases.id, anchorId));
   if (!anchor) {
     return c.json({ error: "not_found", message: "Release not found" }, 404);
@@ -225,15 +229,14 @@ async function hydrateReleaseNeighbors(
            o.slug as orgSlug,
            o.name as orgName
     FROM releases r
-    JOIN sources s ON s.id = r.source_id
-    LEFT JOIN organizations o ON o.id = s.org_id
+    JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE r.id IN (${sql.join(
       ids.map((id) => sql`${id}`),
       sql`, `,
     )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND s.deleted_at IS NULL
   `);
 
   const byId = new Map<string, (typeof rows)[number]>();
@@ -373,16 +376,16 @@ relatedRoutes.get("/related/sources", async (c) => {
 
   const rows = await db
     .select({
-      id: sources.id,
-      slug: sources.slug,
-      name: sources.name,
-      type: sources.type,
-      url: sources.url,
-      orgId: sources.orgId,
-      isHidden: sources.isHidden,
+      id: sourcesActive.id,
+      slug: sourcesActive.slug,
+      name: sourcesActive.name,
+      type: sourcesActive.type,
+      url: sourcesActive.url,
+      orgId: sourcesActive.orgId,
+      isHidden: sourcesActive.isHidden,
     })
-    .from(sources)
-    .where(and(inArray(sources.id, neighborIds), sourceNotDeleted));
+    .from(sourcesActive)
+    .where(inArray(sourcesActive.id, neighborIds));
 
   const visibleById = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
@@ -396,13 +399,13 @@ relatedRoutes.get("/related/sources", async (c) => {
     orgIds.length > 0
       ? await db
           .select({
-            id: organizations.id,
-            slug: organizations.slug,
-            name: organizations.name,
-            avatarUrl: organizations.avatarUrl,
+            id: organizationsActive.id,
+            slug: organizationsActive.slug,
+            name: organizationsActive.name,
+            avatarUrl: organizationsActive.avatarUrl,
           })
-          .from(organizations)
-          .where(and(inArray(organizations.id, orgIds), orgNotDeleted))
+          .from(organizationsActive)
+          .where(inArray(organizationsActive.id, orgIds))
       : [];
   const orgById = new Map<string, { slug: string; name: string; avatarUrl: string | null }>();
   for (const o of orgRows)
