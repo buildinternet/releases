@@ -23,6 +23,15 @@ export function Footer() {
               className="hover:text-stone-700 dark:hover:text-stone-300 underline-offset-2 hover:underline"
             >
               Zach Dunn
+            </a>{" "}
+            /{" "}
+            <a
+              href="https://buildinternet.com"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hover:text-stone-700 dark:hover:text-stone-300 underline-offset-2 hover:underline"
+            >
+              Build Internet
             </a>
             .
           </div>
