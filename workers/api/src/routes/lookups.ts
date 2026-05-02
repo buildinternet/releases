@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
@@ -11,6 +11,7 @@ import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { orgNotDeleted } from "../queries/shared.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -210,7 +211,7 @@ export async function runLookup(
       const [winningOrg] = await db
         .select()
         .from(organizations)
-        .where(and(eq(organizations.slug, parsed.org), isNull(organizations.deletedAt)))
+        .where(and(eq(organizations.slug, parsed.org), orgNotDeleted))
         .limit(1);
       orgId = winningOrg!.id;
     }

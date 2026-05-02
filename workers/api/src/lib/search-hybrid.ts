@@ -12,13 +12,14 @@
  * the caller is signalled via the `degraded` field on the response.
  */
 
-import { sql, inArray, isNull, and } from "drizzle-orm";
+import { sql, inArray, and } from "drizzle-orm";
 import {
   sources,
   organizations,
   products,
   sourceChangelogFiles,
 } from "@buildinternet/releases-core/schema";
+import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 // sources/orgs/products are used for entity hydration (runRegistrySearch);
 // sourceChangelogFiles is used for batched chunk content reads.
 import {
@@ -575,7 +576,7 @@ export async function runRegistrySearch(
             category: organizations.category,
           })
           .from(organizations)
-          .where(and(inArray(organizations.id, orgIds), isNull(organizations.deletedAt)))
+          .where(and(inArray(organizations.id, orgIds), orgNotDeleted))
       : [],
     shouldFetchProducts
       ? db
@@ -587,7 +588,7 @@ export async function runRegistrySearch(
             category: products.category,
           })
           .from(products)
-          .where(and(inArray(products.id, productIds), isNull(products.deletedAt)))
+          .where(and(inArray(products.id, productIds), productNotDeleted))
       : [],
     shouldFetchSources
       ? db
@@ -597,7 +598,7 @@ export async function runRegistrySearch(
             name: sources.name,
           })
           .from(sources)
-          .where(and(inArray(sources.id, sourceIds), isNull(sources.deletedAt)))
+          .where(and(inArray(sources.id, sourceIds), sourceNotDeleted))
       : [],
   ]);
 

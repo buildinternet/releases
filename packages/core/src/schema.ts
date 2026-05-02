@@ -57,6 +57,11 @@ export const organizations = sqliteTable(
     uniqueIndex("idx_organizations_domain_active")
       .on(table.domain)
       .where(sql`${table.deletedAt} IS NULL AND ${table.domain} IS NOT NULL`),
+    // Backs the nightly tombstone sweep cron's "deleted_at < cutoff" candidate
+    // collection. Partial form keeps the index trivially small.
+    index("idx_organizations_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 
@@ -99,6 +104,9 @@ export const products = sqliteTable(
     uniqueIndex("idx_products_slug_active")
       .on(table.slug)
       .where(sql`${table.deletedAt} IS NULL`),
+    index("idx_products_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 
@@ -218,6 +226,9 @@ export const sources = sqliteTable(
     uniqueIndex("idx_sources_slug_active")
       .on(table.slug)
       .where(sql`${table.deletedAt} IS NULL`),
+    index("idx_sources_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

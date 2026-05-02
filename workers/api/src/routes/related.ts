@@ -14,9 +14,10 @@
  */
 
 import { Hono } from "hono";
-import { sql, inArray, eq, isNull, and } from "drizzle-orm";
+import { sql, inArray, eq, and } from "drizzle-orm";
 import { sources, organizations, releases } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
+import { orgNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import { sourceWhere, parseReleaseMedia } from "../utils.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
@@ -381,7 +382,7 @@ relatedRoutes.get("/related/sources", async (c) => {
       isHidden: sources.isHidden,
     })
     .from(sources)
-    .where(and(inArray(sources.id, neighborIds), isNull(sources.deletedAt)));
+    .where(and(inArray(sources.id, neighborIds), sourceNotDeleted));
 
   const visibleById = new Map<string, (typeof rows)[number]>();
   for (const row of rows) {
@@ -401,7 +402,7 @@ relatedRoutes.get("/related/sources", async (c) => {
             avatarUrl: organizations.avatarUrl,
           })
           .from(organizations)
-          .where(and(inArray(organizations.id, orgIds), isNull(organizations.deletedAt)))
+          .where(and(inArray(organizations.id, orgIds), orgNotDeleted))
       : [];
   const orgById = new Map<string, { slug: string; name: string; avatarUrl: string | null }>();
   for (const o of orgRows)

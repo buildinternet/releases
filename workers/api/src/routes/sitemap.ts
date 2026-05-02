@@ -1,7 +1,8 @@
 import { Hono } from "hono";
-import { eq, inArray, max, and, sql, isNull } from "drizzle-orm";
+import { eq, inArray, max, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { organizations, sources, products, releases } from "@buildinternet/releases-core/schema";
+import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import type { Env } from "../index.js";
 
 export const sitemapRoutes = new Hono<Env>();
@@ -16,8 +17,8 @@ sitemapRoutes.get("/sitemap", async (c) => {
       lastActivity: max(sources.lastFetchedAt),
     })
     .from(organizations)
-    .leftJoin(sources, and(eq(sources.orgId, organizations.id), isNull(sources.deletedAt)))
-    .where(isNull(organizations.deletedAt))
+    .leftJoin(sources, and(eq(sources.orgId, organizations.id), sourceNotDeleted))
+    .where(orgNotDeleted)
     .groupBy(organizations.id);
 
   if (orgRows.length === 0) {
@@ -35,7 +36,7 @@ sitemapRoutes.get("/sitemap", async (c) => {
         isHidden: sources.isHidden,
       })
       .from(sources)
-      .where(and(inArray(sources.orgId, orgIds), isNull(sources.deletedAt))),
+      .where(and(inArray(sources.orgId, orgIds), sourceNotDeleted)),
 
     db
       .select({
@@ -43,7 +44,7 @@ sitemapRoutes.get("/sitemap", async (c) => {
         slug: products.slug,
       })
       .from(products)
-      .where(and(inArray(products.orgId, orgIds), isNull(products.deletedAt))),
+      .where(and(inArray(products.orgId, orgIds), productNotDeleted)),
 
     db
       .select({

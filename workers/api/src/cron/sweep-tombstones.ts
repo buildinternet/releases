@@ -11,7 +11,7 @@
  * the two sweeps don't compete for D1 capacity.
  */
 
-import { and, lt, isNotNull, inArray } from "drizzle-orm";
+import { and, lt, isNotNull, inArray, type Column } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
@@ -58,6 +58,9 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
   let purgedOrgs = 0;
   let purgedVectors = 0;
 
+  // Predicate is "tombstoned and older than cutoff" — same shape on each table.
+  const expired = (col: Column) => and(isNotNull(col), lt(col, cutoff));
+
   try {
     // Pre-collect release IDs for any sources we're about to purge so we can
     // clean Vectorize after the FK cascade does its thing. Doing this before
@@ -66,13 +69,13 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
     const sourcesToPurge: { id: string }[] = await db
       .select({ id: sources.id })
       .from(sources)
-      .where(and(isNotNull(sources.deletedAt), lt(sources.deletedAt, cutoff)));
+      .where(expired(sources.deletedAt));
 
     const releaseIdsToCleanup: string[] = [];
     if (sourcesToPurge.length > 0) {
       // Chunk inArray reads to stay well under D1's 100-bind limit.
       const CHUNK = 90;
-      const sourceIds = sourcesToPurge.map((s: { id: string }) => s.id);
+      const sourceIds = sourcesToPurge.map((s) => s.id);
       for (let i = 0; i < sourceIds.length; i += CHUNK) {
         const slice = sourceIds.slice(i, i + CHUNK);
         // oxlint-disable-next-line no-await-in-loop -- chunked inArray under D1's bind cap
@@ -80,15 +83,13 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
           .select({ id: releases.id })
           .from(releases)
           .where(inArray(releases.sourceId, slice));
-        releaseIdsToCleanup.push(...rows.map((r: { id: string }) => r.id));
+        releaseIdsToCleanup.push(...rows.map((r) => r.id));
       }
-    }
 
-    // Sources first (cascades to releases, source_changelog_files, etc.)
-    if (sourcesToPurge.length > 0) {
+      // Sources first (cascades to releases, source_changelog_files, etc.)
       const deleted = await db
         .delete(sources)
-        .where(and(isNotNull(sources.deletedAt), lt(sources.deletedAt, cutoff)))
+        .where(expired(sources.deletedAt))
         .returning({ id: sources.id });
       purgedSources = deleted.length;
     }
@@ -96,7 +97,7 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
     // Products next (no children that aren't already covered).
     const deletedProducts = await db
       .delete(products)
-      .where(and(isNotNull(products.deletedAt), lt(products.deletedAt, cutoff)))
+      .where(expired(products.deletedAt))
       .returning({ id: products.id });
     purgedProducts = deletedProducts.length;
 
@@ -104,7 +105,7 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
     // org_accounts, knowledge_pages, etc.).
     const deletedOrgs = await db
       .delete(organizations)
-      .where(and(isNotNull(organizations.deletedAt), lt(organizations.deletedAt, cutoff)))
+      .where(expired(organizations.deletedAt))
       .returning({ id: organizations.id });
     purgedOrgs = deletedOrgs.length;
 

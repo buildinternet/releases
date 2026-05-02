@@ -3,7 +3,7 @@
 // entry in the adminRoutes allowlist in workers/api/src/index.ts.
 
 import { Hono } from "hono";
-import { and, count, isNull, sql } from "drizzle-orm";
+import { and, count, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   releases,
@@ -12,6 +12,7 @@ import {
   products,
   sourceChangelogChunks,
 } from "@buildinternet/releases-core/schema";
+import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import type { Env } from "../index.js";
 
 export const adminEmbedStatusRoutes = new Hono<Env>();
@@ -40,21 +41,21 @@ adminEmbedStatusRoutes.get("/admin/embed/status", async (c) => {
       // Suppressed rows are still counted — the backfill treats them the
       // same; operators who care about suppressed gaps diff against search.
       .where(and(sql`${releases.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(organizations).where(isNull(organizations.deletedAt)),
+    db.select({ n: count() }).from(organizations).where(orgNotDeleted),
     db
       .select({ n: count() })
       .from(organizations)
-      .where(and(isNull(organizations.deletedAt), sql`${organizations.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(products).where(isNull(products.deletedAt)),
+      .where(and(orgNotDeleted, sql`${organizations.embeddedAt} IS NOT NULL`)),
+    db.select({ n: count() }).from(products).where(productNotDeleted),
     db
       .select({ n: count() })
       .from(products)
-      .where(and(isNull(products.deletedAt), sql`${products.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(sources).where(isNull(sources.deletedAt)),
+      .where(and(productNotDeleted, sql`${products.embeddedAt} IS NOT NULL`)),
+    db.select({ n: count() }).from(sources).where(sourceNotDeleted),
     db
       .select({ n: count() })
       .from(sources)
-      .where(and(isNull(sources.deletedAt), sql`${sources.embeddedAt} IS NOT NULL`)),
+      .where(and(sourceNotDeleted, sql`${sources.embeddedAt} IS NOT NULL`)),
     db.select({ n: count() }).from(sourceChangelogChunks),
     db
       .select({ n: count() })

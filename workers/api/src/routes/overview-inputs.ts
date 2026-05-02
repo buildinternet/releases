@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, gte, isNull, ne } from "drizzle-orm";
+import { and, desc, eq, gte, ne } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
@@ -14,7 +14,7 @@ import {
   selectReleasesForOverview,
 } from "@buildinternet/releases-core/overview";
 import { authMiddleware } from "../middleware/auth.js";
-import { orgNotOnDemand } from "../queries/shared.js";
+import { orgNotOnDemand, sourceNotDeleted } from "../queries/shared.js";
 import { hydrateMediaUrls, orgWhere, parseReleaseMedia } from "../utils.js";
 import type { Env } from "../index.js";
 
@@ -77,7 +77,7 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
         eq(sources.orgId, org.id),
         eq(sources.isHidden, false),
         ne(sources.fetchPriority, "paused"),
-        isNull(sources.deletedAt),
+        sourceNotDeleted,
       ),
     );
 

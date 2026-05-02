@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and, isNull, sql } from "drizzle-orm";
+import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
@@ -9,6 +9,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { generatePlaybookHeader } from "@releases/ai-internal/playbook";
 import { authMiddleware } from "../middleware/auth.js";
+import { productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import { newKnowledgePageId, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
@@ -65,7 +66,7 @@ app.patch("/orgs/:slug/playbook/notes", async (c) => {
     const orgSources = await db
       .select()
       .from(sources)
-      .where(and(eq(sources.orgId, org.id), isNull(sources.deletedAt)));
+      .where(and(eq(sources.orgId, org.id), sourceNotDeleted));
     const orgProducts = await db
       .select({
         id: products.id,
@@ -74,7 +75,7 @@ app.patch("/orgs/:slug/playbook/notes", async (c) => {
         description: products.description,
       })
       .from(products)
-      .where(and(eq(products.orgId, org.id), isNull(products.deletedAt)));
+      .where(and(eq(products.orgId, org.id), productNotDeleted));
 
     const header = generatePlaybookHeader({
       orgName: org.name,
