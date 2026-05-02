@@ -14,6 +14,7 @@ import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
+import { logEvent } from "@releases/lib/log-event";
 import {
   fetchOne,
   pollOne,
@@ -102,7 +103,7 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
     const env = this.env;
 
     if (env.CRON_ENABLED === "false") {
-      console.log("[poll-fetch-workflow] CRON_ENABLED=false; skipping");
+      logEvent("info", { component: "poll-fetch-workflow", event: "cron-disabled" });
       return;
     }
 
@@ -142,7 +143,11 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       });
 
       if (!pollResult.changed) {
-        console.log(`[poll-fetch-workflow] ${source.slug}: no change detected`);
+        logEvent("info", {
+          component: "poll-fetch-workflow",
+          event: "no-change-detected",
+          sourceSlug: source.slug,
+        });
         return;
       }
 
@@ -153,9 +158,11 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       // matches the gate inside fetchOne (poll-fetch.ts:446) so an empty-string
       // feedUrl can't slip past either. See #486 / #517.
       if ((source.type === "scrape" || source.type === "agent") && !getSourceMeta(source).feedUrl) {
-        console.log(
-          `[poll-fetch-workflow] ${source.slug}: changed; deferring to scrape-agent sweep`,
-        );
+        logEvent("info", {
+          component: "poll-fetch-workflow",
+          event: "defer-to-scrape-agent",
+          sourceSlug: source.slug,
+        });
         return;
       }
 
@@ -221,15 +228,25 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         });
       }
 
-      console.log(
-        `[poll-fetch-workflow] ${source.slug}: done (inserted=${fetchResult.releasesInserted}, found=${fetchResult.releasesFound})`,
-      );
+      logEvent("info", {
+        component: "poll-fetch-workflow",
+        event: "done",
+        sourceSlug: source.slug,
+        inserted: fetchResult.releasesInserted,
+        found: fetchResult.releasesFound,
+      });
     } catch (err) {
       const isDeletedSourceRace =
         err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL;
       if (!isDeletedSourceRace) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[poll-fetch-workflow] ${sourceId} failed at ${currentStep}: ${errorMsg}`);
+        logEvent("error", {
+          component: "poll-fetch-workflow",
+          event: "step-failed",
+          sourceId,
+          step: currentStep,
+          err,
+        });
         await recordWorkflowFailure(db, {
           idPrefix: "wf-fail-",
           scheduledTime,

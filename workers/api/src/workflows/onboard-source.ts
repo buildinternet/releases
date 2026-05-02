@@ -20,6 +20,7 @@ import { embedSourceSideEffect } from "../routes/sources.js";
 import { fetchOne, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
 import { getSourceMeta } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export type OnboardSourceWorkflowEnv = InvalidationEnv & {
   DB: D1Database;
@@ -153,19 +154,32 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
             });
           }
         } else {
-          console.log(
-            `[onboard-workflow] ${source.slug}: deferring backfill to scrape-agent sweep`,
-          );
+          logEvent("info", {
+            component: "onboard-workflow",
+            event: "defer-backfill-to-scrape-agent",
+            sourceSlug: source.slug,
+          });
         }
       }
 
-      console.log(`[onboard-workflow] ${source.slug}: done (skipBackfill=${skipBackfill})`);
+      logEvent("info", {
+        component: "onboard-workflow",
+        event: "done",
+        sourceSlug: source.slug,
+        skipBackfill,
+      });
     } catch (err) {
       const isDeletedSourceRace =
         err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL;
       if (!isDeletedSourceRace) {
         const errorMsg = err instanceof Error ? err.message : String(err);
-        console.error(`[onboard-workflow] ${sourceId} failed at ${currentStep}: ${errorMsg}`);
+        logEvent("error", {
+          component: "onboard-workflow",
+          event: "step-failed",
+          sourceId,
+          step: currentStep,
+          err,
+        });
         await recordWorkflowFailure(db, {
           idPrefix: "wf-fail-onboard-",
           scheduledTime,

@@ -44,6 +44,7 @@ import {
   parseThresholds,
 } from "../lib/search-no-results.js";
 import { sendAlert, type AlertEnv } from "../lib/send-alert.js";
+import { logEvent } from "@releases/lib/log-event";
 
 /**
  * Workflow env. Secrets stay as SecretBinding here and are resolved inside
@@ -192,11 +193,11 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
     const env = this.env;
 
     if (env.CRON_ENABLED === "false") {
-      console.log("[scrape-agent-workflow] CRON_ENABLED=false; skipping");
+      logEvent("info", { component: "scrape-agent-workflow", event: "cron-disabled" });
       return;
     }
     if (env.SCRAPE_AGENT_CRON_ENABLED === "false") {
-      console.log("[scrape-agent-workflow] SCRAPE_AGENT_CRON_ENABLED=false; skipping");
+      logEvent("info", { component: "scrape-agent-workflow", event: "scrape-agent-cron-disabled" });
       return;
     }
 
@@ -228,7 +229,7 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
       async (): Promise<PreflightAction> => {
         const apiKey = await env.ANTHROPIC_API_KEY?.get();
         if (!apiKey) {
-          console.warn("[scrape-agent-workflow] ANTHROPIC_API_KEY missing — skipping preflight");
+          logEvent("warn", { component: "scrape-agent-workflow", event: "anthropic-key-missing" });
           return { action: "proceed" };
         }
         const gatewayToken = await env.AI_GATEWAY_TOKEN?.get().catch(() => undefined);
@@ -337,9 +338,16 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
         dispatchErrorDetail,
         notes: derived.notes ?? null,
       });
-      console.log(
-        `[scrape-agent-workflow] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrorDetail.length} skipped=${skippedOverCap}`,
-      );
+      logEvent("info", {
+        component: "scrape-agent-workflow",
+        event: "done",
+        runId,
+        status: derived.status,
+        candidates: rows.length,
+        dispatched: sessionsStarted.length,
+        errors: dispatchErrorDetail.length,
+        skipped: skippedOverCap,
+      });
       return {
         runId,
         startedAt,
@@ -377,8 +385,11 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
         return getTopSearchQueries(db, { since, limit: TOP_SEARCHES_LIMIT });
       })
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[scrape-agent-workflow] top-searches failed (omitting section): ${msg}`);
+        logEvent("warn", {
+          component: "scrape-agent-workflow",
+          event: "top-searches-failed",
+          err: err instanceof Error ? err : String(err),
+        });
         return undefined;
       });
 
@@ -400,7 +411,11 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
         const stats = await getNoResultsStats(db, { since });
         const decision = evaluateNoResultsAlert(stats, thresholds);
         if (!decision.fire) {
-          console.log(`[scrape-agent-workflow] no-results-alert skipped: ${decision.reason}`);
+          logEvent("info", {
+            component: "scrape-agent-workflow",
+            event: "no-results-alert-skipped",
+            reason: decision.reason,
+          });
           return;
         }
         const alertEnv: AlertEnv = {
@@ -416,8 +431,11 @@ export class ScrapeAgentSweepWorkflow extends WorkflowEntrypoint<
         });
       })
       .catch((err: unknown) => {
-        const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[scrape-agent-workflow] no-results-alert failed: ${msg}`);
+        logEvent("warn", {
+          component: "scrape-agent-workflow",
+          event: "no-results-alert-failed",
+          err: err instanceof Error ? err : String(err),
+        });
       });
   }
 }

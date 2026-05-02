@@ -44,6 +44,7 @@ import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 import { forceDrainSweep } from "./cron/force-drain-sweep.js";
 import { sweepSearchQueries } from "./cron/sweep-search-queries.js";
 import { sendAlert, type AlertEnv } from "./lib/send-alert.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export { StatusHub } from "./status-hub.js";
 export { ReleaseHub } from "./release-hub.js";
@@ -417,7 +418,7 @@ export default {
     }
     if (event.cron === "0 1 * * *") {
       if (!env.DISCOVERY_WORKER) {
-        console.warn("[scrape-agent-cron] DISCOVERY_WORKER binding missing; skipping");
+        logEvent("warn", { component: "scrape-agent-cron", event: "discovery-worker-missing" });
         return;
       }
       // Feature-flag the Workflows-based path. Behavior is identical to
@@ -426,9 +427,7 @@ export default {
       // tail of the dispatch list. See issue #482.
       if (env.SCRAPE_AGENT_USE_WORKFLOW === "true") {
         if (!env.SCRAPE_AGENT_WORKFLOW) {
-          console.warn(
-            "[scrape-agent-cron] SCRAPE_AGENT_USE_WORKFLOW=true but workflow binding missing; skipping",
-          );
+          logEvent("warn", { component: "scrape-agent-cron", event: "workflow-binding-missing" });
           return;
         }
         ctx.waitUntil(
@@ -445,7 +444,7 @@ export default {
       }
       const releasesApiKey = await env.RELEASED_API_KEY?.get();
       if (!releasesApiKey) {
-        console.warn("[scrape-agent-cron] RELEASED_API_KEY secret missing; skipping");
+        logEvent("warn", { component: "scrape-agent-cron", event: "api-key-missing" });
         return;
       }
       ctx.waitUntil(
@@ -479,9 +478,7 @@ export default {
     // drops vectors. See issue #486.
     if (env.POLL_FETCH_USE_WORKFLOW === "true") {
       if (!env.POLL_AND_FETCH_WORKFLOW) {
-        console.warn(
-          "[poll-fetch-cron] POLL_FETCH_USE_WORKFLOW=true but workflow binding missing; skipping",
-        );
+        logEvent("warn", { component: "poll-fetch-cron", event: "workflow-binding-missing" });
         return;
       }
       ctx.waitUntil(
@@ -529,7 +526,7 @@ function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): 
     .catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
-      console.error(`[${tag}] dispatch failed: ${message}`, stack ?? "");
+      logEvent("error", { component: tag, event: "dispatch-failed", err });
       if (alertEnv) {
         const body = [`Cron tag: ${tag}`, `Error: ${message}`, stack ? `\nStack:\n${stack}` : ""]
           .filter(Boolean)
@@ -557,10 +554,10 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
     changeDetectEnabled: env.SCRAPE_CHANGE_DETECT_ENABLED === "true",
   });
   if (due.length === 0) {
-    console.log("[poll-fetch-cron] no due sources; skipping workflow fan-out");
+    logEvent("info", { component: "poll-fetch-cron", event: "no-due-sources" });
     return;
   }
-  console.log(`[poll-fetch-cron] fan-out ${due.length} workflow instance(s)`);
+  logEvent("info", { component: "poll-fetch-cron", event: "fanout", instanceCount: due.length });
   const params = due.map((source) => ({
     // Instance IDs must be unique; pairing the scheduled time with the source
     // id keeps replays from collisions across fires. See #486.
@@ -584,9 +581,11 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
       });
     } catch (err) {
       // Non-fatal — don't let summary wiring failure block the fan-out.
-      console.warn(
-        `[poll-fetch-cron] failed to create summary workflow: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      logEvent("warn", {
+        component: "poll-fetch-cron",
+        event: "summary-workflow-create-failed",
+        err: err instanceof Error ? err : String(err),
+      });
     }
   }
 }

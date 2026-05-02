@@ -4,6 +4,7 @@
  * read-side embedding for query vectors, so this just resolves the
  * provider + API key and never wires a workers-ai binding.
  */
+import { logEvent } from "@releases/lib/log-event";
 
 // Types inlined from `@releases/search/embeddings.js`. That module reads
 // `process.env` at import time, which would force the MCP worker's
@@ -40,23 +41,27 @@ interface EmbedEnv {
 export async function buildEmbedConfig(env: EmbedEnv): Promise<ResolvedEmbedConfig | null> {
   const rawProvider = (env.EMBEDDING_PROVIDER ?? "voyage").toLowerCase();
   if (rawProvider !== "voyage" && rawProvider !== "openai" && rawProvider !== "workers-ai") {
-    console.warn(`[embed-config] unknown EMBEDDING_PROVIDER: ${rawProvider}`);
+    logEvent("warn", {
+      component: "embed-config",
+      event: "unknown-provider",
+      provider: rawProvider,
+    });
     return null;
   }
   const provider = rawProvider as EmbeddingProvider;
 
   if (provider === "workers-ai") {
-    console.warn(
-      "[embed-config] workers-ai provider requested but no AI binding is wired to the MCP worker",
-    );
+    logEvent("warn", { component: "embed-config", event: "workers-ai-no-binding" });
     return null;
   }
 
   const keyBinding = provider === "voyage" ? env.VOYAGE_API_KEY : env.OPENAI_API_KEY;
   if (!keyBinding) {
-    console.warn(
-      `[embed-config] ${provider === "voyage" ? "VOYAGE_API_KEY" : "OPENAI_API_KEY"} binding missing — embedding will be skipped`,
-    );
+    logEvent("warn", {
+      component: "embed-config",
+      event: "api-key-binding-missing",
+      binding: provider === "voyage" ? "VOYAGE_API_KEY" : "OPENAI_API_KEY",
+    });
     return null;
   }
 
@@ -64,15 +69,11 @@ export async function buildEmbedConfig(env: EmbedEnv): Promise<ResolvedEmbedConf
   try {
     apiKey = await keyBinding.get();
   } catch (err) {
-    console.warn(
-      `[embed-config] failed to read API key secret: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    logEvent("warn", { component: "embed-config", event: "api-key-read-failed", err });
     return null;
   }
   if (!apiKey) {
-    console.warn("[embed-config] API key secret resolved to empty string");
+    logEvent("warn", { component: "embed-config", event: "api-key-empty" });
     return null;
   }
 

@@ -33,6 +33,7 @@ import {
 import { embedAndUpsertChangelogFile } from "@releases/search/embed-changelog-pipeline.js";
 import { applyOnDiff, setChunkVectorIds } from "../cron/poll-fetch.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
+import { logEvent } from "@releases/lib/log-event";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import type { Env } from "../index.js";
 
@@ -189,7 +190,11 @@ async function logAiUsage(
       releaseCount: input.releaseCount,
     });
   } catch (err) {
-    console.warn(`[workflows-ai] failed to log usage: ${err instanceof Error ? err.message : err}`);
+    logEvent("warn", {
+      component: "workflows-ai",
+      event: "usage-log-failed",
+      err: err instanceof Error ? err : String(err),
+    });
   }
 }
 

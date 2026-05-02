@@ -5,6 +5,8 @@
  * changes so stale entries don't leak across deploys.
  */
 
+import { logEvent } from "@releases/lib/log-event";
+
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
   put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
@@ -118,26 +120,40 @@ export async function invalidateLatestCache(
   meta: { nReleases: number; sourceId: string },
 ): Promise<void> {
   const key = buildLatestCacheKey({ count: String(DEFAULT_LATEST_COUNT) });
-  const base = `[invalidation] key=${key} source_id=${meta.sourceId} n_releases=${meta.nReleases}`;
+  const logCtx = { cacheKey: key, sourceId: meta.sourceId, nReleases: meta.nReleases };
 
   if (env.INVALIDATION_ENABLED !== "true") {
-    console.info(`${base} action=skipped reason=flag_off`);
+    logEvent("info", {
+      component: "invalidation",
+      event: "skipped",
+      reason: "flag_off",
+      ...logCtx,
+    });
     return;
   }
   if (!env.LATEST_CACHE) {
-    console.info(`${base} action=skipped reason=no_binding`);
+    logEvent("info", {
+      component: "invalidation",
+      event: "skipped",
+      reason: "no_binding",
+      ...logCtx,
+    });
     return;
   }
   if (meta.nReleases <= 0) {
-    console.info(`${base} action=skipped reason=no_releases`);
+    logEvent("info", {
+      component: "invalidation",
+      event: "skipped",
+      reason: "no_releases",
+      ...logCtx,
+    });
     return;
   }
 
   try {
     await env.LATEST_CACHE.delete(key);
-    console.info(`${base} action=purged ok=true`);
+    logEvent("info", { component: "invalidation", event: "purged", ...logCtx });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`${base} action=purged reason=error ok=false error="${msg}"`);
+    logEvent("warn", { component: "invalidation", event: "purge-failed", err, ...logCtx });
   }
 }

@@ -1,3 +1,4 @@
+import { logEvent } from "@releases/lib/log-event";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z } from "zod";
 import { createDb } from "./db.js";
@@ -254,7 +255,11 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         }),
       );
       if (!res.ok) {
-        console.error("[mcp-lookup] fallback non-ok", { status: res.status });
+        logEvent("error", {
+          component: "mcp-lookup",
+          event: "fallback-non-ok",
+          httpStatus: res.status,
+        });
         return;
       }
       const lookup = (await res.json()) as LookupResultPayload;
@@ -264,7 +269,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         block.text = block.text ? `${block.text}\n\n${rail}` : rail;
       }
     } catch (err) {
-      console.error("[mcp-lookup] fallback failed", err);
+      logEvent("error", { component: "mcp-lookup", event: "fallback-failed", err });
     }
   }
 

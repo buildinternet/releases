@@ -5,6 +5,7 @@ import { matchWebhookSubscriptions } from "../webhooks/queries.js";
 import { createDb } from "../db.js";
 import { newLocalEventId } from "@buildinternet/releases-core/id";
 import type { ReleaseEvent } from "./types.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export interface PublishContext {
   src: { name: string; slug: string; orgId: string | null; sourceId: string };
@@ -55,14 +56,24 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
         }),
       );
       if (!res.ok) {
-        console.warn(
-          `[events] publish returned ${res.status}: ${await res.text().catch(() => "")}`,
-        );
+        const rawBody = await res.text().catch(() => "");
+        const MAX_BODY_LEN = 2000;
+        const truncated = rawBody.length > MAX_BODY_LEN;
+        logEvent("warn", {
+          component: "events",
+          event: "publish-non-ok",
+          httpStatus: res.status,
+          body: truncated ? `${rawBody.slice(0, MAX_BODY_LEN)}…` : rawBody,
+          bodyLength: rawBody.length,
+          bodyTruncated: truncated,
+        });
       }
     } catch (err) {
-      console.warn(
-        `[events] hub publish failed: ${err instanceof Error ? err.message : String(err)}`,
-      );
+      logEvent("warn", {
+        component: "events",
+        event: "hub-publish-failed",
+        err,
+      });
     }
   })();
 

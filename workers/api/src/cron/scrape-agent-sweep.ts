@@ -16,6 +16,7 @@ import { sendCronReport } from "../lib/notifications.js";
 import type { EmailEnv } from "../lib/email.js";
 import type { CronReport } from "../lib/cron-report.js";
 import { DEFAULT_FORCE_DRAIN_STALE_HOURS, pickCandidates } from "./force-drain-sweep.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export type PreflightAction =
   | { action: "proceed" }
@@ -255,11 +256,11 @@ async function countStranded(db: any, now: Date, staleHours: number): Promise<nu
 
 export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
   if (env.CRON_ENABLED === "false") {
-    console.log("[scrape-agent-cron] CRON_ENABLED=false; skipping");
+    logEvent("info", { component: "scrape-agent-cron", event: "cron-disabled" });
     return;
   }
   if (env.SCRAPE_AGENT_CRON_ENABLED === "false") {
-    console.log("[scrape-agent-cron] SCRAPE_AGENT_CRON_ENABLED=false; skipping");
+    logEvent("info", { component: "scrape-agent-cron", event: "scrape-agent-cron-disabled" });
     return;
   }
 
@@ -285,9 +286,7 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     });
     if (preflight.action === "abort") aborted = preflight;
   } else {
-    console.warn(
-      "[scrape-agent-cron] ANTHROPIC_API_KEY missing — skipping pre-flight; sessions may fail",
-    );
+    logEvent("warn", { component: "scrape-agent-cron", event: "anthropic-key-missing" });
   }
 
   if (aborted) {
@@ -380,9 +379,16 @@ export async function scrapeAgentSweep(env: SweepEnv): Promise<void> {
     notes,
   });
 
-  console.log(
-    `[scrape-agent-cron] done: run=${runId} status=${derived.status} candidates=${rows.length} dispatched=${sessionsStarted.length} errors=${dispatchErrors.length} skipped=${skippedOverCap}`,
-  );
+  logEvent("info", {
+    component: "scrape-agent-cron",
+    event: "done",
+    runId,
+    status: derived.status,
+    candidates: rows.length,
+    dispatched: sessionsStarted.length,
+    errors: dispatchErrors.length,
+    skipped: skippedOverCap,
+  });
 
   // Legacy rollback path: emails dispatch counts only. Result aggregation
   // (releases inserted per org) lives in the Workflows path, which can sleep
@@ -418,9 +424,12 @@ export function parseMaxSessions(raw: string | undefined): number {
   if (!raw) return DEFAULT_MAX_SESSIONS;
   const n = parseInt(raw, 10);
   if (!Number.isFinite(n) || n <= 0) {
-    console.warn(
-      `[scrape-agent-cron] invalid SCRAPE_AGENT_MAX_SESSIONS=${raw}; using default ${DEFAULT_MAX_SESSIONS}`,
-    );
+    logEvent("warn", {
+      component: "scrape-agent-cron",
+      event: "invalid-max-sessions",
+      raw,
+      defaultValue: DEFAULT_MAX_SESSIONS,
+    });
     return DEFAULT_MAX_SESSIONS;
   }
   return n;

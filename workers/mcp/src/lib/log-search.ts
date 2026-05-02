@@ -4,6 +4,7 @@
  * the API worker's source tree. Both paths write the same `search_queries`
  * table on the shared D1.
  */
+import { logEvent } from "@releases/lib/log-event";
 import {
   searchQueries,
   SEARCH_MODES,
@@ -120,6 +121,6 @@ export async function logMcpSearch(env: McpLogSearchEnv, input: McpLogSearchInpu
     await db.insert(searchQueries).values(row);
   } catch (err) {
     // Never break a tool response on a logging failure.
-    console.error("[search-log] insert failed", err);
+    logEvent("error", { component: "search-log", event: "insert-failed", err });
   }
 }

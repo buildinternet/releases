@@ -1,6 +1,7 @@
 import { drizzle } from "drizzle-orm/d1";
 import { eq, sql } from "drizzle-orm";
 import { sources, releases } from "@buildinternet/releases-core/schema";
+import { logEvent } from "@releases/lib/log-event";
 
 // Median gap thresholds in days. Sources with a median gap at or below
 // NORMAL_MAX are retiered to "normal" (polled every 4h), between NORMAL_MAX
@@ -22,7 +23,7 @@ type FetchPriority = "normal" | "low" | "paused";
 
 export async function retierSources(env: { DB: D1Database; CRON_ENABLED?: string }): Promise<void> {
   if (env.CRON_ENABLED === "false") {
-    console.log("[retier] Disabled via CRON_ENABLED=false, skipping");
+    logEvent("info", { component: "retier", event: "cron-disabled" });
     return;
   }
 
@@ -82,18 +83,28 @@ export async function retierSources(env: { DB: D1Database; CRON_ENABLED?: string
     };
     if (target !== current) {
       updates.fetchPriority = target;
-      console.log(
-        `[retier] ${src.slug}: ${current} → ${target} (median gap ${medianGap!.toFixed(1)}d, ${dates.length} releases)`,
-      );
+      logEvent("info", {
+        component: "retier",
+        event: "tier-changed",
+        sourceSlug: src.slug,
+        from: current,
+        to: target,
+        medianGapDays: medianGap!.toFixed(1),
+        releaseCount: dates.length,
+      });
       retiered++;
     }
 
     return db.update(sources).set(updates).where(eq(sources.id, src.id));
   });
   await Promise.all(writes);
-  console.log(
-    `[retier] done: ${allSources.length} evaluated, ${retiered} retiered, ${withSignal} with cadence signal`,
-  );
+  logEvent("info", {
+    component: "retier",
+    event: "done",
+    evaluated: allSources.length,
+    retiered,
+    withSignal,
+  });
 }
 
 // Pure helpers exported for unit tests.

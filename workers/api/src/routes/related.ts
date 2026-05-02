@@ -18,6 +18,7 @@ import { sql, inArray, eq } from "drizzle-orm";
 import { sources, organizations, releases } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import { sourceWhere, parseReleaseMedia } from "../utils.js";
+import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 import type { D1Db } from "../db.js";
 
@@ -108,7 +109,11 @@ relatedRoutes.get("/related/releases", async (c) => {
 
   const index = c.env.RELEASES_INDEX as unknown as ReadOnlyVectorizeIndex | undefined;
   if (!index || typeof index.getByIds !== "function") {
-    console.error("[related/releases] RELEASES_INDEX binding unavailable or missing getByIds");
+    logEvent("error", {
+      component: "related-releases",
+      event: "binding-unavailable",
+      binding: "RELEASES_INDEX",
+    });
     return c.json(degraded("RELEASES_INDEX unavailable"));
   }
 
@@ -134,7 +139,12 @@ relatedRoutes.get("/related/releases", async (c) => {
     const rows = await index.getByIds([anchor.id]);
     anchorVector = rows[0]?.values ?? null;
   } catch (err) {
-    console.error(`[related/releases] getByIds failed for ${anchor.id}:`, err);
+    logEvent("error", {
+      component: "related-releases",
+      event: "get-by-ids-failed",
+      anchorId: anchor.id,
+      err,
+    });
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
   if (!anchorVector || anchorVector.length === 0) {
@@ -158,7 +168,13 @@ relatedRoutes.get("/related/releases", async (c) => {
     });
     matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
   } catch (err) {
-    console.error(`[related/releases] query failed for ${anchor.id} scope=${scope}:`, err);
+    logEvent("error", {
+      component: "related-releases",
+      event: "query-failed",
+      anchorId: anchor.id,
+      scope,
+      err,
+    });
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
 
@@ -280,7 +296,11 @@ relatedRoutes.get("/related/sources", async (c) => {
 
   const index = c.env.ENTITIES_INDEX as unknown as ReadOnlyVectorizeIndex | undefined;
   if (!index || typeof index.getByIds !== "function") {
-    console.error("[related/sources] ENTITIES_INDEX binding unavailable or missing getByIds");
+    logEvent("error", {
+      component: "related-sources",
+      event: "binding-unavailable",
+      binding: "ENTITIES_INDEX",
+    });
     return c.json(degraded("ENTITIES_INDEX unavailable"));
   }
 
@@ -304,7 +324,12 @@ relatedRoutes.get("/related/sources", async (c) => {
     const rows = await index.getByIds([anchor.id]);
     anchorVector = rows[0]?.values ?? null;
   } catch (err) {
-    console.error(`[related/sources] getByIds failed for ${anchor.id}:`, err);
+    logEvent("error", {
+      component: "related-sources",
+      event: "get-by-ids-failed",
+      anchorId: anchor.id,
+      err,
+    });
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
   if (!anchorVector || anchorVector.length === 0) {
@@ -329,7 +354,13 @@ relatedRoutes.get("/related/sources", async (c) => {
     });
     matches = res.matches.map((m) => ({ id: m.id, score: m.score }));
   } catch (err) {
-    console.error(`[related/sources] query failed for ${anchor.id} scope=${scope}:`, err);
+    logEvent("error", {
+      component: "related-sources",
+      event: "query-failed",
+      anchorId: anchor.id,
+      scope,
+      err,
+    });
     return c.json(degraded(err instanceof Error ? err.message : String(err)));
   }
 

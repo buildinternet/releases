@@ -2,6 +2,7 @@ import type { ReleaseEvent } from "../events/types.js";
 import type { WebhookSubscription } from "@buildinternet/releases-core/schema";
 import { expand } from "./expand.js";
 import type { DeliveryMessage } from "./types.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export interface ExpandAndEnqueueArgs {
   events: ReleaseEvent[];
@@ -43,8 +44,10 @@ export async function expandAndEnqueue(args: ExpandAndEnqueueArgs): Promise<void
       await args.queue.sendBatch(chunk.map((body) => ({ body })));
     }
   } catch (err) {
-    console.warn(
-      `[webhooks] expandAndEnqueue failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logEvent("warn", {
+      component: "webhooks",
+      event: "expand-and-enqueue-failed",
+      err: err instanceof Error ? err : String(err),
+    });
   }
 }

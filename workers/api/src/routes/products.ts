@@ -23,6 +23,7 @@ import {
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export const productRoutes = new Hono<Env>();
 
@@ -478,8 +479,10 @@ async function embedProductSideEffect(
       },
     });
   } catch (err) {
-    console.warn(
-      `[products] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logEvent("warn", {
+      component: "products",
+      event: "embed-side-effect-failed",
+      err: err instanceof Error ? err : String(err),
+    });
   }
 }
