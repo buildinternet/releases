@@ -21,7 +21,22 @@ export interface LogPayload {
 }
 
 export function logEvent(level: Level, payload: LogPayload): void {
-  const line = JSON.stringify(payload, errorReplacer);
+  let line: string;
+  try {
+    line = JSON.stringify(payload, errorReplacer);
+  } catch (err) {
+    // Circular refs, BigInt, etc. Logging must fail open — degrade to a
+    // marker line that preserves the original component/event for triage.
+    line = JSON.stringify(
+      {
+        component: payload.component,
+        event: "log-serialization-failed",
+        originalEvent: payload.event,
+        err,
+      },
+      errorReplacer,
+    );
+  }
   if (level === "error") {
     console.error(line);
   } else if (level === "warn") {

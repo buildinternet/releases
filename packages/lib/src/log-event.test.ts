@@ -86,4 +86,34 @@ describe("logEvent", () => {
     const parsed = JSON.parse(arg);
     expect("cause" in parsed.err).toBe(false);
   });
+
+  it("fails open on circular references — emits a serialization-failed marker", () => {
+    const circular: Record<string, unknown> = {};
+    circular.self = circular;
+    logEvent("error", {
+      component: "search-log",
+      event: "insert-failed",
+      ctx: circular,
+    });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+    const arg = (errorSpy.mock.calls[0] as unknown[])[0] as string;
+    const parsed = JSON.parse(arg);
+    expect(parsed.component).toBe("search-log");
+    expect(parsed.event).toBe("log-serialization-failed");
+    expect(parsed.originalEvent).toBe("insert-failed");
+    expect(parsed.err).toBeDefined();
+  });
+
+  it("fails open on BigInt — emits a serialization-failed marker", () => {
+    logEvent("info", {
+      component: "x",
+      event: "y",
+      big: BigInt(1) as unknown,
+    });
+    expect(logSpy).toHaveBeenCalledTimes(1);
+    const arg = (logSpy.mock.calls[0] as unknown[])[0] as string;
+    const parsed = JSON.parse(arg);
+    expect(parsed.event).toBe("log-serialization-failed");
+    expect(parsed.originalEvent).toBe("y");
+  });
 });
