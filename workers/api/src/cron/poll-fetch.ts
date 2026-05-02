@@ -40,6 +40,8 @@ import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
+import { notifyIndexNowForSource, type IndexNowEnv } from "../lib/indexnow.js";
+import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 
 // ── Tier intervals (hours) ──
 
@@ -405,7 +407,7 @@ export interface FetchOneResult {
 
 export const DEFAULT_FETCH_MAX_ENTRIES = 200;
 
-export interface FetchOneEnv {
+export interface FetchOneEnv extends IndexNowEnv {
   GITHUB_TOKEN?: string;
   /**
    * Optional Vectorize bindings for semantic-search side effects. Typed as
@@ -605,6 +607,28 @@ export async function fetchOne(
           src: { name: source.name, slug: source.slug, orgId: source.orgId, sourceId: source.id },
           inserted: publishRows,
         },
+      );
+    }
+
+    // Fire-and-forget IndexNow ping for the org/source/product surfaces whose
+    // lastmod just shifted. Skips itself when INDEXNOW_ENABLED is unset, so
+    // staging and dev are no-ops by default. Per-release URLs are intentionally
+    // out of scope — see https://github.com/buildinternet/releases/issues/649.
+    if (publishRows.length > 0) {
+      await notifyIndexNowForSource(
+        env,
+        {
+          resolveOrgSlug: (id) => resolveOrgSlug(db, id),
+          resolveProductSlug: (id) => resolveProductSlug(db, id),
+        },
+        {
+          slug: source.slug,
+          orgId: source.orgId,
+          productId: source.productId,
+          isHidden: source.isHidden,
+          discovery: source.discovery,
+        },
+        publishRows.length,
       );
     }
 

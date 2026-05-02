@@ -71,6 +71,8 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import { logger } from "@buildinternet/releases-lib/logger";
+import { notifyIndexNowForSource } from "../lib/indexnow.js";
+import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -458,6 +460,23 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
           nReleases: publishRows.length,
           sourceId: src.id,
         }),
+      );
+      c.executionCtx.waitUntil(
+        notifyIndexNowForSource(
+          c.env,
+          {
+            resolveOrgSlug: (id) => resolveOrgSlug(db, id),
+            resolveProductSlug: (id) => resolveProductSlug(db, id),
+          },
+          {
+            slug: src.slug,
+            orgId: src.orgId,
+            productId: src.productId,
+            isHidden: src.isHidden,
+            discovery: src.discovery,
+          },
+          publishRows.length,
+        ),
       );
     }
 

@@ -23,6 +23,26 @@ import { routeMap } from "@/lib/route-map";
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
+  // IndexNow ownership file. Served from the site root because the protocol
+  // forces submitted URLs to live under the key file's directory when
+  // `keyLocation` is used; root placement keeps every URL on releases.sh
+  // submittable. The key is held in env (not committed) so rotation is just
+  // a Vercel env update.
+  const keyMatch = pathname.match(INDEXNOW_KEY_PATH);
+  if (keyMatch) {
+    const expected = process.env.INDEXNOW_KEY;
+    if (expected && keyMatch[1] === expected) {
+      return new NextResponse(expected, {
+        status: 200,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "public, max-age=86400",
+        },
+      });
+    }
+    // Fall through to Next.js so unrelated `.txt` paths (none today) keep working.
+  }
+
   // Explicit suffix routes — skip Accept negotiation.
   if (pathname === "/docs.md") {
     return rewriteTo(request, "/api/docs/index");
@@ -65,6 +85,10 @@ function rewriteToFormat(request: NextRequest, pathname: string, format: Format)
 }
 
 const SUFFIX_PATTERN = new RegExp(`^(\\/[^.]+)\\.(${FORMATS.join("|")})$`);
+
+// IndexNow key files: 8–128 chars from [a-zA-Z0-9-], `.txt` suffix, at root.
+// See https://www.indexnow.org/documentation.
+const INDEXNOW_KEY_PATH = /^\/([a-zA-Z0-9-]{8,128})\.txt$/;
 
 const OFFERED_WITH_MARKDOWN = ["text/html", "text/markdown"] as const;
 
