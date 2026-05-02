@@ -74,6 +74,12 @@
   padding: 0 !important;
   border-radius: 0 !important;
   font-size: inherit;
+  /* Tailwind typography defaults --tw-prose-pre-code to a near-white color
+     designed for the plugin's dark default <pre> background. Since we
+     override <pre> to a light background in light mode, that default leaves
+     code washed out. Reset to the body color as a fallback for blocks Shiki
+     doesn't process (e.g. before the dual-theme variables are applied). */
+  color: inherit;
 }
 
 /* ── Shiki – dual-theme syntax highlighting via CSS variables ── */

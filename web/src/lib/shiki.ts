@@ -37,6 +37,19 @@ const themeOptions = {
     light: "github-light",
     dark: "github-dark-dimmed",
   },
+  // defaultColor:false makes Shiki write BOTH themes as CSS variables
+  // (--shiki-light, --shiki-light-bg, --shiki-dark, --shiki-dark-bg). Without
+  // it, the first theme is written as direct color/background-color and only
+  // the second as variables, which breaks our dual-theme override in
+  // globals.css that expects --shiki-light to exist.
+  defaultColor: false,
+  // Scraped release content often loses fenced-code language hints, leaving
+  // bare ``` blocks. Without a default the rehype plugin skips them entirely
+  // and the prose CSS falls back to washed-out colors. "plaintext" is a Shiki
+  // built-in alias, so it doesn't need a grammar import — the block at least
+  // gets the dual-theme background/foreground variables.
+  defaultLanguage: "plaintext",
+  fallbackLanguage: "plaintext",
 } as const;
 
 /**
