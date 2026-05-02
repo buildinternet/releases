@@ -444,12 +444,12 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
   const slug = c.req.param("slug");
   const hard = c.req.query("hard") === "true";
 
-  // Hard purge needs to find tombstoned rows too (so a second admin call can
-  // purge an already-soft-deleted org); soft delete only operates on live rows.
-  const [org] = await db
-    .select()
-    .from(organizations)
-    .where(orgWhere(slug, { includeDeleted: hard }));
+  // Slug-based lookups always resolve to the active row even with hard=true:
+  // a slug can have one active row plus N tombstones (partial unique index),
+  // so destructuring the first match would be non-deterministic. To purge a
+  // tombstone, callers use the org_ ID. (CodeRabbit #669.)
+  const includeDeleted = hard && slug.startsWith("org_");
+  const [org] = await db.select().from(organizations).where(orgWhere(slug, { includeDeleted }));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
   if (hard) {

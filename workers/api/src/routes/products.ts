@@ -21,6 +21,7 @@ import {
   replaceAliases,
 } from "../utils.js";
 import type { Env } from "../index.js";
+import { productNotDeleted } from "../queries/shared.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -45,7 +46,7 @@ productRoutes.get("/products", async (c) => {
       sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
     })
     .from(products)
-    .where(orgId ? eq(products.orgId, orgId) : undefined)
+    .where(orgId ? and(eq(products.orgId, orgId), productNotDeleted) : productNotDeleted)
     .orderBy(products.name);
 
   return c.json(rows);
@@ -428,10 +429,16 @@ productRoutes.delete("/products/:identifier", async (c) => {
   const identifier = c.req.param("identifier");
   const hard = c.req.query("hard") === "true";
 
+  // Slug-based lookups always resolve to the active row even with hard=true:
+  // a slug can have one active row plus N tombstones (partial unique index),
+  // so destructuring the first match would be non-deterministic. To purge a
+  // tombstone, callers use the prod_ ID — which is unique whether the row
+  // is active or tombstoned. (CodeRabbit #669.)
+  const includeDeleted = hard && identifier.startsWith("prod_");
   const [product] = await db
     .select()
     .from(products)
-    .where(productWhere(identifier, { includeDeleted: hard }));
+    .where(productWhere(identifier, { includeDeleted }));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   if (hard) {

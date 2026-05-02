@@ -44,7 +44,7 @@ export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<S
         THEN NULLIF(SUBSTR(stats.pack_by_fetch, INSTR(stats.pack_by_fetch, '|') + 1), '')
       END AS latest_version_by_fetch
     FROM sources s
-    LEFT JOIN products p ON p.id = s.product_id
+    LEFT JOIN products p ON p.id = s.product_id AND p.deleted_at IS NULL
     LEFT JOIN (
       SELECT
         r.source_id,

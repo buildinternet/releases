@@ -53,7 +53,13 @@ sitemapRoutes.get("/sitemap", async (c) => {
       })
       .from(releases)
       .innerJoin(sources, eq(releases.sourceId, sources.id))
-      .where(and(inArray(sources.orgId, orgIds), sql`${releases.publishedAt} IS NOT NULL`))
+      .where(
+        and(
+          inArray(sources.orgId, orgIds),
+          sourceNotDeleted,
+          sql`${releases.publishedAt} IS NOT NULL`,
+        ),
+      )
       .groupBy(releases.sourceId),
   ]);
 

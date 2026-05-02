@@ -1402,10 +1402,12 @@ sourceRoutes.delete("/sources/:slug", async (c) => {
   const slug = c.req.param("slug");
   const hard = c.req.query("hard") === "true";
 
-  const [src] = await db
-    .select()
-    .from(sources)
-    .where(sourceWhere(slug, { includeDeleted: hard }));
+  // Slug-based lookups always resolve to the active row even with hard=true:
+  // a slug can have one active row plus N tombstones (partial unique index),
+  // so destructuring the first match would be non-deterministic. To purge a
+  // tombstone, callers use the src_ ID. (CodeRabbit #669.)
+  const includeDeleted = hard && slug.startsWith("src_");
+  const [src] = await db.select().from(sources).where(sourceWhere(slug, { includeDeleted }));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const orgId = src.orgId;

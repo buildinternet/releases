@@ -54,7 +54,7 @@ export async function searchProducts(
     SELECT DISTINCT p.slug, p.name, o.slug as orgSlug, o.name as orgName, p.category,
            'product' as kind
     FROM products p
-    LEFT JOIN organizations o ON o.id = p.org_id AND o.deleted_at IS NULL
+    INNER JOIN organizations o ON o.id = p.org_id AND o.deleted_at IS NULL
     LEFT JOIN domain_aliases da ON da.product_id = p.id
     WHERE p.deleted_at IS NULL
       AND (p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern})
@@ -71,8 +71,8 @@ export async function searchSources(
     SELECT s.slug, s.name, s.type, o.slug as orgSlug, o.name as orgName,
            p.slug as productSlug, p.name as productName, p.category as productCategory
     FROM sources s
-    LEFT JOIN organizations o ON o.id = s.org_id
-    LEFT JOIN products p ON p.id = s.product_id
+    LEFT JOIN organizations o ON o.id = s.org_id AND o.deleted_at IS NULL
+    LEFT JOIN products p ON p.id = s.product_id AND p.deleted_at IS NULL
     WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND s.deleted_at IS NULL
       AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
