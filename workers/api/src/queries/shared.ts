@@ -17,6 +17,7 @@ export type SourceWithStats = {
   url: string;
   is_primary: number | null;
   is_hidden: number | null;
+  discovery: "curated" | "agent" | "on_demand" | null;
   fetch_priority: string | null;
   last_fetched_at: string | null;
   last_polled_at: string | null;

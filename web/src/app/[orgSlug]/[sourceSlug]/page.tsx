@@ -8,7 +8,9 @@ import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
 import { Sidebar } from "@/components/sidebar";
 import { SourceTabs } from "@/components/source-tabs";
-import { StateBadge, HIDDEN_BADGE } from "@/components/source-table";
+import { StateBadge, getHiddenStateBadge } from "@/components/source-table";
+import { PromoteSourceButton } from "@/components/promote-source-button";
+import { isPromoteSourceEnabled } from "@/lib/promote-source-flag";
 import { SourceMainContent } from "@/components/source-main-content";
 import { RelatedRail } from "@/components/related-rail";
 import { Suspense } from "react";
@@ -159,6 +161,10 @@ export default async function SourcePage({
     },
   ];
 
+  const hiddenBadge = getHiddenStateBadge(source);
+  const showPromoteButton =
+    source.discovery === "on_demand" && source.isHidden && isPromoteSourceEnabled();
+
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
   const jsonLd = {
     "@context": "https://schema.org",
@@ -225,7 +231,10 @@ export default async function SourcePage({
             {source.name}
           </h1>
           <SourceTypeIcon type={source.type} size={18} />
-          {source.isHidden && <StateBadge label={HIDDEN_BADGE.label} title={HIDDEN_BADGE.title} />}
+          {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
+          {showPromoteButton && (
+            <PromoteSourceButton orgSlug={source.org.slug} sourceSlug={source.slug} />
+          )}
         </div>
         <CliCommand identifier={source.slug} />
         <div className="flex flex-col md:flex-row gap-10 mt-6 pb-12">

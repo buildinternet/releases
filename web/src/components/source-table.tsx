@@ -44,11 +44,32 @@ export function StateBadge({ label, title }: { label: string; title: string }) {
 export const HIDDEN_BADGE = {
   label: "Hidden",
   title:
-    "Hidden from listings, sitemap, and AI features. Still fetched and queryable by direct lookup. Promoted when an admin un-hides it.",
+    "Hidden by an admin. Excluded from listings, sitemap, and AI features. Still fetched and queryable by direct lookup.",
 } as const;
 
+export const ON_DEMAND_BADGE = {
+  label: "On-demand",
+  title:
+    "Materialized by a direct lookup. Awaiting curation — un-hide to surface in listings, sitemap, and AI features.",
+} as const;
+
+/**
+ * Pick the badge for a source's hidden state. On-demand rows (`discovery ===
+ * "on_demand"`) are awaiting curation — they're hidden but reversible — so
+ * they get a distinct label from admin-hidden rows. `discovery` may be
+ * undefined on older API responses; treat that as `"curated"`.
+ */
+export function getHiddenStateBadge(
+  source: Pick<SourceListItem, "isHidden" | "discovery">,
+): { label: string; title: string } | null {
+  if (!source.isHidden) return null;
+  if (source.discovery === "on_demand") return ON_DEMAND_BADGE;
+  return HIDDEN_BADGE;
+}
+
 function getSourceState(source: SourceListItem): { label: string; title: string } | null {
-  if (source.isHidden) return HIDDEN_BADGE;
+  const hidden = getHiddenStateBadge(source);
+  if (hidden) return hidden;
   if (source.fetchPriority === "paused") {
     return { label: "Paused", title: "Fetching is paused for this source" };
   }

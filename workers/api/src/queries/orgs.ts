@@ -31,7 +31,7 @@ export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<S
   // the old `ORDER BY ... LIMIT 1` behavior when the top row had no version.
   return db.all<SourceWithStats>(sql`
     SELECT
-      s.id, s.slug, s.name, s.type, s.url, s.is_primary, s.is_hidden, s.fetch_priority,
+      s.id, s.slug, s.name, s.type, s.url, s.is_primary, s.is_hidden, s.discovery, s.fetch_priority,
       s.last_fetched_at, s.last_polled_at,
       p.slug AS product_slug, p.name AS product_name,
       COALESCE(stats.release_count, 0) AS release_count,
