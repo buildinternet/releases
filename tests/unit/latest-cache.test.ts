@@ -266,6 +266,7 @@ describe("invalidateLatestCache", () => {
   let logs: Record<string, unknown>[] = [];
   const origConsoleLog = console.log;
   const origConsoleWarn = console.warn;
+  const origConsoleError = console.error;
   function capture(...args: unknown[]) {
     const first = args[0];
     if (typeof first === "string") {
@@ -282,11 +283,13 @@ describe("invalidateLatestCache", () => {
     logs = [];
     console.log = capture;
     console.warn = capture;
+    console.error = capture;
   });
 
   afterEach(() => {
     console.log = origConsoleLog;
     console.warn = origConsoleWarn;
+    console.error = origConsoleError;
   });
 
   it("skips with reason=flag_off when INVALIDATION_ENABLED is unset", async () => {
@@ -307,7 +310,11 @@ describe("invalidateLatestCache", () => {
       { nReleases: 3, sourceId: "src_abc" },
     );
     expect(kv.delete).not.toHaveBeenCalled();
-    expect(logs.some((l) => l.event === "skipped" && l.reason === "flag_off")).toBe(true);
+    expect(
+      logs.some(
+        (l) => l.component === "invalidation" && l.event === "skipped" && l.reason === "flag_off",
+      ),
+    ).toBe(true);
   });
 
   it("skips with reason=no_releases when nReleases is 0", async () => {
@@ -317,7 +324,12 @@ describe("invalidateLatestCache", () => {
       { nReleases: 0, sourceId: "src_abc" },
     );
     expect(kv.delete).not.toHaveBeenCalled();
-    expect(logs.some((l) => l.event === "skipped" && l.reason === "no_releases")).toBe(true);
+    expect(
+      logs.some(
+        (l) =>
+          l.component === "invalidation" && l.event === "skipped" && l.reason === "no_releases",
+      ),
+    ).toBe(true);
   });
 
   it("skips with reason=no_binding when LATEST_CACHE is undefined", async () => {
@@ -325,7 +337,11 @@ describe("invalidateLatestCache", () => {
       { INVALIDATION_ENABLED: "true" },
       { nReleases: 2, sourceId: "src_abc" },
     );
-    expect(logs.some((l) => l.event === "skipped" && l.reason === "no_binding")).toBe(true);
+    expect(
+      logs.some(
+        (l) => l.component === "invalidation" && l.event === "skipped" && l.reason === "no_binding",
+      ),
+    ).toBe(true);
   });
 
   it("purges the default key when flag is on and binding present", async () => {
