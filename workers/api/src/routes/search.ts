@@ -192,10 +192,12 @@ searchRoutes.get("/search", async (c) => {
     }
     const releases = rawReleases.map((row) => hydrateReleaseHit(row, mediaOrigin));
 
-    // On-demand GitHub lookup: fire when the query is a bare org/repo coordinate
-    // and the lexical search returned no entities or releases.
+    // On-demand GitHub lookup: a coordinate-shaped query is a precise
+    // question about one repo, so only entity matches (org / catalog
+    // source) suppress it. Tangential FTS hits on a single segment token
+    // (e.g. "shopify" in another org's release body) don't.
     let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
-    if (coordinate && rawReleases.length === 0 && orgs.length === 0 && catalog.length === 0) {
+    if (coordinate && orgs.length === 0 && catalog.length === 0) {
       lookup = await runLookup(c.env, db, coordinate);
       maybeEmbed(lookup);
     }
@@ -286,16 +288,10 @@ searchRoutes.get("/search", async (c) => {
       score: h.score,
     }));
 
-  // On-demand GitHub lookup: fire when the query is a bare org/repo coordinate
-  // and the hybrid search returned no entities, releases, or chunks.
+  // On-demand GitHub lookup: same gate as the lexical branch — entity
+  // matches suppress it, release/chunk hits don't.
   let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
-  if (
-    coordinate &&
-    releases.length === 0 &&
-    chunks.length === 0 &&
-    orgs.length === 0 &&
-    catalog.length === 0
-  ) {
+  if (coordinate && orgs.length === 0 && catalog.length === 0) {
     lookup = await runLookup(c.env, db, coordinate);
     maybeEmbed(lookup);
   }

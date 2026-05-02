@@ -332,12 +332,10 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     withSearchLog("search", async (params) => {
       const out = await search(db, params, env, ctx);
       const { counts } = out;
-      const hasResults =
-        (counts.orgHits ?? 0) > 0 ||
-        (counts.catalogHits ?? 0) > 0 ||
-        (counts.releaseHits ?? 0) > 0 ||
-        (counts.chunkHits ?? 0) > 0;
-      if (!hasResults) await maybeLookup(out, params.query);
+      // Gate on entity matches only — release/chunk hits on a single
+      // segment token shouldn't suppress the lookup for the typed repo.
+      const hasEntityHit = (counts.orgHits ?? 0) > 0 || (counts.catalogHits ?? 0) > 0;
+      if (!hasEntityHit) await maybeLookup(out, params.query);
       return out;
     }),
   );
@@ -378,9 +376,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     },
     withSearchLog("search_releases", async (params) => {
       const out = await searchReleases(db, params, env, ctx);
-      if ((out.counts.releaseHits ?? 0) === 0 && (out.counts.chunkHits ?? 0) === 0) {
-        await maybeLookup(out, params.query);
-      }
+      // No entity buckets to gate on, so always attempt the lookup;
+      // `maybeLookup` no-ops on non-coordinate input.
+      await maybeLookup(out, params.query);
       return out;
     }),
   );
