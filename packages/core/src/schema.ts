@@ -1,5 +1,13 @@
 import { sql } from "drizzle-orm";
-import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
+import {
+  sqliteTable,
+  sqliteView,
+  text,
+  integer,
+  real,
+  uniqueIndex,
+  index,
+} from "drizzle-orm/sqlite-core";
 import {
   newSourceId,
   newReleaseId,
@@ -647,3 +655,70 @@ export const webhookSubscriptions = sqliteTable(
 
 export type WebhookSubscription = typeof webhookSubscriptions.$inferSelect;
 export type NewWebhookSubscription = typeof webhookSubscriptions.$inferInsert;
+
+/**
+ * Active-row views (#671). Each view is `SELECT * FROM <table> WHERE deleted_at
+ * IS NULL`, exposed to Drizzle via `sqliteView(...).existing()` so the planner
+ * inlines the predicate but drizzle-kit doesn't try to emit DDL for it. Read
+ * paths import the *Active form; only admin DELETE/restore code and the
+ * sweep-tombstones cron should reach the base tables.
+ *
+ * Column shapes mirror the base tables. Redeclaration is unfortunate but
+ * `sqliteView(...).existing()` requires column builders; reusing the table's
+ * builder objects would consume them twice.
+ */
+export const organizationsActive = sqliteView("organizations_active", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  domain: text("domain"),
+  description: text("description"),
+  category: text("category"),
+  avatarUrl: text("avatar_url"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  metadata: text("metadata"),
+  embeddedAt: text("embedded_at"),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  deletedAt: text("deleted_at"),
+}).existing();
+
+export const productsActive = sqliteView("products_active", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  orgId: text("org_id").notNull(),
+  url: text("url"),
+  description: text("description"),
+  category: text("category"),
+  createdAt: text("created_at").notNull(),
+  embeddedAt: text("embedded_at"),
+  deletedAt: text("deleted_at"),
+}).existing();
+
+export const sourcesActive = sqliteView("sources_active", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
+  url: text("url").notNull(),
+  orgId: text("org_id"),
+  productId: text("product_id"),
+  metadata: text("metadata"),
+  createdAt: text("created_at").notNull(),
+  lastFetchedAt: text("last_fetched_at"),
+  lastContentHash: text("last_content_hash"),
+  fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
+  consecutiveNoChange: integer("consecutive_no_change"),
+  consecutiveErrors: integer("consecutive_errors"),
+  nextFetchAfter: text("next_fetch_after"),
+  changeDetectedAt: text("change_detected_at"),
+  lastPolledAt: text("last_polled_at"),
+  medianGapDays: real("median_gap_days"),
+  lastRetieredAt: text("last_retiered_at"),
+  isPrimary: integer("is_primary", { mode: "boolean" }),
+  isHidden: integer("is_hidden", { mode: "boolean" }),
+  embeddedAt: text("embedded_at"),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  deletedAt: text("deleted_at"),
+}).existing();

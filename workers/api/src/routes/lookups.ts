@@ -1,6 +1,12 @@
 import { Hono } from "hono";
-import { and, desc, eq, sql } from "drizzle-orm";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { desc, eq, sql } from "drizzle-orm";
+import {
+  organizations,
+  organizationsActive,
+  sources,
+  sourcesActive,
+  releases,
+} from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
@@ -11,7 +17,6 @@ import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
-import { orgNotDeleted } from "../queries/shared.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -96,9 +101,12 @@ export async function runLookup(
   const findExistingSource = () =>
     db
       .select()
-      .from(sources)
-      .where(sql`LOWER(${sources.url}) = ${urlLower} AND ${sources.deletedAt} IS NULL`)
-      .orderBy(sql`CASE WHEN ${sources.url} = ${url} THEN 0 ELSE 1 END`, sources.createdAt)
+      .from(sourcesActive)
+      .where(sql`LOWER(${sourcesActive.url}) = ${urlLower}`)
+      .orderBy(
+        sql`CASE WHEN ${sourcesActive.url} = ${url} THEN 0 ELSE 1 END`,
+        sourcesActive.createdAt,
+      )
       .limit(1);
   const githubToken = await env.GITHUB_TOKEN?.get();
 
@@ -206,12 +214,12 @@ export async function runLookup(
         .onConflictDoNothing();
 
       // Re-read to get the winner's id (could be ours or a concurrent inserter's).
-      // Tombstoned rows are skipped — the partial unique index only constrains
-      // active rows, so a tombstone at this slug doesn't claim the lookup.
+      // The active view skips tombstones — soft-delete renames the slug to a
+      // mangled form so a re-onboard at the original slug doesn't collide.
       const [winningOrg] = await db
         .select()
-        .from(organizations)
-        .where(and(eq(organizations.slug, parsed.org), orgNotDeleted))
+        .from(organizationsActive)
+        .where(eq(organizationsActive.slug, parsed.org))
         .limit(1);
       orgId = winningOrg!.id;
     }

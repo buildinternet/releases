@@ -30,13 +30,17 @@ export type SourceListRow = {
   latest_date: string | null;
 };
 
+// Active-row views (#671) aliased back to the base names so callers' WHERE
+// fragments — which qualify columns as `sources.X`, `organizations.X`,
+// `products.X` — keep working. The view itself filters deleted_at.
+
 export async function countSourcesForList(db: D1Db, whereClause?: SQL): Promise<number> {
   const rows = await db.all<{ total: number }>(sql`
     SELECT COUNT(*) AS total
-    FROM sources
-    LEFT JOIN organizations ON organizations.id = sources.org_id
-    LEFT JOIN products ON products.id = sources.product_id
-    ${whereClause ? sql`WHERE ${whereClause} AND sources.deleted_at IS NULL` : sql`WHERE sources.deleted_at IS NULL`}
+    FROM sources_active sources
+    LEFT JOIN organizations_active organizations ON organizations.id = sources.org_id
+    LEFT JOIN products_active products ON products.id = sources.product_id
+    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
   `);
   return rows[0]?.total ?? 0;
 }
@@ -93,9 +97,9 @@ export async function getSourcesWithStats(
       COALESCE(rs.release_count, 0) AS release_count,
       rs.latest_version AS latest_version,
       rs.latest_date AS latest_date
-    FROM sources
-    LEFT JOIN organizations ON organizations.id = sources.org_id
-    LEFT JOIN products ON products.id = sources.product_id
+    FROM sources_active sources
+    LEFT JOIN organizations_active organizations ON organizations.id = sources.org_id
+    LEFT JOIN products_active products ON products.id = sources.product_id
     LEFT JOIN (
       SELECT
         r.source_id,
@@ -112,7 +116,7 @@ export async function getSourcesWithStats(
       WHERE (r.suppressed IS NULL OR r.suppressed = 0)
       GROUP BY r.source_id
     ) rs ON rs.source_id = sources.id
-    ${whereClause ? sql`WHERE ${whereClause} AND sources.deleted_at IS NULL` : sql`WHERE sources.deleted_at IS NULL`}
+    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
     ORDER BY ${orderBy}
     ${limitClause} ${offsetClause}
   `);

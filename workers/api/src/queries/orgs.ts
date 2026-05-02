@@ -14,11 +14,11 @@ export async function getOrgsWithStats(
       COUNT(CASE WHEN r.id IS NOT NULL AND (r.suppressed IS NULL OR r.suppressed = 0) THEN 1 END) AS release_count,
       MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
       COUNT(CASE WHEN r.published_at >= ${cutoff30d} AND (r.suppressed IS NULL OR r.suppressed = 0) THEN 1 END) AS recent_release_count,
-      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products WHERE org_id = o.id AND deleted_at IS NULL ORDER BY name LIMIT 3) p) AS top_products
-    FROM organizations o
-    LEFT JOIN sources s ON s.org_id = o.id AND s.deleted_at IS NULL
+      (SELECT GROUP_CONCAT(p.name, '||') FROM (SELECT name FROM products_active WHERE org_id = o.id ORDER BY name LIMIT 3) p) AS top_products
+    FROM organizations_active o
+    LEFT JOIN sources_active s ON s.org_id = o.id
     LEFT JOIN releases r ON r.source_id = s.id
-    ${q ? sql`WHERE (lower(o.name) LIKE ${`%${q.toLowerCase()}%`} OR lower(o.slug) LIKE ${`%${q.toLowerCase()}%`}) AND o.deleted_at IS NULL` : sql`WHERE o.deleted_at IS NULL`}
+    ${q ? sql`WHERE (lower(o.name) LIKE ${`%${q.toLowerCase()}%`} OR lower(o.slug) LIKE ${`%${q.toLowerCase()}%`})` : sql``}
     GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category
     ORDER BY o.name
   `);
@@ -43,8 +43,8 @@ export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<S
       CASE WHEN stats.pack_by_fetch IS NOT NULL
         THEN NULLIF(SUBSTR(stats.pack_by_fetch, INSTR(stats.pack_by_fetch, '|') + 1), '')
       END AS latest_version_by_fetch
-    FROM sources s
-    LEFT JOIN products p ON p.id = s.product_id AND p.deleted_at IS NULL
+    FROM sources_active s
+    LEFT JOIN products_active p ON p.id = s.product_id
     LEFT JOIN (
       SELECT
         r.source_id,
@@ -54,13 +54,12 @@ export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<S
         MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at || '|' || COALESCE(r.version, '') END) AS pack_by_date,
         MAX(CASE WHEN r.fetched_at IS NOT NULL THEN r.fetched_at || '|' || COALESCE(r.version, '') END) AS pack_by_fetch
       FROM releases r
-      INNER JOIN sources s2 ON s2.id = r.source_id
+      INNER JOIN sources_active s2 ON s2.id = r.source_id
       WHERE s2.org_id = ${orgId}
         AND (r.suppressed IS NULL OR r.suppressed = 0)
       GROUP BY r.source_id
     ) stats ON stats.source_id = s.id
     WHERE s.org_id = ${orgId}
-      AND s.deleted_at IS NULL
     ORDER BY s.name
   `);
 }
@@ -78,12 +77,11 @@ export async function getOrgSparklines(db: D1Db, cutoff30d: string): Promise<Org
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
     FROM releases r
-    INNER JOIN sources s ON s.id = r.source_id
+    INNER JOIN sources_active s ON s.id = r.source_id
     WHERE
       r.published_at >= ${cutoff30d}
       AND r.published_at IS NOT NULL
       AND (r.suppressed IS NULL OR r.suppressed = 0)
-      AND s.deleted_at IS NULL
     GROUP BY s.org_id, DATE(r.published_at)
     ORDER BY s.org_id, date
   `);
@@ -132,10 +130,9 @@ export async function getOrgActivityData(
           MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
           MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
         FROM releases r
-        INNER JOIN sources s ON s.id = r.source_id
+        INNER JOIN sources_active s ON s.id = r.source_id
         WHERE
           s.org_id = ${orgId}
-          AND s.deleted_at IS NULL
           AND r.published_at IS NOT NULL
           AND (r.suppressed IS NULL OR r.suppressed = 0)
           AND r.published_at >= ${from}
@@ -160,10 +157,9 @@ export async function getOrgActivityData(
         MIN(r.published_at) AS oldest,
         MAX(r.published_at) AS latest_date
       FROM releases r
-      INNER JOIN sources s ON s.id = r.source_id
+      INNER JOIN sources_active s ON s.id = r.source_id
       WHERE
         s.org_id = ${orgId}
-        AND s.deleted_at IS NULL
         AND r.published_at IS NOT NULL
         AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND r.published_at >= ${from}
@@ -224,10 +220,9 @@ export async function getOrgSourceSparklines(
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
     FROM releases r
-    INNER JOIN sources s ON s.id = r.source_id
+    INNER JOIN sources_active s ON s.id = r.source_id
     WHERE
       s.org_id = ${orgId}
-      AND s.deleted_at IS NULL
       AND r.published_at >= ${cutoff30d}
       AND r.published_at IS NOT NULL
       AND (r.suppressed IS NULL OR r.suppressed = 0)
@@ -252,10 +247,9 @@ export async function getOrgHeatmapData(
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
     FROM releases r
-    INNER JOIN sources s ON s.id = r.source_id
+    INNER JOIN sources_active s ON s.id = r.source_id
     WHERE
       s.org_id = ${orgId}
-      AND s.deleted_at IS NULL
       AND r.published_at IS NOT NULL
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND r.published_at >= ${from}
@@ -301,9 +295,8 @@ export async function getOrgReleasesFeed(
            r.published_at, r.fetched_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
     FROM releases r
-    INNER JOIN sources s ON s.id = r.source_id
+    INNER JOIN sources_active s ON s.id = r.source_id
     WHERE s.org_id = ?
-      AND s.deleted_at IS NULL
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${coverageFilter}
       ${cursor.cursorWhere}

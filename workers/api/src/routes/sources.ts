@@ -16,8 +16,10 @@ import {
 import { createDb } from "../db.js";
 import {
   sources,
+  sourcesActive,
   releases,
   organizations,
+  organizationsActive,
   releaseSummaries,
   products,
   sourceChangelogFiles,
@@ -1484,18 +1486,15 @@ sourceRoutes.get("/releases/:id", async (c) => {
   const rows = await db
     .select({
       release: releases,
-      sourceName: sources.name,
-      sourceSlug: sources.slug,
-      sourceType: sources.type,
-      orgSlug: organizations.slug,
-      orgName: organizations.name,
+      sourceName: sourcesActive.name,
+      sourceSlug: sourcesActive.slug,
+      sourceType: sourcesActive.type,
+      orgSlug: organizationsActive.slug,
+      orgName: organizationsActive.name,
     })
     .from(releases)
-    .innerJoin(sources, and(eq(releases.sourceId, sources.id), isNull(sources.deletedAt)))
-    .leftJoin(
-      organizations,
-      and(eq(sources.orgId, organizations.id), isNull(organizations.deletedAt)),
-    )
+    .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
+    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
     .where(
       and(eq(releases.id, id), sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
     );

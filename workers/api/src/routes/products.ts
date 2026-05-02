@@ -3,7 +3,9 @@ import { and, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   products,
+  productsActive,
   sources,
+  sourcesActive,
   organizations,
   orgAccounts,
   tags,
@@ -21,7 +23,6 @@ import {
   replaceAliases,
 } from "../utils.js";
 import type { Env } from "../index.js";
-import { productNotDeleted } from "../queries/shared.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -35,19 +36,19 @@ productRoutes.get("/products", async (c) => {
 
   const rows = await db
     .select({
-      id: products.id,
-      name: products.name,
-      slug: products.slug,
-      orgId: products.orgId,
-      url: products.url,
-      description: products.description,
-      createdAt: products.createdAt,
-      category: products.category,
-      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id AND s.deleted_at IS NULL)`,
+      id: productsActive.id,
+      name: productsActive.name,
+      slug: productsActive.slug,
+      orgId: productsActive.orgId,
+      url: productsActive.url,
+      description: productsActive.description,
+      createdAt: productsActive.createdAt,
+      category: productsActive.category,
+      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
     })
-    .from(products)
-    .where(orgId ? and(eq(products.orgId, orgId), productNotDeleted) : productNotDeleted)
-    .orderBy(products.name);
+    .from(productsActive)
+    .where(orgId ? eq(productsActive.orgId, orgId) : undefined)
+    .orderBy(productsActive.name);
 
   return c.json(rows);
 });
@@ -96,7 +97,10 @@ productRoutes.post("/products/adopt", async (c) => {
     );
   }
 
-  const sourcesToMove = await db.select().from(sources).where(eq(sources.orgId, sourceOrg.id));
+  const sourcesToMove = await db
+    .select()
+    .from(sourcesActive)
+    .where(eq(sourcesActive.orgId, sourceOrg.id));
   const productUrl = body.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
 
   if (body.dryRun) {
@@ -185,15 +189,15 @@ productRoutes.get("/products/:identifier", async (c) => {
   const [productSources, tagRows, aliasRows] = await Promise.all([
     db
       .select({
-        id: sources.id,
-        slug: sources.slug,
-        name: sources.name,
-        type: sources.type,
-        url: sources.url,
+        id: sourcesActive.id,
+        slug: sourcesActive.slug,
+        name: sourcesActive.name,
+        type: sourcesActive.type,
+        url: sourcesActive.url,
       })
-      .from(sources)
-      .where(eq(sources.productId, product.id))
-      .orderBy(sources.name),
+      .from(sourcesActive)
+      .where(eq(sourcesActive.productId, product.id))
+      .orderBy(sourcesActive.name),
     db
       .select({ name: tags.name })
       .from(productTags)
