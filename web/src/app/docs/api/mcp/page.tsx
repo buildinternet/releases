@@ -1,5 +1,6 @@
 import { MarkdownDoc } from "@/components/markdown-doc";
 import { McpInstallButtons } from "@/components/mcp-install-buttons";
+import { SkillsInstall } from "@/components/skills-install";
 import { loadDoc } from "@/lib/docs";
 
 const SLUG = "api/mcp";
@@ -14,6 +15,7 @@ export default function McpPage() {
       slug={SLUG}
       slots={{
         "mcp-install-buttons": <McpInstallButtons />,
+        "skills-install": <SkillsInstall />,
       }}
     />
   );

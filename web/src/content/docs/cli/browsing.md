@@ -8,6 +8,12 @@ adminOnly: false
 
 Find organizations, sources, and releases in the index.
 
+## Pair with agent skills
+
+One-line setup so your agent picks the right `releases` subcommand and flags on its own. See the [skills page](/docs/skills) for the full list.
+
+<!-- slot:skills-install -->
+
 ## List sources
 
 The `list` command shows all configured changelog sources, or details for a single one.

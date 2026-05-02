@@ -8,6 +8,12 @@ adminOnly: false
 
 Use Releases as an AI agent tool server via the Model Context Protocol.
 
+## Pair with agent skills
+
+One-line setup so your agent reaches for these tools on its own. See the [skills page](/docs/skills) for the full list.
+
+<!-- slot:skills-install -->
+
 ## Remote server (recommended)
 
 Connect to the hosted MCP server at `https://mcp.releases.sh/mcp`. No installation or API keys required — all tools are read-only and public.
