@@ -1,4 +1,5 @@
 import { MarkdownDoc } from "@/components/markdown-doc";
+import { SkillsInstall } from "@/components/skills-install";
 import { loadDoc } from "@/lib/docs";
 
 const SLUG = "cli/browsing";
@@ -8,5 +9,12 @@ export function generateMetadata() {
 }
 
 export default function BrowsingPage() {
-  return <MarkdownDoc slug={SLUG} />;
+  return (
+    <MarkdownDoc
+      slug={SLUG}
+      slots={{
+        "skills-install": <SkillsInstall />,
+      }}
+    />
+  );
 }
