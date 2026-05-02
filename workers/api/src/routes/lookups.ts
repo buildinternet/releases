@@ -88,6 +88,12 @@ export async function runLookup(
   // case-insensitively. (The neg-cache helpers already case-fold their
   // keys, so they take `coordinate` as-is.)
   const urlLower = url.toLowerCase();
+  const findExistingSource = () =>
+    db
+      .select()
+      .from(sources)
+      .where(sql`LOWER(${sources.url}) = ${urlLower}`)
+      .limit(1);
   const githubToken = await env.GITHUB_TOKEN?.get();
 
   // Check neg-cache before hitting DB or GitHub.
@@ -101,11 +107,7 @@ export async function runLookup(
 
   // Source already indexed → return it (unless it's an empty stub, which
   // should be re-probed in case the repo has since gained releases).
-  const existing = await db
-    .select()
-    .from(sources)
-    .where(sql`LOWER(${sources.url}) = ${urlLower}`)
-    .limit(1);
+  const existing = await findExistingSource();
   let existingStub: typeof sources.$inferSelect | undefined;
   if (existing.length > 0) {
     const source = existing[0]!;
@@ -217,11 +219,7 @@ export async function runLookup(
     for (let attempt = 0; attempt < 5; attempt++) {
       if (attempt > 0) {
         // oxlint-disable-next-line no-await-in-loop -- race re-check before next slug
-        const concurrent = await db
-          .select()
-          .from(sources)
-          .where(sql`LOWER(${sources.url}) = ${urlLower}`)
-          .limit(1);
+        const concurrent = await findExistingSource();
         if (concurrent.length > 0) {
           insertedSource = concurrent[0]!;
           sourceId = insertedSource.id;
@@ -255,11 +253,7 @@ export async function runLookup(
 
     // If all slug attempts collided, fall back to reading the existing row.
     if (!insertedSource) {
-      const rows = await db
-        .select()
-        .from(sources)
-        .where(sql`LOWER(${sources.url}) = ${urlLower}`)
-        .limit(1);
+      const rows = await findExistingSource();
       if (rows.length > 0) {
         const existingReleases = await db
           .select()

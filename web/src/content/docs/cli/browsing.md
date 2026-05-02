@@ -63,11 +63,14 @@ releases search "breaking change"
 releases search "authentication" --type releases --limit 5
 releases search "vercel" --json
 releases search "vercel/next.js"          # GitHub coordinate — falls back to on-demand lookup
+releases search "github:Shopify/toxiproxy" # Same coordinate with explicit provider prefix
 ```
 
 ### On-demand GitHub lookup
 
-When the query is a `{org}/{repo}` coordinate **and** the in-index search returns no hits, the CLI falls back to a GitHub probe and prints a `Lookup` rail above the regular results. Possible statuses:
+When the query is a `{org}/{repo}` coordinate (optionally prefixed `github:`) **and** no entity (org or catalog source) matched, the CLI prints a `Lookup` rail above the regular results. The lookup fires even when tangential release hits surfaced — a coordinate is treated as a precise question about one repo. Org and repo segments match case-insensitively, so `shopify/toxiproxy` and `Shopify/Toxiproxy` resolve to the same source row.
+
+Possible statuses:
 
 | Status      | Meaning                                                                               |
 | ----------- | ------------------------------------------------------------------------------------- |

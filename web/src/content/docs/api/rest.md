@@ -179,7 +179,7 @@ Hybrid and semantic responses include a ranked `chunks` array interleaved with r
 
 Each chunk hit carries `sourceSlug`, `orgSlug`, `filePath`, `offset`, `length`, `heading`, `snippet`, and `score` so clients can chain into `GET /v1/sources/:slug/changelog?offset=...` for surrounding context.
 
-When the query parses as a `{org}/{repo}` GitHub coordinate **and** the in-index search returned zero hits, the response includes a `lookup` field describing the result of an on-demand probe (see [`POST /v1/lookups`](#post-v1lookups)). `lookup` is `null` when the query is not coordinate-shaped or when existing hits were found.
+When the query parses as a `{org}/{repo}` GitHub coordinate **and** no entity (org or catalog source) matched, the response includes a `lookup` field describing the result of an on-demand probe (see [`POST /v1/lookups`](#post-v1lookups)). The optional `github:` prefix is also accepted (e.g. `github:org/repo`). Tangential release / chunk hits do not suppress the lookup — a coordinate is treated as a precise question about one repo. `lookup` is `null` when the query is not coordinate-shaped or when an entity match was returned.
 
 ### `POST /v1/lookups`
 
@@ -191,10 +191,10 @@ curl -X POST https://api.releases.sh/v1/lookups \
   -d '{"provider": "github", "coordinate": "org/repo"}'
 ```
 
-| Field        | Description                                                                                |
-| ------------ | ------------------------------------------------------------------------------------------ |
-| `provider`   | Currently only `"github"`.                                                                 |
-| `coordinate` | A bare `{org}/{repo}` string. The colon-prefixed `provider:org/repo` form is not accepted. |
+| Field        | Description                                                                                                                                                                                                                                                                                                     |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `provider`   | Currently only `"github"`.                                                                                                                                                                                                                                                                                      |
+| `coordinate` | A `{org}/{repo}` string, optionally prefixed with `github:` (e.g. `github:vercel/next.js`). Other provider prefixes (`npm:`, `gitlab:`, …) are rejected. Org and repo segments are matched case-insensitively against existing rows, so `shopify/toxiproxy` and `Shopify/Toxiproxy` resolve to the same source. |
 
 Five outcomes:
 
