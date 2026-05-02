@@ -9,6 +9,7 @@
     "./anthropic-pricing": "./src/anthropic-pricing.ts",
     "./config": "./src/config.ts",
     "./errors": "./src/errors.ts",
+    "./log-event": "./src/log-event.ts",
     "./logger": "./src/logger.ts",
     "./ma-rate-limit": "./src/ma-rate-limit.ts",
     "./prompt-escape": "./src/prompt-escape.ts",
