@@ -27,6 +27,11 @@ const tabs = [
     label: "MCP",
     command: "https://mcp.releases.sh/mcp",
   },
+  {
+    id: "skills",
+    label: "Skills",
+    command: "npx skills add buildinternet/releases-cli",
+  },
 ] as const;
 
 export function InstallTabs() {
@@ -37,12 +42,12 @@ export function InstallTabs() {
 
   return (
     <div className="w-full max-w-[540px] mx-auto">
-      <div className="flex border-b border-stone-200 dark:border-stone-700">
+      <div className="flex overflow-x-auto border-b border-stone-200 dark:border-stone-700 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActive(tab.id)}
-            className={`px-4 py-2 text-[13px] font-medium transition-colors ${
+            className={`shrink-0 whitespace-nowrap px-4 py-2 text-[13px] font-medium transition-colors ${
               active === tab.id
                 ? "text-stone-900 dark:text-stone-100 border-b-2 border-stone-900 dark:border-stone-100 -mb-px"
                 : "text-stone-400 dark:text-stone-500 hover:text-stone-600 dark:hover:text-stone-300"
