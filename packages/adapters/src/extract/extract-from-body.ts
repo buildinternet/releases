@@ -164,7 +164,12 @@ export async function extractFromBody(
       const result = await extractWithTools(
         {
           body: bodyForLoop,
-          systemPrompt: opts.systemPrompt,
+          // Bake guidance into the system prompt so per-source parseInstructions
+          // and the org playbook reach the tool-loop model. Without this the
+          // tool-loop path silently dropped guidance that runOneShot applies,
+          // letting sources like posthog-changelog (which rely on parseInstructions
+          // to point at the right slice of a 700+ item flat array) return zero.
+          systemPrompt: withGuidance(opts.systemPrompt, opts.guidance),
           userMessage: opts.userMessage,
           sourceUrl: opts.sourceUrl,
           fetchUrl: opts.fetchUrl,
