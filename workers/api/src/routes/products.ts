@@ -43,7 +43,7 @@ productRoutes.get("/products", async (c) => {
       description: products.description,
       createdAt: products.createdAt,
       category: products.category,
-      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
+      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id AND s.deleted_at IS NULL)`,
     })
     .from(products)
     .where(orgId ? and(eq(products.orgId, orgId), productNotDeleted) : productNotDeleted)

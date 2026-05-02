@@ -11,9 +11,10 @@
  * the two sweeps don't compete for D1 capacity.
  */
 
-import { and, lt, isNotNull, inArray, type Column } from "drizzle-orm";
+import { and, eq, lt, isNotNull, isNull, inArray, notInArray, type Column } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
 
 export const CRON_NAME = "sweep-tombstones";
@@ -43,7 +44,7 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
   const db = env._drizzleOverride ?? drizzle(env.DB);
   const now = new Date();
   const retentionDays = parseRetentionDays(env.TOMBSTONE_RETENTION_DAYS);
-  const cutoff = new Date(now.getTime() - retentionDays * 24 * 60 * 60 * 1000).toISOString();
+  const cutoff = daysAgoIso(retentionDays);
 
   await reconcileStaleRunning(db, {
     cronName: CRON_NAME,
@@ -103,11 +104,46 @@ export async function sweepTombstones(env: SweepTombstonesEnv): Promise<void> {
 
     // Orgs last (cascades any remaining children — domain_aliases, org_tags,
     // org_accounts, knowledge_pages, etc.).
+    //
+    // Defense-in-depth: skip orgs that still have an active product or source.
+    // Normal soft-delete cascade-tombstones children, but a manual revive of a
+    // child without reviving the parent would otherwise let the cascade FK on
+    // products.org_id wipe an active product when we hard-purge the org. The
+    // soft path is reversible up to the retention boundary; this guard makes
+    // the cron's hard-delete safe regardless of how the tombstones got set.
+    const orgsBlockedByActiveProducts = await db
+      .selectDistinct({ orgId: products.orgId })
+      .from(products)
+      .innerJoin(organizations, eq(organizations.id, products.orgId))
+      .where(and(expired(organizations.deletedAt), isNull(products.deletedAt)));
+    const orgsBlockedByActiveSources = await db
+      .selectDistinct({ orgId: sources.orgId })
+      .from(sources)
+      .innerJoin(organizations, eq(organizations.id, sources.orgId))
+      .where(and(expired(organizations.deletedAt), isNull(sources.deletedAt)));
+    const blockedOrgIds = new Set<string>([
+      ...orgsBlockedByActiveProducts
+        .map((r: { orgId: string | null }) => r.orgId)
+        .filter((id: string | null): id is string => !!id),
+      ...orgsBlockedByActiveSources
+        .map((r: { orgId: string | null }) => r.orgId)
+        .filter((id: string | null): id is string => !!id),
+    ]);
+
+    const orgDeleteWhere =
+      blockedOrgIds.size > 0
+        ? and(expired(organizations.deletedAt), notInArray(organizations.id, [...blockedOrgIds]))
+        : expired(organizations.deletedAt);
     const deletedOrgs = await db
       .delete(organizations)
-      .where(expired(organizations.deletedAt))
+      .where(orgDeleteWhere)
       .returning({ id: organizations.id });
     purgedOrgs = deletedOrgs.length;
+    if (blockedOrgIds.size > 0) {
+      console.warn(
+        `[sweep-tombstones] skipped ${blockedOrgIds.size} expired orgs with active children — manual cleanup needed`,
+      );
+    }
 
     // Vectorize cleanup: delete release vectors for purged sources. Mirrors
     // the chunked deleteByIds pattern used by DELETE /sources/:slug/releases.

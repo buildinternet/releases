@@ -35,11 +35,13 @@ statsRoutes.get("/stats", async (c) => {
     db
       .select({ n: count() })
       .from(releases)
+      .innerJoin(sources, and(eq(releases.sourceId, sources.id), sourceNotDeleted))
       .where(sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
     db.select({ n: count() }).from(products).where(productNotDeleted),
     db
       .select({ n: count() })
       .from(releases)
+      .innerJoin(sources, and(eq(releases.sourceId, sources.id), sourceNotDeleted))
       .where(
         sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff}`,
       ),

@@ -1489,9 +1489,14 @@ sourceRoutes.get("/releases/:id", async (c) => {
       orgName: organizations.name,
     })
     .from(releases)
-    .leftJoin(sources, eq(releases.sourceId, sources.id))
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(eq(releases.id, id));
+    .innerJoin(sources, and(eq(releases.sourceId, sources.id), isNull(sources.deletedAt)))
+    .leftJoin(
+      organizations,
+      and(eq(sources.orgId, organizations.id), isNull(organizations.deletedAt)),
+    )
+    .where(
+      and(eq(releases.id, id), sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
+    );
 
   if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
 

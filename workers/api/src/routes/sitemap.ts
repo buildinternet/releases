@@ -27,41 +27,63 @@ sitemapRoutes.get("/sitemap", async (c) => {
 
   const orgIds = orgRows.map((o) => o.id);
 
-  const [sourceRows, productRows, latestReleaseRows] = await Promise.all([
-    db
-      .select({
-        orgId: sources.orgId,
-        slug: sources.slug,
-        id: sources.id,
-        isHidden: sources.isHidden,
-      })
-      .from(sources)
-      .where(and(inArray(sources.orgId, orgIds), sourceNotDeleted)),
+  // D1 caps prepared statements at 100 bound parameters; with hundreds of
+  // orgs an unchunked inArray would 500. Chunk to 90 and concat results.
+  const ORG_ID_CHUNK = 90;
+  const orgIdChunks: string[][] = [];
+  for (let i = 0; i < orgIds.length; i += ORG_ID_CHUNK) {
+    orgIdChunks.push(orgIds.slice(i, i + ORG_ID_CHUNK));
+  }
 
-    db
-      .select({
-        orgId: products.orgId,
-        slug: products.slug,
-      })
-      .from(products)
-      .where(and(inArray(products.orgId, orgIds), productNotDeleted)),
-
-    db
-      .select({
-        sourceId: releases.sourceId,
-        latestDate: max(releases.publishedAt),
-      })
-      .from(releases)
-      .innerJoin(sources, eq(releases.sourceId, sources.id))
-      .where(
-        and(
-          inArray(sources.orgId, orgIds),
-          sourceNotDeleted,
-          sql`${releases.publishedAt} IS NOT NULL`,
-        ),
-      )
-      .groupBy(releases.sourceId),
+  const [sourceRowsByChunk, productRowsByChunk, latestReleaseRowsByChunk] = await Promise.all([
+    Promise.all(
+      orgIdChunks.map((chunk) =>
+        db
+          .select({
+            orgId: sources.orgId,
+            slug: sources.slug,
+            id: sources.id,
+            isHidden: sources.isHidden,
+          })
+          .from(sources)
+          .where(and(inArray(sources.orgId, chunk), sourceNotDeleted)),
+      ),
+    ),
+    Promise.all(
+      orgIdChunks.map((chunk) =>
+        db
+          .select({
+            orgId: products.orgId,
+            slug: products.slug,
+          })
+          .from(products)
+          .where(and(inArray(products.orgId, chunk), productNotDeleted)),
+      ),
+    ),
+    Promise.all(
+      orgIdChunks.map((chunk) =>
+        db
+          .select({
+            sourceId: releases.sourceId,
+            latestDate: max(releases.publishedAt),
+          })
+          .from(releases)
+          .innerJoin(sources, eq(releases.sourceId, sources.id))
+          .where(
+            and(
+              inArray(sources.orgId, chunk),
+              sourceNotDeleted,
+              sql`${releases.publishedAt} IS NOT NULL`,
+            ),
+          )
+          .groupBy(releases.sourceId),
+      ),
+    ),
   ]);
+
+  const sourceRows = sourceRowsByChunk.flat();
+  const productRows = productRowsByChunk.flat();
+  const latestReleaseRows = latestReleaseRowsByChunk.flat();
 
   const latestBySource = new Map<string, string>();
   for (const row of latestReleaseRows) {

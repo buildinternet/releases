@@ -145,7 +145,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
         name: products.name,
         url: products.url,
         description: products.description,
-        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
+        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id AND s.deleted_at IS NULL)`,
       })
       .from(products)
       .where(eq(products.orgId, org.id))
