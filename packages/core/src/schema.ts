@@ -747,3 +747,37 @@ export const organizationsPublic = sqliteView("organizations_public", {
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
+
+/**
+ * sources_visible (#674) layers on sources_active with `is_hidden = 0`. Public
+ * read paths that previously combined the active filter with `notDisabled`
+ * import this instead. Write paths and admin/restore code keep using the base
+ * `sources` table; admin reads that *want* hidden rows keep using
+ * `sources_active`.
+ */
+export const sourcesVisible = sqliteView("sources_visible", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
+  url: text("url").notNull(),
+  orgId: text("org_id"),
+  productId: text("product_id"),
+  metadata: text("metadata"),
+  createdAt: text("created_at").notNull(),
+  lastFetchedAt: text("last_fetched_at"),
+  lastContentHash: text("last_content_hash"),
+  fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }),
+  consecutiveNoChange: integer("consecutive_no_change"),
+  consecutiveErrors: integer("consecutive_errors"),
+  nextFetchAfter: text("next_fetch_after"),
+  changeDetectedAt: text("change_detected_at"),
+  lastPolledAt: text("last_polled_at"),
+  medianGapDays: real("median_gap_days"),
+  lastRetieredAt: text("last_retiered_at"),
+  isPrimary: integer("is_primary", { mode: "boolean" }),
+  isHidden: integer("is_hidden", { mode: "boolean" }),
+  embeddedAt: text("embedded_at"),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  deletedAt: text("deleted_at"),
+}).existing();

@@ -17,6 +17,7 @@ import { createDb } from "../db.js";
 import {
   sources,
   sourcesActive,
+  sourcesVisible,
   releases,
   organizations,
   organizationsActive,
@@ -63,7 +64,6 @@ import {
   getSourceHeatmapData,
   SOURCE_SORT_FIELDS,
 } from "../queries/sources.js";
-import { notDisabled } from "../queries/shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
@@ -140,10 +140,6 @@ sourceRoutes.get("/sources", async (c) => {
     conditions.push(eq(sources.productId, product.id));
   }
 
-  if (!includeHidden) {
-    conditions.push(notDisabled);
-  }
-
   if (hasFeed) {
     conditions.push(
       sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL AND json_extract(${sources.metadata}, '$.feedUrl') != ''`,
@@ -177,8 +173,8 @@ sourceRoutes.get("/sources", async (c) => {
   const dir = parseSortDir(c.req.query("dir"), "asc");
 
   const [rows, totalItems] = await Promise.all([
-    getSourcesWithStats(db, whereClause, { limit, offset, sort, dir }),
-    wantsEnvelope ? countSourcesForList(db, whereClause) : Promise.resolve(null),
+    getSourcesWithStats(db, whereClause, { limit, offset, sort, dir, includeHidden }),
+    wantsEnvelope ? countSourcesForList(db, whereClause, { includeHidden }) : Promise.resolve(null),
   ]);
 
   // Derive page from offset when caller pre-computed it — keeps the envelope's
@@ -239,39 +235,35 @@ sourceRoutes.get("/sources/fetchable", async (c) => {
   if (mode === "unfetched") {
     rows = await db
       .select()
-      .from(sources)
-      .where(and(sql`${sources.lastFetchedAt} IS NULL`, notDisabled));
+      .from(sourcesVisible)
+      .where(sql`${sourcesVisible.lastFetchedAt} IS NULL`);
   } else if (mode === "stale" && staleHours) {
     const hours = parseInt(staleHours, 10);
     const cutoff = new Date(Date.now() - hours * 3600_000).toISOString();
     const now = new Date().toISOString();
     rows = await db
       .select()
-      .from(sources)
+      .from(sourcesVisible)
       .where(
         and(
-          sql`(${sources.lastFetchedAt} IS NULL OR ${sources.lastFetchedAt} < ${cutoff})`,
-          sql`(${sources.nextFetchAfter} IS NULL OR ${sources.nextFetchAfter} <= ${now})`,
-          sql`${sources.fetchPriority} != 'paused'`,
-          notDisabled,
+          sql`(${sourcesVisible.lastFetchedAt} IS NULL OR ${sourcesVisible.lastFetchedAt} < ${cutoff})`,
+          sql`(${sourcesVisible.nextFetchAfter} IS NULL OR ${sourcesVisible.nextFetchAfter} <= ${now})`,
+          sql`${sourcesVisible.fetchPriority} != 'paused'`,
         ),
       );
   } else if (mode === "retry_errors") {
     rows = await db
       .select()
-      .from(sources)
+      .from(sourcesVisible)
       .where(
-        and(
-          sql`${sources.id} IN (
+        sql`${sourcesVisible.id} IN (
           SELECT f.source_id FROM fetch_log f
           WHERE f.id = (SELECT f2.id FROM fetch_log f2 WHERE f2.source_id = f.source_id ORDER BY f2.created_at DESC LIMIT 1)
           AND f.status = 'error'
         )`,
-          notDisabled,
-        ),
       );
   } else {
-    rows = await db.select().from(sources).where(notDisabled);
+    rows = await db.select().from(sourcesVisible);
   }
 
   return c.json(rows);
@@ -283,12 +275,11 @@ sourceRoutes.get("/sources/feeds", async (c) => {
   const db = createDb(c.env.DB);
   const rows = await db
     .select()
-    .from(sources)
+    .from(sourcesVisible)
     .where(
       and(
-        sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL`,
-        sql`${sources.fetchPriority} != 'paused'`,
-        notDisabled,
+        sql`json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL`,
+        sql`${sourcesVisible.fetchPriority} != 'paused'`,
       ),
     );
   return c.json(rows);
@@ -298,8 +289,8 @@ sourceRoutes.get("/sources/changes", async (c) => {
   const db = createDb(c.env.DB);
   const rows = await db
     .select()
-    .from(sources)
-    .where(and(isNotNull(sources.changeDetectedAt), notDisabled));
+    .from(sourcesVisible)
+    .where(isNotNull(sourcesVisible.changeDetectedAt));
   return c.json(rows);
 });
 

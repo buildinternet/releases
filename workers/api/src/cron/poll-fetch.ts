@@ -2,6 +2,7 @@ import { eq, and, or, sql, isNull, inArray } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import {
   sources,
+  sourcesVisible,
   releases,
   fetchLog,
   sourceChangelogFiles,
@@ -9,7 +10,6 @@ import {
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
 import { countTokensSafe } from "@buildinternet/releases-core/tokens";
-import { notDisabled } from "../queries/shared.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import {
   headCheckUrl,
@@ -161,7 +161,7 @@ export async function queryDueSources(
   now: Date,
   opts?: { changeDetectEnabled?: boolean },
 ): Promise<Source[]> {
-  const notPaused = sql`${sources.fetchPriority} != 'paused'`;
+  const notPaused = sql`${sourcesVisible.fetchPriority} != 'paused'`;
   // Include sources that have a feed URL OR are GitHub type (GitHub sources
   // don't store a feedUrl — they use the GitHub releases API directly).
   // Behind SCRAPE_CHANGE_DETECT_ENABLED (#517), also include scrape/agent
@@ -169,23 +169,23 @@ export async function queryDueSources(
   // playbook's `fetchQuirks` (unreliable class is a no-op, so the widened
   // filter doesn't explode poll volume).
   const pollable = opts?.changeDetectEnabled
-    ? sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL OR ${sources.type} = 'github' OR ${sources.type} IN ('scrape','agent'))`
-    : sql`(json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL OR ${sources.type} = 'github')`;
+    ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} IN ('scrape','agent'))`
+    : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github')`;
 
   // Build OR conditions for each tier using sql template to avoid enum type issues
   const tierConditions = (Object.keys(TIER_INTERVALS) as PollTier[]).map((tier) => {
     const hours = TIER_INTERVALS[tier];
     const cutoff = new Date(now.getTime() - hours * 3600_000).toISOString();
     return and(
-      sql`${sources.fetchPriority} = ${tier}`,
-      or(isNull(sources.lastPolledAt), sql`${sources.lastPolledAt} < ${cutoff}`),
+      sql`${sourcesVisible.fetchPriority} = ${tier}`,
+      or(isNull(sourcesVisible.lastPolledAt), sql`${sourcesVisible.lastPolledAt} < ${cutoff}`),
     );
   });
 
   return db
     .select()
-    .from(sources)
-    .where(and(notDisabled, pollable, notPaused, or(...tierConditions)));
+    .from(sourcesVisible)
+    .where(and(pollable, notPaused, or(...tierConditions)));
 }
 
 // ── Poll one source ──

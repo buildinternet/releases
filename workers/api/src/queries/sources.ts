@@ -33,11 +33,20 @@ export type SourceListRow = {
 // Active-row views (#671) aliased back to the base names so callers' WHERE
 // fragments — which qualify columns as `sources.X`, `organizations.X`,
 // `products.X` — keep working. The view itself filters deleted_at.
+//
+// `includeHidden` (#674) toggles between `sources_visible` (default — also
+// excludes is_hidden = 1) and `sources_active` (admin reads that want hidden
+// rows). Both views inherit deleted_at filtering.
 
-export async function countSourcesForList(db: D1Db, whereClause?: SQL): Promise<number> {
+export async function countSourcesForList(
+  db: D1Db,
+  whereClause?: SQL,
+  opts: { includeHidden?: boolean } = {},
+): Promise<number> {
+  const fromView = opts.includeHidden ? sql`sources_active` : sql`sources_visible`;
   const rows = await db.all<{ total: number }>(sql`
     SELECT COUNT(*) AS total
-    FROM sources_active sources
+    FROM ${fromView} sources
     LEFT JOIN organizations_active organizations ON organizations.id = sources.org_id
     LEFT JOIN products_active products ON products.id = sources.product_id
     ${whereClause ? sql`WHERE ${whereClause}` : sql``}
@@ -82,11 +91,18 @@ function sourceOrderBy(sort: SourceSortField, dir: SortDir): SQL {
 export async function getSourcesWithStats(
   db: D1Db,
   whereClause?: SQL,
-  opts?: { limit?: number; offset?: number; sort?: SourceSortField; dir?: SortDir },
+  opts?: {
+    limit?: number;
+    offset?: number;
+    sort?: SourceSortField;
+    dir?: SortDir;
+    includeHidden?: boolean;
+  },
 ): Promise<SourceListRow[]> {
   const limitClause = opts?.limit != null ? sql`LIMIT ${opts.limit}` : sql``;
   const offsetClause = opts?.offset != null && opts.offset > 0 ? sql`OFFSET ${opts.offset}` : sql``;
   const orderBy = sourceOrderBy(opts?.sort ?? "name", opts?.dir ?? "asc");
+  const fromView = opts?.includeHidden ? sql`sources_active` : sql`sources_visible`;
   return db.all<SourceListRow>(sql`
     SELECT
       sources.*,
@@ -97,7 +113,7 @@ export async function getSourcesWithStats(
       COALESCE(rs.release_count, 0) AS release_count,
       rs.latest_version AS latest_version,
       rs.latest_date AS latest_date
-    FROM sources_active sources
+    FROM ${fromView} sources
     LEFT JOIN organizations_active organizations ON organizations.id = sources.org_id
     LEFT JOIN products_active products ON products.id = sources.product_id
     LEFT JOIN (

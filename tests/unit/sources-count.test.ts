@@ -63,17 +63,29 @@ beforeAll(async () => {
 afterAll(() => tdb.cleanup());
 
 describe("countSourcesForList", () => {
-  it("counts all sources when no whereClause is provided", async () => {
+  it("excludes hidden sources by default (sources_visible)", async () => {
     const count = await countSourcesForList(tdb.db as never);
-    expect(count).toBe(4);
-  });
-
-  it("applies whereClause — org filter", async () => {
-    const count = await countSourcesForList(tdb.db as never, eq(sources.orgId, "org_a"));
     expect(count).toBe(3);
   });
 
-  it("applies whereClause — compound filter (org + not hidden)", async () => {
+  it("includes hidden sources when includeHidden: true (sources_active)", async () => {
+    const count = await countSourcesForList(tdb.db as never, undefined, { includeHidden: true });
+    expect(count).toBe(4);
+  });
+
+  it("applies whereClause — org filter (visible default)", async () => {
+    const count = await countSourcesForList(tdb.db as never, eq(sources.orgId, "org_a"));
+    expect(count).toBe(2);
+  });
+
+  it("applies whereClause — org filter with includeHidden", async () => {
+    const count = await countSourcesForList(tdb.db as never, eq(sources.orgId, "org_a"), {
+      includeHidden: true,
+    });
+    expect(count).toBe(3);
+  });
+
+  it("applies whereClause — compound filter (org + not hidden) is redundant under visible default", async () => {
     const where = and(
       eq(sources.orgId, "org_a"),
       sql`(${sources.isHidden} IS NULL OR ${sources.isHidden} = 0)`,
@@ -94,6 +106,6 @@ describe("countSourcesForList", () => {
       EXISTS (SELECT 1 FROM organizations o2 WHERE o2.id = ${sources.orgId} AND o2.category = 'ai')
     `;
     const count = await countSourcesForList(tdb.db as never, where);
-    expect(count).toBe(3);
+    expect(count).toBe(2);
   });
 });
