@@ -3,8 +3,9 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ThemeToggle } from "./theme-toggle";
+import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
 
-const GITHUB_REPO_URL = "https://github.com/buildinternet/releases-cli";
+const PANEL_ID = "mobile-nav-panel";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
@@ -24,6 +25,7 @@ export function MobileNav() {
         type="button"
         aria-label={open ? "Close menu" : "Open menu"}
         aria-expanded={open}
+        aria-controls={PANEL_ID}
         onClick={() => setOpen((v) => !v)}
         className="flex h-9 w-9 items-center justify-center rounded text-stone-600 hover:bg-stone-100 hover:text-stone-900 dark:text-stone-400 dark:hover:bg-stone-800 dark:hover:text-stone-100"
       >
@@ -56,31 +58,21 @@ export function MobileNav() {
             onClick={() => setOpen(false)}
             aria-hidden="true"
           />
-          <div className="absolute left-0 right-0 top-full z-40 border-b border-stone-200 bg-white shadow-lg dark:border-stone-800 dark:bg-stone-950">
+          <div
+            id={PANEL_ID}
+            className="absolute left-0 right-0 top-full z-40 border-b border-stone-200 bg-white shadow-lg dark:border-stone-800 dark:bg-stone-950"
+          >
             <nav className="flex flex-col px-6 py-4 text-sm text-stone-700 dark:text-stone-300">
-              <Link
-                href="/search"
-                onClick={() => setOpen(false)}
-                className="py-2 hover:text-stone-900 dark:hover:text-stone-100"
-              >
-                Search
-              </Link>
-              <Link
-                href="/docs"
-                onClick={() => setOpen(false)}
-                className="py-2 hover:text-stone-900 dark:hover:text-stone-100"
-              >
-                Docs
-              </Link>
-              {process.env.NODE_ENV === "development" && (
+              {visibleNavItems().map((item) => (
                 <Link
-                  href="/status"
+                  key={item.href}
+                  href={item.href}
                   onClick={() => setOpen(false)}
                   className="py-2 hover:text-stone-900 dark:hover:text-stone-100"
                 >
-                  Status
+                  {item.label}
                 </Link>
-              )}
+              ))}
               <a
                 href={GITHUB_REPO_URL}
                 target="_blank"

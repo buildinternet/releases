@@ -1,8 +1,7 @@
 import Link from "next/link";
 import { ThemeToggle } from "./theme-toggle";
 import { MobileNav } from "./mobile-nav";
-
-const GITHUB_REPO_URL = "https://github.com/buildinternet/releases-cli";
+import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
 
 export function Header() {
   return (
@@ -44,17 +43,15 @@ export function Header() {
       </Link>
       <MobileNav />
       <nav className="hidden sm:flex items-center gap-5 text-sm text-stone-500 dark:text-stone-400">
-        <Link href="/search" className="hover:text-stone-700 dark:hover:text-stone-300">
-          Search
-        </Link>
-        <Link href="/docs" className="hover:text-stone-700 dark:hover:text-stone-300">
-          Docs
-        </Link>
-        {process.env.NODE_ENV === "development" && (
-          <Link href="/status" className="hover:text-stone-700 dark:hover:text-stone-300">
-            Status
+        {visibleNavItems().map((item) => (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="hover:text-stone-700 dark:hover:text-stone-300"
+          >
+            {item.label}
           </Link>
-        )}
+        ))}
         <a
           href={GITHUB_REPO_URL}
           target="_blank"
