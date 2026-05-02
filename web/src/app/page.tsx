@@ -1,19 +1,14 @@
 import { api, ApiSetupError } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
-import { SourceCard } from "@/components/source-card";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallTabs } from "@/components/install-tabs";
 
 export default async function HomePage() {
-  let stats, orgs, independentSources;
+  let stats, orgs;
   try {
-    [stats, orgs, independentSources] = await Promise.all([
-      api.stats(),
-      api.orgs(),
-      api.sources(true),
-    ]);
+    [stats, orgs] = await Promise.all([api.stats(), api.orgs()]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -80,23 +75,7 @@ export default async function HomePage() {
         </div>
       </div>
       <div className="max-w-4xl mx-auto px-6 pb-12">
-        {orgs.length > 0 && (
-          <div className="mb-8">
-            <OrgTable orgs={orgs} />
-          </div>
-        )}
-        {independentSources.length > 0 && (
-          <div>
-            <div className="text-xs font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
-              Independent Projects
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {independentSources.map((source) => (
-                <SourceCard key={source.slug} source={source} />
-              ))}
-            </div>
-          </div>
-        )}
+        {orgs.length > 0 && <OrgTable orgs={orgs} />}
       </div>
     </div>
   );
