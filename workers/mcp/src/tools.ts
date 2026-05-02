@@ -2,10 +2,11 @@
 // WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
-import { eq, desc, inArray, and, or, isNull, sql } from "drizzle-orm";
+import { eq, desc, inArray, and, sql } from "drizzle-orm";
 import {
   sources,
   releases,
+  releasesVisible,
   organizations,
   usageLog,
   orgAccounts,
@@ -330,9 +331,9 @@ export async function searchReleases(
     JOIN releases r ON r.rowid = releases_fts.rowid
     JOIN sources s ON s.id = r.source_id
     WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      ${includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
       ${sourceId ? sql`AND r.source_id = ${sourceId}` : sql``}
       ${
         orgSourceIds
@@ -513,34 +514,32 @@ export async function getLatestReleases(
   }
 
   // Default filters match the web/API read paths so MCP readers see the same canonical-only feed.
+  // releasesVisible already excludes suppressed + coverage rows; use base table only when
+  // the caller explicitly opts into coverage.
+  const releasesTable = includeCoverage ? releases : releasesVisible;
   const conditions = [
-    eq(releases.suppressed, false),
     sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
+    sql`(${releasesTable.suppressed} IS NULL OR ${releasesTable.suppressed} = 0)`,
   ];
-  if (!includeCoverage) {
-    conditions.push(
-      sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`,
-    );
-  }
-  if (sourceFilter) conditions.push(eq(releases.sourceId, sourceFilter));
-  if (orgSourceIds) conditions.push(inArray(releases.sourceId, orgSourceIds));
-  if (params.type) conditions.push(eq(releases.type, params.type));
+  if (sourceFilter) conditions.push(eq(releasesTable.sourceId, sourceFilter));
+  if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));
+  if (params.type) conditions.push(eq(releasesTable.type, params.type));
 
   const rows = await db
     .select({
-      id: releases.id,
-      title: releases.title,
-      version: releases.version,
-      type: releases.type,
-      content: releases.content,
-      contentSummary: releases.contentSummary,
-      publishedAt: releases.publishedAt,
+      id: releasesTable.id,
+      title: releasesTable.title,
+      version: releasesTable.version,
+      type: releasesTable.type,
+      content: releasesTable.content,
+      contentSummary: releasesTable.contentSummary,
+      publishedAt: releasesTable.publishedAt,
       sourceName: sources.name,
     })
-    .from(releases)
-    .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .from(releasesTable)
+    .innerJoin(sources, eq(releasesTable.sourceId, sources.id))
     .where(and(...conditions))
-    .orderBy(desc(releases.publishedAt))
+    .orderBy(desc(releasesTable.publishedAt))
     .limit(maxCount);
 
   if (rows.length === 0) return text("No releases found.");
@@ -1007,14 +1006,8 @@ async function renderSourceDetail(
       : Promise.resolve([]),
     db
       .select({ n: sql<number>`count(*)` })
-      .from(releases)
-      .where(
-        and(
-          eq(releases.sourceId, src.id),
-          or(isNull(releases.suppressed), eq(releases.suppressed, false)),
-          sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`,
-        ),
-      ),
+      .from(releasesVisible)
+      .where(eq(releasesVisible.sourceId, src.id)),
     // Metadata-only. `content` can be up to 1MB per row on monorepos with
     // many package CHANGELOGs — only pulled when the caller embeds a slice.
     db
@@ -1551,9 +1544,9 @@ export async function search(
           JOIN releases r ON r.rowid = releases_fts.rowid
           JOIN sources s ON s.id = r.source_id
           WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
-            AND (r.suppressed IS NULL OR r.suppressed = 0)
             AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-            ${includeCoverage ? sql`` : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`}
+            AND (r.suppressed IS NULL OR r.suppressed = 0)
+            ${includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
             ${
               sourceIds
                 ? sql`AND r.source_id IN (${sql.join(

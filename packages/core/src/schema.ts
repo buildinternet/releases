@@ -778,3 +778,30 @@ export const sourcesVisible = sqliteView("sources_visible", {
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
+
+/**
+ * Canonical read view for releases. Excludes both suppressed rows
+ * and coverage-side rows (releases that are already covered by another
+ * release). Use this for all user-facing read paths. Admin/ingest paths
+ * that need to see suppressed or coverage rows use the base table directly.
+ * Pass includeCoverage = true at call sites that legitimately want coverage
+ * rows — those fall back to the base `releases` table.
+ */
+export const releasesVisible = sqliteView("releases_visible", {
+  id: text("id").primaryKey(),
+  sourceId: text("source_id").notNull(),
+  version: text("version"),
+  type: text("type", { enum: RELEASE_TYPES }).notNull(),
+  title: text("title").notNull(),
+  content: text("content").notNull(),
+  contentSummary: text("content_summary"),
+  url: text("url"),
+  contentHash: text("content_hash"),
+  metadata: text("metadata"),
+  media: text("media"),
+  publishedAt: text("published_at"),
+  suppressed: integer("suppressed", { mode: "boolean" }),
+  suppressedReason: text("suppressed_reason"),
+  fetchedAt: text("fetched_at").notNull(),
+  embeddedAt: text("embedded_at"),
+}).existing();

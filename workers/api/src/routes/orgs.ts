@@ -7,6 +7,7 @@ import {
   sources,
   sourcesVisible,
   releases,
+  releasesVisible,
   products,
   productsActive,
   tags,
@@ -672,13 +673,15 @@ orgRoutes.get("/orgs/:slug/activity", async (c) => {
   let to = toParam;
   if (!from || !to) {
     const [bounds] = await db
-      .select({ oldest: min(releases.publishedAt), newest: max(releases.publishedAt) })
-      .from(releases)
+      .select({
+        oldest: min(releasesVisible.publishedAt),
+        newest: max(releasesVisible.publishedAt),
+      })
+      .from(releasesVisible)
       .where(
         and(
-          inArray(releases.sourceId, sourceIds),
-          sql`${releases.publishedAt} IS NOT NULL`,
-          sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`,
+          inArray(releasesVisible.sourceId, sourceIds),
+          sql`${releasesVisible.publishedAt} IS NOT NULL`,
         ),
       );
     const today = new Date().toISOString().slice(0, 10);
@@ -1015,35 +1018,29 @@ orgRoutes.get("/orgs/:slug/recent-releases", async (c) => {
 
   const rows = await db
     .select({
-      id: releases.id,
-      sourceId: releases.sourceId,
-      version: releases.version,
-      type: releases.type,
-      title: releases.title,
-      content: releases.content,
-      contentSummary: releases.contentSummary,
-      url: releases.url,
-      contentHash: releases.contentHash,
-      metadata: releases.metadata,
-      media: releases.media,
-      publishedAt: releases.publishedAt,
-      suppressed: releases.suppressed,
-      suppressedReason: releases.suppressedReason,
-      fetchedAt: releases.fetchedAt,
-      embeddedAt: releases.embeddedAt,
+      id: releasesVisible.id,
+      sourceId: releasesVisible.sourceId,
+      version: releasesVisible.version,
+      type: releasesVisible.type,
+      title: releasesVisible.title,
+      content: releasesVisible.content,
+      contentSummary: releasesVisible.contentSummary,
+      url: releasesVisible.url,
+      contentHash: releasesVisible.contentHash,
+      metadata: releasesVisible.metadata,
+      media: releasesVisible.media,
+      publishedAt: releasesVisible.publishedAt,
+      suppressed: releasesVisible.suppressed,
+      suppressedReason: releasesVisible.suppressedReason,
+      fetchedAt: releasesVisible.fetchedAt,
+      embeddedAt: releasesVisible.embeddedAt,
       sourceName: sourcesVisible.name,
       sourceSlug: sourcesVisible.slug,
     })
-    .from(releases)
-    .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
-    .where(
-      and(
-        eq(sourcesVisible.orgId, org.id),
-        gte(releases.publishedAt, since),
-        eq(releases.suppressed, false),
-      ),
-    )
-    .orderBy(desc(releases.publishedAt))
+    .from(releasesVisible)
+    .innerJoin(sourcesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
+    .where(and(eq(sourcesVisible.orgId, org.id), gte(releasesVisible.publishedAt, since)))
+    .orderBy(desc(releasesVisible.publishedAt))
     .limit(limit);
 
   return c.json(rows);

@@ -228,14 +228,13 @@ async function hydrateReleaseNeighbors(
            s.name as sourceName,
            o.slug as orgSlug,
            o.name as orgName
-    FROM releases r
+    FROM releases_visible r
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE r.id IN (${sql.join(
       ids.map((id) => sql`${id}`),
       sql`, `,
     )})
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
   `);
 
@@ -447,12 +446,11 @@ relatedRoutes.get("/related/sources", async (c) => {
                      PARTITION BY r.source_id
                      ORDER BY r.published_at DESC NULLS LAST
                    )                                                          AS rn
-            FROM releases r
+            FROM releases_visible r
             WHERE r.source_id IN (${sql.join(
               visibleIds.map((id) => sql`${id}`),
               sql`, `,
             )})
-              AND (r.suppressed IS NULL OR r.suppressed = 0)
           ) AS ranked
           WHERE rn = 1
         `)

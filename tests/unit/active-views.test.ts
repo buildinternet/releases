@@ -18,6 +18,8 @@ import {
   sources,
   sourcesActive,
   sourcesVisible,
+  releases,
+  releasesVisible,
 } from "@buildinternet/releases-core/schema";
 
 let tdb: TestDatabase;
@@ -293,5 +295,126 @@ describe("organizations_public view (#676)", () => {
       }>(sql`SELECT name, type FROM sqlite_master WHERE type='view' ORDER BY name`)
       .map((r) => r.name);
     expect(rows).toContain("organizations_public");
+  });
+});
+
+describe("releases_visible (#675)", () => {
+  // Helper: insert a minimal source fixture (tests clear tables before each run)
+  async function insertSource(sourceId: string, orgId: string) {
+    await tdb.db.insert(sources).values({
+      id: sourceId,
+      name: "S",
+      slug: sourceId,
+      type: "github",
+      url: `https://github.com/x/${sourceId}`,
+      orgId,
+      discovery: "curated",
+    });
+  }
+
+  it("hides suppressed releases", async () => {
+    const db = tdb.db;
+    await db
+      .insert(organizations)
+      .values({ id: "org_1", name: "Org", slug: "org-rv-1", discovery: "curated" });
+    await insertSource("src_1", "org_1");
+
+    await db.insert(releases).values([
+      {
+        id: "rel_live",
+        sourceId: "src_1",
+        title: "Live",
+        content: "live",
+        type: "feature",
+        suppressed: false,
+      },
+      {
+        id: "rel_suppressed",
+        sourceId: "src_1",
+        title: "Suppressed",
+        content: "suppressed",
+        type: "feature",
+        suppressed: true,
+      },
+    ]);
+
+    const fromBase = await db
+      .select({ id: releases.id })
+      .from(releases)
+      .where(eq(releases.sourceId, "src_1"));
+    expect(fromBase).toHaveLength(2);
+
+    const fromView = await db
+      .select({ id: releasesVisible.id })
+      .from(releasesVisible)
+      .where(eq(releasesVisible.sourceId, "src_1"));
+    expect(fromView).toHaveLength(1);
+    expect(fromView[0]?.id).toBe("rel_live");
+  });
+
+  it("hides coverage-side releases", async () => {
+    const db = tdb.db;
+    await db
+      .insert(organizations)
+      .values({ id: "org_2", name: "Org2", slug: "org-rv-2", discovery: "curated" });
+    await insertSource("src_2", "org_2");
+
+    await db.insert(releases).values([
+      {
+        id: "rel_canonical",
+        sourceId: "src_2",
+        title: "Canonical",
+        content: "canonical",
+        type: "feature",
+        suppressed: false,
+      },
+      {
+        id: "rel_coverage",
+        sourceId: "src_2",
+        title: "Coverage item",
+        content: "coverage",
+        type: "feature",
+        suppressed: false,
+      },
+    ]);
+    tdb.db.$client.run(
+      "INSERT INTO release_coverage (coverage_id, canonical_id, decided_by, decided_at) VALUES ('rel_coverage', 'rel_canonical', 'test', datetime('now'))",
+    );
+
+    const fromView = await db
+      .select({ id: releasesVisible.id })
+      .from(releasesVisible)
+      .where(eq(releasesVisible.sourceId, "src_2"));
+    expect(fromView).toHaveLength(1);
+    expect(fromView[0]?.id).toBe("rel_canonical");
+  });
+
+  it("shows NULL suppressed as visible", async () => {
+    const db = tdb.db;
+    await db
+      .insert(organizations)
+      .values({ id: "org_3", name: "Org3", slug: "org-rv-3", discovery: "curated" });
+    await insertSource("src_3", "org_3");
+
+    // Older rows pre-dating the suppressed column default carry NULL; the
+    // view's `suppressed IS NULL OR suppressed = 0` predicate must include
+    // them.
+    tdb.db.$client.run(
+      "INSERT INTO releases (id, source_id, title, content, type, fetched_at, suppressed) VALUES ('rel_null', 'src_3', 'Null', 'null', 'feature', datetime('now'), NULL)",
+    );
+
+    const fromView = await db
+      .select({ id: releasesVisible.id })
+      .from(releasesVisible)
+      .where(eq(releasesVisible.sourceId, "src_3"));
+    expect(fromView).toHaveLength(1);
+    expect(fromView[0]?.id).toBe("rel_null");
+  });
+
+  it("PRAGMA lists releases_visible as a view", async () => {
+    const rows = tdb.db
+      .all<{ name: string }>(sql`SELECT name FROM sqlite_master WHERE type='view' ORDER BY name`)
+      .map((r) => r.name);
+    expect(rows).toContain("releases_visible");
   });
 });
