@@ -32,7 +32,7 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 - `packages/ai/` → imported as **`@releases/ai-internal`**. `evaluate` (URL recommendation + `buildMetadataFromEvaluation`), `playbook` (deterministic markdown generation), `providers` (provider-detection table). Worker-safe.
 - `packages/rendering/` → imported as **`@releases/rendering/*`**. Atom feed helpers, markdown/JSON formatters, and media URL helpers.
 - `packages/search/` → imported as **`@releases/search/*`**. Embedding providers/cache, Vectorize hybrid search, and release/entity/changelog embedding pipelines.
-- `packages/lib/` — slim private utilities (`config`, `errors`, `source-edit`, Anthropic client/error helpers, managed-agent rate limits). `logger` is published as `@buildinternet/releases-lib/logger`.
+- `packages/lib/` — slim private utilities (`config`, `errors`, `source-edit`, Anthropic client/error helpers, managed-agent rate limits, `anthropic-pricing` for list-price cost estimates on managed-agent sessions). `logger` is published as `@buildinternet/releases-lib/logger`.
 
 ## Surviving `src/` tree
 

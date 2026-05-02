@@ -84,7 +84,9 @@ A second daily cron at 03:00 UTC (`workers/api/src/cron/retier.ts`) recomputes `
 
 ## Discovery guardrails
 
-The discovery worker checks `GET /api/sessions?status=running&type=onboard` before spawning a new session. Returns 409 if the same company (case-insensitive) is already being discovered, 429 if 5+ onboard sessions are running. Uses a service binding (`API_WORKER`) for Worker-to-Worker communication. The `GET /sessions` endpoint supports `?status=` and `?type=` query param filtering.
+The discovery worker checks `GET /v1/sessions?type=onboard&recent_minutes=10` before spawning a new session. Returns 409 if the same company (case-insensitive) is already being discovered OR finished within the last 10 minutes (the dedup window — see #656); 429 if 5+ onboard sessions are currently running. Uses a service binding (`API_WORKER`) for Worker-to-Worker communication. `GET /v1/sessions` supports `?status=`, `?type=`, and `?recent_minutes=N` filters; `recent_minutes` keeps any session that's currently `running` OR was last updated within N minutes (running sessions are always included regardless of staleness). The 5-session concurrency cap is computed from running-only sessions on the discovery worker side, so a recently finished session doesn't tie up the budget.
+
+Per-session estimated cost (model id, cache_creation/cache_read/input/output tokens, list-price USD) is captured by the discovery DO via `@releases/lib/anthropic-pricing` on both successful completions AND error terminal events (provider `session.error`, retries-exhausted idle), then stored on `SessionState.usage`. The web `/status` page renders it under each session card with an `≈ $` qualifier so it isn't mistaken for billed cost. See #657.
 
 ## Realtime streaming
 

@@ -6,6 +6,7 @@
   "exports": {
     "./anthropic-client": "./src/anthropic-client.ts",
     "./anthropic-errors": "./src/anthropic-errors.ts",
+    "./anthropic-pricing": "./src/anthropic-pricing.ts",
     "./config": "./src/config.ts",
     "./errors": "./src/errors.ts",
     "./logger": "./src/logger.ts",

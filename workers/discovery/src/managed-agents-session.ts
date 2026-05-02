@@ -13,6 +13,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { estimateCost } from "@releases/lib/anthropic-pricing.js";
 import {
   classifyMaRateLimitError,
   buildMaRateLimitErrorMessage,
@@ -130,6 +131,61 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       ...(result ? { result } : {}),
       ...(error ? { error } : {}),
     };
+  }
+
+  /**
+   * Pull the final usage envelope from the Anthropic API and snapshot a
+   * list-price USD estimate. Called from both the success exit (after the
+   * stream loop) and the terminal-error branches (provider session.error,
+   * retries_exhausted_idle) so failed sessions get cost attribution too —
+   * otherwise the /status page would show $? on every error.
+   *
+   * Returns `undefined` if the API call fails or the session has no usage
+   * yet — this is best-effort and never blocks the failure path.
+   */
+  private async captureFinalUsage(
+    client: ReturnType<typeof buildAnthropicClient>,
+    anthropicSessionId: string,
+    useWorker: boolean,
+  ): Promise<
+    | {
+        inputTokens?: number;
+        outputTokens?: number;
+        cacheWriteTokens?: number;
+        cacheReadTokens?: number;
+        model?: string;
+        estimatedUsd?: number;
+      }
+    | undefined
+  > {
+    const inferredModel = useWorker ? "claude-haiku-4-5" : "claude-sonnet-4-6";
+    try {
+      const finalSession = await (client.beta.sessions as any).retrieve(anthropicSessionId);
+      const usage = finalSession.usage as Record<string, unknown> | undefined;
+      if (!usage) return undefined;
+      const inputTokens = usage.input_tokens as number | undefined;
+      const outputTokens = usage.output_tokens as number | undefined;
+      const cacheWriteTokens = usage.cache_creation_input_tokens as number | undefined;
+      const cacheReadTokens = usage.cache_read_input_tokens as number | undefined;
+      const model = (finalSession.model as string | undefined) ?? inferredModel;
+      const cost = estimateCost(
+        { inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens },
+        model,
+      );
+      console.log(
+        `[managed-agents] Session usage: ${JSON.stringify(usage)} model=${model} estimatedUsd=${cost?.totalUsd?.toFixed(4) ?? "?"}`,
+      );
+      return {
+        inputTokens,
+        outputTokens,
+        cacheWriteTokens,
+        cacheReadTokens,
+        model,
+        ...(cost ? { estimatedUsd: cost.totalUsd } : {}),
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   private async runSession(params: SessionParams): Promise<void> {
@@ -486,12 +542,17 @@ Find and evaluate changelog sources for the company described in <company>.${dom
                 console.error(
                   `[managed-agents] retries_exhausted after ${providerErrorCount} provider error(s)`,
                 );
+                const usageOnError = await this.captureFinalUsage(
+                  client,
+                  session.id,
+                  Boolean(useWorker),
+                );
                 await this.fail(
                   sessionId,
                   params.company,
                   classification.message,
                   releasesApiKey,
-                  undefined,
+                  usageOnError,
                   classification,
                 );
                 terminalFailed = true;
@@ -513,12 +574,17 @@ Find and evaluate changelog sources for the company described in <company>.${dom
               console.error(
                 `[managed-agents] Session error (${classification.errorType ?? "unknown"}): ${classification.message}`,
               );
+              const usageOnError = await this.captureFinalUsage(
+                client,
+                session.id,
+                Boolean(useWorker),
+              );
               await this.fail(
                 sessionId,
                 params.company,
                 classification.message,
                 releasesApiKey,
-                undefined,
+                usageOnError,
                 { ...classification, retryCount: providerErrorCount - 1 },
               );
               terminalFailed = true;
@@ -545,21 +611,10 @@ Find and evaluate changelog sources for the company described in <company>.${dom
         return;
       }
 
-      // Retrieve final session for usage tracking (also logged in CLI's managed-discovery.ts)
-      let sessionUsage: { inputTokens?: number; outputTokens?: number } | undefined;
-      try {
-        const finalSession = await (client.beta.sessions as any).retrieve(session.id);
-        const usage = finalSession.usage as Record<string, unknown> | undefined;
-        if (usage) {
-          sessionUsage = {
-            inputTokens: usage.input_tokens as number | undefined,
-            outputTokens: usage.output_tokens as number | undefined,
-          };
-          console.log(`[managed-agents] Session usage: ${JSON.stringify(usage)}`);
-        }
-      } catch {
-        // Non-critical
-      }
+      // Snapshot final usage + cost via the shared helper; same call site as
+      // the terminal-error branches so success and failure both attribute
+      // cost correctly. See `captureFinalUsage` below.
+      const sessionUsage = await this.captureFinalUsage(client, session.id, Boolean(useWorker));
 
       // Archive runs in the outer `finally` for every exit path — see the
       // comment on `pendingArchive` at the top of runSession. NOTE: worker
@@ -640,7 +695,14 @@ Find and evaluate changelog sources for the company described in <company>.${dom
     company: string,
     error: string,
     cachedApiKey?: string,
-    usage?: { inputTokens?: number; outputTokens?: number },
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheWriteTokens?: number;
+      cacheReadTokens?: number;
+      model?: string;
+      estimatedUsd?: number;
+    },
     classification?: SessionErrorClassification,
   ): Promise<void> {
     await this.ctx.storage.put("status", "error");
