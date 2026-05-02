@@ -154,7 +154,6 @@ export async function invalidateLatestCache(
     await env.LATEST_CACHE.delete(key);
     logEvent("info", { component: "invalidation", event: "purged", ...logCtx });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logEvent("warn", { component: "invalidation", event: "purge-failed", err: msg, ...logCtx });
+    logEvent("warn", { component: "invalidation", event: "purge-failed", err, ...logCtx });
   }
 }

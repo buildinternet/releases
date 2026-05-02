@@ -178,7 +178,7 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
           event: "step-failed",
           sourceId,
           step: currentStep,
-          err: errorMsg,
+          err,
         });
         await recordWorkflowFailure(db, {
           idPrefix: "wf-fail-onboard-",

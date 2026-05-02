@@ -35,7 +35,7 @@ export async function sendCronReport(
       component: "notifications",
       event: "report-send-failed",
       cronName: report.cronName,
-      err: message,
+      err,
     });
     return { sent: false, reason: "error", error: message };
   }

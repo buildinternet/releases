@@ -258,7 +258,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         logEvent("error", {
           component: "mcp-lookup",
           event: "fallback-non-ok",
-          status: res.status,
+          httpStatus: res.status,
         });
         return;
       }

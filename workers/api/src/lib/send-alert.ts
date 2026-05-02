@@ -43,8 +43,7 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
       if (existing !== null) return false;
     } catch (err) {
       // KV failure is non-fatal — let the email attempt proceed.
-      const msg = err instanceof Error ? err.message : String(err);
-      logEvent("warn", { component: "send-alert", event: "kv-dedup-read-error", err: msg });
+      logEvent("warn", { component: "send-alert", event: "kv-dedup-read-error", err });
     }
   }
 
@@ -65,15 +64,13 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
       } catch (err) {
         // Log but don't undo the send — duplicate emails within the window
         // are preferable to mis-reporting send success.
-        const msg = err instanceof Error ? err.message : String(err);
-        logEvent("warn", { component: "send-alert", event: "kv-dedup-write-error", err: msg });
+        logEvent("warn", { component: "send-alert", event: "kv-dedup-write-error", err });
       }
     }
     logEvent("info", { component: "send-alert", event: "sent", subject });
     return true;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logEvent("warn", { component: "send-alert", event: "send-error", err: msg });
+    logEvent("warn", { component: "send-alert", event: "send-error", err });
     return false;
   }
 }

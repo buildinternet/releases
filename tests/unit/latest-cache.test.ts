@@ -353,7 +353,10 @@ describe("invalidateLatestCache", () => {
     ).resolves.toBeUndefined();
     expect(
       logs.some(
-        (l) => l.component === "invalidation" && l.event === "purge-failed" && l.err === "kv down",
+        (l) =>
+          l.component === "invalidation" &&
+          l.event === "purge-failed" &&
+          (l.err as { message?: string } | undefined)?.message === "kv down",
       ),
     ).toBe(true);
   });

@@ -99,7 +99,7 @@ export async function sendWebhookAlert(
     logEvent("warn", {
       component: "webhook-alert",
       event: "send-error",
-      err: err instanceof Error ? err : new Error(String(err)),
+      err,
     });
     return false;
   }

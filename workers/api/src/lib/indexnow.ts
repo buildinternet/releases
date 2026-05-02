@@ -99,7 +99,7 @@ export async function submitToIndexNow(
     return { status: ok ? "submitted" : "error", httpStatus: res.status };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    logEvent("warn", { component: "indexnow", event: "submit-failed", sourceSlug, err: msg });
+    logEvent("warn", { component: "indexnow", event: "submit-failed", sourceSlug, err });
     return { status: "error", reason: msg };
   }
 }
@@ -140,14 +140,14 @@ export async function notifyIndexNowForSource(
 ): Promise<SubmitResult> {
   // Run every gate that doesn't need slug lookups before touching D1, so
   // disabled / hidden / no-op publishes don't burn a query per release.
-  const base = `[indexnow] source=${source.slug}`;
-  if (env.INDEXNOW_ENABLED !== "true") return logSkip(base, "flag_off");
-  if (env.INDEXING_DISABLED === "true") return logSkip(base, "indexing_disabled");
-  if (!env.INDEXNOW_KEY) return logSkip(base, "no_key_binding");
-  if (nReleases <= 0) return logSkip(base, "no_releases");
-  if (source.isHidden) return logSkip(base, "source_hidden");
-  if (source.discovery === "on_demand") return logSkip(base, "discovery_on_demand");
-  if (!source.orgId) return logSkip(base, "no_urls");
+  const sourceSlug = source.slug;
+  if (env.INDEXNOW_ENABLED !== "true") return logSkip(sourceSlug, "flag_off");
+  if (env.INDEXING_DISABLED === "true") return logSkip(sourceSlug, "indexing_disabled");
+  if (!env.INDEXNOW_KEY) return logSkip(sourceSlug, "no_key_binding");
+  if (nReleases <= 0) return logSkip(sourceSlug, "no_releases");
+  if (source.isHidden) return logSkip(sourceSlug, "source_hidden");
+  if (source.discovery === "on_demand") return logSkip(sourceSlug, "discovery_on_demand");
+  if (!source.orgId) return logSkip(sourceSlug, "no_urls");
 
   const orgSlug = await db.resolveOrgSlug(source.orgId);
   const productSlug = source.productId ? await db.resolveProductSlug(source.productId) : null;

@@ -56,11 +56,16 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
         }),
       );
       if (!res.ok) {
+        const rawBody = await res.text().catch(() => "");
+        const MAX_BODY_LEN = 2000;
+        const truncated = rawBody.length > MAX_BODY_LEN;
         logEvent("warn", {
           component: "events",
           event: "publish-non-ok",
           httpStatus: res.status,
-          body: await res.text().catch(() => ""),
+          body: truncated ? `${rawBody.slice(0, MAX_BODY_LEN)}…` : rawBody,
+          bodyLength: rawBody.length,
+          bodyTruncated: truncated,
         });
       }
     } catch (err) {

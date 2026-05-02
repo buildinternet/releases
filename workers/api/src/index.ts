@@ -526,7 +526,7 @@ function loggedDispatch(tag: string, p: Promise<unknown>, alertEnv?: AlertEnv): 
     .catch((err) => {
       const message = err instanceof Error ? err.message : String(err);
       const stack = err instanceof Error ? err.stack : undefined;
-      logEvent("error", { component: tag, event: "dispatch-failed", err: message, stack });
+      logEvent("error", { component: tag, event: "dispatch-failed", err });
       if (alertEnv) {
         const body = [`Cron tag: ${tag}`, `Error: ${message}`, stack ? `\nStack:\n${stack}` : ""]
           .filter(Boolean)
