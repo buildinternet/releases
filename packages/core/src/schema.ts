@@ -722,3 +722,28 @@ export const sourcesActive = sqliteView("sources_active", {
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
+
+/**
+ * Public-catalog view (#676). Layers on organizations_active so soft-delete
+ * filtering is inherited, and additionally strips on-demand rows (anonymous
+ * lookup-materialized orgs that should not appear in the public catalog).
+ *
+ * Column shape is identical to organizationsActive — both pass through all
+ * organizations columns. Public catalog read paths import this view; admin
+ * paths that need to see on-demand orgs keep using organizationsActive.
+ */
+export const organizationsPublic = sqliteView("organizations_public", {
+  id: text("id").primaryKey(),
+  name: text("name").notNull(),
+  slug: text("slug").notNull(),
+  domain: text("domain"),
+  description: text("description"),
+  category: text("category"),
+  avatarUrl: text("avatar_url"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  metadata: text("metadata"),
+  embeddedAt: text("embedded_at"),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  deletedAt: text("deleted_at"),
+}).existing();

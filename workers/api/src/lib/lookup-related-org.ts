@@ -1,6 +1,5 @@
 import { and, desc, eq, ne, or, sql } from "drizzle-orm";
-import { organizationsActive, sourcesActive } from "@buildinternet/releases-core/schema";
-import { notOnDemand } from "../queries/shared.js";
+import { organizationsPublic, sourcesActive } from "@buildinternet/releases-core/schema";
 import type { createDb } from "../db.js";
 
 type Db = ReturnType<typeof createDb>;
@@ -33,18 +32,13 @@ export async function resolveRelatedOrg(
   const urlPattern = `%github.com/${escapeLike(orgSegment)}/%`;
   const orgsByUrl = await db
     .selectDistinct({
-      id: organizationsActive.id,
-      slug: organizationsActive.slug,
-      name: organizationsActive.name,
+      id: organizationsPublic.id,
+      slug: organizationsPublic.slug,
+      name: organizationsPublic.name,
     })
-    .from(organizationsActive)
-    .innerJoin(sourcesActive, eq(sourcesActive.orgId, organizationsActive.id))
-    .where(
-      and(
-        sql`${sourcesActive.url} LIKE ${urlPattern} ESCAPE '\\'`,
-        notOnDemand(organizationsActive.discovery),
-      ),
-    )
+    .from(organizationsPublic)
+    .innerJoin(sourcesActive, eq(sourcesActive.orgId, organizationsPublic.id))
+    .where(sql`${sourcesActive.url} LIKE ${urlPattern} ESCAPE '\\'`)
     .limit(2);
 
   let candidates = orgsByUrl;
@@ -53,14 +47,12 @@ export async function resolveRelatedOrg(
   if (candidates.length === 0) {
     const exactSlugMatches = await db
       .select({
-        id: organizationsActive.id,
-        slug: organizationsActive.slug,
-        name: organizationsActive.name,
+        id: organizationsPublic.id,
+        slug: organizationsPublic.slug,
+        name: organizationsPublic.name,
       })
-      .from(organizationsActive)
-      .where(
-        and(eq(organizationsActive.slug, orgSegment), notOnDemand(organizationsActive.discovery)),
-      )
+      .from(organizationsPublic)
+      .where(eq(organizationsPublic.slug, orgSegment))
       .limit(2);
     candidates = exactSlugMatches;
   }
