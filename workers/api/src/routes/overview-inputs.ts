@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, desc, eq, gte, ne } from "drizzle-orm";
+import { and, desc, eq, gte, isNull, ne, or } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   knowledgePages,
@@ -79,8 +79,11 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
     .where(
       and(
         eq(sourcesActive.orgId, org.id),
-        eq(sourcesActive.isHidden, false),
-        ne(sourcesActive.fetchPriority, "paused"),
+        // is_hidden / fetch_priority are nullable — three-valued SQL logic
+        // would drop legacy NULL rows from a bare eq/ne, so OR in the IS NULL
+        // case so they count as visible / not-paused.
+        or(eq(sourcesActive.isHidden, false), isNull(sourcesActive.isHidden)),
+        or(ne(sourcesActive.fetchPriority, "paused"), isNull(sourcesActive.fetchPriority)),
       ),
     );
 
