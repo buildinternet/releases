@@ -198,17 +198,25 @@ export async function runLookup(
     // Org reuse: attach to an existing curated/agent org if relatedOrg matched.
     // Otherwise insert a hidden on-demand org, falling back on slug collision.
     let orgId: string;
+    let orgSlug: string;
     if (relatedOrg) {
       orgId = relatedOrg.org.id;
+      orgSlug = relatedOrg.org.slug;
     } else {
+      // Org slug is always lowercased — keeps URLs canonical regardless of
+      // the case the user typed in `org/repo`, and matches the convention
+      // curated orgs already follow. The org *name* prefers the canonical
+      // login from the GitHub probe (e.g. `Shopify`) over the typed case.
+      orgSlug = parsed.org.toLowerCase();
+      const orgName = probe.ownerLogin ?? parsed.org;
       // Upsert org to avoid TOCTOU race under concurrent requests.
       orgId = newOrgId();
       await db
         .insert(organizations)
         .values({
           id: orgId,
-          name: parsed.org,
-          slug: parsed.org,
+          name: orgName,
+          slug: orgSlug,
           discovery: "on_demand",
         })
         .onConflictDoNothing();
@@ -219,20 +227,35 @@ export async function runLookup(
       const [winningOrg] = await db
         .select()
         .from(organizationsActive)
-        .where(eq(organizationsActive.slug, parsed.org))
+        .where(eq(organizationsActive.slug, orgSlug))
         .limit(1);
       orgId = winningOrg!.id;
     }
 
     sourceId = newSourceId();
-    const baseSlug = `${parsed.org}-${parsed.repo}`.toLowerCase();
+    // Prefer the bare repo segment for the source slug — `/shopify/toxiproxy`
+    // reads cleaner than `/shopify/shopify-toxiproxy`. `sources.slug` is
+    // globally UNIQUE though, so popular repo names (`cli`, `core`, `api`)
+    // will collide across orgs. On collision, fall back to the org-prefixed
+    // form before resorting to numeric suffixes — the org-prefixed slug is
+    // effectively coordinate-unique, so suffixes only kick in if two repos
+    // genuinely share both org and name.
+    const repoSlug = parsed.repo.toLowerCase();
+    const repoName = probe.repoName ?? parsed.repo;
+    const slugCandidates: string[] = [
+      repoSlug,
+      `${orgSlug}-${repoSlug}`,
+      `${orgSlug}-${repoSlug}-2`,
+      `${orgSlug}-${repoSlug}-3`,
+      `${orgSlug}-${repoSlug}-4`,
+    ];
 
-    // Handle slug collision on source insert (try base, then base-2 … base-5).
+    // Handle slug collision on source insert (try the candidates in order).
     // Between retries we re-check by URL so a concurrent request that won the
     // first slug can't cause us to insert a second row at the same URL.
     // (sources.slug is UNIQUE; sources.url is not — without this re-check
     //  two concurrent calls could both succeed with different slug suffixes.)
-    for (let attempt = 0; attempt < 5; attempt++) {
+    for (let attempt = 0; attempt < slugCandidates.length; attempt++) {
       if (attempt > 0) {
         // oxlint-disable-next-line no-await-in-loop -- race re-check before next slug
         const concurrent = await findExistingSource();
@@ -242,14 +265,14 @@ export async function runLookup(
           break;
         }
       }
-      const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+      const slug = slugCandidates[attempt]!;
       try {
         // oxlint-disable-next-line no-await-in-loop -- sequential retry on slug collision
         const [row] = await db
           .insert(sources)
           .values({
             id: sourceId,
-            name: coordinate,
+            name: repoName,
             slug,
             type: "github",
             url,

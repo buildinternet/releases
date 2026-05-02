@@ -43,18 +43,21 @@ export async function resolveRelatedOrg(
 
   let candidates = orgsByUrl;
 
-  // If no URL matches, fall back to exact slug match.
+  // If no URL matches, fall back to slug match. Compared case-insensitively
+  // because GitHub coordinates are case-insensitive on the wire and our
+  // canonical org slugs are stored lowercased.
   if (candidates.length === 0) {
-    const exactSlugMatches = await db
+    const slugLower = orgSegment.toLowerCase();
+    const slugMatches = await db
       .select({
         id: organizationsPublic.id,
         slug: organizationsPublic.slug,
         name: organizationsPublic.name,
       })
       .from(organizationsPublic)
-      .where(eq(organizationsPublic.slug, orgSegment))
+      .where(sql`LOWER(${organizationsPublic.slug}) = ${slugLower}`)
       .limit(2);
-    candidates = exactSlugMatches;
+    candidates = slugMatches;
   }
 
   if (candidates.length !== 1) return null;

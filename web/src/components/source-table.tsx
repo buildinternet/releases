@@ -30,7 +30,7 @@ function TypeBadge({ type }: { type: string }) {
   );
 }
 
-function StateBadge({ label, title }: { label: string; title: string }) {
+export function StateBadge({ label, title }: { label: string; title: string }) {
   return (
     <span
       title={title}
@@ -41,10 +41,14 @@ function StateBadge({ label, title }: { label: string; title: string }) {
   );
 }
 
+export const HIDDEN_BADGE = {
+  label: "Hidden",
+  title:
+    "Hidden from listings, sitemap, and AI features. Still fetched and queryable by direct lookup. Promoted when an admin un-hides it.",
+} as const;
+
 function getSourceState(source: SourceListItem): { label: string; title: string } | null {
-  if (source.isHidden) {
-    return { label: "Ignored", title: "This source is hidden from public listings" };
-  }
+  if (source.isHidden) return HIDDEN_BADGE;
   if (source.fetchPriority === "paused") {
     return { label: "Paused", title: "Fetching is paused for this source" };
   }

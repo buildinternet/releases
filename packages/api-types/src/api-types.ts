@@ -207,6 +207,12 @@ export interface SourceDetail {
   name: string;
   type: string;
   url: string;
+  /**
+   * Hidden sources are reachable by direct URL but excluded from listings,
+   * sitemap, and AI features. Set on on-demand lookups and admin-suppressed
+   * rows; absent on canonical curated/agent sources.
+   */
+  isHidden?: boolean;
   changelogUrl?: string | null;
   hasChangelogFile?: boolean;
   org: { slug: string; name: string } | null;

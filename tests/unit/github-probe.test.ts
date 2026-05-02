@@ -40,7 +40,34 @@ describe("probeRepo", () => {
       hasReleases: true,
       hasChangelog: false,
       defaultBranch: "main",
+      ownerLogin: null,
+      repoName: null,
     });
+  });
+
+  test("captures canonical owner.login + repo.name from the probe response", async () => {
+    // GitHub returns canonical case in the repo body; on-demand lookup
+    // uses these to set org name and source name regardless of typed case.
+    mockFetchOnce((url) => {
+      if (url.toLowerCase().endsWith("/repos/shopify/toxiproxy")) {
+        return new Response(
+          JSON.stringify({
+            archived: false,
+            default_branch: "main",
+            name: "toxiproxy",
+            owner: { login: "Shopify" },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.includes("/releases")) return new Response("[]", { status: 200 });
+      if (url.includes("/contents/CHANGELOG.md")) return new Response("", { status: 404 });
+      return new Response("", { status: 404 });
+    });
+
+    const result = await probeRepo(env, "SHOPIFY", "TOXIPROXY");
+    expect(result.ownerLogin).toBe("Shopify");
+    expect(result.repoName).toBe("toxiproxy");
   });
 
   test("returns hasChangelog when CHANGELOG.md exists", async () => {
