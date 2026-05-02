@@ -10,13 +10,13 @@ import {
   products,
   releases,
   sources,
+  sourcesVisible,
   sourceChangelogFiles,
   sourceChangelogChunks,
   usageLog,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { orgWhere, sourceWhere } from "../utils.js";
-import { notDisabled } from "../queries/shared.js";
 import { APIError } from "@anthropic-ai/sdk";
 import {
   anthropicErrorHttpStatus,
@@ -334,16 +334,15 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
         version: releases.version,
         publishedAt: releases.publishedAt,
         url: releases.url,
-        sourceName: sources.name,
+        sourceName: sourcesVisible.name,
       })
       .from(releases)
-      .innerJoin(sources, eq(releases.sourceId, sources.id))
+      .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
       .where(
         and(
-          eq(sources.orgId, o.id),
+          eq(sourcesVisible.orgId, o.id),
           gte(releases.publishedAt, cutoff),
           eq(releases.suppressed, false),
-          notDisabled,
         ),
       )
       .orderBy(desc(releases.publishedAt))

@@ -5,6 +5,7 @@ import {
   organizations,
   orgAccounts,
   sources,
+  sourcesVisible,
   releases,
   products,
   productsActive,
@@ -42,7 +43,6 @@ import {
   getOrgSourceSparklines,
   getOrgReleasesFeed,
 } from "../queries/orgs.js";
-import { notDisabled } from "../queries/shared.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -1031,17 +1031,16 @@ orgRoutes.get("/orgs/:slug/recent-releases", async (c) => {
       suppressedReason: releases.suppressedReason,
       fetchedAt: releases.fetchedAt,
       embeddedAt: releases.embeddedAt,
-      sourceName: sources.name,
-      sourceSlug: sources.slug,
+      sourceName: sourcesVisible.name,
+      sourceSlug: sourcesVisible.slug,
     })
     .from(releases)
-    .innerJoin(sources, eq(releases.sourceId, sources.id))
+    .innerJoin(sourcesVisible, eq(releases.sourceId, sourcesVisible.id))
     .where(
       and(
-        eq(sources.orgId, org.id),
+        eq(sourcesVisible.orgId, org.id),
         gte(releases.publishedAt, since),
         eq(releases.suppressed, false),
-        notDisabled,
       ),
     )
     .orderBy(desc(releases.publishedAt))

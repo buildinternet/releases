@@ -17,6 +17,7 @@ import {
   productsActive,
   sources,
   sourcesActive,
+  sourcesVisible,
 } from "@buildinternet/releases-core/schema";
 
 let tdb: TestDatabase;
@@ -162,6 +163,89 @@ describe("active views exclude tombstoned rows", () => {
     expect(rows).toContain("organizations_active");
     expect(rows).toContain("products_active");
     expect(rows).toContain("sources_active");
+    expect(rows).toContain("sources_visible");
+  });
+});
+
+describe("sources_visible (#674)", () => {
+  it("excludes hidden sources", async () => {
+    const db = tdb.db;
+    await db
+      .insert(organizations)
+      .values({ id: "org_1", name: "Org", slug: "org", discovery: "curated" });
+    await db.insert(sources).values([
+      {
+        id: "src_visible",
+        name: "Visible",
+        slug: "visible",
+        type: "github",
+        url: "https://github.com/x/visible",
+        orgId: "org_1",
+        discovery: "curated",
+        isHidden: false,
+      },
+      {
+        id: "src_hidden",
+        name: "Hidden",
+        slug: "hidden",
+        type: "github",
+        url: "https://github.com/x/hidden",
+        orgId: "org_1",
+        discovery: "curated",
+        isHidden: true,
+      },
+    ]);
+
+    const fromActive = await db.select().from(sourcesActive);
+    expect(fromActive).toHaveLength(2);
+
+    const fromVisible = await db.select().from(sourcesVisible);
+    expect(fromVisible).toHaveLength(1);
+    expect(fromVisible[0]?.id).toBe("src_visible");
+  });
+
+  it("inherits soft-delete filtering from sources_active", async () => {
+    const db = tdb.db;
+    await db
+      .insert(organizations)
+      .values({ id: "org_1", name: "Org", slug: "org", discovery: "curated" });
+    await db.insert(sources).values([
+      {
+        id: "src_live",
+        name: "Live",
+        slug: "live",
+        type: "github",
+        url: "https://github.com/x/live",
+        orgId: "org_1",
+        discovery: "curated",
+        isHidden: false,
+      },
+      {
+        id: "src_dead",
+        name: "Dead",
+        slug: "dead--src_dead",
+        type: "github",
+        url: "https://github.com/x/dead",
+        orgId: "org_1",
+        discovery: "curated",
+        isHidden: false,
+        deletedAt: new Date().toISOString(),
+      },
+      {
+        id: "src_hidden_live",
+        name: "Hidden Live",
+        slug: "hidden-live",
+        type: "github",
+        url: "https://github.com/x/hidden-live",
+        orgId: "org_1",
+        discovery: "curated",
+        isHidden: true,
+      },
+    ]);
+
+    const fromVisible = await db.select().from(sourcesVisible);
+    expect(fromVisible).toHaveLength(1);
+    expect(fromVisible[0]?.id).toBe("src_live");
   });
 });
 

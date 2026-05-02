@@ -5,6 +5,7 @@ import { createDb } from "../db.js";
 import {
   organizationsActive,
   sourcesActive,
+  sourcesVisible,
   releases,
   productsActive,
   fetchLog,
@@ -53,24 +54,21 @@ statsRoutes.get("/stats", async (c) => {
 
   const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
 
-  // Per-source activity (top sources by recent release count, all visible sources)
-  const notDisabled = sql`(${sourcesActive.isHidden} = 0 OR ${sourcesActive.isHidden} IS NULL)`;
-
+  // Per-source activity (top sources by recent release count, all visible sources).
   const perSource = await db
     .select({
-      sourceName: sourcesActive.name,
-      sourceSlug: sourcesActive.slug,
-      sourceType: sourcesActive.type,
+      sourceName: sourcesVisible.name,
+      sourceSlug: sourcesVisible.slug,
+      sourceType: sourcesVisible.type,
       orgName: organizationsActive.name,
-      lastFetchedAt: sourcesActive.lastFetchedAt,
+      lastFetchedAt: sourcesVisible.lastFetchedAt,
       totalReleases: sql<number>`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) THEN 1 END)`,
       recentReleases: sql<number>`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
     })
-    .from(sourcesActive)
-    .leftJoin(releases, eq(releases.sourceId, sourcesActive.id))
-    .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
-    .where(notDisabled)
-    .groupBy(sourcesActive.id)
+    .from(sourcesVisible)
+    .leftJoin(releases, eq(releases.sourceId, sourcesVisible.id))
+    .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
+    .groupBy(sourcesVisible.id)
     .orderBy(
       desc(
         sql`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,

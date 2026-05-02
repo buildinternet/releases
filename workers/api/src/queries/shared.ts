@@ -1,5 +1,5 @@
 import { asc, desc, sql, type Column, type SQL } from "drizzle-orm";
-import { sources, releases } from "@buildinternet/releases-core/schema";
+import { releases } from "@buildinternet/releases-core/schema";
 
 /**
  * Returns `[col IS NULL, col ASC|DESC]` — a two-key ORDER BY that sinks NULLs
@@ -8,9 +8,6 @@ import { sources, releases } from "@buildinternet/releases-core/schema";
 export function nullsLastOrderBy(col: Column, dir: "asc" | "desc"): SQL[] {
   return [sql`${col} IS NULL`, dir === "asc" ? asc(col) : desc(col)];
 }
-
-/** Exclude hidden sources: (is_hidden = 0 OR is_hidden IS NULL) */
-export const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`;
 
 /** Exclude suppressed releases — for use in Drizzle WHERE clauses */
 export const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
