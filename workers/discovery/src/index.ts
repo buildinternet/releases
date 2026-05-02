@@ -114,8 +114,15 @@ export default {
       }
 
       // ── Discovery guardrails: check for duplicates and count cap ──
+      // The dedup window covers both still-running sessions AND sessions that
+      // finished within the last DEDUP_WINDOW_MINUTES — this is what catches
+      // CLI retries that fire after the original session has already
+      // transitioned to complete/error (the May 1 case, see #656).
+      // The 5-session cap still keys off `status=running` so a recently
+      // finished session doesn't count against the live concurrency budget.
+      const DEDUP_WINDOW_MINUTES = 10;
       try {
-        const guardPath = "/v1/sessions?status=running&type=onboard";
+        const guardPath = `/v1/sessions?type=onboard&recent_minutes=${DEDUP_WINDOW_MINUTES}`;
         const apiKey = await env.RELEASED_API_KEY?.get();
         const stagingKey = (await env.STAGING_ACCESS_KEY?.get().catch(() => "")) ?? "";
         const guardHeaders: Record<string, string> = {
@@ -135,18 +142,31 @@ export default {
           const sessions = (await guardRes.json()) as {
             sessionId: string;
             company: string;
+            status: "running" | "complete" | "error" | "cancelled";
+            lastUpdatedAt?: number;
           }[];
           const companyLower = body.company.toLowerCase();
           const existing = sessions.find((s) => s.company.toLowerCase() === companyLower);
           if (existing) {
+            const minutesAgo =
+              existing.lastUpdatedAt !== undefined
+                ? Math.max(0, Math.round((Date.now() - existing.lastUpdatedAt) / 60_000))
+                : undefined;
+            const ageDescriptor =
+              existing.status === "running"
+                ? "still running"
+                : minutesAgo !== undefined
+                  ? `${existing.status} ${minutesAgo}m ago`
+                  : existing.status;
             return errorResponse(
-              `Discovery already running for "${body.company}" (session ${existing.sessionId.slice(0, 8)})`,
+              `Discovery for "${body.company}" was ${ageDescriptor} (session ${existing.sessionId.slice(0, 8)}) — within the ${DEDUP_WINDOW_MINUTES}m dedup window. Wait or reuse the existing session.`,
               409,
             );
           }
-          if (sessions.length >= 5) {
+          const runningCount = sessions.filter((s) => s.status === "running").length;
+          if (runningCount >= 5) {
             return errorResponse(
-              `Maximum concurrent discovery sessions reached (${sessions.length}/5). Try again later.`,
+              `Maximum concurrent discovery sessions reached (${runningCount}/5). Try again later.`,
               429,
             );
           }
