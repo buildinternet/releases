@@ -70,7 +70,6 @@ import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
-import { logger } from "@buildinternet/releases-lib/logger";
 import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 
@@ -1273,7 +1272,7 @@ sourceRoutes.post("/sources", async (c) => {
           params: { sourceId: source.id, skipBackfill },
         })
         .catch((err) => {
-          logger.warn(
+          console.warn(
             `[sources] onboard workflow dispatch failed; falling back to waitUntil: ${err instanceof Error ? err.message : String(err)}`,
           );
           inlineFallback();

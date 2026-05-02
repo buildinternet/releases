@@ -42,7 +42,9 @@ Shared code is split between published npm packages (`@buildinternet/releases-*`
 
 ## Conventions
 
-- All logging goes to **stderr** via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`).
+- Logging splits by runtime:
+  - **CLI + runtime-neutral packages** (`packages/adapters/`, `packages/ai/`, `packages/lib/`, `scripts/`, `tests/evals/`, `src/agent/`) log via `@buildinternet/releases-lib/logger` (source at `packages/lib/src/logger.ts`). The logger writes to stderr **and** persists per-day files under `~/.releases/logs/` — that's the whole point of using it, and it only makes sense in a Node/Bun runtime.
+  - **Worker code** (`workers/api/`, `workers/mcp/`, `workers/discovery/`, `workers/webhooks/`) uses `console.error` / `console.warn` / `console.log` directly, prefixed with a `[component]` tag (e.g. `[search-log]`, `[scrape-agent-workflow]`). Workers Logs already captures `console.*` to stderr; the logger's file-write step is dead weight under `nodejs_compat` (writes to a virtual `fs` discarded per-request) and its hard-coded `[releases]` prefix double-tags worker components. Do not introduce `@buildinternet/releases-lib/logger` into a worker.
 - Source types: `github`, `scrape`, `feed`, `agent`. The `scrape` adapter auto-discovers RSS/Atom/JSON feeds before falling back to Cloudflare browser rendering + AI. Feed metadata (URL, type, ETag) is cached in `source.metadata`.
 - Crawl mode uses Cloudflare's `/crawl` endpoint for multi-page changelogs, stored in `source.metadata.crawlEnabled`. See `packages/adapters/src/crawl.ts`.
 - `daysAgoIso()` from `@buildinternet/releases-core/dates` for date cutoffs.
