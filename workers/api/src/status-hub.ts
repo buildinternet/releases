@@ -72,7 +72,20 @@ interface SessionState {
   /** Provider `session.error` events observed before terminal. */
   retryCount?: number;
   warnings?: string[];
-  usage?: { inputTokens?: number; outputTokens?: number };
+  /**
+   * Token usage + estimated cost from the managed-agents session, captured by
+   * the discovery DO via `@releases/lib/anthropic-pricing`. `estimatedUsd` is
+   * a snapshot of Anthropic list prices at session-completion time — it is
+   * not the billed amount and is not recalculated on read.
+   */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
+    model?: string;
+    estimatedUsd?: number;
+  };
   dismissed?: boolean;
   activeSources?: string[];
   cancelRequested?: boolean;

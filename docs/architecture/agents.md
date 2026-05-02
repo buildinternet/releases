@@ -34,6 +34,10 @@ The `deploy-managed-agents.yml` workflow exposes the same selector as a `workflo
 
 **Follow-up (not yet done):** there's no CLI/API surface to trigger a staging discovery session against `releases-discovery-staging` — the worker is service-bound from `releases-api-staging` but we haven't threaded an `--env staging` flag through the CLI's onboard/update commands. Track via issue #447.
 
+### Per-session cost observability
+
+After each managed-agent session ends, the discovery DO retrieves the final usage envelope via `client.beta.sessions.retrieve(session.id)` and computes a list-price USD estimate using `@releases/lib/anthropic-pricing`. The full block — `inputTokens`, `outputTokens`, `cacheWriteTokens`, `cacheReadTokens`, `model`, and `estimatedUsd` — is forwarded to StatusHub via the `session:complete` / `session:error` events and stored on `SessionState.usage`. The web `/status` page renders it under each session card with an `≈ $` qualifier. The dollar figure is from list prices (not the actual billed amount) — for ground truth use the Anthropic console or AI Gateway dashboards. Pricing constants for new models go in `packages/lib/src/anthropic-pricing.ts`. See #657.
+
 - **Agent skills** live in this monorepo at `src/agent/skills/`. Each skill is a `SKILL.md` with YAML frontmatter. Skills are uploaded to the managed agent definition via `bun run deploy:skills`.
 - **Deterministic pipeline** (ingest, incremental, summarize) stays as direct Messages API calls — not routed through the agent.
 - **URL evaluation** runs pre-checks only (provider detection, feed discovery) via `POST /v1/evaluate`. The discovery agent handles deeper evaluation when needed.

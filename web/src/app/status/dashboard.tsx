@@ -52,7 +52,21 @@ interface SessionState {
   retryCount?: number;
   /** Stamped client-side when the session:error event arrives, so incident bucketing reflects when it failed (not when it started). */
   errorAt?: number;
-  usage?: { inputTokens?: number; outputTokens?: number };
+  /**
+   * Token usage + estimated cost. The dollar figure is a snapshot of Anthropic
+   * list prices at session-completion time (not recalculated on read, so it
+   * stays accurate even after price changes), and is not the billed amount —
+   * render with an "≈" or "estimated" qualifier so it's not mistaken for an
+   * invoice line.
+   */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
+    model?: string;
+    estimatedUsd?: number;
+  };
 }
 
 interface UsageEntry {
@@ -906,13 +920,41 @@ function AgentBadge({ agent, runner }: { agent?: string; runner?: string }): Rea
 
 function SessionTokens({ usage }: { usage?: SessionState["usage"] }): ReactNode {
   if (!usage) return null;
-  const total = (usage.inputTokens ?? 0) + (usage.outputTokens ?? 0);
+  const total =
+    (usage.inputTokens ?? 0) +
+    (usage.outputTokens ?? 0) +
+    (usage.cacheWriteTokens ?? 0) +
+    (usage.cacheReadTokens ?? 0);
   if (total === 0) return null;
+  // Estimated cost from Anthropic list prices (see packages/lib/src/anthropic-pricing.ts).
+  // Always rendered with "≈ $" so a reader doesn't mistake it for billed cost.
+  const cost = usage.estimatedUsd;
+  const tooltipParts: string[] = [];
+  if (usage.model) tooltipParts.push(`model: ${usage.model}`);
+  if (usage.inputTokens) tooltipParts.push(`input: ${formatTokens(usage.inputTokens)}`);
+  if (usage.cacheWriteTokens)
+    tooltipParts.push(`cache write: ${formatTokens(usage.cacheWriteTokens)}`);
+  if (usage.cacheReadTokens)
+    tooltipParts.push(`cache read: ${formatTokens(usage.cacheReadTokens)}`);
+  if (usage.outputTokens) tooltipParts.push(`output: ${formatTokens(usage.outputTokens)}`);
   return (
-    <span className="block text-[10px] text-stone-300 dark:text-stone-600">
+    <span
+      className="block text-[10px] text-stone-300 dark:text-stone-600"
+      title={tooltipParts.join("\n")}
+    >
       {formatTokens(total)} tok
+      {cost !== undefined ? ` · ≈ $${formatUsd(cost)}` : null}
     </span>
   );
+}
+
+/**
+ * Two-decimal cents at $0.01 and above; four decimals below that so a
+ * sub-cent estimate (e.g. an aborted Haiku update) doesn't render as $0.00.
+ */
+function formatUsd(usd: number): string {
+  if (usd >= 0.01) return usd.toFixed(2);
+  return usd.toFixed(4);
 }
 
 type LogMode = "structured" | "raw";

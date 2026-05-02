@@ -13,6 +13,7 @@
 import { DurableObject } from "cloudflare:workers";
 import type { Env } from "./types.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { estimateCost } from "@releases/lib/anthropic-pricing.js";
 import {
   classifyMaRateLimitError,
   buildMaRateLimitErrorMessage,
@@ -545,17 +546,47 @@ Find and evaluate changelog sources for the company described in <company>.${dom
         return;
       }
 
-      // Retrieve final session for usage tracking (also logged in CLI's managed-discovery.ts)
-      let sessionUsage: { inputTokens?: number; outputTokens?: number } | undefined;
+      // Retrieve final session for usage tracking (also logged in CLI's
+      // managed-discovery.ts). The pricing helper uses cache-aware token
+      // counts to produce a list-price USD estimate that StatusHub stores
+      // and the /status page renders. The estimate is computed once here
+      // and snapshotted — not recalculated on read — so price changes
+      // don't rewrite history.
+      const inferredModel = useWorker ? "claude-haiku-4-5" : "claude-sonnet-4-6";
+      let sessionUsage:
+        | {
+            inputTokens?: number;
+            outputTokens?: number;
+            cacheWriteTokens?: number;
+            cacheReadTokens?: number;
+            model?: string;
+            estimatedUsd?: number;
+          }
+        | undefined;
       try {
         const finalSession = await (client.beta.sessions as any).retrieve(session.id);
         const usage = finalSession.usage as Record<string, unknown> | undefined;
         if (usage) {
+          const inputTokens = usage.input_tokens as number | undefined;
+          const outputTokens = usage.output_tokens as number | undefined;
+          const cacheWriteTokens = usage.cache_creation_input_tokens as number | undefined;
+          const cacheReadTokens = usage.cache_read_input_tokens as number | undefined;
+          const model = (finalSession.model as string | undefined) ?? inferredModel;
+          const cost = estimateCost(
+            { inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens },
+            model,
+          );
           sessionUsage = {
-            inputTokens: usage.input_tokens as number | undefined,
-            outputTokens: usage.output_tokens as number | undefined,
+            inputTokens,
+            outputTokens,
+            cacheWriteTokens,
+            cacheReadTokens,
+            model,
+            ...(cost ? { estimatedUsd: cost.totalUsd } : {}),
           };
-          console.log(`[managed-agents] Session usage: ${JSON.stringify(usage)}`);
+          console.log(
+            `[managed-agents] Session usage: ${JSON.stringify(usage)} model=${model} estimatedUsd=${cost?.totalUsd?.toFixed(4) ?? "?"}`,
+          );
         }
       } catch {
         // Non-critical
@@ -640,7 +671,14 @@ Find and evaluate changelog sources for the company described in <company>.${dom
     company: string,
     error: string,
     cachedApiKey?: string,
-    usage?: { inputTokens?: number; outputTokens?: number },
+    usage?: {
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheWriteTokens?: number;
+      cacheReadTokens?: number;
+      model?: string;
+      estimatedUsd?: number;
+    },
     classification?: SessionErrorClassification,
   ): Promise<void> {
     await this.ctx.storage.put("status", "error");
