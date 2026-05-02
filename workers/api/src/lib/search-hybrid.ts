@@ -176,9 +176,7 @@ async function hydrateReleases(
   opts: { includeCoverage?: boolean } = {},
 ): Promise<Map<string, RawReleaseRow>> {
   if (ids.length === 0) return new Map();
-  const coverageFilter = opts.includeCoverage
-    ? sql``
-    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
+  const releasesTable = opts.includeCoverage ? sql`releases` : sql`releases_visible`;
   const rows = await db.all<RawReleaseRow>(sql`
     SELECT r.id as id,
            r.title as title,
@@ -194,16 +192,15 @@ async function hydrateReleases(
            s.type as sourceType,
            o.slug as orgSlug,
            o.name as orgName
-    FROM releases r
+    FROM ${releasesTable} r
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE r.id IN (${sql.join(
       ids.map((id) => sql`${id}`),
       sql`, `,
     )})
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      ${coverageFilter}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
   `);
   const map = new Map<string, RawReleaseRow>();
   for (const row of rows) map.set(row.id, row);

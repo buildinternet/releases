@@ -1,5 +1,4 @@
 import { asc, desc, sql, type Column, type SQL } from "drizzle-orm";
-import { releases } from "@buildinternet/releases-core/schema";
 
 /**
  * Returns `[col IS NULL, col ASC|DESC]` — a two-key ORDER BY that sinks NULLs
@@ -8,12 +7,6 @@ import { releases } from "@buildinternet/releases-core/schema";
 export function nullsLastOrderBy(col: Column, dir: "asc" | "desc"): SQL[] {
   return [sql`${col} IS NULL`, dir === "asc" ? asc(col) : desc(col)];
 }
-
-/** Exclude suppressed releases — for use in Drizzle WHERE clauses */
-export const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
-
-/** Exclude coverage-side releases — use as a bare Drizzle condition via `and(notCoverage, ...)`. */
-export const notCoverage = sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`;
 
 /** Common row type for source list items with release stats */
 export type SourceWithStats = {

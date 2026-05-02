@@ -105,15 +105,6 @@ export interface HybridSearchResponse {
 
 // ── Local FTS query ──────────────────────────────────────────────────
 
-/**
- * Raw SQL in this file aliases releases as `r`, so the coverage NOT EXISTS
- * references `r.id` rather than `releases.id`.
- */
-const coverageCondition = (includeCoverage?: boolean) =>
-  includeCoverage
-    ? sql``
-    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
-
 async function ftsReleaseIds(
   db: D1Db,
   query: string,
@@ -127,9 +118,9 @@ async function ftsReleaseIds(
       JOIN releases r ON r.rowid = releases_fts.rowid
       JOIN sources_active s ON s.id = r.source_id
       WHERE releases_fts MATCH ${toFtsMatchQuery(query)}
-        AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-        ${coverageCondition(opts.includeCoverage)}
+        AND (r.suppressed IS NULL OR r.suppressed = 0)
+        ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
       ORDER BY rank LIMIT ${limit}
     `);
     return rows.map((r) => r.id);
@@ -181,6 +172,7 @@ async function hydrateReleases(
   opts: { includeCoverage?: boolean } = {},
 ): Promise<Map<string, RawReleaseRow>> {
   if (ids.length === 0) return new Map();
+  const releasesTable = opts.includeCoverage ? sql`releases` : sql`releases_visible`;
   const rows = await db.all<RawReleaseRow>(sql`
     SELECT r.id as id,
            r.title as title,
@@ -192,16 +184,15 @@ async function hydrateReleases(
            s.slug as sourceSlug,
            s.name as sourceName,
            o.slug as orgSlug
-    FROM releases r
+    FROM ${releasesTable} r
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE r.id IN (${sql.join(
       ids.map((id) => sql`${id}`),
       sql`, `,
     )})
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      ${coverageCondition(opts.includeCoverage)}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
   `);
   const map = new Map<string, RawReleaseRow>();
   for (const row of rows) map.set(row.id, row);

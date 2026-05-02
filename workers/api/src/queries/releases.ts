@@ -26,9 +26,10 @@ export async function getLatestReleasesAcross(
   d1: D1Database,
   f: LatestReleasesFilter,
 ): Promise<LatestReleaseRow[]> {
+  const releasesTable = f.includeCoverage ? "releases" : "releases_visible";
   const wheres: string[] = [
-    "(r.suppressed IS NULL OR r.suppressed = 0)",
     "(s.is_hidden = 0 OR s.is_hidden IS NULL)",
+    "(r.suppressed IS NULL OR r.suppressed = 0)",
   ];
   const bindings: (string | number)[] = [];
 
@@ -40,10 +41,6 @@ export async function getLatestReleasesAcross(
     bindings.push(f.orgId);
   }
 
-  if (!f.includeCoverage) {
-    wheres.push("NOT EXISTS (SELECT 1 FROM release_coverage rc WHERE rc.coverage_id = r.id)");
-  }
-
   const whereSql = wheres.join(" AND ");
   bindings.push(f.limit);
 
@@ -53,7 +50,7 @@ export async function getLatestReleasesAcross(
     SELECT r.id, r.version, r.title, r.content_summary, r.type,
            r.published_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
-    FROM releases r
+    FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id
     WHERE ${whereSql}
     ORDER BY

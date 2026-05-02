@@ -125,8 +125,7 @@ export async function getSourcesWithStats(
           ),
           ''
         ) AS latest_version
-      FROM releases r
-      WHERE (r.suppressed IS NULL OR r.suppressed = 0)
+      FROM releases_visible r
       GROUP BY r.source_id
     ) rs ON rs.source_id = sources.id
     ${whereClause ? sql`WHERE ${whereClause}` : sql``}
@@ -153,13 +152,12 @@ export async function getSourceReleasesPaginated(
   offset: number,
   opts: { includeCoverage?: boolean } = {},
 ): Promise<SourceReleaseRow[]> {
-  const coverageFilter = opts.includeCoverage
-    ? sql``
-    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = releases.id)`;
+  const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
   return db.all<SourceReleaseRow>(sql`
     SELECT id, version, title, content_summary, content, published_at, url, media
-    FROM releases WHERE source_id = ${sourceId} AND (suppressed IS NULL OR suppressed = 0)
-      ${coverageFilter}
+    FROM ${sql.raw(releasesTable)}
+    WHERE source_id = ${sourceId}
+      AND (suppressed IS NULL OR suppressed = 0)
     ORDER BY
       CASE WHEN published_at IS NOT NULL THEN 0 ELSE 1 END,
       published_at DESC, fetched_at DESC
@@ -187,11 +185,10 @@ export async function getSourceActivityBuckets(
         COUNT(*) AS cnt,
         MIN(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS earliest_tagged,
         MAX(CASE WHEN r.version IS NOT NULL THEN r.published_at || '|' || r.version END) AS latest_tagged
-      FROM releases r
+      FROM releases_visible r
       WHERE
         r.source_id = ${sourceId}
         AND r.published_at IS NOT NULL
-        AND (r.suppressed IS NULL OR r.suppressed = 0)
         AND r.published_at >= ${from}
         AND r.published_at < ${toExclusive}
       GROUP BY week_start
@@ -223,11 +220,10 @@ export async function getSourceHeatmapData(
     SELECT
       DATE(r.published_at) AS date,
       COUNT(*) AS cnt
-    FROM releases r
+    FROM releases_visible r
     WHERE
       r.source_id = ${sourceId}
       AND r.published_at IS NOT NULL
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND r.published_at >= ${from}
       AND r.published_at < ${toExclusive}
     GROUP BY DATE(r.published_at)

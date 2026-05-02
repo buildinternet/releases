@@ -19,6 +19,7 @@ import {
   sourcesActive,
   sourcesVisible,
   releases,
+  releasesVisible,
   organizations,
   organizationsActive,
   releaseSummaries,
@@ -802,18 +803,15 @@ sourceRoutes.get("/sources/:slug/activity", async (c) => {
     return c.json({ error: "bad_request", message: "'from' must be before 'to'." }, 400);
   }
 
-  const notSuppressed = sql`(r.suppressed IS NULL OR r.suppressed = 0)`;
-
   // Default range: oldest to newest release
   let from = fromParam;
   let to = toParam;
   if (!from || !to) {
     const [bounds] = await db.all<{ oldest: string | null; newest: string | null }>(sql`
       SELECT MIN(r.published_at) AS oldest, MAX(r.published_at) AS newest
-      FROM releases r
+      FROM releases_visible r
       WHERE r.source_id = ${src.id}
         AND r.published_at IS NOT NULL
-        AND ${notSuppressed}
     `);
     const today = new Date().toISOString().slice(0, 10);
     if (!from) from = bounds.oldest?.slice(0, 10) ?? today;
@@ -997,10 +995,9 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const offset = (page - 1) * pageSize;
-  const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
   const cutoff = daysAgoIso(30);
   const cutoff90d = daysAgoIso(90);
-  const dateCol = sql`COALESCE(${releases.publishedAt}, ${releases.fetchedAt})`;
+  const dateCol = sql`COALESCE(${releasesVisible.publishedAt}, ${releasesVisible.fetchedAt})`;
 
   // Fire all independent reads in parallel — one D1 roundtrip wave instead of ~7 sequential ones.
   const orgQuery = src.orgId
@@ -1015,16 +1012,15 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     page === 1
       ? Promise.resolve([])
       : db
-          .select({ version: releases.version, publishedAt: releases.publishedAt })
-          .from(releases)
+          .select({ version: releasesVisible.version, publishedAt: releasesVisible.publishedAt })
+          .from(releasesVisible)
           .where(
             and(
-              eq(releases.sourceId, src.id),
-              notSuppressed,
-              sql`${releases.publishedAt} IS NOT NULL`,
+              eq(releasesVisible.sourceId, src.id),
+              sql`${releasesVisible.publishedAt} IS NOT NULL`,
             ),
           )
-          .orderBy(desc(releases.publishedAt))
+          .orderBy(desc(releasesVisible.publishedAt))
           .limit(1);
 
   const [
@@ -1045,13 +1041,13 @@ sourceRoutes.get("/sources/:slug", async (c) => {
         recent: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff} THEN 1 END)`,
         recent90d: sql<number>`COUNT(CASE WHEN ${dateCol} >= ${cutoff90d} THEN 1 END)`,
       })
-      .from(releases)
-      .where(and(eq(releases.sourceId, src.id), notSuppressed)),
+      .from(releasesVisible)
+      .where(eq(releasesVisible.sourceId, src.id)),
     db
-      .select({ date: min(releases.publishedAt) })
-      .from(releases)
+      .select({ date: min(releasesVisible.publishedAt) })
+      .from(releasesVisible)
       .where(
-        and(eq(releases.sourceId, src.id), notSuppressed, sql`${releases.publishedAt} IS NOT NULL`),
+        and(eq(releasesVisible.sourceId, src.id), sql`${releasesVisible.publishedAt} IS NOT NULL`),
       ),
     db
       .select()
@@ -1105,10 +1101,10 @@ sourceRoutes.get("/sources/:slug", async (c) => {
     latestDate = latest?.publishedAt ?? null;
     if (!latestVersion) {
       const [fallback] = await db
-        .select({ version: releases.version })
-        .from(releases)
-        .where(and(eq(releases.sourceId, src.id), notSuppressed))
-        .orderBy(desc(releases.fetchedAt))
+        .select({ version: releasesVisible.version })
+        .from(releasesVisible)
+        .where(eq(releasesVisible.sourceId, src.id))
+        .orderBy(desc(releasesVisible.fetchedAt))
         .limit(1);
       latestVersion = fallback?.version ?? null;
     }
@@ -1486,9 +1482,7 @@ sourceRoutes.get("/releases/:id", async (c) => {
     .from(releases)
     .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
     .leftJoin(organizationsActive, eq(sourcesActive.orgId, organizationsActive.id))
-    .where(
-      and(eq(releases.id, id), sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
-    );
+    .where(and(eq(releases.id, id), sql`${releases.id} IN (SELECT id FROM releases_visible)`));
 
   if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
 

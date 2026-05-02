@@ -6,7 +6,7 @@ import {
   organizationsActive,
   sourcesActive,
   sourcesVisible,
-  releases,
+  releasesVisible,
   productsActive,
   fetchLog,
 } from "@buildinternet/releases-core/schema";
@@ -34,17 +34,14 @@ statsRoutes.get("/stats", async (c) => {
     db.select({ n: count() }).from(sourcesActive),
     db
       .select({ n: count() })
-      .from(releases)
-      .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
-      .where(sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
+      .from(releasesVisible)
+      .innerJoin(sourcesActive, eq(releasesVisible.sourceId, sourcesActive.id)),
     db.select({ n: count() }).from(productsActive),
     db
       .select({ n: count() })
-      .from(releases)
-      .innerJoin(sourcesActive, eq(releases.sourceId, sourcesActive.id))
-      .where(
-        sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff}`,
-      ),
+      .from(releasesVisible)
+      .innerJoin(sourcesActive, eq(releasesVisible.sourceId, sourcesActive.id))
+      .where(sql`${releasesVisible.publishedAt} >= ${cutoff}`),
     db
       .select({ n: count() })
       .from(sourcesActive)
@@ -62,18 +59,14 @@ statsRoutes.get("/stats", async (c) => {
       sourceType: sourcesVisible.type,
       orgName: organizationsActive.name,
       lastFetchedAt: sourcesVisible.lastFetchedAt,
-      totalReleases: sql<number>`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) THEN 1 END)`,
-      recentReleases: sql<number>`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
+      totalReleases: sql<number>`COUNT(${releasesVisible.id})`,
+      recentReleases: sql<number>`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`,
     })
     .from(sourcesVisible)
-    .leftJoin(releases, eq(releases.sourceId, sourcesVisible.id))
+    .leftJoin(releasesVisible, eq(releasesVisible.sourceId, sourcesVisible.id))
     .leftJoin(organizationsActive, eq(sourcesVisible.orgId, organizationsActive.id))
     .groupBy(sourcesVisible.id)
-    .orderBy(
-      desc(
-        sql`COUNT(CASE WHEN (${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
-      ),
-    );
+    .orderBy(desc(sql`COUNT(CASE WHEN ${releasesVisible.publishedAt} >= ${cutoff} THEN 1 END)`));
 
   // Recent fetch activity — join sources + orgs so we can return name/slug/org
   const recentActivity = await db
@@ -83,7 +76,7 @@ statsRoutes.get("/stats", async (c) => {
       orgName: organizationsActive.name,
       releasesFound: fetchLog.releasesFound,
       releasesInserted: fetchLog.releasesInserted,
-      totalReleases: sql<number>`(SELECT COUNT(*) FROM releases r WHERE r.source_id = ${sourcesActive.id} AND (r.suppressed IS NULL OR r.suppressed = 0))`,
+      totalReleases: sql<number>`(SELECT COUNT(*) FROM releases_visible r WHERE r.source_id = ${sourcesActive.id})`,
       status: fetchLog.status,
       durationMs: fetchLog.durationMs,
       error: fetchLog.error,

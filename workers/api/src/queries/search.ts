@@ -77,15 +77,6 @@ export async function searchSources(
   `);
 }
 
-/**
- * Local to this file: raw SQL aliases releases as `r`, so we can't reuse
- * `shared.notCoverageFilterSql` (which references `releases.id` unaliased).
- */
-const coverageCondition = (includeCoverage?: boolean) =>
-  includeCoverage
-    ? sql``
-    : sql`AND NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = r.id)`;
-
 export async function searchReleasesFts(
   db: D1Db,
   query: string,
@@ -107,9 +98,9 @@ export async function searchReleasesFts(
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
     WHERE releases_fts MATCH ${ftsQuery}
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      ${coverageCondition(opts.includeCoverage)}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${opts.includeCoverage ? sql`` : sql`AND r.id IN (SELECT id FROM releases_visible)`}
     ORDER BY rank LIMIT ${limit} OFFSET ${offset}
   `);
 }
@@ -146,13 +137,12 @@ export async function searchReleasesFromMatchedEntities(
            r.content as content,
            r.media as media,
            r.published_at as publishedAt
-    FROM releases r
+    FROM ${opts.includeCoverage ? sql`releases` : sql`releases_visible`} r
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE (r.suppressed IS NULL OR r.suppressed = 0)
-      AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      ${coverageCondition(opts.includeCoverage)}
+    WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (${sql.join(conditions, sql` OR `)})
     ORDER BY r.published_at DESC LIMIT ${limit}
   `);
