@@ -260,21 +260,32 @@ describe("invalidateLatestCache", () => {
     };
   }
 
-  let logs: string[] = [];
-  const origConsoleInfo = console.info;
+  // logEvent emits structured JSON via console.log / console.warn / console.error.
+  // Capture both, parse each arg as JSON, and match against the {component, event, ...}
+  // shape produced by `@releases/lib/log-event`.
+  let logs: Record<string, unknown>[] = [];
+  const origConsoleLog = console.log;
   const origConsoleWarn = console.warn;
+  function capture(...args: unknown[]) {
+    const first = args[0];
+    if (typeof first === "string") {
+      try {
+        logs.push(JSON.parse(first));
+        return;
+      } catch {
+        // Fall through to raw string capture for non-JSON lines.
+      }
+    }
+    logs.push({ raw: args.map(String).join(" ") });
+  }
   beforeEach(() => {
     logs = [];
-    console.info = (...args: unknown[]) => {
-      logs.push(args.map(String).join(" "));
-    };
-    console.warn = (...args: unknown[]) => {
-      logs.push(args.map(String).join(" "));
-    };
+    console.log = capture;
+    console.warn = capture;
   });
 
   afterEach(() => {
-    console.info = origConsoleInfo;
+    console.log = origConsoleLog;
     console.warn = origConsoleWarn;
   });
 
@@ -284,10 +295,7 @@ describe("invalidateLatestCache", () => {
     expect(kv.delete).not.toHaveBeenCalled();
     expect(
       logs.some(
-        (l) =>
-          l.includes("[invalidation]") &&
-          l.includes("action=skipped") &&
-          l.includes("reason=flag_off"),
+        (l) => l.component === "invalidation" && l.event === "skipped" && l.reason === "flag_off",
       ),
     ).toBe(true);
   });
@@ -299,7 +307,7 @@ describe("invalidateLatestCache", () => {
       { nReleases: 3, sourceId: "src_abc" },
     );
     expect(kv.delete).not.toHaveBeenCalled();
-    expect(logs.some((l) => l.includes("reason=flag_off"))).toBe(true);
+    expect(logs.some((l) => l.event === "skipped" && l.reason === "flag_off")).toBe(true);
   });
 
   it("skips with reason=no_releases when nReleases is 0", async () => {
@@ -309,7 +317,7 @@ describe("invalidateLatestCache", () => {
       { nReleases: 0, sourceId: "src_abc" },
     );
     expect(kv.delete).not.toHaveBeenCalled();
-    expect(logs.some((l) => l.includes("reason=no_releases"))).toBe(true);
+    expect(logs.some((l) => l.event === "skipped" && l.reason === "no_releases")).toBe(true);
   });
 
   it("skips with reason=no_binding when LATEST_CACHE is undefined", async () => {
@@ -317,7 +325,7 @@ describe("invalidateLatestCache", () => {
       { INVALIDATION_ENABLED: "true" },
       { nReleases: 2, sourceId: "src_abc" },
     );
-    expect(logs.some((l) => l.includes("reason=no_binding"))).toBe(true);
+    expect(logs.some((l) => l.event === "skipped" && l.reason === "no_binding")).toBe(true);
   });
 
   it("purges the default key when flag is on and binding present", async () => {
@@ -328,10 +336,10 @@ describe("invalidateLatestCache", () => {
     );
     expect(kv.delete).toHaveBeenCalledTimes(1);
     expect(kv.delete).toHaveBeenCalledWith("latest:v1:count=10");
-    expect(logs.some((l) => l.includes("action=purged") && l.includes("ok=true"))).toBe(true);
+    expect(logs.some((l) => l.component === "invalidation" && l.event === "purged")).toBe(true);
   });
 
-  it("swallows KV.delete errors and logs ok=false", async () => {
+  it("swallows KV.delete errors and logs a purge-failed event", async () => {
     const kv = mkKv({
       delete: mock(async () => {
         throw new Error("kv down");
@@ -345,7 +353,7 @@ describe("invalidateLatestCache", () => {
     ).resolves.toBeUndefined();
     expect(
       logs.some(
-        (l) => l.includes("action=purged") && l.includes("ok=false") && l.includes("reason=error"),
+        (l) => l.component === "invalidation" && l.event === "purge-failed" && l.err === "kv down",
       ),
     ).toBe(true);
   });
