@@ -25,7 +25,6 @@ import { registerPrompts } from "./prompts.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
-import { logger } from "@buildinternet/releases-lib/logger";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
 
 /**
@@ -255,7 +254,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         }),
       );
       if (!res.ok) {
-        logger.error("[mcp-lookup] fallback non-ok", { status: res.status });
+        console.error("[mcp-lookup] fallback non-ok", { status: res.status });
         return;
       }
       const lookup = (await res.json()) as LookupResultPayload;
@@ -265,7 +264,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         block.text = block.text ? `${block.text}\n\n${rail}` : rail;
       }
     } catch (err) {
-      logger.error("[mcp-lookup] fallback failed", err);
+      console.error("[mcp-lookup] fallback failed", err);
     }
   }
 

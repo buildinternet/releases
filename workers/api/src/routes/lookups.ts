@@ -13,7 +13,6 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
-import { logger } from "@buildinternet/releases-lib/logger";
 
 export const lookupRoutes = new Hono<Env>();
 
@@ -303,7 +302,7 @@ export async function runLookup(
     }
   } catch (err) {
     // Source row stays; cron picks it up later.
-    logger.error("[lookups] ingest failed", err);
+    console.error("[lookups] ingest failed", err);
     ingestStatus = "deferred";
   }
 

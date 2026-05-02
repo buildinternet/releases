@@ -7,7 +7,6 @@ import {
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
 import { drizzle } from "drizzle-orm/d1";
-import { logger } from "@buildinternet/releases-lib/logger";
 import { sanitizeString } from "./sanitize.js";
 
 export const MAX_QUERY_LEN = 200;
@@ -101,6 +100,6 @@ export async function logSearch(env: LogSearchEnv, input: LogSearchInput): Promi
     await db.insert(searchQueries).values(row);
   } catch (err) {
     // Never break a search response on a logging failure.
-    logger.error("[search-log] insert failed", { err });
+    console.error("[search-log] insert failed", err);
   }
 }
