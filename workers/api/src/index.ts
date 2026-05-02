@@ -162,6 +162,16 @@ export type Env = {
     STAGING_ACCESS_KEY?: SecretBinding;
     // Errata memory store ID — destination for POST /v1/errata/:orgId. See #537.
     MEMORY_STORE_ERRATA_ID?: string;
+    // IndexNow integration (#649). When INDEXNOW_ENABLED="true", new releases
+    // ping api.indexnow.org so search engines pick up the org/source/product
+    // changes immediately. Off everywhere by default; staging stays off via
+    // INDEXING_DISABLED. Key is hosted at https://releases.sh/{INDEXNOW_KEY}.txt
+    // by web/src/proxy.ts.
+    INDEXNOW_ENABLED?: string;
+    INDEXNOW_KEY?: SecretBinding;
+    // Public web base URL — used by the IndexNow helper to build canonical
+    // URLs. Defaults to https://releases.sh when unset.
+    WEB_BASE_URL?: string;
   };
 };
 
