@@ -7,6 +7,7 @@ import { SetupMessage } from "@/components/setup-message";
 import { SourceCard } from "@/components/source-card";
 import { Sidebar } from "@/components/sidebar";
 import { CliCommand } from "@/components/cli-command";
+import { taxonomySidebarSections } from "@/components/taxonomy-chips";
 import Link from "next/link";
 
 const getProduct = cache((slug: string) => api.productDetail(slug));
@@ -54,14 +55,9 @@ export default async function ProductPage({
 
   const sidebarSections = [
     {
-      items: [
-        { label: "Sources", value: product.sources.length, large: true },
-        ...(product.category ? [{ label: "Category", value: product.category }] : []),
-      ],
+      items: [{ label: "Sources", value: product.sources.length, large: true }],
     },
-    ...(product.tags.length > 0
-      ? [{ items: [{ label: "Tags", value: product.tags.join(", ") }] }]
-      : []),
+    ...taxonomySidebarSections({ category: product.category, tags: product.tags }),
   ];
 
   const productUrl = `https://releases.sh/${orgSlug}/product/${productSlug}`;

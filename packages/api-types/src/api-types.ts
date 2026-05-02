@@ -602,6 +602,36 @@ export interface ProductAdoptResult {
   sourceOrgDeleted: string;
 }
 
+// ── Taxonomy (categories + tags) ──
+
+export interface TaxonomyOrg {
+  slug: string;
+  name: string;
+  domain: string | null;
+  avatarUrl: string | null;
+}
+
+export interface TaxonomyProduct {
+  slug: string;
+  name: string;
+  description: string | null;
+  orgSlug: string;
+  orgName: string;
+}
+
+export interface CategoryDetail {
+  slug: string;
+  orgs: TaxonomyOrg[];
+  products: TaxonomyProduct[];
+}
+
+export interface TagDetail {
+  slug: string;
+  name: string;
+  orgs: TaxonomyOrg[];
+  products: TaxonomyProduct[];
+}
+
 // ── Releases (enriched) ──
 
 /** Flat release shape returned by GET /v1/releases/:id with source metadata. */

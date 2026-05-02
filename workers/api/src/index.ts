@@ -36,6 +36,7 @@ import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
+import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
 import { retierSources } from "./cron/retier.js";
@@ -214,6 +215,7 @@ const publicReadRoutes = [
   "releases",
   "products",
   "tags",
+  "categories",
   "related",
   "sitemap",
 ];
@@ -302,6 +304,8 @@ v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true }));
+v1.use("/categories/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/tags/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 
 // Route modules — releaseRoutes is mounted before sourceRoutes so the static
 // `/releases/latest` handler (in releases.ts) wins over the parametric
@@ -331,6 +335,7 @@ v1.route("/", errataRoutes);
 v1.route("/", webhooksRoutes);
 v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);
+v1.route("/", taxonomyRoutes);
 
 // Static endpoint — categories are defined in code, not DB
 v1.get("/categories", (c) => {
