@@ -12,13 +12,14 @@
  * the caller is signalled via the `degraded` field on the response.
  */
 
-import { sql, inArray } from "drizzle-orm";
+import { sql, inArray, and } from "drizzle-orm";
 import {
   sources,
   organizations,
   products,
   sourceChangelogFiles,
 } from "@buildinternet/releases-core/schema";
+import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 // sources/orgs/products are used for entity hydration (runRegistrySearch);
 // sourceChangelogFiles is used for batched chunk content reads.
 import {
@@ -203,6 +204,7 @@ async function hydrateReleases(
     )})
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND s.deleted_at IS NULL
       ${coverageFilter}
   `);
   const map = new Map<string, RawReleaseRow>();
@@ -261,6 +263,7 @@ async function hydrateChunks(
       sql`, `,
     )})
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
+      AND s.deleted_at IS NULL
   `);
 
   if (chunkRows.length === 0) return new Map();
@@ -573,7 +576,7 @@ export async function runRegistrySearch(
             category: organizations.category,
           })
           .from(organizations)
-          .where(inArray(organizations.id, orgIds))
+          .where(and(inArray(organizations.id, orgIds), orgNotDeleted))
       : [],
     shouldFetchProducts
       ? db
@@ -585,7 +588,7 @@ export async function runRegistrySearch(
             category: products.category,
           })
           .from(products)
-          .where(inArray(products.id, productIds))
+          .where(and(inArray(products.id, productIds), productNotDeleted))
       : [],
     shouldFetchSources
       ? db
@@ -595,7 +598,7 @@ export async function runRegistrySearch(
             name: sources.name,
           })
           .from(sources)
-          .where(inArray(sources.id, sourceIds))
+          .where(and(inArray(sources.id, sourceIds), sourceNotDeleted))
       : [],
   ]);
 

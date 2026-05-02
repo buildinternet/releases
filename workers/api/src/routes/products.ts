@@ -21,6 +21,7 @@ import {
   replaceAliases,
 } from "../utils.js";
 import type { Env } from "../index.js";
+import { productNotDeleted } from "../queries/shared.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -42,10 +43,10 @@ productRoutes.get("/products", async (c) => {
       description: products.description,
       createdAt: products.createdAt,
       category: products.category,
-      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id)`,
+      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources s WHERE s.product_id = products.id AND s.deleted_at IS NULL)`,
     })
     .from(products)
-    .where(orgId ? eq(products.orgId, orgId) : undefined)
+    .where(orgId ? and(eq(products.orgId, orgId), productNotDeleted) : productNotDeleted)
     .orderBy(products.name);
 
   return c.json(rows);
@@ -426,12 +427,29 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
 productRoutes.delete("/products/:identifier", async (c) => {
   const db = createDb(c.env.DB);
   const identifier = c.req.param("identifier");
+  const hard = c.req.query("hard") === "true";
 
-  const [product] = await db.select().from(products).where(productWhere(identifier));
+  // Slug-based lookups always resolve to the active row: tombstones rename
+  // the slug ("--<id>" suffix). To purge a tombstone, callers use prod_ ID.
+  const includeDeleted = hard && identifier.startsWith("prod_");
+  const [product] = await db
+    .select()
+    .from(products)
+    .where(productWhere(identifier, { includeDeleted }));
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-  await db.delete(products).where(eq(products.id, product.id));
-  return c.json({ deleted: true });
+  if (hard) {
+    await db.delete(products).where(eq(products.id, product.id));
+    return c.json({ deleted: true, hard: true });
+  }
+
+  // Soft delete: rename slug so the inline UNIQUE doesn't block re-onboarding.
+  const now = new Date().toISOString();
+  await db
+    .update(products)
+    .set({ deletedAt: now, slug: `${product.slug}--${product.id}` })
+    .where(eq(products.id, product.id));
+  return c.json({ deleted: true, deletedAt: now });
 });
 
 // ── Embed side effect ──

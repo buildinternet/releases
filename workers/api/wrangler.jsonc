@@ -190,7 +190,8 @@
     // Daily at 03:00 UTC: recompute fetchPriority tiers based on cadence.
     // Daily at 04:00 UTC: force-drain stranded scrape/agent sources (#518).
     // Daily at 05:00 UTC: delete search_queries rows older than SEARCH_QUERY_RETENTION_DAYS (#575).
-    "crons": ["0 * * * *", "0 1 * * *", "0 3 * * *", "0 4 * * *", "0 5 * * *"],
+    // Daily at 05:30 UTC: hard-purge tombstoned orgs/sources/products older than TOMBSTONE_RETENTION_DAYS (#666).
+    "crons": ["0 * * * *", "0 1 * * *", "0 3 * * *", "0 4 * * *", "0 5 * * *", "30 5 * * *"],
   },
   // State is per-colo, not global. `period` must be 10 or 60 (CF constraint).
   "unsafe": {

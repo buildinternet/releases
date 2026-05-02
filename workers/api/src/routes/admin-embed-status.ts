@@ -12,6 +12,7 @@ import {
   products,
   sourceChangelogChunks,
 } from "@buildinternet/releases-core/schema";
+import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import type { Env } from "../index.js";
 
 export const adminEmbedStatusRoutes = new Hono<Env>();
@@ -40,21 +41,21 @@ adminEmbedStatusRoutes.get("/admin/embed/status", async (c) => {
       // Suppressed rows are still counted — the backfill treats them the
       // same; operators who care about suppressed gaps diff against search.
       .where(and(sql`${releases.embeddedAt} IS NOT NULL`)),
-    db.select({ n: count() }).from(organizations),
+    db.select({ n: count() }).from(organizations).where(orgNotDeleted),
     db
       .select({ n: count() })
       .from(organizations)
-      .where(sql`${organizations.embeddedAt} IS NOT NULL`),
-    db.select({ n: count() }).from(products),
+      .where(and(orgNotDeleted, sql`${organizations.embeddedAt} IS NOT NULL`)),
+    db.select({ n: count() }).from(products).where(productNotDeleted),
     db
       .select({ n: count() })
       .from(products)
-      .where(sql`${products.embeddedAt} IS NOT NULL`),
-    db.select({ n: count() }).from(sources),
+      .where(and(productNotDeleted, sql`${products.embeddedAt} IS NOT NULL`)),
+    db.select({ n: count() }).from(sources).where(sourceNotDeleted),
     db
       .select({ n: count() })
       .from(sources)
-      .where(sql`${sources.embeddedAt} IS NOT NULL`),
+      .where(and(sourceNotDeleted, sql`${sources.embeddedAt} IS NOT NULL`)),
     db.select({ n: count() }).from(sourceChangelogChunks),
     db
       .select({ n: count() })

@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { desc, eq, sql } from "drizzle-orm";
+import { and, desc, eq, sql } from "drizzle-orm";
 import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
@@ -11,6 +11,7 @@ import { createDb } from "../db.js";
 import type { Env } from "../index.js";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { RELEASES_BATCH_CHUNK_SIZE } from "../lib/d1-limits.js";
+import { orgNotDeleted } from "../queries/shared.js";
 import { isConflictError } from "../utils.js";
 import { embedSourceSideEffect } from "./sources.js";
 import { logEvent } from "@releases/lib/log-event";
@@ -96,7 +97,7 @@ export async function runLookup(
     db
       .select()
       .from(sources)
-      .where(sql`LOWER(${sources.url}) = ${urlLower}`)
+      .where(sql`LOWER(${sources.url}) = ${urlLower} AND ${sources.deletedAt} IS NULL`)
       .orderBy(sql`CASE WHEN ${sources.url} = ${url} THEN 0 ELSE 1 END`, sources.createdAt)
       .limit(1);
   const githubToken = await env.GITHUB_TOKEN?.get();
@@ -205,10 +206,12 @@ export async function runLookup(
         .onConflictDoNothing();
 
       // Re-read to get the winner's id (could be ours or a concurrent inserter's).
+      // Tombstoned rows are skipped — the partial unique index only constrains
+      // active rows, so a tombstone at this slug doesn't claim the lookup.
       const [winningOrg] = await db
         .select()
         .from(organizations)
-        .where(eq(organizations.slug, parsed.org))
+        .where(and(eq(organizations.slug, parsed.org), orgNotDeleted))
         .limit(1);
       orgId = winningOrg!.id;
     }

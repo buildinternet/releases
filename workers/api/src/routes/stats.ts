@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { count, gte, desc, eq } from "drizzle-orm";
+import { count, gte, desc, eq, and } from "drizzle-orm";
 import { sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -10,6 +10,7 @@ import {
   fetchLog,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { orgNotDeleted, productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import type { Env } from "../index.js";
 
 export const statsRoutes = new Hono<Env>();
@@ -29,24 +30,29 @@ statsRoutes.get("/stats", async (c) => {
     [neverFetched],
     [recentlyFetched],
   ] = await Promise.all([
-    db.select({ n: count() }).from(organizations),
-    db.select({ n: count() }).from(sources),
+    db.select({ n: count() }).from(organizations).where(orgNotDeleted),
+    db.select({ n: count() }).from(sources).where(sourceNotDeleted),
     db
       .select({ n: count() })
       .from(releases)
+      .innerJoin(sources, and(eq(releases.sourceId, sources.id), sourceNotDeleted))
       .where(sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
-    db.select({ n: count() }).from(products),
+    db.select({ n: count() }).from(products).where(productNotDeleted),
     db
       .select({ n: count() })
       .from(releases)
+      .innerJoin(sources, and(eq(releases.sourceId, sources.id), sourceNotDeleted))
       .where(
         sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0) AND ${releases.publishedAt} >= ${cutoff}`,
       ),
     db
       .select({ n: count() })
       .from(sources)
-      .where(sql`${sources.lastFetchedAt} IS NULL`),
-    db.select({ n: count() }).from(sources).where(gte(sources.lastFetchedAt, cutoff)),
+      .where(and(sourceNotDeleted, sql`${sources.lastFetchedAt} IS NULL`)),
+    db
+      .select({ n: count() })
+      .from(sources)
+      .where(and(sourceNotDeleted, gte(sources.lastFetchedAt, cutoff))),
   ]);
 
   const staleCount = sourceCount.n - neverFetched.n - recentlyFetched.n;
@@ -67,7 +73,7 @@ statsRoutes.get("/stats", async (c) => {
     .from(sources)
     .leftJoin(releases, eq(releases.sourceId, sources.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(notDisabled)
+    .where(and(notDisabled, sourceNotDeleted))
     .groupBy(sources.id)
     .orderBy(
       desc(
@@ -90,7 +96,7 @@ statsRoutes.get("/stats", async (c) => {
       createdAt: fetchLog.createdAt,
     })
     .from(fetchLog)
-    .innerJoin(sources, eq(fetchLog.sourceId, sources.id))
+    .innerJoin(sources, and(eq(fetchLog.sourceId, sources.id), sourceNotDeleted))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .orderBy(desc(fetchLog.createdAt))
     .limit(20);

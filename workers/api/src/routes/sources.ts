@@ -589,8 +589,22 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
 sourceRoutes.delete("/sources/:slug/releases", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
+  const hard = c.req.query("hard") === "true";
   const [src] = await db.select().from(sources).where(sourceWhere(slug));
   if (!src) return c.json({ error: "not_found" }, 404);
+
+  if (!hard) {
+    // Soft path: flip rows to suppressed=1 with reason "force_refetch". Re-fetch
+    // upserts hit ON CONFLICT(source_id, url) and overwrite the suppressed row,
+    // backfilling content. This preserves AI-extracted summaries and embeddings
+    // until the new fetch produces replacements (issue #666).
+    const updated = await db
+      .update(releases)
+      .set({ suppressed: true, suppressedReason: "force_refetch" })
+      .where(eq(releases.sourceId, src.id))
+      .returning({ id: releases.id });
+    return c.json({ suppressed: updated.length });
+  }
 
   const deleted = await db.delete(releases).where(eq(releases.sourceId, src.id)).returning();
 
@@ -618,7 +632,7 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
     );
   }
 
-  return c.json({ deleted: deleted.length });
+  return c.json({ deleted: deleted.length, hard: true });
 });
 
 sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
@@ -1386,14 +1400,32 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
 sourceRoutes.delete("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
+  const hard = c.req.query("hard") === "true";
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  // Slug-based lookups always resolve to the active row: tombstones rename
+  // the slug ("--<id>" suffix). To purge a tombstone, callers use src_ ID.
+  const includeDeleted = hard && slug.startsWith("src_");
+  const [src] = await db.select().from(sources).where(sourceWhere(slug, { includeDeleted }));
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const orgId = src.orgId;
-  await db.delete(sources).where(eq(sources.id, src.id));
+
+  if (hard) {
+    await db.delete(sources).where(eq(sources.id, src.id));
+    if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
+    return c.json({ deleted: true, hard: true });
+  }
+
+  // Soft delete: tombstone the source. Slug is mangled so the inline UNIQUE
+  // doesn't block a re-onboard under the original slug. Releases stay
+  // attached so the cleanup cron can hard-purge via the existing FK cascade.
+  const now = new Date().toISOString();
+  await db
+    .update(sources)
+    .set({ deletedAt: now, slug: `${src.slug}--${src.id}` })
+    .where(eq(sources.id, src.id));
   if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
-  return c.json({ deleted: true });
+  return c.json({ deleted: true, deletedAt: now });
 });
 
 // Bulk release insert for data seeding
@@ -1459,9 +1491,14 @@ sourceRoutes.get("/releases/:id", async (c) => {
       orgName: organizations.name,
     })
     .from(releases)
-    .leftJoin(sources, eq(releases.sourceId, sources.id))
-    .leftJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(eq(releases.id, id));
+    .innerJoin(sources, and(eq(releases.sourceId, sources.id), isNull(sources.deletedAt)))
+    .leftJoin(
+      organizations,
+      and(eq(sources.orgId, organizations.id), isNull(organizations.deletedAt)),
+    )
+    .where(
+      and(eq(releases.id, id), sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`),
+    );
 
   if (rows.length === 0) return c.json({ error: "not_found", message: "Release not found" }, 404);
 

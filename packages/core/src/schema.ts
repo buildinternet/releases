@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { sqliteTable, text, integer, real, uniqueIndex, index } from "drizzle-orm/sqlite-core";
 import {
   newSourceId,
@@ -23,26 +24,42 @@ import {
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
 
-export const organizations = sqliteTable("organizations", {
-  id: text("id").primaryKey().$defaultFn(newOrgId),
-  name: text("name").notNull(),
-  slug: text("slug").notNull().unique(),
-  domain: text("domain").unique(),
-  description: text("description"),
-  category: text("category"),
-  avatarUrl: text("avatar_url"),
-  createdAt: text("created_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-  updatedAt: text("updated_at")
-    .notNull()
-    .$defaultFn(() => new Date().toISOString()),
-  metadata: text("metadata").default("{}"),
-  embeddedAt: text("embedded_at"),
-  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
-    .notNull()
-    .default("curated"),
-});
+export const organizations = sqliteTable(
+  "organizations",
+  {
+    id: text("id").primaryKey().$defaultFn(newOrgId),
+    name: text("name").notNull(),
+    slug: text("slug").notNull().unique(),
+    domain: text("domain").unique(),
+    description: text("description"),
+    category: text("category"),
+    avatarUrl: text("avatar_url"),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    updatedAt: text("updated_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+    metadata: text("metadata").default("{}"),
+    embeddedAt: text("embedded_at"),
+    discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
+      .notNull()
+      .default("curated"),
+    // Soft-delete tombstone (#666). Read paths exclude rows where deleted_at
+    // IS NOT NULL via notDeleted helpers in queries/shared.ts. On tombstone,
+    // the route handler renames slug + domain to mangled forms (slug + "--" +
+    // id) so a re-onboard under the original identifier doesn't collide with
+    // the inline UNIQUE constraint.
+    deletedAt: text("deleted_at"),
+  },
+  (table) => [
+    // Backs the nightly tombstone sweep cron's "deleted_at < cutoff" candidate
+    // collection. Partial form keeps the index trivially small.
+    index("idx_organizations_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
+  ],
+);
 
 export const orgAccounts = sqliteTable(
   "org_accounts",
@@ -76,8 +93,14 @@ export const products = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date().toISOString()),
     embeddedAt: text("embedded_at"),
+    deletedAt: text("deleted_at"),
   },
-  (table) => [index("idx_products_org").on(table.orgId)],
+  (table) => [
+    index("idx_products_org").on(table.orgId),
+    index("idx_products_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
+  ],
 );
 
 export const domainAliases = sqliteTable(
@@ -182,6 +205,7 @@ export const sources = sqliteTable(
     discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
       .notNull()
       .default("curated"),
+    deletedAt: text("deleted_at"),
   },
   (table) => [
     index("idx_sources_org").on(table.orgId),
@@ -192,6 +216,9 @@ export const sources = sqliteTable(
     index("idx_sources_name").on(table.name),
     index("idx_sources_last_fetched_at").on(table.lastFetchedAt),
     index("idx_sources_median_gap_days").on(table.medianGapDays),
+    index("idx_sources_deleted_at")
+      .on(table.deletedAt)
+      .where(sql`${table.deletedAt} IS NOT NULL`),
   ],
 );
 

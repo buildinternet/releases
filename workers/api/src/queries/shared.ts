@@ -1,5 +1,5 @@
 import { asc, desc, ne, or, sql, type Column, type SQL } from "drizzle-orm";
-import { sources, releases, organizations } from "@buildinternet/releases-core/schema";
+import { sources, releases, organizations, products } from "@buildinternet/releases-core/schema";
 
 /**
  * Returns `[col IS NULL, col ASC|DESC]` — a two-key ORDER BY that sinks NULLs
@@ -14,6 +14,17 @@ export const notDisabled = sql`(${sources.isHidden} = 0 OR ${sources.isHidden} I
 
 /** Exclude suppressed releases — for use in Drizzle WHERE clauses */
 export const notSuppressed = sql`(${releases.suppressed} IS NULL OR ${releases.suppressed} = 0)`;
+
+/**
+ * Tombstone filters (issue #666). Soft-deleted rows on organizations, sources,
+ * and products carry a non-null deleted_at and must be hidden from every read
+ * path. Partial unique indexes on slug/domain already exclude tombstones, so
+ * re-onboarding under the same identifier just works — these are the matching
+ * predicates for SELECTs.
+ */
+export const orgNotDeleted = sql`${organizations.deletedAt} IS NULL`;
+export const sourceNotDeleted = sql`${sources.deletedAt} IS NULL`;
+export const productNotDeleted = sql`${products.deletedAt} IS NULL`;
 
 /** Exclude coverage-side releases — use as a bare Drizzle condition via `and(notCoverage, ...)`. */
 export const notCoverage = sql`NOT EXISTS (SELECT 1 FROM release_coverage WHERE release_coverage.coverage_id = ${releases.id})`;

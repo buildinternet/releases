@@ -9,6 +9,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { generatePlaybookHeader } from "@releases/ai-internal/playbook";
 import { authMiddleware } from "../middleware/auth.js";
+import { productNotDeleted, sourceNotDeleted } from "../queries/shared.js";
 import { newKnowledgePageId, orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
 
@@ -62,7 +63,10 @@ app.patch("/orgs/:slug/playbook/notes", async (c) => {
     await db.run(sql`UPDATE knowledge_pages SET notes = ${notes}, updated_at = ${now}
       WHERE scope = 'playbook' AND org_id = ${org.id}`);
   } else {
-    const orgSources = await db.select().from(sources).where(eq(sources.orgId, org.id));
+    const orgSources = await db
+      .select()
+      .from(sources)
+      .where(and(eq(sources.orgId, org.id), sourceNotDeleted));
     const orgProducts = await db
       .select({
         id: products.id,
@@ -71,7 +75,7 @@ app.patch("/orgs/:slug/playbook/notes", async (c) => {
         description: products.description,
       })
       .from(products)
-      .where(eq(products.orgId, org.id));
+      .where(and(eq(products.orgId, org.id), productNotDeleted));
 
     const header = generatePlaybookHeader({
       orgName: org.name,

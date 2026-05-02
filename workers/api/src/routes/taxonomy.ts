@@ -9,7 +9,7 @@ import {
   productTags,
 } from "@buildinternet/releases-core/schema";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
-import { orgNotOnDemand } from "../queries/shared.js";
+import { orgNotOnDemand, orgNotDeleted, productNotDeleted } from "../queries/shared.js";
 import type { Env } from "../index.js";
 import type { CategoryDetail, TagDetail } from "@buildinternet/releases-api-types";
 
@@ -41,13 +41,13 @@ taxonomyRoutes.get("/categories/:slug", async (c) => {
     db
       .select(orgFields)
       .from(organizations)
-      .where(and(eq(organizations.category, slug), orgNotOnDemand))
+      .where(and(eq(organizations.category, slug), orgNotOnDemand, orgNotDeleted))
       .orderBy(organizations.name),
     db
       .select(productFields)
       .from(products)
       .innerJoin(organizations, eq(products.orgId, organizations.id))
-      .where(and(eq(products.category, slug), orgNotOnDemand))
+      .where(and(eq(products.category, slug), orgNotOnDemand, orgNotDeleted, productNotDeleted))
       .orderBy(products.name),
   ]);
 
@@ -69,14 +69,14 @@ taxonomyRoutes.get("/tags/:slug", async (c) => {
       .select(orgFields)
       .from(organizations)
       .innerJoin(orgTags, eq(orgTags.orgId, organizations.id))
-      .where(and(eq(orgTags.tagId, tag.id), orgNotOnDemand))
+      .where(and(eq(orgTags.tagId, tag.id), orgNotOnDemand, orgNotDeleted))
       .orderBy(organizations.name),
     db
       .select(productFields)
       .from(products)
       .innerJoin(productTags, eq(productTags.productId, products.id))
       .innerJoin(organizations, eq(products.orgId, organizations.id))
-      .where(and(eq(productTags.tagId, tag.id), orgNotOnDemand))
+      .where(and(eq(productTags.tagId, tag.id), orgNotOnDemand, orgNotDeleted, productNotDeleted))
       .orderBy(products.name),
   ]);
 
