@@ -86,13 +86,17 @@ export async function runLookup(
   const url = `https://github.com/${coordinate}`;
   // GitHub paths are case-insensitive on redirect, so dedup existing rows
   // case-insensitively. (The neg-cache helpers already case-fold their
-  // keys, so they take `coordinate` as-is.)
+  // keys, so they take `coordinate` as-is.) `sources.url` is NOT unique,
+  // so when multiple case-variant rows exist we pick deterministically:
+  // exact-case match first, then oldest createdAt as a stable
+  // tie-breaker.
   const urlLower = url.toLowerCase();
   const findExistingSource = () =>
     db
       .select()
       .from(sources)
       .where(sql`LOWER(${sources.url}) = ${urlLower}`)
+      .orderBy(sql`CASE WHEN ${sources.url} = ${url} THEN 0 ELSE 1 END`, sources.createdAt)
       .limit(1);
   const githubToken = await env.GITHUB_TOKEN?.get();
 

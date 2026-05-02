@@ -103,6 +103,48 @@ describe("POST /v1/lookups", () => {
     expect(body.source.id).toBe("src_existing");
   });
 
+  test("prefers an exact-case row over a case-folded match when both exist", async () => {
+    // sources.url is not UNIQUE, so two rows with case-variant URLs can
+    // coexist (curated row + a stray on-demand row from before the
+    // case-fold dedup landed). The user's typed case should win to keep
+    // results stable across calls.
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    // Older lowercase row inserted first.
+    await testDb.db.insert(sources).values({
+      id: "src_lowercase",
+      name: "acme/Foo",
+      slug: "acme-foo-lower",
+      type: "github",
+      url: "https://github.com/acme/foo",
+      orgId: "org_acme",
+      discovery: "on_demand",
+    });
+    // Canonical-case row inserted later.
+    await testDb.db.insert(sources).values({
+      id: "src_canonical",
+      name: "Acme/Foo",
+      slug: "acme-foo-canonical",
+      type: "github",
+      url: "https://github.com/Acme/Foo",
+      orgId: "org_acme",
+      discovery: "curated",
+    });
+
+    const env = makeEnv(makeKv());
+    // User types the canonical case → canonical row wins on exact-case
+    // preference even though the lowercase row was created first.
+    const res = await callRoute(env, { provider: "github", coordinate: "Acme/Foo" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; source: { id: string } };
+    expect(body.status).toBe("existing");
+    expect(body.source.id).toBe("src_canonical");
+  });
+
   test("matches an existing source case-insensitively", async () => {
     // Existing row stored with canonical case (Shopify/toxiproxy). User
     // types it lowercased — should still resolve to the same source row,
