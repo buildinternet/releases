@@ -13,6 +13,7 @@ import { lt } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/d1";
 import { searchQueries } from "@buildinternet/releases-core/schema";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export const CRON_NAME = "sweep-search-queries";
 export const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000;
@@ -33,7 +34,7 @@ function parseRetentionDays(raw: string | undefined): number {
 
 export async function sweepSearchQueries(env: SweepSearchQueriesEnv): Promise<void> {
   if (env.CRON_ENABLED === "false") {
-    console.log("[sweep-search-queries] CRON_ENABLED=false; skipping");
+    logEvent("info", { component: "sweep-search-queries", event: "cron-disabled" });
     return;
   }
 
@@ -93,5 +94,11 @@ export async function sweepSearchQueries(env: SweepSearchQueriesEnv): Promise<vo
     notes,
   });
 
-  console.log(`[sweep-search-queries] done: ${notes}`);
+  logEvent("info", {
+    component: "sweep-search-queries",
+    event: "done",
+    notes,
+    deleted,
+    retentionDays,
+  });
 }

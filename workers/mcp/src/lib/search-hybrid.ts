@@ -6,6 +6,7 @@
  * here, fix it in the api worker copy too.
  */
 
+import { logEvent } from "@releases/lib/log-event";
 import { sql, inArray } from "drizzle-orm";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import {
@@ -362,11 +363,7 @@ export async function runHybridSearch(
       embed: embedder,
     });
   } catch (err) {
-    console.warn(
-      `[search-hybrid] vector path failed, falling back to lexical: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    logEvent("warn", { component: "mcp-search-hybrid", event: "degraded-to-fts", err });
     return lexicalResponse(err instanceof Error ? err.message : String(err));
   }
 

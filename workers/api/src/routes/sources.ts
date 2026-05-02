@@ -72,6 +72,7 @@ import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -559,11 +560,11 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
               },
             });
           } catch (err) {
-            console.warn(
-              `[/sources/:slug/releases/batch] embed side-effect failed: ${
-                err instanceof Error ? err.message : String(err)
-              }`,
-            );
+            logEvent("warn", {
+              component: "sources-batch",
+              event: "embed-side-effect-failed",
+              err: err instanceof Error ? err : String(err),
+            });
           }
         })(),
       );
@@ -571,11 +572,12 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
 
     return c.json({ inserted, total });
   } catch (err) {
-    console.error("[/sources/:slug/releases/batch] insert failed", {
+    logEvent("error", {
+      component: "sources-batch",
+      event: "insert-failed",
       sourceId: src.id,
       slug,
-      error: String(err),
-      stack: (err as Error).stack,
+      err: err instanceof Error ? err : String(err),
     });
     const message = (err as Error).message ?? "Failed to insert releases";
     return c.json({ error: "insert_failed", message }, 500);
@@ -605,11 +607,12 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
             await c.env.RELEASES_INDEX.deleteByIds(vectorIds.slice(i, i + CHUNK));
           }
         } catch (err) {
-          console.warn(
-            `[sources] Vectorize delete failed for ${vectorIds.length} release vectors: ${
-              err instanceof Error ? err.message : String(err)
-            }`,
-          );
+          logEvent("warn", {
+            component: "sources",
+            event: "vectorize-delete-failed",
+            vectorCount: vectorIds.length,
+            err: err instanceof Error ? err : String(err),
+          });
         }
       })(),
     );
@@ -1272,9 +1275,11 @@ sourceRoutes.post("/sources", async (c) => {
           params: { sourceId: source.id, skipBackfill },
         })
         .catch((err) => {
-          console.warn(
-            `[sources] onboard workflow dispatch failed; falling back to waitUntil: ${err instanceof Error ? err.message : String(err)}`,
-          );
+          logEvent("warn", {
+            component: "sources",
+            event: "onboard-workflow-dispatch-failed",
+            err: err instanceof Error ? err : String(err),
+          });
           inlineFallback();
         }),
     );
@@ -1628,8 +1633,10 @@ export async function embedSourceSideEffect(
     });
   } catch (err) {
     if (opts?.throwOnError) throw err;
-    console.warn(
-      `[sources] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logEvent("warn", {
+      component: "sources",
+      event: "embed-side-effect-failed",
+      err: err instanceof Error ? err : String(err),
+    });
   }
 }

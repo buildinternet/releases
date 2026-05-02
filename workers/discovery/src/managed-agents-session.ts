@@ -31,6 +31,7 @@ import {
   withDiscoveryIdentity,
   directApiFetcher,
 } from "./fetch-wrappers.js";
+import { logEvent } from "@releases/lib/log-event.js";
 
 // ── MA 429 rate-limit retry loop ─────────────────────────────────────────────
 //
@@ -172,9 +173,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         { inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens },
         model,
       );
-      console.log(
-        `[managed-agents] Session usage: ${JSON.stringify(usage)} model=${model} estimatedUsd=${cost?.totalUsd?.toFixed(4) ?? "?"}`,
-      );
+      logEvent("info", {
+        component: "managed-agents",
+        event: "session-usage",
+        usage,
+        model,
+        estimatedUsd: cost?.totalUsd ?? null,
+      });
       return {
         inputTokens,
         outputTokens,
@@ -328,7 +333,13 @@ export class ManagedAgentsSession extends DurableObject<Env> {
           if (!classification.isRateLimit) throw createErr;
           if (rateLimitRetries >= MA_RATE_LIMIT_MAX_RETRIES) {
             const structured = buildMaRateLimitErrorMessage(classification, rateLimitRetries);
-            console.error(`[managed-agents] ${structured}`);
+            logEvent("error", {
+              component: "managed-agents",
+              event: "rate-limit-retries-exhausted",
+              retryCount: rateLimitRetries,
+              errorType: classification.errorType ?? "rate_limit",
+              message: structured,
+            });
             // oxlint-disable-next-line no-await-in-loop -- fail() must complete before return
             await this.fail(sessionId, params.company, structured, releasesApiKey, undefined, {
               errorSource: "provider",
@@ -339,9 +350,14 @@ export class ManagedAgentsSession extends DurableObject<Env> {
             return;
           }
           rateLimitRetries++;
-          console.error(
-            `[managed-agents] 429 rate limit on session create (attempt ${rateLimitRetries}/${MA_RATE_LIMIT_MAX_RETRIES}); retrying in ${Math.round(classification.retryAfterMs / 1000)}s. type=${classification.errorType ?? "unknown"}`,
-          );
+          logEvent("error", {
+            component: "managed-agents",
+            event: "session-create-rate-limited",
+            attempt: rateLimitRetries,
+            maxRetries: MA_RATE_LIMIT_MAX_RETRIES,
+            retryAfterSecs: Math.round(classification.retryAfterMs / 1000),
+            errorType: classification.errorType ?? "unknown",
+          });
           // oxlint-disable-next-line no-await-in-loop -- sequential backoff; intentional
           await delay(classification.retryAfterMs);
         }
@@ -539,9 +555,11 @@ Find and evaluate changelog sources for the company described in <company>.${dom
                       retryCount: providerErrorCount,
                       message: "Managed-agents retry budget exhausted",
                     };
-                console.error(
-                  `[managed-agents] retries_exhausted after ${providerErrorCount} provider error(s)`,
-                );
+                logEvent("error", {
+                  component: "managed-agents",
+                  event: "retries-exhausted",
+                  providerErrorCount,
+                });
                 const usageOnError = await this.captureFinalUsage(
                   client,
                   session.id,
@@ -571,9 +589,13 @@ Find and evaluate changelog sources for the company described in <company>.${dom
                 message: `Session error: ${JSON.stringify(event)}`,
               };
               lastProviderError = classification;
-              console.error(
-                `[managed-agents] Session error (${classification.errorType ?? "unknown"}): ${classification.message}`,
-              );
+              logEvent("error", {
+                component: "managed-agents",
+                event: "session-error",
+                errorType: classification.errorType ?? "unknown",
+                message: classification.message,
+                providerErrorCount,
+              });
               const usageOnError = await this.captureFinalUsage(
                 client,
                 session.id,
@@ -761,7 +783,12 @@ Find and evaluate changelog sources for the company described in <company>.${dom
           : body;
       return `\n\n---\n\n## Playbook for this org\n\n${displayBody}\n\n---`;
     } catch (err) {
-      console.error(`[managed-agents] playbook fetch failed: ${err}`);
+      logEvent("error", {
+        component: "managed-agents",
+        event: "playbook-fetch-failed",
+        orgId,
+        err: err instanceof Error ? err : new Error(String(err)),
+      });
       return "";
     }
   }
@@ -797,7 +824,11 @@ Find and evaluate changelog sources for the company described in <company>.${dom
         });
       }
     } catch (err) {
-      console.error(`[managed-agents] StatusHub notify failed: ${err}`);
+      logEvent("error", {
+        component: "managed-agents",
+        event: "status-hub-notify-failed",
+        err: err instanceof Error ? err : new Error(String(err)),
+      });
     }
   }
 }

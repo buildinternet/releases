@@ -5,6 +5,7 @@
  */
 
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { logEvent } from "@releases/lib/log-event.js";
 import type { Source } from "@buildinternet/releases-core/schema";
 import type { ExtractDeps, ExtractRepo, UsageEntry } from "@releases/adapters/extract";
 
@@ -27,10 +28,14 @@ export interface WorkerDepsEnv {
 const DEFAULT_AGENT_MODEL = "claude-sonnet-4-6";
 
 const workerLogger = {
-  info: (msg: string) => console.log(`[extract] ${msg}`),
-  warn: (msg: string) => console.warn(`[extract] ${msg}`),
-  debug: (msg: string) => console.debug(`[extract] ${msg}`),
-  error: (msg: string) => console.error(`[extract] ${msg}`),
+  info: (msg: string) =>
+    logEvent("info", { component: "extract-deps-worker", event: "extract-info", message: msg }),
+  warn: (msg: string) =>
+    logEvent("warn", { component: "extract-deps-worker", event: "extract-warn", message: msg }),
+  debug: (msg: string) =>
+    logEvent("info", { component: "extract-deps-worker", event: "extract-debug", message: msg }),
+  error: (msg: string) =>
+    logEvent("error", { component: "extract-deps-worker", event: "extract-error", message: msg }),
 };
 
 function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {

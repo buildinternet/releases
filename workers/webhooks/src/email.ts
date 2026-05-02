@@ -1,3 +1,5 @@
+import { logEvent } from "@releases/lib/log-event";
+
 /**
  * Minimal email + alert helpers for the webhooks worker.
  *
@@ -83,14 +85,22 @@ export async function sendWebhookAlert(
   try {
     const result = await sendEmail(env, { subject: normalizedSubject, text: body });
     if (!result.sent) {
-      console.log(`[webhook-alert] skipped (${result.reason}): ${normalizedSubject}`);
+      logEvent("info", {
+        component: "webhook-alert",
+        event: "skipped",
+        reason: result.reason,
+        subject: normalizedSubject,
+      });
       return false;
     }
-    console.log(`[webhook-alert] sent: ${normalizedSubject}`);
+    logEvent("info", { component: "webhook-alert", event: "sent", subject: normalizedSubject });
     return true;
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[webhook-alert] send error: ${msg}`);
+    logEvent("warn", {
+      component: "webhook-alert",
+      event: "send-error",
+      err: err instanceof Error ? err : new Error(String(err)),
+    });
     return false;
   }
 }

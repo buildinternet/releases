@@ -8,6 +8,7 @@ import { deliver } from "./deliver.js";
 import { writeDeliveryAttempt, type DeliveryAttempt, type Outcome } from "./ae.js";
 import type { DeliveryMessage } from "../../api/src/webhooks/types.js";
 import { sendWebhookAlert, type EmailEnv } from "./email.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export const DLQ_QUEUE = "webhook-dlq";
 
@@ -62,9 +63,13 @@ export default {
       // Aggregate per subscription for a compact summary email.
       const bySubId = new Map<string, { count: number; lastError: string | null }>();
       for (const msg of batch.messages) {
-        console.warn(
-          `[webhook-dlq] sub=${msg.body.subscriptionId} release=${msg.body.event.release.id} attempts=${msg.attempts}`,
-        );
+        logEvent("warn", {
+          component: "webhook-dlq",
+          event: "max-retries-exceeded",
+          subscriptionId: msg.body.subscriptionId,
+          releaseId: msg.body.event.release.id,
+          attempts: msg.attempts,
+        });
         writeDeliveryAttempt(
           env.WEBHOOK_DELIVERIES_AE,
           syntheticAttempt(msg.body, msg.attempts, "dlq"),

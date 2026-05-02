@@ -27,6 +27,7 @@ import type { Source } from "@buildinternet/releases-core/schema";
 import { loadFetchQuirks } from "@releases/ai-internal/playbook";
 import { finalizeRunRow, insertRunningRow, reconcileStaleRunning } from "../db/cron-runs-dao.js";
 import { loadPlaybookNotesForSources } from "./poll-fetch.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export const CRON_NAME = "force-drain-sweep";
 export const STALE_RUNNING_THRESHOLD_MS = 10 * 60 * 1000;
@@ -132,11 +133,11 @@ export async function pickCandidates(
 
 export async function forceDrainSweep(env: ForceDrainEnv): Promise<void> {
   if (env.CRON_ENABLED === "false") {
-    console.log("[force-drain-cron] CRON_ENABLED=false; skipping");
+    logEvent("info", { component: "force-drain-cron", event: "cron-disabled" });
     return;
   }
   if (env.FORCE_DRAIN_CRON_ENABLED !== "true") {
-    console.log("[force-drain-cron] FORCE_DRAIN_CRON_ENABLED not true; skipping");
+    logEvent("info", { component: "force-drain-cron", event: "force-drain-disabled" });
     return;
   }
 
@@ -191,9 +192,14 @@ export async function forceDrainSweep(env: ForceDrainEnv): Promise<void> {
     notes,
   });
 
-  console.log(
-    `[force-drain-cron] done: forced=${candidates.length} unreliable=${unreliableCount} stale=${staleCount} skipped=${skippedOverCap}`,
-  );
+  logEvent("info", {
+    component: "force-drain-cron",
+    event: "done",
+    forced: candidates.length,
+    unreliable: unreliableCount,
+    stale: staleCount,
+    skipped: skippedOverCap,
+  });
 }
 
 export type { Source };

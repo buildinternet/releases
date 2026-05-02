@@ -17,6 +17,7 @@ import {
   type EmbeddingConfig,
   type EmbeddingProvider,
 } from "@releases/search/embeddings.js";
+import { logEvent } from "@releases/lib/log-event";
 
 /** Shape returned by {@link buildEmbedConfig} — `provider` and `model` are always resolved. */
 export type ResolvedEmbedConfig = EmbeddingConfig & {
@@ -39,7 +40,7 @@ interface EmbedEnv {
 export async function buildEmbedConfig(env: EmbedEnv): Promise<ResolvedEmbedConfig | null> {
   const rawProvider = (env.EMBEDDING_PROVIDER ?? "voyage").toLowerCase();
   if (rawProvider !== "voyage" && rawProvider !== "openai" && rawProvider !== "workers-ai") {
-    console.warn(`[embed-config] unknown EMBEDDING_PROVIDER: ${rawProvider}`);
+    logEvent("warn", { component: "embed-config", event: "unknown-provider", rawProvider });
     return null;
   }
   const provider = rawProvider as EmbeddingProvider;
@@ -48,17 +49,13 @@ export async function buildEmbedConfig(env: EmbedEnv): Promise<ResolvedEmbedConf
   // in the API worker (embedding is farmed out to voyage by default), so
   // fail fast with a clear log if someone flips the flag.
   if (provider === "workers-ai") {
-    console.warn(
-      "[embed-config] workers-ai provider requested but no AI binding is wired to the API worker",
-    );
+    logEvent("warn", { component: "embed-config", event: "workers-ai-no-binding" });
     return null;
   }
 
   const keyBinding = provider === "voyage" ? env.VOYAGE_API_KEY : env.OPENAI_API_KEY;
   if (!keyBinding) {
-    console.warn(
-      `[embed-config] ${provider === "voyage" ? "VOYAGE_API_KEY" : "OPENAI_API_KEY"} binding missing — embedding will be skipped`,
-    );
+    logEvent("warn", { component: "embed-config", event: "api-key-binding-missing", provider });
     return null;
   }
 
@@ -66,15 +63,16 @@ export async function buildEmbedConfig(env: EmbedEnv): Promise<ResolvedEmbedConf
   try {
     apiKey = await keyBinding.get();
   } catch (err) {
-    console.warn(
-      `[embed-config] failed to read API key secret: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    logEvent("warn", {
+      component: "embed-config",
+      event: "api-key-read-failed",
+      provider,
+      err: err instanceof Error ? err : String(err),
+    });
     return null;
   }
   if (!apiKey) {
-    console.warn("[embed-config] API key secret resolved to empty string");
+    logEvent("warn", { component: "embed-config", event: "api-key-empty", provider });
     return null;
   }
 

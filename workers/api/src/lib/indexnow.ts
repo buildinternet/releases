@@ -16,6 +16,8 @@
  * shifted as a result of the new releases.
  */
 
+import { logEvent } from "@releases/lib/log-event";
+
 interface SecretBindingLike {
   get(): Promise<string | undefined>;
 }
@@ -57,25 +59,25 @@ export async function submitToIndexNow(
   env: IndexNowEnv,
   opts: SubmitOptions,
 ): Promise<SubmitResult> {
-  const base = `[indexnow] source=${opts.source.slug}`;
+  const sourceSlug = opts.source.slug;
 
-  if (env.INDEXNOW_ENABLED !== "true") return logSkip(base, "flag_off");
-  if (env.INDEXING_DISABLED === "true") return logSkip(base, "indexing_disabled");
-  if (!env.INDEXNOW_KEY) return logSkip(base, "no_key_binding");
-  if (opts.nReleases <= 0) return logSkip(base, "no_releases");
-  if (opts.source.isHidden) return logSkip(base, "source_hidden");
-  if (opts.source.discovery === "on_demand") return logSkip(base, "discovery_on_demand");
+  if (env.INDEXNOW_ENABLED !== "true") return logSkip(sourceSlug, "flag_off");
+  if (env.INDEXING_DISABLED === "true") return logSkip(sourceSlug, "indexing_disabled");
+  if (!env.INDEXNOW_KEY) return logSkip(sourceSlug, "no_key_binding");
+  if (opts.nReleases <= 0) return logSkip(sourceSlug, "no_releases");
+  if (opts.source.isHidden) return logSkip(sourceSlug, "source_hidden");
+  if (opts.source.discovery === "on_demand") return logSkip(sourceSlug, "discovery_on_demand");
 
   const baseUrl = env.WEB_BASE_URL ?? DEFAULT_BASE_URL;
   const urls = buildUrls(baseUrl, opts.source);
-  if (urls.length === 0) return logSkip(base, "no_urls");
+  if (urls.length === 0) return logSkip(sourceSlug, "no_urls");
 
   const fetchImpl = opts.fetchImpl ?? fetch;
   const keyBinding = env.INDEXNOW_KEY;
 
   try {
     const key = await keyBinding.get();
-    if (!key) return logSkip(base, "key_unset");
+    if (!key) return logSkip(sourceSlug, "key_unset");
 
     const payload = { host: new URL(baseUrl).host, key, urlList: urls };
     const res = await fetchImpl(INDEXNOW_ENDPOINT, {
@@ -85,13 +87,19 @@ export async function submitToIndexNow(
       signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),
     });
     const ok = res.status >= 200 && res.status < 300;
-    console.info(
-      `${base} action=submitted ok=${ok} http_status=${res.status} n_urls=${urls.length} n_releases=${opts.nReleases}`,
-    );
+    logEvent("info", {
+      component: "indexnow",
+      event: "submitted",
+      sourceSlug,
+      ok,
+      httpStatus: res.status,
+      nUrls: urls.length,
+      nReleases: opts.nReleases,
+    });
     return { status: ok ? "submitted" : "error", httpStatus: res.status };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`${base} action=submitted ok=false error="${msg}"`);
+    logEvent("warn", { component: "indexnow", event: "submit-failed", sourceSlug, err: msg });
     return { status: "error", reason: msg };
   }
 }
@@ -106,8 +114,8 @@ export function buildUrls(baseUrl: string, source: IndexNowSource): string[] {
   return out;
 }
 
-function logSkip(base: string, reason: string): SubmitResult {
-  console.info(`${base} action=skipped reason=${reason}`);
+function logSkip(sourceSlug: string, reason: string): SubmitResult {
+  logEvent("info", { component: "indexnow", event: "skipped", sourceSlug, reason });
   return { status: "skipped", reason };
 }
 

@@ -6,6 +6,7 @@ import type {
   UpdateRequest,
 } from "./types.js";
 import { discoveryIdentityHeaders } from "./identity.js";
+import { logEvent } from "@releases/lib/log-event.js";
 
 export { Sandbox } from "@cloudflare/sandbox";
 export { ManagedAgentsSession } from "./managed-agents-session.js";
@@ -173,7 +174,11 @@ export default {
         }
       } catch {
         // Non-critical — proceed if StatusHub is unreachable
-        console.warn("[discovery] Could not check active onboards — proceeding anyway");
+        logEvent("warn", {
+          component: "discovery",
+          event: "onboard-guard-skipped",
+          reason: "StatusHub unreachable",
+        });
       }
 
       const result = await startManagedSession(

@@ -8,6 +8,7 @@
  */
 
 import { sendEmail, type EmailEnv } from "./email.js";
+import { logEvent } from "@releases/lib/log-event";
 
 const DEDUP_TTL_SECONDS = 3600;
 
@@ -43,14 +44,19 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
     } catch (err) {
       // KV failure is non-fatal — let the email attempt proceed.
       const msg = err instanceof Error ? err.message : String(err);
-      console.warn(`[send-alert] KV dedup read error (continuing): ${msg}`);
+      logEvent("warn", { component: "send-alert", event: "kv-dedup-read-error", err: msg });
     }
   }
 
   try {
     const result = await sendEmail(env, { subject, text: input.body });
     if (!result.sent) {
-      console.log(`[send-alert] skipped (${result.reason}): ${subject}`);
+      logEvent("info", {
+        component: "send-alert",
+        event: "skipped",
+        reason: result.reason,
+        subject,
+      });
       return false;
     }
     if (env.ALERT_DEDUP_KV && dedupKey) {
@@ -60,14 +66,14 @@ export async function sendAlert(env: AlertEnv, input: SendAlertInput): Promise<b
         // Log but don't undo the send — duplicate emails within the window
         // are preferable to mis-reporting send success.
         const msg = err instanceof Error ? err.message : String(err);
-        console.warn(`[send-alert] KV dedup write error (sent ok): ${msg}`);
+        logEvent("warn", { component: "send-alert", event: "kv-dedup-write-error", err: msg });
       }
     }
-    console.log(`[send-alert] sent: ${subject}`);
+    logEvent("info", { component: "send-alert", event: "sent", subject });
     return true;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    console.warn(`[send-alert] send error: ${msg}`);
+    logEvent("warn", { component: "send-alert", event: "send-error", err: msg });
     return false;
   }
 }

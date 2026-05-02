@@ -29,6 +29,7 @@ import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/search/embeddings
 import { withEmbedCache, type EmbedCacheBinding } from "@releases/search/embedding-cache.js";
 import { searchReleasesFts } from "../queries/search.js";
 import { buildEmbedConfig } from "./embed-config.js";
+import { logEvent } from "@releases/lib/log-event";
 import type { D1Db } from "../db.js";
 
 type SecretBinding = { get(): Promise<string> };
@@ -400,11 +401,11 @@ export async function runHybridSearch(
       embed: embedder,
     });
   } catch (err) {
-    console.warn(
-      `[search-hybrid] vector path failed, falling back to lexical: ${
-        err instanceof Error ? err.message : String(err)
-      }`,
-    );
+    logEvent("warn", {
+      component: "search-hybrid",
+      event: "vector-path-failed",
+      err: err instanceof Error ? err : String(err),
+    });
     return lexicalResponse(err instanceof Error ? err.message : String(err));
   }
 

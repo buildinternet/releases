@@ -5,6 +5,7 @@
  */
 import { sendEmail, type EmailEnv, type SendEmailResult } from "./email.js";
 import { formatCronReport, type CronReport } from "./cron-report.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export async function sendCronReport(
   env: EmailEnv,
@@ -20,12 +21,22 @@ export async function sendCronReport(
       to: opts?.to,
     });
     if (!result.sent) {
-      console.log(`[notifications] skipped ${report.cronName} report: ${result.reason}`);
+      logEvent("info", {
+        component: "notifications",
+        event: "report-skipped",
+        cronName: report.cronName,
+        reason: result.reason,
+      });
     }
     return result;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.warn(`[notifications] failed to send ${report.cronName} report: ${message}`);
+    logEvent("warn", {
+      component: "notifications",
+      event: "report-send-failed",
+      cronName: report.cronName,
+      err: message,
+    });
     return { sent: false, reason: "error", error: message };
   }
 }

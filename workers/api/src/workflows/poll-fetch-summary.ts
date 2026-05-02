@@ -14,6 +14,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { asc, eq } from "drizzle-orm";
 import { workflowFailures } from "../db/schema-workflow-failures.js";
 import { sendAlert, type AlertEnv } from "../lib/send-alert.js";
+import { logEvent } from "@releases/lib/log-event";
 
 /**
  * Window between fan-out and summary alert. Must exceed the per-source
@@ -62,9 +63,7 @@ export class PollFetchSummaryWorkflow extends WorkflowEntrypoint<
     });
 
     if (failures.length === 0) {
-      console.log(
-        `[poll-fetch-summary] scheduledTime=${scheduledTime}: no failures recorded; skipping alert`,
-      );
+      logEvent("info", { component: "poll-fetch-summary", event: "no-failures", scheduledTime });
       return;
     }
 

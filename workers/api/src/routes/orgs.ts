@@ -44,6 +44,7 @@ import {
 import { notDisabled } from "../queries/shared.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
+import { logEvent } from "@releases/lib/log-event";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -1079,8 +1080,10 @@ async function embedOrgSideEffect(
       },
     });
   } catch (err) {
-    console.warn(
-      `[orgs] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logEvent("warn", {
+      component: "orgs",
+      event: "embed-side-effect-failed",
+      err: err instanceof Error ? err : String(err),
+    });
   }
 }

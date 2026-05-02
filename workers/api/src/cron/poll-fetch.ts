@@ -42,6 +42,7 @@ import type { InvalidationEnv } from "../lib/latest-cache.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { notifyIndexNowForSource, type IndexNowEnv } from "../lib/indexnow.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
+import { logEvent } from "@releases/lib/log-event";
 
 // ── Tier intervals (hours) ──
 
@@ -66,7 +67,7 @@ export async function pollAndFetch(
     },
 ): Promise<void> {
   if (env.CRON_ENABLED === "false") {
-    console.log("[cron] Disabled via CRON_ENABLED=false, skipping");
+    logEvent("info", { component: "cron-poll-fetch", event: "cron-disabled" });
     return;
   }
 
@@ -78,7 +79,11 @@ export async function pollAndFetch(
   const dueSources = await queryDueSources(db, now, { changeDetectEnabled });
   if (dueSources.length === 0) return;
 
-  console.log(`[cron] Polling ${dueSources.length} due source(s)`);
+  logEvent("info", {
+    component: "cron-poll-fetch",
+    event: "polling",
+    sourceCount: dueSources.length,
+  });
 
   // Pre-load playbook notes once per distinct org so `pollOne`'s fetchQuirks
   // lookup doesn't fan out into N queries. Empty when the flag is off.
@@ -113,7 +118,11 @@ export async function pollAndFetch(
   let lastInsertingSource: string | undefined;
 
   if (fetchable.length > 0) {
-    console.log(`[cron] Fetching ${fetchable.length} changed source(s)`);
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "fetching-changed",
+      sourceCount: fetchable.length,
+    });
     const results = await runWithConcurrency(fetchable, FETCH_CONCURRENCY, async (source) => {
       const r = await fetchOne(db, source, env);
       if (r.releasesInserted > 0) {
@@ -137,7 +146,11 @@ export async function pollAndFetch(
     .map((r) => r.source)
     .filter((s) => s.type === "agent" || (s.type === "scrape" && getSourceMeta(s).feedUrl == null));
   if (changedScrape.length > 0) {
-    console.log(`[cron] ${changedScrape.length} scrape/agent source(s) flagged for pickup`);
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "scrape-agent-flagged",
+      sourceCount: changedScrape.length,
+    });
   }
 }
 
@@ -272,12 +285,23 @@ export async function pollOne(
     }
 
     await db.update(sources).set(updates).where(eq(sources.id, source.id));
-    console.log(`[cron] Poll ${source.slug}: ${result.status} (${result.responseMs}ms)`);
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "poll-result",
+      sourceSlug: source.slug,
+      status: result.status,
+      responseMs: result.responseMs,
+    });
 
     return { source, changed };
   } catch (err) {
     // Don't let one source failure stop the whole cron
-    console.error(`[cron] Poll error for ${source.slug}: ${err}`);
+    logEvent("error", {
+      component: "cron-poll-fetch",
+      event: "poll-error",
+      sourceSlug: source.slug,
+      err: err instanceof Error ? err : String(err),
+    });
     await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));
     return { source, changed: false };
   }
@@ -316,9 +340,15 @@ async function pollScrapeOrAgentByQuirk(
     extra?: string,
   ) => {
     const durationMs = Date.now() - start;
-    console.log(
-      `[cron] Poll ${source.slug}: detector=${detector} outcome=${outcome} durationMs=${durationMs}${extra ? ` ${extra}` : ""}`,
-    );
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "poll-quirk-outcome",
+      sourceSlug: source.slug,
+      detector,
+      outcome,
+      durationMs,
+      ...(extra ? { extra } : {}),
+    });
   };
 
   // Persist a detector outcome: merge any new validators into metadata, set
@@ -456,7 +486,11 @@ export async function fetchOne(
       rawReleases = await fetchGitHub(source, env.GITHUB_TOKEN);
     } else {
       if (!meta.feedUrl || !meta.feedType) {
-        console.warn(`[cron] Fetch ${source.slug}: missing feedUrl or feedType, skipping`);
+        logEvent("warn", {
+          component: "cron-poll-fetch",
+          event: "fetch-missing-feed",
+          sourceSlug: source.slug,
+        });
         const dur = Date.now() - start;
         await db
           .insert(fetchLog)
@@ -518,7 +552,13 @@ export async function fetchOne(
         durationMs: dur,
         status: "dry_run",
       });
-      console.log(`[cron] Fetch ${source.slug}: dry-run (${rawReleases.length} found, ${dur}ms)`);
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "fetch-dry-run",
+        sourceSlug: source.slug,
+        releasesFound: rawReleases.length,
+        durationMs: dur,
+      });
       return {
         releasesFound: rawReleases.length,
         releasesInserted: 0,
@@ -551,7 +591,12 @@ export async function fetchOne(
           .where(eq(sources.id, source.id)),
       ]);
       const dur = Date.now() - start;
-      console.log(`[cron] Fetch ${source.slug}: no changes (${dur}ms)`);
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "fetch-no-changes",
+        sourceSlug: source.slug,
+        durationMs: dur,
+      });
       return {
         releasesFound: 0,
         releasesInserted: 0,
@@ -640,9 +685,12 @@ export async function fetchOne(
       try {
         await embedReleasesForSource(db, source, insertedIds, env);
       } catch (err) {
-        console.warn(
-          `[cron] release embed failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        logEvent("warn", {
+          component: "cron-poll-fetch",
+          event: "embed-failed",
+          sourceSlug: source.slug,
+          err: err instanceof Error ? err : String(err),
+        });
       }
     }
 
@@ -674,14 +722,23 @@ export async function fetchOne(
       try {
         await refreshChangelogFile(db, source, env.GITHUB_TOKEN, env);
       } catch (err) {
-        console.warn(
-          `[cron] Changelog refresh failed for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
-        );
+        logEvent("warn", {
+          component: "cron-poll-fetch",
+          event: "changelog-refresh-failed",
+          sourceSlug: source.slug,
+          err: err instanceof Error ? err : String(err),
+        });
       }
     }
 
     const dur = Date.now() - start;
-    console.log(`[cron] Fetch ${source.slug}: ${inserted} new (${dur}ms)`);
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "fetch-done",
+      sourceSlug: source.slug,
+      inserted,
+      durationMs: dur,
+    });
     return {
       releasesFound: rawReleases.length,
       releasesInserted: inserted,
@@ -690,7 +747,12 @@ export async function fetchOne(
       insertedIds,
     };
   } catch (err) {
-    console.error(`[cron] Fetch error for ${source.slug}: ${err}`);
+    logEvent("error", {
+      component: "cron-poll-fetch",
+      event: "fetch-error",
+      sourceSlug: source.slug,
+      err: err instanceof Error ? err : String(err),
+    });
 
     await db
       .insert(fetchLog)
@@ -712,9 +774,13 @@ export async function fetchOne(
     if (err instanceof FeedHttpError) {
       const streak = (meta.feed4xxStreak ?? 0) + 1;
       if (streak >= FEED_4XX_INVALIDATE_THRESHOLD) {
-        console.warn(
-          `[cron] Feed URL invalidated for ${source.slug} after ${streak} consecutive 4xx (${err.status}) — clearing for rediscovery`,
-        );
+        logEvent("warn", {
+          component: "cron-poll-fetch",
+          event: "feed-url-invalidated",
+          sourceSlug: source.slug,
+          streak,
+          httpStatus: err.status,
+        });
         const cleared = { ...meta, ...CLEARED_FEED_FIELDS, noFeedFound: false };
         await db
           .update(sources)
@@ -887,23 +953,35 @@ async function fetchOneFile(
   try {
     res = await fetch(rawUrl, { headers: rawHeaders });
   } catch (err) {
-    console.warn(
-      `[cron] refreshChangelogFile(${sourceSlug}): raw fetch failed for ${fullPath}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "changelog-raw-fetch-failed",
+      sourceSlug,
+      path: fullPath,
+      err: err instanceof Error ? err : String(err),
+    });
     return null;
   }
   if (!res.ok) {
-    console.warn(
-      `[cron] refreshChangelogFile(${sourceSlug}): raw fetch ${res.status} for ${fullPath}`,
-    );
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "changelog-raw-fetch-non-ok",
+      sourceSlug,
+      path: fullPath,
+      httpStatus: res.status,
+    });
     return null;
   }
   const raw = await res.text();
   const { content, bytes, truncated } = truncateToByteCap(raw);
   if (truncated) {
-    console.warn(
-      `[cron] refreshChangelogFile(${sourceSlug}): ${fullPath} exceeds size cap, truncated to ${bytes} bytes`,
-    );
+    logEvent("warn", {
+      component: "cron-poll-fetch",
+      event: "changelog-truncated",
+      sourceSlug,
+      path: fullPath,
+      bytes,
+    });
   }
   const contentHashHex = await sha256HexWorker(content);
   return {
@@ -975,7 +1053,12 @@ export async function refreshChangelogFile(
   const rootListing = await listDirContents(owner, repo, "", apiHeaders);
   requestCount++;
   if (!rootListing) {
-    console.log(`[cron] refreshChangelogFile(${source.slug}): 0 files, ${requestCount} requests`);
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "changelog-no-root-listing",
+      sourceSlug: source.slug,
+      requestCount,
+    });
     return { changedFiles: [] };
   }
   const rootFilename = pickChangelog(rootListing);
@@ -1054,9 +1137,13 @@ export async function refreshChangelogFile(
     }
   }
 
-  console.log(
-    `[cron] refreshChangelogFile(${source.slug}): ${fetched.length} files, ${requestCount} requests`,
-  );
+  logEvent("info", {
+    component: "cron-poll-fetch",
+    event: "changelog-refresh-done",
+    sourceSlug: source.slug,
+    fileCount: fetched.length,
+    requestCount,
+  });
 
   const now = new Date().toISOString();
 
@@ -1090,9 +1177,14 @@ export async function refreshChangelogFile(
         .returning({ id: sourceChangelogFiles.id });
       if (row)
         changed.push({ fileId: row.id, content: file.content, contentHash: file.contentHashHex });
-      console.log(
-        `[cron] Inserted ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`,
-      );
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "changelog-file-inserted",
+        sourceSlug: source.slug,
+        path: file.path,
+        bytes: file.bytes,
+        truncated: file.truncated,
+      });
     } else if (prior.contentHash === file.contentHashHex) {
       // Hash unchanged — short-circuit, no embed needed. Backfill tokens if the prior row predates that column.
       const touch: { fetchedAt: string; tokens?: number } = { fetchedAt: now };
@@ -1115,9 +1207,14 @@ export async function refreshChangelogFile(
         })
         .where(eq(sourceChangelogFiles.id, prior.id));
       changed.push({ fileId: prior.id, content: file.content, contentHash: file.contentHashHex });
-      console.log(
-        `[cron] Updated ${file.path} for ${source.slug} (${file.bytes} bytes${file.truncated ? ", truncated" : ""})`,
-      );
+      logEvent("info", {
+        component: "cron-poll-fetch",
+        event: "changelog-file-updated",
+        sourceSlug: source.slug,
+        path: file.path,
+        bytes: file.bytes,
+        truncated: file.truncated,
+      });
     }
   }
 
@@ -1132,9 +1229,13 @@ export async function refreshChangelogFile(
         // oxlint-disable-next-line no-await-in-loop -- sequential per-file embed to avoid flooding the embedding provider
         await embedChangelogFileForSource(db, source, file, env);
       } catch (err) {
-        console.warn(
-          `[cron] changelog embed failed for ${source.slug} (${file.fileId}): ${err instanceof Error ? err.message : String(err)}`,
-        );
+        logEvent("warn", {
+          component: "cron-poll-fetch",
+          event: "changelog-embed-failed",
+          sourceSlug: source.slug,
+          fileId: file.fileId,
+          err: err instanceof Error ? err : String(err),
+        });
       }
     }
   }
@@ -1145,7 +1246,12 @@ export async function refreshChangelogFile(
   for (const row of toDelete) {
     // oxlint-disable-next-line no-await-in-loop -- sequential prune; set is typically empty or 1-2 rows
     await db.delete(sourceChangelogFiles).where(eq(sourceChangelogFiles.id, row.id));
-    console.log(`[cron] Pruned ${row.path} for ${source.slug}`);
+    logEvent("info", {
+      component: "cron-poll-fetch",
+      event: "changelog-file-pruned",
+      sourceSlug: source.slug,
+      path: row.path,
+    });
   }
 
   return { changedFiles: changed };
