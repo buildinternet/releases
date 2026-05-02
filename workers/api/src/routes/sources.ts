@@ -70,6 +70,7 @@ import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 export const sourceRoutes = new Hono<Env>();
 
@@ -1253,7 +1254,7 @@ sourceRoutes.post("/sources", async (c) => {
           params: { sourceId: source.id, skipBackfill },
         })
         .catch((err) => {
-          console.warn(
+          logger.warn(
             `[sources] onboard workflow dispatch failed; falling back to waitUntil: ${err instanceof Error ? err.message : String(err)}`,
           );
           inlineFallback();
@@ -1558,6 +1559,10 @@ export async function embedSourceSideEffect(
   try {
     const embedConfig = await buildEmbedConfig(env);
     if (!embedConfig) return;
+    // Symmetric to the embedConfig guard. Staging deliberately ships without
+    // Vectorize bindings, so a manual `wrangler workflows trigger` would
+    // otherwise hit `undefined.upsert(...)` and propagate via throwOnError.
+    if (!env.ENTITIES_INDEX) return;
     const [src] = await db.select().from(sources).where(eq(sources.id, sourceId));
     if (!src) return;
     // Derive a best-effort domain from the URL.

@@ -31,6 +31,10 @@ export function mkFakeStep() {
           return result;
         } catch (err) {
           lastError = err;
+          // Constructor-name check (not instanceof): cloudflare:workflows isn't
+          // available under bun:test, so the production `NonRetryableError`
+          // class identity diverges. The string match is the only stable
+          // signal that a workflow step opted out of retry.
           const isNonRetryable =
             err instanceof Error && err.constructor.name === "NonRetryableError";
           if (isNonRetryable) break;
