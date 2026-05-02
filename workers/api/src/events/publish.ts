@@ -72,7 +72,7 @@ export async function publishReleaseEvents(env: PublishEnv, ctx: PublishContext)
       logEvent("warn", {
         component: "events",
         event: "hub-publish-failed",
-        err: err instanceof Error ? err : String(err),
+        err,
       });
     }
   })();
