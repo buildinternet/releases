@@ -37,6 +37,9 @@ export interface IndexNowSource {
 
 const INDEXNOW_ENDPOINT = "https://api.indexnow.org/IndexNow";
 const DEFAULT_BASE_URL = "https://releases.sh";
+// Hard ceiling so a slow/blackholed aggregator can't stretch fetchOne()
+// (awaited from POST /sources/:slug/fetch) or the cron's per-source budget.
+const SUBMIT_TIMEOUT_MS = 2000;
 
 export interface SubmitOptions {
   nReleases: number;
@@ -67,17 +70,19 @@ export async function submitToIndexNow(
   const urls = buildUrls(baseUrl, opts.source);
   if (urls.length === 0) return logSkip(base, "no_urls");
 
-  const key = await env.INDEXNOW_KEY.get();
-  if (!key) return logSkip(base, "key_unset");
-
-  const payload = { host: new URL(baseUrl).host, key, urlList: urls };
   const fetchImpl = opts.fetchImpl ?? fetch;
+  const keyBinding = env.INDEXNOW_KEY;
 
   try {
+    const key = await keyBinding.get();
+    if (!key) return logSkip(base, "key_unset");
+
+    const payload = { host: new URL(baseUrl).host, key, urlList: urls };
     const res = await fetchImpl(INDEXNOW_ENDPOINT, {
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
       body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(SUBMIT_TIMEOUT_MS),
     });
     const ok = res.status >= 200 && res.status < 300;
     console.info(
@@ -125,12 +130,18 @@ export async function notifyIndexNowForSource(
   source: NotifyableSource,
   nReleases: number,
 ): Promise<SubmitResult> {
-  // Short-circuit before the slug lookups so disabled environments don't
-  // hit D1 on every publish.
-  if (env.INDEXNOW_ENABLED !== "true") {
-    return logSkip(`[indexnow] source=${source.slug}`, "flag_off");
-  }
-  const orgSlug = source.orgId ? await db.resolveOrgSlug(source.orgId) : null;
+  // Run every gate that doesn't need slug lookups before touching D1, so
+  // disabled / hidden / no-op publishes don't burn a query per release.
+  const base = `[indexnow] source=${source.slug}`;
+  if (env.INDEXNOW_ENABLED !== "true") return logSkip(base, "flag_off");
+  if (env.INDEXING_DISABLED === "true") return logSkip(base, "indexing_disabled");
+  if (!env.INDEXNOW_KEY) return logSkip(base, "no_key_binding");
+  if (nReleases <= 0) return logSkip(base, "no_releases");
+  if (source.isHidden) return logSkip(base, "source_hidden");
+  if (source.discovery === "on_demand") return logSkip(base, "discovery_on_demand");
+  if (!source.orgId) return logSkip(base, "no_urls");
+
+  const orgSlug = await db.resolveOrgSlug(source.orgId);
   const productSlug = source.productId ? await db.resolveProductSlug(source.productId) : null;
   return submitToIndexNow(env, {
     nReleases,

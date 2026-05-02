@@ -180,27 +180,77 @@ describe("submitToIndexNow happy path", () => {
     expect(result.reason).toContain("network unreachable");
   });
 
-  it("notifyIndexNowForSource short-circuits before any DB lookup when flag is off", async () => {
-    let calls = 0;
-    const counting = {
-      async resolveOrgSlug(id: string) {
-        calls++;
-        return id;
-      },
-      async resolveProductSlug(id: string) {
-        calls++;
-        return id;
-      },
-    };
-    const result = await notifyIndexNowForSource(
-      envOn({ INDEXNOW_ENABLED: "false" }),
-      counting,
-      { slug: "x", orgId: "org", productId: "prod", isHidden: false, discovery: "curated" },
-      1,
+  it("soft-fails when the secret binding rejects", async () => {
+    const result = await submitToIndexNow(
+      envOn({ INDEXNOW_KEY: { get: () => Promise.reject(new Error("secrets store down")) } }),
+      { nReleases: 1, source: SOURCE, fetchImpl: stubFetch().fn },
     );
-    expect(result.reason).toBe("flag_off");
-    expect(calls).toBe(0);
+    expect(result.status).toBe("error");
+    expect(result.reason).toContain("secrets store down");
   });
+
+  it("soft-fails when WEB_BASE_URL is malformed", async () => {
+    const result = await submitToIndexNow(envOn({ WEB_BASE_URL: "not-a-url" }), {
+      nReleases: 1,
+      source: SOURCE,
+      fetchImpl: stubFetch().fn,
+    });
+    expect(result.status).toBe("error");
+  });
+});
+
+describe("notifyIndexNowForSource gates", () => {
+  let calls = 0;
+  const counting = {
+    async resolveOrgSlug(id: string) {
+      calls++;
+      return id;
+    },
+    async resolveProductSlug(id: string) {
+      calls++;
+      return id;
+    },
+  };
+
+  type Source = Parameters<typeof notifyIndexNowForSource>[2];
+  const SOURCE_ROW: Source = {
+    slug: "nextjs",
+    orgId: "org_vercel",
+    productId: null,
+    isHidden: false,
+    discovery: "curated",
+  };
+
+  const cases: Array<[string, IndexNowEnv, Source, number, string]> = [
+    ["INDEXNOW_ENABLED=false", envOn({ INDEXNOW_ENABLED: "false" }), SOURCE_ROW, 1, "flag_off"],
+    [
+      "INDEXING_DISABLED=true",
+      envOn({ INDEXING_DISABLED: "true" }),
+      SOURCE_ROW,
+      1,
+      "indexing_disabled",
+    ],
+    ["no key binding", envOn({ INDEXNOW_KEY: undefined }), SOURCE_ROW, 1, "no_key_binding"],
+    ["zero releases", envOn(), SOURCE_ROW, 0, "no_releases"],
+    ["hidden source", envOn(), { ...SOURCE_ROW, isHidden: true }, 1, "source_hidden"],
+    [
+      "on-demand source",
+      envOn(),
+      { ...SOURCE_ROW, discovery: "on_demand" },
+      1,
+      "discovery_on_demand",
+    ],
+    ["independent source", envOn(), { ...SOURCE_ROW, orgId: null }, 1, "no_urls"],
+  ];
+
+  for (const [label, env, source, n, reason] of cases) {
+    it(`skips ${label} before any D1 lookup`, async () => {
+      calls = 0;
+      const result = await notifyIndexNowForSource(env, counting, source, n);
+      expect(result.reason).toBe(reason);
+      expect(calls).toBe(0);
+    });
+  }
 });
 
 interface FetchCall {
