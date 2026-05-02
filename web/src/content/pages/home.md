@@ -18,10 +18,6 @@ An agent-friendly API for product changelogs. A unified registry of product rele
 
 {{orgs}}
 
-## Independent projects
-
-{{independentSources}}
-
 ## Get started
 
 - **CLI:** `brew install buildinternet/tap/releases`
