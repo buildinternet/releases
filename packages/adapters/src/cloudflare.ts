@@ -5,6 +5,11 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 /** Resource types to block when rendering pages via Cloudflare Browser Rendering. */
 export const CF_REJECT_RESOURCE_TYPES = ["font", "stylesheet"] as const;
 
+// CF Browser Rendering's /markdown converter strips fenced-code language hints
+// (`<pre data-language="ts">` or `<code class="language-ts">` collapse to bare
+// ``` blocks), so downstream Shiki highlighting can't tokenize them. Recovering
+// them means fetching /content (HTML) and running our own HTML→markdown — see
+// https://github.com/buildinternet/releases/issues/667.
 async function fetchCloudflareRendered(
   url: string,
   accountId: string,
