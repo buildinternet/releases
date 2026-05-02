@@ -1233,8 +1233,36 @@ sourceRoutes.post("/sources", async (c) => {
     );
   }
 
-  if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
-  c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
+  // Onboarding tail. `X-Onboard-Mode: manual` skips the workflow's backfill
+  // step; the inline fallback path has no backfill to skip (CLI calls
+  // `/sources/:slug/fetch` separately).
+  const inlineFallback = () => {
+    if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
+    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
+  };
+
+  if (c.env.ONBOARD_USE_WORKFLOW === "true" && c.env.ONBOARD_SOURCE_WORKFLOW) {
+    const skipBackfill = c.req.header("x-onboard-mode") === "manual";
+    const workflow = c.env.ONBOARD_SOURCE_WORKFLOW;
+    // Fire-and-forget: control-plane RPC must not block the response.
+    // Deterministic id makes a transient retry safe (CF rejects duplicates).
+    c.executionCtx.waitUntil(
+      workflow
+        .create({
+          id: `onboard-source-${source.id}`,
+          params: { sourceId: source.id, skipBackfill },
+        })
+        .catch((err) => {
+          console.warn(
+            `[sources] onboard workflow dispatch failed; falling back to waitUntil: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          inlineFallback();
+        }),
+    );
+  } else {
+    inlineFallback();
+  }
+
   return c.json(source, 201);
 });
 
@@ -1525,6 +1553,7 @@ export async function embedSourceSideEffect(
   env: Env["Bindings"],
   db: ReturnType<typeof createDb>,
   sourceId: string,
+  opts?: { throwOnError?: boolean },
 ): Promise<void> {
   try {
     const embedConfig = await buildEmbedConfig(env);
@@ -1572,8 +1601,10 @@ export async function embedSourceSideEffect(
           .set({ embeddedAt: new Date().toISOString() })
           .where(eq(sources.id, src.id));
       },
+      throwOnError: opts?.throwOnError,
     });
   } catch (err) {
+    if (opts?.throwOnError) throw err;
     console.warn(
       `[sources] embed side-effect failed: ${err instanceof Error ? err.message : String(err)}`,
     );

@@ -39,6 +39,11 @@ export interface EmbedAndUpsertEntitiesOptions {
   embedConfig?: Partial<EmbeddingConfig>;
   onPersisted?: (ids: string[]) => Promise<void>;
   logger?: EmbedLogger;
+  /**
+   * Re-throw the first caught error after logging. Default `false` — errors
+   * are swallowed to keep the "never fail the write" contract.
+   */
+  throwOnError?: boolean;
 }
 
 function buildEntityText(e: EmbedEntityInput): string {
@@ -56,7 +61,7 @@ function buildEntityMetadata(e: EmbedEntityInput): Record<string, VectorMetadata
 }
 
 export async function embedAndUpsertEntities(opts: EmbedAndUpsertEntitiesOptions): Promise<void> {
-  const { entities, vectorIndex, embedConfig, onPersisted } = opts;
+  const { entities, vectorIndex, embedConfig, onPersisted, throwOnError = false } = opts;
   const logger = opts.logger ?? console;
 
   if (!entities || entities.length === 0) return;
@@ -65,9 +70,9 @@ export async function embedAndUpsertEntities(opts: EmbedAndUpsertEntitiesOptions
     const texts = entities.map(buildEntityText);
     const { vectors } = await embedBatch(texts, embedConfig);
     if (vectors.length !== entities.length) {
-      logger.warn(
-        `[embed-entities] vector count mismatch (${vectors.length} vs ${entities.length}) — skipping upsert`,
-      );
+      const msg = `vector count mismatch (${vectors.length} vs ${entities.length})`;
+      logger.warn(`[embed-entities] ${msg} — skipping upsert`);
+      if (throwOnError) throw new Error(msg);
       return;
     }
 
@@ -85,6 +90,7 @@ export async function embedAndUpsertEntities(opts: EmbedAndUpsertEntitiesOptions
           err instanceof Error ? err.message : String(err)
         }`,
       );
+      if (throwOnError) throw err;
       return;
     }
 
@@ -92,6 +98,8 @@ export async function embedAndUpsertEntities(opts: EmbedAndUpsertEntitiesOptions
       try {
         await onPersisted(entities.map((e) => e.id));
       } catch (err) {
+        // onPersisted is bookkeeping; a retry here would re-upsert vectors
+        // unnecessarily. Swallow even when throwOnError is set.
         logger.warn(
           `[embed-entities] onPersisted callback failed: ${
             err instanceof Error ? err.message : String(err)
@@ -103,5 +111,6 @@ export async function embedAndUpsertEntities(opts: EmbedAndUpsertEntitiesOptions
     logger.warn(
       `[embed-entities] embed pipeline failed: ${err instanceof Error ? err.message : String(err)}`,
     );
+    if (throwOnError) throw err;
   }
 }

@@ -49,6 +49,7 @@ export { ReleaseHub } from "./release-hub.js";
 export { ScrapeAgentSweepWorkflow } from "./workflows/scrape-agent-sweep.js";
 export { PollAndFetchWorkflow } from "./workflows/poll-and-fetch.js";
 export { PollFetchSummaryWorkflow } from "./workflows/poll-fetch-summary.js";
+export { OnboardSourceWorkflow } from "./workflows/onboard-source.js";
 
 /** Cloudflare Secrets Store binding — call .get() to retrieve the secret value. */
 type SecretBinding = { get(): Promise<string> };
@@ -85,6 +86,11 @@ export type Env = {
     // emails any failures recorded in `workflow_failures` by per-source
     // instances. Optional — absent → no alert (safe default).
     POLL_FETCH_SUMMARY_WORKFLOW?: Workflow;
+    // Feature flag: when "true", `POST /v1/sources` dispatches an
+    // `ONBOARD_SOURCE_WORKFLOW` instance for the playbook + embed + backfill
+    // tail instead of riding `c.executionCtx.waitUntil(...)`. See issue #493.
+    ONBOARD_USE_WORKFLOW?: string;
+    ONBOARD_SOURCE_WORKFLOW?: Workflow;
     // Feature flag: when "true", poll-and-fetch widens its candidate set to
     // include scrape/agent sources with no feedUrl and routes them through
     // change-detector branches defined in the org playbook's `fetchQuirks`

@@ -13,7 +13,7 @@ import { drizzle } from "drizzle-orm/d1";
 import { eq } from "drizzle-orm";
 import { sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
-import { workflowFailures } from "../db/schema-workflow-failures.js";
+import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import {
   fetchOne,
   pollOne,
@@ -72,14 +72,6 @@ const RETRY_EMBED = {
   retries: { limit: 5, delay: "30 seconds", backoff: "exponential" },
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
-
-/**
- * Sentinel for "source row was deleted between fan-out and workflow start".
- * Matched verbatim in the catch handler so unrelated NonRetryableErrors that
- * happen to mention "not found" (e.g. a 404 from a downstream API) still get
- * recorded as workflow failures rather than silently swallowed.
- */
-const SOURCE_DELETED_SENTINEL = "load-source: source row deleted";
 
 /**
  * Resolve the FetchOneEnv slice — embedding + GitHub + vector bindings — once
@@ -233,40 +225,19 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         `[poll-fetch-workflow] ${source.slug}: done (inserted=${fetchResult.releasesInserted}, found=${fetchResult.releasesFound})`,
       );
     } catch (err) {
-      // Skip the deleted-source race specifically — sentinel match (not a
-      // substring scan) so unrelated NonRetryableErrors mentioning "not found"
-      // still get recorded.
       const isDeletedSourceRace =
         err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL;
       if (!isDeletedSourceRace) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.error(`[poll-fetch-workflow] ${sourceId} failed at ${currentStep}: ${errorMsg}`);
-        // Best-effort: record this failure for the summary workflow. Don't
-        // mask the original error if the write fails.
-        try {
-          await db
-            .insert(workflowFailures)
-            .values({
-              id: `wf-fail-${scheduledTime}-${sourceId}`,
-              scheduledTime,
-              sourceId,
-              stepName: currentStep,
-              error: errorMsg,
-              createdAt: new Date().toISOString(),
-            })
-            .onConflictDoUpdate({
-              target: workflowFailures.id,
-              set: {
-                stepName: currentStep,
-                error: errorMsg,
-                createdAt: new Date().toISOString(),
-              },
-            });
-        } catch (dbErr) {
-          console.warn(
-            `[poll-fetch-workflow] failed to record failure row: ${dbErr instanceof Error ? dbErr.message : String(dbErr)}`,
-          );
-        }
+        await recordWorkflowFailure(db, {
+          idPrefix: "wf-fail-",
+          scheduledTime,
+          sourceId,
+          stepName: currentStep,
+          error: errorMsg,
+          logTag: "poll-fetch-workflow",
+        });
       }
       throw err;
     }

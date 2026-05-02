@@ -20,7 +20,8 @@ import {
 import { newKnowledgePageId } from "./utils.js";
 
 /**
- * Regenerate the playbook header for an org. Fire-and-forget safe — catches all errors.
+ * Regenerate the playbook header for an org. Default contract is fire-and-forget
+ * (errors swallowed). Pass `{ throwOnError: true }` to re-throw instead.
  *
  * If the org has an old-format playbook (header + notes combined), this migrates it:
  * notes are extracted into the notes column and the content is replaced with header-only.
@@ -28,6 +29,7 @@ import { newKnowledgePageId } from "./utils.js";
 export async function regeneratePlaybook(
   db: ReturnType<typeof createDb>,
   orgId: string,
+  opts?: { throwOnError?: boolean },
 ): Promise<void> {
   try {
     const [org] = await db.select().from(organizations).where(eq(organizations.id, orgId));
@@ -80,7 +82,7 @@ export async function regeneratePlaybook(
     await db.run(sql`INSERT INTO knowledge_pages (id, scope, org_id, product_id, content, notes, release_count, last_contributing_release_at, generated_at, updated_at)
       VALUES (${id}, 'playbook', ${orgId}, NULL, ${header}, ${notes}, ${orgSources.length}, NULL, ${now}, ${now})
       ON CONFLICT (scope, org_id) DO UPDATE SET content = ${header}, notes = COALESCE(knowledge_pages.notes, ${notes}), release_count = ${orgSources.length}, updated_at = ${now}`);
-  } catch {
-    // Fire-and-forget — don't let playbook regen failures break source mutations
+  } catch (err) {
+    if (opts?.throwOnError) throw err;
   }
 }
