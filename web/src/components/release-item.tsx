@@ -195,35 +195,31 @@ export function ReleaseListItem({
       <div className="absolute left-[100px] top-0 bottom-0 w-px bg-stone-200 dark:bg-stone-800" />
       {/* Content */}
       <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
-        <button
-          onClick={() => isOverflowing && setExpanded(!expanded)}
-          className={`flex items-baseline gap-1.5 mb-1 w-full text-left${isOverflowing ? "" : " cursor-default"}`}
-        >
-          <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
-            {heading}
-          </span>
+        <div className="flex items-baseline gap-1.5 mb-1">
+          {release.id ? (
+            <Link
+              href={`/release/${release.id}`}
+              className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline underline-offset-2"
+            >
+              {heading}
+            </Link>
+          ) : (
+            <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
+              {heading}
+            </span>
+          )}
           {release.url && (
             <a
               href={release.url}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 text-xs"
-              onClick={(e) => e.stopPropagation()}
+              aria-label="Open original source"
+              className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs inline-flex items-center justify-center w-7 h-7 -my-2 -mx-1 rounded"
             >
               ↗
             </a>
           )}
-          {release.id && (
-            <Link
-              href={`/release/${release.id}`}
-              className="text-stone-300 dark:text-stone-600 hover:text-stone-500 dark:hover:text-stone-400 text-xs opacity-0 group-hover/item:opacity-100 transition-opacity"
-              onClick={(e) => e.stopPropagation()}
-              title="Permalink"
-            >
-              #
-            </Link>
-          )}
-        </button>
+        </div>
         {showSubtitle && (
           <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{release.title}</div>
         )}
@@ -268,7 +264,10 @@ export function ReleaseListItem({
           ) : (
             <>
               <div className="flex gap-3">
-                <div ref={contentRef} className="max-h-[4.5em] overflow-hidden flex-1 min-w-0">
+                <div
+                  ref={contentRef}
+                  className="relative max-h-[4.5em] overflow-hidden flex-1 min-w-0"
+                >
                   <div
                     className={`${markdownClasses} text-stone-500 dark:text-stone-400 [&_strong]:text-stone-500 dark:[&_strong]:text-stone-400`}
                   >
@@ -280,6 +279,9 @@ export function ReleaseListItem({
                       {markdownContent}
                     </ReactMarkdown>
                   </div>
+                  {isOverflowing && (
+                    <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-stone-50 dark:from-stone-950 to-transparent" />
+                  )}
                 </div>
                 {thumbnail && (
                   <button
@@ -305,12 +307,9 @@ export function ReleaseListItem({
                 )}
               </div>
               {isOverflowing && (
-                <>
-                  <div className="absolute bottom-0 left-0 right-0 h-6 bg-gradient-to-t from-stone-50 dark:from-stone-950 to-transparent" />
-                  <div className="text-xs text-stone-400 dark:text-stone-500 mt-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                    Show more
-                  </div>
-                </>
+                <div className="text-xs text-stone-500 dark:text-stone-400 mt-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                  Show more
+                </div>
               )}
             </>
           )}
