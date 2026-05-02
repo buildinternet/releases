@@ -281,6 +281,52 @@ describe("POST /v1/lookups", () => {
     expect(orgs[0]?.name).toBe("Acme");
   });
 
+  test("falls back to org-prefixed slug when bare repo slug collides globally", async () => {
+    // Pre-seed an unrelated source that already owns the bare slug `cli`.
+    // A new lookup for foo/cli must not get stuck — the bare-slug attempt
+    // collides, but the org-prefixed `foo-cli` fallback should succeed.
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_acme_cli",
+      name: "cli",
+      slug: "cli",
+      type: "github",
+      url: "https://github.com/acme/cli",
+      orgId: "org_acme",
+      discovery: "curated",
+    });
+
+    mockFetch((url) => {
+      if (url.toLowerCase().endsWith("/repos/foo/cli")) {
+        return new Response(
+          JSON.stringify({
+            archived: false,
+            default_branch: "main",
+            name: "cli",
+            owner: { login: "foo" },
+          }),
+          { status: 200 },
+        );
+      }
+      if (url.endsWith("/releases?per_page=1")) return new Response("[]", { status: 200 });
+      if (url.includes("/contents/CHANGELOG.md")) return new Response("", { status: 404 });
+      return new Response("", { status: 404 });
+    });
+
+    const env = makeEnv(makeKv());
+    const res = await callRoute(env, { provider: "github", coordinate: "foo/cli" });
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { status: string; source: { slug: string } };
+    expect(body.status).toBe("empty");
+    // First candidate `cli` collides; the org-prefixed `foo-cli` fallback wins.
+    expect(body.source.slug).toBe("foo-cli");
+  });
+
   test("empty stub gets promoted to indexed when repo gains releases", async () => {
     // Pre-seed an empty stub (mimicking a previous lookup that found no
     // releases). emptyResult=true marks it as eligible for re-probe.
