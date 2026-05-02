@@ -30,13 +30,10 @@ export type SourceListRow = {
   latest_date: string | null;
 };
 
-// Active-row views (#671) aliased back to the base names so callers' WHERE
-// fragments — which qualify columns as `sources.X`, `organizations.X`,
-// `products.X` — keep working. The view itself filters deleted_at.
-//
-// `includeHidden` (#674) toggles between `sources_visible` (default — also
-// excludes is_hidden = 1) and `sources_active` (admin reads that want hidden
-// rows). Both views inherit deleted_at filtering.
+// Raw SQL queries alias the view to `sources` so column references like
+// `sources.X`, `organizations.X`, `products.X` keep working without changes.
+// `includeHidden` selects sources_active (shows hidden rows) vs. the default
+// sources_visible (hides them). Both views already filter deleted_at.
 
 export async function countSourcesForList(
   db: D1Db,

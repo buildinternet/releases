@@ -85,7 +85,7 @@ describe("countSourcesForList", () => {
     expect(count).toBe(3);
   });
 
-  it("applies whereClause — compound filter (org + not hidden) is redundant under visible default", async () => {
+  it("applies whereClause — explicit not-hidden filter on top of visible default still returns correct count", async () => {
     const where = and(
       eq(sources.orgId, "org_a"),
       sql`(${sources.isHidden} IS NULL OR ${sources.isHidden} = 0)`,

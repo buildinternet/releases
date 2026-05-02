@@ -749,11 +749,8 @@ export const organizationsPublic = sqliteView("organizations_public", {
 }).existing();
 
 /**
- * sources_visible (#674) layers on sources_active with `is_hidden = 0`. Public
- * read paths that previously combined the active filter with `notDisabled`
- * import this instead. Write paths and admin/restore code keep using the base
- * `sources` table; admin reads that *want* hidden rows keep using
- * `sources_active`.
+ * Layers on sources_active with `is_hidden = 0`. Use this for public read
+ * paths. Admin reads that want hidden rows use sources_active directly.
  */
 export const sourcesVisible = sqliteView("sources_visible", {
   id: text("id").primaryKey(),
