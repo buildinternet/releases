@@ -1,6 +1,6 @@
 ---
 title: "Documentation"
-description: "Overview of Releases — a changelog index with CLI, REST API, and MCP server."
+description: "Overview of Releases — a changelog index with a CLI, REST API, MCP server, and agent skills."
 adminOnly: false
 ---
 
@@ -8,13 +8,15 @@ adminOnly: false
 
 Changelog index for AI agents and developers.
 
-Releases tracks release notes, changelogs, and version updates across hundreds of developer tools, frameworks, and services. It provides a CLI, REST API, and MCP server for querying structured release data.
+Releases tracks release notes, changelogs, and version updates across hundreds of developer tools, frameworks, and services. It provides a CLI, REST API, MCP server, and a set of auto-triggering agent skills for querying structured release data.
+
+New here? [Install the CLI](/docs/installation), [add the skills](/docs/skills) to your agent, or jump to [Examples](/docs/examples).
 
 ## What you can do
 
 - **Browse and search** — find releases across organizations and sources by keyword, category, or date
 - **Track changes** — follow the latest releases from GitHub repos, RSS feeds, and changelog pages
-- **Integrate** — use the REST API for programmatic access or the MCP server for AI agent workflows
+- **Integrate** — query the [REST API](/docs/api/rest) directly, plug the [MCP server](/docs/api/mcp) into your agent, or install the [skills](/docs/skills) so Claude Code, Codex, Cursor, and OpenCode know how to use it
 
 ## Concepts
 
@@ -29,11 +31,14 @@ Each source has a `slug` that uniquely identifies it and is used as the primary 
 
 ## Interfaces
 
-| Interface      | Best for                                                   |
-| -------------- | ---------------------------------------------------------- |
-| **CLI**        | Interactive exploration, fetching, analysis                |
-| **REST API**   | Programmatic access, web integrations                      |
-| **MCP Server** | AI agent tool use (Claude, Cursor, etc.)                   |
-| **Web UI**     | Browsing the catalog at [releases.sh](https://releases.sh) |
+| Interface                       | Best for                                                           |
+| ------------------------------- | ------------------------------------------------------------------ |
+| **[CLI](/docs/cli/browsing)**   | Interactive exploration, fetching, analysis                        |
+| **[REST API](/docs/api/rest)**  | Programmatic access, web integrations                              |
+| **[MCP Server](/docs/api/mcp)** | AI agent tool use (Claude, Cursor, etc.)                           |
+| **[Skills](/docs/skills)**      | Auto-triggering playbooks for Claude Code, Codex, Cursor, OpenCode |
+| **Web UI**                      | Browsing the catalog at [releases.sh](https://releases.sh)         |
 
 The CLI is open source — see [github.com/buildinternet/releases-cli](https://github.com/buildinternet/releases-cli).
+
+Maintained by [Zach Dunn](https://zachdunn.com) / [Build Internet](https://buildinternet.com).
