@@ -158,15 +158,18 @@ describe("submitToIndexNow happy path", () => {
     ]);
   });
 
-  it("treats 4xx as error but does not throw", async () => {
-    const fetchImpl = stubFetch({ status: 422 });
+  it.each([
+    [422, "4xx"],
+    [503, "5xx"],
+  ])("treats %i (%s) as error but does not throw", async (status) => {
+    const fetchImpl = stubFetch({ status });
     const result = await submitToIndexNow(envOn(), {
       nReleases: 1,
       source: SOURCE,
       fetchImpl: fetchImpl.fn,
     });
     expect(result.status).toBe("error");
-    expect(result.httpStatus).toBe(422);
+    expect(result.httpStatus).toBe(status);
   });
 
   it("swallows fetch rejections", async () => {
