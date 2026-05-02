@@ -158,6 +158,68 @@ describe("extractFromBody — tier gate: toolloop", () => {
   });
 });
 
+describe("extractFromBody — guidance plumbing", () => {
+  test("tool-loop path bakes parseInstructions and playbookContext into the system prompt", async () => {
+    const captured: Anthropic.MessageCreateParams[] = [];
+    const client: Pick<Anthropic, "messages"> = {
+      messages: {
+        stream: ((params: Anthropic.MessageCreateParams) => {
+          captured.push(params);
+          return {
+            finalMessage: async () =>
+              ({
+                id: "msg_1",
+                type: "message",
+                role: "assistant",
+                model: "claude-sonnet-4-6",
+                content: [
+                  {
+                    type: "tool_use",
+                    id: "t1",
+                    name: "extract_releases",
+                    input: { releases: [] },
+                  },
+                ],
+                stop_reason: "tool_use",
+                stop_sequence: null,
+                usage: {
+                  input_tokens: 100,
+                  output_tokens: 10,
+                  cache_read_input_tokens: 0,
+                  cache_creation_input_tokens: 0,
+                },
+              }) as Anthropic.Message,
+          } as never;
+        }) as never,
+      } as never,
+    };
+
+    await extractFromBody(
+      {
+        body: LARGE_BODY,
+        systemPrompt: "BASE_PROMPT",
+        userMessage: "Extract from:",
+        sourceUrl: "https://x.test",
+        fetchUrl: "https://x.test/feed.json",
+        useToolLoop: true,
+        guidance: {
+          parseInstructions: "FIND_THE_FIVE_MOST_RECENT_BUCKETS",
+          playbookContext: "ORG_PLAYBOOK_NOTES",
+        },
+      },
+      makeDeps(client),
+    );
+
+    expect(captured.length).toBe(1);
+    const systemBlocks = captured[0]!.system as Anthropic.TextBlockParam[];
+    expect(Array.isArray(systemBlocks)).toBe(true);
+    const systemText = systemBlocks.map((b) => b.text).join("\n");
+    expect(systemText).toContain("BASE_PROMPT");
+    expect(systemText).toContain("FIND_THE_FIVE_MOST_RECENT_BUCKETS");
+    expect(systemText).toContain("ORG_PLAYBOOK_NOTES");
+  });
+});
+
 describe("extractFromBody — fallback paths", () => {
   test("mode: fallback_to_oneshot + fallbackReason: max_rounds when tool-loop exhausts budget", async () => {
     const keepQueryingResponse = {
