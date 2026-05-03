@@ -22,6 +22,9 @@ import {
   listCatalog,
   getCatalogEntry,
   getOrganization,
+  getLatestReleases,
+  listSources,
+  listProducts,
   search,
 } from "../../workers/mcp/src/tools.js";
 
@@ -125,6 +128,15 @@ describe("list_catalog", () => {
     expect(text).toContain("**Anthropic Release Notes** _(source)_");
   });
 
+  it("surfaces org-scoped coordinates so agents can round-trip identifiers", async () => {
+    const text = resultText(await listCatalog(asD1(fixture.db), {}));
+    // Products should use org/slug form, not bare slug.
+    expect(text).toContain("vercel/nextjs");
+    expect(text).toContain("vercel/turborepo");
+    // Standalone source should also use org/slug.
+    expect(text).toContain("anthropic/anthropic-releases");
+  });
+
   it("scopes to one organization when organization is passed", async () => {
     const text = resultText(await listCatalog(asD1(fixture.db), { organization: "anthropic" }));
     expect(text).toContain("**Anthropic Release Notes** _(source)_");
@@ -158,8 +170,8 @@ describe("get_catalog_entry", () => {
       await getCatalogEntry(asD1(fixture.db), { identifier: "vercel/nextjs" }),
     );
     expect(text).toContain("**Product: Next.js**");
-    // Product detail lists its grouped sources.
-    expect(text).toContain("next-js");
+    // Product detail lists its grouped sources with org-scoped slugs.
+    expect(text).toContain("vercel/next-js");
   });
 
   it("resolves an org-scoped source coordinate to source detail", async () => {
@@ -168,6 +180,8 @@ describe("get_catalog_entry", () => {
     );
     expect(text).toContain("**Source: Anthropic Release Notes**");
     expect(text).toContain("Product: none");
+    // Source detail slug field must be org-scoped.
+    expect(text).toContain("anthropic/anthropic-releases");
   });
 
   it("resolves a prod_ id to product detail", async () => {
@@ -522,5 +536,112 @@ describe("search (unified)", () => {
     expect(out.counts.catalogHits).toBeGreaterThan(0);
     expect(out.counts.releaseHits).toBeGreaterThanOrEqual(0);
     expect(out.counts.chunkHits).toBe(0);
+  });
+
+  it("emits org-scoped coordinates in catalog section", async () => {
+    const text = resultText(
+      (await search(asD1(fixture.db), { query: "next", type: ["catalog"], mode: "lexical" }))
+        .result,
+    );
+    // Bare "nextjs" must not appear without an org prefix in the catalog lines.
+    expect(text).toContain("vercel/nextjs");
+  });
+});
+
+describe("list_sources (round-trippable slugs)", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  it("surfaces org-scoped slug coordinates instead of bare slugs", async () => {
+    const text = resultText(await listSources(asD1(fixture.db), {}));
+    expect(text).toContain("vercel/next-js");
+    expect(text).toContain("vercel/turborepo-src");
+    expect(text).toContain("anthropic/anthropic-releases");
+  });
+
+  it("still scopes correctly when filtered by org", async () => {
+    const text = resultText(await listSources(asD1(fixture.db), { organization: "vercel" }));
+    expect(text).toContain("vercel/next-js");
+    expect(text).not.toContain("anthropic");
+  });
+});
+
+describe("list_products (round-trippable slugs)", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  it("surfaces org-scoped slug coordinates instead of bare slugs", async () => {
+    const text = resultText(await listProducts(asD1(fixture.db), {}));
+    expect(text).toContain("vercel/nextjs");
+    expect(text).toContain("vercel/turborepo");
+  });
+});
+
+describe("get_organization (round-trippable entity coordinates)", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  it("emits org-scoped product coordinates in org detail", async () => {
+    const text = resultText(await getOrganization(asD1(fixture.db), { identifier: "vercel" }));
+    expect(text).toContain("vercel/nextjs");
+    expect(text).toContain("vercel/turborepo");
+  });
+
+  it("emits org-scoped source coordinates in org detail", async () => {
+    const text = resultText(await getOrganization(asD1(fixture.db), { identifier: "vercel" }));
+    expect(text).toContain("vercel/next-js");
+    expect(text).toContain("vercel/turborepo-src");
+  });
+});
+
+describe("get_latest_releases (round-trippable source coordinates)", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  it("includes org-scoped source coordinate in release output", async () => {
+    const text = resultText(await getLatestReleases(asD1(fixture.db), {}));
+    // Both sources appear in the seed data; both must show up with an org prefix.
+    expect(text).toContain("vercel/next-js");
+    expect(text).toContain("anthropic/anthropic-releases");
   });
 });
