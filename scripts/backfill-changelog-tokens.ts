@@ -137,8 +137,10 @@ function parseArgs(argv: string[]): ParsedArgs {
 // ── API helpers ────────────────────────────────────────────────────────────
 
 interface OversizedRowResponse {
+  sourceId: string;
   sourceSlug: string;
   sourceName: string;
+  orgSlug: string;
   path: string;
   filename: string;
   bytes: number;
@@ -187,9 +189,10 @@ async function run(args: ParsedArgs): Promise<BackfillRow[]> {
   for (const row of filtered) {
     // Fetch the full file content via the existing changelog GET. Passing
     // no range params returns the full body verbatim.
+    const sourcePath = `/v1/orgs/${encodeURIComponent(row.orgSlug)}/sources/${encodeURIComponent(row.sourceSlug)}`;
     // oxlint-disable-next-line no-await-in-loop -- sequential: fetch then conditionally patch each row; API rate limit applies
     const cl = await apiGet<{ content: string; path: string; bytes: number }>(
-      `/v1/sources/${encodeURIComponent(row.sourceSlug)}/changelog?path=${encodeURIComponent(row.path)}`,
+      `${sourcePath}/changelog?path=${encodeURIComponent(row.path)}`,
     );
     const newTokens = exactTokensBySection(cl.content);
     const oldTokens = row.tokens;
@@ -210,7 +213,7 @@ async function run(args: ParsedArgs): Promise<BackfillRow[]> {
     );
     if (args.apply) {
       // oxlint-disable-next-line no-await-in-loop -- sequential: must patch after fetch completes; API rate limit applies
-      await apiPatch(`/v1/sources/${encodeURIComponent(row.sourceSlug)}/changelog/tokens`, {
+      await apiPatch(`${sourcePath}/changelog/tokens`, {
         tokens: newTokens,
         path: row.path,
       });

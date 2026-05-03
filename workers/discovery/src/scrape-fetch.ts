@@ -57,7 +57,24 @@ export interface ScrapeEnv {
 
 // ── API helpers ────────────────────────────────────────────────────
 
+/**
+ * Build an org-scoped sub-resource path for a source. Mirrors the helper in
+ * `extract-deps-worker.ts` — passing `source.orgId` + `source.id` (both
+ * `org_…`/`src_…` IDs) avoids the bare-slug ambiguity that #690 introduced
+ * and unblocks the planned 400-on-bare-slug rejection (#698).
+ */
+function sourceSubpath(source: Source, sub?: string): string {
+  const tail = sub ? `/${sub}` : "";
+  return `/v1/orgs/${encodeURIComponent(source.orgId)}/sources/${encodeURIComponent(source.id)}${tail}`;
+}
+
 async function fetchSourceInfo(env: ScrapeEnv, identifier: string): Promise<Source | null> {
+  // Discovery boundary: callers (cron triggers, manual scrape requests) hand
+  // us either a `src_…` ID or a bare slug. IDs are unambiguous against the
+  // bare path; slugs continue to work today via the same path. Migrating
+  // this off the bare path requires reshaping the upstream input contract
+  // (`sourceIdentifiers: string[]`) to carry an org segment, which is out of
+  // scope for the per-PR caller cleanup. Tracked under #698.
   const res = await env.apiFetcher.fetch(
     `https://api/v1/sources/${encodeURIComponent(identifier)}`,
     { headers: { Authorization: `Bearer ${env.apiKey}` } },
@@ -66,9 +83,9 @@ async function fetchSourceInfo(env: ScrapeEnv, identifier: string): Promise<Sour
   return res.json() as Promise<Source>;
 }
 
-async function fetchKnownReleases(env: ScrapeEnv, sourceSlug: string): Promise<KnownRelease[]> {
+async function fetchKnownReleases(env: ScrapeEnv, source: Source): Promise<KnownRelease[]> {
   const res = await env.apiFetcher.fetch(
-    `https://api/v1/sources/${encodeURIComponent(sourceSlug)}/known-releases?limit=10`,
+    `https://api${sourceSubpath(source, "known-releases")}?limit=10`,
     { headers: { Authorization: `Bearer ${env.apiKey}` } },
   );
   if (!res.ok) return [];
@@ -77,31 +94,28 @@ async function fetchKnownReleases(env: ScrapeEnv, sourceSlug: string): Promise<K
 
 async function insertReleases(
   env: ScrapeEnv,
-  sourceSlug: string,
+  source: Source,
   releases: MappedEntry[],
 ): Promise<number> {
   if (releases.length === 0) return 0;
 
-  const res = await env.apiFetcher.fetch(
-    `https://api/v1/sources/${encodeURIComponent(sourceSlug)}/releases/batch`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${env.apiKey}`,
-      },
-      body: JSON.stringify({
-        releases: releases.map((r) => ({
-          title: r.title,
-          content: r.content,
-          url: r.url ?? null,
-          version: r.version ?? null,
-          publishedAt: r.publishedAt?.toISOString() ?? null,
-          media: JSON.stringify(r.media ?? []),
-        })),
-      }),
+  const res = await env.apiFetcher.fetch(`https://api${sourceSubpath(source, "releases/batch")}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${env.apiKey}`,
     },
-  );
+    body: JSON.stringify({
+      releases: releases.map((r) => ({
+        title: r.title,
+        content: r.content,
+        url: r.url ?? null,
+        version: r.version ?? null,
+        publishedAt: r.publishedAt?.toISOString() ?? null,
+        media: JSON.stringify(r.media ?? []),
+      })),
+    }),
+  });
 
   if (!res.ok) {
     const body = await res.text().catch(() => "");
@@ -112,8 +126,8 @@ async function insertReleases(
   return result.inserted;
 }
 
-async function updateSourceAfterFetch(env: ScrapeEnv, sourceId: string): Promise<void> {
-  await env.apiFetcher.fetch(`https://api/v1/sources/${encodeURIComponent(sourceId)}`, {
+async function updateSourceAfterFetch(env: ScrapeEnv, source: Source): Promise<void> {
+  await env.apiFetcher.fetch(`https://api${sourceSubpath(source)}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -261,7 +275,7 @@ async function runScrapePath(
   deps: ReturnType<typeof buildWorkerExtractDeps>,
   start: number,
 ): Promise<string> {
-  const knownReleasesPromise = fetchKnownReleases(env, source.slug);
+  const knownReleasesPromise = fetchKnownReleases(env, source);
 
   let markdown: string | null = null;
   if (meta.markdownUrl) {
@@ -321,7 +335,7 @@ async function finalize(
 
   if (releases.length === 0) {
     await Promise.all([
-      updateSourceAfterFetch(env, source.id),
+      updateSourceAfterFetch(env, source),
       writeFetchLog(env, source.id, {
         releasesFound: 0,
         releasesInserted: 0,
@@ -338,10 +352,10 @@ async function finalize(
     });
   }
 
-  const inserted = await insertReleases(env, source.slug, releases);
+  const inserted = await insertReleases(env, source, releases);
   const finalDuration = Date.now() - start;
   await Promise.all([
-    updateSourceAfterFetch(env, source.id),
+    updateSourceAfterFetch(env, source),
     writeFetchLog(env, source.id, {
       releasesFound: releases.length,
       releasesInserted: inserted,

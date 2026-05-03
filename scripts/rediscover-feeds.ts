@@ -30,10 +30,15 @@ import {
 } from "../packages/adapters/src/feed.js";
 
 type SourceRow = {
+  id: string;
   slug: string;
   name: string;
   type: string;
   url: string;
+  // GET /v1/sources returns orgSlug (not orgId) — keep the field name in
+  // sync with the wire shape so patchSource builds a real URL rather than
+  // /v1/orgs/undefined/sources/...
+  orgSlug: string;
   metadata?: string | null;
 };
 
@@ -102,9 +107,23 @@ async function verifyFeed(
   }
 }
 
-async function patchSource(slug: string, patchedMetadata: Record<string, unknown>): Promise<void> {
+async function patchSource(
+  source: Pick<SourceRow, "id" | "slug" | "orgSlug">,
+  patchedMetadata: Record<string, unknown>,
+): Promise<void> {
   if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
-  const res = await fetch(`${API_URL}/v1/sources/${encodeURIComponent(slug)}`, {
+  // The schema enforces sources.orgId NOT NULL post-#690 Phase C, so
+  // orgSlug should always populate in GET /v1/sources. If it ever doesn't
+  // (stale staging API, mid-migration row, etc.), fail loudly with the
+  // offending source slug rather than building a URL like
+  // /v1/orgs/undefined/sources/... that returns a confusing 404.
+  if (!source.orgSlug) {
+    throw new Error(
+      `source ${source.slug} (${source.id}) is missing orgSlug — refusing to construct an org-scoped PATCH URL`,
+    );
+  }
+  const path = `/v1/orgs/${encodeURIComponent(source.orgSlug)}/sources/${encodeURIComponent(source.id)}`;
+  const res = await fetch(`${API_URL}${path}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -157,7 +176,7 @@ async function processOne(row: Candidate): Promise<Verdict> {
       noFeedFound: false,
     };
     try {
-      await patchSource(row.slug, patched);
+      await patchSource(row, patched);
     } catch (err) {
       return {
         ...verdict,
