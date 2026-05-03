@@ -739,9 +739,14 @@ sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/recent-releases", getRecent
 
 // ── Known releases for incremental parsing ──
 
+const KNOWN_RELEASES_MAX_LIMIT = 500;
 const getKnownReleasesHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const limit = parseInt(c.req.query("limit") ?? "10", 10);
+  const rawLimit = parseInt(c.req.query("limit") ?? "10", 10);
+  const limit = Math.min(
+    Math.max(Number.isFinite(rawLimit) ? rawLimit : 10, 1),
+    KNOWN_RELEASES_MAX_LIMIT,
+  );
 
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found" }, 404);
@@ -1222,10 +1227,12 @@ sourceRoutes.post("/sources", async (c) => {
     }
   }
 
-  // org_id is required. Guard here until the Phase C NOT NULL migration lands.
-  let orgId = body.orgId ?? null;
-  if (!orgId && body.orgSlug) {
-    const [org] = await db.select().from(organizations).where(orgWhere(body.orgSlug));
+  // org_id is required and must resolve to a real org. orgId wins over orgSlug
+  // when both are supplied. Guard here until the Phase C NOT NULL migration lands.
+  let orgId: string | null = null;
+  const orgRef = body.orgId ?? body.orgSlug;
+  if (orgRef) {
+    const [org] = await db.select().from(organizations).where(orgWhere(orgRef));
     orgId = org?.id ?? null;
   }
   if (!orgId) {

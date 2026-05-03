@@ -238,6 +238,27 @@ describe("POST /v1/sources — orgId guard", () => {
     const body = (await res.json()) as { error: string };
     expect(body.error).toBe("bad_request");
   });
+
+  it("400s when orgId is supplied but doesn't exist", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Bad Ref",
+          url: "https://bad-ref.test/changelog",
+          orgId: "org_does_not_exist",
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    expect(((await res.json()) as { error: string }).error).toBe("bad_request");
+  });
 });
 
 describe("GET /v1/orgs/:slug/catalog", () => {
