@@ -63,28 +63,21 @@ export function productWhere(identifier: string, opts?: { includeDeleted?: boole
 }
 
 /**
- * Resolve a source by `(orgSlug, sourceSlug)` for the org-scoped redirector
- * (#690 Phase B). Hidden (on-demand) sources are included; tombstoned rows are
- * excluded unless `opts.includeDeleted` is set.
+ * Resolve a source for the org-scoped redirector (#690 Phase B). Each segment
+ * accepts an ID (`org_…` / `src_…`) or a slug — delegates to `orgWhere` and
+ * `sourceWhere` so the immutable-id and tombstone semantics stay in sync.
  */
 export async function findSourceForOrgSlug(
   db: ReturnType<typeof createDb>,
-  orgSlug: string,
-  sourceSlug: string,
+  orgIdOrSlug: string,
+  sourceIdOrSlug: string,
   opts?: { includeDeleted?: boolean },
 ) {
-  const orgFilter = opts?.includeDeleted
-    ? eq(organizations.slug, orgSlug)
-    : and(eq(organizations.slug, orgSlug), isNull(organizations.deletedAt));
-  const srcFilter = opts?.includeDeleted
-    ? eq(sources.slug, sourceSlug)
-    : and(eq(sources.slug, sourceSlug), isNull(sources.deletedAt));
-
   const rows = await db
     .select({ id: sources.id })
     .from(sources)
     .innerJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(orgFilter, srcFilter))
+    .where(and(orgWhere(orgIdOrSlug, opts), sourceWhere(sourceIdOrSlug, opts)))
     .limit(1);
   return rows[0] ?? null;
 }
@@ -92,22 +85,15 @@ export async function findSourceForOrgSlug(
 /** Sibling of `findSourceForOrgSlug` for products. */
 export async function findProductForOrgSlug(
   db: ReturnType<typeof createDb>,
-  orgSlug: string,
-  productSlug: string,
+  orgIdOrSlug: string,
+  productIdOrSlug: string,
   opts?: { includeDeleted?: boolean },
 ) {
-  const orgFilter = opts?.includeDeleted
-    ? eq(organizations.slug, orgSlug)
-    : and(eq(organizations.slug, orgSlug), isNull(organizations.deletedAt));
-  const prodFilter = opts?.includeDeleted
-    ? eq(products.slug, productSlug)
-    : and(eq(products.slug, productSlug), isNull(products.deletedAt));
-
   const rows = await db
     .select({ id: products.id })
     .from(products)
     .innerJoin(organizations, eq(products.orgId, organizations.id))
-    .where(and(orgFilter, prodFilter))
+    .where(and(orgWhere(orgIdOrSlug, opts), productWhere(productIdOrSlug, opts)))
     .limit(1);
   return rows[0] ?? null;
 }

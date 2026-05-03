@@ -146,6 +146,17 @@ describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug", () => {
 
     expect(res.status).toBe(404);
   });
+
+  it("accepts ids (org_… / src_…) interchangeably with slugs", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/orgs/org_acme/sources/src_acme_cli"));
+
+    expect(res.status).toBe(307);
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/v1/sources/src_acme_cli");
+  });
 });
 
 describe("Org-scoped redirect — method preservation", () => {
