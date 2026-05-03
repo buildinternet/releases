@@ -138,6 +138,7 @@ export async function getSourcesWithStats(
 export type SourceReleaseRow = {
   id: string;
   version: string | null;
+  type: string | null;
   title: string;
   content_summary: string | null;
   content: string;
@@ -155,7 +156,7 @@ export async function getSourceReleasesPaginated(
 ): Promise<SourceReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
   return db.all<SourceReleaseRow>(sql`
-    SELECT id, version, title, content_summary, content, published_at, url, media
+    SELECT id, version, type, title, content_summary, content, published_at, url, media
     FROM ${sql.raw(releasesTable)}
     WHERE source_id = ${sourceId}
       AND (suppressed IS NULL OR suppressed = 0)

@@ -27,6 +27,8 @@ export interface RawSearchReleaseRow {
   /** JSON-encoded MediaItem[] or null. */
   media: string | null;
   publishedAt: string | null;
+  /** Release type — "feature" (default) or "rollup". */
+  type: string | null;
 }
 
 export async function searchOrgs(
@@ -92,7 +94,8 @@ export async function searchReleasesFts(
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
            r.content as content,
            r.media as media,
-           r.published_at as publishedAt
+           r.published_at as publishedAt,
+           r.type as type
     FROM releases_fts
     JOIN releases r ON r.rowid = releases_fts.rowid
     JOIN sources_active s ON s.id = r.source_id
@@ -136,7 +139,8 @@ export async function searchReleasesFromMatchedEntities(
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
            r.content as content,
            r.media as media,
-           r.published_at as publishedAt
+           r.published_at as publishedAt,
+           r.type as type
     FROM ${opts.includeCoverage ? sql`releases` : sql`releases_visible`} r
     JOIN sources_active s ON s.id = r.source_id
     LEFT JOIN organizations_active o ON o.id = s.org_id

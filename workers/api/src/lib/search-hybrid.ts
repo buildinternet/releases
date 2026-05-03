@@ -93,6 +93,8 @@ export interface HybridReleaseHit {
     source: { id: string; slug: string; name: string; type: string };
     orgSlug: string | null;
     orgName: string | null;
+    /** Release type — "feature" (default) or "rollup". */
+    type: string | null;
   };
 }
 
@@ -168,6 +170,8 @@ interface RawReleaseRow {
   sourceType: string;
   orgSlug: string | null;
   orgName: string | null;
+  /** Release type — "feature" (default) or "rollup". */
+  type: string | null;
 }
 
 async function hydrateReleases(
@@ -186,6 +190,7 @@ async function hydrateReleases(
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
            r.content as content,
            r.media as media,
+           r.type as type,
            s.id as sourceId,
            s.slug as sourceSlug,
            s.name as sourceName,
@@ -478,6 +483,7 @@ async function buildReleaseHits(
         },
         orgSlug: row.orgSlug,
         orgName: row.orgName,
+        type: row.type,
       },
     });
   }

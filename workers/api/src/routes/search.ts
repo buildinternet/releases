@@ -83,6 +83,7 @@ function hydrateReleaseHit(
     content: hydrateMediaUrls(row.content, mediaOrigin),
     media,
     publishedAt: row.publishedAt,
+    ...(row.type ? { type: row.type as "feature" | "rollup" } : {}),
     ...(score !== undefined ? { score } : {}),
   };
 }
@@ -262,6 +263,7 @@ searchRoutes.get("/search", async (c) => {
           content: h.release.content,
           media: h.release.media,
           publishedAt: h.release.publishedAt,
+          type: h.release.type,
         },
         mediaOrigin,
         // Emit the fusion score so clients can re-interleave release and
