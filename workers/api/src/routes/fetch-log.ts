@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources } from "@buildinternet/releases-core/schema";
-import { sourceWhere } from "../utils.js";
+import { sourceMatchByIdOrSlug } from "../utils.js";
 import type { Env } from "../index.js";
 
 export const fetchLogRoutes = new Hono<Env>();
@@ -13,7 +13,7 @@ fetchLogRoutes.get("/admin/logs/fetch", async (c) => {
   const limit = parseInt(c.req.query("limit") ?? "20", 10);
 
   if (sourceSlug) {
-    const [src] = await db.select().from(sources).where(sourceWhere(sourceSlug));
+    const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(sourceSlug));
     if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
     const logs = await db

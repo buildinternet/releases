@@ -18,7 +18,6 @@ import { isValidCategory } from "@buildinternet/releases-core/categories";
 import {
   isConflictError,
   getOrCreateTagsD1,
-  productWhere,
   orgWhere,
   replaceAliases,
   resolveProductFromContext,
@@ -300,7 +299,6 @@ productRoutes.post("/products", async (c) => {
 // Update product
 productRoutes.patch("/products/:slug", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
   const body = await c.req.json<{
     name?: string;
     url?: string | null;
@@ -310,7 +308,7 @@ productRoutes.patch("/products/:slug", async (c) => {
     aliases?: string[];
   }>();
 
-  const [product] = await db.select().from(products).where(productWhere(slug));
+  const product = await resolveProductFromContext(c, db);
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const updates: Record<string, string | null> = {};
@@ -377,8 +375,7 @@ productRoutes.patch("/products/:slug", async (c) => {
 
 productRoutes.get("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
-  const identifier = c.req.param("identifier");
-  const [product] = await db.select().from(products).where(productWhere(identifier));
+  const product = await resolveProductFromContext(c, db);
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const rows = await db
@@ -392,9 +389,8 @@ productRoutes.get("/products/:identifier/tags", async (c) => {
 
 productRoutes.put("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
-  const identifier = c.req.param("identifier");
   const body = await c.req.json<{ tags: string[] }>();
-  const [product] = await db.select().from(products).where(productWhere(identifier));
+  const product = await resolveProductFromContext(c, db);
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   if (body.tags.length > 0) {
@@ -410,9 +406,8 @@ productRoutes.put("/products/:identifier/tags", async (c) => {
 
 productRoutes.delete("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
-  const identifier = c.req.param("identifier");
   const body = await c.req.json<{ tags: string[] }>();
-  const [product] = await db.select().from(products).where(productWhere(identifier));
+  const product = await resolveProductFromContext(c, db);
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   for (const tagName of body.tags) {
@@ -432,16 +427,13 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
 // Delete product
 productRoutes.delete("/products/:identifier", async (c) => {
   const db = createDb(c.env.DB);
-  const identifier = c.req.param("identifier");
   const hard = c.req.query("hard") === "true";
 
-  // Slug-based lookups always resolve to the active row: tombstones rename
-  // the slug ("--<id>" suffix). To purge a tombstone, callers use prod_ ID.
-  const includeDeleted = hard && identifier.startsWith("prod_");
-  const [product] = await db
-    .select()
-    .from(products)
-    .where(productWhere(identifier, { includeDeleted }));
+  // includeDeleted lets hard-delete reach tombstones for purge. Tombstones
+  // rename their slug to "<slug>--<id>" so a normal slug-path lookup wouldn't
+  // collide with a live row; passing a `prod_` ID is the canonical way to
+  // reach a tombstone.
+  const product = await resolveProductFromContext(c, db, { includeDeleted: hard });
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   if (hard) {

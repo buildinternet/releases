@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { releaseSummaries, sources } from "@buildinternet/releases-core/schema";
-import { sourceWhere } from "../utils.js";
+import { sourceMatchByIdOrSlug } from "../utils.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
@@ -14,7 +14,10 @@ app.get("/sources/:slug/summaries", async (c) => {
   const year = c.req.query("year");
   const month = c.req.query("month");
 
-  const [source] = await db.select({ id: sources.id }).from(sources).where(sourceWhere(slug));
+  const [source] = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(sourceMatchByIdOrSlug(slug));
   if (!source) return c.json({ error: "Source not found" }, 404);
 
   const conditions = [eq(releaseSummaries.sourceId, source.id)];
@@ -47,7 +50,10 @@ app.post("/sources/:slug/summaries", async (c) => {
     return c.json({ error: "Missing required fields" }, 400);
   }
 
-  const [source] = await db.select({ id: sources.id }).from(sources).where(sourceWhere(slug));
+  const [source] = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .where(sourceMatchByIdOrSlug(slug));
   if (!source) return c.json({ error: "Source not found" }, 404);
 
   await db

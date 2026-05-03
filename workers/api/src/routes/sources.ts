@@ -39,9 +39,8 @@ import {
 import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
 import {
   getStatusHub,
-  sourceWhere,
   orgWhere,
-  productWhere,
+  isProductId,
   resolveSourceFromContext,
   isConflictError,
   computeAvgPerWeek,
@@ -129,17 +128,48 @@ sourceRoutes.get("/sources", async (c) => {
   }
 
   // Resolve org by slug
+  let resolvedOrgId: string | undefined;
   if (orgSlug) {
     const [org] = await db.select().from(organizations).where(orgWhere(orgSlug));
     if (!org) return c.json([]);
+    resolvedOrgId = org.id;
     conditions.push(eq(sources.orgId, org.id));
   }
 
+  // `productSlug` query param accepts a `prod_` ID (matched globally) or a
+  // slug. Slugs are unique per-org (idx_products_org_slug), so when orgSlug
+  // is present we resolve to a single product in that org. Without orgSlug,
+  // we fan out to every product sharing the slug and filter sources to that
+  // ID set — picking the first row would silently mask cross-org duplicates
+  // if any ever land. There are none on prod today; this is the safe shape.
   const productSlug = c.req.query("productSlug");
   if (productSlug) {
-    const [product] = await db.select().from(products).where(productWhere(productSlug));
-    if (!product) return c.json([]);
-    conditions.push(eq(sources.productId, product.id));
+    if (isProductId(productSlug)) {
+      const [product] = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.id, productSlug), isNull(products.deletedAt)))
+        .limit(1);
+      if (!product) return c.json([]);
+      conditions.push(eq(sources.productId, product.id));
+    } else {
+      const slugMatch = resolvedOrgId
+        ? and(eq(products.slug, productSlug), eq(products.orgId, resolvedOrgId))
+        : eq(products.slug, productSlug);
+      const matches = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(slugMatch, isNull(products.deletedAt)));
+      if (matches.length === 0) return c.json([]);
+      conditions.push(
+        matches.length === 1
+          ? eq(sources.productId, matches[0]!.id)
+          : inArray(
+              sources.productId,
+              matches.map((m) => m.id),
+            ),
+      );
+    }
   }
 
   if (hasFeed) {
@@ -301,9 +331,8 @@ sourceRoutes.get("/sources/changes", async (c) => {
 
 sourceRoutes.post("/sources/:slug/fetch", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
-  if (!src) return c.json({ error: "not_found" }, 404);
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   let responsePayload: Record<string, unknown>;
 
@@ -381,9 +410,8 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
 
 sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
-  if (!src) return c.json({ error: "not_found" }, 404);
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const body = await c.req.json<{
     releases: Array<{
@@ -572,7 +600,7 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
       component: "sources-batch",
       event: "insert-failed",
       sourceId: src.id,
-      slug,
+      slug: src.slug,
       err: err instanceof Error ? err : String(err),
     });
     const message = (err as Error).message ?? "Failed to insert releases";
@@ -584,10 +612,9 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
 
 sourceRoutes.delete("/sources/:slug/releases", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
   const hard = c.req.query("hard") === "true";
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
-  if (!src) return c.json({ error: "not_found" }, 404);
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   if (!hard) {
     // Soft path: flip rows to suppressed=1 with reason "force_refetch". Re-fetch
@@ -632,12 +659,11 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
 });
 
 sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
-  const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
   const peek = c.req.query("peek") === "true";
   const body = await c.req.json<{ contentHash: string }>();
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const unchanged = src.lastContentHash === body.contentHash;
@@ -685,7 +711,6 @@ export function mergeSourceMetadata(
 // racing the cron poll (which also rewrites metadata via direct D1 access).
 // Keys whose value is `null` are deleted from the stored metadata.
 sourceRoutes.patch("/sources/:slug/metadata", async (c) => {
-  const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
 
   let patch: Record<string, unknown>;
@@ -698,7 +723,7 @@ sourceRoutes.patch("/sources/:slug/metadata", async (c) => {
     return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
   }
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const merged = mergeSourceMetadata(src.metadata, patch);
@@ -718,7 +743,7 @@ const getRecentReleasesHandler = async (c: import("hono").Context<Env>) => {
   if (!cutoff) return c.json({ error: "cutoff query param required" }, 400);
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found" }, 404);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const rows = await db
     .select()
@@ -749,7 +774,7 @@ const getKnownReleasesHandler = async (c: import("hono").Context<Env>) => {
   );
 
   const src = await resolveSourceFromContext(c, db);
-  if (!src) return c.json({ error: "not_found" }, 404);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const rows = await db
     .select({
@@ -770,11 +795,14 @@ sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/known-releases", getKnownRe
 // ── Sessions involving a specific source slug ──
 
 sourceRoutes.get("/sources/:slug/sessions", async (c) => {
-  const slug = c.req.param("slug");
+  const db = createDb(c.env.DB);
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
   const hub = getStatusHub(c.env);
   const res = await hub.fetch(new Request("https://do/active-sources"));
   const data = (await res.json()) as { slugs: string[]; sessionMap: Record<string, string> };
-  const sessionId = data.sessionMap[slug];
+  const sessionId = data.sessionMap[src.slug];
   if (!sessionId) return c.json({ sessions: [] });
 
   const sessionRes = await hub.fetch(new Request(`https://do/sessions/${sessionId}`));
@@ -959,7 +987,6 @@ sourceRoutes.get("/sources/changelog-files/oversized", authMiddleware, async (c)
  * `selectChangelogFile` when omitted).
  */
 sourceRoutes.patch("/sources/:slug/changelog/tokens", async (c) => {
-  const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ tokens: number; path?: string }>();
   if (!Number.isFinite(body.tokens) || body.tokens < 0) {
@@ -969,7 +996,7 @@ sourceRoutes.patch("/sources/:slug/changelog/tokens", async (c) => {
     );
   }
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const allRows = await db
@@ -1325,10 +1352,9 @@ sourceRoutes.post("/sources", async (c) => {
 
 sourceRoutes.patch("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
   const body = await c.req.json<SourcePatchInput>();
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const UPDATABLE_FIELDS = [
@@ -1418,13 +1444,13 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
 
 sourceRoutes.delete("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
   const hard = c.req.query("hard") === "true";
 
-  // Slug-based lookups always resolve to the active row: tombstones rename
-  // the slug ("--<id>" suffix). To purge a tombstone, callers use src_ ID.
-  const includeDeleted = hard && slug.startsWith("src_");
-  const [src] = await db.select().from(sources).where(sourceWhere(slug, { includeDeleted }));
+  // includeDeleted lets hard-delete reach tombstones for purge. Tombstones
+  // rename their slug to "<slug>--<id>" so a normal slug-path lookup wouldn't
+  // collide with a live row; passing a `src_` ID is the canonical way to
+  // reach a tombstone.
+  const src = await resolveSourceFromContext(c, db, { includeDeleted: hard });
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const orgId = src.orgId;
@@ -1450,9 +1476,8 @@ sourceRoutes.delete("/sources/:slug", async (c) => {
 // Bulk release insert for data seeding
 sourceRoutes.post("/sources/:slug/releases", async (c) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const body = await c.req.json<{
