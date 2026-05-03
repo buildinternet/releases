@@ -108,10 +108,20 @@ async function verifyFeed(
 }
 
 async function patchSource(
-  source: Pick<SourceRow, "id" | "orgSlug">,
+  source: Pick<SourceRow, "id" | "slug" | "orgSlug">,
   patchedMetadata: Record<string, unknown>,
 ): Promise<void> {
   if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
+  // The schema enforces sources.orgId NOT NULL post-#690 Phase C, so
+  // orgSlug should always populate in GET /v1/sources. If it ever doesn't
+  // (stale staging API, mid-migration row, etc.), fail loudly with the
+  // offending source slug rather than building a URL like
+  // /v1/orgs/undefined/sources/... that returns a confusing 404.
+  if (!source.orgSlug) {
+    throw new Error(
+      `source ${source.slug} (${source.id}) is missing orgSlug — refusing to construct an org-scoped PATCH URL`,
+    );
+  }
   const path = `/v1/orgs/${encodeURIComponent(source.orgSlug)}/sources/${encodeURIComponent(source.id)}`;
   const res = await fetch(`${API_URL}${path}`, {
     method: "PATCH",
