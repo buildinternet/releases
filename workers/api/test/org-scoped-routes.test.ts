@@ -194,6 +194,86 @@ describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug/changelog", () => {
   });
 });
 
+// Regression coverage for #698 / #709: the discovery worker, scripts, and
+// promote-source action all hit these write endpoints over the org-scoped
+// path. If a future refactor accidentally drops one of the dual
+// registrations, the cron worker would 404 every fetch.
+describe("org-scoped write endpoints — dual-registered handlers", () => {
+  it("PATCH /v1/orgs/:orgSlug/sources/:sourceSlug reaches the handler", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/orgs/acme/sources/cli", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isHidden: true }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { isHidden: boolean };
+    expect(body.isHidden).toBe(true);
+  });
+
+  it("PATCH /v1/orgs/:orgSlug/sources/:sourceSlug/metadata reaches the handler", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/orgs/acme/sources/cli/metadata", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ feedUrl: "https://example.com/feed" }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { metadata: Record<string, unknown> };
+    expect(body.metadata.feedUrl).toBe("https://example.com/feed");
+  });
+
+  it("POST /v1/orgs/:orgSlug/sources/:sourceSlug/content-hash reaches the handler", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/orgs/acme/sources/cli/content-hash", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contentHash: "deadbeef" }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { unchanged: boolean };
+    // First write of a new hash → unchanged=false (was null on the seed row).
+    expect(body.unchanged).toBe(false);
+  });
+
+  it("POST /v1/orgs/:orgSlug/sources/:sourceSlug/releases/batch reaches the handler", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/orgs/acme/sources/cli/releases/batch", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ releases: [] }),
+      }),
+    );
+
+    // Empty array is accepted; the response shape carries `inserted: 0`.
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { inserted: number };
+    expect(body.inserted).toBe(0);
+  });
+});
+
 describe("GET /v1/orgs/:slug/catalog — input validation", () => {
   it("400s on unknown kind", async () => {
     const db = mkDb();

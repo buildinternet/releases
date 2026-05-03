@@ -408,7 +408,7 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
 
 // ── Batch release insert for fetch command ──
 
-sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
+const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
@@ -606,7 +606,9 @@ sourceRoutes.post("/sources/:slug/releases/batch", async (c) => {
     const message = (err as Error).message ?? "Failed to insert releases";
     return c.json({ error: "insert_failed", message }, 500);
   }
-});
+};
+sourceRoutes.post("/sources/:slug/releases/batch", postReleasesBatchHandler);
+sourceRoutes.post("/orgs/:orgSlug/sources/:sourceSlug/releases/batch", postReleasesBatchHandler);
 
 // ── Delete all releases for a source (for --force re-fetch) ──
 
@@ -658,7 +660,7 @@ sourceRoutes.delete("/sources/:slug/releases", async (c) => {
   return c.json({ deleted: deleted.length, hard: true });
 });
 
-sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
+const postContentHashHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const peek = c.req.query("peek") === "true";
   const body = await c.req.json<{ contentHash: string }>();
@@ -676,7 +678,9 @@ sourceRoutes.post("/sources/:slug/content-hash", async (c) => {
       .where(eq(sources.id, src.id));
   }
   return c.json({ unchanged: false });
-});
+};
+sourceRoutes.post("/sources/:slug/content-hash", postContentHashHandler);
+sourceRoutes.post("/orgs/:orgSlug/sources/:sourceSlug/content-hash", postContentHashHandler);
 
 /**
  * Shallow-merge `patch` into `existing` (parsed from its stored JSON string).
@@ -710,7 +714,7 @@ export function mergeSourceMetadata(
 // adapter need to update fields like `fetchEtag`/`fetchLastModified` without
 // racing the cron poll (which also rewrites metadata via direct D1 access).
 // Keys whose value is `null` are deleted from the stored metadata.
-sourceRoutes.patch("/sources/:slug/metadata", async (c) => {
+const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
 
   let patch: Record<string, unknown>;
@@ -732,7 +736,9 @@ sourceRoutes.patch("/sources/:slug/metadata", async (c) => {
     await db.update(sources).set({ metadata: serialized }).where(eq(sources.id, src.id));
   }
   return c.json({ metadata: merged });
-});
+};
+sourceRoutes.patch("/sources/:slug/metadata", patchMetadataHandler);
+sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug/metadata", patchMetadataHandler);
 
 // ── Recent releases (for summary generation) ──
 
@@ -1364,7 +1370,7 @@ sourceRoutes.post("/sources", async (c) => {
   return c.json(source, 201);
 });
 
-sourceRoutes.patch("/sources/:slug", async (c) => {
+const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<SourcePatchInput>();
 
@@ -1454,7 +1460,9 @@ sourceRoutes.patch("/sources/:slug", async (c) => {
     c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, src.id));
   }
   return c.json(updated);
-});
+};
+sourceRoutes.patch("/sources/:slug", patchSourceHandler);
+sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug", patchSourceHandler);
 
 sourceRoutes.delete("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);

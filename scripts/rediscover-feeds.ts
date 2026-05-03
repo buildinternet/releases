@@ -35,7 +35,10 @@ type SourceRow = {
   name: string;
   type: string;
   url: string;
-  orgId: string;
+  // GET /v1/sources returns orgSlug (not orgId) — keep the field name in
+  // sync with the wire shape so patchSource builds a real URL rather than
+  // /v1/orgs/undefined/sources/...
+  orgSlug: string;
   metadata?: string | null;
 };
 
@@ -105,11 +108,11 @@ async function verifyFeed(
 }
 
 async function patchSource(
-  source: Pick<SourceRow, "id" | "orgId">,
+  source: Pick<SourceRow, "id" | "orgSlug">,
   patchedMetadata: Record<string, unknown>,
 ): Promise<void> {
   if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
-  const path = `/v1/orgs/${encodeURIComponent(source.orgId)}/sources/${encodeURIComponent(source.id)}`;
+  const path = `/v1/orgs/${encodeURIComponent(source.orgSlug)}/sources/${encodeURIComponent(source.id)}`;
   const res = await fetch(`${API_URL}${path}`, {
     method: "PATCH",
     headers: {
