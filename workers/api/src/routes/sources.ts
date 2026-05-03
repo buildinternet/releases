@@ -962,10 +962,14 @@ sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/changelog", getSourceChange
 sourceRoutes.get("/sources/changelog-files/oversized", authMiddleware, async (c) => {
   const db = createDb(c.env.DB);
   const minBytes = parseInt(c.req.query("minBytes") ?? String(256 * 1024), 10);
+  // sourceId + orgSlug travel alongside the slug so the backfill script can
+  // PATCH via the org-scoped path (#698) without an extra resolution hop.
   const rows = await db
     .select({
+      sourceId: sources.id,
       sourceSlug: sources.slug,
       sourceName: sources.name,
+      orgSlug: organizations.slug,
       path: sourceChangelogFiles.path,
       filename: sourceChangelogFiles.filename,
       bytes: sourceChangelogFiles.bytes,
@@ -974,8 +978,9 @@ sourceRoutes.get("/sources/changelog-files/oversized", authMiddleware, async (c)
     })
     .from(sourceChangelogFiles)
     .innerJoin(sources, eq(sources.id, sourceChangelogFiles.sourceId))
+    .innerJoin(organizations, eq(organizations.id, sources.orgId))
     .where(sql`length(${sourceChangelogFiles.content}) > ${minBytes}`)
-    .orderBy(sources.slug, sourceChangelogFiles.path);
+    .orderBy(organizations.slug, sources.slug, sourceChangelogFiles.path);
   return c.json(rows);
 });
 
@@ -985,8 +990,12 @@ sourceRoutes.get("/sources/changelog-files/oversized", authMiddleware, async (c)
  * chars/4 estimate on rows that exceed the live-encode cap. Targets the
  * file identified by `path` (defaults to the row selected by
  * `selectChangelogFile` when omitted).
+ *
+ * Registered at both the legacy `/sources/:slug` form and the org-scoped
+ * form — `resolveSourceFromContext` picks the right resolver based on
+ * which params Hono matched.
  */
-sourceRoutes.patch("/sources/:slug/changelog/tokens", async (c) => {
+const patchChangelogTokensHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{ tokens: number; path?: string }>();
   if (!Number.isFinite(body.tokens) || body.tokens < 0) {
@@ -1021,7 +1030,12 @@ sourceRoutes.patch("/sources/:slug/changelog/tokens", async (c) => {
     .set({ tokens: newTokens })
     .where(eq(sourceChangelogFiles.id, selected.id));
   return c.json({ path: selected.path, oldTokens, tokens: newTokens });
-});
+};
+sourceRoutes.patch("/sources/:slug/changelog/tokens", patchChangelogTokensHandler);
+sourceRoutes.patch(
+  "/orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
+  patchChangelogTokensHandler,
+);
 
 // Registered at both `/sources/:slug` (id-or-slug, id preferred) and
 // `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug).

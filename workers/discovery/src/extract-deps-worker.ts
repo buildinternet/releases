@@ -27,6 +27,18 @@ export interface WorkerDepsEnv {
 /** Default model for agent-style extraction in workers. Sonnet-class. */
 const DEFAULT_AGENT_MODEL = "claude-sonnet-4-6";
 
+/**
+ * Build an org-scoped sub-resource path for a source. We pass `source.id`
+ * (a `src_…` ID) as the source segment and `source.orgId` (an `org_…` ID)
+ * as the org segment — both are unambiguous IDs and the API resolves them
+ * via `findSourceForOrgSlug` (id-or-slug). Using the org-scoped form
+ * eliminates the bare-slug ambiguity that #690 introduced and unblocks the
+ * planned 400-on-bare-slug rejection (#698).
+ */
+function sourceSubpath(source: Source, sub: string): string {
+  return `/v1/orgs/${encodeURIComponent(source.orgId)}/sources/${encodeURIComponent(source.id)}/${sub}`;
+}
+
 const workerLogger = {
   info: (msg: string) =>
     logEvent("info", { component: "extract-deps-worker", event: "extract-info", message: msg }),
@@ -50,7 +62,7 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
   return {
     async peekContentHash(source: Source, hash: string): Promise<boolean> {
       const res = await env.apiFetcher.fetch(
-        `https://api/v1/sources/${encodeURIComponent(source.slug)}/content-hash?peek=true`,
+        `https://api${sourceSubpath(source, "content-hash")}?peek=true`,
         {
           method: "POST",
           headers: jsonHeaders(),
@@ -63,25 +75,19 @@ function buildWorkerRepo(env: WorkerDepsEnv): ExtractRepo {
     },
 
     async commitContentHash(source: Source, hash: string): Promise<void> {
-      await env.apiFetcher.fetch(
-        `https://api/v1/sources/${encodeURIComponent(source.slug)}/content-hash`,
-        {
-          method: "POST",
-          headers: jsonHeaders(),
-          body: JSON.stringify({ contentHash: hash }),
-        },
-      );
+      await env.apiFetcher.fetch(`https://api${sourceSubpath(source, "content-hash")}`, {
+        method: "POST",
+        headers: jsonHeaders(),
+        body: JSON.stringify({ contentHash: hash }),
+      });
     },
 
     async updateSourceMeta(source: Source, patch: Record<string, unknown>): Promise<void> {
-      await env.apiFetcher.fetch(
-        `https://api/v1/sources/${encodeURIComponent(source.slug)}/metadata`,
-        {
-          method: "PATCH",
-          headers: jsonHeaders(),
-          body: JSON.stringify(patch),
-        },
-      );
+      await env.apiFetcher.fetch(`https://api${sourceSubpath(source, "metadata")}`, {
+        method: "PATCH",
+        headers: jsonHeaders(),
+        body: JSON.stringify(patch),
+      });
     },
 
     async getOrgPlaybook(orgId: string | null): Promise<string | null> {

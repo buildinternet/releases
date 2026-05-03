@@ -30,10 +30,12 @@ import {
 } from "../packages/adapters/src/feed.js";
 
 type SourceRow = {
+  id: string;
   slug: string;
   name: string;
   type: string;
   url: string;
+  orgId: string;
   metadata?: string | null;
 };
 
@@ -102,9 +104,13 @@ async function verifyFeed(
   }
 }
 
-async function patchSource(slug: string, patchedMetadata: Record<string, unknown>): Promise<void> {
+async function patchSource(
+  source: Pick<SourceRow, "id" | "orgId">,
+  patchedMetadata: Record<string, unknown>,
+): Promise<void> {
   if (!API_KEY) throw new Error("RELEASED_API_KEY required to --apply");
-  const res = await fetch(`${API_URL}/v1/sources/${encodeURIComponent(slug)}`, {
+  const path = `/v1/orgs/${encodeURIComponent(source.orgId)}/sources/${encodeURIComponent(source.id)}`;
+  const res = await fetch(`${API_URL}${path}`, {
     method: "PATCH",
     headers: {
       "Content-Type": "application/json",
@@ -157,7 +163,7 @@ async function processOne(row: Candidate): Promise<Verdict> {
       noFeedFound: false,
     };
     try {
-      await patchSource(row.slug, patched);
+      await patchSource(row, patched);
     } catch (err) {
       return {
         ...verdict,

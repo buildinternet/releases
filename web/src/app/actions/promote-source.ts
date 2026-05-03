@@ -17,7 +17,8 @@ export async function promoteSourceAction(input: {
 
   let res: Response;
   try {
-    res = await fetch(`${apiUrl}/v1/sources/${encodeURIComponent(input.sourceSlug)}`, {
+    const path = `/v1/orgs/${encodeURIComponent(input.orgSlug)}/sources/${encodeURIComponent(input.sourceSlug)}`;
+    res = await fetch(`${apiUrl}${path}`, {
       method: "PATCH",
       headers: webApiHeaders({
         "Content-Type": "application/json",

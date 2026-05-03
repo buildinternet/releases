@@ -119,27 +119,46 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "get_catalog_entry",
         title: "Get catalog entry",
         description:
-          "Fetch a catalog entry by slug — accepts either a product slug or a source slug. Returns recent releases alongside entry detail. Use after `search` or `list_organizations` to drill into a specific product or source.",
+          "Fetch a catalog entry by org-scoped identifier — accepts either a `<orgSlug>/<sourceSlug>` coordinate or a `src_…` ID. Returns recent releases alongside entry detail. Use after `search` or `list_organizations` to drill into a specific source — both surface the org slug and source slug you'll need here.",
         inputSchema: {
           type: "object",
           properties: {
-            slug: { type: "string", description: "Catalog entry slug (product or source)." },
+            identifier: {
+              type: "string",
+              description: "Org-scoped identifier: `<orgSlug>/<sourceSlug>` or `src_<id>`.",
+            },
             page: { type: "integer", minimum: 1, default: 1 },
             pageSize: { type: "integer", minimum: 1, maximum: 100, default: 20 },
           },
-          required: ["slug"],
+          required: ["identifier"],
         },
         annotations: { readOnlyHint: true },
         execute: async (input) => {
-          const slug = String(input.slug ?? "").trim();
+          const identifier = String(input.identifier ?? "").trim();
           const page = Number(input.page ?? 1);
           const pageSize = Number(input.pageSize ?? 20);
-          if (!slug) throw new Error("`slug` is required");
-          // The web API still routes on /v1/sources/:slug for now — catalog
-          // entries resolve as sources in the HTTP API until the catalog
-          // unification reaches the API surface too.
-          return apiFetch(
-            `/v1/sources/${encodeURIComponent(slug)}?page=${page}&pageSize=${pageSize}`,
+          if (!identifier) throw new Error("`identifier` is required");
+          const qs = `?page=${page}&pageSize=${pageSize}`;
+          // Typed source ID — the bare path keeps accepting these because IDs
+          // are globally unique. Slug-form bare paths are deprecated (#698).
+          if (identifier.startsWith("src_")) {
+            return apiFetch(`/v1/sources/${encodeURIComponent(identifier)}${qs}`);
+          }
+          // Coordinate form `org/slug` — split into org-scoped path segments.
+          const slash = identifier.indexOf("/");
+          if (slash > 0 && slash < identifier.length - 1) {
+            const orgSlug = identifier.slice(0, slash);
+            const sourceSlug = identifier.slice(slash + 1);
+            return apiFetch(
+              `/v1/orgs/${encodeURIComponent(orgSlug)}/sources/${encodeURIComponent(sourceSlug)}${qs}`,
+            );
+          }
+          // Bare slug — ambiguous since slugs are org-scoped (#690). Reject
+          // with a hint that mirrors the server-side MCP tool (#706) so the
+          // three surfaces present a consistent contract to LLM callers.
+          throw new Error(
+            `Bare slug "${identifier}" is ambiguous — source slugs are org-scoped. ` +
+              `Use \`<orgSlug>/<sourceSlug>\` (e.g. "vercel/nextjs") or a \`src_…\` ID.`,
           );
         },
       },
