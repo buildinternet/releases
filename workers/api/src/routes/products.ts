@@ -21,6 +21,7 @@ import {
   productWhere,
   orgWhere,
   replaceAliases,
+  resolveProductFromContext,
 } from "../utils.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
@@ -177,13 +178,12 @@ productRoutes.post("/products/adopt", async (c) => {
   });
 });
 
-// Get product by slug or ID
-productRoutes.get("/products/:identifier", async (c) => {
+// Get product by id (preferred) or slug. Registered at both the bare
+// `/products/:identifier` path and the org-scoped `/orgs/:orgSlug/products/:productSlug`.
+const getProductDetailHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const identifier = c.req.param("identifier");
 
-  const [product] = await db.select().from(products).where(productWhere(identifier));
-
+  const product = await resolveProductFromContext(c, db);
   if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
   const [productSources, tagRows, aliasRows] = await Promise.all([
@@ -217,7 +217,9 @@ productRoutes.get("/products/:identifier", async (c) => {
     tags: tagRows.map((t) => t.name),
     aliases: aliasRows.map((a) => a.domain),
   });
-});
+};
+productRoutes.get("/products/:identifier", getProductDetailHandler);
+productRoutes.get("/orgs/:orgSlug/products/:productSlug", getProductDetailHandler);
 
 // Create product
 productRoutes.post("/products", async (c) => {
