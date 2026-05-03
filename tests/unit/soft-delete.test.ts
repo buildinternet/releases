@@ -12,7 +12,11 @@ import { describe, it, expect, beforeEach, afterAll, beforeAll } from "bun:test"
 import { eq, isNull } from "drizzle-orm";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
 import { organizations, products, sources } from "@buildinternet/releases-core/schema";
-import { orgWhere, sourceWhere, productWhere } from "../../workers/api/src/utils.js";
+import {
+  orgWhere,
+  sourceMatchByIdOrSlug,
+  productMatchByIdOrSlug,
+} from "../../workers/api/src/utils.js";
 
 let tdb: TestDatabase;
 
@@ -142,7 +146,7 @@ describe("tombstone-and-rename keeps slug uniqueness intact", () => {
   });
 });
 
-describe("orgWhere/sourceWhere/productWhere filter tombstones by default", () => {
+describe("orgWhere/sourceMatchByIdOrSlug/productMatchByIdOrSlug filter tombstones by default", () => {
   it("orgWhere skips tombstoned orgs by their (post-rename) slug", async () => {
     const db = tdb.db;
     await db.insert(organizations).values({
@@ -163,7 +167,7 @@ describe("orgWhere/sourceWhere/productWhere filter tombstones by default", () =>
     expect(withDeleted).toHaveLength(1);
   });
 
-  it("sourceWhere skips tombstoned sources by id and post-rename slug", async () => {
+  it("sourceMatchByIdOrSlug skips tombstoned sources by id and post-rename slug", async () => {
     const db = tdb.db;
     await db.insert(organizations).values({
       id: "org_a",
@@ -180,17 +184,21 @@ describe("orgWhere/sourceWhere/productWhere filter tombstones by default", () =>
       url: "https://example.com/dead",
       deletedAt: new Date().toISOString(),
     });
-    expect(await db.select().from(sources).where(sourceWhere("src_dead"))).toHaveLength(0);
-    expect(await db.select().from(sources).where(sourceWhere("dead"))).toHaveLength(0);
-    expect(await db.select().from(sources).where(sourceWhere("dead--src_dead"))).toHaveLength(0);
+    expect(await db.select().from(sources).where(sourceMatchByIdOrSlug("src_dead"))).toHaveLength(
+      0,
+    );
+    expect(await db.select().from(sources).where(sourceMatchByIdOrSlug("dead"))).toHaveLength(0);
+    expect(
+      await db.select().from(sources).where(sourceMatchByIdOrSlug("dead--src_dead")),
+    ).toHaveLength(0);
     const includingDeleted = await db
       .select()
       .from(sources)
-      .where(sourceWhere("src_dead", { includeDeleted: true }));
+      .where(sourceMatchByIdOrSlug("src_dead", { includeDeleted: true }));
     expect(includingDeleted).toHaveLength(1);
   });
 
-  it("productWhere skips tombstoned products", async () => {
+  it("productMatchByIdOrSlug skips tombstoned products", async () => {
     const db = tdb.db;
     await db.insert(organizations).values({
       id: "org_a",
@@ -205,7 +213,9 @@ describe("orgWhere/sourceWhere/productWhere filter tombstones by default", () =>
       slug: "p--prod_dead",
       deletedAt: new Date().toISOString(),
     });
-    expect(await db.select().from(products).where(productWhere("p"))).toHaveLength(0);
-    expect(await db.select().from(products).where(productWhere("p--prod_dead"))).toHaveLength(0);
+    expect(await db.select().from(products).where(productMatchByIdOrSlug("p"))).toHaveLength(0);
+    expect(
+      await db.select().from(products).where(productMatchByIdOrSlug("p--prod_dead")),
+    ).toHaveLength(0);
   });
 });

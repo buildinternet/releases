@@ -4,7 +4,7 @@ import { createDb } from "../db.js";
 import { releases, organizations, sources } from "@buildinternet/releases-core/schema";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
-import { orgWhere, sourceWhere, parseBoolParam, parseReleaseMedia } from "../utils.js";
+import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseReleaseMedia } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
 import {
   buildLatestCacheKey,
@@ -71,7 +71,7 @@ releaseRoutes.get("/releases/latest", async (c) => {
     const src = await db
       .select({ id: sources.id })
       .from(sources)
-      .where(sourceWhere(sourceParam))
+      .where(sourceMatchByIdOrSlug(sourceParam))
       .get();
     if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
     sourceId = src.id;

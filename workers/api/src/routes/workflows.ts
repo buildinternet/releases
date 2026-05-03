@@ -16,7 +16,7 @@ import {
   usageLog,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
-import { orgWhere, sourceWhere } from "../utils.js";
+import { orgWhere, sourceMatchByIdOrSlug } from "../utils.js";
 import { APIError } from "@anthropic-ai/sdk";
 import {
   anthropicErrorHttpStatus,
@@ -256,7 +256,7 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
         discovery: sources.discovery,
       })
       .from(sources)
-      .where(sourceWhere(source));
+      .where(sourceMatchByIdOrSlug(source));
     if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
     // Gate: on-demand sources (and their parent orgs) are excluded from
@@ -462,11 +462,11 @@ workflowsRoutes.post("/workflows/compare", async (c) => {
     db
       .select({ id: sources.id, slug: sources.slug, name: sources.name })
       .from(sources)
-      .where(sourceWhere(a)),
+      .where(sourceMatchByIdOrSlug(a)),
     db
       .select({ id: sources.id, slug: sources.slug, name: sources.name })
       .from(sources)
-      .where(sourceWhere(b)),
+      .where(sourceMatchByIdOrSlug(b)),
   ]);
   if (!srcA) return c.json({ error: "not_found", message: `Source not found: ${a}` }, 404);
   if (!srcB) return c.json({ error: "not_found", message: `Source not found: ${b}` }, 404);

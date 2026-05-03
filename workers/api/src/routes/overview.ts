@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { eq, and, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { knowledgePages, organizations, products } from "@buildinternet/releases-core/schema";
-import { newKnowledgePageId, orgWhere, productWhere } from "../utils.js";
+import { newKnowledgePageId, orgWhere, productMatchByIdOrSlug } from "../utils.js";
 import type { Env } from "../index.js";
 
 const app = new Hono<Env>();
@@ -54,7 +54,7 @@ app.get("/products/:slug/overview", async (c) => {
   const [product] = await db
     .select({ id: products.id })
     .from(products)
-    .where(productWhere(c.req.param("slug")));
+    .where(productMatchByIdOrSlug(c.req.param("slug")));
   if (!product) return c.json(null);
 
   const [row] = await db

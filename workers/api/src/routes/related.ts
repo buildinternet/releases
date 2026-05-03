@@ -22,7 +22,7 @@ import {
   releases,
 } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
-import { sourceWhere, parseReleaseMedia } from "../utils.js";
+import { sourceMatchByIdOrSlug, parseReleaseMedia } from "../utils.js";
 import { logEvent } from "@releases/lib/log-event";
 import type { Env } from "../index.js";
 import type { D1Db } from "../db.js";
@@ -318,7 +318,7 @@ relatedRoutes.get("/related/sources", async (c) => {
       orgId: sources.orgId,
     })
     .from(sources)
-    .where(sourceWhere(anchorParam));
+    .where(sourceMatchByIdOrSlug(anchorParam));
   if (!anchor) {
     return c.json({ error: "not_found", message: "Source not found" }, 404);
   }

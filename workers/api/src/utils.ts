@@ -34,19 +34,22 @@ export function parseReleaseMedia(raw: string | null, mediaOrigin: string): Medi
 }
 
 /**
- * Resolve a source by ID (src_ prefix) or slug. Excludes soft-deleted rows by
- * default (issue #666). Pass `{ includeDeleted: true }` for admin paths that
- * need to see tombstones — the hard-purge variant of DELETE, restore flows,
- * etc.
+ * Resolve a source by ID (`src_` prefix). Id-only — the slug branch lives
+ * in `sourceMatchByIdOrSlug` (legacy fallback) or `findSourceForOrgSlug`
+ * (org-scoped). Excludes soft-deleted rows by default (#666); pass
+ * `{ includeDeleted: true }` for admin paths that need to see tombstones
+ * (hard-purge DELETE, restore).
  */
-export function sourceWhere(identifier: string, opts?: { includeDeleted?: boolean }) {
-  const match = identifier.startsWith("src_")
-    ? eq(sources.id, identifier)
-    : eq(sources.slug, identifier);
+export function sourceById(id: string, opts?: { includeDeleted?: boolean }) {
+  const match = eq(sources.id, id);
   return opts?.includeDeleted ? match : and(match, isNull(sources.deletedAt));
 }
 
-/** Resolve an org by ID (org_ prefix) or slug. See sourceWhere for opts. */
+/**
+ * Resolve an org by ID (`org_` prefix) or slug. Orgs stay globally addressable
+ * by slug — `organizations.slug` keeps its global UNIQUE (only sources and
+ * products were demoted to per-org uniqueness in #690 Phase C).
+ */
 export function orgWhere(identifier: string, opts?: { includeDeleted?: boolean }) {
   const match = identifier.startsWith("org_")
     ? eq(organizations.id, identifier)
@@ -54,18 +57,46 @@ export function orgWhere(identifier: string, opts?: { includeDeleted?: boolean }
   return opts?.includeDeleted ? match : and(match, isNull(organizations.deletedAt));
 }
 
-/** Resolve a product by ID (prod_ prefix) or slug. See sourceWhere for opts. */
-export function productWhere(identifier: string, opts?: { includeDeleted?: boolean }) {
-  const match = identifier.startsWith("prod_")
-    ? eq(products.id, identifier)
-    : eq(products.slug, identifier);
+/** Resolve a product by ID (`prod_` prefix). Id-only — see `sourceById`. */
+export function productById(id: string, opts?: { includeDeleted?: boolean }) {
+  const match = eq(products.id, id);
+  return opts?.includeDeleted ? match : and(match, isNull(products.deletedAt));
+}
+
+/** True if the string looks like a `src_…` source ID. */
+export function isSourceId(s: string): boolean {
+  return s.startsWith("src_");
+}
+
+/** True if the string looks like a `prod_…` product ID. */
+export function isProductId(s: string): boolean {
+  return s.startsWith("prod_");
+}
+
+/**
+ * Legacy "either id or slug" matcher for internal callers that admin
+ * tooling and worker triggers still depend on. Prefer `sourceById` plus
+ * `findSourceForOrgSlug` in new code — the slug branch is unambiguous
+ * today (no cross-org collisions on prod) but degrades to "first row
+ * wins by rowid" if collisions ever appear. Passing through here is a
+ * deliberate carve-out documented at each call site.
+ */
+export function sourceMatchByIdOrSlug(idOrSlug: string, opts?: { includeDeleted?: boolean }) {
+  const match = isSourceId(idOrSlug) ? eq(sources.id, idOrSlug) : eq(sources.slug, idOrSlug);
+  return opts?.includeDeleted ? match : and(match, isNull(sources.deletedAt));
+}
+
+/** Sibling of `sourceMatchByIdOrSlug` for products. */
+export function productMatchByIdOrSlug(idOrSlug: string, opts?: { includeDeleted?: boolean }) {
+  const match = isProductId(idOrSlug) ? eq(products.id, idOrSlug) : eq(products.slug, idOrSlug);
   return opts?.includeDeleted ? match : and(match, isNull(products.deletedAt));
 }
 
 /**
- * Resolve a source within an org (#690). Each segment accepts an ID
- * (`org_…` / `src_…`) or a slug — delegates to `orgWhere` and `sourceWhere`
- * so id branching and tombstone filtering stay in sync.
+ * Resolve a source within an org (#690). The org segment accepts an ID
+ * (`org_…`) or a slug (orgs stay globally addressable). The source segment
+ * accepts an ID (`src_…`) or a slug; per-org slug uniqueness from #690
+ * Phase C is what makes the slug branch unambiguous here.
  */
 export async function findSourceForOrgSlug(
   db: ReturnType<typeof createDb>,
@@ -73,11 +104,18 @@ export async function findSourceForOrgSlug(
   sourceIdOrSlug: string,
   opts?: { includeDeleted?: boolean },
 ) {
+  const sourceMatch = isSourceId(sourceIdOrSlug)
+    ? eq(sources.id, sourceIdOrSlug)
+    : eq(sources.slug, sourceIdOrSlug);
+  const sourceWhere = opts?.includeDeleted
+    ? sourceMatch
+    : and(sourceMatch, isNull(sources.deletedAt));
+
   const rows = await db
     .select({ source: sources })
     .from(sources)
     .innerJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(orgWhere(orgIdOrSlug, opts), sourceWhere(sourceIdOrSlug, opts)))
+    .where(and(orgWhere(orgIdOrSlug, opts), sourceWhere))
     .limit(1);
   return rows[0]?.source ?? null;
 }
@@ -89,20 +127,29 @@ export async function findProductForOrgSlug(
   productIdOrSlug: string,
   opts?: { includeDeleted?: boolean },
 ) {
+  const productMatch = isProductId(productIdOrSlug)
+    ? eq(products.id, productIdOrSlug)
+    : eq(products.slug, productIdOrSlug);
+  const productWhere = opts?.includeDeleted
+    ? productMatch
+    : and(productMatch, isNull(products.deletedAt));
+
   const rows = await db
     .select({ product: products })
     .from(products)
     .innerJoin(organizations, eq(products.orgId, organizations.id))
-    .where(and(orgWhere(orgIdOrSlug, opts), productWhere(productIdOrSlug, opts)))
+    .where(and(orgWhere(orgIdOrSlug, opts), productWhere))
     .limit(1);
   return rows[0]?.product ?? null;
 }
 
 /**
- * Pick the right source resolver based on which params Hono matched. Lets a
- * handler register at both `/sources/:slug` (bare, id-or-slug) and
- * `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug)
- * without branching at every call site.
+ * Pick the right source resolver based on which params Hono matched. Org-scoped
+ * paths route through `findSourceForOrgSlug`; bare paths fall back to the
+ * legacy id-or-slug matcher. The bare-slug branch is unambiguous today (no
+ * cross-org collisions on prod) but is a documented carve-out — new clients
+ * should use the org-scoped path so the slug fallback can eventually be
+ * dropped (a coordinated breaking change against web + MCP).
  */
 export async function resolveSourceFromContext(
   c: { req: { param: (name: string) => string | undefined } },
@@ -116,7 +163,7 @@ export async function resolveSourceFromContext(
   }
   const bare = c.req.param("slug") ?? c.req.param("identifier");
   if (!bare) return null;
-  const [row] = await db.select().from(sources).where(sourceWhere(bare, opts));
+  const [row] = await db.select().from(sources).where(sourceMatchByIdOrSlug(bare, opts));
   return row ?? null;
 }
 
@@ -133,7 +180,7 @@ export async function resolveProductFromContext(
   }
   const bare = c.req.param("identifier") ?? c.req.param("slug");
   if (!bare) return null;
-  const [row] = await db.select().from(products).where(productWhere(bare, opts));
+  const [row] = await db.select().from(products).where(productMatchByIdOrSlug(bare, opts));
   return row ?? null;
 }
 
