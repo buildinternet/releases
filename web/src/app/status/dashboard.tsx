@@ -1177,23 +1177,26 @@ function SourcesTable({
   const totalPages = Math.ceil(filtered.length / perPage);
   const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
 
-  const triggerFetch = async (slug: string) => {
-    setFetching((prev) => new Set(prev).add(slug));
+  // The button passes the typed `src_…` ID rather than the slug — the
+  // legacy bare API path stopped accepting bare slugs in #698. We key
+  // the in-flight + result maps by ID for the same reason.
+  const triggerFetch = async (id: string) => {
+    setFetching((prev) => new Set(prev).add(id));
     setResults((prev) => {
       const next = { ...prev };
-      delete next[slug];
+      delete next[id];
       return next;
     });
     try {
-      const res = await fetch(`/api/proxy/sources/${slug}/fetch`, { method: "POST" });
+      const res = await fetch(`/api/proxy/sources/${id}/fetch`, { method: "POST" });
       const data: FetchTriggerResult = await res.json();
-      setResults((prev) => ({ ...prev, [slug]: data }));
+      setResults((prev) => ({ ...prev, [id]: data }));
     } catch {
-      setResults((prev) => ({ ...prev, [slug]: { error: "Request failed" } }));
+      setResults((prev) => ({ ...prev, [id]: { error: "Request failed" } }));
     } finally {
       setFetching((prev) => {
         const next = new Set(prev);
-        next.delete(slug);
+        next.delete(id);
         return next;
       });
     }
@@ -1300,8 +1303,8 @@ function SourcesTable({
           <div></div>
         </div>
         {paginated.map((src) => {
-          const result = results[src.slug];
-          const isFetching = fetching.has(src.slug);
+          const result = results[src.id];
+          const isFetching = fetching.has(src.id);
           const cadence = describeCadence(src.medianGapDays, src.fetchPriority, src.lastRetieredAt);
           const releaseAge = ageInDays(src.latestDate);
           const fetchedAge = ageInDays(src.lastFetchedAt);
@@ -1346,7 +1349,7 @@ function SourcesTable({
               </div>
               <div className="flex items-center gap-2">
                 <button
-                  onClick={() => triggerFetch(src.slug)}
+                  onClick={() => triggerFetch(src.id)}
                   disabled={isFetching}
                   className="px-2.5 py-1 text-xs rounded border border-stone-300 dark:border-stone-600 text-stone-600 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-700 disabled:opacity-40 disabled:cursor-default transition-colors"
                 >

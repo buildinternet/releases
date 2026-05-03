@@ -69,16 +69,20 @@ function sourceSubpath(source: Source, sub?: string): string {
 }
 
 async function fetchSourceInfo(env: ScrapeEnv, identifier: string): Promise<Source | null> {
-  // Discovery boundary: callers (cron triggers, manual scrape requests) hand
-  // us either a `src_…` ID or a bare slug. IDs are unambiguous against the
-  // bare path; slugs continue to work today via the same path. Migrating
-  // this off the bare path requires reshaping the upstream input contract
-  // (`sourceIdentifiers: string[]`) to carry an org segment, which is out of
-  // scope for the per-PR caller cleanup. Tracked under #698.
-  const res = await env.apiFetcher.fetch(
-    `https://api/v1/sources/${encodeURIComponent(identifier)}`,
-    { headers: { Authorization: `Bearer ${env.apiKey}` } },
-  );
+  // Callers (cron triggers, manual scrape requests, the agent's manage_source
+  // fetch fallback) hand us a `src_…` ID, an `org/slug` coordinate, or a bare
+  // slug. Typed IDs and coordinates have unambiguous routes after #698 — bare
+  // slugs are rejected on the legacy path. Pick the right URL by shape so the
+  // coordinate form (used by the agent fallback once #710 lands) doesn't 404.
+  const slash = identifier.indexOf("/");
+  const url = identifier.startsWith("src_")
+    ? `https://api/v1/sources/${encodeURIComponent(identifier)}`
+    : slash > 0 && slash < identifier.length - 1
+      ? `https://api/v1/orgs/${encodeURIComponent(identifier.slice(0, slash))}/sources/${encodeURIComponent(identifier.slice(slash + 1))}`
+      : `https://api/v1/sources/${encodeURIComponent(identifier)}`;
+  const res = await env.apiFetcher.fetch(url, {
+    headers: { Authorization: `Bearer ${env.apiKey}` },
+  });
   if (!res.ok) return null;
   return res.json() as Promise<Source>;
 }

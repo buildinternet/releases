@@ -1,7 +1,7 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { lookupRoutes } from "../../workers/api/src/routes/lookups.js";
-import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 
 let testDb: TestDatabase;
@@ -447,5 +447,177 @@ describe("POST /v1/lookups", () => {
     expect(body.status).toBe("not_found");
     expect(body.relatedOrg?.org.slug).toBe("acme");
     expect(body.relatedOrg?.sources.length).toBe(1);
+  });
+});
+
+// #698: clients holding a bare slug (legacy bookmarks, OSS CLI's `findSource`)
+// resolve via these endpoints once the bare API path stops accepting slugs.
+describe("GET /v1/lookups/source-by-slug", () => {
+  async function getByslug(slug: string | undefined): Promise<Response> {
+    const env = makeEnv(makeKv());
+    const path =
+      slug === undefined
+        ? "/lookups/source-by-slug"
+        : `/lookups/source-by-slug?slug=${encodeURIComponent(slug)}`;
+    return lookupRoutes.request(path, { method: "GET" }, env);
+  }
+
+  test("400 when slug param is missing", async () => {
+    const res = await getByslug(undefined);
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when slug is an empty string", async () => {
+    const res = await getByslug("   ");
+    expect(res.status).toBe(400);
+  });
+
+  test("404 when no source matches", async () => {
+    const res = await getByslug("nope");
+    expect(res.status).toBe(404);
+  });
+
+  test("200 with the org-scoped triple when a source matches", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_one",
+      name: "Acme CLI",
+      slug: "cli",
+      type: "github",
+      url: "https://github.com/acme/cli",
+      orgId: "org_acme",
+      discovery: "curated",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const res = await getByslug("cli");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      sourceId: string;
+      sourceSlug: string;
+      orgSlug: string;
+    };
+    expect(body).toEqual({
+      sourceId: "src_one",
+      sourceSlug: "cli",
+      orgSlug: "acme",
+    });
+    // Sunset header signals to clients that this is a migration aid.
+    expect(res.headers.get("Sunset")).toBe("Sun, 01 Nov 2026 00:00:00 GMT");
+  });
+
+  test("returns the oldest match deterministically when the slug appears under multiple orgs", async () => {
+    await testDb.db.insert(organizations).values([
+      { id: "org_acme", name: "Acme", slug: "acme", discovery: "curated" },
+      { id: "org_beta", name: "Beta", slug: "beta", discovery: "curated" },
+    ]);
+    await testDb.db.insert(sources).values([
+      {
+        id: "src_newer",
+        name: "Newer CLI",
+        slug: "cli",
+        type: "github",
+        url: "https://github.com/beta/cli",
+        orgId: "org_beta",
+        discovery: "curated",
+        createdAt: "2026-03-01T00:00:00.000Z",
+      },
+      {
+        id: "src_older",
+        name: "Older CLI",
+        slug: "cli",
+        type: "github",
+        url: "https://github.com/acme/cli",
+        orgId: "org_acme",
+        discovery: "curated",
+        createdAt: "2026-01-01T00:00:00.000Z",
+      },
+    ]);
+
+    const res = await getByslug("cli");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { sourceId: string; orgSlug: string };
+    // The bookmark resolver picks the oldest row by createdAt — the contract
+    // is "deterministic, not necessarily right." Repeated calls land here.
+    expect(body.sourceId).toBe("src_older");
+    expect(body.orgSlug).toBe("acme");
+  });
+
+  test("excludes tombstoned (soft-deleted) sources via sourcesActive", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_dead",
+      name: "Dead CLI",
+      slug: "cli",
+      type: "github",
+      url: "https://github.com/acme/cli",
+      orgId: "org_acme",
+      discovery: "curated",
+      deletedAt: "2026-04-01T00:00:00.000Z",
+    });
+
+    const res = await getByslug("cli");
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("GET /v1/lookups/product-by-slug", () => {
+  async function getByslug(slug: string | undefined): Promise<Response> {
+    const env = makeEnv(makeKv());
+    const path =
+      slug === undefined
+        ? "/lookups/product-by-slug"
+        : `/lookups/product-by-slug?slug=${encodeURIComponent(slug)}`;
+    return lookupRoutes.request(path, { method: "GET" }, env);
+  }
+
+  test("400 when slug param is missing", async () => {
+    const res = await getByslug(undefined);
+    expect(res.status).toBe(400);
+  });
+
+  test("404 when no product matches", async () => {
+    const res = await getByslug("nope");
+    expect(res.status).toBe(404);
+  });
+
+  test("200 with the org-scoped triple when a product matches", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(products).values({
+      id: "prod_widget",
+      name: "Widget",
+      slug: "widget",
+      orgId: "org_acme",
+      createdAt: "2026-01-01T00:00:00.000Z",
+    });
+
+    const res = await getByslug("widget");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      productId: string;
+      productSlug: string;
+      orgSlug: string;
+    };
+    expect(body).toEqual({
+      productId: "prod_widget",
+      productSlug: "widget",
+      orgSlug: "acme",
+    });
+    expect(res.headers.get("Sunset")).toBe("Sun, 01 Nov 2026 00:00:00 GMT");
   });
 });

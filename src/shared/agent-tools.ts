@@ -131,7 +131,8 @@ export const AGENT_TOOLS = [
         url: { type: "string", description: "Source URL (required for add; optional for edit)" },
         identifier: {
           type: "string",
-          description: "Source ID (src_...) or slug — required for edit/remove/fetch",
+          description:
+            "Source ID (src_...) or org-scoped coordinate (orgSlug/sourceSlug) — required for edit/remove/fetch. Bare slugs are not accepted; if you only have a slug, look up the org first.",
         },
         type: {
           type: "string",
@@ -231,7 +232,8 @@ export const AGENT_TOOLS = [
         },
         identifier: {
           type: "string",
-          description: "Product ID (prod_...) or slug (required for edit, tag_add)",
+          description:
+            "Product ID (prod_...) or org-scoped coordinate (orgSlug/productSlug) (required for edit, tag_add). Bare slugs are not accepted.",
         },
         url: { type: "string", description: "Canonical product URL" },
         description: { type: "string", description: "Brief product description" },
@@ -359,9 +361,41 @@ export function createTypedExecutor(opts: APIClientOptions) {
   }
 
   /**
-   * Execute a typed tool call. Returns the result text, or null if the tool
-   * is `releases_report_state` (which is handled by the session runner).
+   * Translate an agent-supplied identifier into the right API path segment.
+   *
+   * - Typed IDs (`src_…` / `prod_…`) and `org/slug` coordinates pass through
+   *   to URLs the API resolver actually accepts after #698.
+   * - Bare slugs (no slash, no typed prefix) are rejected here rather than
+   *   sent on to the bare API path, which would surface as a confusing 400
+   *   from `BareSlugRejected`.
    */
+  function buildEntitySubpath(
+    entity: "sources" | "products",
+    identifier: string,
+    sub?: string,
+  ): { path: string } | { error: string } {
+    const tail = sub ? `/${sub}` : "";
+    const idPrefix = entity === "sources" ? "src_" : "prod_";
+    if (identifier.startsWith(idPrefix)) {
+      return { path: `/${entity}/${encodeURIComponent(identifier)}${tail}` };
+    }
+    const slash = identifier.indexOf("/");
+    if (slash > 0 && slash < identifier.length - 1) {
+      const orgSeg = identifier.slice(0, slash);
+      const entitySeg = identifier.slice(slash + 1);
+      const segName = entity === "sources" ? "sources" : "products";
+      return {
+        path: `/orgs/${encodeURIComponent(orgSeg)}/${segName}/${encodeURIComponent(entitySeg)}${tail}`,
+      };
+    }
+    const idHint = entity === "sources" ? "src_…" : "prod_…";
+    return {
+      error:
+        `Error: bare slug "${identifier}" is no longer accepted (#698). ` +
+        `Pass a typed ID (${idHint}) or an org-scoped coordinate (orgSlug/${entity === "sources" ? "sourceSlug" : "productSlug"}).`,
+    };
+  }
+
   /**
    * Server-side auto-evaluate for manage_source(add) when type is omitted.
    * Maps evaluator's recommendedMethod → our source type, and lifts a
@@ -437,13 +471,15 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (action === "edit") {
           const identifier = String(input.identifier ?? "");
           if (!identifier) return "Error: identifier is required for edit";
+          const built = buildEntitySubpath("sources", identifier);
+          if ("error" in built) return built.error;
           const body: Record<string, unknown> = {};
           if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
           if (input.fetch_priority) body.fetchPriority = input.fetch_priority;
           if (input.name) body.name = input.name;
           if (input.url) body.url = input.url;
           if (input.type) body.type = input.type;
-          const result = await api("PATCH", `/sources/${encodeURIComponent(identifier)}`, body);
+          const result = await api("PATCH", built.path, body);
           if (!result.startsWith("Error")) {
             return result + `\n\n[Playbook has been auto-regenerated to reflect this change.]`;
           }
@@ -453,7 +489,9 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (action === "remove") {
           const identifier = String(input.identifier ?? "");
           if (!identifier) return "Error: identifier is required for remove";
-          const result = await api("DELETE", `/sources/${encodeURIComponent(identifier)}`);
+          const built = buildEntitySubpath("sources", identifier);
+          if ("error" in built) return built.error;
+          const result = await api("DELETE", built.path);
           if (!result.startsWith("Error")) {
             return result + `\n\n[Playbook has been auto-regenerated to reflect this removal.]`;
           }
@@ -463,9 +501,11 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (action === "fetch") {
           const identifier = String(input.identifier ?? "");
           if (!identifier) return "Error: identifier is required for fetch";
+          const built = buildEntitySubpath("sources", identifier, "fetch");
+          if ("error" in built) return built.error;
           const fetchPath = opts.sessionId
-            ? `/sources/${encodeURIComponent(identifier)}/fetch?sessionId=${encodeURIComponent(opts.sessionId)}`
-            : `/sources/${encodeURIComponent(identifier)}/fetch`;
+            ? `${built.path}?sessionId=${encodeURIComponent(opts.sessionId)}`
+            : built.path;
           return api("POST", fetchPath);
         }
 
@@ -561,19 +601,23 @@ export function createTypedExecutor(opts: APIClientOptions) {
         if (action === "edit") {
           const identifier = String(input.identifier ?? "");
           if (!identifier) return "Error: identifier is required for edit";
+          const built = buildEntitySubpath("products", identifier);
+          if ("error" in built) return built.error;
           const body: Record<string, unknown> = {};
           if (input.name) body.name = input.name;
           if (input.url) body.url = input.url;
           if (input.description) body.description = input.description;
           if (input.category) body.category = input.category;
-          return api("PATCH", `/products/${encodeURIComponent(identifier)}`, body);
+          return api("PATCH", built.path, body);
         }
 
         if (action === "tag_add") {
           const identifier = String(input.identifier ?? "");
           if (!identifier) return "Error: identifier is required for tag_add";
           if (!input.tags || !Array.isArray(input.tags)) return "Error: tags array is required";
-          return api("PUT", `/products/${encodeURIComponent(identifier)}/tags`, {
+          const built = buildEntitySubpath("products", identifier, "tags");
+          if ("error" in built) return built.error;
+          return api("PUT", built.path, {
             tags: input.tags,
           });
         }
