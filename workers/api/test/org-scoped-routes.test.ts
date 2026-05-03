@@ -1,10 +1,13 @@
 /**
- * Org-scoped source/product routes + catalog (#690 Phase B).
+ * Org-scoped source/product routes + catalog (#690 Phase B, #698 Phase D).
  *
- * GET handlers register at both `/v1/sources/:slug` (id-or-slug, id preferred)
- * and `/v1/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments
- * id-or-slug). Same shape for products. The catalog endpoint returns the
- * unified browse view used by the web frontend and CLI.
+ * Handlers register at both `/v1/sources/:slug` and
+ * `/v1/orgs/:orgSlug/sources/:sourceSlug` (same handler, different params).
+ * Post-#698 the bare path accepts typed `src_…` IDs only — bare slugs throw
+ * `BareSlugRejected` → 400. The org-scoped path accepts id-or-slug on both
+ * segments. Same shape for products (typed-ID-only on `/v1/products/:slug`,
+ * id-or-slug on `/v1/orgs/:orgSlug/products/:productSlug`). The catalog
+ * endpoint returns the unified browse view used by the web frontend and CLI.
  */
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
