@@ -18,6 +18,9 @@ import { adminOrgDependentsRoutes } from "../../workers/api/src/routes/admin-org
 
 function mkDb() {
   const sqlite = new Database(":memory:");
+  // Mirror prod: SQLite ships FKs off by default, so without this PRAGMA a
+  // test could insert orphaned rows that production D1 would reject.
+  sqlite.run("PRAGMA foreign_keys = ON");
   applyMigrations(sqlite);
   return drizzle(sqlite);
 }
@@ -160,6 +163,28 @@ describe("GET /admin/orgs/:slug/dependents", () => {
     expect(body.counts.sources).toBe(0);
     expect(body.counts.releases).toBe(0);
     expect(body.counts.webhookSubscriptions).toBe(0);
+  });
+
+  it("counts org-scoped webhook subscriptions even when the org has no sources", async () => {
+    const db = mkDb();
+    await db.insert(organizations).values({
+      id: "org_hook_only",
+      name: "Hook Only",
+      slug: "hook-only",
+      createdAt: NOW,
+      updatedAt: NOW,
+    });
+    await db.insert(webhookSubscriptions).values({
+      id: "ws_orphan",
+      orgId: "org_hook_only",
+      sourceId: null,
+      url: "https://hook.test/org-only",
+    });
+    const res = await mkApp(db).request("/admin/orgs/hook-only/dependents");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { counts: Record<string, number> };
+    expect(body.counts.sources).toBe(0);
+    expect(body.counts.webhookSubscriptions).toBe(1);
   });
 
   it("returns 404 for unknown org", async () => {

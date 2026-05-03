@@ -10,6 +10,7 @@
  * workers/api/src/index.ts.
  */
 import { Hono } from "hono";
+import type { Context } from "hono";
 import { sql } from "drizzle-orm";
 import { organizations, sources } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
@@ -18,8 +19,8 @@ import type { Env } from "../index.js";
 
 export const adminOrgDependentsRoutes = new Hono<Env>();
 
-function getDb(c: any): ReturnType<typeof createDb> {
-  return c.get("db") ?? createDb(c.env.DB);
+function getDb(c: Context<Env>): ReturnType<typeof createDb> {
+  return (c.get("db" as never) as ReturnType<typeof createDb> | undefined) ?? createDb(c.env.DB);
 }
 
 interface DependentCountsRow {
@@ -52,43 +53,39 @@ adminOrgDependentsRoutes.get("/admin/orgs/:slug/dependents", async (c) => {
     .where(sql`${sources.orgId} = ${org.id}`);
   const sourceCount = Number(sourceCountRow?.n ?? 0);
 
-  let counts: DependentCountsRow = {
-    releases: 0,
-    fetchLog: 0,
-    sourceChangelogFiles: 0,
-    sourceChangelogChunks: 0,
-    releaseSummaries: 0,
-    mediaAssets: 0,
-    webhookSubscriptions: 0,
-  };
+  // Per-source counts collapse to zero when no sources exist; webhooks are
+  // org-scoped (sourceId is nullable) so they're queried independently — an
+  // org with zero sources can still hold subscriptions, and the hard-delete
+  // cascade via webhook_subscriptions.org_id wipes them.
+  const sub = sql`(SELECT id FROM sources WHERE org_id = ${org.id})`;
+  const perSource =
+    sourceCount > 0
+      ? (
+          (await db.all(sql`
+          SELECT
+            (SELECT COUNT(*) FROM releases WHERE source_id IN ${sub}) AS releases,
+            (SELECT COUNT(*) FROM fetch_log WHERE source_id IN ${sub}) AS fetchLog,
+            (SELECT COUNT(*) FROM source_changelog_files WHERE source_id IN ${sub}) AS sourceChangelogFiles,
+            (SELECT COUNT(*) FROM source_changelog_chunks WHERE source_id IN ${sub}) AS sourceChangelogChunks,
+            (SELECT COUNT(*) FROM release_summaries WHERE source_id IN ${sub}) AS releaseSummaries,
+            (SELECT COUNT(*) FROM media_assets WHERE source_id IN ${sub}) AS mediaAssets
+        `)) as Array<Omit<DependentCountsRow, "webhookSubscriptions">>
+        )[0]
+      : undefined;
 
-  if (sourceCount > 0) {
-    // Subquery used by every dependent count — kept literal so the hard-coded
-    // table names match the actual FKs (the cascade target is `sources.org_id`).
-    const sub = sql`(SELECT id FROM sources WHERE org_id = ${org.id})`;
-    const rows = (await db.all(sql`
-      SELECT
-        (SELECT COUNT(*) FROM releases WHERE source_id IN ${sub}) AS releases,
-        (SELECT COUNT(*) FROM fetch_log WHERE source_id IN ${sub}) AS fetchLog,
-        (SELECT COUNT(*) FROM source_changelog_files WHERE source_id IN ${sub}) AS sourceChangelogFiles,
-        (SELECT COUNT(*) FROM source_changelog_chunks WHERE source_id IN ${sub}) AS sourceChangelogChunks,
-        (SELECT COUNT(*) FROM release_summaries WHERE source_id IN ${sub}) AS releaseSummaries,
-        (SELECT COUNT(*) FROM media_assets WHERE source_id IN ${sub}) AS mediaAssets,
-        (SELECT COUNT(*) FROM webhook_subscriptions WHERE source_id IN ${sub}) AS webhookSubscriptions
-    `)) as DependentCountsRow[];
-    const r = rows[0];
-    if (r) {
-      counts = {
-        releases: Number(r.releases ?? 0),
-        fetchLog: Number(r.fetchLog ?? 0),
-        sourceChangelogFiles: Number(r.sourceChangelogFiles ?? 0),
-        sourceChangelogChunks: Number(r.sourceChangelogChunks ?? 0),
-        releaseSummaries: Number(r.releaseSummaries ?? 0),
-        mediaAssets: Number(r.mediaAssets ?? 0),
-        webhookSubscriptions: Number(r.webhookSubscriptions ?? 0),
-      };
-    }
-  }
+  const [webhookRow] = (await db.all(sql`
+    SELECT COUNT(*) AS n FROM webhook_subscriptions WHERE org_id = ${org.id}
+  `)) as Array<{ n: number }>;
+
+  const counts: DependentCountsRow = {
+    releases: Number(perSource?.releases ?? 0),
+    fetchLog: Number(perSource?.fetchLog ?? 0),
+    sourceChangelogFiles: Number(perSource?.sourceChangelogFiles ?? 0),
+    sourceChangelogChunks: Number(perSource?.sourceChangelogChunks ?? 0),
+    releaseSummaries: Number(perSource?.releaseSummaries ?? 0),
+    mediaAssets: Number(perSource?.mediaAssets ?? 0),
+    webhookSubscriptions: Number(webhookRow?.n ?? 0),
+  };
 
   return c.json({
     org: { id: org.id, slug: org.slug, name: org.name },
