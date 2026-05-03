@@ -875,10 +875,12 @@ const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
 sourceRoutes.get("/sources/:slug/heatmap", getSourceHeatmapHandler);
 sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/heatmap", getSourceHeatmapHandler);
 
-sourceRoutes.get("/sources/:slug/changelog", async (c) => {
-  const slug = c.req.param("slug");
+// Search-hybrid hits expose `{ orgSlug, sourceSlug }` to chunk consumers, so
+// the changelog chain has to be addressable without an id once per-org slug
+// uniqueness lands.
+const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
   const allRows = await db
     .select()
@@ -917,7 +919,9 @@ sourceRoutes.get("/sources/:slug/changelog", async (c) => {
       files,
     ),
   );
-});
+};
+sourceRoutes.get("/sources/:slug/changelog", getSourceChangelogHandler);
+sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/changelog", getSourceChangelogHandler);
 
 /**
  * Admin-only: list changelog file rows whose content length exceeds
@@ -1221,11 +1225,24 @@ sourceRoutes.post("/sources", async (c) => {
     }
   }
 
-  // Resolve org by slug if orgSlug provided (preferred over raw orgId)
+  // Resolve org by slug if orgSlug provided (preferred over raw orgId).
+  // org_id is required (#690 Phase A precondition for the upcoming NOT NULL
+  // migration in Phase C). Silent NULL fall-through is what produced the lone
+  // orphan we just adopted — guard at the write boundary so it can't happen
+  // again before the schema constraint catches up.
   let orgId = body.orgId ?? null;
   if (!orgId && body.orgSlug) {
     const [org] = await db.select().from(organizations).where(orgWhere(body.orgSlug));
     orgId = org?.id ?? null;
+  }
+  if (!orgId) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: "orgId or orgSlug is required (must resolve to an existing org)",
+      },
+      400,
+    );
   }
 
   // Insert with auto-suffix on slug collision: try base, then base-2 … base-20.

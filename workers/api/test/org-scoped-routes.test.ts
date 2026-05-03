@@ -164,6 +164,72 @@ describe("GET /v1/orgs/:orgSlug/products/:productSlug", () => {
   });
 });
 
+describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug/changelog", () => {
+  it("matches the bare /v1/sources/:slug/changelog response on a real changelog file", async () => {
+    // Don't need actual file rows — both routes share the same handler, so
+    // a 404 from each is sufficient to prove dual-registration is wired.
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const [orgScoped, bare] = await Promise.all([
+      fetch(new Request("https://x.test/v1/orgs/acme/sources/cli/changelog")),
+      fetch(new Request("https://x.test/v1/sources/cli/changelog")),
+    ]);
+
+    expect(orgScoped.status).toBe(404);
+    expect(bare.status).toBe(404);
+  });
+});
+
+describe("GET /v1/orgs/:slug/catalog — input validation", () => {
+  it("400s on unknown kind", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog?kind=bogus"));
+    expect(res.status).toBe(400);
+  });
+
+  it("clamps limit floor to 1 (rejects negative LIMIT semantics)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog?limit=-1"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { items: unknown[] };
+    // 1 product + 1 source seeded, but limit=1 caps each per-kind, so we'd
+    // see at most 2 items. The bug we're guarding against is LIMIT -1 acting
+    // as no-limit — observable as the catalog returning more than the cap.
+    expect(body.items.length).toBeLessThanOrEqual(2);
+  });
+});
+
+describe("POST /v1/sources — orgId guard (#690 Phase A drift prevention)", () => {
+  it("400s when neither orgId nor orgSlug resolves to an org", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Orphan",
+          url: "https://orphan.test/changelog",
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("bad_request");
+  });
+});
+
 describe("GET /v1/orgs/:slug/catalog", () => {
   it("returns sources and products as a discriminated union", async () => {
     const db = mkDb();

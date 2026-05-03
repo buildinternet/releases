@@ -503,11 +503,32 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
 // Unified browse for the org's addressable things: sources + products today,
 // rollups when #693 ships them. Mirrors what the web's /{orgSlug} page renders
 // and what the CLI's catalog-rollup search wants in one round trip.
+//
+// Response shape:
+//   { org: { id, slug, name },
+//     items: Array<
+//       { kind: "product", id, slug, name, url, description, category }
+//       | { kind: "source",  id, slug, name, type, url, productId }
+//     > }
+// Order: products first (by name), then sources (by name). The mixed-kind
+// payload is intentional — clients render in document order; rollups (#693)
+// will slot in as `{ kind: "rollup", … }` without changing this shape.
+//
+// `?kind=source|product` narrows the response. `?limit=N` is per-kind, hard
+// capped at 500 and floored at 1. Unknown `kind` returns 400.
+const CATALOG_KINDS = new Set(["source", "product"]);
 orgRoutes.get("/orgs/:slug/catalog", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");
   const kindParam = c.req.query("kind");
-  const limit = Math.min(parseInt(c.req.query("limit") ?? "100", 10) || 100, 500);
+  if (kindParam !== undefined && !CATALOG_KINDS.has(kindParam)) {
+    return c.json(
+      { error: "bad_request", message: `Unknown kind '${kindParam}'. Expected source or product.` },
+      400,
+    );
+  }
+  const limitRaw = parseInt(c.req.query("limit") ?? "100", 10);
+  const limit = Math.min(Math.max(Number.isFinite(limitRaw) ? limitRaw : 100, 1), 500);
 
   const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
