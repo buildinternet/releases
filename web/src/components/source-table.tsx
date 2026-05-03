@@ -108,6 +108,7 @@ export function SourceTable({
 
   const productMap = new Map(products.map((p) => [p.slug, p.name]));
   const hasProducts = products.length > 0;
+  const hasOnDemand = sources.some((s) => s.discovery === "on_demand");
 
   const renderRow = (source: SourceListItem, muted: boolean) => {
     const state = getSourceState(source);
@@ -198,6 +199,11 @@ export function SourceTable({
           </tbody>
         </table>
       </div>
+      {hasOnDemand && (
+        <p className="mt-2 text-[12px] text-stone-500 dark:text-stone-400">
+          Includes community-sourced results, which may have less detail than curated ones.
+        </p>
+      )}
     </div>
   );
 }
