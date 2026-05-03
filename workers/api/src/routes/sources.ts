@@ -138,24 +138,38 @@ sourceRoutes.get("/sources", async (c) => {
 
   // `productSlug` query param accepts a `prod_` ID (matched globally) or a
   // slug. Slugs are unique per-org (idx_products_org_slug), so when orgSlug
-  // is also present we scope the slug match to the resolved org. With no
-  // orgSlug the slug match stays global — a documented carve-out that
-  // depends on no cross-org product slug collisions; pair with `?orgSlug=…`
-  // for unambiguous resolution.
+  // is present we resolve to a single product in that org. Without orgSlug,
+  // we fan out to every product sharing the slug and filter sources to that
+  // ID set — picking the first row would silently mask cross-org duplicates
+  // if any ever land. There are none on prod today; this is the safe shape.
   const productSlug = c.req.query("productSlug");
   if (productSlug) {
-    const productMatch = isProductId(productSlug)
-      ? eq(products.id, productSlug)
-      : resolvedOrgId
+    if (isProductId(productSlug)) {
+      const [product] = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.id, productSlug), isNull(products.deletedAt)))
+        .limit(1);
+      if (!product) return c.json([]);
+      conditions.push(eq(sources.productId, product.id));
+    } else {
+      const slugMatch = resolvedOrgId
         ? and(eq(products.slug, productSlug), eq(products.orgId, resolvedOrgId))
         : eq(products.slug, productSlug);
-    const [product] = await db
-      .select()
-      .from(products)
-      .where(and(productMatch, isNull(products.deletedAt)))
-      .limit(1);
-    if (!product) return c.json([]);
-    conditions.push(eq(sources.productId, product.id));
+      const matches = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(slugMatch, isNull(products.deletedAt)));
+      if (matches.length === 0) return c.json([]);
+      conditions.push(
+        matches.length === 1
+          ? eq(sources.productId, matches[0]!.id)
+          : inArray(
+              sources.productId,
+              matches.map((m) => m.id),
+            ),
+      );
+    }
   }
 
   if (hasFeed) {

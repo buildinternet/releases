@@ -217,5 +217,13 @@ describe("orgWhere/sourceMatchByIdOrSlug/productMatchByIdOrSlug filter tombstone
     expect(
       await db.select().from(products).where(productMatchByIdOrSlug("p--prod_dead")),
     ).toHaveLength(0);
+    expect(
+      await db.select().from(products).where(productMatchByIdOrSlug("prod_dead")),
+    ).toHaveLength(0);
+    const includingDeleted = await db
+      .select()
+      .from(products)
+      .where(productMatchByIdOrSlug("prod_dead", { includeDeleted: true }));
+    expect(includingDeleted).toHaveLength(1);
   });
 });
