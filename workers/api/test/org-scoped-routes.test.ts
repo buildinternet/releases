@@ -45,7 +45,8 @@ function mkApp(db: ReturnType<typeof mkDb>) {
     if (err instanceof BareSlugRejected) {
       return c.json({ error: "bare_slug_rejected", entity: err.entity, message: err.message }, 400);
     }
-    return c.json({ error: "internal_error", message: String(err) }, 500);
+    const message = err instanceof Error ? err.message : String(err);
+    return c.json({ error: "internal_error", message }, 500);
   });
   const v1 = new Hono();
   v1.route("/", orgRoutes);

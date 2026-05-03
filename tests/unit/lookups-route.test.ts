@@ -508,7 +508,7 @@ describe("GET /v1/lookups/source-by-slug", () => {
       orgSlug: "acme",
     });
     // Sunset header signals to clients that this is a migration aid.
-    expect(res.headers.get("Sunset")).toBeTruthy();
+    expect(res.headers.get("Sunset")).toBe("Sun, 01 Nov 2026 00:00:00 GMT");
   });
 
   test("returns the oldest match deterministically when the slug appears under multiple orgs", async () => {
@@ -618,5 +618,6 @@ describe("GET /v1/lookups/product-by-slug", () => {
       productSlug: "widget",
       orgSlug: "acme",
     });
+    expect(res.headers.get("Sunset")).toBe("Sun, 01 Nov 2026 00:00:00 GMT");
   });
 });

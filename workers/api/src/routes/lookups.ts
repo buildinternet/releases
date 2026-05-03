@@ -399,12 +399,12 @@ lookupRoutes.get("/lookups/source-by-slug", async (c) => {
     .from(sourcesActive)
     .innerJoin(organizationsActive, eq(organizationsActive.id, sourcesActive.orgId))
     .where(eq(sourcesActive.slug, slug))
-    .orderBy(asc(sourcesActive.createdAt))
+    .orderBy(asc(sourcesActive.createdAt), asc(sourcesActive.id))
     .limit(1);
   if (!row) {
     return c.json({ error: "not_found", message: `No source matches slug "${slug}"` }, 404);
   }
-  c.header("Sunset", "Sat, 1 Nov 2026 00:00:00 GMT");
+  c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
   return c.json(row);
 });
 
@@ -428,11 +428,11 @@ lookupRoutes.get("/lookups/product-by-slug", async (c) => {
     .from(productsActive)
     .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
     .where(eq(productsActive.slug, slug))
-    .orderBy(asc(productsActive.createdAt))
+    .orderBy(asc(productsActive.createdAt), asc(productsActive.id))
     .limit(1);
   if (!row) {
     return c.json({ error: "not_found", message: `No product matches slug "${slug}"` }, 404);
   }
-  c.header("Sunset", "Sat, 1 Nov 2026 00:00:00 GMT");
+  c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
   return c.json(row);
 });
