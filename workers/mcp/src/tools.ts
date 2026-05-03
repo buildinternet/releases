@@ -127,40 +127,121 @@ async function callAnthropic(
   return text(textBlock.text);
 }
 
+/**
+ * Returns true when `identifier` looks like a bare slug (no `src_`/`prod_`
+ * prefix, no `org/slug` separator). Used by tool handlers to emit a helpful
+ * migration hint before the API's bare-path 400 lands (issue #698).
+ *
+ * Trims input — agents commonly pass copy-pasted identifiers with stray
+ * whitespace, and a leading/trailing space would otherwise sneak past the
+ * guard and reach the slug fallback path.
+ */
+export function isBareSlug(identifier: string): boolean {
+  const t = identifier.trim();
+  return getEntityType(t) === "unknown" && !t.includes("/");
+}
+
+/**
+ * Parse an `org/slug` coordinate into its two parts.  Returns `null` when
+ * the string doesn't contain exactly one `/` separator.
+ */
+function parseOrgSlugCoordinate(identifier: string): { orgSlug: string; slug: string } | null {
+  const parts = identifier.trim().split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return { orgSlug: parts[0], slug: parts[1] };
+}
+
 async function resolveSource(db: D1Db, identifier: string) {
-  const condition =
-    getEntityType(identifier) === "source"
-      ? eq(sources.id, identifier)
-      : eq(sources.slug, identifier);
-  const rows = await db.select().from(sources).where(condition).limit(1);
+  const id = identifier.trim();
+  if (getEntityType(id) === "source") {
+    const rows = await db.select().from(sources).where(eq(sources.id, id)).limit(1);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // org/slug coordinate form (e.g. "vercel/next-js")
+  const coord = parseOrgSlugCoordinate(id);
+  if (coord) {
+    const org = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, coord.orgSlug))
+      .limit(1);
+    if (org.length === 0) return null;
+    const rows = await db
+      .select()
+      .from(sources)
+      .where(and(eq(sources.slug, coord.slug), eq(sources.orgId, org[0].id)))
+      .limit(1);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // Bare slug fallback — kept for backward compat during the cutover window;
+  // callers are expected to validate with isBareSlug() before reaching here.
+  const rows = await db.select().from(sources).where(eq(sources.slug, id)).limit(1);
   return rows.length > 0 ? rows[0] : null;
 }
 
 async function resolveProduct(db: D1Db, identifier: string) {
-  const condition =
-    getEntityType(identifier) === "product"
-      ? eq(products.id, identifier)
-      : eq(products.slug, identifier);
-  const rows = await db.select().from(products).where(condition).limit(1);
+  const id = identifier.trim();
+  if (getEntityType(id) === "product") {
+    const rows = await db.select().from(products).where(eq(products.id, id)).limit(1);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // org/slug coordinate form (e.g. "vercel/nextjs")
+  const coord = parseOrgSlugCoordinate(id);
+  if (coord) {
+    const org = await db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, coord.orgSlug))
+      .limit(1);
+    if (org.length === 0) return null;
+    const rows = await db
+      .select()
+      .from(products)
+      .where(and(eq(products.slug, coord.slug), eq(products.orgId, org[0].id)))
+      .limit(1);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // Bare slug fallback — kept for backward compat during the cutover window;
+  // callers are expected to validate with isBareSlug() before reaching here.
+  const rows = await db.select().from(products).where(eq(products.slug, id)).limit(1);
   return rows.length > 0 ? rows[0] : null;
 }
 
 /**
- * Resolve a catalog identifier (source slug / `src_` id, product slug /
- * `prod_` id, or an ambiguous slug) to the set of source IDs to filter on.
- * Returns `null` when nothing matches so callers can echo the identifier
- * back in the error.
+ * Resolve a catalog identifier (source `src_` id, product `prod_` id,
+ * `org/slug` coordinate, or ambiguous slug) to the set of source IDs to
+ * filter on.  Returns `null` when nothing matches so callers can echo the
+ * identifier back in the error.
  */
 async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<string[] | null> {
-  const entityType = getEntityType(identifier);
+  const id = identifier.trim();
+  const entityType = getEntityType(id);
 
   if (entityType === "source") {
-    const src = await resolveSource(db, identifier);
+    const src = await resolveSource(db, id);
     return src ? [src.id] : null;
   }
 
   if (entityType === "product") {
-    const prod = await resolveProduct(db, identifier);
+    const prod = await resolveProduct(db, id);
+    if (!prod) return null;
+    const rows = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.productId, prod.id));
+    return rows.map((r) => r.id);
+  }
+
+  // org/slug coordinate — determine whether it resolves to a source or product
+  const coord = parseOrgSlugCoordinate(id);
+  if (coord) {
+    const src = await resolveSource(db, id);
+    if (src) return [src.id];
+    const prod = await resolveProduct(db, id);
     if (!prod) return null;
     const rows = await db
       .select({ id: sources.id })
@@ -175,7 +256,7 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
   const rows = await db.all<{ id: string }>(sql`
     SELECT s.id as id FROM sources s
     LEFT JOIN products p ON p.id = s.product_id
-    WHERE s.slug = ${identifier} OR p.slug = ${identifier}
+    WHERE s.slug = ${id} OR p.slug = ${id}
   `);
   return rows.length > 0 ? rows.map((r) => r.id) : null;
 }
@@ -226,6 +307,17 @@ export async function searchReleases(
 
   let sourceId: string | undefined;
   if (params.product) {
+    if (isBareSlug(params.product)) {
+      return {
+        result: text(
+          `Bare slug "${params.product}" is ambiguous — source slugs are org-scoped.\n` +
+            `Use an org-scoped identifier instead:\n` +
+            `  • ID:         src_<id>\n` +
+            `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+        ),
+        counts: empty,
+      };
+    }
     const source = await resolveSource(db, params.product);
     if (!source) {
       return { result: text(`No product found with slug "${params.product}"`), counts: empty };
@@ -283,11 +375,12 @@ export async function searchReleases(
       if (hit.kind === "release") {
         const r = hit.release;
         const titleLine = `**${r.title}**`;
+        const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.source.slug}` : r.source.id;
         lines.push(
           [
             `[release] ${titleLine}`,
             `  id: ${r.id}`,
-            `  source: ${r.source.name} (${r.source.slug}) | ${r.publishedAt ?? "N/A"}`,
+            `  source: ${r.source.name} (${srcCoord}) | ${r.publishedAt ?? "N/A"}`,
             r.version ? `  version: ${r.version}` : null,
             `  ${r.summary}`,
           ]
@@ -298,7 +391,7 @@ export async function searchReleases(
         const c = hit.chunk;
         lines.push(
           [
-            `[changelog_chunk] ${c.source.name} (${c.source.slug})`,
+            `[changelog_chunk] ${c.source.name} (${c.source.id})`,
             `  file: ${c.file_path} @ offset=${c.offset} length=${c.length}`,
             c.heading ? `  heading: ${c.heading}` : null,
             `  ${c.snippet}`,
@@ -322,14 +415,17 @@ export async function searchReleases(
     publishedAt: string | null;
     sourceSlug: string;
     sourceName: string;
+    orgSlug: string | null;
   }>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
            r.version, r.title, r.type,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
-           r.published_at as publishedAt
+           r.published_at as publishedAt,
+           o.slug as orgSlug
     FROM releases_fts
     JOIN releases r ON r.rowid = releases_fts.rowid
     JOIN sources s ON s.id = r.source_id
+    LEFT JOIN organizations o ON o.id = s.org_id
     WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
       AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
       AND (r.suppressed IS NULL OR r.suppressed = 0)
@@ -355,7 +451,8 @@ export async function searchReleases(
   const lexicalText = rows
     .map((r) => {
       const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
-      return `[release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`;
+      const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
+      return `[release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`;
     })
     .join("\n\n---\n\n");
 
@@ -411,16 +508,20 @@ export async function searchRegistry(
             name: string;
             description: string | null;
             category: string | null;
+            orgSlug: string | null;
           }>(sql`
-            SELECT p.id, p.slug, p.name, p.description, p.category
+            SELECT p.id, p.slug, p.name, p.description, p.category, o.slug as orgSlug
             FROM products p
+            LEFT JOIN organizations o ON o.id = p.org_id
             WHERE p.name LIKE ${pattern} OR p.slug LIKE ${pattern}
             ORDER BY p.name LIMIT ${lim}
           `)
         : Promise.resolve([]),
       wantsKind("source")
-        ? db.all<{ id: string; slug: string; name: string }>(sql`
-            SELECT s.id, s.slug, s.name FROM sources s
+        ? db.all<{ id: string; slug: string; name: string; orgSlug: string | null }>(sql`
+            SELECT s.id, s.slug, s.name, o.slug as orgSlug
+            FROM sources s
+            LEFT JOIN organizations o ON o.id = s.org_id
             WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
               AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
             ORDER BY s.name LIMIT ${lim}
@@ -438,12 +539,14 @@ export async function searchRegistry(
       );
     }
     for (const p of productRows) {
+      const coord = p.orgSlug ? `${p.orgSlug}/${p.slug}` : p.id;
       out.push(
-        `[product] **${p.name}**\n  id: ${p.id}\n  slug: ${p.slug}${p.category ? ` | category: ${p.category}` : ""}`,
+        `[product] **${p.name}**\n  id: ${p.id}\n  slug: ${coord}${p.category ? ` | category: ${p.category}` : ""}`,
       );
     }
     for (const s of sourceRows) {
-      out.push(`[source] **${s.name}**\n  id: ${s.id}\n  slug: ${s.slug}`);
+      const coord = s.orgSlug ? `${s.orgSlug}/${s.slug}` : s.id;
+      out.push(`[source] **${s.name}**\n  id: ${s.id}\n  slug: ${coord}`);
     }
     if (orgRows.length + productRows.length + sourceRows.length === 0) {
       out.push("No registry entries found.");
@@ -471,7 +574,11 @@ export async function searchRegistry(
   }
 
   const lines = result.hits.map((h) => {
-    const parts = [`[${h.kind}] **${h.name}**`, `  id: ${h.id}`, `  slug: ${h.slug}`];
+    // For orgs, slug is globally unique — already round-trippable.
+    // For products/sources, bare slug is org-scoped; surface the typed ID
+    // which is always round-trippable regardless of org context.
+    const parts = [`[${h.kind}] **${h.name}**`, `  id: ${h.id}`];
+    if (h.kind === "org") parts.push(`  slug: ${h.slug}`);
     if (h.category) parts.push(`  category: ${h.category}`);
     if (h.description) parts.push(`  ${h.description}`);
     return parts.join("\n");
@@ -496,6 +603,14 @@ export async function getLatestReleases(
 
   let sourceFilter: string | undefined;
   if (params.product) {
+    if (isBareSlug(params.product)) {
+      return text(
+        `Bare slug "${params.product}" is ambiguous — source slugs are org-scoped.\n` +
+          `Use an org-scoped identifier instead:\n` +
+          `  • ID:         src_<id>\n` +
+          `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+      );
+    }
     const source = await resolveSource(db, params.product);
     if (!source) return text(`No product found with slug "${params.product}"`);
     sourceFilter = source.id;
@@ -535,9 +650,12 @@ export async function getLatestReleases(
       contentSummary: releasesTable.contentSummary,
       publishedAt: releasesTable.publishedAt,
       sourceName: sources.name,
+      sourceSlug: sources.slug,
+      orgSlug: organizations.slug,
     })
     .from(releasesTable)
     .innerJoin(sources, eq(releasesTable.sourceId, sources.id))
+    .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .where(and(...conditions))
     .orderBy(desc(releasesTable.publishedAt))
     .limit(maxCount);
@@ -548,9 +666,10 @@ export async function getLatestReleases(
     .map((r) => {
       const preview = (r.contentSummary || r.content).slice(0, 500);
       const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
       return [
         titleLine,
-        `Source: ${r.sourceName} | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
+        `Source: ${r.sourceName} (${srcCoord}) | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
         preview,
       ].join("\n");
     })
@@ -565,35 +684,49 @@ export async function listSources(
   db: D1Db,
   params: { organization?: string },
 ): Promise<ToolResult> {
-  const projection = {
-    name: sources.name,
-    slug: sources.slug,
-    type: sources.type,
-    url: sources.url,
-    lastFetchedAt: sources.lastFetchedAt,
+  type SourceRow = {
+    name: string;
+    slug: string;
+    type: string;
+    url: string;
+    lastFetchedAt: string | null;
+    orgSlug: string | null;
   };
 
-  let allSources;
+  let allSources: SourceRow[];
   if (params.organization) {
     const org = await findOrg(db, params.organization);
     if (!org) return text(`No organization found matching "${params.organization}"`);
-    allSources = await db.select(projection).from(sources).where(eq(sources.orgId, org.id));
+    allSources = await db.all<SourceRow>(sql`
+      SELECT s.name, s.slug, s.type, s.url, s.last_fetched_at as lastFetchedAt,
+             o.slug as orgSlug
+      FROM sources s
+      LEFT JOIN organizations o ON o.id = s.org_id
+      WHERE s.org_id = ${org.id}
+    `);
   } else {
-    allSources = await db.select(projection).from(sources).limit(200);
+    allSources = await db.all<SourceRow>(sql`
+      SELECT s.name, s.slug, s.type, s.url, s.last_fetched_at as lastFetchedAt,
+             o.slug as orgSlug
+      FROM sources s
+      LEFT JOIN organizations o ON o.id = s.org_id
+      LIMIT 200
+    `);
   }
 
   if (allSources.length === 0) return text("No products indexed yet.");
 
   const result = allSources
-    .map((s) =>
-      [
+    .map((s) => {
+      const coord = s.orgSlug ? `${s.orgSlug}/${s.slug}` : s.slug;
+      return [
         `**${s.name}**`,
-        `  Slug: ${s.slug}`,
+        `  Slug: ${coord}`,
         `  Type: ${s.type}`,
         `  URL: ${s.url}`,
         `  Last fetched: ${s.lastFetchedAt ?? "Never"}`,
-      ].join("\n"),
-    )
+      ].join("\n");
+    })
     .join("\n\n");
 
   return text(result);
@@ -768,7 +901,7 @@ export async function getOrganization(
     for (const p of orgProducts) {
       const urlPart = p.url ? ` — ${p.url}` : "";
       const descPart = p.description ? ` — ${p.description}` : "";
-      lines.push(`- ${p.name} (${p.slug})${urlPart}${descPart}`);
+      lines.push(`- ${p.name} (${org.slug}/${p.slug})${urlPart}${descPart}`);
     }
   }
 
@@ -776,7 +909,7 @@ export async function getOrganization(
     lines.push("");
     lines.push("Sources:");
     for (const s of orgSources) {
-      lines.push(`- **${s.name}** (${s.slug})`);
+      lines.push(`- **${s.name}** (${org.slug}/${s.slug})`);
       lines.push(`  Type: ${s.type} | URL: ${s.url}`);
       lines.push(`  Last fetched: ${s.lastFetchedAt ?? "Never"}`);
     }
@@ -796,6 +929,15 @@ export async function summarizeChanges(
   anthropic: Anthropic,
 ): Promise<ToolResult> {
   const lookback = params.days ?? 30;
+
+  if (isBareSlug(params.product)) {
+    return text(
+      `Bare slug "${params.product}" is ambiguous — source slugs are org-scoped.\n` +
+        `Use an org-scoped identifier instead:\n` +
+        `  • ID:         src_<id>\n` +
+        `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+    );
+  }
 
   const source = await resolveSource(db, params.product);
   if (!source) return text(`No product found with slug "${params.product}"`);
@@ -859,7 +1001,21 @@ export async function compareProducts(
 ): Promise<ToolResult> {
   const lookback = params.days ?? 30;
 
-  if (params.products.length < 2) return text("Please provide at least two product slugs.");
+  if (params.products.length !== 2) {
+    return text("Please provide exactly two product identifiers.");
+  }
+
+  // Validate every identifier before hitting the DB.
+  for (const id of params.products) {
+    if (isBareSlug(id)) {
+      return text(
+        `Bare slug "${id}" is ambiguous — source slugs are org-scoped.\n` +
+          `Use an org-scoped identifier instead:\n` +
+          `  • ID:         src_<id>\n` +
+          `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+      );
+    }
+  }
 
   const cutoff = daysAgoIso(lookback);
 
@@ -1030,9 +1186,10 @@ async function renderSourceDetail(
   const product = productRows[0] ?? null;
   const releaseCount = Number(relCountRows[0]?.n ?? 0);
 
+  const srcCoord = org ? `${org.slug}/${src.slug}` : src.slug;
   const lines: string[] = [];
   lines.push(`**Source: ${src.name}**`);
-  lines.push(`Slug: ${src.slug} | Type: ${src.type}`);
+  lines.push(`Slug: ${srcCoord} | Type: ${src.type}`);
   lines.push(`URL: ${src.url}`);
   lines.push(`Organization: ${org ? `${org.name} (${org.slug})` : "none"}`);
   lines.push(`Product: ${product ? `${product.name} (${product.slug})` : "none"}`);
@@ -1140,7 +1297,8 @@ export async function listProducts(
 
   const result = rows
     .map((p) => {
-      const parts = [`**${p.name}**`, `  Slug: ${p.slug}`, `  Organization: ${p.orgSlug ?? "N/A"}`];
+      const coord = p.orgSlug ? `${p.orgSlug}/${p.slug}` : p.slug;
+      const parts = [`**${p.name}**`, `  Slug: ${coord}`, `  Organization: ${p.orgSlug ?? "N/A"}`];
       if (p.url) parts.push(`  URL: ${p.url}`);
       if (p.description) parts.push(`  Description: ${p.description}`);
       return parts.join("\n");
@@ -1153,6 +1311,14 @@ export async function listProducts(
 // ── get_product ──────────────────────────────────────────────────────
 
 export async function getProduct(db: D1Db, params: { identifier: string }): Promise<ToolResult> {
+  if (isBareSlug(params.identifier)) {
+    return text(
+      `Bare slug "${params.identifier}" is ambiguous — product slugs are org-scoped.\n` +
+        `Use an org-scoped identifier instead:\n` +
+        `  • ID:         prod_<id>\n` +
+        `  • Coordinate: <orgSlug>/<productSlug>  (e.g. "vercel/nextjs")`,
+    );
+  }
   const product = await resolveProduct(db, params.identifier);
   if (!product) return text(`No product found matching "${params.identifier}"`);
   return renderProductDetail(db, product);
@@ -1201,7 +1367,8 @@ async function renderProductDetail(
     lines.push("");
     lines.push("Sources:");
     for (const s of productSources) {
-      lines.push(`- **${s.name}** (${s.slug})`);
+      const srcCoord = orgRow ? `${orgRow.slug}/${s.slug}` : s.slug;
+      lines.push(`- **${s.name}** (${srcCoord})`);
       lines.push(`  Type: ${s.type} | URL: ${s.url}`);
       lines.push(`  Last fetched: ${s.lastFetchedAt ?? "Never"}`);
     }
@@ -1309,7 +1476,8 @@ export async function listCatalog(
 
   const result = entries
     .map((e) => {
-      const parts = [`**${e.name}** _(${e.kind})_`, `  Slug: ${e.slug}`];
+      const coord = e.orgSlug ? `${e.orgSlug}/${e.slug}` : e.slug;
+      const parts = [`**${e.name}** _(${e.kind})_`, `  Slug: ${coord}`];
       if (e.orgSlug) parts.push(`  Organization: ${e.orgName ?? e.orgSlug} (${e.orgSlug})`);
       if (e.category) parts.push(`  Category: ${e.category}`);
       if (e.url) parts.push(`  URL: ${e.url}`);
@@ -1368,8 +1536,19 @@ export async function getCatalogEntry(
       : text(`No source found matching "${params.identifier}"`);
   }
 
-  // Ambiguous slug: try product first (products typically have shorter,
-  // flatter slugs users reach for; sources carry repo-style slugs).
+  // Bare slug without org context — product and source slugs are now
+  // org-scoped so a bare slug is ambiguous and will break when the API
+  // removes its global carve-out (issue #698). Require an org-scoped form.
+  if (isBareSlug(params.identifier)) {
+    return text(
+      `Bare slug "${params.identifier}" is ambiguous — product and source slugs are org-scoped.\n` +
+        `Use an org-scoped identifier instead:\n` +
+        `  • ID:         src_<id>  or  prod_<id>\n` +
+        `  • Coordinate: <orgSlug>/<slug>  (e.g. "vercel/nextjs")`,
+    );
+  }
+
+  // org/slug coordinate — resolve to product or source
   const [prod, src] = await Promise.all([
     resolveProduct(db, params.identifier),
     resolveSource(db, params.identifier),
@@ -1426,6 +1605,17 @@ export async function search(
 
   let entitySourceIds: string[] | null = null;
   if (params.entity) {
+    if (isBareSlug(params.entity)) {
+      return {
+        result: text(
+          `Bare slug "${params.entity}" is ambiguous — source and product slugs are org-scoped.\n` +
+            `Use an org-scoped identifier instead:\n` +
+            `  • ID:         src_<id>  or  prod_<id>\n` +
+            `  • Coordinate: <orgSlug>/<slug>  (e.g. "vercel/nextjs")`,
+        ),
+        counts: empty,
+      };
+    }
     entitySourceIds = await resolveEntityToSourceIds(db, params.entity);
     if (!entitySourceIds) {
       return { result: text(`No catalog entry found matching "${params.entity}"`), counts: empty };
@@ -1495,6 +1685,7 @@ export async function search(
     publishedAt: string | null;
     sourceSlug: string;
     sourceName: string;
+    orgSlug: string | null;
   };
   type HybridSection = {
     mode: "hybrid";
@@ -1539,10 +1730,12 @@ export async function search(
           SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
                  r.version, r.title, r.type,
                  COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
-                 r.published_at as publishedAt
+                 r.published_at as publishedAt,
+                 o.slug as orgSlug
           FROM releases_fts
           JOIN releases r ON r.rowid = releases_fts.rowid
           JOIN sources s ON s.id = r.source_id
+          LEFT JOIN organizations o ON o.id = s.org_id
           WHERE releases_fts MATCH ${toFtsMatchQuery(params.query)}
             AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
             AND (r.suppressed IS NULL OR r.suppressed = 0)
@@ -1583,8 +1776,9 @@ export async function search(
     const lines = [
       "## Catalog",
       ...catalog.map((e) => {
-        const org = e.orgSlug ? ` — ${e.orgName ?? e.orgSlug}` : "";
-        return `- [${e.kind}] **${e.name}** (${e.slug})${org}`;
+        const coord = e.orgSlug ? `${e.orgSlug}/${e.slug}` : e.slug;
+        const orgLabel = e.orgSlug ? ` — ${e.orgName ?? e.orgSlug}` : "";
+        return `- [${e.kind}] **${e.name}** (${coord})${orgLabel}`;
       }),
     ];
     sections.push(lines.join("\n"));
@@ -1595,11 +1789,12 @@ export async function search(
     for (const hit of releaseResult.hybrid.hits) {
       if (hit.kind === "release") {
         const r = hit.release;
+        const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.source.slug}` : r.source.id;
         lines.push(
           [
             `- [release] **${r.title}**`,
             `  id: ${r.id}`,
-            `  source: ${r.source.name} (${r.source.slug}) | ${r.publishedAt ?? "N/A"}`,
+            `  source: ${r.source.name} (${srcCoord}) | ${r.publishedAt ?? "N/A"}`,
             r.version ? `  version: ${r.version}` : null,
             `  ${r.summary}`,
           ]
@@ -1610,7 +1805,7 @@ export async function search(
         const c = hit.chunk;
         lines.push(
           [
-            `- [changelog_chunk] ${c.source.name} (${c.source.slug})`,
+            `- [changelog_chunk] ${c.source.name} (${c.source.id})`,
             `  file: ${c.file_path} @ offset=${c.offset} length=${c.length}`,
             c.heading ? `  heading: ${c.heading}` : null,
             `  ${c.snippet}`,
@@ -1625,8 +1820,9 @@ export async function search(
     const lines: string[] = ["## Releases"];
     for (const r of releaseResult.rows) {
       const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
       lines.push(
-        `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`,
+        `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`,
       );
     }
     sections.push(lines.join("\n"));
