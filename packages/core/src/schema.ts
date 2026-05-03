@@ -298,6 +298,7 @@ export const usageLog = sqliteTable("usage_log", {
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
   sourceSlug: text("source_slug"),
+  sourceId: text("source_id").references(() => sources.id, { onDelete: "cascade" }),
   releaseCount: integer("release_count"),
   extractionMode: text("extraction_mode").$type<UsageExtractionMode>(),
   toolRounds: integer("tool_rounds"),

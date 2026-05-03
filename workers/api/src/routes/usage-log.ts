@@ -1,8 +1,9 @@
 import { Hono } from "hono";
-import { sql, gte, and, isNotNull } from "drizzle-orm";
+import { sql, gte, and, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   usageLog,
+  sources,
   USAGE_EXTRACTION_MODES,
   USAGE_FALLBACK_REASONS,
   type UsageExtractionMode,
@@ -66,16 +67,25 @@ usageLogRoutes.get("/admin/logs/usage/stats", async (c) => {
       .where(gte(usageLog.createdAt, since))
       .groupBy(usageLog.model),
 
+    // Group by source_id (the stable FK) and join sources for the display slug.
+    // Rows that pre-date the dual-write (source_id IS NULL) fall back to
+    // source_slug so the stats endpoint stays useful during the backfill window.
     db
       .select({
-        label: usageLog.sourceSlug,
+        label: sql<string>`COALESCE(${sources.slug}, ${usageLog.sourceSlug})`,
         totalInput: sql<number>`COALESCE(SUM(${usageLog.inputTokens}), 0)`,
         totalOutput: sql<number>`COALESCE(SUM(${usageLog.outputTokens}), 0)`,
         count: sql<number>`COUNT(*)`,
       })
       .from(usageLog)
-      .where(and(gte(usageLog.createdAt, since), isNotNull(usageLog.sourceSlug)))
-      .groupBy(usageLog.sourceSlug),
+      .leftJoin(sources, eq(usageLog.sourceId, sources.id))
+      .where(
+        and(
+          gte(usageLog.createdAt, since),
+          sql`(${usageLog.sourceId} IS NOT NULL OR ${usageLog.sourceSlug} IS NOT NULL)`,
+        ),
+      )
+      .groupBy(sql`COALESCE(${usageLog.sourceId}, ${usageLog.sourceSlug})`),
   ]);
 
   return c.json({ totals, byOperation, byModel, bySource });
@@ -85,6 +95,20 @@ usageLogRoutes.post("/admin/logs/usage", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json();
 
+  // Dual-write: callers supply sourceSlug; resolve to sourceId so new rows
+  // carry both. Callers may also supply sourceId directly (future) — if present
+  // it wins without a DB round-trip.
+  let resolvedSourceId: string | null = body.sourceId ?? null;
+  const incomingSlug: string | null = body.sourceSlug ?? null;
+  if (!resolvedSourceId && incomingSlug) {
+    const [src] = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.slug, incomingSlug))
+      .limit(1);
+    resolvedSourceId = src?.id ?? null;
+  }
+
   const [inserted] = await db
     .insert(usageLog)
     .values({
@@ -92,7 +116,8 @@ usageLogRoutes.post("/admin/logs/usage", async (c) => {
       model: body.model,
       inputTokens: body.inputTokens,
       outputTokens: body.outputTokens,
-      sourceSlug: body.sourceSlug ?? null,
+      sourceSlug: incomingSlug,
+      sourceId: resolvedSourceId,
       releaseCount: body.releaseCount ?? null,
       extractionMode: validateExtractionMode(body.extractionMode),
       toolRounds: toIntOrNull(body.toolRounds),
