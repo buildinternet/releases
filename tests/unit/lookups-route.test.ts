@@ -281,10 +281,11 @@ describe("POST /v1/lookups", () => {
     expect(orgs[0]?.name).toBe("Acme");
   });
 
-  test("falls back to org-prefixed slug when bare repo slug collides globally", async () => {
-    // Pre-seed an unrelated source that already owns the bare slug `cli`.
-    // A new lookup for foo/cli must not get stuck — the bare-slug attempt
-    // collides, but the org-prefixed `foo-cli` fallback should succeed.
+  test("bare repo slug wins under per-org uniqueness even if another org has the same slug", async () => {
+    // Pre-seed an unrelated source that already owns the bare slug `cli`
+    // under a different org. After #690 Phase C, slug uniqueness is per-org,
+    // so a new `foo/cli` lookup should materialize with bare slug `cli` under
+    // a fresh `foo` org rather than falling back to `foo-cli`.
     await testDb.db.insert(organizations).values({
       id: "org_acme",
       name: "Acme",
@@ -323,8 +324,7 @@ describe("POST /v1/lookups", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as { status: string; source: { slug: string } };
     expect(body.status).toBe("empty");
-    // First candidate `cli` collides; the org-prefixed `foo-cli` fallback wins.
-    expect(body.source.slug).toBe("foo-cli");
+    expect(body.source.slug).toBe("cli");
   });
 
   test("empty stub gets promoted to indexed when repo gains releases", async () => {

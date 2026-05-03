@@ -90,7 +90,7 @@ export const products = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newProductId),
     name: text("name").notNull(),
-    slug: text("slug").notNull().unique(),
+    slug: text("slug").notNull(),
     orgId: text("org_id")
       .notNull()
       .references(() => organizations.id, { onDelete: "cascade" }),
@@ -105,7 +105,7 @@ export const products = sqliteTable(
   },
   (table) => [
     index("idx_products_org").on(table.orgId),
-    // #690 Phase A: additive alongside the global slug UNIQUE; Phase C drops the global one.
+    // #690 Phase C: per-org uniqueness is the only slug constraint now; the global UNIQUE was dropped via scripts/migrations/690-phase-c-rebuild.sql.
     uniqueIndex("idx_products_org_slug").on(table.orgId, table.slug),
     index("idx_products_deleted_at")
       .on(table.deletedAt)
@@ -185,10 +185,12 @@ export const sources = sqliteTable(
   {
     id: text("id").primaryKey().$defaultFn(newSourceId),
     name: text("name").notNull(),
-    slug: text("slug").notNull().unique(),
+    slug: text("slug").notNull(),
     type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
     url: text("url").notNull(),
-    orgId: text("org_id").references(() => organizations.id, { onDelete: "set null" }),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
     productId: text("product_id").references(() => products.id, { onDelete: "set null" }),
     metadata: text("metadata").default("{}"),
     createdAt: text("created_at")
@@ -221,7 +223,7 @@ export const sources = sqliteTable(
     index("idx_sources_org").on(table.orgId),
     index("idx_sources_org_hidden").on(table.orgId, table.isHidden),
     index("idx_sources_product").on(table.productId),
-    // #690 Phase A: additive alongside the global slug UNIQUE; Phase C drops the global one.
+    // #690 Phase C: per-org uniqueness is the only slug constraint now; the global UNIQUE was dropped via scripts/migrations/690-phase-c-rebuild.sql.
     uniqueIndex("idx_sources_org_slug").on(table.orgId, table.slug),
     // Back the /status Sources-tab ORDER BY variants — the admin dashboard
     // sorts by name, last_fetched_at, and median_gap_days.
@@ -706,7 +708,7 @@ export const sourcesActive = sqliteView("sources_active", {
   slug: text("slug").notNull(),
   type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
   url: text("url").notNull(),
-  orgId: text("org_id"),
+  orgId: text("org_id").notNull(),
   productId: text("product_id"),
   metadata: text("metadata"),
   createdAt: text("created_at").notNull(),
@@ -762,7 +764,7 @@ export const sourcesVisible = sqliteView("sources_visible", {
   slug: text("slug").notNull(),
   type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
   url: text("url").notNull(),
-  orgId: text("org_id"),
+  orgId: text("org_id").notNull(),
   productId: text("product_id"),
   metadata: text("metadata"),
   createdAt: text("created_at").notNull(),

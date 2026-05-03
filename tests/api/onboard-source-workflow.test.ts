@@ -232,16 +232,7 @@ describe("OnboardSourceWorkflow", () => {
     expect(entities.upserted).toHaveLength(1);
   });
 
-  it("orphan source (no orgId) skips playbook step", async () => {
-    const { db, sqlite } = mkDb({ type: "scrape" });
-    sqlite.run("UPDATE sources SET org_id = NULL WHERE id = 'src_a1'");
-    globalThis.fetch = mkFetch({}).impl;
-    const entities = mkVectorize();
-    const env = mkEnv({ _drizzleOverride: db, ENTITIES_INDEX: entities.index });
-
-    const { records, thrown } = await runWorkflow(env);
-    expect(thrown).toBeUndefined();
-    const stepNames = records.map((r) => r.name);
-    expect(stepNames).toEqual(["load-source", "embed-source"]);
-  });
+  // Orphan sources (org_id IS NULL) are no longer possible after #690 Phase
+  // C — sources.org_id is NOT NULL. The playbook-skip branch in the workflow
+  // is now dead code and should be removed in a follow-up; the test is gone.
 });

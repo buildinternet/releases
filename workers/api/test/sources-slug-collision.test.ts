@@ -75,15 +75,19 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
     expect(body.slug).toBe("changelog");
   });
 
-  it("auto-suffixes to base-2 when base slug is taken, both return 201 with distinct slugs", async () => {
+  it("auto-suffixes to base-2 when base slug is taken within the same org", async () => {
+    // Per-org uniqueness (#690 Phase C) means slug collisions only happen
+    // inside one org. Same slug in two different orgs is fine and lands
+    // un-suffixed in each — that case is covered by the cross-org test below.
     const db = mkDb();
-    await db.insert(organizations).values([
-      { id: "org_a", slug: "org-a", name: "Org A", category: "cloud" },
-      { id: "org_b", slug: "org-b", name: "Org B", category: "cloud" },
-    ]);
+    await db.insert(organizations).values({
+      id: "org_a",
+      slug: "org-a",
+      name: "Org A",
+      category: "cloud",
+    });
     const fetch = mkApp(db);
 
-    // First source — takes "changelog"
     const res1 = await fetch(
       new Request("https://x.test/v1/sources", {
         method: "POST",
@@ -99,7 +103,46 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
     const body1 = (await res1.json()) as { slug: string };
     expect(body1.slug).toBe("changelog");
 
-    // Second source with the same name — must get "changelog-2"
+    // Same name in the *same* org — must get "changelog-2".
+    const res2 = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Changelog",
+          url: "https://org-a.test/v2/changelog",
+          orgSlug: "org-a",
+        }),
+      }),
+    );
+    expect(res2.status).toBe(201);
+    const body2 = (await res2.json()) as { slug: string };
+    expect(body2.slug).toBe("changelog-2");
+    expect(body1.slug).not.toBe(body2.slug);
+  });
+
+  it("same slug across different orgs lands un-suffixed in each", async () => {
+    const db = mkDb();
+    await db.insert(organizations).values([
+      { id: "org_a", slug: "org-a", name: "Org A", category: "cloud" },
+      { id: "org_b", slug: "org-b", name: "Org B", category: "cloud" },
+    ]);
+    const fetch = mkApp(db);
+
+    const res1 = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Changelog",
+          url: "https://org-a.test/changelog",
+          orgSlug: "org-a",
+        }),
+      }),
+    );
+    expect(res1.status).toBe(201);
+    expect(((await res1.json()) as { slug: string }).slug).toBe("changelog");
+
     const res2 = await fetch(
       new Request("https://x.test/v1/sources", {
         method: "POST",
@@ -112,46 +155,39 @@ describe("POST /v1/sources — slug auto-suffix on collision", () => {
       }),
     );
     expect(res2.status).toBe(201);
-    const body2 = (await res2.json()) as { slug: string };
-    expect(body2.slug).toBe("changelog-2");
-
-    // Both slugs are distinct
-    expect(body1.slug).not.toBe(body2.slug);
+    expect(((await res2.json()) as { slug: string }).slug).toBe("changelog");
   });
 
-  it("continues suffixing when multiple prior entries occupy the base and -2", async () => {
+  it("continues suffixing when multiple prior entries in the same org occupy the base and -2", async () => {
     const db = mkDb();
-    await db.insert(organizations).values([
-      { id: "org_c1", slug: "org-c1", name: "Org C1", category: "cloud" },
-      { id: "org_c2", slug: "org-c2", name: "Org C2", category: "cloud" },
-      { id: "org_c3", slug: "org-c3", name: "Org C3", category: "cloud" },
-    ]);
+    await db.insert(organizations).values({
+      id: "org_c",
+      slug: "org-c",
+      name: "Org C",
+      category: "cloud",
+    });
     const fetch = mkApp(db);
 
-    for (const [orgSlug, url] of [
-      ["org-c1", "https://c1.test/changelog"],
-      ["org-c2", "https://c2.test/changelog"],
-    ] as const) {
+    for (const url of ["https://c.test/v1/changelog", "https://c.test/v2/changelog"] as const) {
       // oxlint-disable-next-line no-await-in-loop -- sequential: each insert must land before next to drive slug collision
       const r = await fetch(
         new Request("https://x.test/v1/sources", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ name: "Changelog", url, orgSlug }),
+          body: JSON.stringify({ name: "Changelog", url, orgSlug: "org-c" }),
         }),
       );
       expect(r.status).toBe(201);
     }
 
-    // Third one should get "changelog-3"
     const res3 = await fetch(
       new Request("https://x.test/v1/sources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           name: "Changelog",
-          url: "https://c3.test/changelog",
-          orgSlug: "org-c3",
+          url: "https://c.test/v3/changelog",
+          orgSlug: "org-c",
         }),
       }),
     );

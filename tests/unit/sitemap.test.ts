@@ -160,24 +160,6 @@ describe("GET /sitemap", () => {
     expect(pairs).toEqual(["other/thing", "vercel/nextjs", "vercel/turborepo"]);
   });
 
-  test("excludes orphan sources (orgId is null)", async () => {
-    const db = testDatabase.db;
-    db.insert(organizations).values({ name: "Host", slug: "host" }).run();
-    db.insert(sources)
-      .values({
-        orgId: null,
-        name: "Orphan",
-        slug: "orphan",
-        type: "feed",
-        url: "https://orphan.dev/",
-      })
-      .run();
-
-    const result = await callSitemap();
-    expect(result.sources).toEqual([]);
-    expect(result.orgs.map((o) => o.slug)).toEqual(["host"]);
-  });
-
   test("carries lastActivity from the max(sources.lastFetchedAt) for each org", async () => {
     const db = testDatabase.db;
     const [org] = db.insert(organizations).values({ name: "Org", slug: "org" }).returning().all();

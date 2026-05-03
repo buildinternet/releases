@@ -233,65 +233,32 @@ export async function runLookup(
     }
 
     sourceId = newSourceId();
-    // Prefer the bare repo segment for the source slug — `/shopify/toxiproxy`
-    // reads cleaner than `/shopify/shopify-toxiproxy`. `sources.slug` is
-    // globally UNIQUE though, so popular repo names (`cli`, `core`, `api`)
-    // will collide across orgs. On collision, fall back to the org-prefixed
-    // form before resorting to numeric suffixes — the org-prefixed slug is
-    // effectively coordinate-unique, so suffixes only kick in if two repos
-    // genuinely share both org and name.
+    // Per-org slug uniqueness (#690 Phase C) means the bare repo segment is
+    // safe to use directly — an org by definition can't have two repos with
+    // the same name. The only remaining race is a concurrent request for the
+    // same coordinate; on UNIQUE error we re-read by URL.
     const repoSlug = parsed.repo.toLowerCase();
     const repoName = probe.repoName ?? parsed.repo;
-    const slugCandidates: string[] = [
-      repoSlug,
-      `${orgSlug}-${repoSlug}`,
-      `${orgSlug}-${repoSlug}-2`,
-      `${orgSlug}-${repoSlug}-3`,
-      `${orgSlug}-${repoSlug}-4`,
-    ];
-
-    // Handle slug collision on source insert (try the candidates in order).
-    // Between retries we re-check by URL so a concurrent request that won the
-    // first slug can't cause us to insert a second row at the same URL.
-    // (sources.slug is UNIQUE; sources.url is not — without this re-check
-    //  two concurrent calls could both succeed with different slug suffixes.)
-    for (let attempt = 0; attempt < slugCandidates.length; attempt++) {
-      if (attempt > 0) {
-        // oxlint-disable-next-line no-await-in-loop -- race re-check before next slug
-        const concurrent = await findExistingSource();
-        if (concurrent.length > 0) {
-          insertedSource = concurrent[0]!;
-          sourceId = insertedSource.id;
-          break;
-        }
-      }
-      const slug = slugCandidates[attempt]!;
-      try {
-        // oxlint-disable-next-line no-await-in-loop -- sequential retry on slug collision
-        const [row] = await db
-          .insert(sources)
-          .values({
-            id: sourceId,
-            name: repoName,
-            slug,
-            type: "github",
-            url,
-            orgId,
-            discovery: "on_demand",
-            isHidden: true,
-            metadata: newMeta,
-          })
-          .returning();
-        insertedSource = row;
-        break;
-      } catch (err) {
-        if (isConflictError(err)) continue;
-        throw err;
-      }
-    }
-
-    // If all slug attempts collided, fall back to reading the existing row.
-    if (!insertedSource) {
+    try {
+      const [row] = await db
+        .insert(sources)
+        .values({
+          id: sourceId,
+          name: repoName,
+          slug: repoSlug,
+          type: "github",
+          url,
+          orgId,
+          discovery: "on_demand",
+          isHidden: true,
+          metadata: newMeta,
+        })
+        .returning();
+      insertedSource = row;
+    } catch (err) {
+      if (!isConflictError(err)) throw err;
+      // Concurrent insert won the (org_id, slug) UNIQUE — re-read and return
+      // their row instead of bailing.
       const rows = await findExistingSource();
       if (rows.length > 0) {
         const existingReleases = await db
@@ -302,7 +269,6 @@ export async function runLookup(
           .limit(20);
         return { status: "existing", source: rows[0]!, releases: existingReleases, relatedOrg };
       }
-      // Truly unrecoverable — surface deferred so the client can retry.
       return { status: "deferred", relatedOrg };
     }
   }

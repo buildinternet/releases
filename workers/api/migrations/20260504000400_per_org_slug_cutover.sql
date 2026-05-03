@@ -1,0 +1,16 @@
+-- #690 Phase C — slug cutover marker.
+--
+-- Intentionally empty. The actual table rebuild (drop global UNIQUE on
+-- sources/products, flip sources.org_id to NOT NULL + cascade) lives at
+-- scripts/migrations/690-phase-c-rebuild.sql and was applied to prod
+-- on 2026-05-03 via `wrangler d1 execute --file=` (the migration system
+-- can't run table rebuilds — see the soft-delete migration's caveat at
+-- 20260502000000_soft_delete_resources.sql:9-13 and the empirical
+-- staging test that confirmed it).
+--
+-- This file exists so the migration timeline matches what's tracked in
+-- d1_migrations on prod, the drizzle-kit drift check stays green, and
+-- the test fixture (tests/db-helper.ts) sees the cutover happen at the
+-- right point in migration order. tests/db-helper.ts loads the actual
+-- rebuild SQL after applying these migrations, so the test schema
+-- matches prod.
