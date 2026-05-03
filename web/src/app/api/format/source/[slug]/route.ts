@@ -1,5 +1,9 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { api } from "@/lib/api";
+import { FORMATS, type Format } from "@/lib/request";
+
+const isFormat = (v: string | null): v is Format =>
+  v !== null && (FORMATS as readonly string[]).includes(v);
 
 /**
  * Legacy bare-slug format target. The `/source/{slug}.atom|.md|.json` URLs
@@ -11,7 +15,11 @@ import { api } from "@/lib/api";
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
-  const format = request.nextUrl.searchParams.get("format");
+  const rawFormat = request.nextUrl.searchParams.get("format");
+  // Allow-list against the canonical FORMATS set — the proxy populates this
+  // from a fixed alternation, but the route is routable directly too, so
+  // refuse anything off-list rather than splicing it into the redirect path.
+  const format: Format = isFormat(rawFormat) ? rawFormat : "md";
 
   let source;
   try {
@@ -24,7 +32,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 
   const target = new URL(request.url);
-  target.pathname = `/${source.org.slug}/${source.slug}.${format ?? "md"}`;
+  target.pathname = `/${source.org.slug}/${source.slug}.${format}`;
   // Preserve the format suffix in the redirect URL so the proxy's rewrite
   // catches the org-scoped path on the next hop.
   return NextResponse.redirect(target, 308);
