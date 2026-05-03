@@ -177,6 +177,7 @@ async function logAiUsage(
     inputTokens: number;
     outputTokens: number;
     sourceSlug?: string | null;
+    sourceId?: string | null;
     releaseCount: number;
   },
 ): Promise<void> {
@@ -187,6 +188,7 @@ async function logAiUsage(
       inputTokens: input.inputTokens,
       outputTokens: input.outputTokens,
       sourceSlug: input.sourceSlug ?? null,
+      sourceId: input.sourceId ?? null,
       releaseCount: input.releaseCount,
     });
   } catch (err) {
@@ -396,6 +398,7 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       sourceSlug: scope.kind === "source" ? scope.slug : null,
+      sourceId: scope.kind === "source" ? scope.id : null,
       releaseCount: inputs.length,
     });
 
@@ -546,6 +549,7 @@ workflowsRoutes.post("/workflows/compare", async (c) => {
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
       sourceSlug: null,
+      sourceId: null,
       releaseCount: rowsA.length + rowsB.length,
     });
 

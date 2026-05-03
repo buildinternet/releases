@@ -225,6 +225,12 @@ export const sources = sqliteTable(
     index("idx_sources_product").on(table.productId),
     // #690 Phase C: per-org uniqueness is the only slug constraint now; the global UNIQUE was dropped via scripts/migrations/690-phase-c-rebuild.sql.
     uniqueIndex("idx_sources_org_slug").on(table.orgId, table.slug),
+    // Standalone index for slug-only lookups — Phase C dropped the global
+    // UNIQUE(slug) which had been doubling as this index. Composite
+    // idx_sources_org_slug can't service `WHERE slug = ?` without an org_id
+    // predicate, and we still query that way on org-less paths (the usage-log
+    // dual-write resolver, MCP coordinate resolution, etc.).
+    index("idx_sources_slug").on(table.slug),
     // Back the /status Sources-tab ORDER BY variants — the admin dashboard
     // sorts by name, last_fetched_at, and median_gap_days.
     index("idx_sources_name").on(table.name),
@@ -298,6 +304,11 @@ export const usageLog = sqliteTable("usage_log", {
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
   sourceSlug: text("source_slug"),
+  // SET NULL (not CASCADE) — usage_log is historical telemetry. A source
+  // delete shouldn't sweep its post-migration rows; the source_slug
+  // fallback in routes/usage-log.ts is what keeps stats useful for
+  // already-deleted sources.
+  sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
   releaseCount: integer("release_count"),
   extractionMode: text("extraction_mode").$type<UsageExtractionMode>(),
   toolRounds: integer("tool_rounds"),
