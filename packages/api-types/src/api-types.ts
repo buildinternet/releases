@@ -247,6 +247,13 @@ export interface SourceDetail {
 
 // ── Releases ──
 
+/**
+ * Release type — mirrors `RELEASE_TYPES` in `@buildinternet/releases-core/schema`.
+ * Optional on the wire so older API responses (mid-deploy or pinned old workers)
+ * degrade gracefully — consumers that see `undefined` should treat it as `"feature"`.
+ */
+export type ReleaseType = "feature" | "rollup";
+
 export interface ReleaseItem {
   id?: string;
   version: string | null;
@@ -256,6 +263,8 @@ export interface ReleaseItem {
   publishedAt: string | null;
   url: string | null;
   media?: MediaItem[];
+  /** Release type. See {@link ReleaseType}. */
+  type?: ReleaseType;
 }
 
 export interface ReleaseDetail {
@@ -273,6 +282,8 @@ export interface ReleaseDetail {
   sourceSlug: string;
   sourceType: string;
   org: { slug: string; name: string } | null;
+  /** Release type. See {@link ReleaseType}. */
+  type?: ReleaseType;
 }
 
 export interface ReleaseCoverageRow {
@@ -410,6 +421,8 @@ export interface SearchReleaseHit {
    * use this to interleave release and chunk hits into a single ranked list.
    */
   score?: number;
+  /** Release type. See {@link ReleaseType}. */
+  type?: ReleaseType;
 }
 
 /**

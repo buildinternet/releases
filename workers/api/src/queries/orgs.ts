@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import type { ReleaseType } from "@buildinternet/releases-api-types";
 import type { D1Db } from "../db.js";
 import type { OrgListRow, SourceWithStats } from "./shared.js";
 
@@ -264,7 +265,7 @@ export type OrgReleaseRow = {
   source_slug: string;
   source_name: string;
   source_type: string;
-  type: string;
+  type: ReleaseType;
 };
 
 /** Uses raw D1 prepare/bind instead of Drizzle because cursor WHERE fragments are dynamic strings. */

@@ -22,6 +22,7 @@ import {
 import { embedBatch, VOYAGE_OUTPUT_DIMENSION } from "@releases/search/embeddings.js";
 import { withEmbedCache, type EmbedCacheBinding } from "@releases/search/embedding-cache.js";
 import { buildEmbedConfig } from "./embed-config.js";
+import type { ReleaseType } from "@buildinternet/releases-api-types";
 import type { D1Db } from "../db.js";
 
 // `@releases/search/embeddings.js` touches `process.env` at module scope;
@@ -76,6 +77,8 @@ export interface HybridReleaseHit {
     summary: string;
     source: { id: string; slug: string; name: string };
     orgSlug: string | null;
+    /** Release type — "feature" (default) or "rollup". */
+    type: ReleaseType;
   };
 }
 
@@ -164,6 +167,8 @@ interface RawReleaseRow {
   sourceSlug: string;
   sourceName: string;
   orgSlug: string | null;
+  /** Release type — "feature" (default) or "rollup". */
+  type: ReleaseType;
 }
 
 async function hydrateReleases(
@@ -180,6 +185,7 @@ async function hydrateReleases(
            r.url as url,
            r.published_at as publishedAt,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.type as type,
            s.id as sourceId,
            s.slug as sourceSlug,
            s.name as sourceName,
@@ -419,6 +425,7 @@ async function buildReleaseHits(
         summary: row.summary,
         source: { id: row.sourceId, slug: row.sourceSlug, name: row.sourceName },
         orgSlug: row.orgSlug,
+        type: row.type,
       },
     });
   }
