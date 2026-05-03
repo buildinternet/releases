@@ -63,9 +63,9 @@ export function productWhere(identifier: string, opts?: { includeDeleted?: boole
 }
 
 /**
- * Resolve a source for the org-scoped redirector (#690 Phase B). Each segment
- * accepts an ID (`org_…` / `src_…`) or a slug — delegates to `orgWhere` and
- * `sourceWhere` so the immutable-id and tombstone semantics stay in sync.
+ * Resolve a source within an org (#690). Each segment accepts an ID
+ * (`org_…` / `src_…`) or a slug — delegates to `orgWhere` and `sourceWhere`
+ * so id branching and tombstone filtering stay in sync.
  */
 export async function findSourceForOrgSlug(
   db: ReturnType<typeof createDb>,
@@ -74,12 +74,12 @@ export async function findSourceForOrgSlug(
   opts?: { includeDeleted?: boolean },
 ) {
   const rows = await db
-    .select({ id: sources.id })
+    .select({ source: sources })
     .from(sources)
     .innerJoin(organizations, eq(sources.orgId, organizations.id))
     .where(and(orgWhere(orgIdOrSlug, opts), sourceWhere(sourceIdOrSlug, opts)))
     .limit(1);
-  return rows[0] ?? null;
+  return rows[0]?.source ?? null;
 }
 
 /** Sibling of `findSourceForOrgSlug` for products. */
@@ -90,12 +90,51 @@ export async function findProductForOrgSlug(
   opts?: { includeDeleted?: boolean },
 ) {
   const rows = await db
-    .select({ id: products.id })
+    .select({ product: products })
     .from(products)
     .innerJoin(organizations, eq(products.orgId, organizations.id))
     .where(and(orgWhere(orgIdOrSlug, opts), productWhere(productIdOrSlug, opts)))
     .limit(1);
-  return rows[0] ?? null;
+  return rows[0]?.product ?? null;
+}
+
+/**
+ * Pick the right source resolver based on which params Hono matched. Lets a
+ * handler register at both `/sources/:slug` (bare, id-or-slug) and
+ * `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug)
+ * without branching at every call site.
+ */
+export async function resolveSourceFromContext(
+  c: { req: { param: (name: string) => string | undefined } },
+  db: ReturnType<typeof createDb>,
+  opts?: { includeDeleted?: boolean },
+) {
+  const orgSeg = c.req.param("orgSlug");
+  const sourceSeg = c.req.param("sourceSlug");
+  if (orgSeg && sourceSeg) {
+    return findSourceForOrgSlug(db, orgSeg, sourceSeg, opts);
+  }
+  const bare = c.req.param("slug") ?? c.req.param("identifier");
+  if (!bare) return null;
+  const [row] = await db.select().from(sources).where(sourceWhere(bare, opts));
+  return row ?? null;
+}
+
+/** Sibling of `resolveSourceFromContext` for products. */
+export async function resolveProductFromContext(
+  c: { req: { param: (name: string) => string | undefined } },
+  db: ReturnType<typeof createDb>,
+  opts?: { includeDeleted?: boolean },
+) {
+  const orgSeg = c.req.param("orgSlug");
+  const productSeg = c.req.param("productSlug");
+  if (orgSeg && productSeg) {
+    return findProductForOrgSlug(db, orgSeg, productSeg, opts);
+  }
+  const bare = c.req.param("identifier") ?? c.req.param("slug");
+  if (!bare) return null;
+  const [row] = await db.select().from(products).where(productWhere(bare, opts));
+  return row ?? null;
 }
 
 /**

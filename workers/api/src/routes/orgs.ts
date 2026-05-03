@@ -500,6 +500,65 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
   return c.json({ deleted: true, deletedAt: now });
 });
 
+// Unified browse for the org's addressable things: sources + products today,
+// rollups when #693 ships them. Mirrors what the web's /{orgSlug} page renders
+// and what the CLI's catalog-rollup search wants in one round trip.
+orgRoutes.get("/orgs/:slug/catalog", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+  const kindParam = c.req.query("kind");
+  const limit = Math.min(parseInt(c.req.query("limit") ?? "100", 10) || 100, 500);
+
+  const [org] = await db.select().from(organizations).where(orgWhere(slug));
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  const wantSources = !kindParam || kindParam === "source";
+  const wantProducts = !kindParam || kindParam === "product";
+
+  const [productRows, sourceRows] = await Promise.all([
+    wantProducts
+      ? db
+          .select({
+            id: productsActive.id,
+            slug: productsActive.slug,
+            name: productsActive.name,
+            url: productsActive.url,
+            description: productsActive.description,
+            category: productsActive.category,
+          })
+          .from(productsActive)
+          .where(eq(productsActive.orgId, org.id))
+          .orderBy(productsActive.name)
+          .limit(limit)
+      : Promise.resolve([]),
+    wantSources
+      ? db
+          .select({
+            id: sourcesVisible.id,
+            slug: sourcesVisible.slug,
+            name: sourcesVisible.name,
+            type: sourcesVisible.type,
+            url: sourcesVisible.url,
+            productId: sourcesVisible.productId,
+          })
+          .from(sourcesVisible)
+          .where(eq(sourcesVisible.orgId, org.id))
+          .orderBy(sourcesVisible.name)
+          .limit(limit)
+      : Promise.resolve([]),
+  ]);
+
+  const items = [
+    ...productRows.map((p) => ({ kind: "product" as const, ...p })),
+    ...sourceRows.map((s) => ({ kind: "source" as const, ...s })),
+  ];
+
+  return c.json({
+    org: { id: org.id, slug: org.slug, name: org.name },
+    items,
+  });
+});
+
 orgRoutes.get("/orgs/:slug/accounts", async (c) => {
   const db = createDb(c.env.DB);
   const slug = c.req.param("slug");

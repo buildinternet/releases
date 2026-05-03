@@ -42,7 +42,7 @@ import {
   sourceWhere,
   orgWhere,
   productWhere,
-  findSourceForOrgSlug,
+  resolveSourceFromContext,
   isConflictError,
   computeAvgPerWeek,
   heatmapDateRange,
@@ -711,14 +711,13 @@ sourceRoutes.patch("/sources/:slug/metadata", async (c) => {
 
 // ── Recent releases (for summary generation) ──
 
-sourceRoutes.get("/sources/:slug/recent-releases", async (c) => {
+const getRecentReleasesHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
   const cutoff = c.req.query("cutoff");
 
   if (!cutoff) return c.json({ error: "cutoff query param required" }, 400);
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const rows = await db
@@ -734,16 +733,17 @@ sourceRoutes.get("/sources/:slug/recent-releases", async (c) => {
     .orderBy(desc(releases.publishedAt));
 
   return c.json(rows);
-});
+};
+sourceRoutes.get("/sources/:slug/recent-releases", getRecentReleasesHandler);
+sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/recent-releases", getRecentReleasesHandler);
 
 // ── Known releases for incremental parsing ──
 
-sourceRoutes.get("/sources/:slug/known-releases", async (c) => {
+const getKnownReleasesHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
   const limit = parseInt(c.req.query("limit") ?? "10", 10);
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found" }, 404);
 
   const rows = await db
@@ -758,7 +758,9 @@ sourceRoutes.get("/sources/:slug/known-releases", async (c) => {
     .limit(limit);
 
   return c.json(rows);
-});
+};
+sourceRoutes.get("/sources/:slug/known-releases", getKnownReleasesHandler);
+sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/known-releases", getKnownReleasesHandler);
 
 // ── Sessions involving a specific source slug ──
 
@@ -777,11 +779,10 @@ sourceRoutes.get("/sources/:slug/sessions", async (c) => {
 });
 
 // Weekly release activity for source timeline visualization
-sourceRoutes.get("/sources/:slug/activity", async (c) => {
+const getSourceActivityHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   // Validate date params
@@ -850,14 +851,15 @@ sourceRoutes.get("/sources/:slug/activity", async (c) => {
       latestVersion: r.latest_version ?? null,
     })),
   });
-});
+};
+sourceRoutes.get("/sources/:slug/activity", getSourceActivityHandler);
+sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/activity", getSourceActivityHandler);
 
 // Daily release heatmap for source contribution-graph visualization
-sourceRoutes.get("/sources/:slug/heatmap", async (c) => {
+const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const { from, to, toExclusive } = heatmapDateRange();
@@ -869,7 +871,9 @@ sourceRoutes.get("/sources/:slug/heatmap", async (c) => {
     dailyCounts: rows.map((r) => ({ date: r.date, count: r.cnt })),
     total,
   });
-});
+};
+sourceRoutes.get("/sources/:slug/heatmap", getSourceHeatmapHandler);
+sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/heatmap", getSourceHeatmapHandler);
 
 sourceRoutes.get("/sources/:slug/changelog", async (c) => {
   const slug = c.req.param("slug");
@@ -986,14 +990,16 @@ sourceRoutes.patch("/sources/:slug/changelog/tokens", async (c) => {
   return c.json({ path: selected.path, oldTokens, tokens: newTokens });
 });
 
-sourceRoutes.get("/sources/:slug", async (c) => {
-  const slug = c.req.param("slug");
+// Registered at both `/sources/:slug` (id-or-slug, id preferred) and
+// `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug).
+// `resolveSourceFromContext` picks the right resolver from the matched params.
+const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const page = parseInt(c.req.query("page") ?? "1", 10);
   const pageSize = parseInt(c.req.query("pageSize") ?? "20", 10);
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
   const db = createDb(c.env.DB);
 
-  const [src] = await db.select().from(sources).where(sourceWhere(slug));
+  const src = await resolveSourceFromContext(c, db);
   if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
 
   const offset = (page - 1) * pageSize;
@@ -1171,7 +1177,9 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   }
 
   return c.json(result);
-});
+};
+sourceRoutes.get("/sources/:slug", getSourceDetailHandler);
+sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug", getSourceDetailHandler);
 
 sourceRoutes.post("/sources", async (c) => {
   const db = createDb(c.env.DB);
@@ -1592,35 +1600,6 @@ sourceRoutes.post("/releases/:id/unsuppress", async (c) => {
   if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
   return c.json({ unsuppressed: true });
 });
-
-// ── Org-scoped source routes (#690 Phase B) ──
-//
-// Resolves `(orgSlug, sourceSlug)` and 307-redirects to the canonical bare
-// path. 307 preserves method and body so PATCH/POST callers need no changes.
-
-async function redirectOrgScopedSource(c: import("hono").Context<Env>) {
-  const orgSlug = c.req.param("orgSlug");
-  const sourceSlug = c.req.param("sourceSlug");
-  if (!orgSlug || !sourceSlug) {
-    return c.json({ error: "bad_request", message: "Missing org or source slug" }, 400);
-  }
-  const db = createDb(c.env.DB);
-  const src = await findSourceForOrgSlug(db, orgSlug, sourceSlug);
-  if (!src) {
-    return c.json(
-      { error: "not_found", message: `Source ${orgSlug}/${sourceSlug} not found` },
-      404,
-    );
-  }
-  const url = new URL(c.req.url);
-  const prefix = `/v1/orgs/${orgSlug}/sources/${sourceSlug}`;
-  const tail = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : "";
-  url.pathname = `/v1/sources/${src.id}${tail}`;
-  return c.redirect(url.toString(), 307);
-}
-
-sourceRoutes.all("/orgs/:orgSlug/sources/:sourceSlug", redirectOrgScopedSource);
-sourceRoutes.all("/orgs/:orgSlug/sources/:sourceSlug/*", redirectOrgScopedSource);
 
 // ── Embed side effect helpers ──
 //

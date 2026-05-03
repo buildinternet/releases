@@ -1,13 +1,10 @@
 /**
- * Org-scoped source/product routes (#690 Phase B).
+ * Org-scoped source/product routes + catalog (#690 Phase B).
  *
- * `/v1/orgs/:orgSlug/sources/:sourceSlug{/...}` resolves the source by
- * `(org_id, slug)` and 307-redirects to `/v1/sources/{src_id}{/...}`. Same
- * shape for products.
- *
- * The redirect itself is the contract under test — we don't follow it. That
- * way these tests stay decoupled from the bare-route handlers' behavior, and
- * Phase C can flip the bare routes to id-only without rewriting these.
+ * GET handlers register at both `/v1/sources/:slug` (id-or-slug, id preferred)
+ * and `/v1/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments
+ * id-or-slug). Same shape for products. The catalog endpoint returns the
+ * unified browse view used by the web frontend and CLI.
  */
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
@@ -17,6 +14,7 @@ import { organizations, sources, products } from "@buildinternet/releases-core/s
 import { Hono } from "hono";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { productRoutes } from "../src/routes/products.js";
+import { orgRoutes } from "../src/routes/orgs.js";
 
 const statusHubStub = {
   idFromName: () => "stub-id",
@@ -40,10 +38,10 @@ function mkApp(db: ReturnType<typeof mkDb>) {
   } as unknown as ExecutionContext;
   const app = new Hono();
   const v1 = new Hono();
+  v1.route("/", orgRoutes);
   v1.route("/", sourceRoutes);
   v1.route("/", productRoutes);
   app.route("/v1", v1);
-  // app.fetch returns the handler's Response directly (no auto-follow on 3xx).
   return (req: Request) => app.fetch(req, fakeEnv, fakeCtx);
 }
 
@@ -81,54 +79,47 @@ async function seed(db: ReturnType<typeof mkDb>) {
 }
 
 describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug", () => {
-  it("307-redirects to the bare /v1/sources/<id> path", async () => {
+  it("returns the same payload as the bare /v1/sources/:id route", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/orgs/acme/sources/cli"));
+    const [orgScoped, bare] = await Promise.all([
+      fetch(new Request("https://x.test/v1/orgs/acme/sources/cli")),
+      fetch(new Request("https://x.test/v1/sources/src_acme_cli")),
+    ]);
 
-    expect(res.status).toBe(307);
-    const location = res.headers.get("location");
-    expect(location).not.toBeNull();
-    expect(new URL(location!).pathname).toBe("/v1/sources/src_acme_cli");
+    expect(orgScoped.status).toBe(200);
+    expect(bare.status).toBe(200);
+    const orgBody = (await orgScoped.json()) as { id: string; slug: string };
+    const bareBody = (await bare.json()) as { id: string; slug: string };
+    expect(orgBody.id).toBe("src_acme_cli");
+    expect(orgBody.slug).toBe("cli");
+    expect(orgBody).toEqual(bareBody);
   });
 
-  it("preserves the trailing path segment in the redirect target", async () => {
+  it("accepts ids in either segment", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/orgs/acme/sources/cli/recent-releases"));
+    const res = await fetch(new Request("https://x.test/v1/orgs/org_acme/sources/src_acme_cli"));
 
-    expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location")!).pathname).toBe(
-      "/v1/sources/src_acme_cli/recent-releases",
-    );
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { id: string }).id).toBe("src_acme_cli");
   });
 
-  it("returns 404 when the source slug doesn't exist within the org", async () => {
+  it("404s when source slug doesn't belong to the named org", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
 
-    // beta/cli — beta has no source slugged "cli" (its slug is "cli-beta").
+    // Beta org has no source slugged 'cli' — Acme does, but the org scope rules it out.
     const res = await fetch(new Request("https://x.test/v1/orgs/beta/sources/cli"));
-
     expect(res.status).toBe(404);
   });
 
-  it("returns 404 when the org slug doesn't exist", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-
-    const res = await fetch(new Request("https://x.test/v1/orgs/nope/sources/cli"));
-
-    expect(res.status).toBe(404);
-  });
-
-  it("returns 404 for a tombstoned source by default", async () => {
+  it("excludes tombstoned sources by default", async () => {
     const db = mkDb();
     await seed(db);
     await db.insert(sources).values({
@@ -143,76 +134,73 @@ describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(new Request("https://x.test/v1/orgs/acme/sources/old"));
-
     expect(res.status).toBe(404);
-  });
-
-  it("accepts ids (org_… / src_…) interchangeably with slugs", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-
-    const res = await fetch(new Request("https://x.test/v1/orgs/org_acme/sources/src_acme_cli"));
-
-    expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/v1/sources/src_acme_cli");
-  });
-});
-
-describe("Org-scoped redirect — method preservation", () => {
-  it("redirects PATCH with body using 307 (preserves method)", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-
-    const res = await fetch(
-      new Request("https://x.test/v1/orgs/acme/sources/cli", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: "Renamed" }),
-      }),
-    );
-
-    // 307 preserves method+body per RFC 7231; clients re-issue PATCH at target.
-    expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/v1/sources/src_acme_cli");
   });
 });
 
 describe("GET /v1/orgs/:orgSlug/products/:productSlug", () => {
-  it("307-redirects to the bare /v1/products/<id> path", async () => {
+  it("returns the same payload as /v1/products/:id", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
 
-    const res = await fetch(new Request("https://x.test/v1/orgs/acme/products/widget"));
+    const [orgScoped, bare] = await Promise.all([
+      fetch(new Request("https://x.test/v1/orgs/acme/products/widget")),
+      fetch(new Request("https://x.test/v1/products/prod_acme_widget")),
+    ]);
 
-    expect(res.status).toBe(307);
-    expect(new URL(res.headers.get("location")!).pathname).toBe("/v1/products/prod_acme_widget");
+    expect(orgScoped.status).toBe(200);
+    expect(bare.status).toBe(200);
+    expect(await orgScoped.json()).toEqual(await bare.json());
   });
 
-  it("preserves trailing segments and query string", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-
-    const res = await fetch(
-      new Request("https://x.test/v1/orgs/acme/products/widget/tags?include=hidden"),
-    );
-
-    expect(res.status).toBe(307);
-    const target = new URL(res.headers.get("location")!);
-    expect(target.pathname).toBe("/v1/products/prod_acme_widget/tags");
-    expect(target.searchParams.get("include")).toBe("hidden");
-  });
-
-  it("returns 404 when the product doesn't exist in that org", async () => {
+  it("404s when product doesn't exist in the named org", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
 
     const res = await fetch(new Request("https://x.test/v1/orgs/beta/products/widget"));
+    expect(res.status).toBe(404);
+  });
+});
 
+describe("GET /v1/orgs/:slug/catalog", () => {
+  it("returns sources and products as a discriminated union", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog"));
+    expect(res.status).toBe(200);
+
+    const body = (await res.json()) as {
+      org: { id: string; slug: string };
+      items: Array<{ kind: "source" | "product"; id: string; slug: string }>;
+    };
+    expect(body.org.slug).toBe("acme");
+    const kinds = new Set(body.items.map((i) => i.kind));
+    expect(kinds.has("source")).toBe(true);
+    expect(kinds.has("product")).toBe(true);
+    expect(body.items.find((i) => i.kind === "source")?.id).toBe("src_acme_cli");
+    expect(body.items.find((i) => i.kind === "product")?.id).toBe("prod_acme_widget");
+  });
+
+  it("filters by kind", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog?kind=product"));
+    const body = (await res.json()) as { items: Array<{ kind: string }> };
+    expect(body.items.every((i) => i.kind === "product")).toBe(true);
+  });
+
+  it("404s for unknown org", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/orgs/nope/catalog"));
     expect(res.status).toBe(404);
   });
 });
