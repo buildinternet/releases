@@ -282,6 +282,6 @@ https://releases.sh/anthropic.md       # Markdown
 https://releases.sh/anthropic.atom     # Atom 1.0 feed
 ```
 
-The same suffixes work on source pages (`/{org}/{source}.atom`) and standalone sources (`/source/{slug}.atom`).
+The same suffixes work on source pages (`/{org}/{source}.atom`); legacy bare paths (`/source/{slug}.atom`) 308-redirect to the canonical org-scoped form.
 
 Atom feeds include the 50 most recent entries with stable `<id>`s, RFC 3339 timestamps, and HTML-typed content. They respond to `If-None-Match` / `If-Modified-Since` with `304 Not Modified` when unchanged — drop in to any feed reader or polling tool without a custom adapter. The feed is also advertised from each HTML page via `<link rel="alternate" type="application/atom+xml">` for browser auto-discovery.

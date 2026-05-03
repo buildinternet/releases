@@ -11,7 +11,7 @@ export async function GET(
   const { orgSlug, productSlug } = await params;
   let product;
   try {
-    product = await api.productDetail(productSlug);
+    product = await api.productDetail({ orgSlug, productSlug });
   } catch {
     return NextResponse.json({ error: "not_found", message: "Product not found" }, { status: 404 });
   }

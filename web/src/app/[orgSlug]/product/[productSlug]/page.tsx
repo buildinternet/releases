@@ -10,7 +10,9 @@ import { CliCommand } from "@/components/cli-command";
 import { taxonomySidebarSections } from "@/components/taxonomy-chips";
 import Link from "next/link";
 
-const getProduct = cache((slug: string) => api.productDetail(slug));
+const getProduct = cache((orgSlug: string, productSlug: string) =>
+  api.productDetail({ orgSlug, productSlug }),
+);
 
 export async function generateMetadata({
   params,
@@ -19,7 +21,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { orgSlug, productSlug } = await params;
   try {
-    const product = await getProduct(productSlug);
+    const product = await getProduct(orgSlug, productSlug);
     return {
       title: product.name,
       description: product.description ?? `${product.name} changelog sources`,
@@ -40,7 +42,7 @@ export default async function ProductPage({
 
   let product: ProductDetail;
   try {
-    product = await getProduct(productSlug);
+    product = await getProduct(orgSlug, productSlug);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (

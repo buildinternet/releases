@@ -33,10 +33,12 @@ export function ChangelogSkeleton() {
 }
 
 export async function ChangelogView({
+  orgSlug,
   sourceSlug,
   path,
   startOffset,
 }: {
+  orgSlug: string;
   sourceSlug: string;
   path?: string;
   /**
@@ -51,11 +53,14 @@ export async function ChangelogView({
   const hasDeepLink = typeof startOffset === "number" && startOffset > 0;
   let file;
   try {
-    file = await api.sourceChangelog(sourceSlug, {
-      path,
-      offset: startOffset,
-      limit: DEFAULT_CHANGELOG_SLICE_LIMIT,
-    });
+    file = await api.sourceChangelog(
+      { orgSlug, sourceSlug },
+      {
+        path,
+        offset: startOffset,
+        limit: DEFAULT_CHANGELOG_SLICE_LIMIT,
+      },
+    );
   } catch {
     file = null;
   }
@@ -147,7 +152,8 @@ export async function ChangelogView({
         // Keying by path resets stream state on file switch so chunks from a
         // prior file don't bleed into the new one.
         key={file.path}
-        slug={sourceSlug}
+        orgSlug={orgSlug}
+        sourceSlug={sourceSlug}
         activePath={file.path}
         markdownClassName={markdownClasses}
         initial={{
