@@ -154,6 +154,20 @@ describe("GET /v1/orgs/:orgSlug/products/:productSlug", () => {
     expect(await orgScoped.json()).toEqual(await bare.json());
   });
 
+  it("accepts ids in either segment", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const [orgScoped, bare] = await Promise.all([
+      fetch(new Request("https://x.test/v1/orgs/org_acme/products/prod_acme_widget")),
+      fetch(new Request("https://x.test/v1/products/prod_acme_widget")),
+    ]);
+
+    expect(orgScoped.status).toBe(200);
+    expect(await orgScoped.json()).toEqual(await bare.json());
+  });
+
   it("404s when product doesn't exist in the named org", async () => {
     const db = mkDb();
     await seed(db);
@@ -165,9 +179,7 @@ describe("GET /v1/orgs/:orgSlug/products/:productSlug", () => {
 });
 
 describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug/changelog", () => {
-  it("matches the bare /v1/sources/:slug/changelog response on a real changelog file", async () => {
-    // Don't need actual file rows — both routes share the same handler, so
-    // a 404 from each is sufficient to prove dual-registration is wired.
+  it("is dual-registered (org-scoped and bare routes both reach the handler)", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
@@ -200,14 +212,12 @@ describe("GET /v1/orgs/:slug/catalog — input validation", () => {
     const res = await fetch(new Request("https://x.test/v1/orgs/acme/catalog?limit=-1"));
     expect(res.status).toBe(200);
     const body = (await res.json()) as { items: unknown[] };
-    // 1 product + 1 source seeded, but limit=1 caps each per-kind, so we'd
-    // see at most 2 items. The bug we're guarding against is LIMIT -1 acting
-    // as no-limit — observable as the catalog returning more than the cap.
-    expect(body.items.length).toBeLessThanOrEqual(2);
+    // limit=-1 is clamped to 1 per-kind; seed has 1 product + 1 source = 2 items max.
+    expect(body.items.length).toBe(2);
   });
 });
 
-describe("POST /v1/sources — orgId guard (#690 Phase A drift prevention)", () => {
+describe("POST /v1/sources — orgId guard", () => {
   it("400s when neither orgId nor orgSlug resolves to an org", async () => {
     const db = mkDb();
     await seed(db);

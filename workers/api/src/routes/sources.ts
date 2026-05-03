@@ -875,9 +875,6 @@ const getSourceHeatmapHandler = async (c: import("hono").Context<Env>) => {
 sourceRoutes.get("/sources/:slug/heatmap", getSourceHeatmapHandler);
 sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/heatmap", getSourceHeatmapHandler);
 
-// Search-hybrid hits expose `{ orgSlug, sourceSlug }` to chunk consumers, so
-// the changelog chain has to be addressable without an id once per-org slug
-// uniqueness lands.
 const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const src = await resolveSourceFromContext(c, db);
@@ -1225,11 +1222,7 @@ sourceRoutes.post("/sources", async (c) => {
     }
   }
 
-  // Resolve org by slug if orgSlug provided (preferred over raw orgId).
-  // org_id is required (#690 Phase A precondition for the upcoming NOT NULL
-  // migration in Phase C). Silent NULL fall-through is what produced the lone
-  // orphan we just adopted — guard at the write boundary so it can't happen
-  // again before the schema constraint catches up.
+  // org_id is required. Guard here until the Phase C NOT NULL migration lands.
   let orgId = body.orgId ?? null;
   if (!orgId && body.orgSlug) {
     const [org] = await db.select().from(organizations).where(orgWhere(body.orgSlug));

@@ -501,21 +501,8 @@ orgRoutes.delete("/orgs/:slug", async (c) => {
 });
 
 // Unified browse for the org's addressable things: sources + products today,
-// rollups when #693 ships them. Mirrors what the web's /{orgSlug} page renders
-// and what the CLI's catalog-rollup search wants in one round trip.
-//
-// Response shape:
-//   { org: { id, slug, name },
-//     items: Array<
-//       { kind: "product", id, slug, name, url, description, category }
-//       | { kind: "source",  id, slug, name, type, url, productId }
-//     > }
-// Order: products first (by name), then sources (by name). The mixed-kind
-// payload is intentional — clients render in document order; rollups (#693)
-// will slot in as `{ kind: "rollup", … }` without changing this shape.
-//
-// `?kind=source|product` narrows the response. `?limit=N` is per-kind, hard
-// capped at 500 and floored at 1. Unknown `kind` returns 400.
+// rollups when #693 ships them. `?kind=source|product` narrows the response;
+// `?limit=N` is per-kind (capped [1, 500]); unknown `kind` returns 400.
 const CATALOG_KINDS = new Set(["source", "product"]);
 orgRoutes.get("/orgs/:slug/catalog", async (c) => {
   const db = createDb(c.env.DB);
