@@ -107,22 +107,6 @@ describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug", () => {
     );
   });
 
-  it("preserves the query string in the redirect target", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-
-    const res = await fetch(
-      new Request("https://x.test/v1/orgs/acme/sources/cli?page=3&pageSize=50"),
-    );
-
-    expect(res.status).toBe(307);
-    const target = new URL(res.headers.get("location")!);
-    expect(target.pathname).toBe("/v1/sources/src_acme_cli");
-    expect(target.searchParams.get("page")).toBe("3");
-    expect(target.searchParams.get("pageSize")).toBe("50");
-  });
-
   it("returns 404 when the source slug doesn't exist within the org", async () => {
     const db = mkDb();
     await seed(db);

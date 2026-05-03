@@ -477,8 +477,6 @@ async function redirectOrgScopedProduct(c: import("hono").Context<Env>) {
     );
   }
   const url = new URL(c.req.url);
-  // See the equivalent comment in routes/sources.ts — Hono's `*` wildcard
-  // isn't exposed as a named param, so we compute the tail from c.req.path.
   const prefix = `/v1/orgs/${orgSlug}/products/${productSlug}`;
   const tail = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : "";
   url.pathname = `/v1/products/${product.id}${tail}`;

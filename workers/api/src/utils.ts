@@ -63,13 +63,9 @@ export function productWhere(identifier: string, opts?: { includeDeleted?: boole
 }
 
 /**
- * Resolve a source by `(orgSlug, sourceSlug)` — used by the org-scoped routes
- * added in #690 Phase B. Joins on the org's slug and the source's slug, scoped
- * to the source's `org_id`. Returns the source row or null.
- *
- * Hidden sources (on-demand lookup rows) are returned the same as visible
- * ones: this matches `sourceWhere`'s behavior, which doesn't filter hidden.
- * Tombstoned rows are excluded by default, matching `sourceWhere(opts)`.
+ * Resolve a source by `(orgSlug, sourceSlug)` for the org-scoped redirector
+ * (#690 Phase B). Hidden (on-demand) sources are included; tombstoned rows are
+ * excluded unless `opts.includeDeleted` is set.
  */
 export async function findSourceForOrgSlug(
   db: ReturnType<typeof createDb>,
