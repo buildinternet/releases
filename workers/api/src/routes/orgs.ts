@@ -211,6 +211,7 @@ orgRoutes.get("/orgs/:slug", async (c) => {
     url: row.url,
     isPrimary: Boolean(row.is_primary),
     isHidden: Boolean(row.is_hidden),
+    discovery: row.discovery ?? "curated",
     fetchPriority: (row.fetch_priority ?? null) as "normal" | "low" | "paused" | null,
     lastFetchedAt: row.last_fetched_at ?? null,
     lastPolledAt: row.last_polled_at ?? null,

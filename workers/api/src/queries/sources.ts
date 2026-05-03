@@ -11,6 +11,7 @@ export type SourceListRow = {
   product_id: string | null;
   is_primary: number | null;
   is_hidden: number | null;
+  discovery: "curated" | "agent" | "on_demand" | null;
   metadata: string | null;
   last_fetched_at: string | null;
   last_polled_at: string | null;

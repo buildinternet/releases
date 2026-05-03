@@ -92,6 +92,12 @@ export interface SourceListItem {
   latestAddedAt?: string | null;
   isPrimary?: boolean;
   isHidden?: boolean;
+  /**
+   * How the row was created. Optional on the wire so older API responses
+   * (mid-deploy or pinned old workers) degrade gracefully — consumers that
+   * see `undefined` should treat it as `"curated"`.
+   */
+  discovery?: "curated" | "agent" | "on_demand";
   fetchPriority?: "normal" | "low" | "paused" | null;
   lastFetchedAt?: string | null;
   lastPolledAt?: string | null;
@@ -123,6 +129,7 @@ export interface SourceWithOrg {
   productSlug: string | null;
   isPrimary: boolean;
   isHidden: boolean | null;
+  discovery?: "curated" | "agent" | "on_demand";
   metadata: string | null;
   releaseCount: number;
   latestVersion: string | null;
@@ -213,6 +220,12 @@ export interface SourceDetail {
    * rows; absent on canonical curated/agent sources.
    */
   isHidden?: boolean;
+  /**
+   * Pairs with `isHidden` to distinguish admin-suppressed rows (`curated` /
+   * `agent` + hidden) from rows materialized by `/v1/lookups` (`on_demand`).
+   * Optional for graceful degradation against older API responses.
+   */
+  discovery?: "curated" | "agent" | "on_demand";
   changelogUrl?: string | null;
   hasChangelogFile?: boolean;
   org: { slug: string; name: string } | null;
