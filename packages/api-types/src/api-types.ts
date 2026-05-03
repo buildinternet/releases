@@ -263,10 +263,7 @@ export interface ReleaseItem {
   publishedAt: string | null;
   url: string | null;
   media?: MediaItem[];
-  /**
-   * Release type. Optional for graceful degradation against older API responses.
-   * Absent means `"feature"` (the default).
-   */
+  /** Release type. See {@link ReleaseType}. */
   type?: ReleaseType;
 }
 
@@ -285,10 +282,7 @@ export interface ReleaseDetail {
   sourceSlug: string;
   sourceType: string;
   org: { slug: string; name: string } | null;
-  /**
-   * Release type. Optional for graceful degradation against older API responses.
-   * Absent means `"feature"` (the default).
-   */
+  /** Release type. See {@link ReleaseType}. */
   type?: ReleaseType;
 }
 
@@ -427,10 +421,7 @@ export interface SearchReleaseHit {
    * use this to interleave release and chunk hits into a single ranked list.
    */
   score?: number;
-  /**
-   * Release type. Optional for graceful degradation against older API responses.
-   * Absent means `"feature"` (the default).
-   */
+  /** Release type. See {@link ReleaseType}. */
   type?: ReleaseType;
 }
 

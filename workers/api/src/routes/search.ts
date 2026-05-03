@@ -83,7 +83,7 @@ function hydrateReleaseHit(
     content: hydrateMediaUrls(row.content, mediaOrigin),
     media,
     publishedAt: row.publishedAt,
-    ...(row.type ? { type: row.type as "feature" | "rollup" } : {}),
+    type: row.type,
     ...(score !== undefined ? { score } : {}),
   };
 }

@@ -968,7 +968,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
   const releasesFormatted = pageRows.map((r) => ({
     id: r.id,
     version: r.version,
-    type: (r.type as "feature" | "rollup") ?? undefined,
+    type: r.type,
     title: r.title,
     summary:
       r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),

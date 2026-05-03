@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import type { D1Db } from "../db.js";
 import type {
+  ReleaseType,
   SearchOrgHit,
   SearchCatalogHit,
   RawSourceHit,
@@ -28,7 +29,7 @@ export interface RawSearchReleaseRow {
   media: string | null;
   publishedAt: string | null;
   /** Release type — "feature" (default) or "rollup". */
-  type: string | null;
+  type: ReleaseType;
 }
 
 export async function searchOrgs(

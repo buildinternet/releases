@@ -1072,7 +1072,7 @@ sourceRoutes.get("/sources/:slug", async (c) => {
   const releasesFormatted = releaseRows.map((r) => ({
     id: r.id,
     version: r.version,
-    type: (r.type as "feature" | "rollup" | null) ?? undefined,
+    type: r.type,
     title: r.title,
     summary:
       r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),

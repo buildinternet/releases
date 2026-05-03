@@ -1,4 +1,5 @@
 import { sql, type SQL } from "drizzle-orm";
+import type { ReleaseType } from "@buildinternet/releases-api-types";
 import type { D1Db } from "../db.js";
 
 export type SourceListRow = {
@@ -138,7 +139,7 @@ export async function getSourcesWithStats(
 export type SourceReleaseRow = {
   id: string;
   version: string | null;
-  type: string | null;
+  type: ReleaseType;
   title: string;
   content_summary: string | null;
   content: string;

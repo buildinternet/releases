@@ -30,6 +30,7 @@ import { withEmbedCache, type EmbedCacheBinding } from "@releases/search/embeddi
 import { searchReleasesFts } from "../queries/search.js";
 import { buildEmbedConfig } from "./embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
+import type { ReleaseType } from "@buildinternet/releases-api-types";
 import type { D1Db } from "../db.js";
 
 type SecretBinding = { get(): Promise<string> };
@@ -94,7 +95,7 @@ export interface HybridReleaseHit {
     orgSlug: string | null;
     orgName: string | null;
     /** Release type — "feature" (default) or "rollup". */
-    type: string | null;
+    type: ReleaseType;
   };
 }
 
@@ -171,7 +172,7 @@ interface RawReleaseRow {
   orgSlug: string | null;
   orgName: string | null;
   /** Release type — "feature" (default) or "rollup". */
-  type: string | null;
+  type: ReleaseType;
 }
 
 async function hydrateReleases(
