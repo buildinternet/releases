@@ -225,6 +225,12 @@ export const sources = sqliteTable(
     index("idx_sources_product").on(table.productId),
     // #690 Phase C: per-org uniqueness is the only slug constraint now; the global UNIQUE was dropped via scripts/migrations/690-phase-c-rebuild.sql.
     uniqueIndex("idx_sources_org_slug").on(table.orgId, table.slug),
+    // Standalone index for slug-only lookups — Phase C dropped the global
+    // UNIQUE(slug) which had been doubling as this index. Composite
+    // idx_sources_org_slug can't service `WHERE slug = ?` without an org_id
+    // predicate, and we still query that way on org-less paths (the usage-log
+    // dual-write resolver, MCP coordinate resolution, etc.).
+    index("idx_sources_slug").on(table.slug),
     // Back the /status Sources-tab ORDER BY variants — the admin dashboard
     // sorts by name, last_fetched_at, and median_gap_days.
     index("idx_sources_name").on(table.name),

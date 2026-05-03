@@ -1,14 +1,20 @@
 -- #699 Phase D — backfill source_id on usage_log from the existing source_slug.
 --
--- Run AFTER the 20260503162734_usage_log_source_id.sql migration has been
--- applied (ALTER TABLE ... ADD COLUMN). This is a best-effort JOIN: rows
--- whose source_slug no longer matches any sources.slug (deleted sources) are
--- left with source_id = NULL and that's acceptable — they are historical.
+-- Run AFTER both 20260503162734_usage_log_source_id.sql (ALTER TABLE ... ADD
+-- COLUMN) and 20260503162735_sources_slug_index.sql (CREATE INDEX
+-- idx_sources_slug) have been applied. The standalone slug index keeps the
+-- correlated subquery below from full-scanning sources for every usage_log
+-- row. This is a best-effort JOIN: rows whose source_slug no longer matches
+-- any sources.slug (deleted sources) are left with source_id = NULL and
+-- that's acceptable — they are historical.
 --
--- Because sources.slug is only unique per-org since #690, the LIMIT 1 guard
--- picks the first matching source row when multiple orgs share the same slug
--- (rare in practice but possible). Run the verification query below after
--- backfilling to check for any ambiguous cases.
+-- Because sources.slug is only unique per-org since #690, ambiguous slugs
+-- (the same slug under multiple orgs) are deliberately skipped — the
+-- correlated subquery uses HAVING COUNT(*) = 1 so only unambiguous
+-- slug-to-source mappings are resolved. Rows whose slug matches multiple
+-- sources stay with source_id NULL; their source_slug fallback continues
+-- to carry the original (ambiguous) attribution for human review. Run the
+-- verification query below after backfilling to count any unresolved rows.
 --
 -- Runbook:
 --
