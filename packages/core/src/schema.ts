@@ -105,6 +105,10 @@ export const products = sqliteTable(
   },
   (table) => [
     index("idx_products_org").on(table.orgId),
+    // Phase A of #690 — additive (org_id, slug) UNIQUE alongside the global
+    // UNIQUE on slug. Phase C drops the global one and this becomes the
+    // canonical primary key for slug resolution.
+    uniqueIndex("idx_products_org_slug").on(table.orgId, table.slug),
     index("idx_products_deleted_at")
       .on(table.deletedAt)
       .where(sql`${table.deletedAt} IS NOT NULL`),
@@ -219,6 +223,10 @@ export const sources = sqliteTable(
     index("idx_sources_org").on(table.orgId),
     index("idx_sources_org_hidden").on(table.orgId, table.isHidden),
     index("idx_sources_product").on(table.productId),
+    // Phase A of #690 — additive (org_id, slug) UNIQUE alongside the global
+    // UNIQUE on slug. Phase C drops the global one and this becomes the
+    // canonical primary key for slug resolution.
+    uniqueIndex("idx_sources_org_slug").on(table.orgId, table.slug),
     // Back the /status Sources-tab ORDER BY variants — the admin dashboard
     // sorts by name, last_fetched_at, and median_gap_days.
     index("idx_sources_name").on(table.name),

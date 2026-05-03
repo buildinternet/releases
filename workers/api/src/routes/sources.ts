@@ -42,6 +42,7 @@ import {
   sourceWhere,
   orgWhere,
   productWhere,
+  findSourceForOrgSlug,
   isConflictError,
   computeAvgPerWeek,
   heatmapDateRange,
@@ -1591,6 +1592,45 @@ sourceRoutes.post("/releases/:id/unsuppress", async (c) => {
   if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
   return c.json({ unsuppressed: true });
 });
+
+// ── Org-scoped source routes (#690 Phase B) ──
+//
+// `/v1/orgs/:orgSlug/sources/:sourceSlug{/...}` resolves the source by
+// `(org_id, slug)` and 307-redirects to the canonical bare path. 307 keeps
+// the method and body, and stays same-origin so Authorization is preserved.
+// Standard fetch (CLI, web frontend, browsers) follows the redirect
+// transparently — no caller logic change required to call the new path.
+//
+// Phase C will flip the bare `/sources/:identifier` routes to id-only and
+// drop the slug-resolution branch in `sourceWhere`. After that, callers
+// either hold a `src_…` id directly or use the org-scoped path here.
+
+async function redirectOrgScopedSource(c: import("hono").Context<Env>) {
+  const orgSlug = c.req.param("orgSlug");
+  const sourceSlug = c.req.param("sourceSlug");
+  if (!orgSlug || !sourceSlug) {
+    return c.json({ error: "bad_request", message: "Missing org or source slug" }, 400);
+  }
+  const db = createDb(c.env.DB);
+  const src = await findSourceForOrgSlug(db, orgSlug, sourceSlug);
+  if (!src) {
+    return c.json(
+      { error: "not_found", message: `Source ${orgSlug}/${sourceSlug} not found` },
+      404,
+    );
+  }
+  const url = new URL(c.req.url);
+  // Strip the matched prefix off the request path to capture any trailing
+  // segment (e.g. `/recent-releases`, `/fetch`). Hono's `*` wildcard isn't
+  // exposed as a named param, so we compute it from c.req.path directly.
+  const prefix = `/v1/orgs/${orgSlug}/sources/${sourceSlug}`;
+  const tail = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : "";
+  url.pathname = `/v1/sources/${src.id}${tail}`;
+  return c.redirect(url.toString(), 307);
+}
+
+sourceRoutes.all("/orgs/:orgSlug/sources/:sourceSlug", redirectOrgScopedSource);
+sourceRoutes.all("/orgs/:orgSlug/sources/:sourceSlug/*", redirectOrgScopedSource);
 
 // ── Embed side effect helpers ──
 //

@@ -21,6 +21,7 @@ import {
   productWhere,
   orgWhere,
   replaceAliases,
+  findProductForOrgSlug,
 } from "../utils.js";
 import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
@@ -455,6 +456,37 @@ productRoutes.delete("/products/:identifier", async (c) => {
     .where(eq(products.id, product.id));
   return c.json({ deleted: true, deletedAt: now });
 });
+
+// ── Org-scoped product routes (#690 Phase B) ──
+//
+// Mirrors the source-side redirector in routes/sources.ts. See that file's
+// comment for the design rationale.
+
+async function redirectOrgScopedProduct(c: import("hono").Context<Env>) {
+  const orgSlug = c.req.param("orgSlug");
+  const productSlug = c.req.param("productSlug");
+  if (!orgSlug || !productSlug) {
+    return c.json({ error: "bad_request", message: "Missing org or product slug" }, 400);
+  }
+  const db = createDb(c.env.DB);
+  const product = await findProductForOrgSlug(db, orgSlug, productSlug);
+  if (!product) {
+    return c.json(
+      { error: "not_found", message: `Product ${orgSlug}/${productSlug} not found` },
+      404,
+    );
+  }
+  const url = new URL(c.req.url);
+  // See the equivalent comment in routes/sources.ts — Hono's `*` wildcard
+  // isn't exposed as a named param, so we compute the tail from c.req.path.
+  const prefix = `/v1/orgs/${orgSlug}/products/${productSlug}`;
+  const tail = c.req.path.startsWith(prefix) ? c.req.path.slice(prefix.length) : "";
+  url.pathname = `/v1/products/${product.id}${tail}`;
+  return c.redirect(url.toString(), 307);
+}
+
+productRoutes.all("/orgs/:orgSlug/products/:productSlug", redirectOrgScopedProduct);
+productRoutes.all("/orgs/:orgSlug/products/:productSlug/*", redirectOrgScopedProduct);
 
 // ── Embed side effect ──
 

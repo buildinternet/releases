@@ -63,6 +63,60 @@ export function productWhere(identifier: string, opts?: { includeDeleted?: boole
 }
 
 /**
+ * Resolve a source by `(orgSlug, sourceSlug)` — used by the org-scoped routes
+ * added in #690 Phase B. Joins on the org's slug and the source's slug, scoped
+ * to the source's `org_id`. Returns the source row or null.
+ *
+ * Hidden sources (on-demand lookup rows) are returned the same as visible
+ * ones: this matches `sourceWhere`'s behavior, which doesn't filter hidden.
+ * Tombstoned rows are excluded by default, matching `sourceWhere(opts)`.
+ */
+export async function findSourceForOrgSlug(
+  db: ReturnType<typeof createDb>,
+  orgSlug: string,
+  sourceSlug: string,
+  opts?: { includeDeleted?: boolean },
+) {
+  const orgFilter = opts?.includeDeleted
+    ? eq(organizations.slug, orgSlug)
+    : and(eq(organizations.slug, orgSlug), isNull(organizations.deletedAt));
+  const srcFilter = opts?.includeDeleted
+    ? eq(sources.slug, sourceSlug)
+    : and(eq(sources.slug, sourceSlug), isNull(sources.deletedAt));
+
+  const rows = await db
+    .select({ id: sources.id })
+    .from(sources)
+    .innerJoin(organizations, eq(sources.orgId, organizations.id))
+    .where(and(orgFilter, srcFilter))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/** Sibling of `findSourceForOrgSlug` for products. */
+export async function findProductForOrgSlug(
+  db: ReturnType<typeof createDb>,
+  orgSlug: string,
+  productSlug: string,
+  opts?: { includeDeleted?: boolean },
+) {
+  const orgFilter = opts?.includeDeleted
+    ? eq(organizations.slug, orgSlug)
+    : and(eq(organizations.slug, orgSlug), isNull(organizations.deletedAt));
+  const prodFilter = opts?.includeDeleted
+    ? eq(products.slug, productSlug)
+    : and(eq(products.slug, productSlug), isNull(products.deletedAt));
+
+  const rows = await db
+    .select({ id: products.id })
+    .from(products)
+    .innerJoin(organizations, eq(products.orgId, organizations.id))
+    .where(and(orgFilter, prodFilter))
+    .limit(1);
+  return rows[0] ?? null;
+}
+
+/**
  * D1 wraps SQLite errors as "Failed query: ..." without preserving the
  * original constraint violation message. We detect conflicts by checking
  * if the insert query failed — for endpoints that use UNIQUE columns,
