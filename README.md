@@ -207,7 +207,7 @@ bun run deploy:agents:discovery  # sync discovery agent only (Sonnet)
 bun run deploy:agents:worker     # sync worker agent only (Haiku)
 bun run deploy:skills            # sync skills only (SKILL.md files)
 bun run deploy:agents --dry-run  # preview agent changes without pushing
-bun run db:migrate:remote    # apply D1 migrations to production
+bun run db:migrate:remote    # apply D1 migrations to production (rarely needed — auto-applied on deploy)
 ```
 
 Local worker/web development:
