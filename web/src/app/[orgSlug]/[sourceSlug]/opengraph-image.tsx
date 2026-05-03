@@ -21,7 +21,7 @@ export default async function Image({
   const { orgSlug, sourceSlug } = await params;
   try {
     const [source, orgDetail] = await Promise.all([
-      api.sourceDetail(sourceSlug),
+      api.sourceDetail({ orgSlug, sourceSlug }),
       api.orgDetail(orgSlug).catch(() => null),
     ]);
     const avatarUrl = await resolveAvatarUrl(orgDetail);

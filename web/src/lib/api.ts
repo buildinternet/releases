@@ -170,8 +170,10 @@ export const api = {
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
   sources: (independent?: boolean) =>
     fetchApi<SourceListItem[]>(`/v1/sources${independent ? "?independent=true" : ""}`),
-  sourceDetail: (slug: string, page = 1, pageSize = 20) =>
-    fetchApi<SourceDetail>(`/v1/sources/${slug}?page=${page}&pageSize=${pageSize}`),
+  sourceDetail: (ref: { orgSlug: string; sourceSlug: string }, page = 1, pageSize = 20) =>
+    fetchApi<SourceDetail>(
+      `/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}?page=${page}&pageSize=${pageSize}`,
+    ),
   search: (q: string, limit = 20, offset = 0) => {
     // Coordinate-shaped queries skip the hybrid semantic rail so the API's
     // on-demand lookup fallback can fire — otherwise weakly-matched chunks
@@ -181,12 +183,14 @@ export const api = {
       `/v1/search?q=${encodeURIComponent(q)}&limit=${limit}&offset=${offset}${mode}`,
     );
   },
-  sourceActivity: (slug: string, from?: string, to?: string) => {
+  sourceActivity: (ref: { orgSlug: string; sourceSlug: string }, from?: string, to?: string) => {
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
     const qs = params.toString();
-    return fetchApi<SourceActivity>(`/v1/sources/${slug}/activity${qs ? `?${qs}` : ""}`);
+    return fetchApi<SourceActivity>(
+      `/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}/activity${qs ? `?${qs}` : ""}`,
+    );
   },
   orgActivity: (slug: string, from?: string, to?: string) => {
     const params = new URLSearchParams();
@@ -208,17 +212,33 @@ export const api = {
   // don't outlive a delete/replace on the API side — a deleted release must
   // 404 on the very next request, not on the next revalidate cycle.
   release: (id: string) => fetchApi<ReleaseDetail>(`/v1/releases/${id}`, { cache: "no-store" }),
-  sourceHeatmap: (slug: string) => fetchApi<SourceHeatmap>(`/v1/sources/${slug}/heatmap`),
-  productDetail: (slug: string) => fetchApi<ProductDetail>(`/v1/products/${slug}`),
+  sourceHeatmap: (ref: { orgSlug: string; sourceSlug: string }) =>
+    fetchApi<SourceHeatmap>(`/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}/heatmap`),
+  /**
+   * Bare-slug resolver used solely by the legacy `/source/[slug]` redirect page
+   * to look up the org for a 308. Hits the legacy bare API path that the rest
+   * of the app has migrated off — kept until that bare path returns 400 (#698)
+   * and the bookmark window has elapsed, at which point the redirect page
+   * should be deleted entirely.
+   */
+  sourceLegacyResolve: (slug: string) =>
+    fetchApi<SourceDetail>(`/v1/sources/${slug}?page=1&pageSize=1`),
+  productDetail: (ref: { orgSlug: string; productSlug: string }) =>
+    fetchApi<ProductDetail>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}`),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
   tagDetail: (slug: string) => fetchApi<TagDetail>(`/v1/tags/${slug}`),
-  sourceChangelog: (slug: string, range?: { path?: string; offset?: number; limit?: number }) => {
+  sourceChangelog: (
+    ref: { orgSlug: string; sourceSlug: string },
+    range?: { path?: string; offset?: number; limit?: number },
+  ) => {
     const params = new URLSearchParams();
     if (range?.path !== undefined) params.set("path", range.path);
     if (range?.offset !== undefined) params.set("offset", String(range.offset));
     if (range?.limit !== undefined) params.set("limit", String(range.limit));
     const qs = params.toString();
-    return fetchApi<SourceChangelogResponse>(`/v1/sources/${slug}/changelog${qs ? `?${qs}` : ""}`);
+    return fetchApi<SourceChangelogResponse>(
+      `/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}/changelog${qs ? `?${qs}` : ""}`,
+    );
   },
   relatedReleases: (releaseId: string, scope: "org" | "global" = "global", limit = 8) =>
     fetchApi<RelatedReleasesResponse>(

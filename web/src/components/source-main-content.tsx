@@ -7,6 +7,7 @@ import { HighlightsView } from "./highlights-view";
 
 interface SourceMainContentProps {
   source: SourceDetail;
+  orgSlug: string;
   tab: string | undefined;
   basePath: string;
   changelogPath?: string;
@@ -23,6 +24,7 @@ interface SourceMainContentProps {
 /** Renders the main column for a source detail page — tab-aware. */
 export function SourceMainContent({
   source,
+  orgSlug,
   tab,
   basePath,
   changelogPath,
@@ -39,6 +41,7 @@ export function SourceMainContent({
         fallback={<ChangelogSkeleton />}
       >
         <ChangelogView
+          orgSlug={orgSlug}
           sourceSlug={source.slug}
           path={changelogPath}
           startOffset={changelogOffset}

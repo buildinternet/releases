@@ -20,7 +20,11 @@ export async function GET(
     // Atom feeds ignore pagination params and always fetch a full tranche of
     // recent entries so the feed is self-contained.
     const effectivePageSize = format === "atom" ? ATOM_DEFAULT_MAX_ENTRIES : pageSize;
-    source = await api.sourceDetail(sourceSlug, format === "atom" ? 1 : page, effectivePageSize);
+    source = await api.sourceDetail(
+      { orgSlug, sourceSlug },
+      format === "atom" ? 1 : page,
+      effectivePageSize,
+    );
   } catch {
     return NextResponse.json({ error: "not_found", message: "Source not found" }, { status: 404 });
   }

@@ -19,7 +19,9 @@ import { CliCommand } from "@/components/cli-command";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
-const getSource = cache((slug: string, page = 1) => api.sourceDetail(slug, page));
+const getSource = cache((orgSlug: string, sourceSlug: string, page = 1) =>
+  api.sourceDetail({ orgSlug, sourceSlug }, page),
+);
 
 /**
  * Two merged rails under the release list:
@@ -73,7 +75,7 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { orgSlug, sourceSlug } = await params;
   try {
-    const source = await getSource(sourceSlug);
+    const source = await getSource(orgSlug, sourceSlug);
     const orgName = source.org?.name ?? orgSlug;
     return {
       title: `${source.name} — ${orgName}`,
@@ -125,9 +127,9 @@ export default async function SourcePage({
   let heatmap;
   try {
     [source, activity, heatmap] = await Promise.all([
-      getSource(sourceSlug, page),
-      api.sourceActivity(sourceSlug, activityFrom).catch(() => null),
-      api.sourceHeatmap(sourceSlug).catch(() => null),
+      getSource(orgSlug, sourceSlug, page),
+      api.sourceActivity({ orgSlug, sourceSlug }, activityFrom).catch(() => null),
+      api.sourceHeatmap({ orgSlug, sourceSlug }).catch(() => null),
     ]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
@@ -252,6 +254,7 @@ export default async function SourcePage({
             />
             <SourceMainContent
               source={source}
+              orgSlug={orgSlug}
               tab={tab}
               basePath={`/${orgSlug}/${sourceSlug}`}
               changelogPath={changelogPath}
