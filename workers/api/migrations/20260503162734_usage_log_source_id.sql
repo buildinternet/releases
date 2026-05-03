@@ -4,4 +4,7 @@
 -- This column lets read paths group by the stable FK instead of the mutable slug.
 -- source_slug is kept for the dual-write period and will be dropped in a follow-up
 -- table rebuild (DROP COLUMN requires SQLite ALTER TABLE rebuild on older versions).
-ALTER TABLE usage_log ADD COLUMN source_id TEXT REFERENCES sources(id) ON DELETE CASCADE;
+-- ON DELETE SET NULL (not CASCADE) — usage_log is historical telemetry. The
+-- source_slug fallback in routes/usage-log.ts keeps stats useful for rows
+-- whose source has been deleted; cascading defeats that intent.
+ALTER TABLE usage_log ADD COLUMN source_id TEXT REFERENCES sources(id) ON DELETE SET NULL;

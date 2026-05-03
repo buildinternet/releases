@@ -54,8 +54,44 @@ async function seed(db: ReturnType<typeof mkDb>["db"]) {
 }
 
 describe("POST /v1/admin/logs/usage — dual-write source_id", () => {
-  it("populates source_id by resolving source_slug against sources table", async () => {
+  it("populates source_id when the slug uniquely identifies one source", async () => {
     const { db } = mkDb();
+    await seed(db);
+    // Insert a third source with a unique slug (no cross-org collision).
+    await db.insert(sources).values({
+      id: "src_a2",
+      orgId: "org_a",
+      slug: "lone-tool",
+      name: "Lone Tool",
+      url: "https://acme.test/lone",
+      type: "feed",
+    });
+    const fetch = await makeApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/admin/logs/usage", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          operation: "agent-ingest",
+          model: "claude-haiku-4-5",
+          inputTokens: 1000,
+          outputTokens: 200,
+          sourceSlug: "lone-tool",
+          releaseCount: 3,
+        }),
+      }),
+    );
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { sourceSlug: string | null; sourceId: string | null };
+    expect(body.sourceSlug).toBe("lone-tool");
+    expect(body.sourceId).toBe("src_a2");
+  });
+
+  it("leaves source_id null when slug is ambiguous (matches multiple orgs)", async () => {
+    const { db } = mkDb();
+    // The default seed plants `my-tool` under both org_a and org_b — a real
+    // per-org-uniqueness collision that the resolver must refuse to guess at.
     await seed(db);
     const fetch = await makeApp(db);
 
@@ -76,8 +112,7 @@ describe("POST /v1/admin/logs/usage — dual-write source_id", () => {
     expect(res.status).toBe(201);
     const body = (await res.json()) as { sourceSlug: string | null; sourceId: string | null };
     expect(body.sourceSlug).toBe("my-tool");
-    // Resolves to the first matching source (src_a1 due to LIMIT 1)
-    expect(body.sourceId).not.toBeNull();
+    expect(body.sourceId).toBeNull();
   });
 
   it("accepts a pre-resolved source_id without a slug round-trip", async () => {

@@ -98,15 +98,23 @@ usageLogRoutes.post("/admin/logs/usage", async (c) => {
   // Dual-write: callers supply sourceSlug; resolve to sourceId so new rows
   // carry both. Callers may also supply sourceId directly (future) — if present
   // it wins without a DB round-trip.
+  //
+  // Only promote slug → id when the lookup is unambiguous. Per-org
+  // uniqueness (#690) lets the same slug live under multiple orgs;
+  // picking the first match would silently misattribute usage. When the
+  // slug resolves to multiple rows we leave sourceId null and keep the raw
+  // slug — callers that care about exact attribution must send sourceId.
   let resolvedSourceId: string | null = body.sourceId ?? null;
   const incomingSlug: string | null = body.sourceSlug ?? null;
   if (!resolvedSourceId && incomingSlug) {
-    const [src] = await db
+    const matches = await db
       .select({ id: sources.id })
       .from(sources)
       .where(eq(sources.slug, incomingSlug))
-      .limit(1);
-    resolvedSourceId = src?.id ?? null;
+      .limit(2);
+    if (matches.length === 1) {
+      resolvedSourceId = matches[0]!.id;
+    }
   }
 
   const [inserted] = await db

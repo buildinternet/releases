@@ -34,9 +34,18 @@
 -- executed via `wrangler d1 execute --file=` (see the Phase C rebuild notes
 -- in scripts/migrations/690-phase-c-rebuild.sql for why).
 
+-- Only resolve unambiguous slugs. Per-org uniqueness (#690) means a slug
+-- can match multiple source rows across orgs; assigning to the first match
+-- would silently misattribute historical usage. Rows whose slug matches
+-- multiple sources stay NULL — their source_slug fallback continues to
+-- carry the original (ambiguous) attribution for human review.
 UPDATE usage_log
 SET source_id = (
-  SELECT id FROM sources WHERE slug = usage_log.source_slug LIMIT 1
+  SELECT MIN(id)
+  FROM sources
+  WHERE slug = usage_log.source_slug
+  GROUP BY slug
+  HAVING COUNT(*) = 1
 )
 WHERE source_id IS NULL
   AND source_slug IS NOT NULL;
