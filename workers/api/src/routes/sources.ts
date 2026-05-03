@@ -128,25 +128,32 @@ sourceRoutes.get("/sources", async (c) => {
   }
 
   // Resolve org by slug
+  let resolvedOrgId: string | undefined;
   if (orgSlug) {
     const [org] = await db.select().from(organizations).where(orgWhere(orgSlug));
     if (!org) return c.json([]);
+    resolvedOrgId = org.id;
     conditions.push(eq(sources.orgId, org.id));
   }
 
-  // `productSlug` query param is best-effort: accepts a `prod_` ID for an
-  // exact match, or a slug (matched globally — fine in practice while no
-  // cross-org product slug collisions exist; an org-scoped filter shape
-  // would be `?orgSlug=…&productSlug=…` and is a future improvement).
+  // `productSlug` query param accepts a `prod_` ID (matched globally) or a
+  // slug. Slugs are unique per-org (idx_products_org_slug), so when orgSlug
+  // is also present we scope the slug match to the resolved org. With no
+  // orgSlug the slug match stays global — a documented carve-out that
+  // depends on no cross-org product slug collisions; pair with `?orgSlug=…`
+  // for unambiguous resolution.
   const productSlug = c.req.query("productSlug");
   if (productSlug) {
     const productMatch = isProductId(productSlug)
       ? eq(products.id, productSlug)
-      : eq(products.slug, productSlug);
+      : resolvedOrgId
+        ? and(eq(products.slug, productSlug), eq(products.orgId, resolvedOrgId))
+        : eq(products.slug, productSlug);
     const [product] = await db
       .select()
       .from(products)
-      .where(and(productMatch, isNull(products.deletedAt)));
+      .where(and(productMatch, isNull(products.deletedAt)))
+      .limit(1);
     if (!product) return c.json([]);
     conditions.push(eq(sources.productId, product.id));
   }

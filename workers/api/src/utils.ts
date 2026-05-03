@@ -104,18 +104,11 @@ export async function findSourceForOrgSlug(
   sourceIdOrSlug: string,
   opts?: { includeDeleted?: boolean },
 ) {
-  const sourceMatch = isSourceId(sourceIdOrSlug)
-    ? eq(sources.id, sourceIdOrSlug)
-    : eq(sources.slug, sourceIdOrSlug);
-  const sourceWhere = opts?.includeDeleted
-    ? sourceMatch
-    : and(sourceMatch, isNull(sources.deletedAt));
-
   const rows = await db
     .select({ source: sources })
     .from(sources)
     .innerJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(orgWhere(orgIdOrSlug, opts), sourceWhere))
+    .where(and(orgWhere(orgIdOrSlug, opts), sourceMatchByIdOrSlug(sourceIdOrSlug, opts)))
     .limit(1);
   return rows[0]?.source ?? null;
 }
@@ -127,18 +120,11 @@ export async function findProductForOrgSlug(
   productIdOrSlug: string,
   opts?: { includeDeleted?: boolean },
 ) {
-  const productMatch = isProductId(productIdOrSlug)
-    ? eq(products.id, productIdOrSlug)
-    : eq(products.slug, productIdOrSlug);
-  const productWhere = opts?.includeDeleted
-    ? productMatch
-    : and(productMatch, isNull(products.deletedAt));
-
   const rows = await db
     .select({ product: products })
     .from(products)
     .innerJoin(organizations, eq(products.orgId, organizations.id))
-    .where(and(orgWhere(orgIdOrSlug, opts), productWhere))
+    .where(and(orgWhere(orgIdOrSlug, opts), productMatchByIdOrSlug(productIdOrSlug, opts)))
     .limit(1);
   return rows[0]?.product ?? null;
 }
@@ -163,7 +149,7 @@ export async function resolveSourceFromContext(
   }
   const bare = c.req.param("slug") ?? c.req.param("identifier");
   if (!bare) return null;
-  const [row] = await db.select().from(sources).where(sourceMatchByIdOrSlug(bare, opts));
+  const [row] = await db.select().from(sources).where(sourceMatchByIdOrSlug(bare, opts)).limit(1);
   return row ?? null;
 }
 
@@ -180,7 +166,7 @@ export async function resolveProductFromContext(
   }
   const bare = c.req.param("identifier") ?? c.req.param("slug");
   if (!bare) return null;
-  const [row] = await db.select().from(products).where(productMatchByIdOrSlug(bare, opts));
+  const [row] = await db.select().from(products).where(productMatchByIdOrSlug(bare, opts)).limit(1);
   return row ?? null;
 }
 
