@@ -317,7 +317,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe(
-            "Scope release results to one catalog entry. Accepts a product slug / prod_ id (expands to every source under the product) or a source slug / src_ id.",
+            "Scope release results to one catalog entry. Accepts a prod_ id (expands to every source under the product), a src_ id, or an org-scoped coordinate in the form orgSlug/slug (e.g. 'vercel/nextjs'). Bare slugs without an org prefix are not accepted.",
           ),
         limit: z.number().optional().describe("Max results per section (default 20)"),
         mode: z
@@ -353,7 +353,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         "Deprecated — use `search` with `type: ['releases']` instead. Search indexed release notes with hybrid retrieval (FTS5 + semantic vectors fused via RRF). Results carry a `kind` discriminator so agents can branch on `release` vs `changelog_chunk` hits.",
       inputSchema: {
         query: z.string().describe("Search query"),
-        product: z.string().optional().describe("Filter to a specific product slug"),
+        product: z
+          .string()
+          .optional()
+          .describe(
+            "Filter to a specific source. Accepts a src_ id or an org-scoped coordinate in the form orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
+          ),
         organization: z
           .string()
           .optional()
@@ -412,7 +417,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       ...titled("Get latest releases", READ_ONLY_HINTS),
       description: "Get the most recent releases, optionally filtered by product or organization",
       inputSchema: {
-        product: z.string().optional().describe("Filter to a specific product slug"),
+        product: z
+          .string()
+          .optional()
+          .describe(
+            "Filter to a specific source. Accepts a src_ id or an org-scoped coordinate in the form orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
+          ),
         organization: z
           .string()
           .optional()
@@ -459,9 +469,13 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("Get catalog entry", READ_ONLY_HINTS),
       description:
-        "Detail for a single catalog entry — accepts either a product (slug or prod_ id) or a source (slug or src_ id). Returns the union of product / source detail fields depending on the entry kind. Source entries list tracked CHANGELOG files by path and byte size. Pass `include_changelog: true` to inline the root CHANGELOG, or `changelog_path` / `changelog_offset` / `changelog_limit` / `changelog_tokens` to embed a specific file or slice — heading-aligned, supports per-package files in monorepos (e.g. `packages/next/CHANGELOG.md`), and emits `totalTokens` / `sliceTokens` for LLM context budgeting. Files over 1MB are flagged as truncated so you know the tail is missing.",
+        "Detail for a single catalog entry — accepts a prod_ id, src_ id, or an org-scoped coordinate in the form orgSlug/slug (e.g. 'vercel/nextjs' or 'vercel/next-js'). Returns the union of product / source detail fields depending on the entry kind. Source entries list tracked CHANGELOG files by path and byte size. Pass `include_changelog: true` to inline the root CHANGELOG, or `changelog_path` / `changelog_offset` / `changelog_limit` / `changelog_tokens` to embed a specific file or slice — heading-aligned, supports per-package files in monorepos (e.g. `packages/next/CHANGELOG.md`), and emits `totalTokens` / `sliceTokens` for LLM context budgeting. Files over 1MB are flagged as truncated so you know the tail is missing.",
       inputSchema: {
-        identifier: z.string().describe("Catalog entry identifier: slug, prod_ id, or src_ id"),
+        identifier: z
+          .string()
+          .describe(
+            "Catalog entry identifier: prod_ id, src_ id, or org-scoped coordinate orgSlug/slug (e.g. 'vercel/nextjs'). Bare slugs without an org prefix are not accepted.",
+          ),
         include_changelog: z
           .boolean()
           .optional()
@@ -583,7 +597,11 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       description:
         "Deprecated — use `get_catalog_entry` instead. Detail for a single product including its organization, category, tags, and the sources grouped under it.",
       inputSchema: {
-        identifier: z.string().describe("Product slug (e.g. 'nextjs') or prod_ id"),
+        identifier: z
+          .string()
+          .describe(
+            "Product identifier: prod_ id or org-scoped coordinate orgSlug/productSlug (e.g. 'vercel/nextjs'). Bare slugs without an org prefix are not accepted.",
+          ),
       },
     },
     async (params) => getProduct(db, params),
@@ -596,7 +614,11 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         ...titled("Summarize changes", AI_READ_HINTS),
         description: "Get an AI-generated summary of recent changes for a product",
         inputSchema: {
-          product: z.string().describe("Product slug"),
+          product: z
+            .string()
+            .describe(
+              "Source identifier: src_ id or org-scoped coordinate orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
+            ),
           days: z.number().optional().describe("Look back this many days (default 30)"),
           instructions: z
             .string()
@@ -618,7 +640,11 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         ...titled("Compare products", AI_READ_HINTS),
         description: "Compare recent changes between two products",
         inputSchema: {
-          products: z.array(z.string()).describe("Array of two product slugs to compare"),
+          products: z
+            .array(z.string())
+            .describe(
+              "Array of exactly two source identifiers to compare. Each entry must be a src_ id or an org-scoped coordinate orgSlug/sourceSlug (e.g. 'vercel/next-js'). Bare slugs without an org prefix are not accepted.",
+            ),
           days: z.number().optional().describe("Look back this many days (default 30)"),
         },
       },

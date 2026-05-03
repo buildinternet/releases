@@ -153,26 +153,55 @@ describe("get_catalog_entry", () => {
     await seed(fixture.db);
   });
 
-  it("resolves a product slug to product detail", async () => {
-    const text = resultText(await getCatalogEntry(asD1(fixture.db), { identifier: "nextjs" }));
+  it("resolves an org-scoped product coordinate to product detail", async () => {
+    const text = resultText(
+      await getCatalogEntry(asD1(fixture.db), { identifier: "vercel/nextjs" }),
+    );
     expect(text).toContain("**Product: Next.js**");
     // Product detail lists its grouped sources.
     expect(text).toContain("next-js");
   });
 
-  it("resolves a standalone source slug to source detail", async () => {
+  it("resolves an org-scoped source coordinate to source detail", async () => {
     const text = resultText(
-      await getCatalogEntry(asD1(fixture.db), { identifier: "anthropic-releases" }),
+      await getCatalogEntry(asD1(fixture.db), { identifier: "anthropic/anthropic-releases" }),
     );
     expect(text).toContain("**Source: Anthropic Release Notes**");
     expect(text).toContain("Product: none");
   });
 
-  it("returns a friendly message when the identifier doesn't resolve", async () => {
+  it("resolves a prod_ id to product detail", async () => {
+    const [prodRow] = await fixture.db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.slug, "nextjs"))
+      .limit(1);
+    const text = resultText(await getCatalogEntry(asD1(fixture.db), { identifier: prodRow.id }));
+    expect(text).toContain("**Product: Next.js**");
+  });
+
+  it("resolves a src_ id to source detail", async () => {
+    const [srcRow] = await fixture.db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.slug, "anthropic-releases"))
+      .limit(1);
+    const text = resultText(await getCatalogEntry(asD1(fixture.db), { identifier: srcRow.id }));
+    expect(text).toContain("**Source: Anthropic Release Notes**");
+  });
+
+  it("rejects a bare slug with a friendly migration hint", async () => {
+    const text = resultText(await getCatalogEntry(asD1(fixture.db), { identifier: "nextjs" }));
+    expect(text).toContain("Bare slug");
+    expect(text).toContain("org-scoped");
+    expect(text).toContain("vercel/nextjs");
+  });
+
+  it("returns a friendly message when the org-scoped identifier doesn't resolve", async () => {
     const text = resultText(
-      await getCatalogEntry(asD1(fixture.db), { identifier: "nothing-matches" }),
+      await getCatalogEntry(asD1(fixture.db), { identifier: "vercel/nothing-matches" }),
     );
-    expect(text).toContain('No catalog entry found matching "nothing-matches"');
+    expect(text).toContain('No catalog entry found matching "vercel/nothing-matches"');
   });
 
   it("lists tracked changelog files for a source without embedding content by default", async () => {
@@ -208,7 +237,9 @@ describe("get_catalog_entry", () => {
     ]);
 
     const text = resultText(
-      await getCatalogEntry(asD1(fixture.db), { identifier: "anthropic-releases" }),
+      await getCatalogEntry(asD1(fixture.db), {
+        identifier: "anthropic/anthropic-releases",
+      }),
     );
     expect(text).toContain("CHANGELOG.md");
     expect(text).toContain("packages/core/CHANGELOG.md");
@@ -241,7 +272,7 @@ describe("get_catalog_entry", () => {
 
     const text = resultText(
       await getCatalogEntry(asD1(fixture.db), {
-        identifier: "anthropic-releases",
+        identifier: "anthropic/anthropic-releases",
         include_changelog: true,
       }),
     );
@@ -281,7 +312,7 @@ describe("get_catalog_entry", () => {
 
     const text = resultText(
       await getCatalogEntry(asD1(fixture.db), {
-        identifier: "anthropic-releases",
+        identifier: "anthropic/anthropic-releases",
         changelog_path: "packages/core/CHANGELOG.md",
       }),
     );
@@ -291,7 +322,9 @@ describe("get_catalog_entry", () => {
   });
 
   it("does not show changelog sections for product-kind entries", async () => {
-    const text = resultText(await getCatalogEntry(asD1(fixture.db), { identifier: "nextjs" }));
+    const text = resultText(
+      await getCatalogEntry(asD1(fixture.db), { identifier: "vercel/nextjs" }),
+    );
     expect(text).not.toContain("include_changelog");
     expect(text).not.toContain("CHANGELOG.md");
   });
@@ -407,13 +440,13 @@ describe("search (unified)", () => {
     expect(text).not.toContain("## Releases");
   });
 
-  it("narrows release results via entity filter (product slug)", async () => {
+  it("narrows release results via entity filter (org-scoped product coordinate)", async () => {
     const text = resultText(
       (
         await search(asD1(fixture.db), {
           query: "async",
           type: ["releases"],
-          entity: "nextjs",
+          entity: "vercel/nextjs",
           mode: "lexical",
         })
       ).result,
@@ -422,13 +455,13 @@ describe("search (unified)", () => {
     expect(text).not.toContain("Claude 4 release");
   });
 
-  it("narrows release results via entity filter (source slug)", async () => {
+  it("narrows release results via entity filter (org-scoped source coordinate)", async () => {
     const text = resultText(
       (
         await search(asD1(fixture.db), {
           query: "Claude",
           type: ["releases"],
-          entity: "anthropic-releases",
+          entity: "anthropic/anthropic-releases",
           mode: "lexical",
         })
       ).result,
@@ -437,17 +470,50 @@ describe("search (unified)", () => {
     expect(text).not.toContain("Next.js 15");
   });
 
-  it("returns a friendly message when the entity filter doesn't match", async () => {
+  it("narrows release results via entity filter (prod_ id)", async () => {
+    const [prodRow] = await fixture.db
+      .select({ id: products.id })
+      .from(products)
+      .where(eq(products.slug, "nextjs"))
+      .limit(1);
     const text = resultText(
       (
         await search(asD1(fixture.db), {
-          query: "anything",
-          entity: "never-heard-of-it",
+          query: "async",
+          type: ["releases"],
+          entity: prodRow.id,
           mode: "lexical",
         })
       ).result,
     );
-    expect(text).toContain('No catalog entry found matching "never-heard-of-it"');
+    expect(text).toContain("Next.js 15");
+  });
+
+  it("rejects a bare slug entity filter with a migration hint", async () => {
+    const text = resultText(
+      (
+        await search(asD1(fixture.db), {
+          query: "anything",
+          entity: "nextjs",
+          mode: "lexical",
+        })
+      ).result,
+    );
+    expect(text).toContain("Bare slug");
+    expect(text).toContain("org-scoped");
+  });
+
+  it("returns a friendly message when the org-scoped entity filter doesn't match", async () => {
+    const text = resultText(
+      (
+        await search(asD1(fixture.db), {
+          query: "anything",
+          entity: "vercel/never-heard-of-it",
+          mode: "lexical",
+        })
+      ).result,
+    );
+    expect(text).toContain('No catalog entry found matching "vercel/never-heard-of-it"');
   });
 
   it("populates per-section hit counts", async () => {

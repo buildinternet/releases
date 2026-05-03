@@ -127,29 +127,79 @@ async function callAnthropic(
   return text(textBlock.text);
 }
 
+/**
+ * Returns true when `identifier` looks like a bare slug (no `src_`/`prod_`
+ * prefix, no `org/slug` separator). Used by tool handlers to emit a helpful
+ * migration hint before the API's bare-path 400 lands (issue #698).
+ */
+export function isBareSlug(identifier: string): boolean {
+  const t = identifier.trim();
+  return getEntityType(t) === "unknown" && !t.includes("/");
+}
+
+/**
+ * Parse an `org/slug` coordinate into its two parts.  Returns `null` when
+ * the string doesn't contain exactly one `/` separator.
+ */
+function parseOrgSlugCoordinate(identifier: string): { orgSlug: string; slug: string } | null {
+  const parts = identifier.split("/");
+  if (parts.length !== 2 || !parts[0] || !parts[1]) return null;
+  return { orgSlug: parts[0], slug: parts[1] };
+}
+
 async function resolveSource(db: D1Db, identifier: string) {
-  const condition =
-    getEntityType(identifier) === "source"
-      ? eq(sources.id, identifier)
-      : eq(sources.slug, identifier);
-  const rows = await db.select().from(sources).where(condition).limit(1);
+  if (getEntityType(identifier) === "source") {
+    const rows = await db.select().from(sources).where(eq(sources.id, identifier)).limit(1);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // org/slug coordinate form (e.g. "vercel/next-js")
+  const coord = parseOrgSlugCoordinate(identifier);
+  if (coord) {
+    const rows = await db.all<typeof sources.$inferSelect>(sql`
+      SELECT s.* FROM sources s
+      JOIN organizations o ON o.id = s.org_id
+      WHERE s.slug = ${coord.slug} AND o.slug = ${coord.orgSlug}
+      LIMIT 1
+    `);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // Bare slug fallback — kept for backward compat during the cutover window;
+  // callers are expected to validate with isBareSlug() before reaching here.
+  const rows = await db.select().from(sources).where(eq(sources.slug, identifier)).limit(1);
   return rows.length > 0 ? rows[0] : null;
 }
 
 async function resolveProduct(db: D1Db, identifier: string) {
-  const condition =
-    getEntityType(identifier) === "product"
-      ? eq(products.id, identifier)
-      : eq(products.slug, identifier);
-  const rows = await db.select().from(products).where(condition).limit(1);
+  if (getEntityType(identifier) === "product") {
+    const rows = await db.select().from(products).where(eq(products.id, identifier)).limit(1);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // org/slug coordinate form (e.g. "vercel/nextjs")
+  const coord = parseOrgSlugCoordinate(identifier);
+  if (coord) {
+    const rows = await db.all<typeof products.$inferSelect>(sql`
+      SELECT p.* FROM products p
+      JOIN organizations o ON o.id = p.org_id
+      WHERE p.slug = ${coord.slug} AND o.slug = ${coord.orgSlug}
+      LIMIT 1
+    `);
+    return rows.length > 0 ? rows[0] : null;
+  }
+
+  // Bare slug fallback — kept for backward compat during the cutover window;
+  // callers are expected to validate with isBareSlug() before reaching here.
+  const rows = await db.select().from(products).where(eq(products.slug, identifier)).limit(1);
   return rows.length > 0 ? rows[0] : null;
 }
 
 /**
- * Resolve a catalog identifier (source slug / `src_` id, product slug /
- * `prod_` id, or an ambiguous slug) to the set of source IDs to filter on.
- * Returns `null` when nothing matches so callers can echo the identifier
- * back in the error.
+ * Resolve a catalog identifier (source `src_` id, product `prod_` id,
+ * `org/slug` coordinate, or ambiguous slug) to the set of source IDs to
+ * filter on.  Returns `null` when nothing matches so callers can echo the
+ * identifier back in the error.
  */
 async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<string[] | null> {
   const entityType = getEntityType(identifier);
@@ -160,6 +210,20 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
   }
 
   if (entityType === "product") {
+    const prod = await resolveProduct(db, identifier);
+    if (!prod) return null;
+    const rows = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.productId, prod.id));
+    return rows.map((r) => r.id);
+  }
+
+  // org/slug coordinate — determine whether it resolves to a source or product
+  const coord = parseOrgSlugCoordinate(identifier);
+  if (coord) {
+    const src = await resolveSource(db, identifier);
+    if (src) return [src.id];
     const prod = await resolveProduct(db, identifier);
     if (!prod) return null;
     const rows = await db
@@ -226,6 +290,17 @@ export async function searchReleases(
 
   let sourceId: string | undefined;
   if (params.product) {
+    if (isBareSlug(params.product)) {
+      return {
+        result: text(
+          `Bare slug "${params.product}" is ambiguous — source slugs are org-scoped.\n` +
+            `Use an org-scoped identifier instead:\n` +
+            `  • ID:         src_<id>\n` +
+            `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+        ),
+        counts: empty,
+      };
+    }
     const source = await resolveSource(db, params.product);
     if (!source) {
       return { result: text(`No product found with slug "${params.product}"`), counts: empty };
@@ -496,6 +571,14 @@ export async function getLatestReleases(
 
   let sourceFilter: string | undefined;
   if (params.product) {
+    if (isBareSlug(params.product)) {
+      return text(
+        `Bare slug "${params.product}" is ambiguous — source slugs are org-scoped.\n` +
+          `Use an org-scoped identifier instead:\n` +
+          `  • ID:         src_<id>\n` +
+          `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+      );
+    }
     const source = await resolveSource(db, params.product);
     if (!source) return text(`No product found with slug "${params.product}"`);
     sourceFilter = source.id;
@@ -797,6 +880,15 @@ export async function summarizeChanges(
 ): Promise<ToolResult> {
   const lookback = params.days ?? 30;
 
+  if (isBareSlug(params.product)) {
+    return text(
+      `Bare slug "${params.product}" is ambiguous — source slugs are org-scoped.\n` +
+        `Use an org-scoped identifier instead:\n` +
+        `  • ID:         src_<id>\n` +
+        `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+    );
+  }
+
   const source = await resolveSource(db, params.product);
   if (!source) return text(`No product found with slug "${params.product}"`);
 
@@ -859,7 +951,19 @@ export async function compareProducts(
 ): Promise<ToolResult> {
   const lookback = params.days ?? 30;
 
-  if (params.products.length < 2) return text("Please provide at least two product slugs.");
+  if (params.products.length < 2) return text("Please provide at least two product identifiers.");
+
+  // Validate each identifier before hitting the DB.
+  for (const id of params.products.slice(0, 2)) {
+    if (isBareSlug(id)) {
+      return text(
+        `Bare slug "${id}" is ambiguous — source slugs are org-scoped.\n` +
+          `Use an org-scoped identifier instead:\n` +
+          `  • ID:         src_<id>\n` +
+          `  • Coordinate: <orgSlug>/<sourceSlug>  (e.g. "vercel/next-js")`,
+      );
+    }
+  }
 
   const cutoff = daysAgoIso(lookback);
 
@@ -1153,6 +1257,14 @@ export async function listProducts(
 // ── get_product ──────────────────────────────────────────────────────
 
 export async function getProduct(db: D1Db, params: { identifier: string }): Promise<ToolResult> {
+  if (isBareSlug(params.identifier)) {
+    return text(
+      `Bare slug "${params.identifier}" is ambiguous — product slugs are org-scoped.\n` +
+        `Use an org-scoped identifier instead:\n` +
+        `  • ID:         prod_<id>\n` +
+        `  • Coordinate: <orgSlug>/<productSlug>  (e.g. "vercel/nextjs")`,
+    );
+  }
   const product = await resolveProduct(db, params.identifier);
   if (!product) return text(`No product found matching "${params.identifier}"`);
   return renderProductDetail(db, product);
@@ -1368,8 +1480,19 @@ export async function getCatalogEntry(
       : text(`No source found matching "${params.identifier}"`);
   }
 
-  // Ambiguous slug: try product first (products typically have shorter,
-  // flatter slugs users reach for; sources carry repo-style slugs).
+  // Bare slug without org context — product and source slugs are now
+  // org-scoped so a bare slug is ambiguous and will break when the API
+  // removes its global carve-out (issue #698). Require an org-scoped form.
+  if (isBareSlug(params.identifier)) {
+    return text(
+      `Bare slug "${params.identifier}" is ambiguous — product and source slugs are org-scoped.\n` +
+        `Use an org-scoped identifier instead:\n` +
+        `  • ID:         src_<id>  or  prod_<id>\n` +
+        `  • Coordinate: <orgSlug>/<slug>  (e.g. "vercel/nextjs")`,
+    );
+  }
+
+  // org/slug coordinate — resolve to product or source
   const [prod, src] = await Promise.all([
     resolveProduct(db, params.identifier),
     resolveSource(db, params.identifier),
@@ -1426,6 +1549,17 @@ export async function search(
 
   let entitySourceIds: string[] | null = null;
   if (params.entity) {
+    if (isBareSlug(params.entity)) {
+      return {
+        result: text(
+          `Bare slug "${params.entity}" is ambiguous — source and product slugs are org-scoped.\n` +
+            `Use an org-scoped identifier instead:\n` +
+            `  • ID:         src_<id>  or  prod_<id>\n` +
+            `  • Coordinate: <orgSlug>/<slug>  (e.g. "vercel/nextjs")`,
+        ),
+        counts: empty,
+      };
+    }
     entitySourceIds = await resolveEntityToSourceIds(db, params.entity);
     if (!entitySourceIds) {
       return { result: text(`No catalog entry found matching "${params.entity}"`), counts: empty };
