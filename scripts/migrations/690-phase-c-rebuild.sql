@@ -23,13 +23,8 @@
 --     --config workers/api/wrangler.jsonc \
 --     --file=scripts/migrations/690-phase-c-rebuild.sql
 --
--- After running on prod, mark this in d1_migrations so the deploy workflow
--- doesn't retry on next push:
---
---   bunx wrangler d1 execute released-db --remote \
---     --config workers/api/wrangler.jsonc \
---     --command "INSERT OR IGNORE INTO d1_migrations (name, applied_at) \
---                VALUES ('20260504000400_per_org_slug_cutover.sql', datetime('now'))"
+-- After running on prod, INSERT OR IGNORE into d1_migrations under the same
+-- name as the companion drizzle migration so the deploy workflow skips it.
 --
 -- Preconditions (verified on prod 2026-05-03):
 --   * 0 sources with NULL org_id
@@ -107,9 +102,9 @@ CREATE VIEW sources_active AS
 CREATE VIEW sources_visible AS
   SELECT * FROM sources_active WHERE is_hidden = 0;
 
--- Products: drop the global UNIQUE(slug); the (org_id, slug) UNIQUE INDEX
--- from Phase A becomes the canonical key. org_id was already NOT NULL +
--- cascade so this is a slug-uniqueness change only.
+-- Products: same shape as the sources rebuild above but slug-only — org_id
+-- was already NOT NULL + cascade. The Phase A (org_id, slug) UNIQUE INDEX
+-- becomes the canonical key once the global UNIQUE(slug) is gone.
 
 DROP VIEW IF EXISTS products_active;
 
