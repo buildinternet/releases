@@ -198,20 +198,18 @@ describe("Sources CRUD", () => {
     }).toThrow();
   });
 
-  it("allows source without an org (null orgId)", () => {
+  it("rejects sources without an org (NOT NULL after #690 Phase C)", () => {
     const db = getDb();
-    db.insert(sources)
-      .values({
-        name: "Orphan Source",
-        slug: "orphan",
-        type: "scrape",
-        url: "https://orphan.com/changelog",
-      })
-      .run();
-
-    const row = db.select().from(sources).where(eq(sources.slug, "orphan")).get();
-    expect(row).toBeDefined();
-    expect(row!.orgId).toBeNull();
+    expect(() => {
+      db.insert(sources)
+        .values({
+          name: "Orphan Source",
+          slug: "orphan",
+          type: "scrape",
+          url: "https://orphan.com/changelog",
+        } as never)
+        .run();
+    }).toThrow();
   });
 });
 

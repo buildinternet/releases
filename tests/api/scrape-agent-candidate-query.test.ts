@@ -97,17 +97,6 @@ function seed() {
         isHidden: true,
         metadata: "{}",
       },
-      // Ineligible: no org
-      {
-        id: "src_8",
-        name: "S8",
-        slug: "s-8",
-        type: "scrape",
-        url: "https://orphan.com",
-        orgId: null,
-        changeDetectedAt: "2026-04-18T00:00:00Z",
-        metadata: "{}",
-      },
     ])
     .run();
 
