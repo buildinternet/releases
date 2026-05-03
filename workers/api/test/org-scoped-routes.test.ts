@@ -15,6 +15,7 @@ import { Hono } from "hono";
 import { sourceRoutes } from "../src/routes/sources.js";
 import { productRoutes } from "../src/routes/products.js";
 import { orgRoutes } from "../src/routes/orgs.js";
+import { BareSlugRejected } from "../src/utils.js";
 
 const statusHubStub = {
   idFromName: () => "stub-id",
@@ -37,6 +38,15 @@ function mkApp(db: ReturnType<typeof mkDb>) {
     passThroughOnException: () => {},
   } as unknown as ExecutionContext;
   const app = new Hono();
+  // Mirror the real app's onError so BareSlugRejected (#698) translates to a
+  // 400 in tests. Without this, a thrown error would surface as Hono's default
+  // 500 response and the bare-slug rejection assertions wouldn't be honest.
+  app.onError((err, c) => {
+    if (err instanceof BareSlugRejected) {
+      return c.json({ error: "bare_slug_rejected", entity: err.entity, message: err.message }, 400);
+    }
+    return c.json({ error: "internal_error", message: String(err) }, 500);
+  });
   const v1 = new Hono();
   v1.route("/", orgRoutes);
   v1.route("/", sourceRoutes);
@@ -179,18 +189,65 @@ describe("GET /v1/orgs/:orgSlug/products/:productSlug", () => {
 });
 
 describe("GET /v1/orgs/:orgSlug/sources/:sourceSlug/changelog", () => {
-  it("is dual-registered (org-scoped and bare routes both reach the handler)", async () => {
+  it("is dual-registered: org-scoped path reaches the handler", async () => {
     const db = mkDb();
     await seed(db);
     const fetch = mkApp(db);
 
-    const [orgScoped, bare] = await Promise.all([
-      fetch(new Request("https://x.test/v1/orgs/acme/sources/cli/changelog")),
-      fetch(new Request("https://x.test/v1/sources/cli/changelog")),
-    ]);
+    const orgScoped = await fetch(new Request("https://x.test/v1/orgs/acme/sources/cli/changelog"));
 
+    // 404 means the route resolved to the handler — the seed has no changelog
+    // file for `cli`, so the handler runs and returns "not found." The status
+    // we're guarding against is 400 (BareSlugRejected) or 405 (no route).
     expect(orgScoped.status).toBe(404);
-    expect(bare.status).toBe(404);
+  });
+
+  it("rejects bare-slug requests with a BareSlugRejected 400 (#698)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/sources/cli/changelog"));
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; entity: string };
+    expect(body.error).toBe("bare_slug_rejected");
+    expect(body.entity).toBe("source");
+  });
+
+  it("typed src_… IDs still resolve on the bare path", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    // No changelog seeded for this source — 404 confirms the resolver ran
+    // (and didn't throw BareSlugRejected). The status we're guarding against
+    // here is 400.
+    const res = await fetch(new Request("https://x.test/v1/sources/src_acme_cli/changelog"));
+    expect(res.status).toBe(404);
+  });
+});
+
+describe("bare-slug rejection on product routes (#698)", () => {
+  it("rejects bare-slug GET /products/:identifier with 400", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/products/widget"));
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; entity: string };
+    expect(body.error).toBe("bare_slug_rejected");
+    expect(body.entity).toBe("product");
+  });
+
+  it("typed prod_… IDs still resolve on the bare path", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(new Request("https://x.test/v1/products/prod_acme_widget"));
+    expect(res.status).toBe(200);
   });
 });
 

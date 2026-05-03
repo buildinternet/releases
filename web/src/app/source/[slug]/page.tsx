@@ -24,18 +24,17 @@ export default async function LegacySourceRedirect({
   const { slug } = await params;
   const { tab, path, offset } = await searchParams;
 
-  let source;
+  let resolved;
   try {
-    source = await api.sourceLegacyResolve(slug);
+    resolved = await api.sourceLegacyResolve(slug);
   } catch {
     notFound();
   }
-  if (!source.org) notFound();
 
   const forward = new URLSearchParams();
   if (tab) forward.set("tab", tab);
   if (path) forward.set("path", path);
   if (offset) forward.set("offset", offset);
   const qs = forward.toString();
-  redirect(`/${source.org.slug}/${source.slug}${qs ? `?${qs}` : ""}`);
+  redirect(`/${resolved.orgSlug}/${resolved.sourceSlug}${qs ? `?${qs}` : ""}`);
 }

@@ -130,12 +130,39 @@ export async function findProductForOrgSlug(
 }
 
 /**
- * Pick the right source resolver based on which params Hono matched. Org-scoped
- * paths route through `findSourceForOrgSlug`; bare paths fall back to the
- * legacy id-or-slug matcher. The bare-slug branch is unambiguous today (no
- * cross-org collisions on prod) but is a documented carve-out — new clients
- * should use the org-scoped path so the slug fallback can eventually be
- * dropped (a coordinated breaking change against web + MCP).
+ * Thrown by `resolveSourceFromContext` / `resolveProductFromContext` when a
+ * bare-path route matches a slug instead of a typed `src_…`/`prod_…` ID.
+ * The global Hono `onError` in `index.ts` translates this to a 400 with a
+ * pointer at the org-scoped path and the `/v1/lookups/*-by-slug` resolver.
+ *
+ * Why throw instead of returning null: handlers already translate `null` to
+ * 404 ("not found"); slug-on-bare-path is a different failure mode (the
+ * client used a deprecated input shape) that deserves a distinct status and
+ * message. Throwing keeps every route handler on the existing two-line
+ * resolver pattern without bolting on a third return state.
+ */
+export class BareSlugRejected extends Error {
+  constructor(
+    public readonly entity: "source" | "product",
+    public readonly slug: string,
+  ) {
+    super(
+      `Bare slug "${slug}" cannot be used on the legacy /${entity}s/:slug path — slugs are org-scoped (#690). ` +
+        `Use /v1/orgs/{orgSlug}/${entity}s/{${entity}Slug} or pass a typed ID (${entity === "source" ? "src_" : "prod_"}…). ` +
+        `If you only have a bare slug, resolve it first via GET /v1/lookups/${entity}-by-slug?slug={slug}.`,
+    );
+    this.name = "BareSlugRejected";
+  }
+}
+
+/**
+ * Pick the right source resolver based on which params Hono matched.
+ * Org-scoped paths route through `findSourceForOrgSlug` (id-or-slug in
+ * either segment); bare paths now require a typed `src_…` ID and reject
+ * raw slugs with `BareSlugRejected` (#698). Per-org slug uniqueness from
+ * #690 made bare slugs ambiguous — typed IDs are still globally unique
+ * and stay safe on the legacy path so admin tooling can adopt at its own
+ * pace.
  */
 export async function resolveSourceFromContext(
   c: { req: { param: (name: string) => string | undefined } },
@@ -149,11 +176,14 @@ export async function resolveSourceFromContext(
   }
   const bare = c.req.param("slug") ?? c.req.param("identifier");
   if (!bare) return null;
+  if (!isSourceId(bare)) {
+    throw new BareSlugRejected("source", bare);
+  }
   const [row] = await db.select().from(sources).where(sourceMatchByIdOrSlug(bare, opts)).limit(1);
   return row ?? null;
 }
 
-/** Sibling of `resolveSourceFromContext` for products. */
+/** Sibling of `resolveSourceFromContext` for products. Same flip applies. */
 export async function resolveProductFromContext(
   c: { req: { param: (name: string) => string | undefined } },
   db: ReturnType<typeof createDb>,
@@ -166,6 +196,9 @@ export async function resolveProductFromContext(
   }
   const bare = c.req.param("identifier") ?? c.req.param("slug");
   if (!bare) return null;
+  if (!isProductId(bare)) {
+    throw new BareSlugRejected("product", bare);
+  }
   const [row] = await db.select().from(products).where(productMatchByIdOrSlug(bare, opts)).limit(1);
   return row ?? null;
 }

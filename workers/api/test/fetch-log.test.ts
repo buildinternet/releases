@@ -421,7 +421,7 @@ describe("POST /v1/sources/:slug/fetch query params", () => {
     nextFeedResult = { releases: [mkRaw("https://a.test/v1")] };
 
     const res = await fetch(
-      new Request("https://x.test/v1/sources/acme-one/fetch?dryRun=true", { method: "POST" }),
+      new Request("https://x.test/v1/sources/src_a1/fetch?dryRun=true", { method: "POST" }),
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as { status: string; releasesInserted: number };
@@ -442,7 +442,7 @@ describe("POST /v1/sources/:slug/fetch query params", () => {
     nextFeedResult = { releases: [] };
 
     const res = await fetch(
-      new Request("https://x.test/v1/sources/acme-one/fetch?max=42", { method: "POST" }),
+      new Request("https://x.test/v1/sources/src_a1/fetch?max=42", { method: "POST" }),
     );
     expect(res.status).toBe(200);
     expect(feedCalls[0].opts.maxEntries).toBe(42);
@@ -454,7 +454,7 @@ describe("POST /v1/sources/:slug/fetch query params", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/sources/acme-one/fetch?max=abc", { method: "POST" }),
+      new Request("https://x.test/v1/sources/src_a1/fetch?max=abc", { method: "POST" }),
     );
     expect(res.status).toBe(400);
     const body = (await res.json()) as { error: string };
@@ -467,7 +467,7 @@ describe("POST /v1/sources/:slug/fetch query params", () => {
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/sources/acme-one/fetch?max=0", { method: "POST" }),
+      new Request("https://x.test/v1/sources/src_a1/fetch?max=0", { method: "POST" }),
     );
     expect(res.status).toBe(400);
   });
@@ -511,7 +511,7 @@ describe("POST /v1/sources/:slug/fetch — scrape source inline dispatch", () =>
     nextFeedResult = { releases: [mkRaw("https://b.test/v1")] };
 
     const res = await fetch(
-      new Request("https://x.test/v1/sources/beta-scrape/fetch", { method: "POST" }),
+      new Request("https://x.test/v1/sources/src_b1/fetch", { method: "POST" }),
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
@@ -526,7 +526,7 @@ describe("POST /v1/sources/:slug/fetch — scrape source inline dispatch", () =>
     const fetch = mkApp(db);
 
     const res = await fetch(
-      new Request("https://x.test/v1/sources/beta-scrape/fetch", { method: "POST" }),
+      new Request("https://x.test/v1/sources/src_b1/fetch", { method: "POST" }),
     );
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;

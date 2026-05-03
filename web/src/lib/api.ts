@@ -215,14 +215,21 @@ export const api = {
   sourceHeatmap: (ref: { orgSlug: string; sourceSlug: string }) =>
     fetchApi<SourceHeatmap>(`/v1/orgs/${ref.orgSlug}/sources/${ref.sourceSlug}/heatmap`),
   /**
-   * Bare-slug resolver used solely by the legacy `/source/[slug]` redirect page
-   * to look up the org for a 308. Hits the legacy bare API path that the rest
-   * of the app has migrated off — kept until that bare path returns 400 (#698)
-   * and the bookmark window has elapsed, at which point the redirect page
-   * should be deleted entirely.
+   * Resolves a bare slug to its canonical org-scoped home. Backs the legacy
+   * `/source/[slug]` redirect page and the `.atom`/`.md`/`.json` legacy
+   * format routes — both translate inbound bookmark URLs to a 308 toward
+   * the canonical `/{orgSlug}/{sourceSlug}` shape.
+   *
+   * Hits `/v1/lookups/source-by-slug`, the dedicated bookmark-resolver
+   * endpoint introduced when the bare API path stopped accepting slugs
+   * (#698). The endpoint returns the oldest match for a given slug — a
+   * deterministic answer for bookmarks even when the same slug appears
+   * under multiple orgs after #690.
    */
   sourceLegacyResolve: (slug: string) =>
-    fetchApi<SourceDetail>(`/v1/sources/${slug}?page=1&pageSize=1`),
+    fetchApi<{ sourceId: string; sourceSlug: string; orgSlug: string }>(
+      `/v1/lookups/source-by-slug?slug=${encodeURIComponent(slug)}`,
+    ),
   productDetail: (ref: { orgSlug: string; productSlug: string }) =>
     fetchApi<ProductDetail>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}`),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),

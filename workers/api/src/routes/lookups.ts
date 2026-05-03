@@ -1,8 +1,9 @@
 import { Hono } from "hono";
-import { desc, eq, sql } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import {
   organizations,
   organizationsActive,
+  productsActive,
   sources,
   sourcesActive,
   releases,
@@ -370,4 +371,68 @@ lookupRoutes.post("/lookups", async (c) => {
     }
   }
   return c.json(result);
+});
+
+/**
+ * Slug → canonical-home lookup for sources. Lets clients that hold a bare
+ * slug (legacy bookmarks, the OSS CLI's `findSource(operatorInput)`) translate
+ * it to the org-scoped form before the bare API path stops resolving slugs
+ * (#698 final piece). Per-org slug uniqueness (#690) means a slug can match
+ * multiple sources across orgs; this endpoint returns the oldest match by
+ * createdAt for stability so repeated calls land on the same row.
+ *
+ * `Sunset` header is set so callers know this is a migration aid, not a
+ * permanent shape — it'll be removed when the bookmark window elapses.
+ */
+lookupRoutes.get("/lookups/source-by-slug", async (c) => {
+  const slug = c.req.query("slug")?.trim();
+  if (!slug) {
+    return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
+  }
+  const db = createDb(c.env.DB);
+  const [row] = await db
+    .select({
+      sourceId: sourcesActive.id,
+      sourceSlug: sourcesActive.slug,
+      orgSlug: organizationsActive.slug,
+    })
+    .from(sourcesActive)
+    .innerJoin(organizationsActive, eq(organizationsActive.id, sourcesActive.orgId))
+    .where(eq(sourcesActive.slug, slug))
+    .orderBy(asc(sourcesActive.createdAt))
+    .limit(1);
+  if (!row) {
+    return c.json({ error: "not_found", message: `No source matches slug "${slug}"` }, 404);
+  }
+  c.header("Sunset", "Sat, 1 Nov 2026 00:00:00 GMT");
+  return c.json(row);
+});
+
+/**
+ * Slug → canonical-home lookup for products. Same semantics as
+ * `/lookups/source-by-slug`. The OSS CLI's `findProduct(operatorInput)` is
+ * the primary consumer.
+ */
+lookupRoutes.get("/lookups/product-by-slug", async (c) => {
+  const slug = c.req.query("slug")?.trim();
+  if (!slug) {
+    return c.json({ error: "bad_request", message: "slug query param is required" }, 400);
+  }
+  const db = createDb(c.env.DB);
+  const [row] = await db
+    .select({
+      productId: productsActive.id,
+      productSlug: productsActive.slug,
+      orgSlug: organizationsActive.slug,
+    })
+    .from(productsActive)
+    .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
+    .where(eq(productsActive.slug, slug))
+    .orderBy(asc(productsActive.createdAt))
+    .limit(1);
+  if (!row) {
+    return c.json({ error: "not_found", message: `No product matches slug "${slug}"` }, 404);
+  }
+  c.header("Sunset", "Sat, 1 Nov 2026 00:00:00 GMT");
+  return c.json(row);
 });

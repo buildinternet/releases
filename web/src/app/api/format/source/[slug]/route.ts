@@ -7,11 +7,10 @@ const isFormat = (v: string | null): v is Format =>
 
 /**
  * Legacy bare-slug format target. The `/source/{slug}.atom|.md|.json` URLs
- * are rewritten here by `src/proxy.ts`. Every source has an org now (#690
- * Phase C made `sources.orgId` NOT NULL), so we resolve once and 308 to the
- * canonical org-scoped format URL. Same lifetime constraint as the
- * `/source/[slug]/page.tsx` redirect — delete when the API's bare path
- * starts returning 400 (#698).
+ * are rewritten here by `src/proxy.ts`. Resolves the bare slug to an
+ * org-scoped path via the dedicated bookmark resolver and 308s. Same
+ * lifetime constraint as the `/source/[slug]/page.tsx` redirect — both
+ * lean on `/v1/lookups/source-by-slug` until the bookmark window elapses.
  */
 export async function GET(request: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
@@ -21,18 +20,15 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // refuse anything off-list rather than splicing it into the redirect path.
   const format: Format = isFormat(rawFormat) ? rawFormat : "md";
 
-  let source;
+  let resolved;
   try {
-    source = await api.sourceLegacyResolve(slug);
+    resolved = await api.sourceLegacyResolve(slug);
   } catch {
-    return NextResponse.json({ error: "not_found" }, { status: 404 });
-  }
-  if (!source.org) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 
   const target = new URL(request.url);
-  target.pathname = `/${source.org.slug}/${source.slug}.${format}`;
+  target.pathname = `/${resolved.orgSlug}/${resolved.sourceSlug}.${format}`;
   // Preserve the format suffix in the redirect URL so the proxy's rewrite
   // catches the org-scoped path on the next hop.
   return NextResponse.redirect(target, 308);

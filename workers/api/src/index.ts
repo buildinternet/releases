@@ -38,6 +38,7 @@ import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
+import { BareSlugRejected } from "./utils.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
 import { retierSources } from "./cron/retier.js";
@@ -186,6 +187,14 @@ export type Env = {
 const app = new Hono<Env>();
 
 app.onError((err, c) => {
+  // Bare-path source/product routes that match a slug instead of a typed ID
+  // throw `BareSlugRejected` from `resolveSourceFromContext` /
+  // `resolveProductFromContext`. Translate to a 400 with the same message
+  // the resolver constructed (it points at the org-scoped path and the
+  // /v1/lookups/*-by-slug resolver).
+  if (err instanceof BareSlugRejected) {
+    return c.json({ error: "bare_slug_rejected", entity: err.entity, message: err.message }, 400);
+  }
   const message = err instanceof Error ? err.message : String(err);
   return c.json({ error: "internal_error", message }, 500);
 });
