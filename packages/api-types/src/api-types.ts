@@ -809,6 +809,26 @@ export interface EmbedBackfillResponse {
   dryRun?: boolean;
 }
 
+/**
+ * Cascade-scope preview returned by `GET /v1/admin/orgs/:slug/dependents`.
+ * Backs the confirmation prompt in CLI/web before a hard-delete on an org —
+ * post-#690 Phase C, hard-deleting an org cascades into every source row
+ * tied to it and every per-source dependent table listed below.
+ */
+export interface OrgDependentsResponse {
+  org: { id: string; slug: string; name: string };
+  counts: {
+    sources: number;
+    releases: number;
+    fetchLog: number;
+    sourceChangelogFiles: number;
+    sourceChangelogChunks: number;
+    releaseSummaries: number;
+    mediaAssets: number;
+    webhookSubscriptions: number;
+  };
+}
+
 export interface EmbedStatusResponse {
   releases: { total: number; embedded: number; unembedded: number };
   entities: {
