@@ -136,7 +136,6 @@ searchRoutes.get("/search", async (c) => {
   const mode = parseMode(c.req.query("mode"));
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
   const db = createDb(c.env.DB);
-  const pattern = `%${q}%`;
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
   // The web frontend sets `X-Releases-Surface: web` so we can attribute hits
@@ -168,9 +167,9 @@ searchRoutes.get("/search", async (c) => {
   // MCP. The /search endpoint keeps its historical shape so orgs/products
   // keep rendering the way the web UI expects.
   const [orgs, rawProducts, rawSources] = await Promise.all([
-    searchOrgs(db, pattern, limit),
-    searchProducts(db, pattern, limit),
-    searchSources(db, pattern, limit),
+    searchOrgs(db, q, limit),
+    searchProducts(db, q, limit),
+    searchSources(db, q, limit),
   ]);
   const catalog = foldSourcesIntoCatalog(rawProducts, rawSources);
 

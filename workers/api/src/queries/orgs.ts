@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
+import { likeContains } from "@buildinternet/releases-core/sql-like";
 import type { D1Db } from "../db.js";
 import type { OrgListRow, SourceWithStats } from "./shared.js";
 
@@ -42,8 +43,8 @@ export async function countOrgsForList(db: D1Db, q?: string): Promise<number> {
 
 function orgListSearchWhere(q?: string) {
   if (!q) return sql``;
-  const pattern = `%${q.toLowerCase()}%`;
-  return sql`WHERE (lower(o.name) LIKE ${pattern} OR lower(o.slug) LIKE ${pattern})`;
+  const lower = q.toLowerCase();
+  return sql`WHERE (${likeContains(sql`lower(o.name)`, lower)} OR ${likeContains(sql`lower(o.slug)`, lower)})`;
 }
 
 export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<SourceWithStats[]> {
