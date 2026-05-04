@@ -7,6 +7,7 @@ import { and, asc, desc, eq, gt, inArray, sql, type SQL } from "drizzle-orm";
 import { fetchLog } from "@buildinternet/releases-core/schema";
 import { cronRuns } from "../db/schema-cron.js";
 import { createDb } from "../db.js";
+import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { parseEnumParam, parseSortDir } from "../utils.js";
 import { nullsLastOrderBy } from "../queries/shared.js";
 import type { Env } from "../index.js";
@@ -59,6 +60,7 @@ adminCronRunsRoutes.get("/admin/cron-runs", async (c) => {
     .orderBy(...orderBy)
     .limit(limit);
 
+  if (c.req.query("envelope") === "true") return c.json(buildBareLimitEnvelope(rows, limit));
   return c.json(rows);
 });
 

@@ -107,19 +107,38 @@ async function seed(db: TestDatabase["db"]) {
   return { vercelId, anthropicId, nextjsId, nextjsSrcId, claudeSrcId };
 }
 
-describe("list_catalog", () => {
-  let fixture: TestDatabase;
-
+/**
+ * Register the standard fixture lifecycle (createTestDb / cleanup /
+ * clearAllTables + seed) inside a describe block. Returns an object whose
+ * `db` getter resolves to the live fixture handle each time it's read, so
+ * test bodies can keep writing `fixture.db` and `fixture.seeded` instead of
+ * threading `let` bookkeeping through every block.
+ */
+function useFixture<T>(seedFn: (db: TestDatabase["db"]) => Promise<T>) {
+  let inner: TestDatabase;
+  let seeded: T;
   beforeAll(() => {
-    fixture = createTestDb();
+    inner = createTestDb();
   });
   afterAll(() => {
-    fixture.cleanup();
+    inner.cleanup();
   });
   beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
+    clearAllTables(inner.db);
+    seeded = await seedFn(inner.db);
   });
+  return {
+    get db() {
+      return inner.db;
+    },
+    get seeded() {
+      return seeded;
+    },
+  };
+}
+
+describe("list_catalog", () => {
+  const fixture = useFixture(seed);
 
   it("folds products and standalone sources into one list with kind discriminator", async () => {
     const text = resultText(await listCatalog(asD1(fixture.db), {}));
@@ -153,18 +172,7 @@ describe("list_catalog", () => {
 });
 
 describe("get_catalog_entry", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   it("resolves an org-scoped product coordinate to product detail", async () => {
     const text = resultText(
@@ -346,18 +354,7 @@ describe("get_catalog_entry", () => {
 });
 
 describe("get_organization (overview consolidation)", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   const longOverview = [
     "Vercel has shipped a wave of infrastructure updates across the last quarter.",
@@ -419,18 +416,7 @@ describe("get_organization (overview consolidation)", () => {
 });
 
 describe("search (unified)", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   it("returns all three sections by default when each has matches", async () => {
     // Lexical mode stays purely in-DB so no Vectorize bindings are needed.
@@ -550,18 +536,7 @@ describe("search (unified)", () => {
 });
 
 describe("list_sources (round-trippable slugs)", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   it("surfaces org-scoped slug coordinates instead of bare slugs", async () => {
     const text = resultText(await listSources(asD1(fixture.db), {}));
@@ -578,18 +553,7 @@ describe("list_sources (round-trippable slugs)", () => {
 });
 
 describe("list_products (round-trippable slugs)", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   it("surfaces org-scoped slug coordinates instead of bare slugs", async () => {
     const text = resultText(await listProducts(asD1(fixture.db), {}));
@@ -599,18 +563,7 @@ describe("list_products (round-trippable slugs)", () => {
 });
 
 describe("get_organization (round-trippable entity coordinates)", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   it("emits org-scoped product coordinates in org detail", async () => {
     const text = resultText(await getOrganization(asD1(fixture.db), { identifier: "vercel" }));
@@ -637,18 +590,7 @@ describe("get_organization (round-trippable entity coordinates)", () => {
 });
 
 describe("list_* pagination", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   // The shared seed gives us 2 orgs / 2 products / 3 sources / 3 catalog
   // entries. Limits below the total are enough to exercise the footer + slice
@@ -728,18 +670,7 @@ describe("list_* pagination", () => {
 });
 
 describe("list_* _meta.pagination", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   it("populates _meta.pagination with hasMore + nextPage on a multi-page result", async () => {
     // 3 sources, limit=2 → page 1 has more.
@@ -844,18 +775,7 @@ describe("list_* _meta.pagination", () => {
 });
 
 describe("get_latest_releases (round-trippable source coordinates)", () => {
-  let fixture: TestDatabase;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    await seed(fixture.db);
-  });
+  const fixture = useFixture(seed);
 
   it("includes org-scoped source coordinate in release output", async () => {
     const text = resultText(await getLatestReleases(asD1(fixture.db), {}));
@@ -866,31 +786,20 @@ describe("get_latest_releases (round-trippable source coordinates)", () => {
 });
 
 describe("get_latest_releases _meta.pagination (cursor)", () => {
-  let fixture: TestDatabase;
-  let nextjsSrcId: string;
-
-  beforeAll(() => {
-    fixture = createTestDb();
-  });
-  afterAll(() => {
-    fixture.cleanup();
-  });
-  beforeEach(async () => {
-    clearAllTables(fixture.db);
-    const seeded = await seed(fixture.db);
-    nextjsSrcId = seeded.nextjsSrcId;
-
-    // Add a deterministic spine of releases so cursor pages are predictable.
-    // Six on top of the two from `seed()` → cursor with limit=3 walks the feed.
+  // Six spine releases on top of the two from `seed()` → cursor with limit=3
+  // walks the feed deterministically.
+  const fixture = useFixture(async (db) => {
+    const seeded = await seed(db);
     const extras = Array.from({ length: 6 }, (_, i) => ({
       id: newReleaseId(),
-      sourceId: nextjsSrcId,
+      sourceId: seeded.nextjsSrcId,
       title: `Spine release ${i + 1}`,
       content: `Body ${i + 1}`,
       url: `https://example.com/spine/${i + 1}`,
       publishedAt: `2024-08-${String(i + 1).padStart(2, "0")}T00:00:00Z`,
     }));
-    await fixture.db.insert(releases).values(extras);
+    await db.insert(releases).values(extras);
+    return seeded;
   });
 
   it("populates cursor _meta with kind=cursor, hasMore, nextCursor on first page", async () => {
@@ -953,7 +862,7 @@ describe("get_latest_releases _meta.pagination (cursor)", () => {
     // Insert a brand-new release at the head of the feed *after* page 1.
     await fixture.db.insert(releases).values({
       id: newReleaseId(),
-      sourceId: nextjsSrcId,
+      sourceId: fixture.seeded.nextjsSrcId,
       title: "Inserted between pages",
       content: "Body",
       url: "https://example.com/inserted",

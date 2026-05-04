@@ -50,3 +50,20 @@ export function buildListResponse<T>(
 export function slicePage<T>(items: T[], pagination: ListPaginationParams): T[] {
   return items.slice(pagination.offset, pagination.offset + pagination.pageSize);
 }
+
+/**
+ * Wrap a bare `?limit`-bounded result set in the canonical `ListResponse<T>`
+ * envelope. For routes with no `?page` / count query — `hasMore` is the
+ * limit-saturation heuristic, totals are omitted.
+ */
+export function buildBareLimitEnvelope<T>(items: T[], limit: number): ListResponse<T> {
+  return {
+    items,
+    pagination: {
+      page: 1,
+      pageSize: limit,
+      returned: items.length,
+      hasMore: items.length >= limit,
+    },
+  };
+}

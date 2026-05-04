@@ -64,4 +64,23 @@ describe("GET /admin/cron-runs", () => {
     const body = (await res.json()) as Array<{ status: string }>;
     expect(body.map((r) => r.status).toSorted()).toEqual(["aborted", "degraded"]);
   });
+
+  it("wraps the response in the canonical ListResponse envelope when ?envelope=true", async () => {
+    const db = mkDb();
+    await db.insert(cronRuns).values([
+      { id: "crun_1", cronName: "retier", startedAt: "2026-04-18T01:00:00Z", status: "done" },
+      { id: "crun_2", cronName: "retier", startedAt: "2026-04-18T02:00:00Z", status: "done" },
+    ]);
+
+    const app = mkApp(db);
+    const res = await app.request(
+      "/admin/cron-runs?cron=retier&limit=2&since=2000-01-01T00:00:00Z&envelope=true",
+    );
+    const body = (await res.json()) as {
+      items: Array<{ id: string }>;
+      pagination: { page: number; pageSize: number; returned: number; hasMore: boolean };
+    };
+    expect(body.items.map((r) => r.id).toSorted()).toEqual(["crun_1", "crun_2"]);
+    expect(body.pagination).toMatchObject({ page: 1, pageSize: 2, returned: 2, hasMore: true });
+  });
 });

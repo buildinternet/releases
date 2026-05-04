@@ -17,6 +17,7 @@ import { and, desc, eq, gt, type SQL } from "drizzle-orm";
 import { searchQueries, SEARCH_SURFACES } from "@buildinternet/releases-core/schema";
 import { createDb } from "../db.js";
 import type { Env } from "../index.js";
+import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { buildBotCondition, getTopSearchQueries } from "../lib/search-queries-top.js";
 import type { BotsMode } from "../lib/search-queries-top.js";
 
@@ -92,6 +93,7 @@ adminSearchQueriesRoutes.get("/admin/search-queries", async (c) => {
     .orderBy(desc(searchQueries.timestamp))
     .limit(limit);
 
+  if (c.req.query("envelope") === "true") return c.json(buildBareLimitEnvelope(rows, limit));
   return c.json(rows);
 });
 
