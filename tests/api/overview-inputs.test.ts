@@ -181,6 +181,57 @@ describe("GET /v1/orgs/:slug/overview/inputs", () => {
     expect(res.status).toBe(400);
   });
 
+  it("?check=true returns the lightweight pre-flight payload", async () => {
+    const now = Date.now();
+    // 3 in-window releases on a single source (no caps will trim).
+    await db.insert(releases).values(
+      Array.from({ length: 3 }, (_, i) => ({
+        id: `rel_check_${i}`,
+        sourceId: srcGithubId,
+        title: `c${i}`,
+        url: `https://github.com/acme/x/releases/c${i}`,
+        content: "x",
+        publishedAt: new Date(now - i * 86400_000).toISOString(),
+      })),
+    );
+    await db.insert(knowledgePages).values({
+      id: newKnowledgePageId(),
+      scope: "org",
+      orgId,
+      content: "previous",
+      releaseCount: 3,
+    });
+
+    const app = mkApp(db);
+    const res = await app.request("/orgs/acme/overview/inputs?window=365&check=true");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      orgSlug: string;
+      selected: number;
+      totalAvailable: number;
+      hasExistingContent: boolean;
+      wouldRegenerate: boolean;
+      windowDays: number;
+    };
+    expect(body.orgSlug).toBe("acme");
+    expect(body.selected).toBe(3);
+    expect(body.totalAvailable).toBe(3);
+    expect(body.hasExistingContent).toBe(true);
+    expect(body.wouldRegenerate).toBe(true);
+    expect(body.windowDays).toBe(365);
+    // No heavy payload fields should appear in check mode.
+    expect((body as any).org).toBeUndefined();
+    expect((body as any).sources).toBeUndefined();
+  });
+
+  it("?check=true reports wouldRegenerate=false when nothing is selectable", async () => {
+    const app = mkApp(db);
+    const res = await app.request("/orgs/acme/overview/inputs?check=true");
+    const body = (await res.json()) as { wouldRegenerate: boolean; selected: number };
+    expect(body.selected).toBe(0);
+    expect(body.wouldRegenerate).toBe(false);
+  });
+
   it("hydrates media and content URLs on selected releases", async () => {
     const now = Date.now();
     await db.insert(releases).values({

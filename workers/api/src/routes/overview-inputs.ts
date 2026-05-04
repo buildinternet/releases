@@ -50,6 +50,8 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
     return c.json({ error: "limit must be a positive integer" }, 400);
   }
 
+  const checkOnly = c.req.query("check") === "true" || c.req.query("check") === "1";
+
   const orgIdMatch = slug.startsWith("org_")
     ? eq(organizationsPublic.id, slug)
     : eq(organizationsPublic.slug, slug);
@@ -114,6 +116,21 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
     .select({ content: knowledgePages.content })
     .from(knowledgePages)
     .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)));
+
+  if (checkOnly) {
+    // Pre-flight payload — orchestrators use this to decide whether to dispatch
+    // a per-org sub-agent without paying for the full release-content + media
+    // hydration. `wouldRegenerate` is true when there's something worth feeding
+    // the model.
+    return c.json({
+      orgSlug: org.slug,
+      selected: selected.length,
+      totalAvailable,
+      hasExistingContent: !!existing?.content,
+      wouldRegenerate: selected.length > 0,
+      windowDays,
+    });
+  }
 
   // Hydrate media so the agent sees absolute URLs it can paste directly into
   // the generated overview. Raw `/_media/{key}` prefixes would render broken

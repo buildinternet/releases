@@ -32,6 +32,7 @@ import { evaluateRoutes } from "./routes/evaluate.js";
 import { adminEmbedStatusRoutes } from "./routes/admin-embed-status.js";
 import { adminCronRunsRoutes } from "./routes/admin-cron-runs.js";
 import { adminSearchQueriesRoutes } from "./routes/admin-search-queries.js";
+import { adminOverviewsRoutes } from "./routes/admin-overviews.js";
 import { adminOrgDependentsRoutes } from "./routes/admin-org-dependents.js";
 import { errataRoutes } from "./routes/errata.js";
 import { webhooksRoutes } from "./routes/webhooks.js";
@@ -256,6 +257,7 @@ const adminRoutes = [
   "admin/cron-runs",
   "admin/logs",
   "admin/search-queries",
+  "admin/overviews",
   "admin/orgs",
   "errata",
   "webhooks",
@@ -365,6 +367,7 @@ v1.route("/", evaluateRoutes);
 v1.route("/", adminEmbedStatusRoutes);
 v1.route("/", adminCronRunsRoutes);
 v1.route("/", adminSearchQueriesRoutes);
+v1.route("/", adminOverviewsRoutes);
 v1.route("/", adminOrgDependentsRoutes);
 v1.route("/", errataRoutes);
 v1.route("/", webhooksRoutes);
