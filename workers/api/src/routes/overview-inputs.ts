@@ -50,7 +50,7 @@ app.get("/orgs/:slug/overview/inputs", authMiddleware, async (c) => {
     return c.json({ error: "limit must be a positive integer" }, 400);
   }
 
-  const checkOnly = c.req.query("check") === "true" || c.req.query("check") === "1";
+  const checkOnly = c.req.query("check") === "true";
 
   const orgIdMatch = slug.startsWith("org_")
     ? eq(organizationsPublic.id, slug)

@@ -20,15 +20,11 @@
  */
 import { Hono } from "hono";
 import { sql } from "drizzle-orm";
-import {
-  classifyOverviewStaleness,
-  type OverviewStaleness,
-} from "@buildinternet/releases-core/overview";
+import { classifyOverviewStaleness } from "@buildinternet/releases-core/overview";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type {
   OverviewManifestResponse,
   OverviewManifestRow,
-  OverviewPlanAction,
 } from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import { buildListResponse, parseListPagination, slicePage } from "../lib/pagination.js";
@@ -38,10 +34,6 @@ export const adminOverviewsRoutes = new Hono<Env>();
 
 function getDb(c: any): ReturnType<typeof createDb> {
   return c.get("db") ?? createDb(c.env.DB);
-}
-
-function isTrue(v: string | undefined): boolean {
-  return v === "true" || v === "1";
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -62,28 +54,21 @@ interface ManifestQueryRow {
   active_source_count: number;
 }
 
-function classifyAction(staleness: OverviewStaleness): OverviewPlanAction {
-  if (staleness === "missing") return "missing";
-  if (staleness === "behind") return "refresh";
-  return "skip";
-}
-
 adminOverviewsRoutes.get("/admin/overviews", async (c) => {
-  const url = new URL(c.req.url);
-  const params = url.searchParams;
+  const params = new URL(c.req.url).searchParams;
   const pagination = parseListPagination(params, { defaultPageSize: 200, maxPageSize: 500 });
 
   const staleDaysRaw = params.get("staleDays");
   const staleDays = staleDaysRaw != null ? parseInt(staleDaysRaw, 10) : null;
-  if (staleDaysRaw != null && (!Number.isFinite(staleDays) || staleDays! < 0)) {
+  if (staleDaysRaw != null && (staleDays == null || !Number.isFinite(staleDays) || staleDays < 0)) {
     return c.json(
       { error: "invalid_param", message: "staleDays must be a non-negative integer" },
       400,
     );
   }
 
-  const missingFlag = isTrue(params.get("missing") ?? undefined);
-  const hasActivityFlag = isTrue(params.get("hasActivity") ?? undefined);
+  const missingFlag = params.get("missing") === "true";
+  const hasActivityFlag = params.get("hasActivity") === "true";
   const planMode = params.get("format") === "plan";
 
   const cutoff30d = daysAgoIso(30);
@@ -130,13 +115,13 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
     const staleness = classifyOverviewStaleness(hasOverview, row.releases_since_overview);
 
     if (filterByStaleness) {
-      let keep = false;
-      if (missingFlag && staleness === "missing") keep = true;
-      if (staleDays != null && staleness === "behind" && row.overview_updated_at) {
-        const ageDays = (now - new Date(row.overview_updated_at).getTime()) / DAY_MS;
-        if (ageDays >= staleDays) keep = true;
-      }
-      if (!keep) continue;
+      const matchesMissing = missingFlag && staleness === "missing";
+      const matchesBehind =
+        staleDays != null &&
+        staleness === "behind" &&
+        row.overview_updated_at != null &&
+        (now - new Date(row.overview_updated_at).getTime()) / DAY_MS >= staleDays;
+      if (!matchesMissing && !matchesBehind) continue;
     }
 
     if (hasActivityFlag && row.recent_release_count <= 0) continue;
@@ -149,13 +134,15 @@ adminOverviewsRoutes.get("/admin/overviews", async (c) => {
       overviewGeneratedAt: row.overview_generated_at,
       lastContributingReleaseAt: row.last_contributing_release_at,
       orgLastActivity: row.org_last_activity,
-      releasesSinceOverview: Number(row.releases_since_overview ?? 0),
-      recentReleaseCount: Number(row.recent_release_count ?? 0),
+      releasesSinceOverview: row.releases_since_overview,
+      recentReleaseCount: row.recent_release_count,
       staleness,
     };
 
     if (planMode) {
-      out.action = classifyAction(staleness);
+      if (staleness === "missing") out.action = "missing";
+      else if (staleness === "behind") out.action = "refresh";
+      else out.action = "skip";
       // Hint a poll-fetch first when an org has active sources but the most
       // recent release is older than the lag threshold — suggests ingest may
       // have stalled and the overview would be regenerated against stale data.
