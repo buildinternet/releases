@@ -1,10 +1,6 @@
-// Page-based pagination for the MCP `list_*` tools. Renders a markdown footer
-// instead of a JSON envelope so an LLM caller can see "there's more" without
-// schema awareness. The `Pagination` shape from
-// `@buildinternet/releases-core/cli-contracts` is the source of truth for
-// totals + hasMore math.
-
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
+import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
+import type { SearchMode } from "@buildinternet/releases-core/schema";
 
 export interface McpPaginationInput {
   page?: number;
@@ -17,12 +13,12 @@ export interface McpPagination {
   offset: number;
 }
 
-// Structured pagination state attached to `_meta.pagination` on `list_*` tool
-// results. Mirrors `Pagination` from `@buildinternet/releases-core/cli-contracts`
-// with two adjustments: `totalItems` / `totalPages` are required (we always
-// pass a backend total in), and `nextPage` is added so MCP clients don't
-// recompute `page + 1` themselves.
+// Mirrors `Pagination` from `@buildinternet/releases-core/cli-contracts` with
+// `totalItems` / `totalPages` required (we always pass a backend total in) and
+// adds `nextPage` so clients don't recompute `page + 1`. The `kind` field
+// pairs with `McpCursorPaginationMeta` for clean discriminated-union narrowing.
 export interface McpPaginationMeta {
+  kind: "page";
   page: number;
   pageSize: number;
   returned: number;
@@ -107,6 +103,7 @@ export function buildPaginationMeta(opts: {
     totalItems: opts.totalItems,
   });
   const meta: McpPaginationMeta = {
+    kind: "page",
     page: computed.page,
     pageSize: computed.pageSize,
     returned: computed.returned,
@@ -116,4 +113,110 @@ export function buildPaginationMeta(opts: {
   };
   if (computed.hasMore) meta.nextPage = computed.page + 1;
   return meta;
+}
+
+// ── Cursor-based pagination (feed-shaped surfaces) ────────────────────
+//
+// Append-only feeds (`get_latest_releases`) can't use page numbers — a new
+// release between page 1 and page 2 shifts the slice. Encode the last row's
+// (publishedAt, id) into an opaque token so continuation is stable.
+
+const DEFAULT_FEED_LIMIT = 50;
+const MAX_FEED_LIMIT = 200;
+
+export interface ReleaseCursorValue {
+  lastPublishedAt: string | null;
+  lastId: string;
+}
+
+export function encodeReleaseCursor(v: ReleaseCursorValue): string {
+  return toBase64Url(`${v.lastPublishedAt ?? ""}|${v.lastId}`);
+}
+
+export function decodeReleaseCursor(token: string): ReleaseCursorValue | null {
+  if (!token) return null;
+  const raw = fromBase64Url(token);
+  if (!raw) return null;
+  const sep = raw.indexOf("|");
+  // Reject when there's no separator or the id half is empty.
+  if (sep < 0 || sep === raw.length - 1) return null;
+  const left = raw.slice(0, sep);
+  return { lastPublishedAt: left || null, lastId: raw.slice(sep + 1) };
+}
+
+export function parseFeedLimit(limit: number | undefined): number {
+  if (typeof limit !== "number" || !Number.isFinite(limit) || limit <= 0) {
+    return DEFAULT_FEED_LIMIT;
+  }
+  return Math.min(Math.floor(limit), MAX_FEED_LIMIT);
+}
+
+export interface McpCursorPaginationMeta {
+  kind: "cursor";
+  returned: number;
+  limit: number;
+  hasMore: boolean;
+  nextCursor?: string;
+}
+
+export function buildCursorMeta(opts: {
+  returned: number;
+  limit: number;
+  hasMore: boolean;
+  nextCursor: string | null;
+}): McpCursorPaginationMeta {
+  const meta: McpCursorPaginationMeta = {
+    kind: "cursor",
+    returned: opts.returned,
+    limit: opts.limit,
+    hasMore: opts.hasMore,
+  };
+  if (opts.hasMore && opts.nextCursor) meta.nextCursor = opts.nextCursor;
+  return meta;
+}
+
+// ── Search meta (ranking-bounded surfaces) ────────────────────────────
+//
+// Search isn't paginated — results are top-ranked, and "page 2" of a ranked
+// query isn't a coherent thing without re-ranking. The honest signal a client
+// wants is "did we cap your results, and how were they distributed?"
+
+export interface McpSearchHitCounts {
+  orgHits?: number;
+  catalogHits?: number;
+  releaseHits?: number;
+  chunkHits?: number;
+}
+
+export interface McpSearchMeta {
+  mode: SearchMode;
+  limit: number;
+  returned: number;
+  hitCap: boolean;
+  hitCounts: McpSearchHitCounts;
+  degraded: boolean;
+}
+
+export function buildSearchMeta(opts: {
+  mode: SearchMode;
+  limit: number;
+  counts: McpSearchHitCounts;
+  degraded?: boolean;
+}): McpSearchMeta {
+  const { mode, limit, counts } = opts;
+  const sections = [counts.orgHits, counts.catalogHits, counts.releaseHits, counts.chunkHits];
+  const hitCounts: McpSearchHitCounts = {};
+  let returned = 0;
+  let hitCap = false;
+  for (const [i, n] of sections.entries()) {
+    if (typeof n !== "number") continue;
+    returned += n;
+    if (limit > 0 && n >= limit) hitCap = true;
+    const key = (["orgHits", "catalogHits", "releaseHits", "chunkHits"] as const)[i];
+    hitCounts[key] = n;
+  }
+  const degraded = opts.degraded === true;
+  // When semantic infra is unavailable the fallback path is lexical, so the
+  // reported mode reflects what actually ran rather than what was requested.
+  return { mode: degraded ? "lexical" : mode, limit, returned, hitCap, hitCounts, degraded };
 }

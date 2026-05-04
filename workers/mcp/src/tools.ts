@@ -2,7 +2,7 @@
 // WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
-import { eq, desc, inArray, and, sql } from "drizzle-orm";
+import { eq, desc, inArray, and, or, lt, sql } from "drizzle-orm";
 import {
   sources,
   releases,
@@ -18,6 +18,7 @@ import {
   sourceChangelogFiles,
   knowledgePages,
   type ReleaseType,
+  type SearchMode,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
@@ -42,23 +43,33 @@ import {
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
+  buildCursorMeta,
   buildPaginationMeta,
+  decodeReleaseCursor,
+  encodeReleaseCursor,
+  parseFeedLimit,
   parseMcpPagination,
   renderPageFooter,
   slicePage,
   type ListNoun,
+  type McpCursorPaginationMeta,
   type McpPagination,
   type McpPaginationInput,
   type McpPaginationMeta,
+  type McpSearchMeta,
 } from "./lib/pagination.js";
 
 // `_meta` on tool results is supported by the MCP spec for out-of-band
-// structured state. The `list_*` tools attach `_meta.pagination` so MCP-aware
-// clients can branch on `hasMore` / `nextPage` without parsing the markdown
-// footer; the footer remains for clients that read text only.
+// structured state. List/feed tools attach `_meta.pagination` (page-based on
+// catalog-shaped surfaces, cursor-based on append-only feeds — discriminate by
+// `"kind" in meta`); search tools attach `_meta.search` instead, since
+// ranking-bounded results aren't a slice of a stable list.
 export type ToolResult = {
   content: [{ type: "text"; text: string }];
-  _meta?: { pagination?: McpPaginationMeta };
+  _meta?: {
+    pagination?: McpPaginationMeta | McpCursorPaginationMeta;
+    search?: McpSearchMeta;
+  };
 };
 
 /**
@@ -320,8 +331,6 @@ async function resolveEntityToSourceIds(db: D1Db, identifier: string): Promise<s
 
 // ── search_releases ──────────────────────────────────────────────────
 
-export type SearchReleasesMode = "lexical" | "semantic" | "hybrid";
-
 export async function searchReleases(
   db: D1Db,
   params: {
@@ -330,7 +339,7 @@ export async function searchReleases(
     organization?: string;
     type?: ReleaseType;
     limit?: number;
-    mode?: SearchReleasesMode;
+    mode?: SearchMode;
     include_coverage?: boolean;
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
@@ -339,7 +348,7 @@ export async function searchReleases(
 ): Promise<SearchToolReturn> {
   const maxResults = params.limit ?? 20;
   const typeFilter = params.type;
-  const mode: SearchReleasesMode = params.mode ?? "hybrid";
+  const mode: SearchMode = params.mode ?? "hybrid";
   const includeCoverage = params.include_coverage === true;
   const empty: SearchCounts = { releaseHits: 0, chunkHits: 0 };
 
@@ -652,10 +661,17 @@ export async function getLatestReleases(
     organization?: string;
     type?: ReleaseType;
     count?: number;
+    limit?: number;
+    cursor?: string;
     include_coverage?: boolean;
   },
 ): Promise<ToolResult> {
-  const maxCount = params.count ?? 10;
+  // `count` is the legacy input; `limit` is the canonical name on the cursor
+  // path (matches REST + the other paginated MCP tools). Take whichever was
+  // provided. Default 10 keeps the legacy behavior for callers that pass
+  // neither.
+  const requestedLimit = params.limit ?? params.count ?? 10;
+  const limit = parseFeedLimit(requestedLimit);
   const includeCoverage = params.include_coverage === true;
 
   let sourceFilter: string | undefined;
@@ -697,6 +713,29 @@ export async function getLatestReleases(
   if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));
   if (params.type) conditions.push(eq(releasesTable.type, params.type));
 
+  // Cursor decode: silently ignore unparseable tokens rather than 400. The
+  // feed is append-only and stable under cursor inserts, so a stale cursor
+  // just gives the caller a fresh head of the feed.
+  if (params.cursor) {
+    const decoded = decodeReleaseCursor(params.cursor);
+    if (decoded) {
+      const cursorClause = decoded.lastPublishedAt
+        ? // Standard tuple comparison for (publishedAt DESC, id DESC) ordering.
+          or(
+            lt(releasesTable.publishedAt, decoded.lastPublishedAt),
+            and(
+              eq(releasesTable.publishedAt, decoded.lastPublishedAt),
+              lt(releasesTable.id, decoded.lastId),
+            ),
+          )
+        : // Null-published releases sort to the tail; compare by id alone there.
+          lt(releasesTable.id, decoded.lastId);
+      if (cursorClause) conditions.push(cursorClause);
+    }
+  }
+
+  // Fetch limit+1 to detect hasMore without a separate COUNT query — feeds
+  // don't carry a totalItems anyway.
   const rows = await db
     .select({
       id: releasesTable.id,
@@ -714,12 +753,36 @@ export async function getLatestReleases(
     .innerJoin(sources, eq(releasesTable.sourceId, sources.id))
     .leftJoin(organizations, eq(sources.orgId, organizations.id))
     .where(and(...conditions))
-    .orderBy(desc(releasesTable.publishedAt))
-    .limit(maxCount);
+    .orderBy(desc(releasesTable.publishedAt), desc(releasesTable.id))
+    .limit(limit + 1);
 
-  if (rows.length === 0) return text("No releases found.");
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
 
-  const result = rows
+  let nextCursor: string | null = null;
+  if (hasMore && pageRows.length > 0) {
+    const last = pageRows[pageRows.length - 1];
+    nextCursor = encodeReleaseCursor({
+      lastPublishedAt: last.publishedAt ?? null,
+      lastId: last.id,
+    });
+  }
+
+  const cursorMeta = buildCursorMeta({
+    returned: pageRows.length,
+    limit,
+    hasMore,
+    nextCursor,
+  });
+
+  if (pageRows.length === 0) {
+    return {
+      content: [{ type: "text" as const, text: "No releases found." }],
+      _meta: { pagination: cursorMeta },
+    };
+  }
+
+  const body = pageRows
     .map((r) => {
       const preview = (r.contentSummary || r.content).slice(0, 500);
       const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
@@ -732,7 +795,15 @@ export async function getLatestReleases(
     })
     .join("\n\n---\n\n");
 
-  return text(result);
+  // LLM-readable continuation hint, mirroring the page-based footer pattern.
+  const footer = hasMore
+    ? `\n\n_Showing ${pageRows.length} of more. Pass \`cursor: "${nextCursor}", limit: ${limit}\` to continue._`
+    : "";
+
+  return {
+    content: [{ type: "text" as const, text: body + footer }],
+    _meta: { pagination: cursorMeta },
+  };
 }
 
 // ── list_sources ─────────────────────────────────────────────────────
@@ -1691,7 +1762,7 @@ export async function search(
     organization?: string;
     entity?: string;
     limit?: number;
-    mode?: SearchReleasesMode;
+    mode?: SearchMode;
     include_coverage?: boolean;
   },
   searchEnv?: import("./lib/search-hybrid.js").HybridSearchEnv,
@@ -1701,7 +1772,7 @@ export async function search(
     params.type && params.type.length > 0 ? params.type : ["orgs", "catalog", "releases"],
   );
   const limit = params.limit ?? 20;
-  const mode: SearchReleasesMode = params.mode ?? "hybrid";
+  const mode: SearchMode = params.mode ?? "hybrid";
   const includeCoverage = params.include_coverage === true;
   const pattern = `%${params.query}%`;
   const empty: SearchCounts = { orgHits: 0, catalogHits: 0, releaseHits: 0, chunkHits: 0 };

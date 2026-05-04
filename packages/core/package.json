@@ -22,7 +22,8 @@
     "./slug": "./src/slug.ts",
     "./reserved-slugs": "./src/reserved-slugs.ts",
     "./tokens": "./src/tokens.ts",
-    "./cli-contracts": "./src/cli-contracts.ts"
+    "./cli-contracts": "./src/cli-contracts.ts",
+    "./cursor": "./src/cursor.ts"
   },
   "files": [
     "src",
