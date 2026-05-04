@@ -1,0 +1,26 @@
+# Codex environment actions mirrored from .claude/launch.json.
+version = 1
+name = "releases"
+
+[setup]
+script = '''
+cd "$CODEX_WORKTREE_PATH"
+./scripts/setup-worktree.sh
+'''
+
+[[actions]]
+name = "API"
+icon = "run"
+command = "bun run dev:api"
+
+[[actions]]
+name = "Web (local API)"
+icon = "run"
+command = "bun run dev:web"
+env = { RELEASED_API_URL = "http://localhost:8787" }
+
+[[actions]]
+name = "Web (prod API)"
+icon = "run"
+command = "bun run dev:web"
+env = { RELEASED_API_URL = "https://api.releases.sh" }
