@@ -327,6 +327,42 @@ export interface APIClientOptions {
 }
 
 /**
+ * Translate an agent-supplied identifier into the right API path segment.
+ *
+ * - Typed IDs (`src_…` / `prod_…`) and `org/slug` coordinates pass through
+ *   to URLs the API resolver actually accepts after #698.
+ * - Bare slugs (no slash, no typed prefix) are rejected here rather than
+ *   sent on to the bare API path, which would surface as a confusing 400
+ *   from `BareSlugRejected`.
+ */
+function buildEntitySubpath(
+  entity: "sources" | "products",
+  identifier: string,
+  sub?: string,
+): { path: string } | { error: string } {
+  const tail = sub ? `/${sub}` : "";
+  const idPrefix = entity === "sources" ? "src_" : "prod_";
+  if (identifier.startsWith(idPrefix)) {
+    return { path: `/${entity}/${encodeURIComponent(identifier)}${tail}` };
+  }
+  const slash = identifier.indexOf("/");
+  if (slash > 0 && slash < identifier.length - 1) {
+    const orgSeg = identifier.slice(0, slash);
+    const entitySeg = identifier.slice(slash + 1);
+    const segName = entity === "sources" ? "sources" : "products";
+    return {
+      path: `/orgs/${encodeURIComponent(orgSeg)}/${segName}/${encodeURIComponent(entitySeg)}${tail}`,
+    };
+  }
+  const idHint = entity === "sources" ? "src_…" : "prod_…";
+  return {
+    error:
+      `Error: bare slug "${identifier}" is no longer accepted (#698). ` +
+      `Pass a typed ID (${idHint}) or an org-scoped coordinate (orgSlug/${entity === "sources" ? "sourceSlug" : "productSlug"}).`,
+  };
+}
+
+/**
  * Create a typed executor that maps structured tool calls to REST API calls.
  *
  * Returns a function that takes a tool name and input object, routes to the
@@ -358,42 +394,6 @@ export function createTypedExecutor(opts: APIClientOptions) {
     } catch (err) {
       return `Error: ${err instanceof Error ? err.message : String(err)}`;
     }
-  }
-
-  /**
-   * Translate an agent-supplied identifier into the right API path segment.
-   *
-   * - Typed IDs (`src_…` / `prod_…`) and `org/slug` coordinates pass through
-   *   to URLs the API resolver actually accepts after #698.
-   * - Bare slugs (no slash, no typed prefix) are rejected here rather than
-   *   sent on to the bare API path, which would surface as a confusing 400
-   *   from `BareSlugRejected`.
-   */
-  function buildEntitySubpath(
-    entity: "sources" | "products",
-    identifier: string,
-    sub?: string,
-  ): { path: string } | { error: string } {
-    const tail = sub ? `/${sub}` : "";
-    const idPrefix = entity === "sources" ? "src_" : "prod_";
-    if (identifier.startsWith(idPrefix)) {
-      return { path: `/${entity}/${encodeURIComponent(identifier)}${tail}` };
-    }
-    const slash = identifier.indexOf("/");
-    if (slash > 0 && slash < identifier.length - 1) {
-      const orgSeg = identifier.slice(0, slash);
-      const entitySeg = identifier.slice(slash + 1);
-      const segName = entity === "sources" ? "sources" : "products";
-      return {
-        path: `/orgs/${encodeURIComponent(orgSeg)}/${segName}/${encodeURIComponent(entitySeg)}${tail}`,
-      };
-    }
-    const idHint = entity === "sources" ? "src_…" : "prod_…";
-    return {
-      error:
-        `Error: bare slug "${identifier}" is no longer accepted (#698). ` +
-        `Pass a typed ID (${idHint}) or an org-scoped coordinate (orgSlug/${entity === "sources" ? "sourceSlug" : "productSlug"}).`,
-    };
   }
 
   /**
