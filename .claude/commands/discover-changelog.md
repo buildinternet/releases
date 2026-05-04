@@ -139,7 +139,7 @@ If no releases were fetched:
 For orgs with `scrape` or `agent` sources, write verified agent notes once you have real fetch data:
 
 ```bash
-releases admin playbook <slug> --notes "$(cat <<'EOF'
+releases admin playbook <slug> --notes-file - <<'EOF'
 ### Fetch instructions
 ...
 
@@ -149,7 +149,6 @@ releases admin playbook <slug> --notes "$(cat <<'EOF'
 ### Coverage
 ...
 EOF
-)"
 ```
 
 The full structure and "verified vs compilation" distinction is in the Playbooks section of `releases:managing-sources`. Skip this step for feed-only or GitHub-only orgs.

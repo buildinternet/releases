@@ -40,7 +40,7 @@ Key commands:
 - `releases admin org tag add <slug> <tags...>` — Add tags
 - `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]` — Create product
 - `releases admin playbook <org>` — Read playbook
-- `releases admin playbook <org> --notes "..."` — Update playbook notes
+- `releases admin playbook <org> --notes-file <path>` (use `-` for stdin) — Update playbook notes
 - `releases categories --json` — List valid categories
 - `releases admin policy ignore add --org <org> <url>` — Ignore URL (org-scoped)
 - `releases admin policy block add <url>` — Block URL globally
@@ -54,7 +54,7 @@ Key commands:
 3. **Add** — Add sources with `releases admin source add` using appropriate types. When creating an org, always include `--description` with a brief one-sentence product description.
 4. **Validate** — Fetch each source with `releases admin source fetch <slug> --dry-run` first, then real fetch. Check results with `releases tail <slug> --json`.
 5. **Assess content depth** — For feed sources, check if pages have richer content than feed summaries.
-6. **Write the playbook** — Follow the playbook authoring rubric in the `managing-sources` skill (Playbooks → Writing good agent notes). The playbook is a per-org skill you're authoring for future fetch agents — durable target-shaped facts only. Adapter/harness errors and raw onboarding observations route to memory stores, not the playbook. After validating sources, run `releases admin playbook <org>` to read current state, then update notes with `releases admin playbook <org> --notes "..."` using the three canonical sections (`### Fetch instructions`, `### Traps`, `### Coverage`).
+6. **Write the playbook** — Follow the playbook authoring rubric in the `managing-sources` skill (Playbooks → Writing good agent notes). The playbook is a per-org skill you're authoring for future fetch agents — durable target-shaped facts only. Adapter/harness errors and raw onboarding observations route to memory stores, not the playbook. After validating sources, run `releases admin playbook <org>` to read current state, then update notes with `releases admin playbook <org> --notes-file <path>` (use `-` for stdin) using the three canonical sections (`### Fetch instructions`, `### Traps`, `### Coverage`).
 7. **Report** — Summarize what was found, including how many releases were persisted.
 
 ## Source Selection

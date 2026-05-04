@@ -170,7 +170,8 @@ releases admin playbook vercel
 releases admin playbook vercel --json
 
 # Replace agent notes — seeds a fresh header on first write
-releases admin playbook vercel --notes "$(cat playbook-notes.md)"
+releases admin playbook vercel --notes-file playbook-notes.md
+# Or pipe from stdin: cat playbook-notes.md | releases admin playbook vercel --notes-file -
 ```
 
 The playbook header (source list, products) regenerates automatically after any source add/edit/remove.

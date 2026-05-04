@@ -29,7 +29,7 @@ Key commands:
 - `releases admin org update <slug> [--name <n>] [--domain <d>] [--tier <t>] [--billing-customer-id <id>]` — Update org
 - `releases admin product add <name> --org <org>` — Create product
 - `releases admin playbook <org>` — Read playbook
-- `releases admin playbook <org> --notes "..."` — Update playbook notes
+- `releases admin playbook <org> --notes-file <path>` (use `-` for stdin) — Update playbook notes
 - `releases tail [slug] --json [--org <org>]` — Get latest releases
 - `releases list [slug] --json` — List sources
 
@@ -43,7 +43,7 @@ When asked to fetch sources:
 2. Run `releases admin source fetch <slug>` for each source.
 3. Report the number of releases fetched per source.
 4. Report any errors encountered.
-5. **Update the playbook** if you encountered something durable about the **target** — a new DOM hook, a real cadence shift, a per-package release-tag pattern. Follow the playbook authoring rubric in the `managing-sources` skill (Playbooks → Writing good agent notes): target-shaped facts go in the playbook; adapter/harness errors don't. Run `releases admin playbook <org> --notes "..."` with the three canonical sections (`### Fetch instructions`, `### Traps`, `### Coverage`). If nothing target-shaped changed, leave the playbook alone.
+5. **Update the playbook** if you encountered something durable about the **target** — a new DOM hook, a real cadence shift, a per-package release-tag pattern. Follow the playbook authoring rubric in the `managing-sources` skill (Playbooks → Writing good agent notes): target-shaped facts go in the playbook; adapter/harness errors don't. Run `releases admin playbook <org> --notes-file <path>` (use `-` for stdin) with the three canonical sections (`### Fetch instructions`, `### Traps`, `### Coverage`). If nothing target-shaped changed, leave the playbook alone.
 6. Do NOT add, remove, or modify sources — only fetch.
 
 ## Update Operations
