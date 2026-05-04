@@ -25,7 +25,7 @@ export async function getOrgsWithStats(
     LEFT JOIN releases_visible r ON r.source_id = s.id
     ${where}
     GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category
-    ORDER BY o.name
+    ORDER BY o.name, o.id
     ${page}
   `);
 }

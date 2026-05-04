@@ -52,7 +52,7 @@ productRoutes.get("/products", async (c) => {
       })
       .from(productsActive)
       .where(where)
-      .orderBy(productsActive.name)
+      .orderBy(productsActive.name, productsActive.id)
       .limit(pagination.pageSize)
       .offset(pagination.offset),
     db.select({ n: count() }).from(productsActive).where(where),
