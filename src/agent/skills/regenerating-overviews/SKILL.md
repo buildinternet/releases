@@ -19,7 +19,7 @@ No managed-agent task exists for this today. You — the Claude Code instance re
 - After significant source mutations: a new active source landed, an old one was hidden
 - After backfilling a window of releases: stale overview no longer reflects current focus
 
-**Skip on-demand orgs.** If `org.discovery === 'on_demand'`, do not regenerate — the API-side overview workflow already gates on this column, and generating an overview for an org that hasn't been curated wastes tokens. When doing a batch sweep, filter these out before dispatching sub-agents: `releases admin org list --json | jq '[.[] | select(.discovery != "on_demand")]'`.
+**Skip on-demand orgs.** If `org.discovery === 'on_demand'`, do not regenerate — the API-side overview workflow already gates on this column, and generating an overview for an org that hasn't been curated wastes tokens. The `releases admin overview plan` / `overview list` endpoints already filter to curated orgs server-side via the `organizations_active` view, so manifest-driven sweeps don't need a separate filter pass.
 
 ## Workflow
 
@@ -28,7 +28,7 @@ Three steps. Each step is a single CLI invocation; no other tools needed.
 ### 1. Fetch inputs
 
 ```bash
-releases admin overview-inputs <slug> --json [--window 90]
+releases admin overview inputs <slug> --json [--window 90]
 ```
 
 Returns:
@@ -139,7 +139,7 @@ Use `max_tokens: 800`.
 ### 3. Write the result
 
 ```bash
-releases admin overview-write <slug> --content-file /tmp/<slug>-overview.md
+releases admin overview update <slug> --content-file /tmp/<slug>-overview.md
 ```
 
 Optional flags (omit and the CLI re-fetches inputs to derive both):
@@ -170,10 +170,10 @@ These come from the system prompt above but are worth restating because they're 
 
 Real incidents have come from sub-agents quietly working around upstream errors:
 
-- **`releases admin source fetch` errors** (non-zero exit, `--wait` surfacing managed-agents errors, etc.) → STOP. Surface the error to the parent. Do NOT regenerate from older `overview-inputs` data — the result will be stale and the operator can't tell. The `--wait` flag added in CLI v0.10 makes this exit non-zero; trust the exit code.
-- **`overview-inputs` empty when you expect content** → likely the fetch never ran or hit a hidden source list. Surface, don't paper over.
+- **`releases admin source fetch` errors** (non-zero exit, `--wait` surfacing managed-agents errors, etc.) → STOP. Surface the error to the parent. Do NOT regenerate from older `overview inputs` data — the result will be stale and the operator can't tell. The `--wait` flag added in CLI v0.10 makes this exit non-zero; trust the exit code.
+- **`overview inputs` empty when you expect content** → likely the fetch never ran or hit a hidden source list. Surface, don't paper over.
 - **Provider API thoughts** ("let me just call Anthropic directly with `ANTHROPIC_API_KEY`") → no. The only AI surface is the parent harness running this skill. Never read `.env`. Never read secrets of any kind. Never invoke provider SDKs directly. The model call described in step 2 is the parent's job, not a sub-agent's.
-- **Out-of-skill data sources** ("let me also check the company blog / Twitter / Hacker News") → no. The only data source is `overview-inputs`. If a release is missing, the fix is `releases admin source fetch`, not external scraping.
+- **Out-of-skill data sources** ("let me also check the company blog / Twitter / Hacker News") → no. The only data source is `overview inputs`. If a release is missing, the fix is `releases admin source fetch`, not external scraping.
 
 ## Composing With Other Skills
 

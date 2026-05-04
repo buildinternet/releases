@@ -22,7 +22,7 @@ There is intentionally **no single-command "refresh in one step"** today. Compos
 - After onboarding: first full fetch + overview for a newly added org
 - Spot checks: "is Stripe up to date?"
 
-> **On-demand orgs** (`discovery = 'on_demand'`) are hidden stubs materialized by the on-demand lookup endpoint. They get embeddings and cron fetches but no overviews or summarization. When selecting orgs for maintenance, exclude them: `releases admin org list --json | jq '[.[] | select(.discovery != "on_demand")]'`. If you want to promote an on-demand org to curated so it gets full treatment, use `manage_org` action "edit" with `discovery: 'curated'` (or any equivalent admin edit).
+> **On-demand orgs** (`discovery = 'on_demand'`) are hidden stubs materialized by the on-demand lookup endpoint. They get embeddings and cron fetches but no overviews or summarization. The `releases admin overview plan` / `overview list` endpoints already filter to curated orgs server-side via the `organizations_active` view, so manifest-driven sweeps don't need a separate filter pass. To promote an on-demand org to curated, use `releases admin org update <slug> --discovery curated`.
 
 ## Single Org Update
 
@@ -33,10 +33,10 @@ Two steps:
 releases admin source fetch --org <slug>
 
 # 2. Regenerate the overview by invoking the regenerating-overviews skill.
-#    See that skill for the workflow; the inputs and write commands are:
-releases admin overview-inputs <slug> --json
+#    See that skill for the workflow; the inputs and update commands are:
+releases admin overview inputs <slug> --json
 # … generate markdown locally per skill prompt …
-releases admin overview-write <slug> --content-file /tmp/<slug>-overview.md
+releases admin overview update <slug> --content-file /tmp/<slug>-overview.md
 ```
 
 For orgs with `scrape` or `agent` sources, skim the playbook before fetching — it documents source-specific quirks that may affect `--max` or require crawl flags:
@@ -57,7 +57,7 @@ Skip this for orgs with only `feed` and `github` sources. Check source types wit
 
 ### Verifying the result
 
-After regen, `releases admin overview <slug>` prints the new content with metadata. If `selected: []` came back from `overview-inputs`, no overview is written — that's usually a signal that the fetch missed (try `--max` higher) or all sources are paused.
+After regen, `releases admin overview get <slug>` prints the new content with metadata. If `selected: []` came back from `overview inputs`, no overview is written — that's usually a signal that the fetch missed (try `--max` higher) or all sources are paused.
 
 ## Batch Updates
 
@@ -67,31 +67,42 @@ When updating multiple orgs, use parallel Claude Code sub-agents (one per org). 
 
 Pick orgs by activity level or overview freshness.
 
-**Finding orgs with missing or stale overviews.** No single command exposes this, but the CLI is composable. The snippet below writes each org's overview status to `/tmp/overview-status/`, then prints a sorted table:
+**Finding orgs with missing or stale overviews.** One call returns a planning-ready manifest:
 
 ```bash
-mkdir -p /tmp/overview-status
-releases admin org list --json | jq -r '.[].slug' \
-  | xargs -n1 -P8 -I{} sh -c 'releases admin overview {} --json 2>/dev/null > /tmp/overview-status/{}.json'
-
-for f in /tmp/overview-status/*.json; do
-  slug="${f##*/}"; slug="${slug%.json}"
-  jq -r --arg slug "$slug" 'if .content then "\($slug)\t\(.updatedAt // .generatedAt)" else "\($slug)\tNONE" end' "$f"
-done | sort -t$'\t' -k2
+releases admin overview plan --stale-days 14 --missing --has-activity --json
 ```
 
-`NONE` means no overview exists; anything older than **30 days** is stale per `OVERVIEW_STALE_DAYS` (`@buildinternet/releases-core/overview`).
+Each row carries the freshness signals an orchestrator needs:
 
-**Other selection signals.** `releases admin org list --json` exposes:
+- `staleness`: `"missing"` (no overview), `"behind"` (overview exists but `releasesSinceOverview > 0`), `"fresh"`
+- `releasesSinceOverview` — the real outdated signal; a 30-day-old overview with zero new releases isn't actually stale
+- `action` (plan-mode only): `"missing" | "refresh" | "skip"`
+- `needsFetch` (plan-mode only): true when the org has active sources but the most recent release is more than 7 days old — orchestrator should run `admin source fetch --org <slug>` first
+- `recentReleaseCount`, `orgLastActivity`, `overviewUpdatedAt` for sorting / triage
 
-- `recentReleaseCount` — recently active orgs with overviews not updated since last activity
-- `lastActivity` — orgs inactive long enough that existing overview may be fine
+Filter knobs:
+
+- `--stale-days <n>` — include `behind` rows whose overview is at least N days old
+- `--missing` — include rows with no overview at all
+- `--has-activity` — drop orgs with zero recent releases (avoid regen on dormant orgs)
+
+For the lighter payload without `action` / `needsFetch`, use `releases admin overview list --stale-days <n> --missing --has-activity --json`.
+
+**Pre-flight per-org.** Before dispatching a regen sub-agent, confirm there's something worth feeding the model without paying for the full release-content + media payload:
+
+```bash
+releases admin overview inputs <slug> --check --json
+# → { orgSlug, selected, totalAvailable, hasExistingContent, wouldRegenerate, windowDays }
+```
+
+Skip dispatch when `wouldRegenerate: false`.
 
 ### Dispatching agents
 
 Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each org. Send all agent calls in a single message for maximum parallelism.
 
-**Have agents return markdown inline, not upload it.** Dispatched sub-agents commonly get their `Write` and `Bash` denied against `/tmp`, which breaks the write-file-then-`overview-write` handoff. Shape the prompt so the agent returns generated markdown in its final report; the parent session writes the file and uploads. This also keeps the failure surface in one place — if an agent bails, the parent falls back to generating in-session from `overview-inputs`.
+**Have agents return markdown inline, not upload it.** Dispatched sub-agents commonly get their `Write` and `Bash` denied against `/tmp`, which breaks the write-file-then-`overview update` handoff. Shape the prompt so the agent returns generated markdown in its final report; the parent session writes the file and uploads. This also keeps the failure surface in one place — if an agent bails, the parent falls back to generating in-session from `overview inputs`.
 
 Prompt template:
 
@@ -104,7 +115,7 @@ Invoke the `regenerating-overviews` skill for the prompt and workflow.
   2. `releases admin source fetch --org {slug} --json --wait 600` if needed.
      If exit code != 0, STOP and report the error verbatim — do not generate
      from older data.
-  3. `releases admin overview-inputs {slug} --json`. If `selected` is empty,
+  3. `releases admin overview inputs {slug} --json`. If `selected` is empty,
      stop and report "empty-window".
   4. Generate the markdown inline per the skill.
 
@@ -140,7 +151,7 @@ Do not attempt to upload. The parent session handles writes.
 
 ### Tracking results
 
-After agents complete, the parent harvests each returned code block, writes `/tmp/<slug>-overview.md`, and runs `releases admin overview-write` in parallel (idempotent, last write wins). For any agent that bailed without content, re-fetch `overview-inputs` locally and generate inline.
+After agents complete, the parent harvests each returned code block, writes `/tmp/<slug>-overview.md`, and runs `releases admin overview update` in parallel (idempotent, last write wins). For any agent that bailed without content, re-fetch `overview inputs` locally and generate inline.
 
 Summary table format:
 
