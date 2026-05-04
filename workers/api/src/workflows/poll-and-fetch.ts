@@ -236,26 +236,33 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         found: fetchResult.releasesFound,
       });
     } catch (err) {
-      const isDeletedSourceRace =
-        err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL;
-      if (!isDeletedSourceRace) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        logEvent("error", {
+      // Source deleted between fan-out dispatch and workflow start — expected
+      // race. Return cleanly so the instance ends in a `Completed` state
+      // instead of `Errored` (which would also trigger an alert email).
+      if (err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL) {
+        logEvent("info", {
           component: "poll-fetch-workflow",
-          event: "step-failed",
+          event: "source-deleted-race",
           sourceId,
-          step: currentStep,
-          err,
         });
-        await recordWorkflowFailure(db, {
-          idPrefix: "wf-fail-",
-          scheduledTime,
-          sourceId,
-          stepName: currentStep,
-          error: errorMsg,
-          logTag: "poll-fetch-workflow",
-        });
+        return;
       }
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logEvent("error", {
+        component: "poll-fetch-workflow",
+        event: "step-failed",
+        sourceId,
+        step: currentStep,
+        err,
+      });
+      await recordWorkflowFailure(db, {
+        idPrefix: "wf-fail-",
+        scheduledTime,
+        sourceId,
+        stepName: currentStep,
+        error: errorMsg,
+        logTag: "poll-fetch-workflow",
+      });
       throw err;
     }
   }

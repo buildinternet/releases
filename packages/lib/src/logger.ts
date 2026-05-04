@@ -1,9 +1,17 @@
-// All logging goes to stderr — stdout is reserved for MCP JSON-RPC in serve mode
-// Logs are also persisted to ~/.releases/logs/ for debugging
+// In Node/Bun (CLI): all logging goes to stderr (stdout is reserved for MCP
+// JSON-RPC in serve mode) and is persisted to ~/.releases/logs/ for debugging.
+// In Cloudflare Workers: dispatch to the matching `console.*` method so
+// Workers Logs reads the right severity, and skip the FS write (the virtual
+// FS is discarded per-request and `console.error` for everything would tag
+// `info` lines as ERROR-level — see issue #713).
 
 import { appendFileSync } from "fs";
 import { join } from "path";
 import { getLogsDir } from "./config.js";
+
+const isWorker =
+  typeof navigator !== "undefined" &&
+  (navigator as { userAgent?: string }).userAgent === "Cloudflare-Workers";
 
 function getLogFile(): string {
   const date = new Date().toISOString().split("T")[0];
@@ -11,6 +19,7 @@ function getLogFile(): string {
 }
 
 function writeToFile(level: string, args: unknown[]) {
+  if (isWorker) return;
   const timestamp = new Date().toISOString();
   const message = args
     .map((a) => (typeof a === "string" ? a : JSON.stringify(a, null, 2)))
@@ -20,11 +29,12 @@ function writeToFile(level: string, args: unknown[]) {
 
 export const logger = {
   info: (...args: unknown[]) => {
-    console.error("[releases]", ...args);
+    if (isWorker) console.log("[releases]", ...args);
+    else console.error("[releases]", ...args);
     writeToFile("INFO", args);
   },
   warn: (...args: unknown[]) => {
-    console.error("[releases] WARN:", ...args);
+    console.warn("[releases] WARN:", ...args);
     writeToFile("WARN", args);
   },
   error: (...args: unknown[]) => {
@@ -32,7 +42,11 @@ export const logger = {
     writeToFile("ERROR", args);
   },
   debug: (...args: unknown[]) => {
-    if (process.env.DEBUG) console.error("[releases] DEBUG:", ...args);
+    if (isWorker) {
+      console.debug("[releases] DEBUG:", ...args);
+    } else if (process.env.DEBUG) {
+      console.error("[releases] DEBUG:", ...args);
+    }
     writeToFile("DEBUG", args);
   },
 };

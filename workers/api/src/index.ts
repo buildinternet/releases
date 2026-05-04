@@ -41,6 +41,7 @@ import { taxonomyRoutes } from "./routes/taxonomy.js";
 import { BareSlugRejected } from "./utils.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
+import { finalizeRunRow, insertRunningRow } from "./db/cron-runs-dao.js";
 import { retierSources } from "./cron/retier.js";
 import { scrapeAgentSweep } from "./cron/scrape-agent-sweep.js";
 import { forceDrainSweep } from "./cron/force-drain-sweep.js";
@@ -598,41 +599,121 @@ const CREATE_BATCH_MAX = 100;
 
 async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): Promise<void> {
   const db = drizzle(env.DB);
-  const due = await queryDueSources(db, new Date(), {
-    changeDetectEnabled: env.SCRAPE_CHANGE_DETECT_ENABLED === "true",
+  const startedAt = new Date().toISOString();
+  // Reserve a `running` cron_runs row up front so the dispatch is visible on
+  // /status?tab=cron even if the fan-out crashes before finalize. The row is
+  // updated to `done` (or `dispatch_failed`) once createBatch returns.
+  const runId = await insertRunningRow(db, {
+    cronName: "poll-and-fetch",
+    startedAt,
+  }).catch((err) => {
+    logEvent("warn", {
+      component: "poll-fetch-cron",
+      event: "cron-run-insert-failed",
+      err: err instanceof Error ? err : String(err),
+    });
+    return null;
   });
-  if (due.length === 0) {
-    logEvent("info", { component: "poll-fetch-cron", event: "no-due-sources" });
-    return;
-  }
-  logEvent("info", { component: "poll-fetch-cron", event: "fanout", instanceCount: due.length });
-  const params = due.map((source) => ({
-    // Instance IDs must be unique; pairing the scheduled time with the source
-    // id keeps replays from collisions across fires. See #486.
-    id: `poll-fetch-${scheduledTime}-${source.id}`,
-    params: { sourceId: source.id, scheduledTime },
-  }));
-  for (let i = 0; i < params.length; i += CREATE_BATCH_MAX) {
-    const chunk = params.slice(i, i + CREATE_BATCH_MAX);
-    // oxlint-disable-next-line no-await-in-loop -- sequential to stay under control-plane rate; per-instance work runs in parallel anyway
-    await env.POLL_AND_FETCH_WORKFLOW!.createBatch(chunk);
-  }
 
-  // Kick one summary instance per fan-out. It sleeps 10 min then queries
-  // workflow_failures for this scheduledTime and sends one alert if any
-  // sources failed. Absent binding → silently skip.
-  if (env.POLL_FETCH_SUMMARY_WORKFLOW) {
-    try {
-      await env.POLL_FETCH_SUMMARY_WORKFLOW.create({
-        id: `poll-fetch-summary-${scheduledTime}`,
-        params: { scheduledTime },
-      });
-    } catch (err) {
-      // Non-fatal — don't let summary wiring failure block the fan-out.
-      logEvent("warn", {
-        component: "poll-fetch-cron",
-        event: "summary-workflow-create-failed",
-        err: err instanceof Error ? err : String(err),
+  let dispatched = 0;
+  let dispatchErrors = 0;
+  let candidates = 0;
+  let preflightError: Error | null = null;
+  const dispatchErrorDetail: Array<{ orgSlug: string; error: string }> = [];
+
+  try {
+    const due = await queryDueSources(db, new Date(), {
+      changeDetectEnabled: env.SCRAPE_CHANGE_DETECT_ENABLED === "true",
+    });
+    candidates = due.length;
+    if (due.length === 0) {
+      logEvent("info", { component: "poll-fetch-cron", event: "no-due-sources" });
+      return;
+    }
+    logEvent("info", { component: "poll-fetch-cron", event: "fanout", instanceCount: due.length });
+    const params = due.map((source) => ({
+      // Instance IDs must be unique; pairing the scheduled time with the source
+      // id keeps replays from collisions across fires. See #486.
+      id: `poll-fetch-${scheduledTime}-${source.id}`,
+      params: { sourceId: source.id, scheduledTime },
+    }));
+    for (let i = 0; i < params.length; i += CREATE_BATCH_MAX) {
+      const chunk = params.slice(i, i + CREATE_BATCH_MAX);
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- sequential to stay under control-plane rate; per-instance work runs in parallel anyway
+        await env.POLL_AND_FETCH_WORKFLOW!.createBatch(chunk);
+        dispatched += chunk.length;
+      } catch (err) {
+        dispatchErrors += chunk.length;
+        dispatchErrorDetail.push({
+          orgSlug: `chunk-${i}`,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        logEvent("error", {
+          component: "poll-fetch-cron",
+          event: "createbatch-failed",
+          chunkOffset: i,
+          chunkSize: chunk.length,
+          err: err instanceof Error ? err : String(err),
+        });
+      }
+    }
+
+    // Kick one summary instance per fan-out. It sleeps 10 min then queries
+    // workflow_failures for this scheduledTime and sends one alert if any
+    // sources failed. Absent binding → silently skip.
+    if (env.POLL_FETCH_SUMMARY_WORKFLOW) {
+      try {
+        await env.POLL_FETCH_SUMMARY_WORKFLOW.create({
+          id: `poll-fetch-summary-${scheduledTime}`,
+          params: { scheduledTime },
+        });
+      } catch (err) {
+        // Non-fatal — don't let summary wiring failure block the fan-out.
+        logEvent("warn", {
+          component: "poll-fetch-cron",
+          event: "summary-workflow-create-failed",
+          err: err instanceof Error ? err : String(err),
+        });
+      }
+    }
+  } catch (err) {
+    // queryDueSources or other pre-loop work threw before any dispatch could
+    // happen. Stash so the `finally` finalizes with `dispatch_failed` instead
+    // of mis-marking the run `done` (dispatched=0, dispatchErrors=0).
+    preflightError = err instanceof Error ? err : new Error(String(err));
+    throw err;
+  } finally {
+    if (runId) {
+      const status = preflightError
+        ? ("dispatch_failed" as const)
+        : dispatchErrors > 0 && dispatched === 0
+          ? ("dispatch_failed" as const)
+          : dispatchErrors > 0
+            ? ("degraded" as const)
+            : ("done" as const);
+      if (preflightError) {
+        dispatchErrorDetail.push({
+          orgSlug: "preflight",
+          error: preflightError.message,
+        });
+      }
+      await finalizeRunRow(db, runId, {
+        endedAt: new Date().toISOString(),
+        status,
+        candidates,
+        dispatched,
+        skippedOverCap: 0,
+        dispatchErrors,
+        sessionsStarted: [],
+        dispatchErrorDetail,
+        notes: preflightError ? `preflight failed: ${preflightError.message}` : null,
+      }).catch((err) => {
+        logEvent("warn", {
+          component: "poll-fetch-cron",
+          event: "cron-run-finalize-failed",
+          err: err instanceof Error ? err : String(err),
+        });
       });
     }
   }
