@@ -745,6 +745,7 @@ describe("list_* _meta.pagination", () => {
     // 3 sources, limit=2 → page 1 has more.
     const result = await listSources(asD1(fixture.db), { limit: 2 });
     expect(result._meta?.pagination).toEqual({
+      kind: "page",
       page: 1,
       pageSize: 2,
       returned: 2,
@@ -771,6 +772,7 @@ describe("list_* _meta.pagination", () => {
   it("carries _meta on a single-page result with hasMore=false", async () => {
     const result = await listSources(asD1(fixture.db), {});
     expect(result._meta?.pagination).toEqual({
+      kind: "page",
       page: 1,
       pageSize: 50,
       returned: 3,
@@ -797,6 +799,7 @@ describe("list_* _meta.pagination", () => {
     const result = await listSources(asD1(fixture.db), {});
     expect(resultText(result)).toBe("No sources indexed yet.");
     expect(result._meta?.pagination).toEqual({
+      kind: "page",
       page: 1,
       pageSize: 50,
       returned: 0,
@@ -809,6 +812,7 @@ describe("list_* _meta.pagination", () => {
   it("filter-aware totals: list_organizations narrows totalItems to matching rows", async () => {
     const result = await listOrganizations(asD1(fixture.db), { query: "Vercel", limit: 1 });
     expect(result._meta?.pagination).toEqual({
+      kind: "page",
       page: 1,
       pageSize: 1,
       returned: 1,
@@ -858,5 +862,164 @@ describe("get_latest_releases (round-trippable source coordinates)", () => {
     // Both sources appear in the seed data; both must show up with an org prefix.
     expect(text).toContain("vercel/next-js");
     expect(text).toContain("anthropic/anthropic-releases");
+  });
+});
+
+describe("get_latest_releases _meta.pagination (cursor)", () => {
+  let fixture: TestDatabase;
+  let nextjsSrcId: string;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    const seeded = await seed(fixture.db);
+    nextjsSrcId = seeded.nextjsSrcId;
+
+    // Add a deterministic spine of releases so cursor pages are predictable.
+    // Six on top of the two from `seed()` → cursor with limit=3 walks the feed.
+    const extras = Array.from({ length: 6 }, (_, i) => ({
+      id: newReleaseId(),
+      sourceId: nextjsSrcId,
+      title: `Spine release ${i + 1}`,
+      content: `Body ${i + 1}`,
+      url: `https://example.com/spine/${i + 1}`,
+      publishedAt: `2024-08-${String(i + 1).padStart(2, "0")}T00:00:00Z`,
+    }));
+    await fixture.db.insert(releases).values(extras);
+  });
+
+  it("populates cursor _meta with kind=cursor, hasMore, nextCursor on first page", async () => {
+    const result = await getLatestReleases(asD1(fixture.db), { limit: 3 });
+    const meta = result._meta?.pagination;
+    expect(meta?.kind).toBe("cursor");
+    if (meta?.kind !== "cursor") return;
+    expect(meta).toMatchObject({ returned: 3, limit: 3, hasMore: true });
+    expect(meta.nextCursor).toBeTruthy();
+  });
+
+  it("omits nextCursor on the last page", async () => {
+    // Total = 8 (2 seed + 6 spine). limit=10 → single page, no continuation.
+    const result = await getLatestReleases(asD1(fixture.db), { limit: 10 });
+    expect(result._meta?.pagination).toMatchObject({
+      kind: "cursor",
+      returned: 8,
+      limit: 10,
+      hasMore: false,
+    });
+    expect(result._meta?.pagination).not.toHaveProperty("nextCursor");
+  });
+
+  it("walks the feed via cursor — page 1 + page 2 cover the full set without overlap", async () => {
+    const page1 = await getLatestReleases(asD1(fixture.db), { limit: 4 });
+    const meta1 = page1._meta?.pagination;
+    expect(meta1?.kind).toBe("cursor");
+    if (meta1?.kind !== "cursor" || !meta1.nextCursor) {
+      throw new Error("expected first-page cursor");
+    }
+
+    const page2 = await getLatestReleases(asD1(fixture.db), {
+      limit: 4,
+      cursor: meta1.nextCursor,
+    });
+    expect(page2._meta?.pagination).toMatchObject({
+      kind: "cursor",
+      returned: 4,
+      hasMore: false,
+    });
+
+    const text1 = resultText(page1);
+    const text2 = resultText(page2);
+    // Newest 4 (Claude 4 + Next.js 15 + 2 spine) → page 1; oldest 4 spine → page 2.
+    // Cross-check: titles on page 2 must NOT appear on page 1.
+    expect(text1).toContain("Claude 4 release");
+    expect(text2).toContain("Spine release 1");
+    expect(text2).not.toContain("Claude 4 release");
+    expect(text1).not.toContain("Spine release 1");
+  });
+
+  it("cursor stays stable when a new release lands between calls", async () => {
+    const page1 = await getLatestReleases(asD1(fixture.db), { limit: 3 });
+    const meta1 = page1._meta?.pagination;
+    if (meta1?.kind !== "cursor" || !meta1.nextCursor) {
+      throw new Error("expected first-page cursor");
+    }
+    const cursor = meta1.nextCursor;
+
+    // Insert a brand-new release at the head of the feed *after* page 1.
+    await fixture.db.insert(releases).values({
+      id: newReleaseId(),
+      sourceId: nextjsSrcId,
+      title: "Inserted between pages",
+      content: "Body",
+      url: "https://example.com/inserted",
+      publishedAt: "2026-01-01T00:00:00Z",
+    });
+
+    const page2 = await getLatestReleases(asD1(fixture.db), { limit: 3, cursor });
+    const text2 = resultText(page2);
+    // The inserted release should NOT appear on page 2 — cursor encodes the
+    // boundary, so the new row sits ahead of the cursor and is excluded.
+    expect(text2).not.toContain("Inserted between pages");
+    // Page 2 still returns the next slice from where the cursor pointed.
+    expect(text2).toContain("Spine release");
+  });
+
+  it("silently ignores an unparseable cursor and returns a fresh head", async () => {
+    const result = await getLatestReleases(asD1(fixture.db), {
+      limit: 3,
+      cursor: "not-a-valid-base64-cursor!@#$",
+    });
+    // Garbage cursor → no error, just returns the head of the feed.
+    const text = resultText(result);
+    expect(text).toContain("Claude 4 release");
+    expect(result._meta?.pagination).toMatchObject({
+      kind: "cursor",
+      returned: 3,
+      limit: 3,
+      hasMore: true,
+    });
+  });
+
+  it("legacy `count` input still works when `limit` is omitted", async () => {
+    const result = await getLatestReleases(asD1(fixture.db), { count: 2 });
+    expect(result._meta?.pagination).toMatchObject({
+      kind: "cursor",
+      returned: 2,
+      limit: 2,
+      hasMore: true,
+    });
+  });
+
+  it("`limit` takes precedence over `count` when both are provided", async () => {
+    const result = await getLatestReleases(asD1(fixture.db), { count: 99, limit: 2 });
+    expect(result._meta?.pagination).toMatchObject({
+      kind: "cursor",
+      returned: 2,
+      limit: 2,
+    });
+  });
+
+  it("emits a continuation hint in the body so non-_meta clients can chain", async () => {
+    const result = await getLatestReleases(asD1(fixture.db), { limit: 3 });
+    const text = resultText(result);
+    expect(text).toContain("cursor:");
+    expect(text).toContain("Pass");
+  });
+
+  it("carries cursor _meta on the empty-result case", async () => {
+    clearAllTables(fixture.db);
+    const result = await getLatestReleases(asD1(fixture.db), { limit: 5 });
+    expect(resultText(result)).toBe("No releases found.");
+    expect(result._meta?.pagination).toMatchObject({
+      kind: "cursor",
+      returned: 0,
+      limit: 5,
+      hasMore: false,
+    });
   });
 });

@@ -25,6 +25,7 @@ import {
 import { registerResources } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
 import { logMcpSearch, deriveMcpClientKind, type McpSearchCommand } from "./lib/log-search.js";
+import { buildSearchMeta } from "./lib/pagination.js";
 import type { SearchMode } from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 import type { LookupResultPayload } from "@buildinternet/releases-api-types";
@@ -171,7 +172,7 @@ export interface CreateServerOptions {
 export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer({
     name: "releases",
-    version: "0.13.0",
+    version: "0.14.0",
   });
 
   const db = createDb(env.DB);
@@ -198,12 +199,21 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
    * the `ToolResult` to satisfy the MCP SDK's tool signature. Logging is
    * fire-and-forget — never blocks the response, never propagates errors.
    */
+  // `search_registry` doesn't expose a `mode` input — it's semantic + lexical
+  // fallback — so report "semantic" unless the call degraded.
+  const defaultModeFor: Record<McpSearchCommand, SearchMode> = {
+    search: "hybrid",
+    search_releases: "hybrid",
+    search_registry: "semantic",
+  };
+
   function withSearchLog<
     T extends {
       query: string;
       mode?: SearchMode;
       organization?: string;
       entity?: string;
+      limit?: number;
     },
   >(
     command: McpSearchCommand,
@@ -218,6 +228,14 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         if (mediaOrigin && out.result.content[0]?.text) {
           out.result.content[0].text = hydrateMediaUrls(out.result.content[0].text, mediaOrigin);
         }
+        const { degraded, ...hitCounts } = counts;
+        const searchMeta = buildSearchMeta({
+          mode: params.mode ?? defaultModeFor[command],
+          limit: params.limit ?? 20,
+          counts: hitCounts,
+          degraded,
+        });
+        out.result._meta = { ...out.result._meta, search: searchMeta };
         return out.result;
       } finally {
         const log = logMcpSearch(env, {
@@ -437,7 +455,11 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     "get_latest_releases",
     {
       ...titled("Get latest releases", READ_ONLY_HINTS),
-      description: "Get the most recent releases, optionally filtered by product or organization",
+      description: [
+        "Get the most recent releases, optionally filtered by product or organization.",
+        "",
+        "Cursor-paginated: pass `limit` for slice size (default 10), `cursor` to continue from a prior call. The result's `_meta.pagination` carries `kind: 'cursor'`, `hasMore`, and `nextCursor` when more rows exist; the response text echoes `nextCursor` so an LLM caller can chain without parsing `_meta`. Cursors are stable under inserts — a release added between calls won't shift the slice.",
+      ].join("\n"),
       inputSchema: {
         product: z
           .string()
@@ -457,7 +479,27 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .describe(
             "Filter by release type: 'feature' for individual releases, 'rollup' for seasonal/quarterly catch-all posts. Omit to include both.",
           ),
-        count: z.number().optional().describe("Number of releases to return (default 10)"),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe(
+            "Slice size (1–200). Defaults to 10. Takes precedence over the legacy `count` input.",
+          ),
+        cursor: z
+          .string()
+          .optional()
+          .describe(
+            "Opaque continuation token from a prior call's `_meta.pagination.nextCursor`. Pass to fetch the next slice. Stale cursors are silently ignored — the call returns a fresh head of the feed.",
+          ),
+        count: z
+          .number()
+          .optional()
+          .describe(
+            "Legacy alias for `limit`. Prefer `limit` in new callers; ignored when `limit` is also supplied.",
+          ),
         include_coverage: z
           .boolean()
           .optional()
