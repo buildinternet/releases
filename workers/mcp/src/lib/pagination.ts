@@ -17,6 +17,21 @@ export interface McpPagination {
   offset: number;
 }
 
+// Structured pagination state attached to `_meta.pagination` on `list_*` tool
+// results. Mirrors `Pagination` from `@buildinternet/releases-core/cli-contracts`
+// with two adjustments: `totalItems` / `totalPages` are required (we always
+// pass a backend total in), and `nextPage` is added so MCP clients don't
+// recompute `page + 1` themselves.
+export interface McpPaginationMeta {
+  page: number;
+  pageSize: number;
+  returned: number;
+  totalItems: number;
+  totalPages: number;
+  hasMore: boolean;
+  nextPage?: number;
+}
+
 export type ListNoun = "sources" | "organizations" | "products" | "catalog entries";
 
 const DEFAULT_LIMIT = 50;
@@ -75,4 +90,30 @@ export function renderPageFooter(opts: {
 
 export function slicePage<T>(items: T[], pagination: McpPagination): T[] {
   return items.slice(pagination.offset, pagination.offset + pagination.pageSize);
+}
+
+// Build the `_meta.pagination` payload for a list_* tool result. Always
+// populates `totalPages` (caller passes a real total) and adds `nextPage`
+// only when more pages exist, so clients can branch on `nextPage != null`.
+export function buildPaginationMeta(opts: {
+  pagination: McpPagination;
+  returned: number;
+  totalItems: number;
+}): McpPaginationMeta {
+  const computed = computePagination({
+    page: opts.pagination.page,
+    pageSize: opts.pagination.pageSize,
+    returned: opts.returned,
+    totalItems: opts.totalItems,
+  });
+  const meta: McpPaginationMeta = {
+    page: computed.page,
+    pageSize: computed.pageSize,
+    returned: computed.returned,
+    totalItems: opts.totalItems,
+    totalPages: computed.totalPages ?? 1,
+    hasMore: computed.hasMore,
+  };
+  if (computed.hasMore) meta.nextPage = computed.page + 1;
+  return meta;
 }

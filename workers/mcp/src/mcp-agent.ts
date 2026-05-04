@@ -20,6 +20,7 @@ import {
   summarizeChanges,
   compareProducts,
   type SearchToolReturn,
+  type ToolResult,
 } from "./tools.js";
 import { registerResources } from "./resources.js";
 import { registerPrompts } from "./prompts.js";
@@ -170,7 +171,7 @@ export interface CreateServerOptions {
 export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer({
     name: "releases",
-    version: "0.12.0",
+    version: "0.13.0",
   });
 
   const db = createDb(env.DB);
@@ -179,7 +180,6 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
   const requestClientKind = deriveMcpClientKind(requestUserAgent);
 
   /** Hydrate portable /_media/ URLs in tool text output. */
-  type ToolResult = { content: [{ type: "text"; text: string }] };
   function withMedia<T>(handler: (params: T) => Promise<ToolResult>) {
     return async (params: T): Promise<ToolResult> => {
       const result = await handler(params);

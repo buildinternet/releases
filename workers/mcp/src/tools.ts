@@ -42,15 +42,24 @@ import {
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
+  buildPaginationMeta,
   parseMcpPagination,
   renderPageFooter,
   slicePage,
   type ListNoun,
   type McpPagination,
   type McpPaginationInput,
+  type McpPaginationMeta,
 } from "./lib/pagination.js";
 
-export type ToolResult = { content: [{ type: "text"; text: string }] };
+// `_meta` on tool results is supported by the MCP spec for out-of-band
+// structured state. The `list_*` tools attach `_meta.pagination` so MCP-aware
+// clients can branch on `hasMore` / `nextPage` without parsing the markdown
+// footer; the footer remains for clients that read text only.
+export type ToolResult = {
+  content: [{ type: "text"; text: string }];
+  _meta?: { pagination?: McpPaginationMeta };
+};
 
 /**
  * Per-section hit counts emitted by the search tools so `withSearchLog` in
@@ -84,10 +93,31 @@ function paginatedText(opts: {
   totalItems: number;
 }): ToolResult {
   const footer = renderPageFooter(opts);
-  if (opts.returned === 0) {
-    return text(`No ${opts.noun} on this page.${footer ? `\n\n${footer}` : ""}`);
-  }
-  return text(footer ? `${opts.body}\n\n${footer}` : opts.body);
+  const _meta = { pagination: buildPaginationMeta(opts) };
+  const body =
+    opts.returned === 0
+      ? `No ${opts.noun} on this page.${footer ? `\n\n${footer}` : ""}`
+      : footer
+        ? `${opts.body}\n\n${footer}`
+        : opts.body;
+  return { content: [{ type: "text" as const, text: body }], _meta };
+}
+
+// Empty-state result for the case where pagination ran but the backing
+// query returned zero rows total (so `paginatedText` would print a generic
+// "no <noun> on this page" — callers want their own copy here). Carries
+// `_meta.pagination` for symmetry with the populated path.
+function emptyListResult(opts: { message: string; pagination: McpPagination }): ToolResult {
+  return {
+    content: [{ type: "text" as const, text: opts.message }],
+    _meta: {
+      pagination: buildPaginationMeta({
+        pagination: opts.pagination,
+        returned: 0,
+        totalItems: 0,
+      }),
+    },
+  };
 }
 
 // ── Shared helpers ───────────────────────────────────────────────────
@@ -747,7 +777,7 @@ export async function listSources(
   ]);
 
   const totalItems = Number(totalRow[0]?.n ?? 0);
-  if (totalItems === 0) return text("No sources indexed yet.");
+  if (totalItems === 0) return emptyListResult({ message: "No sources indexed yet.", pagination });
 
   const body = rows
     .map((s) => {
@@ -831,7 +861,7 @@ export async function listOrganizations(
   ]);
 
   const totalItems = Number(totalRow[0]?.n ?? 0);
-  if (totalItems === 0) return text("No organizations found.");
+  if (totalItems === 0) return emptyListResult({ message: "No organizations found.", pagination });
 
   const body = rows
     .map((o) => [`**${o.name}**`, `  Slug: ${o.slug}`, `  Domain: ${o.domain ?? "N/A"}`].join("\n"))
@@ -1356,7 +1386,7 @@ export async function listProducts(
   ]);
 
   const totalItems = Number(totalRow[0]?.n ?? 0);
-  if (totalItems === 0) return text("No products found.");
+  if (totalItems === 0) return emptyListResult({ message: "No products found.", pagination });
 
   const body = rows
     .map((p) => {
@@ -1547,7 +1577,8 @@ export async function listCatalog(
   // would obscure the discriminator. Acceptable because the catalog stays
   // small per org (tens of rows in practice).
   const totalItems = entries.length;
-  if (totalItems === 0) return text("No catalog entries found.");
+  if (totalItems === 0)
+    return emptyListResult({ message: "No catalog entries found.", pagination });
 
   const pageEntries = slicePage(entries, pagination);
 
