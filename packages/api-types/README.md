@@ -19,6 +19,7 @@ import type { OrgListResponse } from "@buildinternet/releases-api-types";
 
 async function listOrgs(): Promise<OrgListResponse> {
   const res = await fetch("https://api.releases.sh/v1/orgs");
+  if (!res.ok) throw new Error(`API error: ${res.status}`);
   return (await res.json()) as OrgListResponse;
 }
 ```

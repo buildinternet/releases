@@ -8,7 +8,7 @@ adminOnly: false
 
 Programmatic access to the Releases index via HTTP.
 
-All endpoints are prefixed with `/v1` and return JSON. Paginated list endpoints return `{ items, pagination }`:
+All endpoints are prefixed with `/v1`. By default they return JSON, and paginated list endpoints return `{ items, pagination }`:
 
 ```ts
 {
