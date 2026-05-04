@@ -727,6 +727,118 @@ describe("list_* pagination", () => {
   });
 });
 
+describe("list_* _meta.pagination", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  it("populates _meta.pagination with hasMore + nextPage on a multi-page result", async () => {
+    // 3 sources, limit=2 → page 1 has more.
+    const result = await listSources(asD1(fixture.db), { limit: 2 });
+    expect(result._meta?.pagination).toEqual({
+      page: 1,
+      pageSize: 2,
+      returned: 2,
+      totalItems: 3,
+      totalPages: 2,
+      hasMore: true,
+      nextPage: 2,
+    });
+  });
+
+  it("omits nextPage on the last page", async () => {
+    const result = await listSources(asD1(fixture.db), { limit: 2, page: 2 });
+    expect(result._meta?.pagination).toMatchObject({
+      page: 2,
+      pageSize: 2,
+      returned: 1,
+      totalItems: 3,
+      totalPages: 2,
+      hasMore: false,
+    });
+    expect(result._meta?.pagination).not.toHaveProperty("nextPage");
+  });
+
+  it("carries _meta on a single-page result with hasMore=false", async () => {
+    const result = await listSources(asD1(fixture.db), {});
+    expect(result._meta?.pagination).toEqual({
+      page: 1,
+      pageSize: 50,
+      returned: 3,
+      totalItems: 3,
+      totalPages: 1,
+      hasMore: false,
+    });
+  });
+
+  it("carries _meta when paging past the end (returned=0, totalItems>0)", async () => {
+    const result = await listSources(asD1(fixture.db), { limit: 2, page: 99 });
+    expect(result._meta?.pagination).toMatchObject({
+      page: 99,
+      pageSize: 2,
+      returned: 0,
+      totalItems: 3,
+      totalPages: 2,
+      hasMore: false,
+    });
+  });
+
+  it("carries _meta on the empty-table case (totalItems=0)", async () => {
+    clearAllTables(fixture.db);
+    const result = await listSources(asD1(fixture.db), {});
+    expect(resultText(result)).toBe("No sources indexed yet.");
+    expect(result._meta?.pagination).toEqual({
+      page: 1,
+      pageSize: 50,
+      returned: 0,
+      totalItems: 0,
+      totalPages: 1,
+      hasMore: false,
+    });
+  });
+
+  it("filter-aware totals: list_organizations narrows totalItems to matching rows", async () => {
+    const result = await listOrganizations(asD1(fixture.db), { query: "Vercel", limit: 1 });
+    expect(result._meta?.pagination).toEqual({
+      page: 1,
+      pageSize: 1,
+      returned: 1,
+      totalItems: 1,
+      totalPages: 1,
+      hasMore: false,
+    });
+  });
+
+  it("list_products and list_catalog also expose _meta.pagination", async () => {
+    const productsResult = await listProducts(asD1(fixture.db), { limit: 1 });
+    expect(productsResult._meta?.pagination).toMatchObject({
+      page: 1,
+      pageSize: 1,
+      totalItems: 2,
+      hasMore: true,
+      nextPage: 2,
+    });
+
+    const catalog = await listCatalog(asD1(fixture.db), { limit: 2 });
+    expect(catalog._meta?.pagination).toMatchObject({
+      page: 1,
+      pageSize: 2,
+      totalItems: 3,
+      hasMore: true,
+      nextPage: 2,
+    });
+  });
+});
+
 describe("get_latest_releases (round-trippable source coordinates)", () => {
   let fixture: TestDatabase;
 
