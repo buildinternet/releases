@@ -64,9 +64,13 @@ Weekly release activity for the organization.
 
 List products. Filter with `?orgId=...`.
 
+### `GET /v1/orgs/:orgSlug/products/:productSlug`
+
+Get product details. Both segments accept an id or a slug. This is the canonical form — prefer it in new clients.
+
 ### `GET /v1/products/:slug`
 
-Get product details by slug or ID.
+Get product details by typed ID (`prod_…`). Bare slugs return `400 bare_slug_rejected` because slugs are now per-org and ambiguous on the global path. To resolve a bare slug, use `GET /v1/lookups/product-by-slug?slug=<slug>` (returns `{productId, productSlug, orgSlug}`).
 
 ---
 
@@ -85,14 +89,16 @@ List sources with filters.
 | `query`       | Substring search on name, slug, or URL |
 | `category`    | Filter by category                     |
 
-### `GET /v1/sources/:slug`
+### `GET /v1/orgs/:orgSlug/sources/:sourceSlug`
 
-Source details with paginated releases.
+Source details with paginated releases. Both segments accept an id or a slug. This is the canonical form — prefer it in new clients. The same handler is dual-registered at `/v1/sources/:slug` for typed IDs only; bare slugs there return `400 bare_slug_rejected`. To resolve a bare slug, use `GET /v1/lookups/source-by-slug?slug=<slug>` (returns `{sourceId, sourceSlug, orgSlug}`).
 
 | Param      | Description      |
 | ---------- | ---------------- |
 | `page`     | Page number      |
 | `pageSize` | Results per page |
+
+All `/v1/sources/:slug/...` sub-resources below (`activity`, `recent-releases`, `changelog`, `summaries`, etc.) follow the same rule: typed IDs work on the bare path; slug callers must use the equivalent `/v1/orgs/:orgSlug/sources/:sourceSlug/...` form.
 
 ### `GET /v1/sources/:slug/activity`
 
@@ -223,6 +229,20 @@ Response shape:
 `relatedOrg` is the "did you mean" rail — populated when the org segment matches a known org but the specific repo doesn't exist or has no releases. It is `null` when the org isn't tracked.
 
 Materialized rows carry `discovery: "on_demand"` and `isHidden: true`. Embeddings still run via `waitUntil` so semantic search picks them up on the next hit; AI features (overviews, summarization, playbook regen) skip on-demand rows. Negative results (`not_found`, `empty`) are cached in KV (`lookup:github:{org}/{repo}`, 24h for `not_found`, 6h for `empty`).
+
+### `GET /v1/lookups/source-by-slug`
+
+Resolve a bare source slug to its canonical org-scoped home. Returns `{sourceId, sourceSlug, orgSlug}`. Useful for old bookmarks and for clients that only have a slug after the bare `/v1/sources/:slug` path stopped accepting them (#698). When a slug exists under multiple orgs, the oldest match by `(createdAt, id)` wins — deterministic across calls. Carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT`; this is a 6-month migration aid, not a permanent shape.
+
+```bash
+curl -H "Authorization: Bearer $RELEASED_API_KEY" \
+  "https://api.releases.sh/v1/lookups/source-by-slug?slug=vercel-ai-sdk"
+# → {"sourceId":"src_…","sourceSlug":"vercel-ai-sdk","orgSlug":"vercel"}
+```
+
+### `GET /v1/lookups/product-by-slug`
+
+Same shape as the source resolver, but for products. Returns `{productId, productSlug, orgSlug}`. Same Sunset window.
 
 ### `GET /v1/related/releases`
 
