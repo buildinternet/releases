@@ -121,7 +121,7 @@ VS Code, Windsurf, Zed, and other stdio-only clients:
 
 **MCP Tools:**
 
-> Every tool that takes an org / product / source / release identifier accepts the typed ID (`org_…`, `prod_…`, `src_…`, `rel_…`) interchangeably with the slug. Source and product params also accept an `org/slug` coordinate.
+> Every tool that takes an org / product / source identifier accepts the typed ID (`org_…`, `prod_…`, `src_…`) interchangeably with the slug. Source and product params also accept an `org/slug` coordinate. Releases are addressed by id only (`rel_…` or a bare 21-char nanoid) — there is no release-slug shape.
 
 | Tool                  | Description                                                                                                                                                                                                                                                                                                                                   |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |

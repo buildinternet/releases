@@ -313,7 +313,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe(
-            "Scope release results to sources belonging to this organization. Accepts an org_ id, slug, domain, name, or account handle.",
+            "Scope release results to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
           ),
         entity: z
           .string()
@@ -365,7 +365,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe(
-            "Filter to sources belonging to this organization. Accepts an org_ id, slug, domain, name, or account handle.",
+            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
           ),
         type: z
           .enum(["feature", "rollup"])
@@ -431,7 +431,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe(
-            "Filter to sources belonging to this organization. Accepts an org_ id, slug, domain, name, or account handle.",
+            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
           ),
         type: z
           .enum(["feature", "rollup"])
@@ -464,9 +464,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         organization: z
           .string()
           .optional()
-          .describe(
-            "Organization to scope to. Accepts an org_ id, slug, domain, name, or account handle.",
-          ),
+          .describe("Organization to scope to. Accepts an org_ id, slug, domain, or name."),
       },
     },
     async (params) => listCatalog(db, params),
@@ -529,7 +527,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe(
-            "Filter to sources belonging to this organization. Accepts an org_ id, slug, domain, name, or account handle.",
+            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
           ),
       },
     },
@@ -599,7 +597,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .string()
           .optional()
           .describe(
-            "Organization to scope to. Accepts an org_ id, slug, domain, name, or account handle (e.g. 'vercel').",
+            "Organization to scope to. Accepts an org_ id, slug, domain, or name (e.g. 'vercel').",
           ),
       },
     },

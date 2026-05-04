@@ -38,7 +38,7 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
           z
             .string()
             .describe(
-              "Product identifier — accepts a prod_ id, an org-scoped coordinate (e.g. 'vercel/nextjs'), or a slug for completion (e.g. 'nextjs', 'supabase-studio').",
+              "Product identifier — `prod_…` id or an `org/slug` coordinate (e.g. 'vercel/nextjs'). Completion returns coordinates so downstream tools accept them directly.",
             ),
           (value) => completeProductSlug(db, value),
         ),
@@ -75,7 +75,7 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
           z
             .string()
             .describe(
-              "First product. Accepts a prod_ id, org-scoped coordinate, or slug for completion.",
+              "First product — `prod_…` id or `org/slug` coordinate. Completion returns coordinates.",
             ),
           (value) => completeProductSlug(db, value),
         ),
@@ -83,7 +83,7 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
           z
             .string()
             .describe(
-              "Second product. Accepts a prod_ id, org-scoped coordinate, or slug for completion.",
+              "Second product — `prod_…` id or `org/slug` coordinate. Completion returns coordinates.",
             ),
           (value) => completeProductSlug(db, value),
         ),
