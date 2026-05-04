@@ -264,7 +264,7 @@ export interface SourceDetail {
   lastPolledAt: string | null;
   trackingSince: string;
   releases: ReleaseItem[];
-  pagination: { page: number; pageSize: number; totalPages: number; totalItems: number };
+  pagination: Pagination;
   summaries: {
     rolling: ReleaseSummaryItem | null;
     monthly: ReleaseSummaryItem[];

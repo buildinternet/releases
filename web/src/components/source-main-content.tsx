@@ -75,7 +75,7 @@ export function SourceMainContent({
       ))}
       <Pagination
         page={source.pagination.page}
-        totalPages={source.pagination.totalPages}
+        totalPages={source.pagination.totalPages ?? 1}
         basePath={basePath}
       />
     </>

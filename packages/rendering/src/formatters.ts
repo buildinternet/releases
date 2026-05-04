@@ -154,7 +154,7 @@ export function sourceToMarkdown(source: FormatSourceDetail, opts: FormatOptions
   }
 
   // ── Pagination ──
-  if (source.pagination.totalPages > 1) {
+  if ((source.pagination.totalPages ?? 0) > 1) {
     const paginationAttrs = [
       `page="${source.pagination.page}"`,
       `total-pages="${source.pagination.totalPages}"`,

@@ -2,15 +2,23 @@ import { Hono } from "hono";
 import { eq, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { fetchLog, sources } from "@buildinternet/releases-core/schema";
+import { buildBareLimitEnvelope } from "../lib/pagination.js";
 import { sourceMatchByIdOrSlug } from "../utils.js";
 import type { Env } from "../index.js";
 
 export const fetchLogRoutes = new Hono<Env>();
 
+const DEFAULT_LIMIT = 20;
+const MAX_LIMIT = 100;
+
 fetchLogRoutes.get("/admin/logs/fetch", async (c) => {
   const db = createDb(c.env.DB);
   const sourceSlug = c.req.query("source");
-  const limit = parseInt(c.req.query("limit") ?? "20", 10);
+  const rawLimit = parseInt(c.req.query("limit") ?? String(DEFAULT_LIMIT), 10);
+  const limit =
+    Number.isFinite(rawLimit) && rawLimit > 0 ? Math.min(rawLimit, MAX_LIMIT) : DEFAULT_LIMIT;
+
+  const wantsEnvelope = c.req.query("envelope") === "true";
 
   if (sourceSlug) {
     const [src] = await db.select().from(sources).where(sourceMatchByIdOrSlug(sourceSlug));
@@ -22,11 +30,11 @@ fetchLogRoutes.get("/admin/logs/fetch", async (c) => {
       .where(eq(fetchLog.sourceId, src.id))
       .orderBy(desc(fetchLog.createdAt))
       .limit(limit);
-    return c.json(logs);
+    return wantsEnvelope ? c.json(buildBareLimitEnvelope(logs, limit)) : c.json(logs);
   }
 
   const logs = await db.select().from(fetchLog).orderBy(desc(fetchLog.createdAt)).limit(limit);
-  return c.json(logs);
+  return wantsEnvelope ? c.json(buildBareLimitEnvelope(logs, limit)) : c.json(logs);
 });
 
 fetchLogRoutes.post("/admin/logs/fetch", async (c) => {

@@ -1188,7 +1188,14 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     lastPolledAt: src.lastPolledAt,
     trackingSince: earliest?.date ?? metrics.oldest ?? src.createdAt,
     releases: releasesFormatted,
-    pagination: { page, pageSize, totalPages, totalItems },
+    pagination: {
+      page,
+      pageSize,
+      returned: releasesFormatted.length,
+      totalItems,
+      totalPages,
+      hasMore: page < totalPages,
+    },
     summaries: {
       rolling: rollingSummaryRow
         ? {
