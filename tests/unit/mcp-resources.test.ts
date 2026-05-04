@@ -210,6 +210,36 @@ describe("MCP resources + completion", () => {
     }
   });
 
+  it("narrows to one org when input is coordinate-form", async () => {
+    // "vercel/" without a slug needle returns every product under vercel.
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
+        argument: { name: "productSlug", value: "vercel/" },
+      });
+      const values = result.completion.values.toSorted();
+      expect(values).toEqual(["vercel/alphaturbo", "vercel/nextjs", "vercel/turborepo"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("filters by org segment + slug prefix when input is `org/slug-prefix`", async () => {
+    // "vercel/turbo" should match turborepo and alphaturbo under vercel only.
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
+        argument: { name: "productSlug", value: "vercel/turbo" },
+      });
+      // Order: prefix match (turborepo) before substring match (alphaturbo).
+      expect(result.completion.values).toEqual(["vercel/turborepo", "vercel/alphaturbo"]);
+    } finally {
+      await link.close();
+    }
+  });
+
   it("strips LIKE wildcards so user-supplied % / _ cannot widen the match", async () => {
     const link = await linkResources(fixture.db);
     try {
