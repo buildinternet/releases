@@ -37,6 +37,7 @@ import { assemblePlaybook } from "@releases/ai-internal/playbook";
 import type { Env } from "../index.js";
 import {
   getOrgsWithStats,
+  countOrgsForList,
   getOrgSparklines,
   getOrgSourcesWithStats,
   getOrgActivityData,
@@ -47,6 +48,7 @@ import {
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
+import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 
 export const orgRoutes = new Hono<Env>();
 
@@ -54,11 +56,20 @@ orgRoutes.get("/orgs", async (c) => {
   const db = createDb(c.env.DB);
   const cutoff30d = daysAgoIso(30);
   const qParam = c.req.query("q");
+  const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-  const [rows, sparklineRows] = await Promise.all([
-    getOrgsWithStats(db, cutoff30d, qParam ?? undefined),
-    getOrgSparklines(db, cutoff30d),
+  const [rows, totalItems] = await Promise.all([
+    getOrgsWithStats(db, cutoff30d, qParam ?? undefined, {
+      limit: pagination.pageSize,
+      offset: pagination.offset,
+    }),
+    countOrgsForList(db, qParam ?? undefined),
   ]);
+  const sparklineRows = await getOrgSparklines(
+    db,
+    cutoff30d,
+    rows.map((row) => row.id),
+  );
 
   // Build a 30-day sparkline array per org (align to UTC midnight to avoid off-by-one near day boundary)
   const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
@@ -93,7 +104,7 @@ orgRoutes.get("/orgs", async (c) => {
     sparkline: sparklineMap.get(row.id) ?? Array.from({ length: 30 }, () => 0),
   }));
 
-  return c.json(result);
+  return c.json(buildListResponse(result, pagination, totalItems));
 });
 
 orgRoutes.get("/orgs/:slug", async (c) => {
@@ -557,8 +568,24 @@ orgRoutes.get("/orgs/:slug/catalog", async (c) => {
   ]);
 
   const items = [
-    ...productRows.map((p) => ({ kind: "product" as const, ...p })),
-    ...sourceRows.map((s) => ({ kind: "source" as const, ...s })),
+    ...productRows.map((p) => ({
+      kind: "product" as const,
+      id: p.id,
+      slug: p.slug,
+      name: p.name,
+      url: p.url,
+      description: p.description,
+      category: p.category,
+    })),
+    ...sourceRows.map((s) => ({
+      kind: "source" as const,
+      id: s.id,
+      slug: s.slug,
+      name: s.name,
+      type: s.type,
+      url: s.url,
+      productId: s.productId,
+    })),
   ];
 
   return c.json({
@@ -583,8 +610,18 @@ orgRoutes.get("/orgs/:slug/accounts", async (c) => {
     return c.json(account ?? null);
   }
 
-  const accounts = await db.select().from(orgAccounts).where(eq(orgAccounts.orgId, org.id));
-  return c.json(accounts);
+  const pagination = parseListPagination(new URL(c.req.url).searchParams);
+  const [accounts, totalRow] = await Promise.all([
+    db
+      .select()
+      .from(orgAccounts)
+      .where(eq(orgAccounts.orgId, org.id))
+      .orderBy(orgAccounts.platform, orgAccounts.handle)
+      .limit(pagination.pageSize)
+      .offset(pagination.offset),
+    db.select({ n: count() }).from(orgAccounts).where(eq(orgAccounts.orgId, org.id)),
+  ]);
+  return c.json(buildListResponse(accounts, pagination, Number(totalRow[0]?.n ?? 0)));
 });
 
 orgRoutes.delete("/orgs/:slug/accounts/:platform/:handle", async (c) => {
@@ -625,13 +662,29 @@ orgRoutes.get("/orgs/:slug/tags", async (c) => {
   const [org] = await db.select().from(organizations).where(orgWhere(slug));
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  const rows = await db
-    .select({ name: tags.name })
-    .from(orgTags)
-    .innerJoin(tags, eq(orgTags.tagId, tags.id))
-    .where(eq(orgTags.orgId, org.id))
-    .orderBy(tags.name);
-  return c.json(rows.map((r) => r.name));
+  const pagination = parseListPagination(new URL(c.req.url).searchParams);
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select({ name: tags.name })
+      .from(orgTags)
+      .innerJoin(tags, eq(orgTags.tagId, tags.id))
+      .where(eq(orgTags.orgId, org.id))
+      .orderBy(tags.name)
+      .limit(pagination.pageSize)
+      .offset(pagination.offset),
+    db
+      .select({ n: count() })
+      .from(orgTags)
+      .innerJoin(tags, eq(orgTags.tagId, tags.id))
+      .where(eq(orgTags.orgId, org.id)),
+  ]);
+  return c.json(
+    buildListResponse(
+      rows.map((r) => r.name),
+      pagination,
+      Number(totalRow[0]?.n ?? 0),
+    ),
+  );
 });
 
 orgRoutes.put("/orgs/:slug/tags", async (c) => {

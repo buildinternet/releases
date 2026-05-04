@@ -7,7 +7,11 @@ export async function getOrgsWithStats(
   db: D1Db,
   cutoff30d: string,
   q?: string,
+  pagination?: { limit: number; offset: number },
 ): Promise<OrgListRow[]> {
+  const where = orgListSearchWhere(q);
+  const page = pagination ? sql`LIMIT ${pagination.limit} OFFSET ${pagination.offset}` : sql``;
+
   return db.all<OrgListRow>(sql`
     SELECT
       o.id, o.slug, o.name, o.domain, o.description, o.category,
@@ -19,10 +23,27 @@ export async function getOrgsWithStats(
     FROM organizations_active o
     LEFT JOIN sources_active s ON s.org_id = o.id
     LEFT JOIN releases_visible r ON r.source_id = s.id
-    ${q ? sql`WHERE (lower(o.name) LIKE ${`%${q.toLowerCase()}%`} OR lower(o.slug) LIKE ${`%${q.toLowerCase()}%`})` : sql``}
+    ${where}
     GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category
-    ORDER BY o.name
+    ORDER BY o.name, o.id
+    ${page}
   `);
+}
+
+export async function countOrgsForList(db: D1Db, q?: string): Promise<number> {
+  const where = orgListSearchWhere(q);
+  const [row] = await db.all<{ n: number }>(sql`
+    SELECT COUNT(*) AS n
+    FROM organizations_active o
+    ${where}
+  `);
+  return Number(row?.n ?? 0);
+}
+
+function orgListSearchWhere(q?: string) {
+  if (!q) return sql``;
+  const pattern = `%${q.toLowerCase()}%`;
+  return sql`WHERE (lower(o.name) LIKE ${pattern} OR lower(o.slug) LIKE ${pattern})`;
 }
 
 export async function getOrgSourcesWithStats(db: D1Db, orgId: string): Promise<SourceWithStats[]> {
@@ -70,7 +91,30 @@ export type OrgSparklineRow = {
   cnt: number;
 };
 
-export async function getOrgSparklines(db: D1Db, cutoff30d: string): Promise<OrgSparklineRow[]> {
+export async function getOrgSparklines(
+  db: D1Db,
+  cutoff30d: string,
+  orgIds?: string[],
+): Promise<OrgSparklineRow[]> {
+  if (orgIds && orgIds.length === 0) return [];
+  if (!orgIds || orgIds.length <= 90) {
+    return getOrgSparklinesChunk(db, cutoff30d, orgIds);
+  }
+
+  const chunks: string[][] = [];
+  for (let i = 0; i < orgIds.length; i += 90) chunks.push(orgIds.slice(i, i + 90));
+  const rows = await Promise.all(
+    chunks.map((chunk) => getOrgSparklinesChunk(db, cutoff30d, chunk)),
+  );
+  return rows.flat();
+}
+
+function getOrgSparklinesChunk(
+  db: D1Db,
+  cutoff30d: string,
+  orgIds?: string[],
+): Promise<OrgSparklineRow[]> {
+  const orgFilter = orgIds ? sql`AND s.org_id IN ${orgIds}` : sql``;
   return db.all<OrgSparklineRow>(sql`
     SELECT
       s.org_id,
@@ -81,6 +125,7 @@ export async function getOrgSparklines(db: D1Db, cutoff30d: string): Promise<Org
     WHERE
       r.published_at >= ${cutoff30d}
       AND r.published_at IS NOT NULL
+      ${orgFilter}
     GROUP BY s.org_id, DATE(r.published_at)
     ORDER BY s.org_id, date
   `);

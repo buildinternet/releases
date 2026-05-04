@@ -35,7 +35,7 @@ Key commands:
 - `releases admin source remove <slug> [--ignore --reason "..."]` — Remove and optionally ignore a source
 - `releases admin source fetch <slug> [--dry-run] [--max <n>]` — Fetch releases from a source
 - `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` — Create org
-- `releases admin org edit <slug> [--category <c>]` — Edit org
+- `releases admin org update <slug> [--name <n>] [--domain <d>] [--tier <t>] [--billing-customer-id <id>]` — Update org
 - `releases admin org show <slug> --json` — Full org details
 - `releases admin org tag add <slug> <tags...>` — Add tags
 - `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]` — Create product

@@ -140,12 +140,22 @@ export default {
               headers: guardHeaders,
             });
         if (guardRes.ok) {
-          const sessions = (await guardRes.json()) as {
-            sessionId: string;
-            company: string;
-            status: "running" | "complete" | "error" | "cancelled";
-            lastUpdatedAt?: number;
-          }[];
+          const sessionsBody = (await guardRes.json()) as
+            | {
+                sessionId: string;
+                company: string;
+                status: "running" | "complete" | "error" | "cancelled";
+                lastUpdatedAt?: number;
+              }[]
+            | {
+                items: {
+                  sessionId: string;
+                  company: string;
+                  status: "running" | "complete" | "error" | "cancelled";
+                  lastUpdatedAt?: number;
+                }[];
+              };
+          const sessions = Array.isArray(sessionsBody) ? sessionsBody : sessionsBody.items;
           const companyLower = body.company.toLowerCase();
           const existing = sessions.find((s) => s.company.toLowerCase() === companyLower);
           if (existing) {

@@ -22,7 +22,7 @@ Operations can be performed via CLI commands or typed MCP/agent tools. Use which
 | Search releases       | `releases search <query> --json`                                                                                                  | `search` with `type: ["releases"]`, query, limit                                                                                                                                                                            |
 | Evaluate URL          | `releases admin discovery evaluate <url> --json`                                                                                  | `evaluate_url` with url param (optional dry-run; `manage_source` action "add" auto-evaluates)                                                                                                                               |
 | Add org               | `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]`                              | `manage_org` action "add" with name, domain, description, category, tags                                                                                                                                                    |
-| Edit org              | `releases admin org edit <slug> [--category <c>]`                                                                                 | `manage_org` action "edit" with identifier, category                                                                                                                                                                        |
+| Update org            | `releases admin org update <slug> [--name <n>] [--domain <d>] [--tier <t>] [--billing-customer-id <id>]`                          | `manage_org` action "edit" with identifier, name, domain, description, category (`--tier` and `--billing-customer-id` are CLI-only; no typed-tool equivalent)                                                               |
 | Show org              | `releases admin org show <slug> --json`                                                                                           | `get_organization` with identifier                                                                                                                                                                                          |
 | Add tags to org       | `releases admin org tag add <slug> <tags...>`                                                                                     | `manage_org` action "tag_add" with identifier, tags                                                                                                                                                                         |
 | Link account          | `releases admin org link <slug> --platform <p> --handle <h>`                                                                      | `manage_org` action "link_account" with identifier, platform, handle                                                                                                                                                        |
@@ -114,7 +114,9 @@ manage_source(action="add", name="Changelog", url="https://example.com/changelog
 
 The same applies on CLI: pass `--primary` to `releases admin source add`, not a follow-up `source edit`.
 
-Use `manage_source(action="edit", is_primary=true)` only when promoting a source you added in a prior session — never in the same flow as the add.
+Use `releases admin source add --primary` or `manage_source(action="add", ..., is_primary=true)` when adding the source in the current onboarding flow; reserve `releases admin source edit --primary` or `manage_source(action="edit", is_primary=true)` for promoting a source that already existed before this session.
+
+That promotion path is only for sources added in an earlier session — never in the same flow as the add.
 
 ## Playbooks
 

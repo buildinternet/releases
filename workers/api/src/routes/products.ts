@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { and, eq, sql } from "drizzle-orm";
+import { and, count, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   products,
@@ -26,6 +26,7 @@ import type { Env } from "../index.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
 import { logEvent } from "@releases/lib/log-event";
+import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 
 export const productRoutes = new Hono<Env>();
 
@@ -33,24 +34,31 @@ export const productRoutes = new Hono<Env>();
 productRoutes.get("/products", async (c) => {
   const db = createDb(c.env.DB);
   const orgId = c.req.query("orgId");
+  const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-  const rows = await db
-    .select({
-      id: productsActive.id,
-      name: productsActive.name,
-      slug: productsActive.slug,
-      orgId: productsActive.orgId,
-      url: productsActive.url,
-      description: productsActive.description,
-      createdAt: productsActive.createdAt,
-      category: productsActive.category,
-      sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
-    })
-    .from(productsActive)
-    .where(orgId ? eq(productsActive.orgId, orgId) : undefined)
-    .orderBy(productsActive.name);
+  const where = orgId ? eq(productsActive.orgId, orgId) : undefined;
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select({
+        id: productsActive.id,
+        name: productsActive.name,
+        slug: productsActive.slug,
+        orgId: productsActive.orgId,
+        url: productsActive.url,
+        description: productsActive.description,
+        createdAt: productsActive.createdAt,
+        category: productsActive.category,
+        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
+      })
+      .from(productsActive)
+      .where(where)
+      .orderBy(productsActive.name, productsActive.id)
+      .limit(pagination.pageSize)
+      .offset(pagination.offset),
+    db.select({ n: count() }).from(productsActive).where(where),
+  ]);
 
-  return c.json(rows);
+  return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
 });
 
 // Adopt: migrate an org into a product under another org (must be before /:identifier)

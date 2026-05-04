@@ -23,6 +23,22 @@ export interface Stats {
   products: number;
 }
 
+// ── Pagination ──
+
+export interface Pagination {
+  page: number;
+  pageSize: number;
+  returned: number;
+  totalItems?: number;
+  totalPages?: number;
+  hasMore: boolean;
+}
+
+export interface ListResponse<T> {
+  items: T[];
+  pagination: Pagination;
+}
+
 // ── Sitemap (bulk URL emission) ──
 
 export interface SitemapPayload {
@@ -47,6 +63,16 @@ export interface OrgListItem {
   sparkline: number[];
 }
 
+export type OrgListResponse = ListResponse<OrgListItem>;
+
+export interface OrgAccountItem {
+  platform: string;
+  handle: string;
+}
+
+export type OrgAccountsResponse = ListResponse<OrgAccountItem>;
+export type OrgTagsResponse = ListResponse<string>;
+
 export interface OrgDetail {
   id?: string;
   slug: string;
@@ -64,7 +90,7 @@ export interface OrgDetail {
   lastPolledAt: string | null;
   trackingSince: string;
   aliases?: string[];
-  accounts: { platform: string; handle: string }[];
+  accounts: OrgAccountItem[];
   products: Array<{
     id: string;
     slug: string;
@@ -614,6 +640,8 @@ export interface ProductListItem {
   sourceCount: number;
 }
 
+export type ProductListResponse = ListResponse<ProductListItem>;
+
 export interface ProductDetail {
   id: string;
   name: string;
@@ -798,6 +826,29 @@ export interface Session {
   activeSources?: string[];
   cancelRequested?: boolean;
 }
+
+export type SessionListResponse = ListResponse<Session>;
+
+// ── Admin URL Lists ──
+
+export interface IgnoredUrlItem {
+  id: string;
+  url: string;
+  orgId: string;
+  reason: string | null;
+  ignoredAt: string;
+}
+
+export interface BlockedUrlItem {
+  id: string;
+  pattern: string;
+  type: "exact" | "domain";
+  reason: string | null;
+  createdAt: string;
+}
+
+export type IgnoredUrlListResponse = ListResponse<IgnoredUrlItem>;
+export type BlockedUrlListResponse = ListResponse<BlockedUrlItem>;
 
 // ── Embed (admin) ──
 
