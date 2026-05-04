@@ -618,6 +618,7 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
   let dispatched = 0;
   let dispatchErrors = 0;
   let candidates = 0;
+  let preflightError: Error | null = null;
   const dispatchErrorDetail: Array<{ orgSlug: string; error: string }> = [];
 
   try {
@@ -676,14 +677,27 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
         });
       }
     }
+  } catch (err) {
+    // queryDueSources or other pre-loop work threw before any dispatch could
+    // happen. Stash so the `finally` finalizes with `dispatch_failed` instead
+    // of mis-marking the run `done` (dispatched=0, dispatchErrors=0).
+    preflightError = err instanceof Error ? err : new Error(String(err));
+    throw err;
   } finally {
     if (runId) {
-      const status =
-        dispatchErrors > 0 && dispatched === 0
+      const status = preflightError
+        ? ("dispatch_failed" as const)
+        : dispatchErrors > 0 && dispatched === 0
           ? ("dispatch_failed" as const)
           : dispatchErrors > 0
             ? ("degraded" as const)
             : ("done" as const);
+      if (preflightError) {
+        dispatchErrorDetail.push({
+          orgSlug: "preflight",
+          error: preflightError.message,
+        });
+      }
       await finalizeRunRow(db, runId, {
         endedAt: new Date().toISOString(),
         status,
@@ -693,7 +707,7 @@ async function fanOutPollAndFetch(env: Env["Bindings"], scheduledTime: number): 
         dispatchErrors,
         sessionsStarted: [],
         dispatchErrorDetail,
-        notes: null,
+        notes: preflightError ? `preflight failed: ${preflightError.message}` : null,
       }).catch((err) => {
         logEvent("warn", {
           component: "poll-fetch-cron",
