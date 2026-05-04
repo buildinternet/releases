@@ -111,15 +111,14 @@ Products: {product list or "none"}
 **Coverage**: 2-3 sentences. Which sources are canonical, whether there are gaps.
 
 Save by running:
-releases admin playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes-file - 2>/dev/null <<'NOTES'
 YOUR NOTES HERE
 NOTES
-)" 2>/dev/null
 
 Verify with: releases admin playbook {slug} 2>/dev/null | tail -20
 ```
 
-The playbook header regenerates automatically after any source add/edit/remove, and the `--notes` PATCH seeds a fresh header on first write — no separate regenerate step needed.
+The playbook header regenerates automatically after any source add/edit/remove, and the `--notes-file` PATCH seeds a fresh header on first write — no separate regenerate step needed.
 
 ### Verified prompt template
 
@@ -158,10 +157,9 @@ Every claim must cite observed data. If uncertain, say so explicitly.
 
 ## Step 4: Save
 
-releases admin playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes-file - 2>/dev/null <<'NOTES'
 YOUR NOTES HERE
 NOTES
-)" 2>/dev/null
 
 Verify with: releases admin playbook {slug} 2>/dev/null | tail -20
 ```
@@ -186,10 +184,9 @@ Sub-agents may be blocked from saving notes via Bash (heredoc permission issues)
 2. The parent agent (you) saves the notes manually:
 
 ```bash
-releases admin playbook {slug} --notes "$(cat <<'NOTES'
+releases admin playbook {slug} --notes-file - 2>/dev/null <<'NOTES'
 {paste notes from agent result}
 NOTES
-)" 2>/dev/null
 ```
 
 This is a known limitation of subagent permissions. Plan for it — check each agent's result and save manually if needed.
