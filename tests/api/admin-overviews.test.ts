@@ -229,6 +229,12 @@ describe("GET /v1/admin/overviews", () => {
       slug: "lagging",
       releaseDates: [new Date(now - 30 * DAY_MS).toISOString()],
     });
+    // Exact 7-day boundary — `>= NEEDS_FETCH_LAG_DAYS` means this counts as lagged.
+    // Subtract a small fudge so floating-point drift can't tip the comparison.
+    await seedOrg(db, {
+      slug: "seven-day",
+      releaseDates: [new Date(now - 7 * DAY_MS - 1000).toISOString()],
+    });
 
     const app = mkApp(db);
     const res = await app.request("/admin/overviews?format=plan");
@@ -241,6 +247,7 @@ describe("GET /v1/admin/overviews", () => {
 
     expect(bySlug["missing-active"].needsFetch).toBe(false);
     expect(bySlug["lagging"].needsFetch).toBe(true);
+    expect(bySlug["seven-day"].needsFetch).toBe(true);
   });
 
   it("400s on negative staleDays", async () => {
