@@ -1,6 +1,13 @@
-import { describe, test, expect, beforeAll, afterAll } from "bun:test";
+import { describe, test, expect, beforeAll, afterAll, beforeEach } from "bun:test";
 import { Database, type Statement } from "bun:sqlite";
 import { escapeLikePattern } from "@buildinternet/releases-core/sql-like";
+import { organizations } from "@buildinternet/releases-core/schema";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
+import { getOrgsWithStats, countOrgsForList } from "../../workers/api/src/queries/orgs.js";
+import type { D1Db } from "../../workers/api/src/db.js";
+
+const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;
 
 describe("escapeLikePattern", () => {
   test("escapes backslash, percent, and underscore; leaves plain text alone", () => {
@@ -40,5 +47,49 @@ describe("escapeLikePattern + SQLite LIKE ESCAPE roundtrip", () => {
   test("plain substring matching still works", () => {
     expect(matches("Hello, world", "world")).toBe(true);
     expect(matches("Hello, world", "moon")).toBe(false);
+  });
+});
+
+describe("getOrgsWithStats / countOrgsForList stay aligned on LIKE-special inputs", () => {
+  // Regression for #734: a query like `foo_bar` used to match `fooXbar` too,
+  // and the count helper inflated to match — pagination footer (page X of Y)
+  // disagreed with the rendered slice. Both helpers go through the same
+  // `orgListSearchWhere`, so this asserts they stay in lockstep.
+  let tdb: TestDatabase;
+  beforeAll(() => {
+    tdb = createTestDb();
+  });
+  afterAll(() => tdb.cleanup());
+  beforeEach(() => clearAllTables(tdb.db));
+
+  async function seedOrgs(names: string[]) {
+    await tdb.db.insert(organizations).values(
+      names.map((name, i) => ({
+        id: `org_${i}`,
+        name,
+        slug: name.toLowerCase().replace(/[^a-z0-9]/g, "-"),
+        discovery: "curated" as const,
+      })),
+    );
+  }
+
+  const cutoff = daysAgoIso(30);
+
+  test("underscore is treated literally — `foo_bar` does not match `fooXbar`", async () => {
+    await seedOrgs(["foo_bar", "fooXbar", "foo1bar", "unrelated"]);
+    const rows = await getOrgsWithStats(asD1(tdb.db), cutoff, "foo_bar");
+    const total = await countOrgsForList(asD1(tdb.db), "foo_bar");
+    expect(rows.map((r) => r.name)).toEqual(["foo_bar"]);
+    expect(total).toBe(1);
+    expect(rows.length).toBe(total);
+  });
+
+  test("percent is treated literally — `100%` does not act as a wildcard", async () => {
+    await seedOrgs(["100% pure", "1000 hits", "the 100%"]);
+    const rows = await getOrgsWithStats(asD1(tdb.db), cutoff, "100%");
+    const total = await countOrgsForList(asD1(tdb.db), "100%");
+    expect(rows.map((r) => r.name).toSorted()).toEqual(["100% pure", "the 100%"]);
+    expect(total).toBe(2);
+    expect(rows.length).toBe(total);
   });
 });

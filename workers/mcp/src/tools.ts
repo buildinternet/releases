@@ -551,7 +551,7 @@ export async function searchRegistry(
             description: string | null;
             category: string | null;
           }>(sql`
-            SELECT o.id, o.slug, o.name, o.description, o.category
+            SELECT DISTINCT o.id, o.slug, o.name, o.description, o.category
             FROM organizations o
             LEFT JOIN domain_aliases da ON da.org_id = o.id
             WHERE ${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
