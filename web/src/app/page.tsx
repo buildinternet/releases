@@ -75,7 +75,7 @@ export default async function HomePage() {
         </div>
       </div>
       <div className="max-w-4xl mx-auto px-6 pb-12">
-        {orgs.length > 0 && <OrgTable orgs={orgs} />}
+        {orgs && orgs.length > 0 && <OrgTable orgs={orgs} />}
       </div>
     </div>
   );

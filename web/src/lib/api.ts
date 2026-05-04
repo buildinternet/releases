@@ -166,7 +166,11 @@ const RELATED_CACHE_OPTS = { next: { revalidate: 300 } } as const;
 
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
-  orgs: async () => (await fetchApi<ListResponse<OrgListItem>>("/v1/orgs")).items,
+  orgs: async (): Promise<OrgListItem[]> => {
+    const body = await fetchApi<ListResponse<OrgListItem> | OrgListItem[]>("/v1/orgs");
+    if (Array.isArray(body)) return body;
+    return body?.items ?? [];
+  },
   sitemap: () => fetchApi<SitemapPayload>("/v1/sitemap"),
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
   sources: (independent?: boolean) =>
