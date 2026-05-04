@@ -39,7 +39,7 @@ export interface ManageProductInput {
   name?: string;
   /** Organization ID (org_...) or slug — required for add */
   organization?: string;
-  /** Product ID (prod_...) or slug — required for edit/tag_add */
+  /** Product ID (prod_...) or `org/slug` coordinate — required for edit/tag_add. Bare slugs are rejected (#698). */
   identifier?: string;
   url?: string;
   description?: string;
@@ -71,7 +71,7 @@ export interface ManageSourceInput {
   url?: string;
   /** Required for add. */
   name?: string;
-  /** Source ID (src_...) or slug — required for edit/remove/fetch. */
+  /** Source ID (src_...) or `org/slug` coordinate — required for edit/remove/fetch. Bare slugs are rejected (#698). */
   identifier?: string;
   /** On add: auto-detected via evaluator when omitted. */
   type?: "github" | "scrape" | "feed" | "agent";

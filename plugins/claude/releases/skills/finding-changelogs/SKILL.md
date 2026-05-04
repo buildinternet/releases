@@ -33,7 +33,7 @@ For `github` sources, the fetch pipeline ingests tagged releases **and** the rep
 
 ### Reading a tracked CHANGELOG
 
-Once a github source is tracked, its CHANGELOG is readable via `GET /v1/sources/:slug/changelog` (REST), the `get_catalog_entry` MCP tool with `include_changelog: true` (or any slicing param — see below), or `releases admin source changelog <slug>` (CLI). All three support heading-aligned slicing in two modes:
+Once a github source is tracked, its CHANGELOG is readable via `GET /v1/orgs/:orgSlug/sources/:sourceSlug/changelog` (REST — both segments accept id-or-slug; the legacy bare path `/v1/sources/:slug/changelog` accepts typed `src_…` IDs only post-#698), the `get_catalog_entry` MCP tool with `include_changelog: true` (or any slicing param — see below), or `releases admin source changelog <identifier>` (CLI — accepts a slug, typed ID, or `org/slug` coordinate). All three support heading-aligned slicing in two modes:
 
 - **Token mode** (preferred for agent context budgeting) — pass `changelog_tokens` / `--tokens` with a cl100k_base budget. The response carries `sliceTokens` (actual count of the returned chunk) and `totalTokens` (whole file) so you can plan context precisely. Recommended brackets: 2000 / 5000 / 10000 / 20000.
 - **Char mode** — pass `changelog_limit` / `--limit` for character budgets. Same snap/overshoot rules.
