@@ -41,6 +41,14 @@ import {
 } from "@buildinternet/releases-api-types";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
+import {
+  parseMcpPagination,
+  renderPageFooter,
+  slicePage,
+  type ListNoun,
+  type McpPagination,
+  type McpPaginationInput,
+} from "./lib/pagination.js";
 
 export type ToolResult = { content: [{ type: "text"; text: string }] };
 
@@ -63,6 +71,23 @@ export type SearchToolReturn = { result: ToolResult; counts: SearchCounts };
 
 function text(t: string): ToolResult {
   return { content: [{ type: "text" as const, text: t }] };
+}
+
+// Shared rendering for the four list_* tools. `body` is the joined per-row
+// markdown (or empty when the page is past the end); `noun` keys the
+// "no <noun> on this page" fallback and the footer.
+function paginatedText(opts: {
+  body: string;
+  noun: ListNoun;
+  pagination: McpPagination;
+  returned: number;
+  totalItems: number;
+}): ToolResult {
+  const footer = renderPageFooter(opts);
+  if (opts.returned === 0) {
+    return text(`No ${opts.noun} on this page.${footer ? `\n\n${footer}` : ""}`);
+  }
+  return text(footer ? `${opts.body}\n\n${footer}` : opts.body);
 }
 
 // ── Shared helpers ───────────────────────────────────────────────────
@@ -684,7 +709,7 @@ export async function getLatestReleases(
 
 export async function listSources(
   db: D1Db,
-  params: { organization?: string },
+  params: { organization?: string } & McpPaginationInput,
 ): Promise<ToolResult> {
   type SourceRow = {
     name: string;
@@ -695,30 +720,36 @@ export async function listSources(
     orgSlug: string | null;
   };
 
-  let allSources: SourceRow[];
+  const pagination = parseMcpPagination(params);
+
+  let orgId: string | undefined;
   if (params.organization) {
     const org = await findOrg(db, params.organization);
     if (!org) return text(`No organization found matching "${params.organization}"`);
-    allSources = await db.all<SourceRow>(sql`
-      SELECT s.name, s.slug, s.type, s.url, s.last_fetched_at as lastFetchedAt,
-             o.slug as orgSlug
-      FROM sources s
-      LEFT JOIN organizations o ON o.id = s.org_id
-      WHERE s.org_id = ${org.id}
-    `);
-  } else {
-    allSources = await db.all<SourceRow>(sql`
-      SELECT s.name, s.slug, s.type, s.url, s.last_fetched_at as lastFetchedAt,
-             o.slug as orgSlug
-      FROM sources s
-      LEFT JOIN organizations o ON o.id = s.org_id
-      LIMIT 200
-    `);
+    orgId = org.id;
   }
 
-  if (allSources.length === 0) return text("No products indexed yet.");
+  const [rows, totalRow] = await Promise.all([
+    db.all<SourceRow>(sql`
+      SELECT s.name, s.slug, s.type, s.url, s.last_fetched_at as lastFetchedAt,
+             o.slug as orgSlug
+      FROM sources s
+      LEFT JOIN organizations o ON o.id = s.org_id
+      ${orgId ? sql`WHERE s.org_id = ${orgId}` : sql``}
+      ORDER BY s.name, s.id
+      LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
+    `),
+    db.all<{ n: number }>(sql`
+      SELECT COUNT(*) as n
+      FROM sources s
+      ${orgId ? sql`WHERE s.org_id = ${orgId}` : sql``}
+    `),
+  ]);
 
-  const result = allSources
+  const totalItems = Number(totalRow[0]?.n ?? 0);
+  if (totalItems === 0) return text("No sources indexed yet.");
+
+  const body = rows
     .map((s) => {
       const coord = s.orgSlug ? `${s.orgSlug}/${s.slug}` : s.slug;
       return [
@@ -731,22 +762,29 @@ export async function listSources(
     })
     .join("\n\n");
 
-  return text(result);
+  return paginatedText({ body, noun: "sources", pagination, returned: rows.length, totalItems });
 }
 
 // ── list_organizations ───────────────────────────────────────────────
 
 export async function listOrganizations(
   db: D1Db,
-  params: { query?: string; platform?: string },
+  params: { query?: string; platform?: string } & McpPaginationInput,
 ): Promise<ToolResult> {
-  let rows;
+  const pagination = parseMcpPagination(params);
 
-  if (params.query && params.platform) {
-    // Both query and platform: wrap OR conditions in parens, AND with platform
-    const pattern = `%${params.query}%`;
-    rows = await db.all<{ name: string; slug: string; domain: string | null }>(sql`
-      SELECT DISTINCT o.name, o.slug, o.domain
+  // The query/platform combinations diverge only in their FROM/WHERE clauses.
+  // Build them once and reuse the fragment for both the paged SELECT and the
+  // COUNT(*) so totals stay filter-aware. Filtered arms wrap with DISTINCT o.id
+  // because account/alias joins fan a single org into multiple rows; the
+  // unfiltered arm skips DISTINCT (it'd add a sort cost on the full table).
+  const pattern = params.query ? `%${params.query}%` : null;
+
+  let fromWhere = sql`FROM organizations o`;
+  let distinct = false;
+  if (pattern && params.platform) {
+    distinct = true;
+    fromWhere = sql`
       FROM organizations o
       LEFT JOIN domain_aliases da ON da.org_id = o.id
       JOIN org_accounts oa ON oa.org_id = o.id
@@ -756,12 +794,10 @@ export async function listOrganizations(
         OR da.domain LIKE ${pattern}
         OR oa.handle LIKE ${pattern})
         AND oa.platform = ${params.platform}
-      ORDER BY o.name
-    `);
-  } else if (params.query) {
-    const pattern = `%${params.query}%`;
-    rows = await db.all<{ name: string; slug: string; domain: string | null }>(sql`
-      SELECT DISTINCT o.name, o.slug, o.domain
+    `;
+  } else if (pattern) {
+    distinct = true;
+    fromWhere = sql`
       FROM organizations o
       LEFT JOIN domain_aliases da ON da.org_id = o.id
       LEFT JOIN org_accounts oa ON oa.org_id = o.id
@@ -770,30 +806,44 @@ export async function listOrganizations(
         OR o.domain LIKE ${pattern}
         OR da.domain LIKE ${pattern}
         OR oa.handle LIKE ${pattern}
-      ORDER BY o.name
-    `);
+    `;
   } else if (params.platform) {
-    rows = await db.all<{ name: string; slug: string; domain: string | null }>(sql`
-      SELECT DISTINCT o.name, o.slug, o.domain
+    distinct = true;
+    fromWhere = sql`
       FROM organizations o
       JOIN org_accounts oa ON oa.org_id = o.id
       WHERE oa.platform = ${params.platform}
-      ORDER BY o.name
-    `);
-  } else {
-    rows = await db
-      .select({ name: organizations.name, slug: organizations.slug, domain: organizations.domain })
-      .from(organizations)
-      .orderBy(organizations.name);
+    `;
   }
 
-  if (rows.length === 0) return text("No organizations found.");
+  const distinctKw = distinct ? sql`DISTINCT` : sql``;
+  type Row = { name: string; slug: string; domain: string | null };
+  const [rows, totalRow] = await Promise.all([
+    db.all<Row>(sql`
+      SELECT ${distinctKw} o.name, o.slug, o.domain
+      ${fromWhere}
+      ORDER BY o.name, o.slug
+      LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
+    `),
+    distinct
+      ? db.all<{ n: number }>(sql`SELECT COUNT(*) as n FROM (SELECT DISTINCT o.id ${fromWhere})`)
+      : db.all<{ n: number }>(sql`SELECT COUNT(*) as n ${fromWhere}`),
+  ]);
 
-  const result = rows
+  const totalItems = Number(totalRow[0]?.n ?? 0);
+  if (totalItems === 0) return text("No organizations found.");
+
+  const body = rows
     .map((o) => [`**${o.name}**`, `  Slug: ${o.slug}`, `  Domain: ${o.domain ?? "N/A"}`].join("\n"))
     .join("\n\n");
 
-  return text(result);
+  return paginatedText({
+    body,
+    noun: "organizations",
+    pagination,
+    returned: rows.length,
+    totalItems,
+  });
 }
 
 // ── get_organization ─────────────────────────────────────────────────
@@ -1272,8 +1322,10 @@ async function renderSourceDetail(
 
 export async function listProducts(
   db: D1Db,
-  params: { organization?: string },
+  params: { organization?: string } & McpPaginationInput,
 ): Promise<ToolResult> {
+  const pagination = parseMcpPagination(params);
+
   let orgId: string | undefined;
   if (params.organization) {
     const org = await findOrg(db, params.organization);
@@ -1281,23 +1333,32 @@ export async function listProducts(
     orgId = org.id;
   }
 
-  const rows = await db.all<{
-    name: string;
-    slug: string;
-    url: string | null;
-    description: string | null;
-    orgSlug: string | null;
-  }>(sql`
-    SELECT p.name, p.slug, p.url, p.description, o.slug as orgSlug
-    FROM products p
-    LEFT JOIN organizations o ON o.id = p.org_id
-    ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
-    ORDER BY p.name
-  `);
+  const [rows, totalRow] = await Promise.all([
+    db.all<{
+      name: string;
+      slug: string;
+      url: string | null;
+      description: string | null;
+      orgSlug: string | null;
+    }>(sql`
+      SELECT p.name, p.slug, p.url, p.description, o.slug as orgSlug
+      FROM products p
+      LEFT JOIN organizations o ON o.id = p.org_id
+      ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
+      ORDER BY p.name, p.id
+      LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
+    `),
+    db.all<{ n: number }>(sql`
+      SELECT COUNT(*) as n
+      FROM products p
+      ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
+    `),
+  ]);
 
-  if (rows.length === 0) return text("No products found.");
+  const totalItems = Number(totalRow[0]?.n ?? 0);
+  if (totalItems === 0) return text("No products found.");
 
-  const result = rows
+  const body = rows
     .map((p) => {
       const coord = p.orgSlug ? `${p.orgSlug}/${p.slug}` : p.slug;
       const parts = [`**${p.name}**`, `  Slug: ${coord}`, `  Organization: ${p.orgSlug ?? "N/A"}`];
@@ -1307,7 +1368,7 @@ export async function listProducts(
     })
     .join("\n\n");
 
-  return text(result);
+  return paginatedText({ body, noun: "products", pagination, returned: rows.length, totalItems });
 }
 
 // ── get_product ──────────────────────────────────────────────────────
@@ -1397,8 +1458,10 @@ type CatalogEntry = SearchCatalogHit & {
 
 export async function listCatalog(
   db: D1Db,
-  params: { organization?: string },
+  params: { organization?: string } & McpPaginationInput,
 ): Promise<ToolResult> {
+  const pagination = parseMcpPagination(params);
+
   let orgId: string | undefined;
   if (params.organization) {
     const org = await findOrg(db, params.organization);
@@ -1421,7 +1484,7 @@ export async function listCatalog(
       FROM products p
       LEFT JOIN organizations o ON o.id = p.org_id
       ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
-      ORDER BY p.name
+      ORDER BY p.name, p.slug
     `),
     db.all<{
       slug: string;
@@ -1439,7 +1502,7 @@ export async function listCatalog(
       WHERE s.product_id IS NULL
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
         ${orgId ? sql`AND s.org_id = ${orgId}` : sql``}
-      ORDER BY s.name
+      ORDER BY s.name, s.slug
     `),
   ]);
 
@@ -1472,11 +1535,23 @@ export async function listCatalog(
     ),
   ];
 
-  entries.sort((a, b) => a.name.localeCompare(b.name));
+  // kind + slug tiebreakers keep page boundaries stable when product and
+  // source entries share a name (or two products under different orgs do).
+  entries.sort(
+    (a, b) =>
+      a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind) || a.slug.localeCompare(b.slug),
+  );
 
-  if (entries.length === 0) return text("No catalog entries found.");
+  // Catalog merge happens in JS because products + standalone sources are two
+  // tables with different column shapes; UNION ALL with a uniform projection
+  // would obscure the discriminator. Acceptable because the catalog stays
+  // small per org (tens of rows in practice).
+  const totalItems = entries.length;
+  if (totalItems === 0) return text("No catalog entries found.");
 
-  const result = entries
+  const pageEntries = slicePage(entries, pagination);
+
+  const body = pageEntries
     .map((e) => {
       const coord = e.orgSlug ? `${e.orgSlug}/${e.slug}` : e.slug;
       const parts = [`**${e.name}** _(${e.kind})_`, `  Slug: ${coord}`];
@@ -1492,7 +1567,13 @@ export async function listCatalog(
     })
     .join("\n\n");
 
-  return text(result);
+  return paginatedText({
+    body,
+    noun: "catalog entries",
+    pagination,
+    returned: pageEntries.length,
+    totalItems,
+  });
 }
 
 // ── get_catalog_entry ────────────────────────────────────────────────

@@ -24,6 +24,7 @@ import {
   getOrganization,
   getLatestReleases,
   listSources,
+  listOrganizations,
   listProducts,
   search,
 } from "../../workers/mcp/src/tools.js";
@@ -632,6 +633,97 @@ describe("get_organization (round-trippable entity coordinates)", () => {
     const text = resultText(await getOrganization(asD1(fixture.db), { identifier: org.id }));
     // Same record reaches the same renderer regardless of identifier shape.
     expect(text).toContain("Vercel");
+  });
+});
+
+describe("list_* pagination", () => {
+  let fixture: TestDatabase;
+
+  beforeAll(() => {
+    fixture = createTestDb();
+  });
+  afterAll(() => {
+    fixture.cleanup();
+  });
+  beforeEach(async () => {
+    clearAllTables(fixture.db);
+    await seed(fixture.db);
+  });
+
+  // The shared seed gives us 2 orgs / 2 products / 3 sources / 3 catalog
+  // entries. Limits below the total are enough to exercise the footer + slice
+  // logic across all four list_* tools without growing the fixture.
+
+  it("list_sources omits the footer when the page covers the total", async () => {
+    const text = resultText(await listSources(asD1(fixture.db), {}));
+    expect(text).not.toContain("Page ");
+    expect(text).toContain("vercel/next-js");
+    expect(text).toContain("anthropic/anthropic-releases");
+  });
+
+  it("list_sources renders a footer that echoes the active limit so paging is self-contained", async () => {
+    const text = resultText(await listSources(asD1(fixture.db), { limit: 2 }));
+    expect(text).toContain("Page 1 of 2 · Showing 2 of 3 sources.");
+    expect(text).toContain("Pass `page: 2, limit: 2` to continue.");
+  });
+
+  it("list_sources page=2 returns the tail and drops the next-page hint", async () => {
+    const text = resultText(await listSources(asD1(fixture.db), { limit: 2, page: 2 }));
+    expect(text).toContain("Page 2 of 2 · Showing 1 of 3 sources.");
+    expect(text).not.toContain("Pass `page: 3");
+  });
+
+  it("list_sources reports 'no sources on this page' beyond the last page", async () => {
+    const text = resultText(await listSources(asD1(fixture.db), { limit: 2, page: 99 }));
+    expect(text).toContain("No sources on this page.");
+    expect(text).toContain("Page 99 of 2 · Showing 0 of 3 sources.");
+  });
+
+  it("list_sources past-end on a single-page result still shows the footer for context", async () => {
+    // page=2 limit=50 against 3 rows: totalPages=1, but the caller asked for
+    // page 2 — we owe them context, not a bare "no entries on this page".
+    const text = resultText(await listSources(asD1(fixture.db), { page: 2 }));
+    expect(text).toContain("No sources on this page.");
+    expect(text).toContain("Page 2 of 1 · Showing 0 of 3 sources.");
+  });
+
+  it("list_products paginates products with a single-row limit", async () => {
+    const text = resultText(await listProducts(asD1(fixture.db), { limit: 1 }));
+    expect(text).toContain("Page 1 of 2 · Showing 1 of 2 products.");
+    expect(text).toContain("Pass `page: 2, limit: 1` to continue.");
+  });
+
+  it("list_organizations paginates orgs with a single-row limit", async () => {
+    const text = resultText(await listOrganizations(asD1(fixture.db), { limit: 1 }));
+    expect(text).toContain("Page 1 of 2 · Showing 1 of 2 organizations.");
+    // Filter-respecting count: query that matches one row should report 1 of 1
+    // and skip the footer (single page).
+    const filtered = resultText(
+      await listOrganizations(asD1(fixture.db), { query: "Vercel", limit: 1 }),
+    );
+    expect(filtered).not.toContain("Page ");
+    expect(filtered).toContain("**Vercel**");
+  });
+
+  it("list_catalog paginates merged products + standalone sources", async () => {
+    const text = resultText(await listCatalog(asD1(fixture.db), { limit: 2 }));
+    expect(text).toContain("Page 1 of 2 · Showing 2 of 3 catalog entries.");
+    expect(text).toContain("Pass `page: 2, limit: 2` to continue.");
+  });
+
+  it("list_catalog scopes the total to the org filter", async () => {
+    const text = resultText(
+      await listCatalog(asD1(fixture.db), { organization: "anthropic", limit: 1 }),
+    );
+    // Anthropic seed contains exactly one entry — no pagination footer.
+    expect(text).not.toContain("Page ");
+    expect(text).toContain("anthropic/anthropic-releases");
+  });
+
+  it("list_sources empty result still returns the no-content message", async () => {
+    clearAllTables(fixture.db);
+    const text = resultText(await listSources(asD1(fixture.db), {}));
+    expect(text).toBe("No sources indexed yet.");
   });
 });
 

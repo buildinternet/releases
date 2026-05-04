@@ -83,10 +83,33 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "list_organizations",
         title: "List organizations",
         description:
-          "List all organizations tracked in the releases.sh registry, with release counts and activity.",
-        inputSchema: { type: "object", properties: {} },
+          "List all organizations tracked in the releases.sh registry, with release counts and activity. Returns the canonical `{ items, pagination }` envelope so callers can ask for the next slice via `page`.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            page: {
+              type: "integer",
+              minimum: 1,
+              default: 1,
+              description: "1-based page number. Defaults to 1.",
+            },
+            limit: {
+              type: "integer",
+              minimum: 1,
+              maximum: 500,
+              description: "Entries per page (1–500). Defaults to the API's page size.",
+            },
+          },
+        },
         annotations: { readOnlyHint: true },
-        execute: () => apiFetch("/v1/orgs"),
+        execute: async (input) => {
+          const qs = new URLSearchParams();
+          if (typeof input.page === "number" && input.page > 0) qs.set("page", String(input.page));
+          if (typeof input.limit === "number" && input.limit > 0)
+            qs.set("limit", String(input.limit));
+          const suffix = qs.toString();
+          return apiFetch(`/v1/orgs${suffix ? `?${suffix}` : ""}`);
+        },
       },
       { signal },
     );
