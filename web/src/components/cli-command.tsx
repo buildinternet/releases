@@ -9,7 +9,7 @@ type CliCommandProps =
 
 export function CliCommand({ identifier, command, className }: CliCommandProps) {
   const { copied, copy } = useCopyToClipboard();
-  const resolved = command ?? `npx @buildinternet/releases show ${identifier}`;
+  const resolved = command ?? `npx @buildinternet/releases get ${identifier}`;
 
   return (
     <div

@@ -45,7 +45,7 @@ For orgs with `scrape` or `agent` sources, skim the playbook before fetching —
 releases admin playbook <slug>
 ```
 
-Skip this for orgs with only `feed` and `github` sources. Check source types with `releases admin org show <slug>`.
+Skip this for orgs with only `feed` and `github` sources. Check source types with `releases admin org get <slug>`.
 
 ### Useful flags on `admin source fetch`
 

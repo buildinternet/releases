@@ -48,7 +48,7 @@ Before dispatching agents, collect source metadata for the target orgs. Each age
 ```bash
 for org in <slugs>; do
   echo "=== $org ==="
-  bun src/index.ts admin org show "$org" --json 2>/dev/null | bun -e "
+  bun src/index.ts admin org get "$org" --json 2>/dev/null | bun -e "
     const d = JSON.parse(await Bun.stdin.text());
     const products = d.products?.map(p => p.name + ' (' + p.slug + ')').join(', ') || 'none';
     console.log('Products:', products);
@@ -118,7 +118,7 @@ NOTES
 Verify with: releases admin playbook {slug} 2>/dev/null | tail -20
 ```
 
-The playbook header regenerates automatically after any source add/edit/remove, and the `--notes-file` PATCH seeds a fresh header on first write — no separate regenerate step needed.
+The playbook header regenerates automatically after any source create/update/delete, and the `--notes-file` PATCH seeds a fresh header on first write — no separate regenerate step needed.
 
 ### Verified prompt template
 
@@ -130,7 +130,7 @@ Playbooks are **skills for agents that will fetch from this org**. Write in impe
 
 ## Step 1: Gather data (run all of these)
 
-bun src/index.ts admin org show {slug} --json 2>/dev/null
+bun src/index.ts admin org get {slug} --json 2>/dev/null
 {for each source:}
 bun src/index.ts list {source-slug} --json 2>/dev/null
 bun src/index.ts admin source fetch-log {source-slug} --json 2>/dev/null
