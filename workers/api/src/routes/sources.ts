@@ -67,6 +67,9 @@ import { logEvent } from "@releases/lib/log-event";
 
 export const sourceRoutes = new Hono<Env>();
 
+const SOURCE_TYPES = ["github", "scrape", "feed", "agent"] as const;
+type SourceType = (typeof SOURCE_TYPES)[number];
+
 sourceRoutes.get("/sources", async (c) => {
   const db = createDb(c.env.DB);
   const independent = c.req.query("independent") === "true";
@@ -187,6 +190,13 @@ sourceRoutes.get("/sources", async (c) => {
     );
   }
 
+  const rawType = c.req.query("type");
+  if (rawType && (SOURCE_TYPES as readonly string[]).includes(rawType)) {
+    conditions.push(eq(sources.type, rawType as SourceType));
+  }
+
+  const staleOnly = parseBoolParam(c.req.query("stale"));
+
   const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
   const wantsEnvelope = c.req.query("envelope") === "true";
 
@@ -194,8 +204,10 @@ sourceRoutes.get("/sources", async (c) => {
   const dir = parseSortDir(c.req.query("dir"), "asc");
 
   const [rows, totalItems] = await Promise.all([
-    getSourcesWithStats(db, whereClause, { limit, offset, sort, dir, includeHidden }),
-    wantsEnvelope ? countSourcesForList(db, whereClause, { includeHidden }) : Promise.resolve(null),
+    getSourcesWithStats(db, whereClause, { limit, offset, sort, dir, includeHidden, staleOnly }),
+    wantsEnvelope
+      ? countSourcesForList(db, whereClause, { includeHidden, staleOnly })
+      : Promise.resolve(null),
   ]);
 
   // Derive page from offset when caller pre-computed it — keeps the envelope's

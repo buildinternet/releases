@@ -1,6 +1,10 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import type { D1Db } from "../db.js";
+
+/** Mirrored in web/src/app/status/dashboard.tsx as STALE_THRESHOLD_DAYS. */
+export const SOURCE_STALE_DAYS = 90;
 
 export type SourceListRow = {
   id: string;
@@ -40,15 +44,24 @@ export type SourceListRow = {
 export async function countSourcesForList(
   db: D1Db,
   whereClause?: SQL,
-  opts: { includeHidden?: boolean } = {},
+  opts: { includeHidden?: boolean; staleOnly?: boolean } = {},
 ): Promise<number> {
   const fromView = opts.includeHidden ? sql`sources_active` : sql`sources_visible`;
+  const staleJoin = opts.staleOnly
+    ? sql`LEFT JOIN (SELECT r.source_id, MAX(r.published_at) AS latest_date FROM releases_visible r GROUP BY r.source_id) rs ON rs.source_id = sources.id`
+    : sql``;
+  const staleWhere = opts.staleOnly
+    ? sql`(rs.latest_date IS NULL OR rs.latest_date < ${daysAgoIso(SOURCE_STALE_DAYS)})`
+    : null;
+  const combinedWhere =
+    whereClause && staleWhere ? sql`${whereClause} AND ${staleWhere}` : (whereClause ?? staleWhere);
   const rows = await db.all<{ total: number }>(sql`
     SELECT COUNT(*) AS total
     FROM ${fromView} sources
     LEFT JOIN organizations_active organizations ON organizations.id = sources.org_id
     LEFT JOIN products_active products ON products.id = sources.product_id
-    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
+    ${staleJoin}
+    ${combinedWhere ? sql`WHERE ${combinedWhere}` : sql``}
   `);
   return rows[0]?.total ?? 0;
 }
@@ -96,12 +109,18 @@ export async function getSourcesWithStats(
     sort?: SourceSortField;
     dir?: SortDir;
     includeHidden?: boolean;
+    staleOnly?: boolean;
   },
 ): Promise<SourceListRow[]> {
   const limitClause = opts?.limit != null ? sql`LIMIT ${opts.limit}` : sql``;
   const offsetClause = opts?.offset != null && opts.offset > 0 ? sql`OFFSET ${opts.offset}` : sql``;
   const orderBy = sourceOrderBy(opts?.sort ?? "name", opts?.dir ?? "asc");
   const fromView = opts?.includeHidden ? sql`sources_active` : sql`sources_visible`;
+  const staleWhere = opts?.staleOnly
+    ? sql`(rs.latest_date IS NULL OR rs.latest_date < ${daysAgoIso(SOURCE_STALE_DAYS)})`
+    : null;
+  const combinedWhere =
+    whereClause && staleWhere ? sql`${whereClause} AND ${staleWhere}` : (whereClause ?? staleWhere);
   return db.all<SourceListRow>(sql`
     SELECT
       sources.*,
@@ -130,7 +149,7 @@ export async function getSourcesWithStats(
       FROM releases_visible r
       GROUP BY r.source_id
     ) rs ON rs.source_id = sources.id
-    ${whereClause ? sql`WHERE ${whereClause}` : sql``}
+    ${combinedWhere ? sql`WHERE ${combinedWhere}` : sql``}
     ORDER BY ${orderBy}
     ${limitClause} ${offsetClause}
   `);
