@@ -37,12 +37,12 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
     orgTemplate,
     {
       description:
-        "Organization profile — accounts, tags, sources, products, aliases, and overview preview. URI: releases://org/{orgSlug}. Not enumerable; discover slugs via completion.",
+        "Organization profile — accounts, tags, sources, products, aliases, and overview preview. URI: releases://org/{orgSlug}. The `{orgSlug}` segment also accepts an org_ id, domain, or account handle. Not enumerable; completion offers slugs.",
       mimeType: "text/markdown",
     },
     async (uri, variables) => {
-      const slug = String(variables.orgSlug);
-      return toMarkdownContents(uri, await getOrganization(db, { identifier: slug }), mediaOrigin);
+      const identifier = String(variables.orgSlug);
+      return toMarkdownContents(uri, await getOrganization(db, { identifier }), mediaOrigin);
     },
   );
 
@@ -58,12 +58,12 @@ export function registerResources(server: McpServer, db: D1Db, mediaOrigin: stri
     catalogTemplate,
     {
       description:
-        "Catalog entry — a product or standalone source, folded into one addressable surface. URI: releases://catalog/{slug}. Completion spans both product and source slugs. Not enumerable; discover slugs via completion.",
+        "Catalog entry — a product or standalone source, folded into one addressable surface. URI: releases://catalog/{slug}. The `{slug}` segment also accepts a prod_ id, src_ id, or org-scoped coordinate (e.g. 'vercel/nextjs'). Completion spans both product and source slugs.",
       mimeType: "text/markdown",
     },
     async (uri, variables) => {
-      const slug = String(variables.slug);
-      return toMarkdownContents(uri, await getCatalogEntry(db, { identifier: slug }), mediaOrigin);
+      const identifier = String(variables.slug);
+      return toMarkdownContents(uri, await getCatalogEntry(db, { identifier }), mediaOrigin);
     },
   );
 

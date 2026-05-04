@@ -68,7 +68,9 @@ function text(t: string): ToolResult {
 // ── Shared helpers ───────────────────────────────────────────────────
 
 async function findOrg(db: D1Db, identifier: string) {
-  // Single query: slug, domain, name (case-insensitive), or domain alias
+  const id = identifier.trim();
+  // Single query: org_ id, slug, domain, name (case-insensitive), domain alias, or account handle.
+  // PK lookup on o.id is an indexed fast-path; LIMIT 1 stops evaluation on first match.
   const rows = await db.all<{
     id: string;
     name: string;
@@ -79,17 +81,17 @@ async function findOrg(db: D1Db, identifier: string) {
   }>(sql`
     SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
     FROM organizations o
-    WHERE o.slug = ${identifier} OR o.domain = ${identifier} OR LOWER(o.name) = LOWER(${identifier})
+    WHERE o.id = ${id} OR o.slug = ${id} OR o.domain = ${id} OR LOWER(o.name) = LOWER(${id})
     UNION
     SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
     FROM organizations o
     JOIN domain_aliases da ON da.org_id = o.id
-    WHERE da.domain = ${identifier}
+    WHERE da.domain = ${id}
     UNION
     SELECT o.id, o.name, o.slug, o.domain, o.description, o.category
     FROM organizations o
     JOIN org_accounts oa ON oa.org_id = o.id
-    WHERE oa.handle = ${identifier}
+    WHERE oa.handle = ${id}
     LIMIT 1
   `);
   return rows.length > 0 ? rows[0] : null;

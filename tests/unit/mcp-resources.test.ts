@@ -132,7 +132,7 @@ describe("MCP resources + completion", () => {
         argument: { name: "sourceSlug", value: "nextjs" },
       });
       const values = result.completion.values.toSorted();
-      expect(values).toEqual(["nextjs-canary", "nextjs-releases"]);
+      expect(values).toEqual(["vercel/nextjs-canary", "vercel/nextjs-releases"]);
     } finally {
       await link.close();
     }
@@ -190,7 +190,7 @@ describe("MCP resources + completion", () => {
         ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
         argument: { name: "productSlug", value: "base" },
       });
-      expect(result.completion.values.toSorted()).toEqual(["supabase-product"]);
+      expect(result.completion.values.toSorted()).toEqual(["supabase/supabase-product"]);
     } finally {
       await link.close();
     }
@@ -204,7 +204,37 @@ describe("MCP resources + completion", () => {
         ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
         argument: { name: "productSlug", value: "turbo" },
       });
-      expect(result.completion.values).toEqual(["turborepo", "alphaturbo"]);
+      expect(result.completion.values).toEqual(["vercel/turborepo", "vercel/alphaturbo"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("narrows to one org when input is coordinate-form", async () => {
+    // "vercel/" without a slug needle returns every product under vercel.
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
+        argument: { name: "productSlug", value: "vercel/" },
+      });
+      const values = result.completion.values.toSorted();
+      expect(values).toEqual(["vercel/alphaturbo", "vercel/nextjs", "vercel/turborepo"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("filters by org segment + slug prefix when input is `org/slug-prefix`", async () => {
+    // "vercel/turbo" should match turborepo and alphaturbo under vercel only.
+    const link = await linkResources(fixture.db);
+    try {
+      const result = await link.client.complete({
+        ref: { type: "ref/resource", uri: "releases://product/{productSlug}" },
+        argument: { name: "productSlug", value: "vercel/turbo" },
+      });
+      // Order: prefix match (turborepo) before substring match (alphaturbo).
+      expect(result.completion.values).toEqual(["vercel/turborepo", "vercel/alphaturbo"]);
     } finally {
       await link.close();
     }

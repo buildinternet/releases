@@ -312,7 +312,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         organization: z
           .string()
           .optional()
-          .describe("Scope release results to sources belonging to this organization"),
+          .describe(
+            "Scope release results to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
+          ),
         entity: z
           .string()
           .optional()
@@ -362,7 +364,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         organization: z
           .string()
           .optional()
-          .describe("Filter to sources belonging to this organization"),
+          .describe(
+            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
+          ),
         type: z
           .enum(["feature", "rollup"])
           .optional()
@@ -426,7 +430,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         organization: z
           .string()
           .optional()
-          .describe("Filter to sources belonging to this organization"),
+          .describe(
+            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
+          ),
         type: z
           .enum(["feature", "rollup"])
           .optional()
@@ -458,7 +464,7 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         organization: z
           .string()
           .optional()
-          .describe("Organization slug, domain, name, or org_ id to scope to"),
+          .describe("Organization to scope to. Accepts an org_ id, slug, domain, or name."),
       },
     },
     async (params) => listCatalog(db, params),
@@ -520,7 +526,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         organization: z
           .string()
           .optional()
-          .describe("Filter to sources belonging to this organization"),
+          .describe(
+            "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
+          ),
       },
     },
     async (params) => listSources(db, params),
@@ -549,7 +557,11 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       description:
         "Get detailed information about a single organization — accounts, tags, sources, products, aliases. When an AI-generated overview exists the response includes a short preview; pass `include_overview: true` to inline the full briefing (with a stale warning if it's older than 30 days).",
       inputSchema: {
-        identifier: z.string().describe("Organization slug, domain, name, or account handle"),
+        identifier: z
+          .string()
+          .describe(
+            "Organization identifier. Accepts an org_ id, slug, domain, name, or account handle.",
+          ),
         include_overview: z
           .boolean()
           .optional()
@@ -584,7 +596,9 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         organization: z
           .string()
           .optional()
-          .describe("Organization slug, domain, name, or org_ id (e.g. 'vercel')"),
+          .describe(
+            "Organization to scope to. Accepts an org_ id, slug, domain, or name (e.g. 'vercel').",
+          ),
       },
     },
     async (params) => listProducts(db, params),

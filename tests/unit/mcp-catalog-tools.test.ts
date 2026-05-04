@@ -622,6 +622,17 @@ describe("get_organization (round-trippable entity coordinates)", () => {
     expect(text).toContain("vercel/next-js");
     expect(text).toContain("vercel/turborepo-src");
   });
+
+  it("resolves a typed org_ id via the PK fast-path", async () => {
+    const [org] = await fixture.db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, "vercel"))
+      .limit(1);
+    const text = resultText(await getOrganization(asD1(fixture.db), { identifier: org.id }));
+    // Same record reaches the same renderer regardless of identifier shape.
+    expect(text).toContain("Vercel");
+  });
 });
 
 describe("get_latest_releases (round-trippable source coordinates)", () => {

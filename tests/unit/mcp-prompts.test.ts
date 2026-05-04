@@ -136,7 +136,9 @@ describe("MCP prompts + completion", () => {
         argument: { name: "product", value: "next" },
       });
       const values = result.completion.values.toSorted();
-      expect(values).toEqual(["nextjs", "nextjs-canary"]);
+      // Catalog completion returns coordinates so the interpolated tool call lands on
+      // an unambiguous product (per-org slug uniqueness, #690).
+      expect(values).toEqual(["vercel/nextjs", "vercel/nextjs-canary"]);
     } finally {
       await link.close();
     }
@@ -151,7 +153,7 @@ describe("MCP prompts + completion", () => {
         ref: { type: "ref/prompt", name: "whats_new" },
         argument: { name: "product", value: "repo" },
       });
-      expect(result.completion.values).toEqual(["turborepo"]);
+      expect(result.completion.values).toEqual(["vercel/turborepo"]);
     } finally {
       await link.close();
     }
@@ -165,6 +167,31 @@ describe("MCP prompts + completion", () => {
         argument: { name: "organization", value: "sup" },
       });
       expect(result.completion.values).toEqual(["supabase"]);
+    } finally {
+      await link.close();
+    }
+  });
+
+  it("interpolates coordinate-form completions into the prompt body unchanged", async () => {
+    // Regression: completion previously returned bare slugs that downstream
+    // tools (summarize_changes / compare_products / get_latest_releases /
+    // get_catalog_entry) reject with `bare_slug_rejected`. Coordinates round-
+    // trip cleanly, so the prompt body must preserve them verbatim.
+    const link = await linkPrompts(fixture.db, true);
+    try {
+      const completion = await link.client.complete({
+        ref: { type: "ref/prompt", name: "whats_new" },
+        argument: { name: "product", value: "next" },
+      });
+      const [coordinate] = completion.completion.values;
+      expect(coordinate).toMatch(/^[a-z0-9-]+\/[a-z0-9-]+$/);
+
+      const prompt = await link.client.getPrompt({
+        name: "whats_new",
+        arguments: { product: coordinate, days: "7" },
+      });
+      const text = (prompt.messages[0].content as { text: string }).text;
+      expect(text).toContain(coordinate);
     } finally {
       await link.close();
     }

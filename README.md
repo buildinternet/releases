@@ -121,6 +121,8 @@ VS Code, Windsurf, Zed, and other stdio-only clients:
 
 **MCP Tools:**
 
+> Every tool that takes an org / product / source identifier accepts the typed ID (`org_…`, `prod_…`, `src_…`) interchangeably with the slug. Source and product params also accept an `org/slug` coordinate. Releases are addressed by id only (`rel_…` or a bare 21-char nanoid) — there is no release-slug shape.
+
 | Tool                  | Description                                                                                                                                                                                                                                                                                                                                   |
 | --------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `search`              | Unified search across orgs, catalog (products + standalone sources), and release content. Pass `type: ("orgs"\|"catalog"\|"releases")[]` to skip sections; `entity` to scope releases                                                                                                                                                         |
@@ -145,7 +147,7 @@ Every tool carries MCP annotations (`readOnlyHint`, `idempotentHint`, `openWorld
 | `releases://product/{productSlug}` | Product detail rendered as Markdown. Same completion behavior.                                               |
 | `releases://source/{sourceSlug}`   | Source detail rendered as Markdown. Same completion behavior.                                                |
 
-All three templates are completion-only — `resources/list` returns empty so the catalog scales without silent truncation. Type a prefix or substring and the client will suggest matching slugs.
+All three templates are completion-only — `resources/list` returns empty so the catalog scales without silent truncation. Type a prefix or substring and the client will suggest matching slugs. The URI segment also accepts a typed ID (`org_…`, `prod_…`, `src_…`) when you have one — completion just doesn't surface IDs because they aren't browseable.
 
 **MCP Prompts** (priming conversation starters):
 

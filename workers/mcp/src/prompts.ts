@@ -35,7 +35,11 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
         "Summarize recent changes for a product over the last N days. Uses the product's indexed releases.",
       argsSchema: {
         product: completable(
-          z.string().describe("Product slug (e.g. 'nextjs', 'supabase-studio')"),
+          z
+            .string()
+            .describe(
+              "Product identifier — `prod_…` id or an `org/slug` coordinate (e.g. 'vercel/nextjs'). Completion returns coordinates so downstream tools accept them directly.",
+            ),
           (value) => completeProductSlug(db, value),
         ),
         days: z.string().optional().describe("Look-back window in days (default 30)"),
@@ -67,11 +71,21 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
       description:
         "Compare recent releases between two products to surface divergence and overlap in features, fixes, and breaking changes.",
       argsSchema: {
-        productA: completable(z.string().describe("First product slug"), (value) =>
-          completeProductSlug(db, value),
+        productA: completable(
+          z
+            .string()
+            .describe(
+              "First product — `prod_…` id or `org/slug` coordinate. Completion returns coordinates.",
+            ),
+          (value) => completeProductSlug(db, value),
         ),
-        productB: completable(z.string().describe("Second product slug"), (value) =>
-          completeProductSlug(db, value),
+        productB: completable(
+          z
+            .string()
+            .describe(
+              "Second product — `prod_…` id or `org/slug` coordinate. Completion returns coordinates.",
+            ),
+          (value) => completeProductSlug(db, value),
         ),
         days: z.string().optional().describe("Look-back window in days (default 30)"),
       },
@@ -103,7 +117,11 @@ export function registerPrompts(server: McpServer, db: D1Db, opts: { aiTools: bo
         "Pull the AI-generated overview for an org plus its most recent releases — a quick status briefing.",
       argsSchema: {
         organization: completable(
-          z.string().describe("Organization slug, domain, or name"),
+          z
+            .string()
+            .describe(
+              "Organization identifier. Accepts an org_ id, slug, domain, name, or account handle.",
+            ),
           (value) => completeOrgSlug(db, value),
         ),
         days: z

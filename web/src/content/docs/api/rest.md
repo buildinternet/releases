@@ -58,7 +58,7 @@ List organizations with source counts and metadata.
 
 ### `GET /v1/orgs/:slug`
 
-Get organization details including sources, products, and release metrics.
+Get organization details including sources, products, and release metrics. The `:slug` segment also accepts an `org_…` typed ID or a registered domain alias — the resolver picks whichever shape was passed. Name and account-handle lookup is MCP-only (`get_organization`); they aren't matched here.
 
 ### `GET /v1/orgs/:slug/accounts`
 

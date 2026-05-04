@@ -96,19 +96,22 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "get_organization",
         title: "Get organization",
         description:
-          "Fetch detailed information about an organization by slug (e.g. 'vercel', 'anthropic'), including its sources, products, and AI-generated overview.",
+          "Fetch detailed information about an organization, including its sources, products, and AI-generated overview. Accepts an `org_…` id, slug (e.g. 'vercel', 'anthropic'), domain, name, or account handle.",
         inputSchema: {
           type: "object",
           properties: {
-            slug: { type: "string", description: "Organization slug." },
+            identifier: {
+              type: "string",
+              description: "Organization identifier: `org_…` id, slug, domain, name, or handle.",
+            },
           },
-          required: ["slug"],
+          required: ["identifier"],
         },
         annotations: { readOnlyHint: true },
         execute: async (input) => {
-          const slug = String(input.slug ?? "").trim();
-          if (!slug) throw new Error("`slug` is required");
-          return apiFetch(`/v1/orgs/${encodeURIComponent(slug)}`);
+          const identifier = String(input.identifier ?? "").trim();
+          if (!identifier) throw new Error("`identifier` is required");
+          return apiFetch(`/v1/orgs/${encodeURIComponent(identifier)}`);
         },
       },
       { signal },
