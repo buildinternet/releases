@@ -197,14 +197,17 @@ describe("PollAndFetchWorkflow", () => {
     expect(invalidationCalls).toHaveLength(0);
   });
 
-  it("source not found: NonRetryableError, no retries", async () => {
+  it("source not found: ends cleanly, no retries, no failure row", async () => {
     const db = mkDb();
     const env = mkEnv({ _drizzleOverride: db });
     const { records, thrown } = await runWorkflow(env, "src_nonexistent");
     const load = records.find((r) => r.name === "load-source");
     expect(load?.ok).toBe(false);
     expect(load?.attempts).toBe(1);
-    expect(thrown).toBeInstanceOf(Error);
+    // Deleted-source race ends in `Completed` rather than `Errored` so the
+    // Workflows control plane doesn't surface a synthetic terminal failure
+    // (see issue #713). The catch block matches the sentinel and returns.
+    expect(thrown).toBeUndefined();
   });
 
   it("CRON_ENABLED=false: short-circuits before load-source", async () => {

@@ -169,26 +169,32 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
         skipBackfill,
       });
     } catch (err) {
-      const isDeletedSourceRace =
-        err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL;
-      if (!isDeletedSourceRace) {
-        const errorMsg = err instanceof Error ? err.message : String(err);
-        logEvent("error", {
+      // Source deleted between dispatch and workflow start — expected race.
+      // Return cleanly so the instance ends `Completed` rather than `Errored`.
+      if (err instanceof NonRetryableError && err.message === SOURCE_DELETED_SENTINEL) {
+        logEvent("info", {
           component: "onboard-workflow",
-          event: "step-failed",
+          event: "source-deleted-race",
           sourceId,
-          step: currentStep,
-          err,
         });
-        await recordWorkflowFailure(db, {
-          idPrefix: "wf-fail-onboard-",
-          scheduledTime,
-          sourceId,
-          stepName: currentStep,
-          error: errorMsg,
-          logTag: "onboard-workflow",
-        });
+        return;
       }
+      const errorMsg = err instanceof Error ? err.message : String(err);
+      logEvent("error", {
+        component: "onboard-workflow",
+        event: "step-failed",
+        sourceId,
+        step: currentStep,
+        err,
+      });
+      await recordWorkflowFailure(db, {
+        idPrefix: "wf-fail-onboard-",
+        scheduledTime,
+        sourceId,
+        stepName: currentStep,
+        error: errorMsg,
+        logTag: "onboard-workflow",
+      });
       throw err;
     }
   }

@@ -152,14 +152,17 @@ describe("OnboardSourceWorkflow", () => {
     expect(stepNames).not.toContain("backfill-fetch");
   });
 
-  it("source deleted between dispatch and run: NonRetryableError, no failure row", async () => {
+  it("source deleted between dispatch and run: ends cleanly, no failure row", async () => {
     const { db } = mkDb({ type: "feed", feedUrl: "https://a.test/feed" });
     globalThis.fetch = mkFetch({}).impl;
     const env = mkEnv({ _drizzleOverride: db, ENTITIES_INDEX: mkVectorize().index });
 
     const { records, thrown } = await runWorkflow(env, { sourceId: "src_missing" });
-    expect(thrown).toBeDefined();
-    expect((thrown as Error).constructor.name).toBe("NonRetryableError");
+    // The workflow detects the deleted-source race in `load-source` and
+    // returns from the catch block. The Cloudflare runtime sees a clean
+    // return, so the instance ends in `Completed` rather than `Errored`
+    // (avoids a synthetic alert email — see issue #713).
+    expect(thrown).toBeUndefined();
 
     const loadStep = records.find((r) => r.name === "load-source");
     expect(loadStep?.ok).toBe(false);
