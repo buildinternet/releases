@@ -661,16 +661,16 @@ describe("list_* pagination", () => {
     expect(text).toContain("anthropic/anthropic-releases");
   });
 
-  it("list_sources renders a footer with `page: 2` hint when more pages exist", async () => {
+  it("list_sources renders a footer that echoes the active limit so paging is self-contained", async () => {
     const text = resultText(await listSources(asD1(fixture.db), { limit: 2 }));
     expect(text).toContain("Page 1 of 2 · Showing 2 of 3 sources.");
-    expect(text).toContain("Pass `page: 2` to continue.");
+    expect(text).toContain("Pass `page: 2, limit: 2` to continue.");
   });
 
   it("list_sources page=2 returns the tail and drops the next-page hint", async () => {
     const text = resultText(await listSources(asD1(fixture.db), { limit: 2, page: 2 }));
     expect(text).toContain("Page 2 of 2 · Showing 1 of 3 sources.");
-    expect(text).not.toContain("Pass `page: 3` to continue.");
+    expect(text).not.toContain("Pass `page: 3");
   });
 
   it("list_sources reports 'no sources on this page' beyond the last page", async () => {
@@ -679,10 +679,18 @@ describe("list_* pagination", () => {
     expect(text).toContain("Page 99 of 2 · Showing 0 of 3 sources.");
   });
 
+  it("list_sources past-end on a single-page result still shows the footer for context", async () => {
+    // page=2 limit=50 against 3 rows: totalPages=1, but the caller asked for
+    // page 2 — we owe them context, not a bare "no entries on this page".
+    const text = resultText(await listSources(asD1(fixture.db), { page: 2 }));
+    expect(text).toContain("No sources on this page.");
+    expect(text).toContain("Page 2 of 1 · Showing 0 of 3 sources.");
+  });
+
   it("list_products paginates products with a single-row limit", async () => {
     const text = resultText(await listProducts(asD1(fixture.db), { limit: 1 }));
     expect(text).toContain("Page 1 of 2 · Showing 1 of 2 products.");
-    expect(text).toContain("Pass `page: 2` to continue.");
+    expect(text).toContain("Pass `page: 2, limit: 1` to continue.");
   });
 
   it("list_organizations paginates orgs with a single-row limit", async () => {
@@ -700,7 +708,7 @@ describe("list_* pagination", () => {
   it("list_catalog paginates merged products + standalone sources", async () => {
     const text = resultText(await listCatalog(asD1(fixture.db), { limit: 2 }));
     expect(text).toContain("Page 1 of 2 · Showing 2 of 3 catalog entries.");
-    expect(text).toContain("Pass `page: 2` to continue.");
+    expect(text).toContain("Pass `page: 2, limit: 2` to continue.");
   });
 
   it("list_catalog scopes the total to the org filter", async () => {

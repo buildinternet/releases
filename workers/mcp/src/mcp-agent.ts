@@ -170,7 +170,7 @@ export interface CreateServerOptions {
 export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer({
     name: "releases",
-    version: "0.11.0",
+    version: "0.12.0",
   });
 
   const db = createDb(env.DB);

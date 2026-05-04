@@ -736,7 +736,7 @@ export async function listSources(
       FROM sources s
       LEFT JOIN organizations o ON o.id = s.org_id
       ${orgId ? sql`WHERE s.org_id = ${orgId}` : sql``}
-      ORDER BY s.name
+      ORDER BY s.name, s.id
       LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
     `),
     db.all<{ n: number }>(sql`
@@ -822,7 +822,7 @@ export async function listOrganizations(
     db.all<Row>(sql`
       SELECT ${distinctKw} o.name, o.slug, o.domain
       ${fromWhere}
-      ORDER BY o.name
+      ORDER BY o.name, o.slug
       LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
     `),
     distinct
@@ -1345,7 +1345,7 @@ export async function listProducts(
       FROM products p
       LEFT JOIN organizations o ON o.id = p.org_id
       ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
-      ORDER BY p.name
+      ORDER BY p.name, p.id
       LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
     `),
     db.all<{ n: number }>(sql`
@@ -1484,7 +1484,7 @@ export async function listCatalog(
       FROM products p
       LEFT JOIN organizations o ON o.id = p.org_id
       ${orgId ? sql`WHERE p.org_id = ${orgId}` : sql``}
-      ORDER BY p.name
+      ORDER BY p.name, p.slug
     `),
     db.all<{
       slug: string;
@@ -1502,7 +1502,7 @@ export async function listCatalog(
       WHERE s.product_id IS NULL
         AND (s.is_hidden = 0 OR s.is_hidden IS NULL)
         ${orgId ? sql`AND s.org_id = ${orgId}` : sql``}
-      ORDER BY s.name
+      ORDER BY s.name, s.slug
     `),
   ]);
 
@@ -1535,7 +1535,12 @@ export async function listCatalog(
     ),
   ];
 
-  entries.sort((a, b) => a.name.localeCompare(b.name));
+  // kind + slug tiebreakers keep page boundaries stable when product and
+  // source entries share a name (or two products under different orgs do).
+  entries.sort(
+    (a, b) =>
+      a.name.localeCompare(b.name) || a.kind.localeCompare(b.kind) || a.slug.localeCompare(b.slug),
+  );
 
   // Catalog merge happens in JS because products + standalone sources are two
   // tables with different column shapes; UNION ALL with a uniform projection

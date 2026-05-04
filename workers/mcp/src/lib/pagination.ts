@@ -44,8 +44,14 @@ export function parseMcpPagination(
   return { page, pageSize, offset: (page - 1) * pageSize };
 }
 
-// Returns the markdown footer line(s) when there's more than one page; null
-// when the result fits in a single page so the terse case stays terse.
+// Returns the markdown footer line(s) when the caller might want to keep
+// paging — multi-page results, or any case where they've asked for a page past
+// the only page (so they get context, not a bare "no entries"). Single-page
+// results on page 1 omit the footer so the terse case stays terse.
+//
+// The continuation hint echoes the caller's `limit` whenever it differs from
+// the default so a follow-up `page: N+1` call doesn't silently revert to 50
+// and shift the slice underfoot.
 export function renderPageFooter(opts: {
   pagination: McpPagination;
   returned: number;
@@ -60,8 +66,10 @@ export function renderPageFooter(opts: {
     totalItems,
   });
   const totalPages = meta.totalPages ?? 1;
-  if (totalPages <= 1) return null;
-  const nextHint = meta.hasMore ? `\nPass \`page: ${pagination.page + 1}\` to continue.` : "";
+  if (totalPages <= 1 && pagination.page <= 1) return null;
+  const nextHint = meta.hasMore
+    ? `\nPass \`page: ${pagination.page + 1}, limit: ${pagination.pageSize}\` to continue.`
+    : "";
   return `Page ${pagination.page} of ${totalPages} · Showing ${returned} of ${totalItems} ${noun}.${nextHint}`;
 }
 
