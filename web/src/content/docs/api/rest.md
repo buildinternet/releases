@@ -232,17 +232,17 @@ Materialized rows carry `discovery: "on_demand"` and `isHidden: true`. Embedding
 
 ### `GET /v1/lookups/source-by-slug`
 
-Resolve a bare source slug to its canonical org-scoped home. Returns `{sourceId, sourceSlug, orgSlug}`. Useful for old bookmarks and for clients that only have a slug after the bare `/v1/sources/:slug` path stopped accepting them (#698). When a slug exists under multiple orgs, the oldest match by `(createdAt, id)` wins — deterministic across calls. Carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT`; this is a 6-month migration aid, not a permanent shape.
+Resolve a bare source slug to its canonical org-scoped home. **Requires a Bearer token** — the `/v1/lookups/*` namespace is gated, unlike the rest of the read API. Returns `{sourceId, sourceSlug, orgSlug}`. Useful for old bookmarks and for clients that only have a slug after the bare `/v1/sources/:slug` path stopped accepting them (#698). When a slug exists under multiple orgs, the oldest match by `(createdAt, id)` wins — deterministic across calls. Carries `Sunset: Sun, 01 Nov 2026 00:00:00 GMT`; this is a 6-month migration aid, not a permanent shape.
 
 ```bash
-curl -H "Authorization: Bearer $RELEASED_API_KEY" \
+curl -H "Authorization: Bearer YOUR_KEY" \
   "https://api.releases.sh/v1/lookups/source-by-slug?slug=vercel-ai-sdk"
 # → {"sourceId":"src_…","sourceSlug":"vercel-ai-sdk","orgSlug":"vercel"}
 ```
 
 ### `GET /v1/lookups/product-by-slug`
 
-Same shape as the source resolver, but for products. Returns `{productId, productSlug, orgSlug}`. Same Sunset window.
+Same shape as the source resolver, but for products. Returns `{productId, productSlug, orgSlug}`. Same auth requirement and Sunset window.
 
 ### `GET /v1/related/releases`
 
