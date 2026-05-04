@@ -1,9 +1,10 @@
 import { Hono } from "hono";
-import { eq, and, or } from "drizzle-orm";
+import { eq, and, or, count, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { ignoredUrls, blockedUrls, organizations } from "@buildinternet/releases-core/schema";
 import { orgWhere } from "../utils.js";
 import type { Env } from "../index.js";
+import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 
 export const ignoreRoutes = new Hono<Env>();
 
@@ -26,8 +27,19 @@ ignoreRoutes.get("/orgs/:slug/ignored-urls", async (c) => {
     return c.json(row ?? null);
   }
 
-  const rows = await db.select().from(ignoredUrls).where(eq(ignoredUrls.orgId, org.id));
-  return c.json(rows);
+  const pagination = parseListPagination(new URL(c.req.url).searchParams);
+  const where = eq(ignoredUrls.orgId, org.id);
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select()
+      .from(ignoredUrls)
+      .where(where)
+      .orderBy(desc(ignoredUrls.ignoredAt), desc(ignoredUrls.id))
+      .limit(pagination.pageSize)
+      .offset(pagination.offset),
+    db.select({ n: count() }).from(ignoredUrls).where(where),
+  ]);
+  return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
 });
 
 ignoreRoutes.post("/orgs/:slug/ignored-urls", async (c) => {
@@ -94,8 +106,17 @@ ignoreRoutes.get("/admin/blocklist", async (c) => {
     return c.json(match);
   }
 
-  const rows = await db.select().from(blockedUrls);
-  return c.json(rows);
+  const pagination = parseListPagination(new URL(c.req.url).searchParams);
+  const [rows, totalRow] = await Promise.all([
+    db
+      .select()
+      .from(blockedUrls)
+      .orderBy(desc(blockedUrls.createdAt), desc(blockedUrls.id))
+      .limit(pagination.pageSize)
+      .offset(pagination.offset),
+    db.select({ n: count() }).from(blockedUrls),
+  ]);
+  return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
 });
 
 ignoreRoutes.post("/admin/blocklist", async (c) => {

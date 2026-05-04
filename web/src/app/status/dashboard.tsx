@@ -134,6 +134,14 @@ const TABS: { value: Tab; label: string }[] = [
 ];
 const DEFAULT_TAB: Tab = "sessions";
 
+function unwrapList<T>(value: unknown): T[] | null {
+  if (Array.isArray(value)) return value as T[];
+  if (value && typeof value === "object" && Array.isArray((value as { items?: unknown }).items)) {
+    return (value as { items: T[] }).items;
+  }
+  return null;
+}
+
 function parseTab(value: string | null): Tab {
   return TABS.some((t) => t.value === value) ? (value as Tab) : DEFAULT_TAB;
 }
@@ -267,9 +275,10 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     const safeFetch = (url: string) => fetch(url).then((r) => (r.ok ? r.json() : null));
     return Promise.all([safeFetch(`/api/proxy/sessions`), safeFetch(`/api/proxy/status/usage`)])
       .then(([s, u]) => {
-        if (s) setSessions(s as SessionState[]);
+        const sessionItems = unwrapList<SessionState>(s);
+        if (sessionItems) setSessions(sessionItems);
         if (u) setUsage(u as UsageEntry[]);
-        return s as SessionState[] | null;
+        return sessionItems;
       })
       .catch(() => null);
   }, []);

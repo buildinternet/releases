@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { buildListResponse, parseListPagination, slicePage } from "./lib/pagination.js";
 
 const STALE_SESSION_MS = 15 * 60 * 1000; // 15 minutes with no update → mark as error
 const RETENTION_MS = 30 * 24 * 60 * 60 * 1000; // 30 days
@@ -40,7 +41,17 @@ export function applySessionFilters(
   return out;
 }
 
-interface SessionState {
+export function buildSessionListResponse(
+  sessions: SessionState[],
+  params: URLSearchParams,
+  now: number,
+) {
+  const filtered = applySessionFilters(sessions, params, now);
+  const pagination = parseListPagination(params);
+  return buildListResponse(slicePage(filtered, pagination), pagination, filtered.length);
+}
+
+export interface SessionState {
   sessionId: string;
   company: string;
   type: "onboard" | "update";
@@ -171,8 +182,12 @@ export class StatusHub extends DurableObject {
     // is within the window — used by the discovery worker to dedup against retries
     // that fire after the original session has already transitioned. See #656.
     if (request.method === "GET" && url.pathname === "/sessions") {
-      const sessions = applySessionFilters(await this.getSessions(), url.searchParams, Date.now());
-      return new Response(JSON.stringify(sessions), {
+      const response = buildSessionListResponse(
+        await this.getSessions(),
+        url.searchParams,
+        Date.now(),
+      );
+      return new Response(JSON.stringify(response), {
         headers: { "Content-Type": "application/json" },
       });
     }

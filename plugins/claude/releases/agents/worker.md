@@ -26,7 +26,7 @@ Key commands:
 
 - `releases admin source fetch <slug> [--max <n>]` — Fetch releases from a source
 - `releases admin source edit <identifier> [--primary] [--priority <p>]` — Edit source config (accepts ID or slug)
-- `releases admin org edit <slug> [--category <c>]` — Edit org
+- `releases admin org update <slug> [--name <n>] [--domain <d>] [--tier <t>] [--billing-customer-id <id>]` — Update org
 - `releases admin product add <name> --org <org>` — Create product
 - `releases admin playbook <org>` — Read playbook
 - `releases admin playbook <org> --notes "..."` — Update playbook notes
@@ -50,7 +50,7 @@ When asked to fetch sources:
 
 When asked to update source metadata or org details:
 
-1. Use the appropriate CLI command (`releases admin source edit`, `releases admin org edit`, `releases admin product add`)
+1. Use the appropriate CLI command (`releases admin source edit`, `releases admin org update`, `releases admin product add`)
 2. Confirm each change was applied
 3. Report any errors
 

@@ -8,7 +8,23 @@ adminOnly: false
 
 Programmatic access to the Releases index via HTTP.
 
-All endpoints are prefixed with `/v1` and return JSON.
+All endpoints are prefixed with `/v1` and return JSON. Paginated list endpoints return `{ items, pagination }`:
+
+```ts
+{
+  items: T[];
+  pagination: {
+    page: number;
+    pageSize: number;
+    returned: number;
+    totalItems?: number;
+    totalPages?: number;
+    hasMore: boolean;
+  };
+}
+```
+
+List endpoints that accept `limit` and `page` default to 500 items per page and cap `limit` at 500 unless noted otherwise.
 
 ## Authentication
 
@@ -32,11 +48,51 @@ Returns counts of organizations, sources, releases, and products.
 
 ### `GET /v1/orgs`
 
-List all organizations with source counts and metadata.
+List organizations with source counts and metadata.
+
+| Param   | Description                           |
+| ------- | ------------------------------------- |
+| `q`     | Substring search on org name or slug  |
+| `limit` | Results per page (1-500, default 500) |
+| `page`  | Page number (default 1)               |
 
 ### `GET /v1/orgs/:slug`
 
 Get organization details including sources, products, and release metrics.
+
+### `GET /v1/orgs/:slug/accounts`
+
+List social/code-host accounts for the organization.
+
+| Param      | Description                                 |
+| ---------- | ------------------------------------------- |
+| `platform` | Return the single account for this platform |
+| `limit`    | Results per page (1-500, default 500)       |
+| `page`     | Page number (default 1)                     |
+
+When `platform` is provided, the endpoint returns a single account or `null` instead of the paginated list envelope.
+
+### `GET /v1/orgs/:slug/tags`
+
+List tags assigned to the organization.
+
+| Param   | Description                           |
+| ------- | ------------------------------------- |
+| `limit` | Results per page (1-500, default 500) |
+| `page`  | Page number (default 1)               |
+
+### `GET /v1/orgs/:slug/ignored-urls`
+
+List org-scoped ignored URLs. Requires a Bearer token.
+
+| Param    | Description                                             |
+| -------- | ------------------------------------------------------- |
+| `limit`  | Results per page (1-500, default 500)                   |
+| `page`   | Page number (default 1)                                 |
+| `url`    | URL to test when used with `single=true`                |
+| `single` | Return the matching ignored URL row or `null` for `url` |
+
+When `single=true&url=...` is provided, the endpoint returns a single row or `null` instead of the paginated list envelope.
 
 ### `GET /v1/orgs/:slug/releases`
 
@@ -64,6 +120,12 @@ Weekly release activity for the organization.
 
 List products. Filter with `?orgId=...`.
 
+| Param   | Description                           |
+| ------- | ------------------------------------- |
+| `orgId` | Filter by organization ID             |
+| `limit` | Results per page (1-500, default 500) |
+| `page`  | Page number (default 1)               |
+
 ### `GET /v1/orgs/:orgSlug/products/:productSlug`
 
 Get product details. Both segments accept an id or a slug. This is the canonical form — prefer it in new clients.
@@ -71,6 +133,51 @@ Get product details. Both segments accept an id or a slug. This is the canonical
 ### `GET /v1/products/:slug`
 
 Get product details by typed ID (`prod_…`). Bare slugs return `400 bare_slug_rejected` because slugs are now per-org and ambiguous on the global path. To resolve a bare slug, use `GET /v1/lookups/product-by-slug?slug=<slug>` (returns `{productId, productSlug, orgSlug}`).
+
+---
+
+## Sessions
+
+### `GET /v1/sessions`
+
+List managed-agent discovery/fetch sessions. Requires a Bearer token.
+
+| Param            | Description                                                               |
+| ---------------- | ------------------------------------------------------------------------- |
+| `status`         | Filter by `running`, `complete`, `error`, or `cancelled`                  |
+| `type`           | Filter by `onboard` or `update`                                           |
+| `recent_minutes` | Include running sessions and finished sessions updated within this window |
+| `limit`          | Results per page (1-500, default 500)                                     |
+| `page`           | Page number (default 1)                                                   |
+
+### `GET /v1/sessions/:sessionId`
+
+Get a single session.
+
+### `GET /v1/sessions/:sessionId/logs`
+
+Get status logs for a session.
+
+### `GET /v1/sessions/:sessionId/stdout`
+
+Get captured stdout for a session.
+
+---
+
+## Admin Lists
+
+### `GET /v1/admin/blocklist`
+
+List globally blocked URL patterns. Requires a Bearer token.
+
+| Param    | Description                                           |
+| -------- | ----------------------------------------------------- |
+| `limit`  | Results per page (1-500, default 500)                 |
+| `page`   | Page number (default 1)                               |
+| `url`    | URL to test when used with `single=true`              |
+| `single` | Return the matching blocklist row or `null` for `url` |
+
+When `single=true&url=...` is provided, the endpoint returns a single row or `null` instead of the paginated list envelope.
 
 ---
 

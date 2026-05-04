@@ -20,6 +20,7 @@ import type {
   ReleaseCoverageResponse,
   CategoryDetail,
   TagDetail,
+  ListResponse,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 
@@ -165,7 +166,7 @@ const RELATED_CACHE_OPTS = { next: { revalidate: 300 } } as const;
 
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
-  orgs: () => fetchApi<OrgListItem[]>("/v1/orgs"),
+  orgs: async () => (await fetchApi<ListResponse<OrgListItem>>("/v1/orgs")).items,
   sitemap: () => fetchApi<SitemapPayload>("/v1/sitemap"),
   orgDetail: (slug: string) => fetchApi<OrgDetail>(`/v1/orgs/${slug}`),
   sources: (independent?: boolean) =>
