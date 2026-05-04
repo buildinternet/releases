@@ -244,6 +244,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [sessionLogs, setSessionLogs] = useState<Record<string, string[]>>({});
   const [sessionStdout, setSessionStdout] = useState<Record<string, string[]>>({});
   const [allSources, setAllSources] = useState<SourceEntry[]>([]);
+  const [sourcesTotal, setSourcesTotal] = useState<number | null>(null);
   const [sourceSort, setSourceSort] = useState<SortState<SourceSortField>>({
     field: "name",
     dir: "asc",
@@ -288,21 +289,26 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   }, [hydrate]);
 
   // Fetch sources when sort changes (server-side sort triggers a refetch).
-  // TODO: `limit=500` is a stopgap. Once the source count crosses the cap,
-  // the Sources tab needs real server-side pagination (envelope=true) and
-  // server-side type/stale/q filters so we stop shipping the whole table to
-  // the client, and OrgsTable needs its own rollup endpoint instead of
-  // aggregating sources in the browser.
+  // `limit=500` is still a hard cap, but `envelope=true` returns
+  // `pagination.totalItems` so the table can warn instead of silently
+  // truncating once the source count crosses the cap. Real incremental
+  // paging + server-side type/stale/q filters and an OrgsTable rollup
+  // endpoint are the remaining follow-ups.
   useEffect(() => {
     const params = new URLSearchParams({
+      envelope: "true",
       limit: "500",
       sort: sourceSort.field,
       dir: sourceSort.dir,
     });
     fetch(`/api/proxy/sources?${params}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((src) => {
-        if (src) setAllSources(src as SourceEntry[]);
+      .then((body) => {
+        if (!body) return;
+        const items = unwrapList<SourceEntry>(body) ?? [];
+        setAllSources(items);
+        const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
+        setSourcesTotal(typeof total === "number" ? total : null);
       })
       .catch(() => {});
   }, [sourceSort]);
@@ -623,9 +629,14 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
         />
       )}
       {tab === "sources" && (
-        <SourcesTable sources={allSources} sort={sourceSort} onSortChange={setSourceSort} />
+        <SourcesTable
+          sources={allSources}
+          totalItems={sourcesTotal}
+          sort={sourceSort}
+          onSortChange={setSourceSort}
+        />
       )}
-      {tab === "orgs" && <OrgsTable sources={allSources} />}
+      {tab === "orgs" && <OrgsTable sources={allSources} totalItems={sourcesTotal} />}
       {tab === "cron" && <CronRunsTab />}
       {tab === "searches" && <SearchQueriesTab />}
     </div>
@@ -1134,12 +1145,24 @@ function FetchLogTable({
 
 type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 
+function TruncationBanner({ shown, totalItems }: { shown: number; totalItems: number | null }) {
+  if (totalItems == null || totalItems <= shown) return null;
+  return (
+    <div className="mb-3 px-3 py-2 text-xs rounded border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200">
+      Showing {shown.toLocaleString()} of {totalItems.toLocaleString()} sources — table is truncated
+      at the page-size cap (500). Filters and aggregates only reflect the loaded rows.
+    </div>
+  );
+}
+
 function SourcesTable({
   sources,
+  totalItems,
   sort,
   onSortChange,
 }: {
   sources: SourceEntry[];
+  totalItems: number | null;
   sort: SortState<SourceSortField>;
   onSortChange: (next: SortState<SourceSortField>) => void;
 }) {
@@ -1229,6 +1252,7 @@ function SourcesTable({
 
   return (
     <div>
+      <TruncationBanner shown={sources.length} totalItems={totalItems} />
       {/* Filters */}
       <div className="flex items-center gap-3 mb-3">
         <div className="flex gap-1">
@@ -1433,7 +1457,7 @@ interface OrgRow {
 
 type OrgStaleFilter = "all" | "stale" | "dormant";
 
-function OrgsTable({ sources }: { sources: SourceEntry[] }) {
+function OrgsTable({ sources, totalItems }: { sources: SourceEntry[]; totalItems: number | null }) {
   const [filter, setFilter] = useState<OrgStaleFilter>("all");
   const [query, setQuery] = useState("");
 
@@ -1507,6 +1531,7 @@ function OrgsTable({ sources }: { sources: SourceEntry[] }) {
 
   return (
     <div>
+      <TruncationBanner shown={sources.length} totalItems={totalItems} />
       <div className="flex items-center gap-3 mb-3">
         <div className="flex gap-1">
           {filterButtons.map((f) => (

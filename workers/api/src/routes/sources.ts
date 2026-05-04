@@ -27,7 +27,7 @@ import {
   sourceChangelogFiles,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
-import type { Pagination } from "@buildinternet/releases-core/cli-contracts";
+import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -91,15 +91,16 @@ sourceRoutes.get("/sources", async (c) => {
   const includeHidden = c.req.query("include_hidden") === "true";
   const categoryFilter = c.req.query("category");
 
-  // Pagination: default limit 100, hard cap 500
-  const limitParam = c.req.query("limit");
+  // Pagination: default limit 100, hard cap 500. `?offset=` is also accepted
+  // and overrides `?page=` so callers that pre-compute offsets keep working.
+  const url = new URL(c.req.url);
   const offsetParam = c.req.query("offset");
-  const pageParam = c.req.query("page");
-  const rawLimit = limitParam ? parseInt(limitParam, 10) : 100;
-  const limit = isNaN(rawLimit) || rawLimit < 1 ? 100 : Math.min(rawLimit, 500);
-  const rawPage = pageParam ? parseInt(pageParam, 10) : 1;
-  const page = isNaN(rawPage) || rawPage < 1 ? 1 : rawPage;
-  const rawOffset = offsetParam ? parseInt(offsetParam, 10) : (page - 1) * limit;
+  const pagination = parseListPagination(url.searchParams, {
+    defaultPageSize: 100,
+    maxPageSize: 500,
+  });
+  const { page, pageSize: limit } = pagination;
+  const rawOffset = offsetParam ? parseInt(offsetParam, 10) : pagination.offset;
   const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
 
   // Filter by URLs — return raw source rows matching the provided url params
@@ -242,15 +243,9 @@ sourceRoutes.get("/sources", async (c) => {
   }));
 
   if (wantsEnvelope && totalItems != null) {
-    const pagination: Pagination = {
-      page: effectivePage,
-      pageSize: limit,
-      returned: result.length,
-      totalItems,
-      totalPages: Math.max(1, Math.ceil(totalItems / limit)),
-      hasMore: effectivePage * limit < totalItems,
-    };
-    return c.json({ items: result, pagination });
+    return c.json(
+      buildListResponse(result, { page: effectivePage, pageSize: limit, offset }, totalItems),
+    );
   }
 
   return c.json(result);
