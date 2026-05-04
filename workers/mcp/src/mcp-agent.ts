@@ -139,6 +139,24 @@ function titled(title: string, hints: typeof READ_ONLY_HINTS | typeof AI_READ_HI
   return { title, annotations: { title, ...hints } };
 }
 
+// Shared `page` / `limit` zod fields for the four list_* tools. Defaults
+// (page=1, limit=50, max=200) match `parseMcpPagination` in
+// workers/mcp/src/lib/pagination.ts.
+const paginationFields = {
+  page: z.number().int().min(1).optional().describe("1-based page number. Defaults to 1."),
+  limit: z
+    .number()
+    .int()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Entries per page (1–200). Defaults to 50."),
+};
+
+function withPagination<T extends Record<string, z.ZodTypeAny>>(schema: T) {
+  return { ...schema, ...paginationFields };
+}
+
 export interface CreateServerOptions {
   /**
    * Inbound request UA — passed through to `search_queries.user_agent` and
@@ -459,13 +477,15 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
         "List catalog entries — products and standalone sources combined into one list with a `kind: 'product' | 'source'` discriminator per row. This replaces the need to call `list_products` and `list_sources` separately.",
         "",
         "Orgs that group multiple sources under a product (e.g. Vercel → Next.js, Turborepo) surface those products; orgs with a single source that isn't part of a product surface it directly as a `kind: 'source'` entry. Either shape is a reasonable thing to pass to `search(entity: ...)`.",
+        "",
+        "Paginated: defaults to 50 entries per page. Pass `page: 2` for the next slice. The footer surfaces the total when more pages exist.",
       ].join("\n"),
-      inputSchema: {
+      inputSchema: withPagination({
         organization: z
           .string()
           .optional()
           .describe("Organization to scope to. Accepts an org_ id, slug, domain, or name."),
-      },
+      }),
     },
     async (params) => listCatalog(db, params),
   );
@@ -521,15 +541,16 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     "list_sources",
     {
       ...titled("List sources (deprecated)", READ_ONLY_HINTS),
-      description: "Deprecated — use `list_catalog` instead. List all indexed changelog sources.",
-      inputSchema: {
+      description:
+        "Deprecated — use `list_catalog` instead. List all indexed changelog sources. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice.",
+      inputSchema: withPagination({
         organization: z
           .string()
           .optional()
           .describe(
             "Filter to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
           ),
-      },
+      }),
     },
     async (params) => listSources(db, params),
   );
@@ -538,14 +559,15 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     "list_organizations",
     {
       ...titled("List organizations", READ_ONLY_HINTS),
-      description: "List all indexed organizations, optionally filtered",
-      inputSchema: {
+      description:
+        "List all indexed organizations, optionally filtered. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice.",
+      inputSchema: withPagination({
         query: z
           .string()
           .optional()
           .describe("Search across org name, slug, domain, and account handles"),
         platform: z.string().optional().describe("Filter to orgs with an account on this platform"),
-      },
+      }),
     },
     async (params) => listOrganizations(db, params),
   );
@@ -591,15 +613,15 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
     {
       ...titled("List products (deprecated)", READ_ONLY_HINTS),
       description:
-        "Deprecated — use `list_catalog` instead. List products — the optional grouping layer between organizations and sources.",
-      inputSchema: {
+        "Deprecated — use `list_catalog` instead. List products — the optional grouping layer between organizations and sources. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice.",
+      inputSchema: withPagination({
         organization: z
           .string()
           .optional()
           .describe(
             "Organization to scope to. Accepts an org_ id, slug, domain, or name (e.g. 'vercel').",
           ),
-      },
+      }),
     },
     async (params) => listProducts(db, params),
   );
