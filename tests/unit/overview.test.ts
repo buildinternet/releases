@@ -4,6 +4,7 @@ import {
   isOverviewStale,
   overviewAgeDays,
   overviewPreview,
+  classifyOverviewStaleness,
 } from "@buildinternet/releases-core/overview";
 
 const DAY = 24 * 60 * 60 * 1000;
@@ -32,6 +33,22 @@ describe("isOverviewStale", () => {
     const now = Date.now();
     const generated = new Date(now - (OVERVIEW_STALE_DAYS + 1) * DAY - 60_000).toISOString();
     expect(isOverviewStale(generated, now)).toBe(true);
+  });
+});
+
+describe("classifyOverviewStaleness", () => {
+  it("returns 'missing' when no overview exists", () => {
+    expect(classifyOverviewStaleness(false, 0)).toBe("missing");
+    expect(classifyOverviewStaleness(false, 99)).toBe("missing");
+  });
+
+  it("returns 'fresh' when an overview exists and no releases since", () => {
+    expect(classifyOverviewStaleness(true, 0)).toBe("fresh");
+  });
+
+  it("returns 'behind' when releases have shipped since the overview", () => {
+    expect(classifyOverviewStaleness(true, 1)).toBe("behind");
+    expect(classifyOverviewStaleness(true, 200)).toBe("behind");
   });
 });
 

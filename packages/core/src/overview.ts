@@ -62,6 +62,24 @@ export function isOverviewStale(generatedAt: string, now: number = Date.now()): 
 }
 
 /**
+ * Classify an overview by its release-gap signal. The freshness gap that
+ * matters for regeneration is **releases shipped since the overview was
+ * generated**, not pure date diff. A 30-day-old overview with zero new
+ * releases isn't actually stale; a 5-day-old overview that's missed 200
+ * releases probably is.
+ */
+export type OverviewStaleness = "missing" | "behind" | "fresh";
+
+export function classifyOverviewStaleness(
+  hasOverview: boolean,
+  releasesSinceOverview: number,
+): OverviewStaleness {
+  if (!hasOverview) return "missing";
+  if (releasesSinceOverview > 0) return "behind";
+  return "fresh";
+}
+
+/**
  * Strip a stray leading markdown heading. The overview prompt forbids
  * headings, but the model occasionally emits one anyway and it ruins
  * previews.

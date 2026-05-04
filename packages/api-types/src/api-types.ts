@@ -546,6 +546,51 @@ export interface OverviewPageItem {
 /** @deprecated Use OverviewPageItem */
 export type KnowledgePageItem = OverviewPageItem;
 
+// ── Overview Manifest (admin planning) ──
+
+export type OverviewStaleness = "missing" | "behind" | "fresh";
+export type OverviewPlanAction = "missing" | "refresh" | "skip";
+
+/**
+ * Per-org row returned by GET /v1/admin/overviews. Designed for orchestrators
+ * planning a maintenance sweep — `releasesSinceOverview` is the freshness
+ * signal that matters, not date diff alone.
+ */
+export interface OverviewManifestRow {
+  orgSlug: string;
+  orgName: string;
+  discovery: "curated" | "agent" | "on_demand";
+  overviewUpdatedAt: string | null;
+  overviewGeneratedAt: string | null;
+  lastContributingReleaseAt: string | null;
+  orgLastActivity: string | null;
+  releasesSinceOverview: number;
+  recentReleaseCount: number;
+  staleness: OverviewStaleness;
+  /** Only populated when ?format=plan. */
+  action?: OverviewPlanAction;
+  /** Only populated when ?format=plan. */
+  needsFetch?: boolean;
+}
+
+export type OverviewManifestResponse = ListResponse<OverviewManifestRow>;
+
+// ── Overview inputs (?check=true) ──
+
+/**
+ * Lightweight pre-flight payload returned by GET /v1/orgs/:slug/overview/inputs?check=true.
+ * Skips the heavy release-content hydration so an orchestrator can decide whether
+ * to dispatch without paying for the full payload.
+ */
+export interface OverviewInputsCheck {
+  orgSlug: string;
+  selected: number;
+  totalAvailable: number;
+  hasExistingContent: boolean;
+  wouldRegenerate: boolean;
+  windowDays: number;
+}
+
 /** @deprecated Use UnifiedSearchResponse */
 export type SearchResult = SearchReleaseHit;
 /** @deprecated Use UnifiedSearchResponse */
