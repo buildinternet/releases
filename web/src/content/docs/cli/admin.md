@@ -1,49 +1,49 @@
 ---
 title: "Source Management"
-description: "Add, edit, and organize changelog sources (operator-only)."
+description: "Create, update, and organize changelog sources (operator-only)."
 adminOnly: true
 ---
 
 # Source Management
 
-Add, edit, remove, and organize changelog sources. Operator workflows live under `releases admin ...` and require an API key.
+Create, update, delete, and organize changelog sources. Operator workflows live under `releases admin ...` and require an API key.
 
-## Add sources
+## Create sources
 
 ```bash
-releases admin source add "Next.js" --url https://github.com/vercel/next.js
-releases admin source add "Linear" --url https://linear.app/changelog
-releases admin source add --name "My Blog" --url https://example.com/changelog
+releases admin source create "Next.js" --url https://github.com/vercel/next.js
+releases admin source create "Linear" --url https://linear.app/changelog
+releases admin source create --name "My Blog" --url https://example.com/changelog
 ```
 
-By default, `add` runs automated pre-checks to determine the best ingestion method. GitHub URLs use the Releases API directly; other URLs are evaluated for feed discovery, provider detection, and scrape feasibility.
+By default, `create` runs automated pre-checks to determine the best ingestion method. GitHub URLs use the Releases API directly; other URLs are evaluated for feed discovery, provider detection, and scrape feasibility.
 
 Override detection with `--type github`, `--type scrape`, or `--type feed`. If you know the feed URL, provide it directly:
 
 ```bash
-releases admin source add "Claude Code" --url https://docs.anthropic.com/en/changelog \
+releases admin source create "Claude Code" --url https://docs.anthropic.com/en/changelog \
   --feed-url https://docs.anthropic.com/en/changelog/rss.xml
 ```
 
-## Edit sources
+## Update sources
 
-The `edit` command accepts a source ID (`src_...`) or slug. IDs are preferred — slugs can change, IDs are immutable.
+The `update` command accepts a source ID (`src_...`) or slug. IDs are preferred — slugs can change, IDs are immutable.
 
 ```bash
-releases admin source edit src_abc123 --name "New Name"    # by ID (preferred)
-releases admin source edit next-js --url https://github.com/vercel/next.js/releases
-releases admin source edit my-blog --org acme
-releases admin source edit my-blog --type feed
-releases admin source edit my-blog --primary
-releases admin source edit my-blog --slug new-slug --confirm-slug-change  # rename (breaks web links)
+releases admin source update src_abc123 --name "New Name"    # by ID (preferred)
+releases admin source update next-js --url https://github.com/vercel/next.js/releases
+releases admin source update my-blog --org acme
+releases admin source update my-blog --type feed
+releases admin source update my-blog --primary
+releases admin source update my-blog --slug new-slug --confirm-slug-change  # rename (breaks web links)
 ```
 
 Slug renames require `--confirm-slug-change` because they break existing web links.
 
-## Remove sources
+## Delete sources
 
 ```bash
-releases admin source remove my-blog
+releases admin source delete my-blog
 ```
 
 ## Read or refresh a CHANGELOG file
@@ -83,10 +83,10 @@ releases admin discovery evaluate https://linear.app/changelog
 Group sources under organizations for aggregate queries:
 
 ```bash
-releases admin org add "Vercel"
+releases admin org create "Vercel"
 releases admin org link vercel --platform github --handle vercel
 releases admin org list
-releases admin org show vercel
+releases admin org get vercel
 ```
 
 ## Products
@@ -94,10 +94,10 @@ releases admin org show vercel
 Group sources under products within an organization:
 
 ```bash
-releases admin product add "Next.js" --org vercel --url https://nextjs.org
+releases admin product create "Next.js" --org vercel --url https://nextjs.org
 releases admin product list vercel
-releases admin product edit nextjs --description "React framework for production"
-releases admin product remove nextjs
+releases admin product update nextjs --description "React framework for production"
+releases admin product delete nextjs
 ```
 
 Convert an org that should be a product:
@@ -118,7 +118,7 @@ releases admin product alias add nextjs nextjs.org
 ## Categories & tags
 
 ```bash
-releases admin org add "Acme" --category cloud --tags typescript,edge
+releases admin org create "Acme" --category cloud --tags typescript,edge
 releases admin org tag add acme react serverless
 releases admin product tag add acme-cli testing
 ```
@@ -135,7 +135,7 @@ releases admin source import manifest.json --skip-existing
 
 ## Onboarding
 
-Use the AI agent to discover, validate, and add sources for a company:
+Use the AI agent to discover, validate, and create sources for a company:
 
 ```bash
 releases admin discovery onboard "Vercel"
@@ -154,8 +154,8 @@ releases admin policy block list
 ## Release management
 
 ```bash
-releases admin release show rel_abc123
-releases admin release edit rel_abc123 --title "Fixed title"
+releases admin release get rel_abc123
+releases admin release update rel_abc123 --title "Fixed title"
 releases admin release delete rel_abc123
 releases admin release suppress rel_abc123 --reason "promotional content"
 ```
@@ -174,7 +174,7 @@ releases admin playbook vercel --notes-file playbook-notes.md
 # Or pipe from stdin: cat playbook-notes.md | releases admin playbook vercel --notes-file -
 ```
 
-The playbook header (source list, products) regenerates automatically after any source add/edit/remove.
+The playbook header (source list, products) regenerates automatically after any source create/update/delete.
 
 ## Persisted summaries
 

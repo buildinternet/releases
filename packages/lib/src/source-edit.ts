@@ -21,7 +21,7 @@ export type ResolveFeedUpdateResult =
 
 /**
  * Decide how to update a source's feed metadata from the flags on
- * `releases admin source edit`. Pure helper — no DB or I/O — so it can be
+ * `releases admin source update`. Pure helper — no DB or I/O — so it can be
  * unit-tested directly.
  *
  * Rules:

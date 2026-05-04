@@ -25,9 +25,9 @@ Run via Bash using `bun src/index.ts` (dev) or `releases` (compiled binary). Use
 Key commands:
 
 - `releases admin source fetch <slug> [--max <n>]` — Fetch releases from a source
-- `releases admin source edit <identifier> [--primary] [--priority <p>]` — Edit source config (accepts ID or slug)
+- `releases admin source update <identifier> [--primary] [--priority <p>]` — Update source config (accepts ID or slug)
 - `releases admin org update <slug> [--name <n>] [--domain <d>] [--tier <t>] [--billing-customer-id <id>]` — Update org
-- `releases admin product add <name> --org <org>` — Create product
+- `releases admin product create <name> --org <org>` — Create product
 - `releases admin playbook <org>` — Read playbook
 - `releases admin playbook <org> --notes-file <path>` (use `-` for stdin) — Update playbook notes
 - `releases tail [slug] --json [--org <org>]` — Get latest releases
@@ -50,7 +50,7 @@ When asked to fetch sources:
 
 When asked to update source metadata or org details:
 
-1. Use the appropriate CLI command (`releases admin source edit`, `releases admin org update`, `releases admin product add`)
+1. Use the appropriate CLI command (`releases admin source update`, `releases admin org update`, `releases admin product create`)
 2. Confirm each change was applied
 3. Report any errors
 

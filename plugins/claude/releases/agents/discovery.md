@@ -30,15 +30,15 @@ Run via Bash using `bun src/index.ts` (dev) or `releases` (compiled binary). Use
 Key commands:
 
 - `releases admin discovery evaluate <url> --json` — Evaluate a changelog URL for best ingestion method
-- `releases admin source add <name> --url <url> --org <org> [--type <type>] [--feed-url <url>]` — Add a source
-- `releases admin source edit <identifier> [--primary] [--priority <p>]` — Edit source config (accepts ID or slug)
-- `releases admin source remove <slug> [--ignore --reason "..."]` — Remove and optionally ignore a source
+- `releases admin source create <name> --url <url> --org <org> [--type <type>] [--feed-url <url>]` — Create a source
+- `releases admin source update <identifier> [--primary] [--priority <p>]` — Update source config (accepts ID or slug)
+- `releases admin source delete <slug> [--ignore --reason "..."]` — Delete and optionally ignore a source
 - `releases admin source fetch <slug> [--dry-run] [--max <n>]` — Fetch releases from a source
-- `releases admin org add <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` — Create org
+- `releases admin org create <name> [--domain <d>] [--description <t>] [--category <c>] [--tags <t1,t2>]` — Create org
 - `releases admin org update <slug> [--name <n>] [--domain <d>] [--tier <t>] [--billing-customer-id <id>]` — Update org
-- `releases admin org show <slug> --json` — Full org details
+- `releases admin org get <slug> --json` — Full org details
 - `releases admin org tag add <slug> <tags...>` — Add tags
-- `releases admin product add <name> --org <org> [--category <c>] [--tags <t>]` — Create product
+- `releases admin product create <name> --org <org> [--category <c>] [--tags <t>]` — Create product
 - `releases admin playbook <org>` — Read playbook
 - `releases admin playbook <org> --notes-file <path>` (use `-` for stdin) — Update playbook notes
 - `releases categories --json` — List valid categories
@@ -51,7 +51,7 @@ Key commands:
 
 1. **Pre-check** — Use `list_organizations` and `list_catalog` MCP tools to check if the company already exists with sources. If it does, report the existing state and stop — do not re-discover or add duplicate sources.
 2. **Discover** — Use `releases admin discovery evaluate <url> --json`, web search, and `list_catalog` to find changelog URLs, feeds, and GitHub repos.
-3. **Add** — Add sources with `releases admin source add` using appropriate types. When creating an org, always include `--description` with a brief one-sentence product description.
+3. **Add** — Add sources with `releases admin source create` using appropriate types. When creating an org, always include `--description` with a brief one-sentence product description.
 4. **Validate** — Fetch each source with `releases admin source fetch <slug> --dry-run` first, then real fetch. Check results with `releases tail <slug> --json`.
 5. **Assess content depth** — For feed sources, check if pages have richer content than feed summaries.
 6. **Write the playbook** — Follow the playbook authoring rubric in the `managing-sources` skill (Playbooks → Writing good agent notes). The playbook is a per-org skill you're authoring for future fetch agents — durable target-shaped facts only. Adapter/harness errors and raw onboarding observations route to memory stores, not the playbook. After validating sources, run `releases admin playbook <org>` to read current state, then update notes with `releases admin playbook <org> --notes-file <path>` (use `-` for stdin) using the three canonical sections (`### Fetch instructions`, `### Traps`, `### Coverage`).
@@ -62,8 +62,8 @@ Key commands:
 Prefer 3-5 high-signal sources per org over exhaustive coverage. Only index the org's own products, not ecosystem plugins. Add and pause low-value sources rather than omitting them:
 
 ```bash
-releases admin source add "Low Priority Source" --url <url> --org <org> --type github
-releases admin source edit <identifier> --priority paused
+releases admin source create "Low Priority Source" --url <url> --org <org> --type github
+releases admin source update <identifier> --priority paused
 ```
 
 ## Multi-Product Organizations
@@ -71,7 +71,7 @@ releases admin source edit <identifier> --priority paused
 When you discover sources that clearly belong to different products (separate repos, separate domains), create products:
 
 ```bash
-releases admin product add "Next.js" --org vercel --category frameworks --tags react,ssr
+releases admin product create "Next.js" --org vercel --category frameworks --tags react,ssr
 ```
 
 For medium confidence, note suggestions but don't auto-create.
