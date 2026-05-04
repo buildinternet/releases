@@ -1,18 +1,5 @@
 import { Hono } from "hono";
-import {
-  eq,
-  desc,
-  count,
-  and,
-  or,
-  like,
-  min,
-  isNull,
-  isNotNull,
-  sql,
-  gte,
-  inArray,
-} from "drizzle-orm";
+import { eq, desc, count, and, or, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   sources,
@@ -30,6 +17,7 @@ import {
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import {
@@ -180,12 +168,12 @@ sourceRoutes.get("/sources", async (c) => {
   }
 
   if (queryText) {
-    const pattern = `%${queryText.toLowerCase()}%`;
+    const lower = queryText.toLowerCase();
     conditions.push(
       or(
-        like(sql`lower(${sources.name})`, pattern),
-        like(sql`lower(${sources.slug})`, pattern),
-        like(sql`lower(${sources.url})`, pattern),
+        likeContains(sql`lower(${sources.name})`, lower),
+        likeContains(sql`lower(${sources.slug})`, lower),
+        likeContains(sql`lower(${sources.url})`, lower),
       )!,
     );
   }

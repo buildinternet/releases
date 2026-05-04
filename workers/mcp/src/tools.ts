@@ -21,6 +21,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
+import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import {
   buildChangelogResponse,
@@ -537,7 +538,7 @@ export async function searchRegistry(
   if (result.degraded) {
     // Lexical fallback — reuse the existing LIKE queries so users get
     // something back when Vectorize is unavailable.
-    const pattern = `%${params.query}%`;
+    const q = params.query;
     const lim = params.limit ?? 20;
     const wantsKind = (k: RegistryKind) => !params.kind || params.kind === k;
 
@@ -550,11 +551,11 @@ export async function searchRegistry(
             description: string | null;
             category: string | null;
           }>(sql`
-            SELECT o.id, o.slug, o.name, o.description, o.category
+            SELECT DISTINCT o.id, o.slug, o.name, o.description, o.category
             FROM organizations o
             LEFT JOIN domain_aliases da ON da.org_id = o.id
-            WHERE o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
-              OR da.domain LIKE ${pattern}
+            WHERE ${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
+              OR ${likeContains(sql`o.domain`, q)} OR ${likeContains(sql`da.domain`, q)}
             ORDER BY o.name LIMIT ${lim}
           `)
         : Promise.resolve([]),
@@ -570,7 +571,7 @@ export async function searchRegistry(
             SELECT p.id, p.slug, p.name, p.description, p.category, o.slug as orgSlug
             FROM products p
             LEFT JOIN organizations o ON o.id = p.org_id
-            WHERE p.name LIKE ${pattern} OR p.slug LIKE ${pattern}
+            WHERE ${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)}
             ORDER BY p.name LIMIT ${lim}
           `)
         : Promise.resolve([]),
@@ -580,7 +581,7 @@ export async function searchRegistry(
             FROM sources s
             LEFT JOIN organizations o ON o.id = s.org_id
             WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
-              AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
+              AND (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
             ORDER BY s.name LIMIT ${lim}
           `)
         : Promise.resolve([]),
@@ -808,34 +809,34 @@ export async function listOrganizations(
   // COUNT(*) so totals stay filter-aware. Filtered arms wrap with DISTINCT o.id
   // because account/alias joins fan a single org into multiple rows; the
   // unfiltered arm skips DISTINCT (it'd add a sort cost on the full table).
-  const pattern = params.query ? `%${params.query}%` : null;
+  const q = params.query ?? null;
 
   let fromWhere = sql`FROM organizations o`;
   let distinct = false;
-  if (pattern && params.platform) {
+  if (q && params.platform) {
     distinct = true;
     fromWhere = sql`
       FROM organizations o
       LEFT JOIN domain_aliases da ON da.org_id = o.id
       JOIN org_accounts oa ON oa.org_id = o.id
-      WHERE (o.name LIKE ${pattern}
-        OR o.slug LIKE ${pattern}
-        OR o.domain LIKE ${pattern}
-        OR da.domain LIKE ${pattern}
-        OR oa.handle LIKE ${pattern})
+      WHERE (${likeContains(sql`o.name`, q)}
+        OR ${likeContains(sql`o.slug`, q)}
+        OR ${likeContains(sql`o.domain`, q)}
+        OR ${likeContains(sql`da.domain`, q)}
+        OR ${likeContains(sql`oa.handle`, q)})
         AND oa.platform = ${params.platform}
     `;
-  } else if (pattern) {
+  } else if (q) {
     distinct = true;
     fromWhere = sql`
       FROM organizations o
       LEFT JOIN domain_aliases da ON da.org_id = o.id
       LEFT JOIN org_accounts oa ON oa.org_id = o.id
-      WHERE o.name LIKE ${pattern}
-        OR o.slug LIKE ${pattern}
-        OR o.domain LIKE ${pattern}
-        OR da.domain LIKE ${pattern}
-        OR oa.handle LIKE ${pattern}
+      WHERE ${likeContains(sql`o.name`, q)}
+        OR ${likeContains(sql`o.slug`, q)}
+        OR ${likeContains(sql`o.domain`, q)}
+        OR ${likeContains(sql`da.domain`, q)}
+        OR ${likeContains(sql`oa.handle`, q)}
     `;
   } else if (params.platform) {
     distinct = true;
@@ -1703,7 +1704,7 @@ export async function search(
   const limit = params.limit ?? 20;
   const mode: SearchReleasesMode = params.mode ?? "hybrid";
   const includeCoverage = params.include_coverage === true;
-  const pattern = `%${params.query}%`;
+  const q = params.query;
   const empty: SearchCounts = { orgHits: 0, catalogHits: 0, releaseHits: 0, chunkHits: 0 };
 
   let orgScope: Awaited<ReturnType<typeof findOrg>> = null;
@@ -1755,8 +1756,8 @@ export async function search(
           SELECT DISTINCT o.slug, o.name, o.domain, o.category
           FROM organizations o
           LEFT JOIN domain_aliases da ON da.org_id = o.id
-          WHERE o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
-            OR da.domain LIKE ${pattern}
+          WHERE ${likeContains(sql`o.name`, q)} OR ${likeContains(sql`o.slug`, q)}
+            OR ${likeContains(sql`o.domain`, q)} OR ${likeContains(sql`da.domain`, q)}
           ORDER BY o.name LIMIT ${limit}
         `)
     : Promise.resolve([]);
@@ -1770,7 +1771,7 @@ export async function search(
             FROM products p
             LEFT JOIN organizations o ON o.id = p.org_id
             LEFT JOIN domain_aliases da ON da.product_id = p.id
-            WHERE (p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern})
+            WHERE (${likeContains(sql`p.name`, q)} OR ${likeContains(sql`p.slug`, q)} OR ${likeContains(sql`da.domain`, q)})
               ${orgScope ? sql`AND p.org_id = ${orgScope.id}` : sql``}
             ORDER BY p.name LIMIT ${limit}
           `),
@@ -1781,7 +1782,7 @@ export async function search(
             LEFT JOIN products p ON p.id = s.product_id
             LEFT JOIN organizations o ON o.id = s.org_id
             WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
-              AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
+              AND (${likeContains(sql`s.name`, q)} OR ${likeContains(sql`s.slug`, q)} OR ${likeContains(sql`s.url`, q)})
               ${orgScope ? sql`AND s.org_id = ${orgScope.id}` : sql``}
             ORDER BY s.name LIMIT ${limit}
           `),

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
+import { likeContains } from "@buildinternet/releases-core/sql-like";
 import type { D1Db } from "../db.js";
 import type {
   ReleaseType,
@@ -32,24 +33,20 @@ export interface RawSearchReleaseRow {
   type: ReleaseType;
 }
 
-export async function searchOrgs(
-  db: D1Db,
-  pattern: string,
-  limit: number,
-): Promise<SearchOrgHit[]> {
+export async function searchOrgs(db: D1Db, query: string, limit: number): Promise<SearchOrgHit[]> {
   return db.all<SearchOrgHit>(sql`
     SELECT DISTINCT o.slug, o.name, o.domain, NULL as avatarUrl, o.category
     FROM organizations_active o
     LEFT JOIN domain_aliases da ON da.org_id = o.id
-    WHERE (o.name LIKE ${pattern} OR o.slug LIKE ${pattern} OR o.domain LIKE ${pattern}
-      OR da.domain LIKE ${pattern})
+    WHERE (${likeContains(sql`o.name`, query)} OR ${likeContains(sql`o.slug`, query)}
+      OR ${likeContains(sql`o.domain`, query)} OR ${likeContains(sql`da.domain`, query)})
     ORDER BY o.name LIMIT ${limit}
   `);
 }
 
 export async function searchProducts(
   db: D1Db,
-  pattern: string,
+  query: string,
   limit: number,
 ): Promise<SearchCatalogHit[]> {
   return db.all<SearchCatalogHit>(sql`
@@ -58,14 +55,15 @@ export async function searchProducts(
     FROM products_active p
     INNER JOIN organizations_active o ON o.id = p.org_id
     LEFT JOIN domain_aliases da ON da.product_id = p.id
-    WHERE (p.name LIKE ${pattern} OR p.slug LIKE ${pattern} OR da.domain LIKE ${pattern})
+    WHERE (${likeContains(sql`p.name`, query)} OR ${likeContains(sql`p.slug`, query)}
+      OR ${likeContains(sql`da.domain`, query)})
     ORDER BY p.name LIMIT ${limit}
   `);
 }
 
 export async function searchSources(
   db: D1Db,
-  pattern: string,
+  query: string,
   limit: number,
 ): Promise<RawSourceHit[]> {
   return db.all<RawSourceHit>(sql`
@@ -75,7 +73,8 @@ export async function searchSources(
     LEFT JOIN organizations_active o ON o.id = s.org_id
     LEFT JOIN products_active p ON p.id = s.product_id
     WHERE (s.is_hidden = 0 OR s.is_hidden IS NULL)
-      AND (s.name LIKE ${pattern} OR s.slug LIKE ${pattern} OR s.url LIKE ${pattern})
+      AND (${likeContains(sql`s.name`, query)} OR ${likeContains(sql`s.slug`, query)}
+        OR ${likeContains(sql`s.url`, query)})
     ORDER BY s.name LIMIT ${limit}
   `);
 }
