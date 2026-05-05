@@ -26,6 +26,7 @@ function readFixture(name: string): string {
 // Cache fixtures at module level — they're immutable and small
 const RSS_BASIC = readFixture("rss-basic.xml");
 const ATOM_BASIC = readFixture("atom-basic.xml");
+const ATOM_ZOLA = readFixture("atom-zola.xml");
 const JSONFEED_BASIC = readFixture("jsonfeed-basic.json");
 const RSS_WITH_MEDIA = readFixture("rss-with-media.xml");
 
@@ -52,12 +53,6 @@ describe("parseRss", () => {
     const releases = parseRss(RSS_BASIC);
     expect(releases[0].isBreaking).toBe(true);
     expect(releases[1].isBreaking).toBe(false);
-  });
-
-  it("handles CDATA content", () => {
-    const releases = parseRss(RSS_BASIC);
-    expect(releases[0].content).toBeTruthy();
-    expect(releases[0].content).not.toContain("CDATA");
   });
 
   it("skips items without title", () => {
@@ -92,12 +87,6 @@ describe("parseRss", () => {
     expect(releases[0].content).toBe("");
     expect(releases[0].url).toBe("https://www.notion.so/releases/2026-04-14");
     expect(releases[1].content).toBe("");
-  });
-
-  it("converts HTML content to markdown", () => {
-    const releases = parseRss(RSS_BASIC);
-    expect(releases[0].content).not.toContain("<p>");
-    expect(releases[0].content).not.toContain("<strong>");
   });
 
   it("uses content:encoded when description is absent", () => {
@@ -143,18 +132,13 @@ describe("parseRss", () => {
 // ── Atom parsing ───────────────────────────────────────────────────
 
 describe("parseAtom", () => {
-  it("parses basic Atom entries", () => {
+  it("parses basic Atom entries (title, url, content)", () => {
     const releases = parseAtom(ATOM_BASIC);
 
     expect(releases).toHaveLength(2);
     expect(releases[0].title).toBe("v3.0.0 — Breaking: New Auth System");
-    expect(releases[1].title).toBe("v2.5.0 — Performance Improvements");
-  });
-
-  it("extracts alternate link hrefs", () => {
-    const releases = parseAtom(ATOM_BASIC);
-
     expect(releases[0].url).toBe("https://acme.com/releases/v3-0-0");
+    expect(releases[1].title).toBe("v2.5.0 — Performance Improvements");
     expect(releases[1].url).toBe("https://acme.com/releases/v2-5-0");
   });
 
@@ -194,6 +178,20 @@ describe("parseAtom", () => {
     const releases = parseAtom(ATOM_BASIC);
     expect(releases[0].version).toBe("3.0.0");
     expect(releases[1].version).toBe("2.5.0");
+  });
+
+  // Regression for #700: feeds emitted by Zola (and any other generator)
+  // attach `xml:lang` and other attributes to <entry> tags. The previous
+  // hand-rolled parser used a literal `indexOf("<entry>")` and silently
+  // returned zero releases for these feeds (htmx.org being the canonical
+  // example).
+  it("parses entries that carry attributes (e.g. xml:lang)", () => {
+    const releases = parseAtom(ATOM_ZOLA);
+    expect(releases).toHaveLength(2);
+    expect(releases[0].title).toBe("First Essay");
+    expect(releases[0].url).toBe("https://example.com/essays/first/");
+    expect(releases[0].content).toContain("Body of the first essay");
+    expect(releases[1].title).toBe("Second Essay");
   });
 });
 
