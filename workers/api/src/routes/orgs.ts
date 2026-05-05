@@ -489,6 +489,21 @@ orgRoutes.patch(
       );
     }
 
+    // Run alias replacement first so a conflict short-circuits before any
+    // org/tag writes commit. D1 has no interactive transactions, so this
+    // ordering — not a true rollback — is the closest we get to atomicity.
+    if (body.aliases !== undefined) {
+      const { conflict } = await replaceAliases(db, { orgId: org.id, aliases: body.aliases });
+      if (conflict)
+        return c.json(
+          {
+            error: "conflict",
+            message: `Domain alias "${conflict}" already claimed by another org or product`,
+          },
+          409,
+        );
+    }
+
     const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
     if (body.name) updates.name = body.name;
     if (body.slug) updates.slug = body.slug;
@@ -512,18 +527,6 @@ orgRoutes.patch(
           .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
           .onConflictDoNothing();
       }
-    }
-
-    if (body.aliases !== undefined) {
-      const { conflict } = await replaceAliases(db, { orgId: org.id, aliases: body.aliases });
-      if (conflict)
-        return c.json(
-          {
-            error: "conflict",
-            message: `Domain alias "${conflict}" already claimed by another org or product`,
-          },
-          409,
-        );
     }
 
     // Re-embed if semantically meaningful fields changed (name/description/
@@ -571,12 +574,24 @@ orgRoutes.delete(
     const db = createDb(c.env.DB);
     const slug = c.req.param("slug");
     const hard = c.req.query("hard") === "true";
+    const isOrgId = slug.startsWith("org_");
 
-    // Slug-based lookups always resolve to the active row even with hard=true:
-    // tombstones rename the slug ("--<id>" suffix), so a slug match is by
-    // construction the active row. To purge a tombstone, callers use the org_
-    // ID, which is unique whether the row is active or tombstoned.
-    const includeDeleted = hard && slug.startsWith("org_");
+    // Hard delete requires the immutable org_ ID. Slugs are mutable and
+    // collision-prone (post-rename, post-tombstone), so accepting them on a
+    // destructive path is too easy to misfire. ID-only matches the OpenAPI
+    // contract and the original tombstone-purge use case.
+    if (hard && !isOrgId) {
+      return c.json(
+        {
+          error: "bad_request",
+          message:
+            "Hard delete requires an org_ ID; slug is not accepted on this destructive path.",
+        },
+        400,
+      );
+    }
+
+    const includeDeleted = hard && isOrgId;
     const [org] = await db.select().from(organizations).where(orgWhere(slug, { includeDeleted }));
     if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
