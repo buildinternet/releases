@@ -81,21 +81,30 @@ function Row({ slide }: { slide: Slide }) {
   return (
     <Link
       href={`/release/${release.id}`}
-      className="flex items-center gap-3 h-11 px-4 text-[13px] hover:bg-stone-50 dark:hover:bg-stone-800/40 transition-colors"
+      className="flex flex-col sm:flex-row sm:items-center gap-0.5 sm:gap-3 h-16 sm:h-11 px-4 py-2 sm:py-0 text-[13px] hover:bg-stone-50 dark:hover:bg-stone-800/40 transition-colors"
     >
-      <span className="font-medium text-stone-900 dark:text-stone-100 min-w-[80px] sm:min-w-[110px] truncate">
-        {release.source.name}
-      </span>
-      {release.version && (
-        <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap">
-          {release.version}
+      {/* Top row on mobile · left side on desktop */}
+      <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+        <span className="font-medium text-stone-900 dark:text-stone-100 sm:min-w-[110px] truncate">
+          {release.source.name}
         </span>
-      )}
-      <span className="flex-1 text-stone-700 dark:text-stone-300 truncate">
+        {release.version && (
+          <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap">
+            {release.version}
+          </span>
+        )}
+        {relative && (
+          <span className="ml-auto sm:hidden font-mono text-[11px] text-stone-400 dark:text-stone-500 whitespace-nowrap">
+            {relative}
+          </span>
+        )}
+      </div>
+      {/* Title — second line on mobile, middle column on desktop */}
+      <span className="flex-1 min-w-0 text-stone-700 dark:text-stone-300 truncate">
         {pickLabel(release)}
       </span>
       {relative && (
-        <span className="font-mono text-[11px] text-stone-400 dark:text-stone-500 whitespace-nowrap hidden sm:inline">
+        <span className="hidden sm:inline font-mono text-[11px] text-stone-400 dark:text-stone-500 whitespace-nowrap">
           {relative}
         </span>
       )}
@@ -182,12 +191,17 @@ export function ShippingNowTicker({ releases }: { releases: LatestReleaseItem[] 
           <span>Recent</span>
         </div>
 
-        {/* Sliding feed */}
-        <div className="flex-1 relative overflow-hidden h-11" aria-live="polite" aria-atomic="true">
+        {/* Sliding feed — `--row-h` keeps the translate in step with the
+            row's responsive height (64px on mobile, 44px from sm: up). */}
+        <div
+          className="flex-1 relative overflow-hidden h-16 sm:h-11 [--row-h:64px] sm:[--row-h:44px]"
+          aria-live="polite"
+          aria-atomic="true"
+        >
           <div
             className="absolute inset-x-0 top-0"
             style={{
-              transform: `translateY(-${step * 44}px)`,
+              transform: `translateY(calc(${-step} * var(--row-h)))`,
               transition: animate
                 ? `transform ${TRANSITION_MS}ms cubic-bezier(0.4, 0, 0.2, 1)`
                 : "none",
