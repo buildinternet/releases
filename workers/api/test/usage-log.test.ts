@@ -6,6 +6,7 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { eq } from "drizzle-orm";
 import { applyMigrations } from "../../../tests/db-helper";
 import { organizations, sources, usageLog } from "@buildinternet/releases-core/schema";
 
@@ -186,6 +187,38 @@ describe("GET /v1/admin/logs/usage/stats — bySource breakdown", () => {
     expect(body.bySource).toHaveLength(1);
     expect(body.bySource[0].label).toBe("my-tool");
     expect(body.bySource[0].count).toBe(1);
+  });
+
+  it("excludes rows whose source has been soft-deleted (deletedAt set)", async () => {
+    const { db } = mkDb();
+    await seed(db);
+    const fetch = await makeApp(db);
+
+    // Tombstone src_a1 — it stays in the table but should fall out of the
+    // bySource rollup since the route joins sources_active, not sources.
+    await db
+      .update(sources)
+      .set({ deletedAt: new Date().toISOString() })
+      .where(eq(sources.id, "src_a1"));
+
+    await db.insert(usageLog).values({
+      operation: "agent-ingest",
+      model: "test-model",
+      inputTokens: 100,
+      outputTokens: 20,
+      sourceId: "src_a1",
+      releaseCount: 1,
+    });
+
+    const res = await fetch(new Request("https://x.test/v1/admin/logs/usage/stats?days=7"));
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      totals: { count: number };
+      bySource: Array<{ label: string | null; count: number }>;
+    };
+
+    expect(body.totals.count).toBe(1);
+    expect(body.bySource).toHaveLength(0);
   });
 
   it("excludes rows whose source has been deleted (sourceId NULL)", async () => {

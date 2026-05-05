@@ -4,6 +4,7 @@ import { createDb } from "../db.js";
 import {
   usageLog,
   sources,
+  sourcesActive,
   USAGE_EXTRACTION_MODES,
   USAGE_FALLBACK_REASONS,
   type UsageExtractionMode,
@@ -67,19 +68,20 @@ usageLogRoutes.get("/admin/logs/usage/stats", async (c) => {
       .where(gte(usageLog.createdAt, since))
       .groupBy(usageLog.model),
 
-    // Group by source_id (the stable FK) and join sources for the display slug.
-    // Rows whose source has been deleted (source_id NULL via ON DELETE SET NULL)
-    // are excluded — they still contribute to totals and the by-operation /
-    // by-model rollups, just not the per-source breakdown.
+    // Group by source_id (the stable FK) and join sources_active for the display
+    // slug — tombstoned rows (deleted_at IS NOT NULL) drop out alongside
+    // hard-deleted ones (source_id NULL via ON DELETE SET NULL). Excluded rows
+    // still contribute to totals and the by-operation / by-model rollups, just
+    // not the per-source breakdown.
     db
       .select({
-        label: sources.slug,
+        label: sourcesActive.slug,
         totalInput: sql<number>`COALESCE(SUM(${usageLog.inputTokens}), 0)`,
         totalOutput: sql<number>`COALESCE(SUM(${usageLog.outputTokens}), 0)`,
         count: sql<number>`COUNT(*)`,
       })
       .from(usageLog)
-      .innerJoin(sources, eq(usageLog.sourceId, sources.id))
+      .innerJoin(sourcesActive, eq(usageLog.sourceId, sourcesActive.id))
       .where(gte(usageLog.createdAt, since))
       .groupBy(usageLog.sourceId),
   ]);
