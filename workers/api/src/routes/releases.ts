@@ -59,13 +59,26 @@ releaseRoutes.get("/releases/latest", async (c) => {
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
 
   // `?exclude=github` (or `?exclude=github,scrape`) drops releases whose
-  // source.type is in the list. Sorted so any param ordering hits the same
-  // cache key.
-  const excludeSourceTypes = (c.req.query("exclude") ?? "")
+  // source.type is in the list. Reject typos with a 400 — silently
+  // ignoring them would return an unfiltered feed for callers expecting
+  // filtering, and worse, cache-collide with the unfiltered default.
+  const excludeRaw = c.req.query("exclude") ?? "";
+  const excludeTokens = excludeRaw
     .split(",")
     .map((t) => t.trim().toLowerCase())
-    .filter((t) => VALID_SOURCE_TYPES.has(t))
-    .toSorted();
+    .filter((t) => t.length > 0);
+  const invalidExcludes = [...new Set(excludeTokens.filter((t) => !VALID_SOURCE_TYPES.has(t)))];
+  if (invalidExcludes.length > 0) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `Invalid \`exclude\` source types: ${invalidExcludes.join(", ")}. Allowed: ${[...VALID_SOURCE_TYPES].join(", ")}.`,
+      },
+      400,
+    );
+  }
+  // Dedupe + sort so any param ordering or duplicate hits the same cache key.
+  const excludeSourceTypes = [...new Set(excludeTokens)].toSorted();
 
   if (sourceParam && orgParam) {
     return c.json(
