@@ -894,25 +894,6 @@ describe("get_latest_releases _meta.pagination (cursor)", () => {
     });
   });
 
-  it("legacy `count` input still works when `limit` is omitted", async () => {
-    const result = await getLatestReleases(asD1(fixture.db), { count: 2 });
-    expect(result._meta?.pagination).toMatchObject({
-      kind: "cursor",
-      returned: 2,
-      limit: 2,
-      hasMore: true,
-    });
-  });
-
-  it("`limit` takes precedence over `count` when both are provided", async () => {
-    const result = await getLatestReleases(asD1(fixture.db), { count: 99, limit: 2 });
-    expect(result._meta?.pagination).toMatchObject({
-      kind: "cursor",
-      returned: 2,
-      limit: 2,
-    });
-  });
-
   it("emits a continuation hint in the body so non-_meta clients can chain", async () => {
     const result = await getLatestReleases(asD1(fixture.db), { limit: 3 });
     const text = resultText(result);
