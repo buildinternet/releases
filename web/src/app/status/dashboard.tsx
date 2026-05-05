@@ -12,6 +12,7 @@ import { useFetchLog } from "@/components/use-fetch-log";
 import { SortHeader, type SortState } from "@/components/sort-header";
 import { DAY_MS } from "@/lib/cadence";
 import { SOURCE_STALE_DAYS as STALE_THRESHOLD_DAYS } from "@buildinternet/releases-core/sources";
+import type { OrgsRollupResponse, OrgsRollupRow } from "@buildinternet/releases-api-types";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
@@ -1233,7 +1234,7 @@ function SourcesTable() {
         </div>
         <button
           onClick={() => setStaleOnly(!staleOnly)}
-          title={`No release in ${STALE_THRESHOLD_DAYS}+ days, or never published`}
+          title={`Older than ${STALE_THRESHOLD_DAYS} days, or never published`}
           className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
             staleOnly
               ? "bg-amber-500 text-white"
@@ -1389,21 +1390,8 @@ function SourceTypeBadge({ type }: { type: string }) {
   return <span className={`capitalize ${styles[type] ?? "text-stone-400"}`}>{type}</span>;
 }
 
-interface OrgRow {
-  orgSlug: string;
-  sourceCount: number;
-  staleCount: number;
-  mostRecentRelease: string | null;
-  mostRecentAgeDays: number | null;
-  allStale: boolean;
-}
-
-interface OrgsRollupMeta {
-  staleDays: number;
-  totalOrgs: number;
-  dormantOrgs: number;
-  anyStaleOrgs: number;
-}
+type OrgRow = OrgsRollupRow;
+type OrgsRollupMeta = OrgsRollupResponse["meta"];
 
 type OrgStaleFilter = "all" | "stale" | "dormant";
 
