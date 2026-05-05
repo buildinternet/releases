@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, useCallback, type ReactNode } from "react";
+import { useEffect, useRef, useState, useCallback, type ReactNode } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import {
   type FetchLogEntry,
@@ -11,6 +11,8 @@ import { FetchLogList } from "@/components/fetch-log-list";
 import { useFetchLog } from "@/components/use-fetch-log";
 import { SortHeader, type SortState } from "@/components/sort-header";
 import { DAY_MS } from "@/lib/cadence";
+import { SOURCE_STALE_DAYS as STALE_THRESHOLD_DAYS } from "@buildinternet/releases-core/sources";
+import type { OrgsRollupResponse, OrgsRollupRow } from "@buildinternet/releases-api-types";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
@@ -146,10 +148,6 @@ function parseTab(value: string | null): Tab {
   return TABS.some((t) => t.value === value) ? (value as Tab) : DEFAULT_TAB;
 }
 
-// Matches the "low" retier band ceiling: sources shipping less than once a
-// quarter get flagged. Sources with no releases count as stale too.
-const STALE_THRESHOLD_DAYS = 90;
-
 function ageInDays(iso: string | null | undefined, now: number = Date.now()): number | null {
   if (!iso) return null;
   const t = new Date(iso).getTime();
@@ -243,12 +241,6 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const [expandedSessions, setExpandedSessions] = useState<Set<string>>(new Set());
   const [sessionLogs, setSessionLogs] = useState<Record<string, string[]>>({});
   const [sessionStdout, setSessionStdout] = useState<Record<string, string[]>>({});
-  const [allSources, setAllSources] = useState<SourceEntry[]>([]);
-  const [sourcesTotal, setSourcesTotal] = useState<number | null>(null);
-  const [sourceSort, setSourceSort] = useState<SortState<SourceSortField>>({
-    field: "name",
-    dir: "asc",
-  });
   const [fetchLogSort, setFetchLogSort] = useState<SortState<FetchLogSortField>>({
     field: "createdAt",
     dir: "desc",
@@ -287,31 +279,6 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   useEffect(() => {
     hydrate();
   }, [hydrate]);
-
-  // Fetch sources when sort changes (server-side sort triggers a refetch).
-  // `limit=500` is still a hard cap, but `envelope=true` returns
-  // `pagination.totalItems` so the table can warn instead of silently
-  // truncating once the source count crosses the cap. Real incremental
-  // paging + server-side type/stale/q filters and an OrgsTable rollup
-  // endpoint are the remaining follow-ups.
-  useEffect(() => {
-    const params = new URLSearchParams({
-      envelope: "true",
-      limit: "500",
-      sort: sourceSort.field,
-      dir: sourceSort.dir,
-    });
-    fetch(`/api/proxy/sources?${params}`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((body) => {
-        if (!body) return;
-        const items = unwrapList<SourceEntry>(body) ?? [];
-        setAllSources(items);
-        const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
-        setSourcesTotal(typeof total === "number" ? total : null);
-      })
-      .catch(() => {});
-  }, [sourceSort]);
 
   // Handle incoming WebSocket messages
   const handleMessage = useCallback((event: MessageEvent) => {
@@ -628,15 +595,8 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           onSortChange={setFetchLogSort}
         />
       )}
-      {tab === "sources" && (
-        <SourcesTable
-          sources={allSources}
-          totalItems={sourcesTotal}
-          sort={sourceSort}
-          onSortChange={setSourceSort}
-        />
-      )}
-      {tab === "orgs" && <OrgsTable sources={allSources} totalItems={sourcesTotal} />}
+      {tab === "sources" && <SourcesTable />}
+      {tab === "orgs" && <OrgsTable />}
       {tab === "cron" && <CronRunsTab />}
       {tab === "searches" && <SearchQueriesTab />}
     </div>
@@ -1145,69 +1105,80 @@ function FetchLogTable({
 
 type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 
-function TruncationBanner({ shown, totalItems }: { shown: number; totalItems: number | null }) {
-  if (totalItems == null || totalItems <= shown) return null;
-  return (
-    <div className="mb-3 px-3 py-2 text-xs rounded border border-amber-200 dark:border-amber-800/40 bg-amber-50 dark:bg-amber-900/20 text-amber-900 dark:text-amber-200">
-      Showing {shown.toLocaleString()} of {totalItems.toLocaleString()} sources — table is truncated
-      at the page-size cap (500). Filters and aggregates only reflect the loaded rows.
-    </div>
-  );
-}
-
-function SourcesTable({
-  sources,
-  totalItems,
-  sort,
-  onSortChange,
-}: {
-  sources: SourceEntry[];
-  totalItems: number | null;
-  sort: SortState<SourceSortField>;
-  onSortChange: (next: SortState<SourceSortField>) => void;
-}) {
-  const [filter, setFilter] = useState<SourceTypeFilter>("all");
+function SourcesTable() {
+  const [sources, setSources] = useState<SourceEntry[]>([]);
+  const [totalItems, setTotalItems] = useState<number | null>(null);
+  const [error, setError] = useState(false);
+  const [sort, setSortState] = useState<SortState<SourceSortField>>({ field: "name", dir: "asc" });
+  const [filter, setFilterState] = useState<SourceTypeFilter>("all");
   const [query, setQuery] = useState("");
-  const [staleOnly, setStaleOnly] = useState(false);
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [staleOnly, setStaleOnlyState] = useState(false);
   const [fetching, setFetching] = useState<Set<string>>(new Set());
   const [results, setResults] = useState<Record<string, FetchTriggerResult>>({});
-  const [page, setPage] = useState(0);
-  const perPage = 25;
+  const [page, setPage] = useState(1);
+  const perPage = 50;
 
-  const handleSortChange = useCallback(
-    (next: SortState<SourceSortField>) => {
-      setPage(0);
-      onSortChange(next);
-    },
-    [onSortChange],
-  );
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedQuery((prev) => (prev === query ? prev : query));
+      setPage((p) => (p === 1 ? p : 1));
+    }, 250);
+    return () => clearTimeout(id);
+  }, [query]);
 
-  const { countByType, staleCount } = useMemo(() => {
-    const counts: Record<string, number> = {};
-    let stale = 0;
-    for (const s of sources) {
-      counts[s.type] = (counts[s.type] ?? 0) + 1;
-      if (isSourceStale(s)) stale++;
-    }
-    return { countByType: counts, staleCount: stale };
-  }, [sources]);
-
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase();
-    return sources.filter((s) => {
-      if (filter !== "all" && s.type !== filter) return false;
-      if (staleOnly && !isSourceStale(s)) return false;
-      if (!q) return true;
-      return (
-        s.name.toLowerCase().includes(q) ||
-        s.slug.toLowerCase().includes(q) ||
-        (s.orgSlug ?? "").toLowerCase().includes(q)
-      );
+  useEffect(() => {
+    const params = new URLSearchParams({
+      envelope: "true",
+      page: String(page),
+      limit: String(perPage),
+      sort: sort.field,
+      dir: sort.dir,
     });
-  }, [sources, filter, staleOnly, query]);
+    if (filter !== "all") params.set("type", filter);
+    if (staleOnly) params.set("stale", "true");
+    if (debouncedQuery) params.set("q", debouncedQuery);
 
-  const totalPages = Math.ceil(filtered.length / perPage);
-  const paginated = filtered.slice(page * perPage, (page + 1) * perPage);
+    const controller = new AbortController();
+    fetch(`/api/proxy/sources?${params}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (controller.signal.aborted) return;
+        if (!body) {
+          setSources([]);
+          setTotalItems(null);
+          setError(true);
+          return;
+        }
+        const items = unwrapList<SourceEntry>(body) ?? [];
+        setSources(items);
+        const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
+        setTotalItems(typeof total === "number" ? total : null);
+        setError(false);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setSources([]);
+        setTotalItems(null);
+        setError(true);
+      });
+    return () => controller.abort();
+  }, [page, perPage, sort, filter, staleOnly, debouncedQuery]);
+
+  const setFilter = (next: SourceTypeFilter) => {
+    setFilterState(next);
+    setPage(1);
+  };
+  const setStaleOnly = (next: boolean) => {
+    setStaleOnlyState(next);
+    setPage(1);
+  };
+  const setSort = (next: SortState<SourceSortField>) => {
+    setSortState(next);
+    setPage(1);
+  };
+
+  const totalPages = totalItems != null ? Math.max(1, Math.ceil(totalItems / perPage)) : 1;
 
   // The button passes the typed `src_…` ID rather than the slug — the
   // legacy bare API path stopped accepting bare slugs in #698. We key
@@ -1242,100 +1213,73 @@ function SourcesTable({
     { value: "agent", label: "Agent" },
   ];
 
-  if (sources.length === 0) {
-    return (
-      <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">
-        No sources loaded.
-      </div>
-    );
-  }
-
   return (
     <div>
-      <TruncationBanner shown={sources.length} totalItems={totalItems} />
       {/* Filters */}
       <div className="flex items-center gap-3 mb-3">
         <div className="flex gap-1">
-          {filterButtons.map((f) => {
-            const count = f.value === "all" ? sources.length : (countByType[f.value] ?? 0);
-            if (count === 0 && f.value !== "all") return null;
-            return (
-              <button
-                key={f.value}
-                onClick={() => {
-                  setFilter(f.value);
-                  setPage(0);
-                }}
-                className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
-                  filter === f.value
-                    ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
-                    : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
-                }`}
-              >
-                {f.label} <span className="ml-0.5 opacity-60">{count}</span>
-              </button>
-            );
-          })}
+          {filterButtons.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => setFilter(f.value)}
+              className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
+                filter === f.value
+                  ? "bg-stone-900 dark:bg-stone-100 text-white dark:text-stone-900"
+                  : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
+              }`}
+            >
+              {f.label}
+            </button>
+          ))}
         </div>
         <button
-          onClick={() => {
-            setStaleOnly((v) => !v);
-            setPage(0);
-          }}
-          title={`No release in ${STALE_THRESHOLD_DAYS}+ days, or never published`}
+          onClick={() => setStaleOnly(!staleOnly)}
+          title={`Older than ${STALE_THRESHOLD_DAYS} days, or never published`}
           className={`px-2.5 py-1 text-xs rounded-full transition-colors ${
             staleOnly
               ? "bg-amber-500 text-white"
               : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
           }`}
         >
-          Stale <span className="ml-0.5 opacity-60">{staleCount}</span>
+          Stale
         </button>
         <input
           type="text"
           placeholder="Filter sources..."
           value={query}
-          onChange={(e) => {
-            setQuery(e.target.value);
-            setPage(0);
-          }}
+          onChange={(e) => setQuery(e.target.value)}
           className="px-2.5 py-1 text-xs rounded border border-stone-200 dark:border-stone-700 bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 placeholder:text-stone-400 w-48"
         />
       </div>
 
       <div className="border border-stone-200 dark:border-stone-800 rounded-lg overflow-hidden font-mono">
         <div className="grid grid-cols-[2fr_1fr_1fr_1.4fr_0.9fr_1.2fr_auto] px-4 py-2 border-b border-stone-100 dark:border-stone-800 text-xs font-sans font-medium">
-          <SortHeader field="name" current={sort} onChange={handleSortChange}>
+          <SortHeader field="name" current={sort} onChange={setSort}>
             Name
           </SortHeader>
-          <SortHeader field="org" current={sort} onChange={handleSortChange}>
+          <SortHeader field="org" current={sort} onChange={setSort}>
             Org
           </SortHeader>
-          <SortHeader field="type" current={sort} onChange={handleSortChange}>
+          <SortHeader field="type" current={sort} onChange={setSort}>
             Type
           </SortHeader>
-          <SortHeader
-            field="latest_date"
-            current={sort}
-            onChange={handleSortChange}
-            defaultDir="desc"
-          >
+          <SortHeader field="latest_date" current={sort} onChange={setSort} defaultDir="desc">
             Last Release
           </SortHeader>
-          <SortHeader field="fetch_priority" current={sort} onChange={handleSortChange}>
+          <SortHeader field="fetch_priority" current={sort} onChange={setSort}>
             Priority
           </SortHeader>
-          <SortHeader
-            field="median_gap_days"
-            current={sort}
-            onChange={handleSortChange}
-            defaultDir="desc"
-          >
+          <SortHeader field="median_gap_days" current={sort} onChange={setSort} defaultDir="desc">
             Cadence
           </SortHeader>
           <div></div>
         </div>
-        {paginated.map((src) => {
+        {sources.length === 0 && (
+          <div className="px-4 py-6 text-xs text-stone-400 dark:text-stone-500 text-center">
+            {error ? "Failed to load sources." : "No sources match."}
+          </div>
+        )}
+        {sources.map((src) => {
           const result = results[src.id];
           const isFetching = fetching.has(src.id);
           const cadence = describeCadence(src.medianGapDays, src.fetchPriority, src.lastRetieredAt);
@@ -1408,30 +1352,30 @@ function SourcesTable({
           );
         })}
       </div>
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
-          <span>{filtered.length} sources</span>
+      <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
+        <span>{totalItems != null ? `${totalItems.toLocaleString()} sources` : "—"}</span>
+        {totalPages > 1 && (
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setPage(page - 1)}
-              disabled={page === 0}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
               className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
             >
               Prev
             </button>
             <span>
-              {page + 1} / {totalPages}
+              {page} / {totalPages}
             </span>
             <button
-              onClick={() => setPage(page + 1)}
-              disabled={page >= totalPages - 1}
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= totalPages}
               className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
             >
               Next
             </button>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
@@ -1446,92 +1390,83 @@ function SourceTypeBadge({ type }: { type: string }) {
   return <span className={`capitalize ${styles[type] ?? "text-stone-400"}`}>{type}</span>;
 }
 
-interface OrgRow {
-  orgSlug: string;
-  sourceCount: number;
-  staleCount: number;
-  mostRecentRelease: string | null;
-  mostRecentAgeDays: number | null;
-  allStale: boolean;
-}
+type OrgRow = OrgsRollupRow;
+type OrgsRollupMeta = OrgsRollupResponse["meta"];
 
 type OrgStaleFilter = "all" | "stale" | "dormant";
 
-function OrgsTable({ sources, totalItems }: { sources: SourceEntry[]; totalItems: number | null }) {
-  const [filter, setFilter] = useState<OrgStaleFilter>("all");
+function OrgsTable() {
+  const [orgs, setOrgs] = useState<OrgRow[]>([]);
+  const [meta, setMeta] = useState<OrgsRollupMeta | null>(null);
+  const [totalItems, setTotalItems] = useState<number | null>(null);
+  const [error, setError] = useState(false);
+  const [filter, setFilterState] = useState<OrgStaleFilter>("all");
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const perPage = 50;
 
-  const { orgs, dormantCount, anyStaleCount } = useMemo(() => {
-    const byOrg = new Map<string, SourceEntry[]>();
-    for (const s of sources) {
-      const key = s.orgSlug ?? "—";
-      const list = byOrg.get(key) ?? [];
-      list.push(s);
-      byOrg.set(key, list);
-    }
-    const now = Date.now();
-    const rows: OrgRow[] = [];
-    let dormant = 0;
-    let anyStale = 0;
-    for (const [orgSlug, list] of byOrg) {
-      let mostRecent: string | null = null;
-      let staleCount = 0;
-      for (const s of list) {
-        if (isSourceStale(s, now)) staleCount++;
-        // ISO-8601 strings sort lexicographically by time.
-        if (s.latestDate && (!mostRecent || s.latestDate > mostRecent)) {
-          mostRecent = s.latestDate;
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setDebouncedQuery((prev) => (prev === query ? prev : query));
+      setPage((p) => (p === 1 ? p : 1));
+    }, 250);
+    return () => clearTimeout(id);
+  }, [query]);
+
+  useEffect(() => {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(perPage),
+    });
+    if (filter !== "all") params.set("filter", filter);
+    if (debouncedQuery) params.set("q", debouncedQuery);
+
+    const controller = new AbortController();
+    fetch(`/api/proxy/admin/sources/orgs-rollup?${params}`, { signal: controller.signal })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((body) => {
+        if (controller.signal.aborted) return;
+        if (!body) {
+          setOrgs([]);
+          setTotalItems(null);
+          setMeta(null);
+          setError(true);
+          return;
         }
-      }
-      const allStale = staleCount === list.length;
-      if (allStale) dormant++;
-      if (staleCount > 0) anyStale++;
-      rows.push({
-        orgSlug,
-        sourceCount: list.length,
-        staleCount,
-        mostRecentRelease: mostRecent,
-        mostRecentAgeDays: ageInDays(mostRecent, now),
-        allStale,
+        const items = unwrapList<OrgRow>(body) ?? [];
+        setOrgs(items);
+        const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
+        setTotalItems(typeof total === "number" ? total : null);
+        const m = (body as { meta?: OrgsRollupMeta }).meta;
+        setMeta(m ?? null);
+        setError(false);
+      })
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setOrgs([]);
+        setTotalItems(null);
+        setMeta(null);
+        setError(true);
       });
-    }
-    rows.sort((a, b) => {
-      if (a.allStale !== b.allStale) return a.allStale ? -1 : 1;
-      const aAge = a.mostRecentAgeDays ?? Number.POSITIVE_INFINITY;
-      const bAge = b.mostRecentAgeDays ?? Number.POSITIVE_INFINITY;
-      if (aAge !== bAge) return bAge - aAge;
-      return a.orgSlug.localeCompare(b.orgSlug);
-    });
-    return { orgs: rows, dormantCount: dormant, anyStaleCount: anyStale };
-  }, [sources]);
+    return () => controller.abort();
+  }, [page, perPage, filter, debouncedQuery]);
 
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase();
-    return orgs.filter((o) => {
-      if (filter === "stale" && o.staleCount === 0) return false;
-      if (filter === "dormant" && !o.allStale) return false;
-      if (!q) return true;
-      return o.orgSlug.toLowerCase().includes(q);
-    });
-  }, [orgs, filter, query]);
-
-  if (sources.length === 0) {
-    return (
-      <div className="text-sm text-stone-400 dark:text-stone-500 py-8 text-center">
-        No sources loaded.
-      </div>
-    );
-  }
+  const setFilter = (next: OrgStaleFilter) => {
+    setFilterState(next);
+    setPage(1);
+  };
 
   const filterButtons: { value: OrgStaleFilter; label: string; count: number }[] = [
-    { value: "all", label: "All", count: orgs.length },
-    { value: "stale", label: "Has stale", count: anyStaleCount },
-    { value: "dormant", label: "All stale", count: dormantCount },
+    { value: "all", label: "All", count: meta?.totalOrgs ?? 0 },
+    { value: "stale", label: "Has stale", count: meta?.anyStaleOrgs ?? 0 },
+    { value: "dormant", label: "All stale", count: meta?.dormantOrgs ?? 0 },
   ];
+
+  const totalPages = totalItems != null ? Math.max(1, Math.ceil(totalItems / perPage)) : 1;
 
   return (
     <div>
-      <TruncationBanner shown={sources.length} totalItems={totalItems} />
       <div className="flex items-center gap-3 mb-3">
         <div className="flex gap-1">
           {filterButtons.map((f) => (
@@ -1546,7 +1481,7 @@ function OrgsTable({ sources, totalItems }: { sources: SourceEntry[]; totalItems
                   : "bg-stone-100 dark:bg-stone-800 text-stone-500 dark:text-stone-400 hover:bg-stone-200 dark:hover:bg-stone-700"
               }`}
             >
-              {f.label} <span className="ml-0.5 opacity-60">{f.count}</span>
+              {f.label} <span className="ml-0.5 opacity-60">{f.count.toLocaleString()}</span>
             </button>
           ))}
         </div>
@@ -1567,7 +1502,7 @@ function OrgsTable({ sources, totalItems }: { sources: SourceEntry[]; totalItems
           <div>Newest Release</div>
           <div>Status</div>
         </div>
-        {filtered.map((o) => (
+        {orgs.map((o) => (
           <div
             key={o.orgSlug}
             className="grid grid-cols-[2fr_0.8fr_0.8fr_1.4fr_0.8fr] gap-x-4 px-4 py-2.5 text-xs border-b border-stone-100 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-800 transition-colors items-center"
@@ -1597,9 +1532,34 @@ function OrgsTable({ sources, totalItems }: { sources: SourceEntry[]; totalItems
             </div>
           </div>
         ))}
-        {filtered.length === 0 && (
+        {orgs.length === 0 && (
           <div className="px-4 py-6 text-xs text-stone-400 dark:text-stone-500 text-center">
-            No orgs match.
+            {error ? "Failed to load orgs." : "No orgs match."}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between mt-3 text-xs text-stone-400 dark:text-stone-500">
+        <span>{totalItems != null ? `${totalItems.toLocaleString()} orgs` : "—"}</span>
+        {totalPages > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1}
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
+            >
+              Prev
+            </button>
+            <span>
+              {page} / {totalPages}
+            </span>
+            <button
+              onClick={() => setPage((p) => p + 1)}
+              disabled={page >= totalPages}
+              className="px-2 py-1 rounded border border-stone-200 dark:border-stone-700 hover:bg-stone-50 dark:hover:bg-stone-800 disabled:opacity-30 disabled:cursor-default"
+            >
+              Next
+            </button>
           </div>
         )}
       </div>

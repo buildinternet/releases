@@ -271,6 +271,33 @@ export interface SourceDetail {
   };
 }
 
+// ── Admin telemetry: orgs rollup ──
+
+export interface OrgsRollupRow {
+  /** Org slug, or "—" for sources without an org. */
+  orgSlug: string;
+  sourceCount: number;
+  /** Sources with no release on file or `latestDate` older than `staleDays`. */
+  staleCount: number;
+  /** Most-recent release across all of the org's sources, or null. */
+  mostRecentRelease: string | null;
+  mostRecentAgeDays: number | null;
+  /** True iff every source in the org is stale (and the org has at least one source). */
+  allStale: boolean;
+}
+
+export interface OrgsRollupResponse extends ListResponse<OrgsRollupRow> {
+  meta: {
+    /** Stale cutoff used server-side, in days. */
+    staleDays: number;
+    totalOrgs: number;
+    /** Orgs where every source is stale. */
+    dormantOrgs: number;
+    /** Orgs with at least one stale source. */
+    anyStaleOrgs: number;
+  };
+}
+
 // ── Releases ──
 
 /**
