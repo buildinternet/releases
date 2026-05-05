@@ -48,6 +48,7 @@ const searchPreviewComponents: Record<string, any> = {
 import { SourceTypeIcon } from "./source-type-icon";
 import { FallbackImage } from "./fallback-image";
 import { LookupRail } from "./lookup-rail";
+import { RollupBadge } from "./rollup-badge";
 import { formatDate } from "@/lib/formatters";
 
 type SearchFilter = "all" | "orgs" | "products" | "releases";
@@ -170,6 +171,7 @@ const resultMarkdownClasses =
 function ResultCard({
   kindLabel,
   title,
+  titleBadge,
   titleHref,
   externalUrl,
   date,
@@ -183,6 +185,7 @@ function ResultCard({
 }: {
   kindLabel?: string;
   title: string;
+  titleBadge?: React.ReactNode;
   titleHref: string;
   externalUrl?: string | null;
   date?: string | null;
@@ -218,6 +221,7 @@ function ResultCard({
             ↗
           </a>
         )}
+        {titleBadge}
       </div>
       <div className="text-[12px] text-stone-400 dark:text-stone-500 mb-2 flex items-center gap-1 flex-wrap">
         <span>via</span>
@@ -289,6 +293,7 @@ function ReleaseResultCard({ hit }: { hit: SearchReleaseHit }) {
   return (
     <ResultCard
       title={heading}
+      titleBadge={<RollupBadge type={hit.type} />}
       titleHref={releaseHref(hit)}
       date={formatDate(hit.publishedAt)}
       sourceName={hit.sourceName}

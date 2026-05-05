@@ -11,6 +11,7 @@ import { CliCommand } from "@/components/cli-command";
 import { AlsoCoveredBy } from "@/components/also-covered-by";
 import { RelatedRail } from "@/components/related-rail";
 import { ReleaseContent } from "./release-content";
+import { RollupBadge } from "@/components/rollup-badge";
 
 export async function generateMetadata({
   params,
@@ -154,9 +155,12 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
 
         {/* Header */}
         <div className="mt-6 mb-6">
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-            {heading}
-          </h1>
+          <div className="flex items-center gap-2 flex-wrap">
+            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+              {heading}
+            </h1>
+            <RollupBadge type={release.type} />
+          </div>
           {showSubtitle && (
             <p className="text-lg text-stone-600 dark:text-stone-400 mt-1">{release.title}</p>
           )}

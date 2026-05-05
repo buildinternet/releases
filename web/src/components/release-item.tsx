@@ -12,6 +12,7 @@ import { isOptimizableImage } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
+import { RollupBadge } from "./rollup-badge";
 
 /** Strip a leading markdown heading that duplicates the release title,
  *  and empty artifacts left by HTML-to-markdown conversion. */
@@ -219,6 +220,7 @@ export function ReleaseListItem({
               ↗
             </a>
           )}
+          <RollupBadge type={release.type} />
         </div>
         {showSubtitle && (
           <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{release.title}</div>
