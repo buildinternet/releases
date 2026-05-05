@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { describeRoute, resolver } from "hono-openapi";
+import { OrgListResponseSchema, ErrorResponseSchema } from "@buildinternet/releases-api-types";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -52,464 +54,592 @@ import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 
 export const orgRoutes = new Hono<Env>();
 
-orgRoutes.get("/orgs", async (c) => {
-  const db = createDb(c.env.DB);
-  const cutoff30d = daysAgoIso(30);
-  const qParam = c.req.query("q");
-  const pagination = parseListPagination(new URL(c.req.url).searchParams);
+orgRoutes.get(
+  "/orgs",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "List organizations",
+    description:
+      "Paginated list of orgs with 30-day release sparklines. Supports `?q=` substring search on name/slug.",
+    responses: {
+      200: {
+        description: "Paginated org list",
+        content: { "application/json": { schema: resolver(OrgListResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const cutoff30d = daysAgoIso(30);
+    const qParam = c.req.query("q");
+    const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-  const [rows, totalItems] = await Promise.all([
-    getOrgsWithStats(db, cutoff30d, qParam ?? undefined, {
-      limit: pagination.pageSize,
-      offset: pagination.offset,
-    }),
-    countOrgsForList(db, qParam ?? undefined),
-  ]);
-  const sparklineRows = await getOrgSparklines(
-    db,
-    cutoff30d,
-    rows.map((row) => row.id),
-  );
+    const [rows, totalItems] = await Promise.all([
+      getOrgsWithStats(db, cutoff30d, qParam ?? undefined, {
+        limit: pagination.pageSize,
+        offset: pagination.offset,
+      }),
+      countOrgsForList(db, qParam ?? undefined),
+    ]);
+    const sparklineRows = await getOrgSparklines(
+      db,
+      cutoff30d,
+      rows.map((row) => row.id),
+    );
 
-  // Build a 30-day sparkline array per org (align to UTC midnight to avoid off-by-one near day boundary)
-  const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
-  const sparklineMap = new Map<string, number[]>();
-  for (const row of sparklineRows) {
-    if (!sparklineMap.has(row.org_id)) {
-      sparklineMap.set(
-        row.org_id,
-        Array.from({ length: 30 }, () => 0),
-      );
-    }
-    const dayDate = new Date(row.date + "T00:00:00Z");
-    const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
-    const idx = 29 - daysAgo;
-    if (idx >= 0 && idx < 30) {
-      sparklineMap.get(row.org_id)![idx] = row.cnt;
-    }
-  }
-
-  const result = rows.map((row) => ({
-    id: row.id,
-    slug: row.slug,
-    name: row.name,
-    domain: row.domain,
-    description: row.description,
-    category: row.category,
-    sourceCount: row.source_count,
-    releaseCount: row.release_count,
-    recentReleaseCount: row.recent_release_count,
-    lastActivity: row.last_activity ?? null,
-    topProducts: row.top_products ? row.top_products.split("||") : [],
-    sparkline: sparklineMap.get(row.id) ?? Array.from({ length: 30 }, () => 0),
-  }));
-
-  return c.json(buildListResponse(result, pagination, totalItems));
-});
-
-orgRoutes.get("/orgs/:slug", async (c) => {
-  const slug = c.req.param("slug");
-  const db = createDb(c.env.DB);
-
-  let [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) {
-    const [alias] = await db
-      .select({ org: organizations })
-      .from(domainAliases)
-      .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
-      .where(eq(domainAliases.domain, slug));
-    if (alias) org = alias.org;
-  }
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  const cutoff = daysAgoIso(30);
-  const cutoff90d = daysAgoIso(90);
-
-  const [
-    accounts,
-    tagRows,
-    orgSources,
-    productRows,
-    aliasRows,
-    totalReleaseRow,
-    latestFetchRow,
-    latestPollRow,
-    knowledgePageRows,
-    metricsRow,
-  ] = await Promise.all([
-    db
-      .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
-      .from(orgAccounts)
-      .where(eq(orgAccounts.orgId, org.id)),
-
-    db
-      .select({ name: tags.name })
-      .from(orgTags)
-      .innerJoin(tags, eq(orgTags.tagId, tags.id))
-      .where(eq(orgTags.orgId, org.id))
-      .orderBy(tags.name),
-
-    getOrgSourcesWithStats(db, org.id),
-
-    db
-      .select({
-        id: productsActive.id,
-        slug: productsActive.slug,
-        name: productsActive.name,
-        url: productsActive.url,
-        description: productsActive.description,
-        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
-      })
-      .from(productsActive)
-      .where(eq(productsActive.orgId, org.id))
-      .orderBy(productsActive.name),
-
-    db
-      .select({ domain: domainAliases.domain })
-      .from(domainAliases)
-      .where(eq(domainAliases.orgId, org.id))
-      .orderBy(domainAliases.domain),
-
-    // Total release count (includes suppressed — intentional for overall count)
-    db
-      .select({ n: count() })
-      .from(releases)
-      .innerJoin(sources, eq(releases.sourceId, sources.id))
-      .where(eq(sources.orgId, org.id)),
-
-    // Latest fetch timestamp across all org sources
-    db
-      .select({ maxFetch: max(sources.lastFetchedAt) })
-      .from(sources)
-      .where(eq(sources.orgId, org.id)),
-
-    // Latest poll (change-detection check) timestamp across all org sources
-    db
-      .select({ maxPoll: max(sources.lastPolledAt) })
-      .from(sources)
-      .where(eq(sources.orgId, org.id)),
-
-    // Overview + playbook pages for this org (single query, split client-side)
-    db
-      .select()
-      .from(knowledgePages)
-      .where(
-        and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id)),
-      ),
-
-    // Recent-release metrics — scoped via subquery so this joins the parallel
-    // wave instead of blocking on orgSources.
-    db
-      .select({
-        recent: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
-        recent90d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff90d} THEN 1 END)`,
-        oldest: min(releases.publishedAt),
-      })
-      .from(releases)
-      .where(
-        and(
-          sql`${releases.sourceId} IN (SELECT id FROM sources WHERE org_id = ${org.id})`,
-          sql`${releases.publishedAt} IS NOT NULL`,
-        ),
-      ),
-  ]);
-
-  const sourcesWithStats = orgSources.map((row) => ({
-    id: row.id,
-    slug: row.slug,
-    name: row.name,
-    type: row.type,
-    url: row.url,
-    isPrimary: Boolean(row.is_primary),
-    isHidden: Boolean(row.is_hidden),
-    discovery: row.discovery ?? "curated",
-    fetchPriority: (row.fetch_priority ?? null) as "normal" | "low" | "paused" | null,
-    lastFetchedAt: row.last_fetched_at ?? null,
-    lastPolledAt: row.last_polled_at ?? null,
-    releaseCount: row.release_count,
-    latestVersion: row.latest_version_by_date ?? row.latest_version_by_fetch ?? null,
-    latestDate: row.latest_date ?? null,
-    latestAddedAt: row.latest_added_at ?? null,
-    productSlug: row.product_slug ?? null,
-    productName: row.product_name ?? null,
-  }));
-
-  const metrics = metricsRow[0];
-  const releasesLast30Days = metrics.recent;
-  const avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
-  const oldestReleaseDate = metrics.oldest;
-
-  const totalReleases = totalReleaseRow[0];
-  const latestFetch = latestFetchRow[0];
-  const latestPoll = latestPollRow[0];
-  const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
-  // Playbook content (header + agent notes) is internal — only return it to
-  // authenticated callers so we don't leak it via the public-cached JSON.
-  const isAuthed = await isValidBearerAuth(c);
-  const playbookRow = isAuthed
-    ? (knowledgePageRows.find((r) => r.scope === "playbook") ?? null)
-    : null;
-
-  const overviewData = knowledgeRow
-    ? {
-        scope: knowledgeRow.scope as "org",
-        content: knowledgeRow.content,
-        releaseCount: knowledgeRow.releaseCount,
-        lastContributingReleaseAt: knowledgeRow.lastContributingReleaseAt,
-        generatedAt: knowledgeRow.generatedAt,
-        updatedAt: knowledgeRow.updatedAt,
+    // Build a 30-day sparkline array per org (align to UTC midnight to avoid off-by-one near day boundary)
+    const today = new Date(new Date().toISOString().slice(0, 10) + "T00:00:00Z");
+    const sparklineMap = new Map<string, number[]>();
+    for (const row of sparklineRows) {
+      if (!sparklineMap.has(row.org_id)) {
+        sparklineMap.set(
+          row.org_id,
+          Array.from({ length: 30 }, () => 0),
+        );
       }
-    : null;
+      const dayDate = new Date(row.date + "T00:00:00Z");
+      const daysAgo = Math.floor((today.getTime() - dayDate.getTime()) / (1000 * 60 * 60 * 24));
+      const idx = 29 - daysAgo;
+      if (idx >= 0 && idx < 30) {
+        sparklineMap.get(row.org_id)![idx] = row.cnt;
+      }
+    }
 
-  const result = {
-    id: org.id,
-    slug: org.slug,
-    name: org.name,
-    domain: org.domain,
-    description: org.description,
-    category: org.category,
-    tags: tagRows.map((t) => t.name),
-    sourceCount: orgSources.length,
-    releaseCount: totalReleases.n,
-    releasesLast30Days,
-    avgReleasesPerWeek,
-    lastFetchedAt: latestFetch.maxFetch ?? null,
-    lastPolledAt: latestPoll.maxPoll ?? null,
-    trackingSince: oldestReleaseDate ?? org.createdAt,
-    aliases: aliasRows.map((a) => a.domain),
-    accounts,
-    products: productRows,
-    sources: sourcesWithStats,
-    overview: overviewData,
-    playbook: playbookRow
+    const result = rows.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      domain: row.domain,
+      description: row.description,
+      category: row.category,
+      avatarUrl: row.avatar_url,
+      sourceCount: row.source_count,
+      releaseCount: row.release_count,
+      recentReleaseCount: row.recent_release_count,
+      lastActivity: row.last_activity ?? null,
+      topProducts: row.top_products ? row.top_products.split("||") : [],
+      sparkline: sparklineMap.get(row.id) ?? Array.from({ length: 30 }, () => 0),
+    }));
+
+    return c.json(buildListResponse(result, pagination, totalItems));
+  },
+);
+
+orgRoutes.get(
+  "/orgs/:slug",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Get organization detail",
+    description:
+      "Resolves by slug, `org_…` ID, or domain alias. Authenticated callers also receive the org playbook (private; CDN cache opt-out).",
+    responses: {
+      200: {
+        description: "Organization detail",
+        content: {
+          // application/json is the default; schema lands when OrgDetail ports to Zod (sources PR).
+          "application/json": {},
+          "text/markdown": { schema: { type: "string" } },
+        },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const slug = c.req.param("slug");
+    const db = createDb(c.env.DB);
+
+    let [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) {
+      const [alias] = await db
+        .select({ org: organizations })
+        .from(domainAliases)
+        .innerJoin(organizations, eq(domainAliases.orgId, organizations.id))
+        .where(eq(domainAliases.domain, slug));
+      if (alias) org = alias.org;
+    }
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    const cutoff = daysAgoIso(30);
+    const cutoff90d = daysAgoIso(90);
+
+    const [
+      accounts,
+      tagRows,
+      orgSources,
+      productRows,
+      aliasRows,
+      totalReleaseRow,
+      latestFetchRow,
+      latestPollRow,
+      knowledgePageRows,
+      metricsRow,
+    ] = await Promise.all([
+      db
+        .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
+        .from(orgAccounts)
+        .where(eq(orgAccounts.orgId, org.id)),
+
+      db
+        .select({ name: tags.name })
+        .from(orgTags)
+        .innerJoin(tags, eq(orgTags.tagId, tags.id))
+        .where(eq(orgTags.orgId, org.id))
+        .orderBy(tags.name),
+
+      getOrgSourcesWithStats(db, org.id),
+
+      db
+        .select({
+          id: productsActive.id,
+          slug: productsActive.slug,
+          name: productsActive.name,
+          url: productsActive.url,
+          description: productsActive.description,
+          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
+        })
+        .from(productsActive)
+        .where(eq(productsActive.orgId, org.id))
+        .orderBy(productsActive.name),
+
+      db
+        .select({ domain: domainAliases.domain })
+        .from(domainAliases)
+        .where(eq(domainAliases.orgId, org.id))
+        .orderBy(domainAliases.domain),
+
+      // Total release count (includes suppressed — intentional for overall count)
+      db
+        .select({ n: count() })
+        .from(releases)
+        .innerJoin(sources, eq(releases.sourceId, sources.id))
+        .where(eq(sources.orgId, org.id)),
+
+      // Latest fetch timestamp across all org sources
+      db
+        .select({ maxFetch: max(sources.lastFetchedAt) })
+        .from(sources)
+        .where(eq(sources.orgId, org.id)),
+
+      // Latest poll (change-detection check) timestamp across all org sources
+      db
+        .select({ maxPoll: max(sources.lastPolledAt) })
+        .from(sources)
+        .where(eq(sources.orgId, org.id)),
+
+      // Overview + playbook pages for this org (single query, split client-side)
+      db
+        .select()
+        .from(knowledgePages)
+        .where(
+          and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id)),
+        ),
+
+      // Recent-release metrics — scoped via subquery so this joins the parallel
+      // wave instead of blocking on orgSources.
+      db
+        .select({
+          recent: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff} THEN 1 END)`,
+          recent90d: sql<number>`COUNT(CASE WHEN ${releases.publishedAt} >= ${cutoff90d} THEN 1 END)`,
+          oldest: min(releases.publishedAt),
+        })
+        .from(releases)
+        .where(
+          and(
+            sql`${releases.sourceId} IN (SELECT id FROM sources WHERE org_id = ${org.id})`,
+            sql`${releases.publishedAt} IS NOT NULL`,
+          ),
+        ),
+    ]);
+
+    const sourcesWithStats = orgSources.map((row) => ({
+      id: row.id,
+      slug: row.slug,
+      name: row.name,
+      type: row.type,
+      url: row.url,
+      isPrimary: Boolean(row.is_primary),
+      isHidden: Boolean(row.is_hidden),
+      discovery: row.discovery ?? "curated",
+      fetchPriority: (row.fetch_priority ?? null) as "normal" | "low" | "paused" | null,
+      lastFetchedAt: row.last_fetched_at ?? null,
+      lastPolledAt: row.last_polled_at ?? null,
+      releaseCount: row.release_count,
+      latestVersion: row.latest_version_by_date ?? row.latest_version_by_fetch ?? null,
+      latestDate: row.latest_date ?? null,
+      latestAddedAt: row.latest_added_at ?? null,
+      productSlug: row.product_slug ?? null,
+      productName: row.product_name ?? null,
+    }));
+
+    const metrics = metricsRow[0];
+    const releasesLast30Days = metrics.recent;
+    const avgReleasesPerWeek = computeAvgPerWeek(metrics.recent90d, metrics.oldest);
+    const oldestReleaseDate = metrics.oldest;
+
+    const totalReleases = totalReleaseRow[0];
+    const latestFetch = latestFetchRow[0];
+    const latestPoll = latestPollRow[0];
+    const knowledgeRow = knowledgePageRows.find((r) => r.scope === "org") ?? null;
+    // Playbook content (header + agent notes) is internal — only return it to
+    // authenticated callers so we don't leak it via the public-cached JSON.
+    const isAuthed = await isValidBearerAuth(c);
+    const playbookRow = isAuthed
+      ? (knowledgePageRows.find((r) => r.scope === "playbook") ?? null)
+      : null;
+
+    const overviewData = knowledgeRow
       ? {
-          scope: playbookRow.scope as "playbook",
-          content: assemblePlaybook(playbookRow.content, playbookRow.notes),
-          updatedAt: playbookRow.updatedAt,
+          scope: knowledgeRow.scope as "org",
+          content: knowledgeRow.content,
+          releaseCount: knowledgeRow.releaseCount,
+          lastContributingReleaseAt: knowledgeRow.lastContributingReleaseAt,
+          generatedAt: knowledgeRow.generatedAt,
+          updatedAt: knowledgeRow.updatedAt,
         }
-      : null,
-  };
+      : null;
 
-  if (wantsMarkdown(c)) {
-    return markdownResponse(c, orgToMarkdown(result as any));
-  }
+    const result = {
+      id: org.id,
+      slug: org.slug,
+      name: org.name,
+      domain: org.domain,
+      description: org.description,
+      category: org.category,
+      avatarUrl: org.avatarUrl,
+      tags: tagRows.map((t) => t.name),
+      sourceCount: orgSources.length,
+      releaseCount: totalReleases.n,
+      releasesLast30Days,
+      avgReleasesPerWeek,
+      lastFetchedAt: latestFetch.maxFetch ?? null,
+      lastPolledAt: latestPoll.maxPoll ?? null,
+      trackingSince: oldestReleaseDate ?? org.createdAt,
+      aliases: aliasRows.map((a) => a.domain),
+      accounts,
+      products: productRows,
+      sources: sourcesWithStats,
+      overview: overviewData,
+      playbook: playbookRow
+        ? {
+            scope: playbookRow.scope as "playbook",
+            content: assemblePlaybook(playbookRow.content, playbookRow.notes),
+            updatedAt: playbookRow.updatedAt,
+          }
+        : null,
+    };
 
-  // Authed responses include the playbook — opt out of the shared CDN cache
-  // and signal Vary so any honoring intermediary keys on Authorization.
-  if (isAuthed) {
-    c.header("Cache-Control", "private, no-store");
-  }
-  c.header("Vary", "Authorization", { append: true });
+    if (wantsMarkdown(c)) {
+      return markdownResponse(c, orgToMarkdown(result as any));
+    }
 
-  return c.json(result);
-});
+    // Authed responses include the playbook — opt out of the shared CDN cache
+    // and signal Vary so any honoring intermediary keys on Authorization.
+    if (isAuthed) {
+      c.header("Cache-Control", "private, no-store");
+    }
+    c.header("Vary", "Authorization", { append: true });
 
-orgRoutes.post("/orgs", async (c) => {
-  const db = createDb(c.env.DB);
-  const body = await c.req.json<{
-    name: string;
-    slug?: string;
-    domain?: string;
-    description?: string;
-    category?: string;
-    tags?: string[];
-  }>();
+    return c.json(result);
+  },
+);
 
-  if (!body.name)
-    return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
-
-  if (body.category && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
-  }
-
-  const slug = body.slug ?? toSlug(body.name);
-  if (isReservedSlug(slug, "root")) {
-    return c.json(
-      {
-        error: "slug_reserved",
-        message: `Slug "${slug}" is reserved and cannot be used for an organization. Choose a different slug (e.g. by passing an explicit "slug" field) or rename the organization.`,
-        slug,
+orgRoutes.post(
+  "/orgs",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Create organization",
+    description:
+      "Body fields: `name` (required), `slug?`, `domain?`, `description?`, `category?`, `tags?: string[]`. Slug derived from name when omitted.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      201: { description: "Organization created" },
+      400: {
+        description: "Invalid request body or category",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
-      409,
-    );
-  }
-  const now = new Date().toISOString();
-
-  try {
-    const [org] = await db
-      .insert(organizations)
-      .values({
-        name: body.name,
-        slug,
-        domain: body.domain ?? null,
-        description: body.description ?? null,
-        category: body.category ?? null,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-
-    if (body.tags && body.tags.length > 0) {
-      const tagRows = await getOrCreateTagsD1(db, body.tags);
-      const tagCreatedAt = new Date().toISOString();
-      await db
-        .insert(orgTags)
-        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: tagCreatedAt })))
-        .onConflictDoNothing();
-    }
-
-    c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
-    return c.json(org, 201);
-  } catch (err) {
-    if (isConflictError(err)) {
-      return c.json(
-        { error: "conflict", message: `Organization with slug "${slug}" already exists` },
-        409,
-      );
-    }
-    throw err;
-  }
-});
-
-orgRoutes.patch("/orgs/:slug", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const body = await c.req.json<{
-    name?: string;
-    slug?: string;
-    domain?: string | null;
-    description?: string | null;
-    category?: string | null;
-    tags?: string[];
-    aliases?: string[];
-  }>();
-
-  if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
-  }
-
-  const [org] = await db.select().from(organizations).where(orgWhere(slug));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  if (body.slug && isReservedSlug(body.slug, "root")) {
-    return c.json(
-      {
-        error: "slug_reserved",
-        message: `Slug "${body.slug}" is reserved and cannot be used for an organization.`,
-        slug: body.slug,
+      409: {
+        description: "Slug conflict or reserved slug",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
-      409,
-    );
-  }
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = await c.req.json<{
+      name: string;
+      slug?: string;
+      domain?: string;
+      description?: string;
+      category?: string;
+      tags?: string[];
+    }>();
 
-  const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
-  if (body.name) updates.name = body.name;
-  if (body.slug) updates.slug = body.slug;
-  if (body.domain !== undefined) updates.domain = body.domain;
-  if (body.description !== undefined) updates.description = body.description;
-  if (body.category !== undefined) updates.category = body.category;
+    if (!body.name)
+      return c.json({ error: "bad_request", message: "Missing required field: name" }, 400);
 
-  const [updated] = await db
-    .update(organizations)
-    .set(updates)
-    .where(eq(organizations.id, org.id))
-    .returning();
-
-  if (body.tags !== undefined) {
-    await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
-    if (body.tags.length > 0) {
-      const tagRows = await getOrCreateTagsD1(db, body.tags);
-      const now = new Date().toISOString();
-      await db
-        .insert(orgTags)
-        .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
-        .onConflictDoNothing();
+    if (body.category && !isValidCategory(body.category)) {
+      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
     }
-  }
 
-  if (body.aliases !== undefined) {
-    const { conflict } = await replaceAliases(db, { orgId: org.id, aliases: body.aliases });
-    if (conflict)
+    const slug = body.slug ?? toSlug(body.name);
+    if (isReservedSlug(slug, "root")) {
       return c.json(
         {
-          error: "conflict",
-          message: `Domain alias "${conflict}" already claimed by another org or product`,
+          error: "slug_reserved",
+          message: `Slug "${slug}" is reserved and cannot be used for an organization. Choose a different slug (e.g. by passing an explicit "slug" field) or rename the organization.`,
+          slug,
         },
         409,
       );
-  }
+    }
+    const now = new Date().toISOString();
 
-  // Re-embed if semantically meaningful fields changed (name/description/
-  // category/domain). Tag/slug churn alone doesn't warrant it.
-  const semanticChanged =
-    body.name !== undefined ||
-    body.description !== undefined ||
-    body.category !== undefined ||
-    body.domain !== undefined;
-  if (semanticChanged) {
-    c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
-  }
+    try {
+      const [org] = await db
+        .insert(organizations)
+        .values({
+          name: body.name,
+          slug,
+          domain: body.domain ?? null,
+          description: body.description ?? null,
+          category: body.category ?? null,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
 
-  return c.json(updated);
-});
+      if (body.tags && body.tags.length > 0) {
+        const tagRows = await getOrCreateTagsD1(db, body.tags);
+        const tagCreatedAt = new Date().toISOString();
+        await db
+          .insert(orgTags)
+          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: tagCreatedAt })))
+          .onConflictDoNothing();
+      }
 
-orgRoutes.delete("/orgs/:slug", async (c) => {
-  const db = createDb(c.env.DB);
-  const slug = c.req.param("slug");
-  const hard = c.req.query("hard") === "true";
+      c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
+      return c.json(org, 201);
+    } catch (err) {
+      if (isConflictError(err)) {
+        return c.json(
+          { error: "conflict", message: `Organization with slug "${slug}" already exists` },
+          409,
+        );
+      }
+      throw err;
+    }
+  },
+);
 
-  // Slug-based lookups always resolve to the active row even with hard=true:
-  // tombstones rename the slug ("--<id>" suffix), so a slug match is by
-  // construction the active row. To purge a tombstone, callers use the org_
-  // ID, which is unique whether the row is active or tombstoned.
-  const includeDeleted = hard && slug.startsWith("org_");
-  const [org] = await db.select().from(organizations).where(orgWhere(slug, { includeDeleted }));
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+orgRoutes.patch(
+  "/orgs/:slug",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Update organization",
+    description:
+      "All body fields optional. `domain`, `description`, `category` accept `null` to clear. `tags` and `aliases` arrays replace the full set when provided.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: { description: "Organization updated" },
+      400: {
+        description: "Invalid category",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      409: {
+        description: "Reserved slug or alias conflict",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const body = await c.req.json<{
+      name?: string;
+      slug?: string;
+      domain?: string | null;
+      description?: string | null;
+      category?: string | null;
+      tags?: string[];
+      aliases?: string[];
+    }>();
 
-  if (hard) {
-    await db.delete(organizations).where(eq(organizations.id, org.id));
-    return c.json({ deleted: true, hard: true });
-  }
+    if (body.category !== undefined && body.category !== null && !isValidCategory(body.category)) {
+      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+    }
 
-  // Soft delete: tombstone the org and cascade-tombstone its products and
-  // sources. Slug + domain are mangled to "<value>--<id>" so the inline
-  // UNIQUE constraints don't block a re-onboard under the original
-  // identifier. The cleanup cron hard-purges rows older than 30 days.
-  const now = new Date().toISOString();
-  await db
-    .update(organizations)
-    .set({
-      deletedAt: now,
-      slug: `${org.slug}--${org.id}`,
-      domain: org.domain ? `${org.domain}--${org.id}` : null,
-    })
-    .where(eq(organizations.id, org.id));
-  // Cascade-tombstone children. Slug/domain renaming on each child stays
-  // consistent: child id is unique so the suffix is unique.
-  const orgProducts = await db
-    .select({ id: products.id, slug: products.slug })
-    .from(products)
-    .where(eq(products.orgId, org.id));
-  for (const p of orgProducts) {
-    // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
+    const [org] = await db.select().from(organizations).where(orgWhere(slug));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    if (body.slug && isReservedSlug(body.slug, "root")) {
+      return c.json(
+        {
+          error: "slug_reserved",
+          message: `Slug "${body.slug}" is reserved and cannot be used for an organization.`,
+          slug: body.slug,
+        },
+        409,
+      );
+    }
+
+    // Run alias replacement first so a conflict short-circuits before any
+    // org/tag writes commit. D1 has no interactive transactions, so this
+    // ordering — not a true rollback — is the closest we get to atomicity.
+    if (body.aliases !== undefined) {
+      const { conflict } = await replaceAliases(db, { orgId: org.id, aliases: body.aliases });
+      if (conflict)
+        return c.json(
+          {
+            error: "conflict",
+            message: `Domain alias "${conflict}" already claimed by another org or product`,
+          },
+          409,
+        );
+    }
+
+    const updates: Record<string, string | null> = { updatedAt: new Date().toISOString() };
+    if (body.name) updates.name = body.name;
+    if (body.slug) updates.slug = body.slug;
+    if (body.domain !== undefined) updates.domain = body.domain;
+    if (body.description !== undefined) updates.description = body.description;
+    if (body.category !== undefined) updates.category = body.category;
+
+    const [updated] = await db
+      .update(organizations)
+      .set(updates)
+      .where(eq(organizations.id, org.id))
+      .returning();
+
+    if (body.tags !== undefined) {
+      await db.delete(orgTags).where(eq(orgTags.orgId, org.id));
+      if (body.tags.length > 0) {
+        const tagRows = await getOrCreateTagsD1(db, body.tags);
+        const now = new Date().toISOString();
+        await db
+          .insert(orgTags)
+          .values(tagRows.map((t) => ({ orgId: org.id, tagId: t.id, createdAt: now })))
+          .onConflictDoNothing();
+      }
+    }
+
+    // Re-embed if semantically meaningful fields changed (name/description/
+    // category/domain). Tag/slug churn alone doesn't warrant it.
+    const semanticChanged =
+      body.name !== undefined ||
+      body.description !== undefined ||
+      body.category !== undefined ||
+      body.domain !== undefined;
+    if (semanticChanged) {
+      c.executionCtx.waitUntil(embedOrgSideEffect(c.env, db, org.id));
+    }
+
+    return c.json(updated);
+  },
+);
+
+orgRoutes.delete(
+  "/orgs/:slug",
+  describeRoute({
+    tags: ["Orgs"],
+    summary: "Delete organization",
+    description:
+      "Soft delete by default (tombstones the org and cascades to its products and sources; rows reclaimed by the nightly tombstone sweep). Pass `?hard=true` with an `org_…` ID to purge immediately.",
+    security: [{ bearerAuth: [] }],
+    parameters: [
+      {
+        name: "hard",
+        in: "query",
+        required: false,
+        schema: { type: "boolean" },
+        description:
+          "Hard-delete instead of soft-tombstoning. Only honored when the path identifier is an `org_…` ID.",
+      },
+    ],
+    responses: {
+      200: { description: "Tombstoned or hard-deleted" },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const slug = c.req.param("slug");
+    const hard = c.req.query("hard") === "true";
+    const isOrgId = slug.startsWith("org_");
+
+    // Hard delete requires the immutable org_ ID. Slugs are mutable and
+    // collision-prone (post-rename, post-tombstone), so accepting them on a
+    // destructive path is too easy to misfire. ID-only matches the OpenAPI
+    // contract and the original tombstone-purge use case.
+    if (hard && !isOrgId) {
+      return c.json(
+        {
+          error: "bad_request",
+          message:
+            "Hard delete requires an org_ ID; slug is not accepted on this destructive path.",
+        },
+        400,
+      );
+    }
+
+    const includeDeleted = hard && isOrgId;
+    const [org] = await db.select().from(organizations).where(orgWhere(slug, { includeDeleted }));
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    if (hard) {
+      await db.delete(organizations).where(eq(organizations.id, org.id));
+      return c.json({ deleted: true, hard: true });
+    }
+
+    // Soft delete: tombstone the org and cascade-tombstone its products and
+    // sources. Slug + domain are mangled to "<value>--<id>" so the inline
+    // UNIQUE constraints don't block a re-onboard under the original
+    // identifier. The cleanup cron hard-purges rows older than 30 days.
+    const now = new Date().toISOString();
     await db
-      .update(products)
-      .set({ deletedAt: now, slug: `${p.slug}--${p.id}` })
-      .where(eq(products.id, p.id));
-  }
-  const orgSources = await db
-    .select({ id: sources.id, slug: sources.slug })
-    .from(sources)
-    .where(eq(sources.orgId, org.id));
-  for (const s of orgSources) {
-    // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
-    await db
-      .update(sources)
-      .set({ deletedAt: now, slug: `${s.slug}--${s.id}` })
-      .where(eq(sources.id, s.id));
-  }
-  return c.json({ deleted: true, deletedAt: now });
-});
+      .update(organizations)
+      .set({
+        deletedAt: now,
+        slug: `${org.slug}--${org.id}`,
+        domain: org.domain ? `${org.domain}--${org.id}` : null,
+      })
+      .where(eq(organizations.id, org.id));
+    // Cascade-tombstone children. Slug/domain renaming on each child stays
+    // consistent: child id is unique so the suffix is unique.
+    const orgProducts = await db
+      .select({ id: products.id, slug: products.slug })
+      .from(products)
+      .where(eq(products.orgId, org.id));
+    for (const p of orgProducts) {
+      // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
+      await db
+        .update(products)
+        .set({ deletedAt: now, slug: `${p.slug}--${p.id}` })
+        .where(eq(products.id, p.id));
+    }
+    const orgSources = await db
+      .select({ id: sources.id, slug: sources.slug })
+      .from(sources)
+      .where(eq(sources.orgId, org.id));
+    for (const s of orgSources) {
+      // oxlint-disable-next-line no-await-in-loop -- per-row rename to keep slug suffix tied to row id
+      await db
+        .update(sources)
+        .set({ deletedAt: now, slug: `${s.slug}--${s.id}` })
+        .where(eq(sources.id, s.id));
+    }
+    return c.json({ deleted: true, deletedAt: now });
+  },
+);
 
 // Unified browse for the org's addressable things: sources + products today,
 // rollups when #693 ships them. `?kind=source|product` narrows the response;

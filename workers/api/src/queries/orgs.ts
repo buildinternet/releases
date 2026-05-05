@@ -15,7 +15,7 @@ export async function getOrgsWithStats(
 
   return db.all<OrgListRow>(sql`
     SELECT
-      o.id, o.slug, o.name, o.domain, o.description, o.category,
+      o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url,
       COUNT(DISTINCT s.id) AS source_count,
       COUNT(r.id) AS release_count,
       MAX(CASE WHEN r.published_at IS NOT NULL THEN r.published_at END) AS last_activity,
@@ -25,7 +25,7 @@ export async function getOrgsWithStats(
     LEFT JOIN sources_active s ON s.org_id = o.id
     LEFT JOIN releases_visible r ON r.source_id = s.id
     ${where}
-    GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category
+    GROUP BY o.id, o.slug, o.name, o.domain, o.description, o.category, o.avatar_url
     ORDER BY o.name, o.id
     ${page}
   `);

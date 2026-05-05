@@ -40,6 +40,7 @@ import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
+import { mountOpenApi } from "./openapi.js";
 import { BareSlugRejected } from "./utils.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
 import { drizzle } from "drizzle-orm/d1";
@@ -344,6 +345,7 @@ v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic:
 v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true }));
 v1.use("/categories/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/tags/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/openapi.json", cacheControl(3600, { staleWhileRevalidate: 300, isPublic: true }));
 
 // Route modules — releaseRoutes is mounted before sourceRoutes so the static
 // `/releases/latest` handler (in releases.ts) wins over the parametric
@@ -395,6 +397,11 @@ v1.get("/categories", (c) => {
     "security",
   ]);
 });
+
+// OpenAPI spec + Scalar reference UI. Mounted after all v1 routes so the
+// generator sees the complete route table. Public — no auth gate so external
+// consumers can fetch the spec for SDK generation.
+mountOpenApi(v1);
 
 app.route("/v1", v1);
 
