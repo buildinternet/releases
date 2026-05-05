@@ -4,6 +4,13 @@
  */
 
 import type { z } from "zod";
+import type { SourceType } from "@buildinternet/releases-core/schema";
+
+export type {
+  SourceType,
+  SourceDiscovery,
+  SourceFetchPriority,
+} from "@buildinternet/releases-core/schema";
 import type {
   MediaItemSchema,
   PaginationSchema,
@@ -545,7 +552,7 @@ export interface ProductDetail {
   description: string | null;
   category: string | null;
   createdAt: string;
-  sources: Array<{ id: string; slug: string; name: string; type: string; url: string }>;
+  sources: Array<{ id: string; slug: string; name: string; type: SourceType; url: string }>;
   tags: string[];
 }
 
