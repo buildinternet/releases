@@ -9,6 +9,7 @@ export type LatestReleaseRow = {
   source_slug: string;
   source_name: string;
   source_type: string;
+  org_slug: string | null;
   type: string;
 };
 
@@ -19,6 +20,12 @@ export interface LatestReleasesFilter {
   orgId?: string;
   /** Include coverage-side rows (hidden by default) */
   includeCoverage?: boolean;
+  /**
+   * Exclude releases whose source.type is in this list. Validated upstream
+   * against the canonical `["github","scrape","feed","agent"]` set; we trust
+   * the input here and bind it directly into a NOT IN clause.
+   */
+  excludeSourceTypes?: string[];
   limit: number;
 }
 
@@ -41,6 +48,12 @@ export async function getLatestReleasesAcross(
     bindings.push(f.orgId);
   }
 
+  if (f.excludeSourceTypes && f.excludeSourceTypes.length > 0) {
+    const placeholders = f.excludeSourceTypes.map(() => "?").join(", ");
+    wheres.push(`s.type NOT IN (${placeholders})`);
+    bindings.push(...f.excludeSourceTypes);
+  }
+
   const whereSql = wheres.join(" AND ");
   bindings.push(f.limit);
 
@@ -49,9 +62,11 @@ export async function getLatestReleasesAcross(
       `
     SELECT r.id, r.version, r.title, r.content_summary, r.type,
            r.published_at, r.url, r.media,
-           s.slug AS source_slug, s.name AS source_name, s.type AS source_type
+           s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
+           o.slug AS org_slug
     FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id
+    LEFT JOIN organizations o ON o.id = s.org_id
     WHERE ${whereSql}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,

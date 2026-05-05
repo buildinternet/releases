@@ -21,6 +21,7 @@ import type {
   CategoryDetail,
   TagDetail,
   ListResponse,
+  MediaItem,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 
@@ -164,8 +165,41 @@ export const adminApi = {
 // Cache doesn't serve fresh semantic neighbors for longer than the CDN would.
 const RELATED_CACHE_OPTS = { next: { revalidate: 300 } } as const;
 
+export interface LatestReleaseItem {
+  id: string;
+  version: string | null;
+  type: string;
+  title: string | null;
+  summary: string | null;
+  publishedAt: string | null;
+  url: string | null;
+  media: MediaItem[];
+  source: { slug: string; name: string; type: string; orgSlug: string | null };
+}
+
 export const api = {
   stats: () => fetchApi<Stats>("/v1/stats"),
+  latestReleases: async (
+    opts: { count?: number; excludeSourceTypes?: string[] } = {},
+  ): Promise<LatestReleaseItem[]> => {
+    const params = new URLSearchParams();
+    if (opts.count !== undefined) params.set("count", String(opts.count));
+    if (opts.excludeSourceTypes && opts.excludeSourceTypes.length > 0) {
+      params.set("exclude", opts.excludeSourceTypes.toSorted().join(","));
+    }
+    const qs = params.toString();
+    const body = await fetchApi<{ releases: LatestReleaseItem[] }>(
+      `/v1/releases/latest${qs ? `?${qs}` : ""}`,
+    );
+    return body.releases ?? [];
+  },
+  /**
+   * Homepage ticker. Pinned to one of the KV-cached default shapes
+   * (`CACHEABLE_DEFAULT_SHAPES` in workers/api/src/lib/latest-cache.ts) — if
+   * either the count or the exclude list drifts, the response leaves the
+   * cache and every homepage hit becomes a D1 query.
+   */
+  homepageLatestReleases: () => api.latestReleases({ count: 20, excludeSourceTypes: ["github"] }),
   orgs: async (): Promise<OrgListItem[]> => {
     const body = await fetchApi<ListResponse<OrgListItem> | OrgListItem[]>("/v1/orgs");
     if (Array.isArray(body)) return body;

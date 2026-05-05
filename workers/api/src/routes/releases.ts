@@ -6,6 +6,7 @@ import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseReleaseMedia } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
+import { SOURCE_TYPES } from "./sources.js";
 import {
   buildLatestCacheKey,
   isCacheableLatestRequest,
@@ -48,12 +49,23 @@ releaseRoutes.get("/releases", async (c) => {
 
 // Cacheable "latest releases" feed. Shape documented in
 // docs/architecture/remote-mode.md.
+const VALID_SOURCE_TYPES: ReadonlySet<string> = new Set(SOURCE_TYPES);
+
 releaseRoutes.get("/releases/latest", async (c) => {
   const rawCount = parseInt(c.req.query("count") ?? String(DEFAULT_LATEST_COUNT), 10);
   const count = isNaN(rawCount) || rawCount < 1 ? DEFAULT_LATEST_COUNT : Math.min(rawCount, 100);
   const sourceParam = c.req.query("source");
   const orgParam = c.req.query("org");
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+
+  // `?exclude=github` (or `?exclude=github,scrape`) drops releases whose
+  // source.type is in the list. Sorted so any param ordering hits the same
+  // cache key.
+  const excludeSourceTypes = (c.req.query("exclude") ?? "")
+    .split(",")
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => VALID_SOURCE_TYPES.has(t))
+    .toSorted();
 
   if (sourceParam && orgParam) {
     return c.json(
@@ -90,6 +102,7 @@ releaseRoutes.get("/releases/latest", async (c) => {
     source: sourceId,
     org: orgId,
     include_coverage: includeCoverage ? "true" : undefined,
+    exclude: excludeSourceTypes.length > 0 ? excludeSourceTypes.join(",") : undefined,
   });
 
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
@@ -100,6 +113,7 @@ releaseRoutes.get("/releases/latest", async (c) => {
       sourceId,
       orgId,
       includeCoverage,
+      excludeSourceTypes,
       limit: count,
     });
     return rows.map((r) => ({
@@ -115,6 +129,7 @@ releaseRoutes.get("/releases/latest", async (c) => {
         slug: r.source_slug,
         name: r.source_name,
         type: r.source_type,
+        orgSlug: r.org_slug,
       },
     }));
   };
@@ -127,6 +142,7 @@ releaseRoutes.get("/releases/latest", async (c) => {
     sourceId,
     orgId,
     includeCoverage,
+    excludeSourceTypes,
   });
 
   if (!cacheable) {

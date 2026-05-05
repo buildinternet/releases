@@ -1,14 +1,20 @@
-import { api, ApiSetupError } from "@/lib/api";
+import { api, ApiSetupError, type LatestReleaseItem } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
 import { InstallTabs } from "@/components/install-tabs";
+import { ShippingNowTicker } from "@/components/shipping-now-ticker";
 
 export default async function HomePage() {
   let stats, orgs;
+  let latest: LatestReleaseItem[] = [];
   try {
-    [stats, orgs] = await Promise.all([api.stats(), api.orgs()]);
+    [stats, orgs, latest] = await Promise.all([
+      api.stats(),
+      api.orgs(),
+      api.homepageLatestReleases().catch(() => [] as LatestReleaseItem[]),
+    ]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -74,6 +80,7 @@ export default async function HomePage() {
           <InstallTabs />
         </div>
       </div>
+      {latest.length > 0 && <ShippingNowTicker releases={latest} />}
       <div className="max-w-4xl mx-auto px-6 pb-12">
         {orgs && orgs.length > 0 && <OrgTable orgs={orgs} />}
       </div>
