@@ -661,18 +661,12 @@ export async function getLatestReleases(
     product?: string;
     organization?: string;
     type?: ReleaseType;
-    count?: number;
     limit?: number;
     cursor?: string;
     include_coverage?: boolean;
   },
 ): Promise<ToolResult> {
-  // `count` is the legacy input; `limit` is the canonical name on the cursor
-  // path (matches REST + the other paginated MCP tools). Take whichever was
-  // provided. Default 10 keeps the legacy behavior for callers that pass
-  // neither.
-  const requestedLimit = params.limit ?? params.count ?? 10;
-  const limit = parseFeedLimit(requestedLimit);
+  const limit = parseFeedLimit(params.limit ?? 10);
   const includeCoverage = params.include_coverage === true;
 
   let sourceFilter: string | undefined;

@@ -172,7 +172,7 @@ export interface CreateServerOptions {
 export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServerOptions) {
   const server = new McpServer({
     name: "releases",
-    version: "0.14.0",
+    version: "0.15.0",
   });
 
   const db = createDb(env.DB);
@@ -485,20 +485,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .min(1)
           .max(200)
           .optional()
-          .describe(
-            "Slice size (1–200). Defaults to 10. Takes precedence over the legacy `count` input.",
-          ),
+          .describe("Slice size (1–200). Defaults to 10."),
         cursor: z
           .string()
           .optional()
           .describe(
             "Opaque continuation token from a prior call's `_meta.pagination.nextCursor`. Pass to fetch the next slice. Stale cursors are silently ignored — the call returns a fresh head of the feed.",
-          ),
-        count: z
-          .number()
-          .optional()
-          .describe(
-            "Legacy alias for `limit`. Prefer `limit` in new callers; ignored when `limit` is also supplied.",
           ),
         include_coverage: z
           .boolean()
