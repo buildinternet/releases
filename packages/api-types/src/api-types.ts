@@ -966,3 +966,23 @@ export interface EmbedStatusResponse {
   };
   chunks: { total: number; embedded: number; unembedded: number };
 }
+
+// ── Evaluate (URL recommendation) ──
+
+/**
+ * Returned verbatim by GET /v1/evaluate. Lives in the public api-types package
+ * so external consumers (CLI, third-party clients) can import the shape
+ * without depending on worker-internal AI helpers.
+ */
+export interface EvaluationResult {
+  recommendedMethod: "feed" | "github" | "markdown" | "scrape" | "crawl";
+  recommendedUrl: string;
+  feedUrl?: string;
+  feedType?: "rss" | "atom" | "jsonfeed";
+  githubRepo?: string;
+  pageStructure: "single-page" | "index" | "unknown";
+  alternatives: Array<{ url: string; method: string; note: string }>;
+  confidence: "high" | "medium" | "low";
+  provider?: string;
+  notes?: string;
+}
