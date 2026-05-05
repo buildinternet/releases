@@ -22,6 +22,7 @@ import { sessionRoutes } from "./routes/sessions.js";
 import { mediaRoutes } from "./routes/media.js";
 import { streamRoutes } from "./routes/stream.js";
 import { mountWebhooksReplay } from "./routes/webhooks-replay.js";
+import { graphqlRoutes } from "./graphql/handler.js";
 import { releaseRoutes } from "./routes/releases.js";
 import summaries from "./routes/summaries.js";
 import overview from "./routes/overview.js";
@@ -402,6 +403,14 @@ v1.get("/categories", (c) => {
 // generator sees the complete route table. Public — no auth gate so external
 // consumers can fetch the spec for SDK generation.
 mountOpenApi(v1);
+
+// GraphQL spike (#TBD). Sits inside v1 so it picks up the per-route public
+// middleware (rate limit, db health). publicReadAuthMiddleware is intentionally
+// not applied — its POST-requires-Bearer behavior would block legitimate
+// public GraphQL queries (which are POSTs by convention); admin-vs-public
+// gating is resolved inside the resolver via isValidBearerAuth.
+v1.use("/graphql", publicRateLimitMiddleware, dbHealthCheck);
+v1.route("/", graphqlRoutes);
 
 app.route("/v1", v1);
 
