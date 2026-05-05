@@ -1,43 +1,60 @@
 /**
- * Shared API response types.
- *
- * This is the single source of truth for all API response shapes.
- * Consumed by: web frontend, CLI client, and (optionally) API worker routes.
+ * Shared API response types — single source of truth for the wire protocol.
+ * Consumed by: web frontend, MCP worker, OSS CLI, and the API worker.
  */
+
+import type { z } from "zod";
+import type {
+  MediaItemSchema,
+  PaginationSchema,
+  StatsSchema,
+  ErrorResponseSchema,
+} from "./schemas/shared.js";
+import type {
+  OrgListItemSchema,
+  OrgListResponseSchema,
+  OrgAccountItemSchema,
+  OrgAccountsResponseSchema,
+  OrgTagsResponseSchema,
+  CreateOrgBodySchema,
+  UpdateOrgBodySchema,
+} from "./schemas/orgs.js";
+
+export {
+  MediaItemSchema,
+  PaginationSchema,
+  ListResponseSchema,
+  StatsSchema,
+  ErrorResponseSchema,
+} from "./schemas/shared.js";
+export {
+  OrgListItemSchema,
+  OrgListResponseSchema,
+  OrgAccountItemSchema,
+  OrgAccountsResponseSchema,
+  OrgTagsResponseSchema,
+  CreateOrgBodySchema,
+  UpdateOrgBodySchema,
+} from "./schemas/orgs.js";
 
 // ── Media ──
 
-export interface MediaItem {
-  type: "image" | "video" | "gif";
-  url: string;
-  alt?: string;
-  r2Url?: string;
-}
+export type MediaItem = z.infer<typeof MediaItemSchema>;
 
 // ── Stats ──
 
-export interface Stats {
-  orgs: number;
-  sources: number;
-  releases: number;
-  products: number;
-}
+export type Stats = z.infer<typeof StatsSchema>;
 
 // ── Pagination ──
 
-export interface Pagination {
-  page: number;
-  pageSize: number;
-  returned: number;
-  totalItems?: number;
-  totalPages?: number;
-  hasMore: boolean;
-}
+export type Pagination = z.infer<typeof PaginationSchema>;
 
 export interface ListResponse<T> {
   items: T[];
   pagination: Pagination;
 }
+
+export type ErrorResponse = z.infer<typeof ErrorResponseSchema>;
 
 // ── Sitemap (bulk URL emission) ──
 
@@ -49,29 +66,13 @@ export interface SitemapPayload {
 
 // ── Organizations ──
 
-export interface OrgListItem {
-  slug: string;
-  name: string;
-  domain: string | null;
-  avatarUrl: string | null;
-  githubHandle: string | null;
-  sourceCount: number;
-  releaseCount: number;
-  recentReleaseCount: number;
-  lastActivity: string | null;
-  topProducts: string[];
-  sparkline: number[];
-}
-
-export type OrgListResponse = ListResponse<OrgListItem>;
-
-export interface OrgAccountItem {
-  platform: string;
-  handle: string;
-}
-
-export type OrgAccountsResponse = ListResponse<OrgAccountItem>;
-export type OrgTagsResponse = ListResponse<string>;
+export type OrgListItem = z.infer<typeof OrgListItemSchema>;
+export type OrgListResponse = z.infer<typeof OrgListResponseSchema>;
+export type OrgAccountItem = z.infer<typeof OrgAccountItemSchema>;
+export type OrgAccountsResponse = z.infer<typeof OrgAccountsResponseSchema>;
+export type OrgTagsResponse = z.infer<typeof OrgTagsResponseSchema>;
+export type CreateOrgBody = z.infer<typeof CreateOrgBodySchema>;
+export type UpdateOrgBody = z.infer<typeof UpdateOrgBodySchema>;
 
 export interface OrgDetail {
   id?: string;

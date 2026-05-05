@@ -16,6 +16,10 @@
     "src",
     "README.md"
   ],
+  "dependencies": {
+    "@buildinternet/releases-core": "workspace:*",
+    "zod": "^4.3.6"
+  },
   "publishConfig": {
     "access": "public"
   }
