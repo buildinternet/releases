@@ -136,6 +136,8 @@ orgRoutes.get(
       200: {
         description: "Organization detail",
         content: {
+          // application/json is the default; schema lands when OrgDetail ports to Zod (sources PR).
+          "application/json": {},
           "text/markdown": { schema: { type: "string" } },
         },
       },
