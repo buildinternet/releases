@@ -67,8 +67,8 @@ import { logEvent } from "@releases/lib/log-event";
 
 export const sourceRoutes = new Hono<Env>();
 
-const SOURCE_TYPES = ["github", "scrape", "feed", "agent"] as const;
-type SourceType = (typeof SOURCE_TYPES)[number];
+export const SOURCE_TYPES = ["github", "scrape", "feed", "agent"] as const;
+export type SourceType = (typeof SOURCE_TYPES)[number];
 
 sourceRoutes.get("/sources", async (c) => {
   const db = createDb(c.env.DB);

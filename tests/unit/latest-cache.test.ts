@@ -90,24 +90,36 @@ describe("isCacheableLatestRequest", () => {
     sourceId?: string;
     orgId?: string;
     includeCoverage?: boolean;
+    excludeSourceTypes?: string[];
   }): boolean {
+    const exclude = (params.excludeSourceTypes ?? []).toSorted();
     const normalized = {
       count: params.count ?? DEFAULT_LATEST_COUNT,
       sourceId: params.sourceId,
       orgId: params.orgId,
       includeCoverage: params.includeCoverage ?? false,
+      excludeSourceTypes: exclude,
     };
     const key = buildLatestCacheKey({
       count: String(normalized.count),
       source: normalized.sourceId,
       org: normalized.orgId,
       include_coverage: normalized.includeCoverage ? "true" : undefined,
+      exclude: exclude.length > 0 ? exclude.join(",") : undefined,
     });
     return isCacheableLatestRequest(key, normalized);
   }
 
   it("caches the default unfiltered request", () => {
     expect(check({})).toBe(true);
+  });
+
+  it("caches the homepage shape (count=20, exclude=github)", () => {
+    expect(check({ count: 20, excludeSourceTypes: ["github"] })).toBe(true);
+  });
+
+  it("does not cache exclude on a non-homepage count", () => {
+    expect(check({ count: 10, excludeSourceTypes: ["github"] })).toBe(false);
   });
 
   it("does not cache when a source filter is present", () => {
@@ -137,6 +149,7 @@ describe("isCacheableLatestRequest", () => {
       sourceId: undefined,
       orgId: "org_test_allowlist",
       includeCoverage: false,
+      excludeSourceTypes: [],
     };
     expect(isCacheableLatestRequest(allowlistedKey, params)).toBe(false);
 
@@ -344,29 +357,34 @@ describe("invalidateLatestCache", () => {
     ).toBe(true);
   });
 
-  it("purges the default key when flag is on and binding present", async () => {
+  it("purges every default cacheable shape when flag is on and binding present", async () => {
     const kv = mkKv();
     await invalidateLatestCache(
       { LATEST_CACHE: kv, INVALIDATION_ENABLED: "true" },
       { nReleases: 5, sourceId: "src_abc" },
     );
-    expect(kv.delete).toHaveBeenCalledTimes(1);
     expect(kv.delete).toHaveBeenCalledWith("latest:v1:count=10");
-    expect(logs.some((l) => l.component === "invalidation" && l.event === "purged")).toBe(true);
+    expect(kv.delete).toHaveBeenCalledWith("latest:v1:count=20&exclude=github");
+    expect(kv.delete).toHaveBeenCalledTimes(2);
+    expect(logs.filter((l) => l.component === "invalidation" && l.event === "purged")).toHaveLength(
+      2,
+    );
   });
 
-  it("swallows KV.delete errors and logs a purge-failed event", async () => {
+  it("swallows KV.delete errors per-key — one failure doesn't block the others", async () => {
+    let calls = 0;
     const kv = mkKv({
       delete: mock(async () => {
-        throw new Error("kv down");
+        calls++;
+        if (calls === 1) throw new Error("kv down");
       }),
     });
-    await expect(
-      invalidateLatestCache(
-        { LATEST_CACHE: kv, INVALIDATION_ENABLED: "true" },
-        { nReleases: 2, sourceId: "src_abc" },
-      ),
-    ).resolves.toBeUndefined();
+    const result = await invalidateLatestCache(
+      { LATEST_CACHE: kv, INVALIDATION_ENABLED: "true" },
+      { nReleases: 2, sourceId: "src_abc" },
+    );
+    expect(result).toBeUndefined();
+    expect(kv.delete).toHaveBeenCalledTimes(2);
     expect(
       logs.some(
         (l) =>
@@ -375,5 +393,6 @@ describe("invalidateLatestCache", () => {
           (l.err as { message?: string } | undefined)?.message === "kv down",
       ),
     ).toBe(true);
+    expect(logs.some((l) => l.component === "invalidation" && l.event === "purged")).toBe(true);
   });
 });

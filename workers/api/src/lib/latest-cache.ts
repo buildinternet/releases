@@ -35,34 +35,62 @@ export interface NormalizedLatestParams {
   sourceId: string | undefined;
   orgId: string | undefined;
   includeCoverage: boolean;
+  /** Source types excluded from the result, sorted ascending. */
+  excludeSourceTypes: string[];
 }
 
-// Explicit allowlist of filtered cache keys worth caching beyond the default
-// unfiltered shape. Empty by design — add an entry here (matching the
-// `buildLatestCacheKey` output for that shape) when analytics show a
-// filtered request is a hot enough read to justify its own cache entry.
-// Example: the Vercel org page might eventually warrant
-//   "latest:v1:count=10&org=org_vercel_id"
-//
-// When you add an entry, also extend `invalidateLatestCache` below so the
-// purge set matches the cache set — otherwise entries here will be stale
-// for up to LATEST_CACHE_TTL_SECONDS after any release to the relevant org.
+/**
+ * Cacheable default shapes — every shape in this list is read-through KV
+ * cached and purged by `invalidateLatestCache`. Two requests every poller
+ * and homepage visitor collapse onto:
+ *
+ * - CLI / `tail -f` default: count=10, no exclude.
+ * - Homepage ticker: count=20, exclude=github (drops high-volume SDK noise
+ *   without round-tripping it through the wire).
+ *
+ * Add a new entry here when a filtered shape becomes a hot enough read to
+ * justify its own cache entry. The `excludeSourceTypes` array MUST be
+ * sorted — it's compared element-by-element against the (already sorted)
+ * normalized request params.
+ */
+export const HOMEPAGE_LATEST_COUNT = 20;
+export const CACHEABLE_DEFAULT_SHAPES: ReadonlyArray<{
+  count: number;
+  excludeSourceTypes: string[];
+}> = [
+  { count: DEFAULT_LATEST_COUNT, excludeSourceTypes: [] },
+  { count: HOMEPAGE_LATEST_COUNT, excludeSourceTypes: ["github"] },
+];
+
+// Escape hatch for shapes that don't fit `CACHEABLE_DEFAULT_SHAPES` — e.g.
+// a single org-filtered key (`latest:v1:count=10&org=org_vercel_id`) where
+// the org id is environment-specific and can't live in source. The shapes
+// table is the preferred extension point; reach for the allowlist only
+// when the cache key itself needs to encode runtime data. Empty by design —
+// any addition must be paired with a matching purge entry below.
 export const ALLOWLISTED_CACHE_KEYS: ReadonlySet<string> = new Set<string>();
 
-// The homepage/CLI default request — unfiltered, default count, coverage
-// hidden. This is the one key every follow-poller and homepage visitor
-// collapses onto, so it's always worth caching.
-function isDefaultLatestRequest(p: NormalizedLatestParams): boolean {
-  return (
-    p.sourceId === undefined &&
-    p.orgId === undefined &&
-    p.count === DEFAULT_LATEST_COUNT &&
-    p.includeCoverage === false
+function arraysEqual(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((v, i) => v === b[i]);
+}
+
+function isCacheableDefaultShape(p: NormalizedLatestParams): boolean {
+  if (p.sourceId !== undefined || p.orgId !== undefined || p.includeCoverage) return false;
+  return CACHEABLE_DEFAULT_SHAPES.some(
+    (s) => s.count === p.count && arraysEqual(s.excludeSourceTypes, p.excludeSourceTypes),
   );
 }
 
 export function isCacheableLatestRequest(key: string, params: NormalizedLatestParams): boolean {
-  return isDefaultLatestRequest(params) || ALLOWLISTED_CACHE_KEYS.has(key);
+  return isCacheableDefaultShape(params) || ALLOWLISTED_CACHE_KEYS.has(key);
+}
+
+/** Build the cache key for one of the default cacheable shapes. */
+function defaultShapeKey(shape: { count: number; excludeSourceTypes: string[] }): string {
+  return buildLatestCacheKey({
+    count: String(shape.count),
+    exclude: shape.excludeSourceTypes.length > 0 ? shape.excludeSourceTypes.join(",") : undefined,
+  });
 }
 
 export async function withLatestCache<T>(
@@ -101,26 +129,25 @@ export interface InvalidationEnv {
 }
 
 /**
- * Purge the cached /v1/releases/latest default shape after a publish.
+ * Purge every cached /v1/releases/latest default shape after a publish.
+ *
+ * Iterates `CACHEABLE_DEFAULT_SHAPES` so adding a new cacheable shape is a
+ * one-line change and stays in sync automatically. Allowlisted shapes
+ * (`ALLOWLISTED_CACHE_KEYS`) need a matching purge added here by hand.
  *
  * Called fire-and-forget from the publish sites alongside publishReleaseEvents.
  * Purges are best-effort; the 300s TTL remains the safety net on failure.
  *
- * v1 scope: only the unfiltered default shape (`latest:v1:count=10`) is cached,
- * so that's all this purges. When ALLOWLISTED_CACHE_KEYS grows, extend this
- * helper to purge the matching shapes in the same PR.
- *
- * Kept inline (no queue, no dedicated Worker) because the work is a single
- * KV.delete(). If a second event-driven side-effect emerges, revisit a
- * dedicated consumer — see https://github.com/buildinternet/releases/issues/408
- * for the conversation.
+ * Kept inline (no queue, no dedicated Worker) because the work is a small
+ * fixed set of KV.delete()s in parallel. If a second event-driven side-
+ * effect emerges, revisit a dedicated consumer — see issue #408.
  */
 export async function invalidateLatestCache(
   env: InvalidationEnv,
   meta: { nReleases: number; sourceId: string },
 ): Promise<void> {
-  const key = buildLatestCacheKey({ count: String(DEFAULT_LATEST_COUNT) });
-  const logCtx = { cacheKey: key, sourceId: meta.sourceId, nReleases: meta.nReleases };
+  const keys = CACHEABLE_DEFAULT_SHAPES.map(defaultShapeKey);
+  const logCtx = { cacheKeys: keys, sourceId: meta.sourceId, nReleases: meta.nReleases };
 
   if (env.INVALIDATION_ENABLED !== "true") {
     logEvent("info", {
@@ -150,10 +177,15 @@ export async function invalidateLatestCache(
     return;
   }
 
-  try {
-    await env.LATEST_CACHE.delete(key);
-    logEvent("info", { component: "invalidation", event: "purged", ...logCtx });
-  } catch (err) {
-    logEvent("warn", { component: "invalidation", event: "purge-failed", err, ...logCtx });
-  }
+  const cache = env.LATEST_CACHE;
+  await Promise.all(
+    keys.map(async (key) => {
+      try {
+        await cache.delete(key);
+        logEvent("info", { component: "invalidation", event: "purged", cacheKey: key });
+      } catch (err) {
+        logEvent("warn", { component: "invalidation", event: "purge-failed", err, cacheKey: key });
+      }
+    }),
+  );
 }

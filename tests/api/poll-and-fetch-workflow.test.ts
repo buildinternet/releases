@@ -13,6 +13,10 @@ import { applyMigrations } from "../db-helper";
 import { PollAndFetchWorkflow } from "../../workers/api/src/workflows/poll-and-fetch";
 import type { PollAndFetchWorkflowEnv } from "../../workers/api/src/workflows/poll-and-fetch";
 import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
+import { CACHEABLE_DEFAULT_SHAPES } from "../../workers/api/src/lib/latest-cache";
+
+// One logical invalidation deletes one KV key per cacheable shape.
+const CACHE_DELETES_PER_INVALIDATION = CACHEABLE_DEFAULT_SHAPES.length;
 
 function mkDb() {
   const sqlite = new Database(":memory:");
@@ -130,7 +134,8 @@ describe("PollAndFetchWorkflow", () => {
     expect(vec.upserted[0]).toHaveLength(2);
 
     // Latest-cache invalidation fired exactly once for this source
-    expect(invalidationCalls).toHaveLength(1);
+    // (one delete per cacheable shape).
+    expect(invalidationCalls).toHaveLength(CACHE_DELETES_PER_INVALIDATION);
   });
 
   it("embed-releases retries on transient Vectorize failure and recovers", async () => {
@@ -161,7 +166,7 @@ describe("PollAndFetchWorkflow", () => {
     expect(embedStep?.attempts).toBe(3);
 
     // Vectorize upsert succeeded on the 3rd try, so invalidation still runs.
-    expect(invalidationCalls).toHaveLength(1);
+    expect(invalidationCalls).toHaveLength(CACHE_DELETES_PER_INVALIDATION);
   });
 
   it("embed-releases exhausts retries and bubbles the failure", async () => {
