@@ -67,7 +67,11 @@ import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-
 import { publishReleaseEvents } from "../events/publish.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
-import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
+import {
+  RELEASES_BATCH_CHUNK_SIZE,
+  RELEASES_ID_IN_CHUNK_SIZE,
+  IN_ARRAY_CHUNK_SIZE,
+} from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
@@ -113,11 +117,18 @@ sourceRoutes.get(
     const rawOffset = offsetParam ? parseInt(offsetParam, 10) : pagination.offset;
     const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
 
-    // Filter by URLs — return raw source rows matching the provided url params
+    // Filter by URLs — return raw source rows matching the provided url params.
+    // URLs come from query string, so chunk at the D1 100-bind cap.
     if (filterByUrls) {
       const urls = c.req.queries("url") ?? [];
       if (urls.length === 0) return c.json([]);
-      const rows = await db.select().from(sources).where(inArray(sources.url, urls));
+      const rows: (typeof sources.$inferSelect)[] = [];
+      for (let i = 0; i < urls.length; i += IN_ARRAY_CHUNK_SIZE) {
+        const chunk = urls.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+        // oxlint-disable-next-line no-await-in-loop -- sequential chunks under the D1 bind-param cap
+        const chunkRows = await db.select().from(sources).where(inArray(sources.url, chunk));
+        rows.push(...chunkRows);
+      }
       return c.json(rows);
     }
 

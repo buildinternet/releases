@@ -17,6 +17,11 @@ export const RELEASES_BATCH_CHUNK_SIZE = 7;
 // with 90 ids is 90.
 export const RELEASES_ID_IN_CHUNK_SIZE = 90;
 
+// Generic IN-clause chunk for single-column `inArray(...)` SELECTs on any
+// table — same 90-bind budget as the releases lookups. Use when callers
+// can supply an unbounded list (URLs, slugs, ids).
+export const IN_ARRAY_CHUNK_SIZE = 90;
+
 // `source_changelog_chunks` INSERT binds 11 placeholders per row: the nine
 // listed columns (source_changelog_file_id, source_id, offset, length,
 // tokens, content_hash, heading, vector_id, embedded_at — vectorId and
