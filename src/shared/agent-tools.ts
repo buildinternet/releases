@@ -455,11 +455,14 @@ export function createTypedExecutor(opts: APIClientOptions) {
           let feedUrl = input.feed_url ? String(input.feed_url) : undefined;
           let feedType = input.feed_type ? String(input.feed_type) : undefined;
           let evalSummary: string | undefined;
-          // Auto-evaluate when we don't know the type, or we know feedUrl but
-          // not feedType. The second case is #700: without feedType in metadata,
-          // fetchOne gates with "Missing feedUrl or feedType" and burns 4
-          // onboard-source workflow retries on every feed source.
-          if (!type || (feedUrl && !feedType)) {
+          // Auto-evaluate when we don't know the type, or we're aiming for
+          // type=feed without complete metadata. Without this, a caller that
+          // passes type=feed but omits feed_url/feed_type would skip the
+          // evaluator and get demoted to scrape — see #700: fetchOne gates
+          // with "Missing feedUrl or feedType" and burns 4 onboard-source
+          // workflow retries on every feed source missing either field.
+          const needsFeedMeta = type === "feed" && !(feedUrl && feedType);
+          if (!type || needsFeedMeta) {
             const ev = await autoEvaluate(String(url));
             type = type ?? ev.type;
             feedUrl = feedUrl ?? ev.feedUrl;
