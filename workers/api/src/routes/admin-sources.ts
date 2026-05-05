@@ -132,7 +132,7 @@ adminSourcesRoutes.get("/admin/sources/orgs-rollup", async (c) => {
     const staleCount = Number(r.stale_count) || 0;
     const mostRecent = r.most_recent_release;
     const ageDays = mostRecent
-      ? Math.max(0, (now - new Date(mostRecent).getTime()) / 86400_000)
+      ? Math.max(0, Math.floor((now - new Date(mostRecent).getTime()) / 86400_000))
       : null;
     return {
       orgSlug: r.org_slug,

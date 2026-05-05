@@ -11,6 +11,7 @@ import { FetchLogList } from "@/components/fetch-log-list";
 import { useFetchLog } from "@/components/use-fetch-log";
 import { SortHeader, type SortState } from "@/components/sort-header";
 import { DAY_MS } from "@/lib/cadence";
+import { SOURCE_STALE_DAYS as STALE_THRESHOLD_DAYS } from "@buildinternet/releases-core/sources";
 import { describeCadence } from "./cadence-helpers";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
@@ -145,10 +146,6 @@ function unwrapList<T>(value: unknown): T[] | null {
 function parseTab(value: string | null): Tab {
   return TABS.some((t) => t.value === value) ? (value as Tab) : DEFAULT_TAB;
 }
-
-// Matches the "low" retier band ceiling: sources shipping less than once a
-// quarter get flagged. Sources with no releases count as stale too.
-const STALE_THRESHOLD_DAYS = 90;
 
 function ageInDays(iso: string | null | undefined, now: number = Date.now()): number | null {
   if (!iso) return null;
@@ -1144,13 +1141,22 @@ function SourcesTable() {
     fetch(`/api/proxy/sources?${params}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (controller.signal.aborted || !body) return;
+        if (controller.signal.aborted) return;
+        if (!body) {
+          setSources([]);
+          setTotalItems(null);
+          return;
+        }
         const items = unwrapList<SourceEntry>(body) ?? [];
         setSources(items);
         const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
         setTotalItems(typeof total === "number" ? total : null);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setSources([]);
+        setTotalItems(null);
+      });
     return () => controller.abort();
   }, [page, perPage, sort, filter, staleOnly, debouncedQuery]);
 
@@ -1427,7 +1433,12 @@ function OrgsTable() {
     fetch(`/api/proxy/admin/sources/orgs-rollup?${params}`, { signal: controller.signal })
       .then((r) => (r.ok ? r.json() : null))
       .then((body) => {
-        if (controller.signal.aborted || !body) return;
+        if (controller.signal.aborted) return;
+        if (!body) {
+          setOrgs([]);
+          setTotalItems(null);
+          return;
+        }
         const items = unwrapList<OrgRow>(body) ?? [];
         setOrgs(items);
         const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
@@ -1435,7 +1446,11 @@ function OrgsTable() {
         const m = (body as { meta?: OrgsRollupMeta }).meta;
         if (m) setMeta(m);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (controller.signal.aborted) return;
+        setOrgs([]);
+        setTotalItems(null);
+      });
     return () => controller.abort();
   }, [page, perPage, filter, debouncedQuery]);
 

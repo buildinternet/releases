@@ -1,10 +1,10 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { SOURCE_STALE_DAYS } from "@buildinternet/releases-core/sources";
 import type { D1Db } from "../db.js";
 
-/** Mirrored in web/src/app/status/dashboard.tsx as STALE_THRESHOLD_DAYS. */
-export const SOURCE_STALE_DAYS = 90;
+export { SOURCE_STALE_DAYS };
 
 export type SourceListRow = {
   id: string;

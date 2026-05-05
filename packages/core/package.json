@@ -21,6 +21,7 @@
     "./fts": "./src/fts.ts",
     "./sql-like": "./src/sql-like.ts",
     "./slug": "./src/slug.ts",
+    "./sources": "./src/sources.ts",
     "./reserved-slugs": "./src/reserved-slugs.ts",
     "./tokens": "./src/tokens.ts",
     "./cli-contracts": "./src/cli-contracts.ts",
