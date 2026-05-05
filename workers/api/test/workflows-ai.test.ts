@@ -336,28 +336,8 @@ describe("POST /v1/workflows/summarize", () => {
     const rows = await db.select().from(usageLog);
     expect(rows).toHaveLength(1);
     expect(rows[0].operation).toBe("summarize");
-    expect(rows[0].sourceSlug).toBe("acme-one");
-    expect(rows[0].releaseCount).toBe(2);
-  });
-
-  it("dual-writes sourceId alongside sourceSlug for source-scoped summarize", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-
-    await fetch(
-      new Request("https://x.test/v1/workflows/summarize", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ source: "acme-one" }),
-      }),
-    );
-
-    const rows = await db.select().from(usageLog);
-    expect(rows).toHaveLength(1);
-    // Both columns populated — dual-write window
-    expect(rows[0].sourceSlug).toBe("acme-one");
     expect(rows[0].sourceId).toBe("src_a1");
+    expect(rows[0].releaseCount).toBe(2);
   });
 
   it("records sourceId as null for org-scoped summarize (no single source)", async () => {
@@ -375,7 +355,6 @@ describe("POST /v1/workflows/summarize", () => {
 
     const rows = await db.select().from(usageLog);
     expect(rows).toHaveLength(1);
-    expect(rows[0].sourceSlug).toBeNull();
     expect(rows[0].sourceId).toBeNull();
   });
 });

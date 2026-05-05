@@ -176,7 +176,6 @@ async function logAiUsage(
     model: string;
     inputTokens: number;
     outputTokens: number;
-    sourceSlug?: string | null;
     sourceId?: string | null;
     releaseCount: number;
   },
@@ -187,7 +186,6 @@ async function logAiUsage(
       model: input.model,
       inputTokens: input.inputTokens,
       outputTokens: input.outputTokens,
-      sourceSlug: input.sourceSlug ?? null,
       sourceId: input.sourceId ?? null,
       releaseCount: input.releaseCount,
     });
@@ -397,7 +395,6 @@ workflowsRoutes.post("/workflows/summarize", async (c) => {
       model: SUMMARY_MODEL,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
-      sourceSlug: scope.kind === "source" ? scope.slug : null,
       sourceId: scope.kind === "source" ? scope.id : null,
       releaseCount: inputs.length,
     });
@@ -548,7 +545,6 @@ workflowsRoutes.post("/workflows/compare", async (c) => {
       model: COMPARE_MODEL,
       inputTokens: result.inputTokens,
       outputTokens: result.outputTokens,
-      sourceSlug: null,
       sourceId: null,
       releaseCount: rowsA.length + rowsB.length,
     });
