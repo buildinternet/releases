@@ -52,6 +52,7 @@
       "name": "@releases/ai-internal",
       "version": "0.0.0",
       "dependencies": {
+        "@buildinternet/releases-api-types": "workspace:*",
         "@buildinternet/releases-core": "workspace:*",
         "@releases/adapters": "workspace:*",
         "yaml": "^2.8.3",
@@ -60,7 +61,7 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.2.0",
+      "version": "0.7.0",
     },
     "packages/core": {
       "name": "@buildinternet/releases-core",

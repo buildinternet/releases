@@ -1,4 +1,5 @@
 import { logger } from "@buildinternet/releases-lib/logger";
+import type { EvaluationResult } from "@buildinternet/releases-api-types";
 import { detectProvider, type DetectedProvider } from "./providers.js";
 import { classifyFeedMime, discoverFeed } from "@releases/adapters/feed";
 import type { SourceMetadata } from "@releases/adapters/source-meta";
@@ -6,18 +7,7 @@ import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 // ── Types ──────────────────────────────────────────────────────────
 
-export interface EvaluationResult {
-  recommendedMethod: "feed" | "github" | "markdown" | "scrape" | "crawl";
-  recommendedUrl: string;
-  feedUrl?: string;
-  feedType?: "rss" | "atom" | "jsonfeed";
-  githubRepo?: string;
-  pageStructure: "single-page" | "index" | "unknown";
-  alternatives: Array<{ url: string; method: string; note: string }>;
-  confidence: "high" | "medium" | "low";
-  provider?: string;
-  notes?: string;
-}
+export type { EvaluationResult };
 
 // ── Build metadata shape from evaluation result ────────────────────
 

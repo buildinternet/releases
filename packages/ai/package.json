@@ -9,6 +9,7 @@
     "./providers": "./src/providers.ts"
   },
   "dependencies": {
+    "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/adapters": "workspace:*",
     "yaml": "^2.8.3",
