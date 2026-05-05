@@ -2,6 +2,7 @@ import type { RawRelease, FetchOptions } from "@releases/adapters/types";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { FeedHttpError } from "@releases/lib/errors";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { parseFeed as libParseFeed } from "@rowanmanning/feed-parser";
 
 // Re-export source-meta helpers so consumers can pull everything feed-related
 // from a single path.
@@ -261,34 +262,18 @@ export async function fetchAndParseFeed(
   const lastModified = res.headers.get("last-modified") ?? undefined;
   const contentLength = res.headers.get("content-length") ?? undefined;
 
-  let releases: RawRelease[];
-  switch (feedType) {
-    case "rss":
-      releases = parseRss(body);
-      break;
-    case "atom":
-      releases = parseAtom(body);
-      break;
-    case "jsonfeed":
-      releases = parseJsonFeed(body);
-      break;
-    default: {
-      const detected = detectFeedTypeFromContent(body);
-      if (detected) {
-        logger.info(`Feed type "${feedType}" unrecognized, detected ${detected} from content`);
-        releases =
-          detected === "rss"
-            ? parseRss(body)
-            : detected === "atom"
-              ? parseAtom(body)
-              : parseJsonFeed(body);
-      } else {
-        throw new Error(
-          `Cannot parse feed: unrecognized type "${feedType}" and content detection failed`,
-        );
-      }
+  let effectiveType: FeedType = feedType;
+  if (effectiveType !== "rss" && effectiveType !== "atom" && effectiveType !== "jsonfeed") {
+    const detected = detectFeedTypeFromContent(body);
+    if (!detected) {
+      throw new Error(
+        `Cannot parse feed: unrecognized type "${feedType}" and content detection failed`,
+      );
     }
+    logger.info(`Feed type "${feedType}" unrecognized, detected ${detected} from content`);
+    effectiveType = detected;
   }
+  let releases = effectiveType === "jsonfeed" ? parseJsonFeed(body) : parseRss(body);
 
   if (options?.since) {
     releases = releases.filter((r) => !r.publishedAt || r.publishedAt >= options.since!);
@@ -422,58 +407,37 @@ export async function bodyHashCheck(
 
 // ── Feed parsers ────────────────────────────────────────────────────
 
+/**
+ * Parse RSS or Atom XML via `@rowanmanning/feed-parser`. The library handles
+ * namespace declarations, attribute-bearing tags (`<entry xml:lang="en">` —
+ * see #700), CDATA, and the `content:encoded` ↔ `<description>` precedence
+ * (#319: feeds like OpenAI Codex put a stub in description and the real body
+ * in content:encoded). We still apply our own `htmlToMarkdown` + `extractMedia`
+ * since the library returns HTML bodies and `<media:*>` enclosures, not markdown.
+ *
+ * `parseAtom` is an alias kept so callers can self-document which format they
+ * have. The library doesn't parse JSON Feed — that path is `parseJsonFeed`.
+ */
 export function parseRss(xml: string): RawRelease[] {
   const releases: RawRelease[] = [];
-  for (const item of extractAllBetween(xml, "<item>", "</item>")) {
-    const title = extractText(item, "title");
-    if (!title) continue;
-
-    // Prefer <content:encoded> over <description>: RSS convention is that
-    // content:encoded carries the full post body while description is a
-    // short teaser. Several feeds (e.g. OpenAI Codex) put only the title in
-    // description and the real markdown/HTML body in content:encoded — using
-    // description meant we were storing stubs like "Codex app".
-    const contentEncoded = extractText(item, "content:encoded");
-    const description = extractText(item, "description");
-    const body = contentEncoded ?? description ?? "";
-    const link = extractText(item, "link");
-    const pubDate = extractText(item, "pubDate");
-
+  for (const item of libParseFeed(xml).items) {
+    if (!item.title) continue;
+    const body = item.content ?? item.description ?? "";
+    const dateRaw = item.updated ?? item.published;
     releases.push({
-      title,
+      title: item.title,
       content: htmlToMarkdown(decodeHtmlEntities(body)),
-      url: link ?? undefined,
-      publishedAt: pubDate ? new Date(pubDate) : undefined,
-      version: extractVersionFromTitle(title),
-      isBreaking: detectBreaking(title, body),
+      url: item.url ?? undefined,
+      publishedAt: dateRaw ? new Date(dateRaw) : undefined,
+      version: extractVersionFromTitle(item.title),
+      isBreaking: detectBreaking(item.title, body),
       media: extractMedia(body),
     });
   }
   return releases;
 }
 
-export function parseAtom(xml: string): RawRelease[] {
-  const releases: RawRelease[] = [];
-  for (const entry of extractAllBetween(xml, "<entry>", "</entry>")) {
-    const title = extractText(entry, "title");
-    if (!title) continue;
-
-    const content = extractText(entry, "content") ?? extractText(entry, "summary") ?? "";
-    const link = extractAtomLink(entry);
-    const updated = extractText(entry, "updated") ?? extractText(entry, "published");
-
-    releases.push({
-      title,
-      content: htmlToMarkdown(decodeHtmlEntities(content)),
-      url: link ?? undefined,
-      publishedAt: updated ? new Date(updated) : undefined,
-      version: extractVersionFromTitle(title),
-      isBreaking: detectBreaking(title, content),
-      media: extractMedia(content),
-    });
-  }
-  return releases;
-}
+export const parseAtom = parseRss;
 
 export function parseJsonFeed(json: string): RawRelease[] {
   const feed = JSON.parse(json);
@@ -502,53 +466,6 @@ export function parseJsonFeed(json: string): RawRelease[] {
         media: html ? extractMedia(html) : [],
       };
     });
-}
-
-// ── XML helpers (no external dependency) ────────────────────────────
-
-function extractAllBetween(xml: string, openTag: string, closeTag: string): string[] {
-  const results: string[] = [];
-  let idx = 0;
-  while (true) {
-    const start = xml.indexOf(openTag, idx);
-    if (start === -1) break;
-    const end = xml.indexOf(closeTag, start + openTag.length);
-    if (end === -1) break;
-    results.push(xml.slice(start + openTag.length, end));
-    idx = end + closeTag.length;
-  }
-  return results;
-}
-
-const reCache = new Map<string, { cdata: RegExp; text: RegExp }>();
-
-function getTagRegexes(tag: string) {
-  let cached = reCache.get(tag);
-  if (!cached) {
-    cached = {
-      cdata: new RegExp(`<${tag}[^>]*>\\s*<!\\[CDATA\\[([\\s\\S]*?)\\]\\]>\\s*</${tag}>`, "i"),
-      text: new RegExp(`<${tag}[^>]*>([\\s\\S]*?)</${tag}>`, "i"),
-    };
-    reCache.set(tag, cached);
-  }
-  return cached;
-}
-
-function extractText(xml: string, tag: string): string | null {
-  const re = getTagRegexes(tag);
-  const cdataMatch = xml.match(re.cdata);
-  if (cdataMatch) return cdataMatch[1].trim();
-  const textMatch = xml.match(re.text);
-  return textMatch ? textMatch[1].trim() : null;
-}
-
-function extractAtomLink(entry: string): string | null {
-  const altMatch = entry.match(
-    /<link[^>]*rel=["']alternate["'][^>]*href=["']([^"']+)["'][^>]*\/?>/i,
-  );
-  if (altMatch) return altMatch[1];
-  const hrefMatch = entry.match(/<link[^>]*href=["']([^"']+)["'][^>]*\/?>/i);
-  return hrefMatch ? hrefMatch[1] : null;
 }
 
 export function extractVersionFromTitle(title: string): string | undefined {

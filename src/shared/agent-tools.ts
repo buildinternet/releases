@@ -79,6 +79,8 @@ export interface ManageSourceInput {
   organization?: string;
   /** Pre-known feed URL for add. */
   feed_url?: string;
+  /** Pre-known feed type for add (rss / atom / jsonfeed). Required when `feed_url` is supplied directly. */
+  feed_type?: "rss" | "atom" | "jsonfeed";
   /** Edit-only. */
   is_primary?: boolean;
   /** Edit-only. */
@@ -145,6 +147,12 @@ export const AGENT_TOOLS = [
           description: "Organization ID (org_...) or slug — used on add",
         },
         feed_url: { type: "string", description: "Direct feed URL, if pre-known (add only)" },
+        feed_type: {
+          type: "string",
+          enum: ["rss", "atom", "jsonfeed"],
+          description:
+            "Feed type — required when feed_url is supplied directly. Omit to let the evaluator detect both from the page URL.",
+        },
         is_primary: {
           type: "boolean",
           description:
@@ -404,7 +412,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
    */
   async function autoEvaluate(
     url: string,
-  ): Promise<{ type?: string; feedUrl?: string; summary: string }> {
+  ): Promise<{ type?: string; feedUrl?: string; feedType?: string; summary: string }> {
     const raw = await api("GET", `/evaluate?url=${encodeURIComponent(url)}`);
     if (raw.startsWith("Error")) {
       return { summary: `evaluator unavailable (${raw}); proceeding without type inference` };
@@ -413,6 +421,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
       const data = JSON.parse(raw) as {
         recommendedMethod?: string;
         feedUrl?: string;
+        feedType?: string;
         confidence?: string;
       };
       const mapped =
@@ -422,6 +431,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
       return {
         type: mapped,
         feedUrl: data.feedUrl,
+        feedType: data.feedType,
         summary: `auto-detected type=${mapped}${data.feedUrl ? `, feed=${data.feedUrl}` : ""} (confidence=${data.confidence ?? "unknown"})`,
       };
     } catch {
@@ -443,19 +453,32 @@ export function createTypedExecutor(opts: APIClientOptions) {
 
           let type = input.type ? String(input.type) : undefined;
           let feedUrl = input.feed_url ? String(input.feed_url) : undefined;
+          let feedType = input.feed_type ? String(input.feed_type) : undefined;
           let evalSummary: string | undefined;
-          if (!type) {
+          // Auto-evaluate when we don't know the type, or we know feedUrl but
+          // not feedType. The second case is #700: without feedType in metadata,
+          // fetchOne gates with "Missing feedUrl or feedType" and burns 4
+          // onboard-source workflow retries on every feed source.
+          if (!type || (feedUrl && !feedType)) {
             const ev = await autoEvaluate(String(url));
-            type = ev.type;
+            type = type ?? ev.type;
             feedUrl = feedUrl ?? ev.feedUrl;
+            feedType = feedType ?? ev.feedType;
             evalSummary = ev.summary;
           }
 
+          // type=feed requires both feedUrl and feedType in metadata; demote
+          // to scrape if either is missing so the daily scrape-agent sweep
+          // can discover a feed instead of the cron erroring on every tick.
+          const hasFeedMeta = Boolean(feedUrl && feedType);
+          let resolvedType = type;
+          if (resolvedType === "feed" && !hasFeedMeta) resolvedType = "scrape";
+          else if (!resolvedType && hasFeedMeta) resolvedType = "feed";
+
           const body: Record<string, unknown> = { name, url };
-          if (type) body.type = type;
-          else if (feedUrl) body.type = "feed";
+          if (resolvedType) body.type = resolvedType;
           if (input.organization) body.orgSlug = input.organization;
-          if (feedUrl) body.metadata = JSON.stringify({ feedUrl });
+          if (hasFeedMeta) body.metadata = JSON.stringify({ feedUrl, feedType });
           if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
 
           let result = await api("POST", "/sources", body);
