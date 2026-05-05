@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { sql, gte, and, eq } from "drizzle-orm";
+import { sql, gte, eq } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   usageLog,
@@ -68,24 +68,20 @@ usageLogRoutes.get("/admin/logs/usage/stats", async (c) => {
       .groupBy(usageLog.model),
 
     // Group by source_id (the stable FK) and join sources for the display slug.
-    // Rows that pre-date the dual-write (source_id IS NULL) fall back to
-    // source_slug so the stats endpoint stays useful during the backfill window.
+    // Rows whose source has been deleted (source_id NULL via ON DELETE SET NULL)
+    // are excluded — they still contribute to totals and the by-operation /
+    // by-model rollups, just not the per-source breakdown.
     db
       .select({
-        label: sql<string>`COALESCE(${sources.slug}, ${usageLog.sourceSlug})`,
+        label: sources.slug,
         totalInput: sql<number>`COALESCE(SUM(${usageLog.inputTokens}), 0)`,
         totalOutput: sql<number>`COALESCE(SUM(${usageLog.outputTokens}), 0)`,
         count: sql<number>`COUNT(*)`,
       })
       .from(usageLog)
-      .leftJoin(sources, eq(usageLog.sourceId, sources.id))
-      .where(
-        and(
-          gte(usageLog.createdAt, since),
-          sql`(${usageLog.sourceId} IS NOT NULL OR ${usageLog.sourceSlug} IS NOT NULL)`,
-        ),
-      )
-      .groupBy(sql`COALESCE(${usageLog.sourceId}, ${usageLog.sourceSlug})`),
+      .innerJoin(sources, eq(usageLog.sourceId, sources.id))
+      .where(gte(usageLog.createdAt, since))
+      .groupBy(usageLog.sourceId),
   ]);
 
   return c.json({ totals, byOperation, byModel, bySource });
@@ -95,15 +91,12 @@ usageLogRoutes.post("/admin/logs/usage", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json();
 
-  // Dual-write: callers supply sourceSlug; resolve to sourceId so new rows
-  // carry both. Callers may also supply sourceId directly (future) — if present
-  // it wins without a DB round-trip.
-  //
-  // Only promote slug → id when the lookup is unambiguous. Per-org
-  // uniqueness (#690) lets the same slug live under multiple orgs;
-  // picking the first match would silently misattribute usage. When the
-  // slug resolves to multiple rows we leave sourceId null and keep the raw
-  // slug — callers that care about exact attribution must send sourceId.
+  // Callers may pass sourceId directly, or sourceSlug for back-compat from
+  // before #699 Phase D. When only the slug is supplied, promote it to
+  // sourceId only when the lookup is unambiguous — per-org uniqueness (#690)
+  // lets the same slug live under multiple orgs, and picking the first match
+  // would silently misattribute usage. Ambiguous or unknown slugs land as
+  // sourceId NULL; the row still contributes to totals.
   let resolvedSourceId: string | null = body.sourceId ?? null;
   const incomingSlug: string | null = body.sourceSlug ?? null;
   if (!resolvedSourceId && incomingSlug) {
@@ -124,7 +117,6 @@ usageLogRoutes.post("/admin/logs/usage", async (c) => {
       model: body.model,
       inputTokens: body.inputTokens,
       outputTokens: body.outputTokens,
-      sourceSlug: incomingSlug,
       sourceId: resolvedSourceId,
       releaseCount: body.releaseCount ?? null,
       extractionMode: validateExtractionMode(body.extractionMode),

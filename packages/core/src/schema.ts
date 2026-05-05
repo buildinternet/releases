@@ -303,11 +303,9 @@ export const usageLog = sqliteTable("usage_log", {
   model: text("model").notNull(),
   inputTokens: integer("input_tokens").notNull(),
   outputTokens: integer("output_tokens").notNull(),
-  sourceSlug: text("source_slug"),
   // SET NULL (not CASCADE) — usage_log is historical telemetry. A source
-  // delete shouldn't sweep its post-migration rows; the source_slug
-  // fallback in routes/usage-log.ts is what keeps stats useful for
-  // already-deleted sources.
+  // delete shouldn't sweep its post-migration rows; the row stays with
+  // source_id NULL and contributes to totals + by-operation/by-model rollups.
   sourceId: text("source_id").references(() => sources.id, { onDelete: "set null" }),
   releaseCount: integer("release_count"),
   extractionMode: text("extraction_mode").$type<UsageExtractionMode>(),
