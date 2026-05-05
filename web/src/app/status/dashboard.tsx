@@ -1107,6 +1107,7 @@ type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 function SourcesTable() {
   const [sources, setSources] = useState<SourceEntry[]>([]);
   const [totalItems, setTotalItems] = useState<number | null>(null);
+  const [error, setError] = useState(false);
   const [sort, setSortState] = useState<SortState<SourceSortField>>({ field: "name", dir: "asc" });
   const [filter, setFilterState] = useState<SourceTypeFilter>("all");
   const [query, setQuery] = useState("");
@@ -1145,17 +1146,20 @@ function SourcesTable() {
         if (!body) {
           setSources([]);
           setTotalItems(null);
+          setError(true);
           return;
         }
         const items = unwrapList<SourceEntry>(body) ?? [];
         setSources(items);
         const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
         setTotalItems(typeof total === "number" ? total : null);
+        setError(false);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         setSources([]);
         setTotalItems(null);
+        setError(true);
       });
     return () => controller.abort();
   }, [page, perPage, sort, filter, staleOnly, debouncedQuery]);
@@ -1271,7 +1275,7 @@ function SourcesTable() {
         </div>
         {sources.length === 0 && (
           <div className="px-4 py-6 text-xs text-stone-400 dark:text-stone-500 text-center">
-            No sources match.
+            {error ? "Failed to load sources." : "No sources match."}
           </div>
         )}
         {sources.map((src) => {
@@ -1407,6 +1411,7 @@ function OrgsTable() {
   const [orgs, setOrgs] = useState<OrgRow[]>([]);
   const [meta, setMeta] = useState<OrgsRollupMeta | null>(null);
   const [totalItems, setTotalItems] = useState<number | null>(null);
+  const [error, setError] = useState(false);
   const [filter, setFilterState] = useState<OrgStaleFilter>("all");
   const [query, setQuery] = useState("");
   const [debouncedQuery, setDebouncedQuery] = useState("");
@@ -1437,6 +1442,8 @@ function OrgsTable() {
         if (!body) {
           setOrgs([]);
           setTotalItems(null);
+          setMeta(null);
+          setError(true);
           return;
         }
         const items = unwrapList<OrgRow>(body) ?? [];
@@ -1444,12 +1451,15 @@ function OrgsTable() {
         const total = (body as { pagination?: { totalItems?: number } }).pagination?.totalItems;
         setTotalItems(typeof total === "number" ? total : null);
         const m = (body as { meta?: OrgsRollupMeta }).meta;
-        if (m) setMeta(m);
+        setMeta(m ?? null);
+        setError(false);
       })
       .catch(() => {
         if (controller.signal.aborted) return;
         setOrgs([]);
         setTotalItems(null);
+        setMeta(null);
+        setError(true);
       });
     return () => controller.abort();
   }, [page, perPage, filter, debouncedQuery]);
@@ -1536,7 +1546,7 @@ function OrgsTable() {
         ))}
         {orgs.length === 0 && (
           <div className="px-4 py-6 text-xs text-stone-400 dark:text-stone-500 text-center">
-            No orgs match.
+            {error ? "Failed to load orgs." : "No orgs match."}
           </div>
         )}
       </div>
