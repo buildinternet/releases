@@ -3,7 +3,7 @@ import {
   SOURCE_TYPES,
   SOURCE_DISCOVERY,
   SOURCE_FETCH_PRIORITIES,
-} from "@buildinternet/releases-core/schema";
+} from "@buildinternet/releases-core/source-enums";
 import {
   ListResponseSchema,
   PaginationSchema,

@@ -6,7 +6,7 @@ import type {
   SourceType,
   SourceDiscovery,
   SourceFetchPriority,
-} from "@buildinternet/releases-core/schema";
+} from "@buildinternet/releases-core/source-enums";
 import type { D1Db } from "../db.js";
 
 export { SOURCE_STALE_DAYS };

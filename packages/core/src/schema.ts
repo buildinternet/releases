@@ -32,15 +32,6 @@ import {
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
 export type ReleaseType = (typeof RELEASE_TYPES)[number];
 
-export const SOURCE_TYPES = ["github", "scrape", "feed", "agent"] as const;
-export type SourceType = (typeof SOURCE_TYPES)[number];
-
-export const SOURCE_DISCOVERY = ["curated", "agent", "on_demand"] as const;
-export type SourceDiscovery = (typeof SOURCE_DISCOVERY)[number];
-
-export const SOURCE_FETCH_PRIORITIES = ["normal", "low", "paused"] as const;
-export type SourceFetchPriority = (typeof SOURCE_FETCH_PRIORITIES)[number];
-
 export const organizations = sqliteTable(
   "organizations",
   {
@@ -59,7 +50,9 @@ export const organizations = sqliteTable(
       .$defaultFn(() => new Date().toISOString()),
     metadata: text("metadata").default("{}"),
     embeddedAt: text("embedded_at"),
-    discovery: text("discovery", { enum: SOURCE_DISCOVERY }).notNull().default("curated"),
+    discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
+      .notNull()
+      .default("curated"),
     // Soft-delete tombstone (#666). Read paths exclude rows where deleted_at
     // IS NOT NULL via notDeleted helpers in queries/shared.ts. On tombstone,
     // the route handler renames slug + domain to mangled forms (slug + "--" +
@@ -193,7 +186,7 @@ export const sources = sqliteTable(
     id: text("id").primaryKey().$defaultFn(newSourceId),
     name: text("name").notNull(),
     slug: text("slug").notNull(),
-    type: text("type", { enum: SOURCE_TYPES }).notNull(),
+    type: text("type", { enum: ["github", "scrape", "feed", "agent"] }).notNull(),
     url: text("url").notNull(),
     orgId: text("org_id")
       .notNull()
@@ -205,7 +198,7 @@ export const sources = sqliteTable(
       .$defaultFn(() => new Date().toISOString()),
     lastFetchedAt: text("last_fetched_at"),
     lastContentHash: text("last_content_hash"),
-    fetchPriority: text("fetch_priority", { enum: SOURCE_FETCH_PRIORITIES }).default("normal"),
+    fetchPriority: text("fetch_priority", { enum: ["normal", "low", "paused"] }).default("normal"),
     consecutiveNoChange: integer("consecutive_no_change").default(0),
     consecutiveErrors: integer("consecutive_errors").default(0),
     nextFetchAfter: text("next_fetch_after"),
@@ -221,7 +214,9 @@ export const sources = sqliteTable(
     isPrimary: integer("is_primary", { mode: "boolean" }).default(false),
     isHidden: integer("is_hidden", { mode: "boolean" }).default(false),
     embeddedAt: text("embedded_at"),
-    discovery: text("discovery", { enum: SOURCE_DISCOVERY }).notNull().default("curated"),
+    discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
+      .notNull()
+      .default("curated"),
     deletedAt: text("deleted_at"),
   },
   (table) => [
@@ -699,7 +694,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   updatedAt: text("updated_at").notNull(),
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
-  discovery: text("discovery", { enum: SOURCE_DISCOVERY }).notNull(),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -739,7 +734,7 @@ export const sourcesActive = sqliteView("sources_active", {
   isPrimary: integer("is_primary", { mode: "boolean" }),
   isHidden: integer("is_hidden", { mode: "boolean" }),
   embeddedAt: text("embedded_at"),
-  discovery: text("discovery", { enum: SOURCE_DISCOVERY }).notNull(),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -764,7 +759,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   updatedAt: text("updated_at").notNull(),
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
-  discovery: text("discovery", { enum: SOURCE_DISCOVERY }).notNull(),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -795,7 +790,7 @@ export const sourcesVisible = sqliteView("sources_visible", {
   isPrimary: integer("is_primary", { mode: "boolean" }),
   isHidden: integer("is_hidden", { mode: "boolean" }),
   embeddedAt: text("embedded_at"),
-  discovery: text("discovery", { enum: SOURCE_DISCOVERY }).notNull(),
+  discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 

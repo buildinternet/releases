@@ -4,13 +4,13 @@
  */
 
 import type { z } from "zod";
-import type { SourceType } from "@buildinternet/releases-core/schema";
+import type { SourceType } from "@buildinternet/releases-core/source-enums";
 
 export type {
   SourceType,
   SourceDiscovery,
   SourceFetchPriority,
-} from "@buildinternet/releases-core/schema";
+} from "@buildinternet/releases-core/source-enums";
 import type {
   MediaItemSchema,
   PaginationSchema,

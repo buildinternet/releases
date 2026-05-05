@@ -13,10 +13,9 @@ import {
   releaseSummaries,
   products,
   sourceChangelogFiles,
-  SOURCE_TYPES,
   type ReleaseType,
-  type SourceType,
 } from "@buildinternet/releases-core/schema";
+import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
