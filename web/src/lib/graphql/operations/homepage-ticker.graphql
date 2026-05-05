@@ -1,0 +1,27 @@
+query HomepageTicker($limit: Int!, $exclude: [String!]!) {
+  latestReleases(limit: $limit, excludeSourceTypes: $exclude) {
+    items {
+      id
+      title
+      version
+      type
+      url
+      publishedAt
+      contentSummary
+      media {
+        type
+        url
+        alt
+        r2Url
+      }
+      source {
+        slug
+        name
+        type
+        org {
+          slug
+        }
+      }
+    }
+  }
+}

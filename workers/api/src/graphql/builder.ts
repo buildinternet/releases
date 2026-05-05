@@ -1,5 +1,5 @@
 import SchemaBuilder from "@pothos/core";
-import type { Pagination } from "@buildinternet/releases-core/cli-contracts";
+import type { MediaItem, Pagination } from "@buildinternet/releases-api-types";
 import type { D1Db } from "../db.js";
 import type { Loaders, Org, Product, Release, Source } from "./loaders.js";
 
@@ -7,6 +7,8 @@ export type GraphQLContext = {
   db: D1Db;
   loaders: Loaders;
   isAdmin: boolean;
+  /** Origin used to resolve `r2Key` → public `r2Url` for release media. */
+  mediaOrigin: string;
 };
 
 export type OrgConnection = { items: Org[]; pagination: Pagination };
@@ -14,11 +16,17 @@ export type ReleaseFeed = { items: Release[]; nextCursor: string | null };
 
 export const builder = new SchemaBuilder<{
   Context: GraphQLContext;
+  // Default to non-null fields and lists. Pothos defaults to nullable, which
+  // forces every codegen consumer through layers of optional chaining for
+  // columns that the DB guarantees. Opt into nullability explicitly per field.
+  DefaultFieldNullability: false;
+  DefaultInputFieldRequiredness: false;
   Objects: {
     Org: Org;
     Product: Product;
     Source: Source;
     Release: Release;
+    Media: MediaItem;
     Pagination: Pagination;
     OrgConnection: OrgConnection;
     ReleaseFeed: ReleaseFeed;
@@ -28,7 +36,9 @@ export const builder = new SchemaBuilder<{
     DateTime: { Input: string; Output: string };
     JSON: { Input: unknown; Output: unknown };
   };
-}>({});
+}>({
+  defaultFieldNullability: false,
+});
 
 builder.objectType("Pagination", {
   description: "Page-based pagination envelope. Mirrors REST's Pagination shape.",

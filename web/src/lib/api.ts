@@ -65,7 +65,7 @@ export type {
   TagDetail,
 };
 
-const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
+export const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 // Trusted-proxy secret — bypasses the API's per-IP rate limiter for
 // server-to-server traffic from Vercel. Does NOT carry admin privileges, so
 // admin-gated fields (e.g. org playbook) never leak into the public cache.
@@ -105,27 +105,40 @@ export class ApiSetupError extends Error {
   }
 }
 
-async function fetchApi<T>(
-  path: string,
-  init?: { cache?: RequestCache; next?: { revalidate?: number | false } },
-): Promise<T> {
-  let res: Response;
-  const fetchInit: RequestInit = { headers: webApiHeaders() };
+export type FetchCacheInit = { cache?: RequestCache; next?: { revalidate?: number | false } };
+
+/**
+ * Apply cache-or-ISR options to a RequestInit, defaulting to 60s revalidate
+ * so reads stay aligned with the API's own KV cache TTLs. Shared by REST and
+ * GraphQL transports — drift here would mean two caches with different lifetimes.
+ */
+export function applyCacheInit(target: RequestInit, init?: FetchCacheInit): void {
   if (init?.cache) {
-    fetchInit.cache = init.cache;
+    target.cache = init.cache;
   } else {
-    (fetchInit as { next?: { revalidate?: number | false } }).next = init?.next ?? {
+    (target as RequestInit & { next?: FetchCacheInit["next"] }).next = init?.next ?? {
       revalidate: 60,
     };
   }
+}
+
+export const apiSetupSteps = [
+  `bun run dev:api    # start the Cloudflare worker API`,
+  `# or`,
+  `bun run api         # start the local Bun API server`,
+];
+
+async function fetchApi<T>(path: string, init?: FetchCacheInit): Promise<T> {
+  let res: Response;
+  const fetchInit: RequestInit = { headers: webApiHeaders() };
+  applyCacheInit(fetchInit, init);
   try {
     res = await fetch(`${API_URL}${path}`, fetchInit);
   } catch {
-    throw new ApiSetupError(`Cannot connect to the API at ${API_URL}. Is the server running?`, [
-      `bun run dev:api    # start the Cloudflare worker API`,
-      `# or`,
-      `bun run api         # start the local Bun API server`,
-    ]);
+    throw new ApiSetupError(
+      `Cannot connect to the API at ${API_URL}. Is the server running?`,
+      apiSetupSteps,
+    );
   }
 
   if (res.status === 503) {
@@ -193,13 +206,6 @@ export const api = {
     );
     return body.releases ?? [];
   },
-  /**
-   * Homepage ticker. Pinned to one of the KV-cached default shapes
-   * (`CACHEABLE_DEFAULT_SHAPES` in workers/api/src/lib/latest-cache.ts) — if
-   * either the count or the exclude list drifts, the response leaves the
-   * cache and every homepage hit becomes a D1 query.
-   */
-  homepageLatestReleases: () => api.latestReleases({ count: 20, excludeSourceTypes: ["github"] }),
   orgs: async (): Promise<OrgListItem[]> => {
     const body = await fetchApi<ListResponse<OrgListItem> | OrgListItem[]>("/v1/orgs");
     if (Array.isArray(body)) return body;

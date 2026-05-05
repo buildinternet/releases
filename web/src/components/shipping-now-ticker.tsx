@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
-import type { LatestReleaseItem } from "@/lib/api";
+import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 
-type Slide = { release: LatestReleaseItem; relative: string | null };
+export type TickerRelease = HomepageTickerQuery["latestReleases"]["items"][number];
+type Slide = { release: TickerRelease; relative: string | null };
 
 const ROTATION_MS = 3500;
 const TRANSITION_MS = 500;
@@ -18,7 +19,7 @@ const MAX_ITEMS = 20;
  * collapses to nothing once the version slug is removed). The ticker is a
  * marketing surface; if there's no headline, it's not worth a slot.
  */
-function isMeaningfulRelease(r: LatestReleaseItem): boolean {
+function isMeaningfulRelease(r: TickerRelease): boolean {
   const title = (r.title ?? "").trim();
   if (!title) return false;
   const version = (r.version ?? "").trim();
@@ -30,7 +31,7 @@ function isMeaningfulRelease(r: LatestReleaseItem): boolean {
   return true;
 }
 
-function pickLabel(r: LatestReleaseItem): string {
+function pickLabel(r: TickerRelease): string {
   return r.title ?? r.version ?? "(untitled)";
 }
 
@@ -65,13 +66,17 @@ function ActivityIcon() {
  * isn't guaranteed since #690.
  */
 function chevronTarget(
-  r: LatestReleaseItem,
+  r: TickerRelease,
 ): { href: string; external: boolean; label: string } | null {
   if (r.url) {
     return { href: r.url, external: true, label: `Open ${r.source.name} release in a new tab` };
   }
-  if (r.source.orgSlug) {
-    return { href: `/${r.source.orgSlug}`, external: false, label: `More from ${r.source.name}` };
+  if (r.source.org.slug) {
+    return {
+      href: `/${r.source.org.slug}`,
+      external: false,
+      label: `More from ${r.source.name}`,
+    };
   }
   return null;
 }
@@ -112,7 +117,7 @@ function Row({ slide }: { slide: Slide }) {
   );
 }
 
-export function ShippingNowTicker({ releases }: { releases: LatestReleaseItem[] }) {
+export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
   // Pre-format relative dates here so the ticker doesn't recompute
   // `Date.now()` and re-parse ISO strings for every row on every tick (21
   // rows × every 3.5s = a lot of needless work).

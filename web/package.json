@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "next dev --turbopack",
     "build": "cp ../scripts/install.sh public/install && bun scripts/build-well-known.ts && next build",
-    "start": "next start"
+    "start": "next start",
+    "codegen": "graphql-codegen --config codegen.ts"
   },
   "dependencies": {
     "@buildinternet/releases-api-types": "workspace:*",
@@ -24,10 +25,14 @@
     "shiki": "^4.0.2"
   },
   "devDependencies": {
+    "@graphql-codegen/cli": "^7.0.0",
+    "@graphql-codegen/client-preset": "^6.0.0",
+    "@graphql-typed-document-node/core": "^3.2.0",
     "@tailwindcss/postcss": "^4.2.2",
     "@types/node": "^25.6.0",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
+    "graphql": "^16.13.2",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.3",
     "vercel": "^52.0.0"

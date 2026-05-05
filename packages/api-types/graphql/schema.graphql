@@ -1,0 +1,164 @@
+# GENERATED — do not edit by hand.
+# Regenerate with: bun workers/api/scripts/print-graphql-schema.ts
+
+scalar DateTime
+
+scalar JSON
+
+"""
+An image, video, or GIF attached to a release.
+"""
+type Media {
+  alt: String
+  r2Url: String
+  type: String!
+  url: String!
+}
+
+"""
+An organization (the entity that produces one or more products / sources).
+"""
+type Org {
+  avatarUrl: String
+  category: String
+  createdAt: DateTime!
+  description: String
+  discovery: String!
+  domain: String
+  id: ID!
+  name: String!
+  products: [Product!]!
+  slug: String!
+
+  """
+  All non-hidden sources for the org. Use Product.sources for product-scoped lists.
+  """
+  sources: [Source!]!
+  updatedAt: DateTime!
+}
+
+"""
+Catalog-shaped page of organizations.
+"""
+type OrgConnection {
+  items: [Org!]!
+  pagination: Pagination!
+}
+
+"""
+Page-based pagination envelope. Mirrors REST's Pagination shape.
+"""
+type Pagination {
+  hasMore: Boolean
+  page: Int!
+  pageSize: Int!
+  returned: Int!
+  totalItems: Int
+  totalPages: Int
+}
+
+"""
+Optional grouping layer between an Org and its Sources.
+"""
+type Product {
+  category: String
+  createdAt: DateTime!
+  description: String
+  id: ID!
+  name: String!
+  org: Org!
+  slug: String!
+  sources: [Source!]!
+  url: String
+}
+
+type Query {
+  """
+  Feed-shaped slice of recent visible releases. Pass `cursor` from the previous page's `nextCursor` to fetch the next slice.
+  """
+  latestReleases(
+    cursor: String
+
+    """
+    Drop releases whose source.type is in this list. Tokens are validated against the canonical source-type set; unknown tokens fail with BAD_USER_INPUT.
+    """
+    excludeSourceTypes: [String!]
+    limit: Int = 20
+    orgIdOrSlug: String
+  ): ReleaseFeed!
+
+  """
+  Look up an organization by id (org_…) or slug.
+  """
+  org(idOrSlug: String!): Org
+
+  """
+  Catalog-shaped page of organizations, newest first.
+  """
+  orgs(limit: Int = 20, page: Int = 1): OrgConnection!
+
+  """
+  Look up a release by id (rel_…) — or by url for legacy callers.
+  """
+  release(idOrUrl: String!): Release
+
+  """
+  Look up a source by id (src_…). Slug-only lookups require an org context.
+  """
+  source(id: String!): Source
+}
+
+"""
+A single release (changelog entry).
+"""
+type Release {
+  """
+  Full markdown body. Often large — request only when you need it (this is the field-selection win).
+  """
+  content: String!
+  contentSummary: String
+  fetchedAt: DateTime!
+  id: ID!
+
+  """
+  Images / videos / GIFs attached to the release. Empty list if none.
+  """
+  media: [Media!]!
+  publishedAt: DateTime
+  source: Source!
+  title: String!
+  type: String!
+  url: String
+  version: String
+}
+
+"""
+Feed-shaped page of releases. `nextCursor` is null when the feed is exhausted.
+"""
+type ReleaseFeed {
+  items: [Release!]!
+  nextCursor: String
+}
+
+"""
+A changelog source (github / scrape / feed / agent).
+"""
+type Source {
+  createdAt: DateTime!
+  discovery: String!
+  fetchPriority: String
+  id: ID!
+  lastFetchedAt: DateTime
+  medianGapDays: Float
+  name: String!
+  org: Org!
+  product: Product
+
+  """
+  Recent non-suppressed releases, newest first. Capped at 50 in the spike.
+  """
+  releases(limit: Int = 20): [Release!]!
+  slug: String!
+  type: String!
+  url: String!
+}

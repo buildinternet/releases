@@ -19,7 +19,12 @@ const yoga = createYoga<GraphQLServerContext>({
   graphiql: (_req, { env }) => (env as { ENVIRONMENT?: string }).ENVIRONMENT !== "production",
   context: ({ env, isAdmin }): GraphQLContext => {
     const db = createDb(env.DB);
-    return { db, loaders: createLoaders(db), isAdmin };
+    return {
+      db,
+      loaders: createLoaders(db),
+      isAdmin,
+      mediaOrigin: env.MEDIA_ORIGIN ?? "",
+    };
   },
   landingPage: false,
 });

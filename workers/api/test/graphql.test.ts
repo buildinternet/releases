@@ -51,6 +51,7 @@ function ctx(db: Db): GraphQLContext {
     db: d1Like,
     loaders: createLoaders(d1Like),
     isAdmin: false,
+    mediaOrigin: "https://media.test",
   };
 }
 
@@ -337,6 +338,83 @@ describe("GraphQL spike", () => {
       cursor = feed.nextCursor;
     }
     expect(collected).toContain("rel_undated_1");
+  });
+
+  it("latestReleases drops sources whose type is in excludeSourceTypes", async () => {
+    const result = await graphql({
+      schema,
+      source: `query {
+        latestReleases(limit: 50, excludeSourceTypes: ["github"]) {
+          items { id source { type } }
+          nextCursor
+        }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const feed = (
+      result.data as {
+        latestReleases: {
+          items: Array<{ id: string; source: { type: string } }>;
+          nextCursor: string | null;
+        };
+      }
+    ).latestReleases;
+    expect(feed.items).toHaveLength(5);
+    expect(feed.items.every((r) => r.source.type === "feed")).toBe(true);
+  });
+
+  it("latestReleases rejects unknown source types in excludeSourceTypes", async () => {
+    const r = await graphql({
+      schema,
+      source: `query { latestReleases(excludeSourceTypes: ["nope"]) { items { id } } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(r.errors).toBeDefined();
+    expect(r.errors?.[0].extensions?.code).toBe("BAD_USER_INPUT");
+  });
+
+  it("Release.media parses JSON and resolves r2Url against the context origin", async () => {
+    await h.db.insert(releases).values({
+      id: "rel_with_media",
+      sourceId: "src_a1_1",
+      title: "media-bearing release",
+      content: "screenshots inside",
+      url: "https://example.com/media/1",
+      publishedAt: "2026-04-25T00:00:00Z",
+      media: JSON.stringify([
+        { type: "image", url: "https://cdn.example/a.png", alt: "a", r2Key: "media/a.png" },
+        { type: "image", url: "https://cdn.example/b.png" },
+      ]),
+    });
+
+    const result = await graphql({
+      schema,
+      source: `query {
+        release(idOrUrl: "rel_with_media") {
+          media { type url alt r2Url }
+        }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const media = (
+      result.data as {
+        release: {
+          media: Array<{ type: string; url: string; alt: string | null; r2Url: string | null }>;
+        };
+      }
+    ).release.media;
+    expect(media).toHaveLength(2);
+    expect(media[0]).toEqual({
+      type: "image",
+      url: "https://cdn.example/a.png",
+      alt: "a",
+      r2Url: "https://media.test/media/a.png",
+    });
+    // Second item has no r2Key → r2Url is null/undefined depending on resolver
+    // (the helper omits the field when there's nothing to resolve).
+    expect(media[1].r2Url ?? null).toBeNull();
   });
 
   it("rejects malformed cursors with a BAD_USER_INPUT error", async () => {
