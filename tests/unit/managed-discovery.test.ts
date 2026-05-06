@@ -278,7 +278,7 @@ describe("tool error detection via result prefix", () => {
 // ── Provider session error classification ──
 
 describe("classifyProviderSessionError", () => {
-  it("classifies an unknown_error session.error event", () => {
+  it("classifies a retrying unknown_error session.error event as fatal", () => {
     const event = {
       type: "session.error",
       error: {
@@ -291,10 +291,28 @@ describe("classifyProviderSessionError", () => {
       errorSource: "provider",
       errorType: "unknown_error",
       message: "An internal service error occurred.",
+      severity: "fatal",
     });
   });
 
-  it("classifies a model_overloaded_error session.error event", () => {
+  it("classifies an exhausted unknown_error as soft (sub-task gave up; session continues)", () => {
+    const event = {
+      type: "session.error",
+      error: {
+        type: "unknown_error",
+        message: "Skill setup did not complete successfully.",
+        retry_status: { type: "exhausted" },
+      },
+    };
+    expect(classifyProviderSessionError(event)).toEqual({
+      errorSource: "provider",
+      errorType: "unknown_error",
+      message: "Skill setup did not complete successfully.",
+      severity: "soft",
+    });
+  });
+
+  it("classifies a model_overloaded_error session.error event as fatal", () => {
     const event = {
       type: "session.error",
       error: { type: "model_overloaded_error", message: "Model overloaded." },
@@ -303,6 +321,7 @@ describe("classifyProviderSessionError", () => {
       errorSource: "provider",
       errorType: "model_overloaded_error",
       message: "Model overloaded.",
+      severity: "fatal",
     });
   });
 

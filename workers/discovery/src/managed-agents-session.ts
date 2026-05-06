@@ -147,7 +147,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   private async captureFinalUsage(
     client: ReturnType<typeof buildAnthropicClient>,
     anthropicSessionId: string,
-    useWorker: boolean,
+    agentRole: "discovery" | "worker" | "coordinator",
   ): Promise<
     | {
         inputTokens?: number;
@@ -156,37 +156,176 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         cacheReadTokens?: number;
         model?: string;
         estimatedUsd?: number;
+        /**
+         * Per-thread breakdown for multi-agent sessions. Empty / absent for
+         * single-agent paths (discovery, worker). Populated when threads.list
+         * returns more than one thread (i.e. coordinator delegated at least
+         * once). Used by the /status cost card to show the Sonnet/Haiku split.
+         */
+        byThread?: {
+          threadId?: string;
+          agentName?: string;
+          model: string;
+          inputTokens?: number;
+          outputTokens?: number;
+          cacheWriteTokens?: number;
+          cacheReadTokens?: number;
+          estimatedUsd?: number;
+        }[];
       }
     | undefined
   > {
-    const inferredModel = useWorker ? "claude-haiku-4-5" : "claude-sonnet-4-6";
+    // Inferred model is a fallback when sessions.retrieve doesn't surface the
+    // model on the response. Coordinator and discovery both run Sonnet today.
+    const inferredModel = agentRole === "worker" ? "claude-haiku-4-5" : "claude-sonnet-4-6";
     try {
       const finalSession = await (client.beta.sessions as any).retrieve(anthropicSessionId);
       const usage = finalSession.usage as Record<string, unknown> | undefined;
-      if (!usage) return undefined;
-      const inputTokens = usage.input_tokens as number | undefined;
-      const outputTokens = usage.output_tokens as number | undefined;
-      const cacheWriteTokens = usage.cache_creation_input_tokens as number | undefined;
-      const cacheReadTokens = usage.cache_read_input_tokens as number | undefined;
+      const inputTokens = usage?.input_tokens as number | undefined;
+      const outputTokens = usage?.output_tokens as number | undefined;
+      const cacheWriteTokens = usage?.cache_creation_input_tokens as number | undefined;
+      const cacheReadTokens = usage?.cache_read_input_tokens as number | undefined;
       const model = (finalSession.model as string | undefined) ?? inferredModel;
-      const cost = estimateCost(
-        { inputTokens, outputTokens, cacheWriteTokens, cacheReadTokens },
-        model,
+
+      // Per-thread breakdown (multi-agent only). The session-level `usage` may
+      // already aggregate across threads — this is intentionally additive,
+      // surfacing the Sonnet/Haiku split for cost attribution rather than
+      // replacing the aggregate. Best-effort: any failure on threads.list
+      // collapses back to the single-agent path.
+      type ThreadUsageRow = {
+        threadId?: string;
+        agentName?: string;
+        model: string;
+        inputTokens?: number;
+        outputTokens?: number;
+        cacheWriteTokens?: number;
+        cacheReadTokens?: number;
+        estimatedUsd?: number;
+      };
+      let byThread: ThreadUsageRow[] | undefined = undefined;
+      if (agentRole === "coordinator") {
+        try {
+          // `(client.beta.sessions as any)` matches the call-site cast we use
+          // elsewhere in this file: the worker's separate SDK install means
+          // some IDE TS servers don't pick up the typed `threads` namespace
+          // even though `tsc` does. The downstream `t` is annotated to keep
+          // the typed property access (`t.usage?.input_tokens`, etc.).
+          const threadList = await (client.beta.sessions as any).threads.list(anthropicSessionId);
+          const threads = (threadList.data ?? []) as Array<{
+            id?: string;
+            agent?: { name?: string; model?: { id?: string } };
+            usage?: {
+              input_tokens?: number;
+              output_tokens?: number;
+              cache_creation?: {
+                ephemeral_1h_input_tokens?: number;
+                ephemeral_5m_input_tokens?: number;
+              };
+              cache_read_input_tokens?: number;
+            };
+          }>;
+          if (threads.length > 0) {
+            byThread = threads.map((t) => {
+              const tInput = t.usage?.input_tokens;
+              const tOutput = t.usage?.output_tokens;
+              // Cache creation is split by lifetime in the typed shape; sum
+              // both buckets for the single estimateCost slot.
+              const cc = t.usage?.cache_creation;
+              const tCacheW =
+                cc !== undefined
+                  ? (cc.ephemeral_1h_input_tokens ?? 0) + (cc.ephemeral_5m_input_tokens ?? 0)
+                  : undefined;
+              const tCacheR = t.usage?.cache_read_input_tokens;
+              const tModel = t.agent?.model?.id ?? inferredModel;
+              const tCost = estimateCost(
+                {
+                  inputTokens: tInput,
+                  outputTokens: tOutput,
+                  cacheWriteTokens: tCacheW,
+                  cacheReadTokens: tCacheR,
+                },
+                tModel,
+              );
+              // Direct assignment (rather than spread-undefined) keeps
+              // allocations off the hot path — oxlint no-loop-allocation flags
+              // the spread form here. JSON.stringify drops undefined fields on
+              // the wire, so the resulting shape matches the session-level
+              // return below.
+              const row: ThreadUsageRow = { model: tModel };
+              if (typeof t.id === "string") row.threadId = t.id;
+              if (typeof t.agent?.name === "string") row.agentName = t.agent.name;
+              if (tInput !== undefined) row.inputTokens = tInput;
+              if (tOutput !== undefined) row.outputTokens = tOutput;
+              if (tCacheW !== undefined) row.cacheWriteTokens = tCacheW;
+              if (tCacheR !== undefined) row.cacheReadTokens = tCacheR;
+              if (tCost) row.estimatedUsd = tCost.totalUsd;
+              return row;
+            });
+          }
+        } catch (err) {
+          logEvent("warn", {
+            component: "managed-agents",
+            event: "thread-usage-list-failed",
+            err: err instanceof Error ? err : new Error(String(err)),
+          });
+        }
+      }
+
+      // If session-level usage is empty but threads have it, aggregate.
+      // Single pass — sums all four token buckets at once instead of four scans.
+      const threadTotals = byThread?.reduce(
+        (s, t) => ({
+          input: s.input + (t.inputTokens ?? 0),
+          output: s.output + (t.outputTokens ?? 0),
+          cacheW: s.cacheW + (t.cacheWriteTokens ?? 0),
+          cacheR: s.cacheR + (t.cacheReadTokens ?? 0),
+        }),
+        { input: 0, output: 0, cacheW: 0, cacheR: 0 },
       );
+      const aggInput = inputTokens ?? threadTotals?.input;
+      const aggOutput = outputTokens ?? threadTotals?.output;
+      const aggCacheW = cacheWriteTokens ?? threadTotals?.cacheW;
+      const aggCacheR = cacheReadTokens ?? threadTotals?.cacheR;
+
+      if (aggInput === undefined && aggOutput === undefined && !byThread?.length) return undefined;
+
+      // Multi-agent sessions span model tiers (coordinator Sonnet, worker
+      // Haiku). Pricing the aggregate token total at a single rate would
+      // overprice Haiku output and underprice Sonnet input. Per-thread
+      // `estimatedUsd` was already computed at the correct model in the
+      // map above; sum those instead. Single-agent sessions (no byThread)
+      // fall back to the standard aggregate-then-price path.
+      let estimatedUsd: number | undefined;
+      if (byThread && byThread.length > 0) {
+        const sum = byThread.reduce<number>((s, t) => s + (t.estimatedUsd ?? 0), 0);
+        estimatedUsd = sum > 0 ? sum : undefined;
+      } else {
+        estimatedUsd = estimateCost(
+          {
+            inputTokens: aggInput,
+            outputTokens: aggOutput,
+            cacheWriteTokens: aggCacheW,
+            cacheReadTokens: aggCacheR,
+          },
+          model,
+        )?.totalUsd;
+      }
       logEvent("info", {
         component: "managed-agents",
         event: "session-usage",
         usage,
         model,
-        estimatedUsd: cost?.totalUsd ?? null,
+        estimatedUsd: estimatedUsd ?? null,
+        threadCount: byThread?.length ?? null,
       });
       return {
-        inputTokens,
-        outputTokens,
-        cacheWriteTokens,
-        cacheReadTokens,
+        ...(aggInput !== undefined ? { inputTokens: aggInput } : {}),
+        ...(aggOutput !== undefined ? { outputTokens: aggOutput } : {}),
+        ...(aggCacheW !== undefined ? { cacheWriteTokens: aggCacheW } : {}),
+        ...(aggCacheR !== undefined ? { cacheReadTokens: aggCacheR } : {}),
         model,
-        ...(cost ? { estimatedUsd: cost.totalUsd } : {}),
+        ...(estimatedUsd !== undefined ? { estimatedUsd } : {}),
+        ...(byThread && byThread.length > 0 ? { byThread } : {}),
       };
     } catch {
       return undefined;
@@ -196,11 +335,33 @@ export class ManagedAgentsSession extends DurableObject<Env> {
   private async runSession(params: SessionParams): Promise<void> {
     const { sessionId, environmentId, mode } = params;
 
-    // Route update sessions to the worker agent (Haiku) for lower cost
+    // Agent selection:
+    //   - update + ANTHROPIC_WORKER_AGENT_ID → single-agent Haiku (legacy)
+    //   - onboard + ANTHROPIC_COORDINATOR_AGENT_ID → multi-agent coordinator
+    //     (Sonnet) that delegates fetches to the worker via the
+    //     agent_toolset_20260401 tool. Subordinate-thread custom-tool calls
+    //     are cross-posted to the primary stream with session_thread_id;
+    //     handleCustomToolUse + sendResult work unchanged because the server
+    //     routes the reply by custom_tool_use_id.
+    //   - otherwise → single-agent discovery (Sonnet, current default).
     const workerAgentId = this.env.ANTHROPIC_WORKER_AGENT_ID;
-    const useWorker = mode === "update" && workerAgentId;
-    const agentId = useWorker ? workerAgentId : params.agentId;
-    const agentVersion = useWorker ? undefined : params.agentVersion;
+    const coordinatorAgentId = this.env.ANTHROPIC_COORDINATOR_AGENT_ID;
+    let agentRole: "discovery" | "worker" | "coordinator";
+    let agentId: string;
+    let agentVersion: number | undefined;
+    if (mode === "update" && workerAgentId) {
+      agentRole = "worker";
+      agentId = workerAgentId;
+      agentVersion = undefined;
+    } else if (mode === "onboard" && coordinatorAgentId) {
+      agentRole = "coordinator";
+      agentId = coordinatorAgentId;
+      agentVersion = undefined;
+    } else {
+      agentRole = "discovery";
+      agentId = params.agentId;
+      agentVersion = params.agentVersion;
+    }
 
     // Captured once the Anthropic session is created. Archived in `finally`
     // below so timeout-abort and unexpected-throw paths leave the session in a
@@ -216,13 +377,24 @@ export class ManagedAgentsSession extends DurableObject<Env> {
       // rather than silently dropping the notification (which happened previously
       // because StatusHub's session:error handler required an existing row).
       const releasesApiKey = await this.env.RELEASED_API_KEY.get();
+      let statusHubAgentLabel: "haiku" | "sonnet" | "coordinator";
+      switch (agentRole) {
+        case "worker":
+          statusHubAgentLabel = "haiku";
+          break;
+        case "coordinator":
+          statusHubAgentLabel = "coordinator";
+          break;
+        default:
+          statusHubAgentLabel = "sonnet";
+      }
       await this.notifyStatusHub(
         {
           type: "session:start",
           sessionId,
           company: params.company,
           sessionType: mode,
-          agent: useWorker ? "haiku" : "sonnet",
+          agent: statusHubAgentLabel,
           ...(params.correlationId ? { correlationId: params.correlationId } : {}),
           ...(params.sourceIdentifiers && params.sourceIdentifiers.length > 0
             ? { activeSources: params.sourceIdentifiers }
@@ -346,6 +518,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
               errorType: classification.errorType ?? "rate_limit",
               retryCount: rateLimitRetries,
               message: structured,
+              severity: "fatal",
             });
             return;
           }
@@ -392,21 +565,31 @@ Call manage_source(action=fetch) for each source using the source ID as the \`id
 ${idList}
 </sources>${playbookBlock}`;
       } else {
-        const systemContext = buildDiscoverySystemPrompt({
-          evaluateAvailable: false,
-          categories: CATEGORIES,
-        });
+        // Coordinator agents already carry their full system prompt on the
+        // agent definition, so the onboard task message is just the
+        // <task>/<company>/... block. Single-agent discovery (legacy path)
+        // continues to inline the discovery system prompt because that's how
+        // the agent was configured before the prompt-on-definition cleanup.
         const domainBlock = params.domain
           ? `\n<domain>${escapeForPromptTag(params.domain)}</domain>`
           : "";
         const githubOrgBlock = params.githubOrg
           ? `\n<github_org>${escapeForPromptTag(params.githubOrg)}</github_org>`
           : "";
-        prompt = `${systemContext}\n\n---\n\n<task>
+        const taskBlock = `<task>
 Find and evaluate changelog sources for the company described in <company>.${domainBlock ? " Their website domain is in <domain>." : ""}${githubOrgBlock ? " Their GitHub organization is in <github_org>." : ""}
 </task>
 
 <company>${escapeForPromptTag(params.company)}</company>${domainBlock}${githubOrgBlock}`;
+        if (agentRole === "coordinator") {
+          prompt = taskBlock;
+        } else {
+          const systemContext = buildDiscoverySystemPrompt({
+            evaluateAvailable: false,
+            categories: CATEGORIES,
+          });
+          prompt = `${systemContext}\n\n---\n\n${taskBlock}`;
+        }
       }
 
       const stream = await (client.beta.sessions.events as any).stream(session.id);
@@ -420,6 +603,51 @@ Find and evaluate changelog sources for the company described in <company>.${dom
       let toolCallCount = 0;
       let toolErrors = 0;
       let lastAgentMessage = "";
+
+      // ── Pending custom-tool results, batched per turn ──────────────────
+      // The model may emit multiple custom_tool_use events in one turn
+      // (parallel tool calls). The conversation moves on the moment any one
+      // result lands, so the second `events.send` would hit "no non-archived
+      // thread is waiting on tool_use_id". We collect each tool's result via
+      // a deferred promise here and flush them as a single events.send batch
+      // when the matching `*_status_idle` event fires with
+      // `stop_reason: { type: "requires_action", event_ids: [...] }`. State-
+      // report tools resolve to `null` and contribute nothing to the flush.
+      type PendingResult = { toolUseId: string; text: string; isError: boolean } | null;
+      type PendingTool = {
+        threadIdForRouting: string | null;
+        resultPromise: Promise<PendingResult>;
+      };
+      const pendingByToolUseId = new Map<string, PendingTool>();
+      const flushRequiredAction = async (
+        eventIds: string[],
+        threadIdForRouting: string | null,
+      ): Promise<void> => {
+        const flushable = eventIds.flatMap((id) => {
+          const entry = pendingByToolUseId.get(id);
+          return entry ? [{ id, entry }] : [];
+        });
+        if (flushable.length === 0) return;
+        // Drop entries up front — the model isn't waiting on a state-report-only
+        // tool's result, and an awaited handler can't re-resolve.
+        for (const { id } of flushable) pendingByToolUseId.delete(id);
+        // oxlint-disable-next-line no-await-in-loop -- handlers run concurrently; this awaits the joined set
+        const resolved = await Promise.all(flushable.map((x) => x.entry.resultPromise));
+        const events: Record<string, unknown>[] = [];
+        resolved.forEach((r, i) => {
+          if (r === null) return;
+          if (r.isError) toolErrors++;
+          const routing = flushable[i].entry.threadIdForRouting ?? threadIdForRouting;
+          events.push({
+            type: "user.custom_tool_result",
+            custom_tool_use_id: r.toolUseId,
+            content: [{ type: "text", text: r.text }],
+            ...(routing ? { session_thread_id: routing } : {}),
+          });
+        });
+        if (events.length === 0) return;
+        await (client.beta.sessions.events as any).send(session.id, { events });
+      };
       // Track provider session.error events so a subsequent retries_exhausted
       // status_idle can attribute the failure to the upstream incident rather
       // than falling through to our-side "no tools called" detection.
@@ -445,40 +673,61 @@ Find and evaluate changelog sources for the company described in <company>.${dom
           switch (event.type) {
             case "agent.custom_tool_use": {
               const toolEvent = event as any;
-              const sendResult = async (toolUseId: string, text: string) => {
-                if (text.startsWith("Error")) toolErrors++;
-                await (client.beta.sessions.events as any).send(session.id, {
-                  events: [
+              const toolUseId = toolEvent.id as string;
+              // Multi-agent: when the call originated on a subordinate thread,
+              // the event is cross-posted to the primary stream with
+              // `session_thread_id` set. Echo it on the result so the server
+              // routes the reply back to the waiting thread.
+              const threadIdForRouting =
+                (toolEvent.session_thread_id as string | null | undefined) ?? null;
+              // Defer: enqueue a promise that resolves when the handler calls
+              // sendResult (or to null on state-report tools). The flush
+              // happens on the next *_status_idle with requires_action so all
+              // parallel results go in one batch.
+              let resolveFn!: (v: PendingResult) => void;
+              const resultPromise = new Promise<PendingResult>((r) => {
+                resolveFn = r;
+              });
+              pendingByToolUseId.set(toolUseId, { threadIdForRouting, resultPromise });
+              void (async () => {
+                try {
+                  const wasStateReport = await handleCustomToolUse(
+                    { id: toolUseId, name: toolEvent.name, input: toolEvent.input },
                     {
-                      type: "user.custom_tool_result",
-                      custom_tool_use_id: toolUseId,
-                      content: [{ type: "text", text }],
+                      sendResult: async (id: string, text: string) => {
+                        resolveFn({ toolUseId: id, text, isError: text.startsWith("Error") });
+                      },
+                      executor,
+                      onScrapeFetch: scrapeHandler,
+                      getRemainingSessionMs: () => Math.max(0, deadline - Date.now()),
+                      sessionId: session.id,
+                      agentName: agentRole,
+                      onStateCapture: (state) => {
+                        captured.state = state;
+                      },
+                      onToolCall: (toolName) => {
+                        toolCallCount++;
+                        this.ctx.storage.put("progress", {
+                          step: "discovery",
+                          currentAction: toolName,
+                        });
+                      },
                     },
-                  ],
-                });
-              };
-              const wasStateReport = await handleCustomToolUse(
-                { id: toolEvent.id, name: toolEvent.name, input: toolEvent.input },
-                {
-                  sendResult,
-                  executor,
-                  onScrapeFetch: scrapeHandler,
-                  getRemainingSessionMs: () => Math.max(0, deadline - Date.now()),
-                  sessionId: session.id,
-                  agentName: useWorker ? "worker" : "discovery",
-                  onStateCapture: (state) => {
-                    captured.state = state;
-                  },
-                  onToolCall: (toolName) => {
-                    toolCallCount++;
-                    this.ctx.storage.put("progress", {
-                      step: "discovery",
-                      currentAction: toolName,
-                    });
-                  },
-                },
-              );
-              if (wasStateReport) continue;
+                  );
+                  if (wasStateReport) {
+                    // No tool result to send back; flush will skip this one.
+                    resolveFn(null);
+                  }
+                } catch (err) {
+                  // Surface handler crashes as error tool results so the
+                  // model gets feedback rather than waiting forever.
+                  resolveFn({
+                    toolUseId,
+                    text: `Error: ${err instanceof Error ? err.message : String(err)}`,
+                    isError: true,
+                  });
+                }
+              })();
               break;
             }
 
@@ -537,8 +786,93 @@ Find and evaluate changelog sources for the company described in <company>.${dom
               break;
             }
 
+            // ── Multi-agent (coordinator) thread events ─────────────────
+            // Subordinate-thread lifecycle is mirrored to the primary stream
+            // for visibility. None of these are session-terminal — the
+            // session is terminal when the coordinator's `session.status_idle`
+            // fires below. We forward as status-hub log lines and do not set
+            // `done`. Custom-tool calls from subordinate threads still come
+            // through as `agent.custom_tool_use` (handled above) with
+            // `session_thread_id` set; the server routes our reply by
+            // `custom_tool_use_id` so dispatch is unchanged.
+            case "session.thread_created": {
+              const threadId = (event as any).session_thread_id;
+              const agentName = (event as any).agent_name ?? "subordinate";
+              await this.notifyStatusHub(
+                {
+                  type: "session:progress",
+                  sessionId,
+                  logLine: `[${agentName}] thread ${threadId} created`,
+                },
+                releasesApiKey,
+              );
+              break;
+            }
+
+            case "session.thread_status_running":
+            case "session.thread_status_idle":
+            case "session.thread_status_terminated": {
+              const threadId = (event as any).session_thread_id;
+              const stopReason = (event as any).stop_reason;
+              const stop = stopReason?.type;
+              const status = (event.type as string).replace("session.thread_status_", "");
+              const suffix = stop ? ` (${stop})` : "";
+              await this.notifyStatusHub(
+                {
+                  type: "session:progress",
+                  sessionId,
+                  logLine: `[thread ${threadId}] ${status}${suffix}`,
+                },
+                releasesApiKey,
+              );
+              if (
+                event.type === "session.thread_status_idle" &&
+                stop === "requires_action" &&
+                Array.isArray(stopReason?.event_ids)
+              ) {
+                await flushRequiredAction(stopReason.event_ids, threadId ?? null);
+              }
+              break;
+            }
+
+            case "agent.thread_message_received":
+            case "agent.thread_message_sent": {
+              // Each direction populates only one of the two name fields, so a
+              // fallback covers both cases without branching.
+              const e = event as {
+                from_agent_name?: string;
+                to_agent_name?: string;
+                content?: { type?: string; text?: string }[];
+              };
+              const peerName = e.from_agent_name ?? e.to_agent_name ?? "unknown";
+              const direction = event.type === "agent.thread_message_received" ? "←" : "→";
+              const firstText =
+                Array.isArray(e.content) && e.content[0]?.type === "text" ? e.content[0].text : "";
+              const text = firstText ? truncate(firstText, 240) : "";
+              await this.notifyStatusHub(
+                {
+                  type: "session:progress",
+                  sessionId,
+                  logLine: `${direction} ${peerName}${text ? `: ${text}` : ""}`,
+                },
+                releasesApiKey,
+              );
+              break;
+            }
+
             case "session.status_idle":
-              if ((event as any).stop_reason?.type === "requires_action") continue;
+              if ((event as any).stop_reason?.type === "requires_action") {
+                // Belt-and-suspenders: thread_status_idle handles routed
+                // flushes already. This catches sessions where no per-thread
+                // event fires (older single-agent sessions) by flushing on
+                // the primary thread. The map is per-toolUseId so the
+                // thread-level flush already cleared its entries.
+                const eventIds = (event as any).stop_reason?.event_ids ?? [];
+                if (Array.isArray(eventIds) && eventIds.length > 0) {
+                  await flushRequiredAction(eventIds, null);
+                }
+                continue;
+              }
               if (isRetriesExhaustedIdle(event)) {
                 // Attribute to the last provider error we saw so the failure
                 // shows "managed-agents · <type>" instead of falling through
@@ -554,17 +888,14 @@ Find and evaluate changelog sources for the company described in <company>.${dom
                       stopReason: "retries_exhausted",
                       retryCount: providerErrorCount,
                       message: "Managed-agents retry budget exhausted",
+                      severity: "fatal",
                     };
                 logEvent("error", {
                   component: "managed-agents",
                   event: "retries-exhausted",
                   providerErrorCount,
                 });
-                const usageOnError = await this.captureFinalUsage(
-                  client,
-                  session.id,
-                  Boolean(useWorker),
-                );
+                const usageOnError = await this.captureFinalUsage(client, session.id, agentRole);
                 await this.fail(
                   sessionId,
                   params.company,
@@ -584,23 +915,40 @@ Find and evaluate changelog sources for the company described in <company>.${dom
 
             case "session.error": {
               providerErrorCount++;
-              const classification = classifyProviderSessionError(event) ?? {
-                errorSource: "provider" as const,
+              const classification: SessionErrorClassification = classifyProviderSessionError(
+                event,
+              ) ?? {
+                errorSource: "provider",
                 message: `Session error: ${JSON.stringify(event)}`,
+                severity: "fatal",
               };
               lastProviderError = classification;
-              logEvent("error", {
+              logEvent(classification.severity === "fatal" ? "error" : "warn", {
                 component: "managed-agents",
                 event: "session-error",
                 errorType: classification.errorType ?? "unknown",
+                severity: classification.severity,
                 message: classification.message,
                 providerErrorCount,
               });
-              const usageOnError = await this.captureFinalUsage(
-                client,
-                session.id,
-                Boolean(useWorker),
-              );
+              if (classification.severity === "soft") {
+                // Sub-task gave up (skill setup, MCP fetch). The conversation
+                // is still alive — surface as a status-hub log and keep
+                // streaming. If the session genuinely can't recover, a later
+                // session.status_terminated or retries_exhausted idle will
+                // finish it via the existing branches.
+                // oxlint-disable-next-line no-await-in-loop -- ordered status updates
+                await this.notifyStatusHub(
+                  {
+                    type: "session:progress",
+                    sessionId,
+                    logLine: `[managed-agents] non-fatal: ${classification.message}`,
+                  },
+                  releasesApiKey,
+                );
+                break;
+              }
+              const usageOnError = await this.captureFinalUsage(client, session.id, agentRole);
               await this.fail(
                 sessionId,
                 params.company,
@@ -636,7 +984,7 @@ Find and evaluate changelog sources for the company described in <company>.${dom
       // Snapshot final usage + cost via the shared helper; same call site as
       // the terminal-error branches so success and failure both attribute
       // cost correctly. See `captureFinalUsage` below.
-      const sessionUsage = await this.captureFinalUsage(client, session.id, Boolean(useWorker));
+      const sessionUsage = await this.captureFinalUsage(client, session.id, agentRole);
 
       // Archive runs in the outer `finally` for every exit path — see the
       // comment on `pendingArchive` at the top of runSession. NOTE: worker
