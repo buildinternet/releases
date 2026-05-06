@@ -1,4 +1,10 @@
-import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
+import {
+  SOURCE_DISCOVERY,
+  SOURCE_TYPES,
+  type SourceDiscovery,
+  type SourceType,
+} from "@buildinternet/releases-core/source-enums";
+import { RELEASE_TYPES, type ReleaseType } from "@buildinternet/releases-core/schema";
 import { builder } from "../builder.js";
 
 // Spell out the values explicitly so Pothos types each enum entry's `value`
@@ -20,5 +26,25 @@ export const MediaKindEnum = builder.enumType("MediaKind", {
   description: "Kind of media attached to a release.",
   values: Object.fromEntries(MEDIA_KINDS.map((v) => [v, { value: v }])) as {
     [K in MediaKind]: { value: K };
+  },
+});
+
+// Same value list as the SOURCE_DISCOVERY column on `sources`; the SDL name
+// is org-scoped because the only field we currently expose it on is
+// `Org.discovery`. If we later type `Source.discovery` we can promote this
+// to a shared `Discovery` enum.
+export const OrgDiscoveryEnum = builder.enumType("OrgDiscovery", {
+  description:
+    "How an organization entered the registry: hand-curated, materialized by the discovery agent, or created on-demand via /v1/lookups.",
+  values: Object.fromEntries(SOURCE_DISCOVERY.map((v) => [v, { value: v }])) as {
+    [K in SourceDiscovery]: { value: K };
+  },
+});
+
+export const ReleaseTypeEnum = builder.enumType("ReleaseType", {
+  description:
+    "Whether a release is a normal feature/changelog entry or a seasonal/quarterly rollup catch-all.",
+  values: Object.fromEntries(RELEASE_TYPES.map((v) => [v, { value: v }])) as {
+    [K in ReleaseType]: { value: K };
   },
 });

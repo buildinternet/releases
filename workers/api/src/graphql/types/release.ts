@@ -1,5 +1,6 @@
 import { parseReleaseMedia } from "../../utils.js";
 import { builder } from "../builder.js";
+import { ReleaseTypeEnum } from "./enums.js";
 
 export const ReleaseType = builder.objectType("Release", {
   description: "A single release (changelog entry).",
@@ -7,7 +8,7 @@ export const ReleaseType = builder.objectType("Release", {
     id: t.exposeID("id"),
     title: t.exposeString("title"),
     version: t.exposeString("version", { nullable: true }),
-    type: t.exposeString("type"),
+    type: t.field({ type: ReleaseTypeEnum, resolve: (r) => r.type }),
     url: t.exposeString("url", { nullable: true }),
     publishedAt: t.expose("publishedAt", { type: "DateTime", nullable: true }),
     fetchedAt: t.expose("fetchedAt", { type: "DateTime" }),
