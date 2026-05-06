@@ -33,7 +33,8 @@ export const SourceType = builder.objectType("Source", {
 
     releases: t.field({
       type: ["Release"],
-      description: "Recent non-suppressed releases, newest first. Capped at 50 in the spike.",
+      description:
+        "Recent non-suppressed releases, newest first. The loader fetches up to 50 per source per batch; `limit` clamps to that ceiling.",
       args: {
         limit: t.arg.int({ required: false, defaultValue: 20 }),
       },

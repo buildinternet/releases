@@ -419,6 +419,50 @@ describe("GraphQL spike", () => {
     expect(media[1].r2Url ?? null).toBeNull();
   });
 
+  it("Source.releases gives every batched source its own slice (no starvation)", async () => {
+    // Regression for #757: the loader used to fetch `chunk.length * 50` rows
+    // ordered globally by published_at, then split in memory. A source with
+    // many recent releases would consume the whole window and shorter ones
+    // batched alongside it returned []. The window-function path partitions
+    // per source, so each gets up to 50 regardless of neighbors.
+    const tallExtras: Array<typeof releases.$inferInsert> = [];
+    for (let i = 0; i < 100; i++) {
+      // Dated AFTER the seeded releases (2026-04-20 and earlier) so they sort
+      // ahead under DESC and would crowd out the shorter source.
+      tallExtras.push({
+        id: `rel_tall_${i}`,
+        sourceId: "src_a1_1",
+        title: `tall ${i}`,
+        content: `body ${i}`,
+        url: `https://example.com/tall/${i}`,
+        // ms-distinct timestamps so DESC ordering is deterministic.
+        publishedAt: new Date(Date.UTC(2026, 4, 1) + i * 1000).toISOString(),
+      });
+    }
+    await h.db.insert(releases).values(tallExtras);
+
+    const result = await graphql({
+      schema,
+      // Both sources resolve in the SAME GraphQL request → DataLoader batches
+      // them into one window-function query with `source_id IN (?, ?)`.
+      source: `query {
+        tall: source(id: "src_a1_1") { releases(limit: 50) { id } }
+        short: source(id: "src_a2_1") { releases(limit: 50) { id } }
+      }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const data = result.data as {
+      tall: { releases: Array<{ id: string }> };
+      short: { releases: Array<{ id: string }> };
+    };
+    // Tall source caps at the loader ceiling (50); short source returns its 5
+    // even though all 5 are older than every release on the tall source.
+    expect(data.tall.releases).toHaveLength(50);
+    expect(data.short.releases).toHaveLength(5);
+    expect(data.short.releases.every((r) => r.id.startsWith("rel_src_a2_1"))).toBe(true);
+  });
+
   it("rejects malformed cursors with a BAD_USER_INPUT error", async () => {
     const r = await graphql({
       schema,

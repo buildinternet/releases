@@ -1,5 +1,5 @@
 import DataLoader from "dataloader";
-import { and, desc, eq, inArray, isNull } from "drizzle-orm";
+import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 import {
   organizations,
   products,
@@ -16,11 +16,9 @@ type Release = typeof releasesVisible.$inferSelect;
 
 export type Loaders = ReturnType<typeof createLoaders>;
 
-// Cap for `Source.releases` field — per-source slice from the per-batch fetch.
-// Spike debt: the batch fetcher pulls `chunk.length * RECENT_RELEASE_CAP` rows
-// ordered globally, so a single tall source can starve shorter ones inside the
-// same batch. Production fix is a window function (`ROW_NUMBER() OVER
-// (PARTITION BY source_id …)`).
+// Per-source cap for `Source.releases`. Enforced inside the batch query via
+// ROW_NUMBER() OVER (PARTITION BY source_id …) so each requested source gets
+// its own slice — a tall source cannot starve shorter ones in the same batch.
 const RECENT_RELEASE_CAP = 50;
 
 async function chunkedFetch<K extends string, R>(
@@ -145,30 +143,53 @@ export function createLoaders(db: D1Db) {
       return productIds.map((id) => grouped.get(id) ?? []);
     }),
 
-    // Releases are paginated per source, but to avoid N+1 we fetch the latest
-    // RECENT_RELEASE_CAP rows for every requested sourceId in one query and
-    // slice in memory. See module-level comment on RECENT_RELEASE_CAP for the
-    // starvation caveat.
-    //
     // Reads through `releases_visible` so suppressed AND coverage-side rows
     // are filtered to match REST's public surfaces (`/v1/sources/:slug/activity`,
     // `/v1/releases/latest`, `/v1/releases/:id`).
     releasesBySourceId: new DataLoader<string, Release[]>(async (sourceIds) => {
-      const rows = await chunkedFetch(sourceIds, (chunk) =>
-        db
-          .select()
+      const rows = await chunkedFetch(sourceIds, async (chunk) => {
+        const ranked = db
+          .select({
+            id: releasesVisible.id,
+            sourceId: releasesVisible.sourceId,
+            version: releasesVisible.version,
+            type: releasesVisible.type,
+            title: releasesVisible.title,
+            content: releasesVisible.content,
+            contentSummary: releasesVisible.contentSummary,
+            url: releasesVisible.url,
+            contentHash: releasesVisible.contentHash,
+            metadata: releasesVisible.metadata,
+            media: releasesVisible.media,
+            publishedAt: releasesVisible.publishedAt,
+            suppressed: releasesVisible.suppressed,
+            suppressedReason: releasesVisible.suppressedReason,
+            fetchedAt: releasesVisible.fetchedAt,
+            embeddedAt: releasesVisible.embeddedAt,
+            rn: sql<number>`row_number() OVER (PARTITION BY ${releasesVisible.sourceId} ORDER BY ${releasesVisible.publishedAt} DESC, ${releasesVisible.id} DESC)`.as(
+              "rn",
+            ),
+          })
           .from(releasesVisible)
           .where(inArray(releasesVisible.sourceId, chunk))
-          .orderBy(desc(releasesVisible.publishedAt))
-          .limit(chunk.length * RECENT_RELEASE_CAP),
-      );
+          .as("ranked");
+        return db.select().from(ranked).where(lte(ranked.rn, RECENT_RELEASE_CAP));
+      });
       const grouped = new Map<string, Release[]>();
       for (const row of rows) {
         const list = grouped.get(row.sourceId) ?? [];
-        if (list.length < RECENT_RELEASE_CAP) {
-          list.push(row);
-          grouped.set(row.sourceId, list);
-        }
+        list.push(row);
+        grouped.set(row.sourceId, list);
+      }
+      // ROW_NUMBER ordered by published_at DESC, id DESC; the outer SELECT
+      // doesn't preserve row order, so re-sort each group before handing back.
+      for (const list of grouped.values()) {
+        list.sort((a, b) => {
+          const ap = a.publishedAt ?? "";
+          const bp = b.publishedAt ?? "";
+          if (ap !== bp) return ap < bp ? 1 : -1;
+          return a.id < b.id ? 1 : a.id > b.id ? -1 : 0;
+        });
       }
       return sourceIds.map((id) => grouped.get(id) ?? []);
     }),
