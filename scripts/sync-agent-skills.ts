@@ -619,11 +619,19 @@ async function main() {
       tools: unknown[];
       model?: string;
     } = {
-      skills: skillIds,
       system: prompt,
       tools: [...AGENT_TOOLS],
     };
-    const changes = [`${skillIds.length} skill(s)`, "system prompt", `${AGENT_TOOLS.length} tools`];
+    const changes = ["system prompt", `${AGENT_TOOLS.length} tools`];
+    // Only push skills when this run actually rebuilt the skill set. Without
+    // this guard, a `--discovery`/`--worker`-only run with --agent (which
+    // leaves syncSkills=false) and a stale/empty cached config would write
+    // `skills: []` and strip every skill from the agent. Mirrors the
+    // coordinator-block guard below.
+    if (syncSkills) {
+      payload.skills = skillIds;
+      changes.unshift(`${skillIds.length} skill(s)`);
+    }
 
     if (remoteAgent.model.id !== model) {
       console.log(`  Model: changed (${remoteAgent.model.id} → ${model})`);

@@ -93,7 +93,7 @@ IMPORTANT: At the end of discovery, call the releases_report_state tool with the
   "sources": [
     {
       "url": "<source url>",
-      "type": "github|scrape|feed",
+      "type": "github|scrape|feed|agent",
       "slug": "<slug from manage_source(add)>",
       "label": "<human-readable label>",
       "confidence": "high|medium|low",
