@@ -270,6 +270,11 @@ export const releases = sqliteTable(
     uniqueIndex("idx_releases_source_url").on(table.sourceId, table.url),
     index("idx_releases_source_published").on(table.sourceId, table.publishedAt),
     index("idx_releases_published").on(table.publishedAt),
+    // Covers `(published_at DESC, id DESC)` cursor walks — GraphQL `latestReleases`
+    // and REST `/v1/orgs/:slug/releases`. Drizzle's index() helper doesn't emit
+    // direction modifiers, so the matching DESC index is hand-authored in the
+    // migration file (20260506000000_releases_published_id_index.sql).
+    index("idx_releases_published_id").on(table.publishedAt, table.id),
     index("idx_releases_source_suppressed_published").on(
       table.sourceId,
       table.suppressed,
