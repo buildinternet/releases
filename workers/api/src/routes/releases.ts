@@ -6,7 +6,7 @@ import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseReleaseMedia } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
-import { SOURCE_TYPES, parseExcludeSourceTypes } from "./sources.js";
+import { SOURCE_TYPES, parseExcludeSourceTypes } from "../lib/source-types.js";
 import {
   buildLatestCacheKey,
   isCacheableLatestRequest,

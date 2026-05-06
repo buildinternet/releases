@@ -344,7 +344,7 @@ describe("GraphQL spike", () => {
     const result = await graphql({
       schema,
       source: `query {
-        latestReleases(limit: 50, excludeSourceTypes: ["github"]) {
+        latestReleases(limit: 50, excludeSourceTypes: [github]) {
           items { id source { type } }
           nextCursor
         }
@@ -365,13 +365,15 @@ describe("GraphQL spike", () => {
   });
 
   it("latestReleases rejects unknown source types in excludeSourceTypes", async () => {
+    // Validation now lives at the schema layer — graphql-js coerces enum
+    // values during parsing and rejects unknowns before the resolver runs.
     const r = await graphql({
       schema,
-      source: `query { latestReleases(excludeSourceTypes: ["nope"]) { items { id } } }`,
+      source: `query { latestReleases(excludeSourceTypes: [nope]) { items { id } } }`,
       contextValue: ctx(h.db),
     });
     expect(r.errors).toBeDefined();
-    expect(r.errors?.[0].extensions?.code).toBe("BAD_USER_INPUT");
+    expect(r.errors?.[0].message).toMatch(/SourceType/i);
   });
 
   it("Release.media parses JSON and resolves r2Url against the context origin", async () => {

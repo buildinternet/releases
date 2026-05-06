@@ -6,9 +6,15 @@ export type Incremental<T> =
   | T
   | { [P in keyof T]?: P extends " $fragmentName" | "__typename" ? T[P] : never };
 import { TypedDocumentNode as DocumentNode } from "@graphql-typed-document-node/core";
+/** Kind of media attached to a release. */
+export type MediaKind = "gif" | "image" | "video";
+
+/** How a source is ingested: GitHub releases API, scraped HTML, parsed feed, or AI agent. */
+export type SourceType = "agent" | "feed" | "github" | "scrape";
+
 export type HomepageTickerQueryVariables = Exact<{
   limit: number;
-  exclude: Array<string> | string;
+  exclude: Array<SourceType> | SourceType;
 }>;
 
 export type HomepageTickerQuery = {
@@ -21,8 +27,8 @@ export type HomepageTickerQuery = {
       url: string | null;
       publishedAt: string | null;
       contentSummary: string | null;
-      media: Array<{ type: string; url: string; alt: string | null; r2Url: string | null }>;
-      source: { slug: string; name: string; type: string; org: { slug: string } };
+      media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
+      source: { slug: string; name: string; type: SourceType; org: { slug: string } };
     }>;
   };
 };
@@ -52,7 +58,7 @@ export const HomepageTickerDocument = {
               kind: "ListType",
               type: {
                 kind: "NonNullType",
-                type: { kind: "NamedType", name: { kind: "Name", value: "String" } },
+                type: { kind: "NamedType", name: { kind: "Name", value: "SourceType" } },
               },
             },
           },

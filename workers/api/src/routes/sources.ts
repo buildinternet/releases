@@ -67,27 +67,8 @@ import { logEvent } from "@releases/lib/log-event";
 
 export const sourceRoutes = new Hono<Env>();
 
-export const SOURCE_TYPES = ["github", "scrape", "feed", "agent"] as const;
-export type SourceType = (typeof SOURCE_TYPES)[number];
-const SOURCE_TYPE_SET: ReadonlySet<string> = new Set(SOURCE_TYPES);
-
-/**
- * Normalize and validate `?exclude=` / `excludeSourceTypes` input shared by
- * REST (`/v1/releases/latest`) and GraphQL (`latestReleases`). Trims, lowers,
- * dedupes, and rejects unknown tokens with a list of offenders so each
- * transport can shape its own error envelope.
- */
-export function parseExcludeSourceTypes(
-  raw: ReadonlyArray<string> | string | null | undefined,
-): { ok: true; values: SourceType[] } | { ok: false; invalid: string[] } {
-  const tokens = (typeof raw === "string" ? raw.split(",") : (raw ?? []))
-    .map((t) => t.trim().toLowerCase())
-    .filter((t) => t.length > 0);
-  const normalized = [...new Set(tokens)];
-  const invalid = normalized.filter((t) => !SOURCE_TYPE_SET.has(t));
-  if (invalid.length > 0) return { ok: false, invalid };
-  return { ok: true, values: normalized as SourceType[] };
-}
+import { SOURCE_TYPES, type SourceType } from "../lib/source-types.js";
+export { SOURCE_TYPES, type SourceType, parseExcludeSourceTypes } from "../lib/source-types.js";
 
 sourceRoutes.get("/sources", async (c) => {
   const db = createDb(c.env.DB);

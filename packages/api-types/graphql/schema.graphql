@@ -11,8 +11,17 @@ An image, video, or GIF attached to a release.
 type Media {
   alt: String
   r2Url: String
-  type: String!
+  type: MediaKind!
   url: String!
+}
+
+"""
+Kind of media attached to a release.
+"""
+enum MediaKind {
+  gif
+  image
+  video
 }
 
 """
@@ -80,9 +89,9 @@ type Query {
     cursor: String
 
     """
-    Drop releases whose source.type is in this list. Tokens are validated against the canonical source-type set; unknown tokens fail with BAD_USER_INPUT.
+    Drop releases whose source.type is in this list.
     """
-    excludeSourceTypes: [String!]
+    excludeSourceTypes: [SourceType!]
     limit: Int = 20
     orgIdOrSlug: String
   ): ReleaseFeed!
@@ -159,6 +168,16 @@ type Source {
   """
   releases(limit: Int = 20): [Release!]!
   slug: String!
-  type: String!
+  type: SourceType!
   url: String!
+}
+
+"""
+How a source is ingested: GitHub releases API, scraped HTML, parsed feed, or AI agent.
+"""
+enum SourceType {
+  agent
+  feed
+  github
+  scrape
 }

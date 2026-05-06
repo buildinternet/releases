@@ -1,4 +1,4 @@
-query HomepageTicker($limit: Int!, $exclude: [String!]!) {
+query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
   latestReleases(limit: $limit, excludeSourceTypes: $exclude) {
     items {
       id
