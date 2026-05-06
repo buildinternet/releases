@@ -59,7 +59,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.123",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.131",
     "@buildinternet/releases-core": "workspace:*",
     "@buildinternet/releases-lib": "^0.20.2",
     "@buildinternet/releases-skills": "^0.20.2",
@@ -70,7 +70,7 @@
     "@releases/lib": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@releases/search": "workspace:*",
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.95.0",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dayjs": "^1.11.20",
     "drizzle-orm": "^0.45.2",

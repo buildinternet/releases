@@ -8,7 +8,7 @@
     "db:migrate:remote": "wrangler d1 migrations apply released-db --remote"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "^0.95.0",
     "@envelop/disable-introspection": "^9.1.1",
     "@escape.tech/graphql-armor-cost-limit": "^2.4.3",
     "@escape.tech/graphql-armor-max-aliases": "^2.6.2",
