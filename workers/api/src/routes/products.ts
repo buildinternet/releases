@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { describeRoute, resolver } from "hono-openapi";
 import { and, count, eq, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -16,6 +17,14 @@ import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
 import {
+  ProductListResponseSchema,
+  ProductDetailSchema,
+  ProductRowSchema,
+  ProductAdoptResponseSchema,
+  ProductDeleteResponseSchema,
+  ErrorResponseSchema,
+} from "@buildinternet/releases-api-types";
+import {
   isConflictError,
   getOrCreateTagsD1,
   orgWhere,
@@ -31,159 +40,202 @@ import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 export const productRoutes = new Hono<Env>();
 
 // List products, optionally filtered by orgId
-productRoutes.get("/products", async (c) => {
-  const db = createDb(c.env.DB);
-  const orgId = c.req.query("orgId");
-  const pagination = parseListPagination(new URL(c.req.url).searchParams);
+productRoutes.get(
+  "/products",
+  describeRoute({
+    tags: ["Products"],
+    summary: "List products",
+    description:
+      "Returns the paginated `{items, pagination}` envelope. Filter by `?orgId=` to scope to one org.",
+    responses: {
+      200: {
+        description: "Products list",
+        content: { "application/json": { schema: resolver(ProductListResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const orgId = c.req.query("orgId");
+    const pagination = parseListPagination(new URL(c.req.url).searchParams);
 
-  const where = orgId ? eq(productsActive.orgId, orgId) : undefined;
-  const [rows, totalRow] = await Promise.all([
-    db
-      .select({
-        id: productsActive.id,
-        name: productsActive.name,
-        slug: productsActive.slug,
-        orgId: productsActive.orgId,
-        url: productsActive.url,
-        description: productsActive.description,
-        createdAt: productsActive.createdAt,
-        category: productsActive.category,
-        sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
-      })
-      .from(productsActive)
-      .where(where)
-      .orderBy(productsActive.name, productsActive.id)
-      .limit(pagination.pageSize)
-      .offset(pagination.offset),
-    db.select({ n: count() }).from(productsActive).where(where),
-  ]);
+    const where = orgId ? eq(productsActive.orgId, orgId) : undefined;
+    const [rows, totalRow] = await Promise.all([
+      db
+        .select({
+          id: productsActive.id,
+          name: productsActive.name,
+          slug: productsActive.slug,
+          orgId: productsActive.orgId,
+          url: productsActive.url,
+          description: productsActive.description,
+          createdAt: productsActive.createdAt,
+          category: productsActive.category,
+          sourceCount: sql<number>`(SELECT COUNT(*) FROM sources_active s WHERE s.product_id = products_active.id)`,
+        })
+        .from(productsActive)
+        .where(where)
+        .orderBy(productsActive.name, productsActive.id)
+        .limit(pagination.pageSize)
+        .offset(pagination.offset),
+      db.select({ n: count() }).from(productsActive).where(where),
+    ]);
 
-  return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
-});
+    return c.json(buildListResponse(rows, pagination, Number(totalRow[0]?.n ?? 0)));
+  },
+);
 
 // Adopt: migrate an org into a product under another org (must be before /:identifier)
-productRoutes.post("/products/adopt", async (c) => {
-  const db = createDb(c.env.DB);
-  const body = await c.req.json<{
-    sourceOrgSlug: string;
-    targetOrgSlug: string;
-    slug?: string;
-    url?: string;
-    dryRun?: boolean;
-  }>();
-
-  if (!body.sourceOrgSlug || !body.targetOrgSlug) {
-    return c.json(
-      { error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" },
-      400,
-    );
-  }
-
-  const [sourceOrg] = await db.select().from(organizations).where(orgWhere(body.sourceOrgSlug));
-  if (!sourceOrg)
-    return c.json(
-      { error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` },
-      404,
-    );
-
-  const [targetOrg] = await db.select().from(organizations).where(orgWhere(body.targetOrgSlug));
-  if (!targetOrg)
-    return c.json(
-      { error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` },
-      404,
-    );
-
-  const productSlug = body.slug ?? sourceOrg.slug;
-  if (isReservedSlug(productSlug, "nested")) {
-    return c.json(
-      {
-        error: "slug_reserved",
-        message: `Slug "${productSlug}" is reserved and cannot be used for a product. Pass an explicit "slug" field to override.`,
-        slug: productSlug,
+productRoutes.post(
+  "/products/adopt",
+  describeRoute({
+    tags: ["Products"],
+    summary: "Adopt an org as a product",
+    description:
+      "Migrates `sourceOrgSlug` into a new product under `targetOrgSlug`. Sources and org_accounts move to the target org; the source org is deleted (cascade removes the now-migrated rows). Pass `dryRun: true` to preview without writing.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Adopt result (live or dry-run preview)",
+        content: { "application/json": { schema: resolver(ProductAdoptResponseSchema) } },
       },
-      409,
-    );
-  }
-
-  const sourcesToMove = await db
-    .select()
-    .from(sourcesActive)
-    .where(eq(sourcesActive.orgId, sourceOrg.id));
-  const productUrl = body.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
-
-  if (body.dryRun) {
-    return c.json({
-      dryRun: true,
-      product: {
-        name: sourceOrg.name,
-        slug: productSlug,
-        url: productUrl,
-        orgSlug: targetOrg.slug,
+      400: {
+        description: "Missing required fields",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
-      sourcesToMove: sourcesToMove.map((s) => s.slug),
-      sourceOrgToDelete: sourceOrg.slug,
-    });
-  }
+      404: {
+        description: "Source or target org not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      409: {
+        description: "Slug conflict or reserved slug",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = await c.req.json<{
+      sourceOrgSlug: string;
+      targetOrgSlug: string;
+      slug?: string;
+      url?: string;
+      dryRun?: boolean;
+    }>();
 
-  let product;
-  try {
-    [product] = await db
-      .insert(products)
-      .values({
-        name: sourceOrg.name,
-        slug: productSlug,
-        orgId: targetOrg.id,
-        url: productUrl,
-        description: sourceOrg.description,
-      })
-      .returning();
-  } catch (err) {
-    if (isConflictError(err)) {
+    if (!body.sourceOrgSlug || !body.targetOrgSlug) {
       return c.json(
-        { error: "conflict", message: `Product with slug "${productSlug}" already exists` },
+        { error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" },
+        400,
+      );
+    }
+
+    const [sourceOrg] = await db.select().from(organizations).where(orgWhere(body.sourceOrgSlug));
+    if (!sourceOrg)
+      return c.json(
+        { error: "not_found", message: `Source org not found: ${body.sourceOrgSlug}` },
+        404,
+      );
+
+    const [targetOrg] = await db.select().from(organizations).where(orgWhere(body.targetOrgSlug));
+    if (!targetOrg)
+      return c.json(
+        { error: "not_found", message: `Target org not found: ${body.targetOrgSlug}` },
+        404,
+      );
+
+    const productSlug = body.slug ?? sourceOrg.slug;
+    if (isReservedSlug(productSlug, "nested")) {
+      return c.json(
+        {
+          error: "slug_reserved",
+          message: `Slug "${productSlug}" is reserved and cannot be used for a product. Pass an explicit "slug" field to override.`,
+          slug: productSlug,
+        },
         409,
       );
     }
-    throw err;
-  }
 
-  // Move sources to target org and link to new product
-  if (sourcesToMove.length > 0) {
-    await db
-      .update(sources)
-      .set({ orgId: targetOrg.id, productId: product.id })
-      .where(eq(sources.orgId, sourceOrg.id));
-  }
+    const sourcesToMove = await db
+      .select()
+      .from(sourcesActive)
+      .where(eq(sourcesActive.orgId, sourceOrg.id));
+    const productUrl = body.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
 
-  // Move org accounts to target org (skip duplicates)
-  const accountsToMove = await db
-    .select()
-    .from(orgAccounts)
-    .where(eq(orgAccounts.orgId, sourceOrg.id));
-  if (accountsToMove.length > 0) {
-    await db
-      .insert(orgAccounts)
-      .values(
-        accountsToMove.map((a) => ({
+    if (body.dryRun) {
+      return c.json({
+        dryRun: true,
+        product: {
+          name: sourceOrg.name,
+          slug: productSlug,
+          url: productUrl,
+          orgSlug: targetOrg.slug,
+        },
+        sourcesToMove: sourcesToMove.map((s) => s.slug),
+        sourceOrgToDelete: sourceOrg.slug,
+      });
+    }
+
+    let product;
+    try {
+      [product] = await db
+        .insert(products)
+        .values({
+          name: sourceOrg.name,
+          slug: productSlug,
           orgId: targetOrg.id,
-          platform: a.platform,
-          handle: a.handle,
-          createdAt: a.createdAt,
-        })),
-      )
-      .onConflictDoNothing();
-  }
+          url: productUrl,
+          description: sourceOrg.description,
+        })
+        .returning();
+    } catch (err) {
+      if (isConflictError(err)) {
+        return c.json(
+          { error: "conflict", message: `Product with slug "${productSlug}" already exists` },
+          409,
+        );
+      }
+      throw err;
+    }
 
-  // Delete source org (cascade removes its now-migrated accounts)
-  await db.delete(organizations).where(eq(organizations.id, sourceOrg.id));
+    // Move sources to target org and link to new product
+    if (sourcesToMove.length > 0) {
+      await db
+        .update(sources)
+        .set({ orgId: targetOrg.id, productId: product.id })
+        .where(eq(sources.orgId, sourceOrg.id));
+    }
 
-  return c.json({
-    product,
-    sourcesMoved: sourcesToMove.length,
-    accountsMoved: accountsToMove.length,
-    sourceOrgDeleted: sourceOrg.slug,
-  });
-});
+    // Move org accounts to target org (skip duplicates)
+    const accountsToMove = await db
+      .select()
+      .from(orgAccounts)
+      .where(eq(orgAccounts.orgId, sourceOrg.id));
+    if (accountsToMove.length > 0) {
+      await db
+        .insert(orgAccounts)
+        .values(
+          accountsToMove.map((a) => ({
+            orgId: targetOrg.id,
+            platform: a.platform,
+            handle: a.handle,
+            createdAt: a.createdAt,
+          })),
+        )
+        .onConflictDoNothing();
+    }
+
+    // Delete source org (cascade removes its now-migrated accounts)
+    await db.delete(organizations).where(eq(organizations.id, sourceOrg.id));
+
+    return c.json({
+      product,
+      sourcesMoved: sourcesToMove.length,
+      accountsMoved: accountsToMove.length,
+      sourceOrgDeleted: sourceOrg.slug,
+    });
+  },
+);
 
 // Get product by id (preferred) or slug. Registered at both the bare
 // `/products/:identifier` path and the org-scoped `/orgs/:orgSlug/products/:productSlug`.
@@ -225,87 +277,139 @@ const getProductDetailHandler = async (c: import("hono").Context<Env>) => {
     aliases: aliasRows.map((a) => a.domain),
   });
 };
-productRoutes.get("/products/:identifier", getProductDetailHandler);
-productRoutes.get("/orgs/:orgSlug/products/:productSlug", getProductDetailHandler);
+const getProductDetailRoute = describeRoute({
+  tags: ["Products"],
+  summary: "Get product detail",
+  description:
+    "Resolves by slug or `prod_…` ID on the bare path, or by org-scoped slug pair. Returns the product row plus its sources, tags, and domain aliases.",
+  responses: {
+    200: {
+      description: "Product detail with sources, tags, and aliases",
+      content: { "application/json": { schema: resolver(ProductDetailSchema) } },
+    },
+    400: {
+      description:
+        "Bare slug supplied on `/products/:identifier` (#698 — use the org-scoped path or `/v1/lookups/product-by-slug`)",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Product not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+productRoutes.get("/products/:identifier", getProductDetailRoute, getProductDetailHandler);
+productRoutes.get(
+  "/orgs/:orgSlug/products/:productSlug",
+  getProductDetailRoute,
+  getProductDetailHandler,
+);
 
 // Create product
-productRoutes.post("/products", async (c) => {
-  const db = createDb(c.env.DB);
-  const body = await c.req.json<{
-    orgId?: string;
-    orgSlug?: string;
-    name: string;
-    slug?: string;
-    url?: string;
-    description?: string;
-    category?: string;
-    tags?: string[];
-  }>();
-
-  if ((!body.orgId && !body.orgSlug) || !body.name) {
-    return c.json(
-      { error: "bad_request", message: "Missing required fields: orgId or orgSlug, name" },
-      400,
-    );
-  }
-
-  const orgCond = body.orgId ? eq(organizations.id, body.orgId) : orgWhere(body.orgSlug!);
-  const [org] = await db.select().from(organizations).where(orgCond);
-  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
-
-  if (body.category && !isValidCategory(body.category)) {
-    return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
-  }
-
-  const slug = body.slug ?? toSlug(body.name);
-  if (isReservedSlug(slug, "nested")) {
-    return c.json(
-      {
-        error: "slug_reserved",
-        message: `Slug "${slug}" is reserved and cannot be used for a product. Choose a different slug or rename the product.`,
-        slug,
+productRoutes.post(
+  "/products",
+  describeRoute({
+    tags: ["Products"],
+    summary: "Create product",
+    description:
+      "Body fields: `name` (required), `orgId` or `orgSlug` (one required), `slug?`, `url?`, `description?`, `category?`, `tags?`. `category` is validated against the canonical list. Returns the raw product row (201).",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      201: {
+        description: "Product created",
+        content: { "application/json": { schema: resolver(ProductRowSchema) } },
       },
-      409,
-    );
-  }
+      400: {
+        description: "Missing required fields or invalid category",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Organization not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      409: {
+        description: "Slug conflict or reserved slug",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = await c.req.json<{
+      orgId?: string;
+      orgSlug?: string;
+      name: string;
+      slug?: string;
+      url?: string;
+      description?: string;
+      category?: string;
+      tags?: string[];
+    }>();
 
-  try {
-    const [created] = await db
-      .insert(products)
-      .values({
-        name: body.name,
-        slug,
-        orgId: org.id,
-        url: body.url ?? null,
-        description: body.description ?? null,
-        category: body.category ?? null,
-      })
-      .returning();
-
-    if (body.tags && body.tags.length > 0) {
-      const tagRows = await getOrCreateTagsD1(db, body.tags);
-      const now = new Date().toISOString();
-      await db
-        .insert(productTags)
-        .values(tagRows.map((t) => ({ productId: created.id, tagId: t.id, createdAt: now })))
-        .onConflictDoNothing();
+    if ((!body.orgId && !body.orgSlug) || !body.name) {
+      return c.json(
+        { error: "bad_request", message: "Missing required fields: orgId or orgSlug, name" },
+        400,
+      );
     }
 
-    c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
-    return c.json(created, 201);
-  } catch (err) {
-    if (isConflictError(err)) {
+    const orgCond = body.orgId ? eq(organizations.id, body.orgId) : orgWhere(body.orgSlug!);
+    const [org] = await db.select().from(organizations).where(orgCond);
+    if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+    if (body.category && !isValidCategory(body.category)) {
+      return c.json({ error: "bad_request", message: `Invalid category: "${body.category}"` }, 400);
+    }
+
+    const slug = body.slug ?? toSlug(body.name);
+    if (isReservedSlug(slug, "nested")) {
       return c.json(
-        { error: "conflict", message: `Product with slug "${slug}" already exists` },
+        {
+          error: "slug_reserved",
+          message: `Slug "${slug}" is reserved and cannot be used for a product. Choose a different slug or rename the product.`,
+          slug,
+        },
         409,
       );
     }
-    throw err;
-  }
-});
 
-// Update product
-productRoutes.patch("/products/:slug", async (c) => {
+    try {
+      const [created] = await db
+        .insert(products)
+        .values({
+          name: body.name,
+          slug,
+          orgId: org.id,
+          url: body.url ?? null,
+          description: body.description ?? null,
+          category: body.category ?? null,
+        })
+        .returning();
+
+      if (body.tags && body.tags.length > 0) {
+        const tagRows = await getOrCreateTagsD1(db, body.tags);
+        const now = new Date().toISOString();
+        await db
+          .insert(productTags)
+          .values(tagRows.map((t) => ({ productId: created.id, tagId: t.id, createdAt: now })))
+          .onConflictDoNothing();
+      }
+
+      c.executionCtx.waitUntil(embedProductSideEffect(c.env, db, created.id));
+      return c.json(created, 201);
+    } catch (err) {
+      if (isConflictError(err)) {
+        return c.json(
+          { error: "conflict", message: `Product with slug "${slug}" already exists` },
+          409,
+        );
+      }
+      throw err;
+    }
+  },
+);
+
+const patchProductHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<{
     name?: string;
@@ -379,7 +483,34 @@ productRoutes.patch("/products/:slug", async (c) => {
   }
 
   return c.json(updated);
+};
+const patchProductRoute = describeRoute({
+  tags: ["Products"],
+  summary: "Update product",
+  description:
+    "All body fields optional. Re-embeds the product in Vectorize when `name`, `description`, `category`, or `url` changes. `tags` (when provided) replaces the full tag set; `aliases` (when provided) replaces the full domain-alias set and rejects with 409 on cross-entity collisions.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: {
+      description: "Product updated (returns the raw product row)",
+      content: { "application/json": { schema: resolver(ProductRowSchema) } },
+    },
+    400: {
+      description: "Invalid category or bare slug supplied on the bare path",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Product not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    409: {
+      description: "Domain alias collision",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
 });
+productRoutes.patch("/products/:slug", patchProductRoute, patchProductHandler);
+productRoutes.patch("/orgs/:orgSlug/products/:productSlug", patchProductRoute, patchProductHandler);
 
 productRoutes.get("/products/:identifier/tags", async (c) => {
   const db = createDb(c.env.DB);
@@ -433,30 +564,54 @@ productRoutes.delete("/products/:identifier/tags", async (c) => {
 });
 
 // Delete product
-productRoutes.delete("/products/:identifier", async (c) => {
-  const db = createDb(c.env.DB);
-  const hard = c.req.query("hard") === "true";
+productRoutes.delete(
+  "/products/:identifier",
+  describeRoute({
+    tags: ["Products"],
+    summary: "Delete product",
+    description:
+      "Soft-deletes by default — sets `deletedAt` and renames the slug to `<slug>--<id>` so the inline UNIQUE doesn't block re-onboarding. Pass `?hard=true` to permanently remove the row (cascades to product_tags and domain_aliases). Hard-delete reaches tombstones; pass a `prod_…` ID for that path.",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      200: {
+        description: "Product deleted (soft or hard)",
+        content: { "application/json": { schema: resolver(ProductDeleteResponseSchema) } },
+      },
+      400: {
+        description: "Bare slug supplied on `/products/:identifier`",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      404: {
+        description: "Product not found",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const hard = c.req.query("hard") === "true";
 
-  // includeDeleted lets hard-delete reach tombstones for purge. Tombstones
-  // rename their slug to "<slug>--<id>" so a normal slug-path lookup wouldn't
-  // collide with a live row; passing a `prod_` ID is the canonical way to
-  // reach a tombstone.
-  const product = await resolveProductFromContext(c, db, { includeDeleted: hard });
-  if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
+    // includeDeleted lets hard-delete reach tombstones for purge. Tombstones
+    // rename their slug to "<slug>--<id>" so a normal slug-path lookup wouldn't
+    // collide with a live row; passing a `prod_` ID is the canonical way to
+    // reach a tombstone.
+    const product = await resolveProductFromContext(c, db, { includeDeleted: hard });
+    if (!product) return c.json({ error: "not_found", message: "Product not found" }, 404);
 
-  if (hard) {
-    await db.delete(products).where(eq(products.id, product.id));
-    return c.json({ deleted: true, hard: true });
-  }
+    if (hard) {
+      await db.delete(products).where(eq(products.id, product.id));
+      return c.json({ deleted: true, hard: true });
+    }
 
-  // Soft delete: rename slug so the inline UNIQUE doesn't block re-onboarding.
-  const now = new Date().toISOString();
-  await db
-    .update(products)
-    .set({ deletedAt: now, slug: `${product.slug}--${product.id}` })
-    .where(eq(products.id, product.id));
-  return c.json({ deleted: true, deletedAt: now });
-});
+    // Soft delete: rename slug so the inline UNIQUE doesn't block re-onboarding.
+    const now = new Date().toISOString();
+    await db
+      .update(products)
+      .set({ deletedAt: now, slug: `${product.slug}--${product.id}` })
+      .where(eq(products.id, product.id));
+    return c.json({ deleted: true, deletedAt: now });
+  },
+);
 
 // ── Embed side effect ──
 

@@ -4,7 +4,6 @@
  */
 
 import type { z } from "zod";
-import type { SourceType } from "@buildinternet/releases-core/source-enums";
 
 export type {
   SourceType,
@@ -42,6 +41,20 @@ import type {
   ChangelogFileSummarySchema,
   SourceChangelogResponseSchema,
 } from "./schemas/sources.js";
+import type {
+  ProductRowSchema,
+  ProductListItemSchema,
+  ProductListResponseSchema,
+  ProductDetailSourceSchema,
+  ProductDetailSchema,
+  CreateProductBodySchema,
+  UpdateProductBodySchema,
+  AdoptProductBodySchema,
+  ProductAdoptResultSchema,
+  ProductAdoptDryRunSchema,
+  ProductAdoptResponseSchema,
+  ProductDeleteResponseSchema,
+} from "./schemas/products.js";
 
 export {
   MediaItemSchema,
@@ -53,6 +66,7 @@ export {
   ReleaseItemSchema,
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
+  CategorySchema,
 } from "./schemas/shared.js";
 export {
   OrgListItemSchema,
@@ -75,6 +89,20 @@ export {
   ChangelogFileSummarySchema,
   SourceChangelogResponseSchema,
 } from "./schemas/sources.js";
+export {
+  ProductRowSchema,
+  ProductListItemSchema,
+  ProductListResponseSchema,
+  ProductDetailSourceSchema,
+  ProductDetailSchema,
+  CreateProductBodySchema,
+  UpdateProductBodySchema,
+  AdoptProductBodySchema,
+  ProductAdoptResultSchema,
+  ProductAdoptDryRunSchema,
+  ProductAdoptResponseSchema,
+  ProductDeleteResponseSchema,
+} from "./schemas/products.js";
 
 // ── Media ──
 
@@ -529,39 +557,20 @@ export interface OrgReleasesResponse {
 
 // ── Products ──
 
-export interface ProductListItem {
-  id: string;
-  name: string;
-  slug: string;
-  orgId: string;
-  url: string | null;
-  description: string | null;
-  category: string | null;
-  createdAt: string;
-  sourceCount: number;
-}
-
-export type ProductListResponse = ListResponse<ProductListItem>;
-
-export interface ProductDetail {
-  id: string;
-  name: string;
-  slug: string;
-  orgId: string;
-  url: string | null;
-  description: string | null;
-  category: string | null;
-  createdAt: string;
-  sources: Array<{ id: string; slug: string; name: string; type: SourceType; url: string }>;
-  tags: string[];
-}
-
-export interface ProductAdoptResult {
-  product: ProductDetail;
-  sourcesMoved: number;
-  accountsMoved: number;
-  sourceOrgDeleted: string;
-}
+// `Category` lives in @buildinternet/releases-core/categories — import it from
+// there. CategorySchema is re-exported here for OpenAPI / Zod consumers only.
+export type ProductRow = z.infer<typeof ProductRowSchema>;
+export type ProductListItem = z.infer<typeof ProductListItemSchema>;
+export type ProductListResponse = z.infer<typeof ProductListResponseSchema>;
+export type ProductDetailSource = z.infer<typeof ProductDetailSourceSchema>;
+export type ProductDetail = z.infer<typeof ProductDetailSchema>;
+export type CreateProductBody = z.infer<typeof CreateProductBodySchema>;
+export type UpdateProductBody = z.infer<typeof UpdateProductBodySchema>;
+export type AdoptProductBody = z.infer<typeof AdoptProductBodySchema>;
+export type ProductAdoptResult = z.infer<typeof ProductAdoptResultSchema>;
+export type ProductAdoptDryRun = z.infer<typeof ProductAdoptDryRunSchema>;
+export type ProductAdoptResponse = z.infer<typeof ProductAdoptResponseSchema>;
+export type ProductDeleteResponse = z.infer<typeof ProductDeleteResponseSchema>;
 
 // ── Taxonomy (categories + tags) ──
 
