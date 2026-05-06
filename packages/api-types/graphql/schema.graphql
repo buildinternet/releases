@@ -140,7 +140,7 @@ type Source {
   product: Product
 
   """
-  Recent non-suppressed releases, newest first. Capped at 50 in the spike.
+  Recent non-suppressed releases, newest first. The loader fetches up to 50 per source per batch; `limit` clamps to that ceiling.
   """
   releases(limit: Int = 20): [Release!]!
   slug: String!
