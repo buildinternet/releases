@@ -107,6 +107,7 @@
         "ANTHROPIC_ENVIRONMENT_ID": "env_015c9WRKAWFfSqAV6tsAj6Qf",
         "ANTHROPIC_VAULT_ID": "vlt_011CaHHvBA7pA6GDwRHJa4TN",
         "ANTHROPIC_WORKER_AGENT_ID": "agent_011CaHHqcTEy9WDeLPzqsmHP",
+        "ANTHROPIC_COORDINATOR_AGENT_ID": "agent_011CamrB7cJDfoMufEUd8pTD",
         "MEMORY_STORE_ERRATA_ID": "memstore_01BWRxdBdkPbBWcxmKoVGEA9",
         "MEMORY_STORE_TOOL_NOTES_ID": "memstore_01WQCrdDEjNKGfURRswhWBkb",
         // Route Anthropic SDK calls through Cloudflare AI Gateway.

@@ -12,6 +12,7 @@ on:
       - src/shared/agent-tools.ts
       - src/shared/worker-prompt.ts
       - src/shared/discovery-prompt.ts
+      - src/shared/coordinator-prompt.ts
       - src/agent/skills/**
       - scripts/sync-agent-skills.ts
   workflow_dispatch:
@@ -29,7 +30,7 @@ on:
       agent:
         description: Agent scope (used when deploy includes agents)
         type: choice
-        options: [all, discovery, worker]
+        options: [all, discovery, worker, coordinator]
         default: all
 
 # Queue concurrent runs per env instead of cancelling — an interrupted deploy
@@ -89,3 +90,9 @@ jobs:
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: bun run deploy:agents:worker -- --env "$DEPLOY_ENV"
+
+      - name: Deploy coordinator agent
+        if: ${{ (env.DEPLOY_TARGET == 'both' || env.DEPLOY_TARGET == 'agents') && env.AGENT_TARGET == 'coordinator' }}
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: bun run deploy:agents:coordinator -- --env "$DEPLOY_ENV"

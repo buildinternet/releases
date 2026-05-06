@@ -2,9 +2,11 @@
 /**
  * Deploy managed agents: sync skills, system prompt, tools, and model.
  *
- * Manages two agents per environment:
- *   - Discovery agent (Sonnet) — onboarding, evaluation, judgment tasks
+ * Manages three agents per environment:
+ *   - Discovery agent (Sonnet) — single-agent onboarding (legacy path)
  *   - Worker agent (Haiku) — fetches, updates, mechanical operations
+ *   - Coordinator agent (Sonnet) — multi-agent onboarding; delegates fetches
+ *     to the worker via the agent_toolset_20260401 tool. Created lazily.
  *
  * Usage:
  *   bun scripts/sync-agent-skills.ts                  # deploy skills, agents, memory stores (prod)
@@ -15,6 +17,7 @@
  *   bun scripts/sync-agent-skills.ts --memory-stores  # memory stores only
  *   bun scripts/sync-agent-skills.ts --discovery      # discovery agent only
  *   bun scripts/sync-agent-skills.ts --worker         # worker agent only
+ *   bun scripts/sync-agent-skills.ts --coordinator    # coordinator agent only
  *   bun scripts/sync-agent-skills.ts --agent-id <id>  # target an ad-hoc agent
  *
  * `--agent-id <id>` overrides the discovery/worker targets and syncs a single
@@ -36,8 +39,18 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { resolve } from "path";
 import { buildDiscoverySystemPrompt } from "../src/shared/discovery-prompt.js";
 import { buildWorkerSystemPrompt } from "../src/shared/worker-prompt.js";
+import { buildCoordinatorSystemPrompt } from "../src/shared/coordinator-prompt.js";
 import { AGENT_TOOLS } from "../src/shared/agent-tools.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
+
+// Display name of the worker agent the coordinator delegates to. Must match
+// the `name` used when creating the worker agent below.
+const WORKER_AGENT_NAME = "Releases Worker Agent";
+
+// AGENT_TOOLS already includes an `agent_toolset_20260401` entry (idx 0),
+// so the coordinator inherits it from the shared list. The toolset is a
+// no-op on agents without a `multiagent.coordinator` config, which is why
+// discovery + worker can carry it without becoming coordinators.
 
 // ── Config ───────────────────────────────────────────────────────
 
@@ -113,6 +126,7 @@ interface SkillConfig {
   skills: SkillMapping;
   agentId: string;
   workerAgentId?: string;
+  coordinatorAgentId?: string;
   memoryStores?: {
     errata?: string;
     toolNotes?: string;
@@ -201,6 +215,18 @@ function getWorkerAgentId(env: DeployEnv, config: SkillConfig | null): string | 
     process.env.ANTHROPIC_WORKER_AGENT_ID ??
     readWranglerVar("ANTHROPIC_WORKER_AGENT_ID") ??
     config?.workerAgentId ??
+    null
+  );
+}
+
+function getCoordinatorAgentId(env: DeployEnv, config: SkillConfig | null): string | null {
+  if (env === "staging") {
+    return config?.coordinatorAgentId ?? process.env.ANTHROPIC_COORDINATOR_AGENT_ID ?? null;
+  }
+  return (
+    process.env.ANTHROPIC_COORDINATOR_AGENT_ID ??
+    readWranglerVar("ANTHROPIC_COORDINATOR_AGENT_ID") ??
+    config?.coordinatorAgentId ??
     null
   );
 }
@@ -309,6 +335,10 @@ async function createAgent(
     system: string;
     tools: unknown[];
     skills?: { type: string; skill_id: string; version: string }[];
+    multiagent?: {
+      type: "coordinator";
+      agents: { type: "agent"; id: string; version?: number }[];
+    };
   },
 ): Promise<{ id: string; version: number }> {
   const res = await fetch(`${ANTHROPIC_API}/v1/agents`, {
@@ -392,6 +422,7 @@ async function main() {
   const memoryStoresOnly = process.argv.includes("--memory-stores");
   const discoveryOnly = process.argv.includes("--discovery");
   const workerOnly = process.argv.includes("--worker");
+  const coordinatorOnly = process.argv.includes("--coordinator");
 
   const agentIdIdx = process.argv.indexOf("--agent-id");
   const agentIdOverride = agentIdIdx >= 0 ? process.argv[agentIdIdx + 1] : null;
@@ -404,10 +435,12 @@ async function main() {
   const syncSkills = !anyOnly || skillsOnly;
   const syncAgent = !anyOnly || agentOnly;
   const syncMemoryStores = !anyOnly || memoryStoresOnly;
-  // --agent-id disables the default discovery/worker targets. Only the
-  // override agent is touched.
-  const syncDiscovery = !workerOnly && !agentIdOverride;
-  const syncWorker = !discoveryOnly && !agentIdOverride;
+  // --agent-id disables the default targets. Only the override agent is touched.
+  // Per-agent flags are mutually exclusive selectors among discovery/worker/coordinator.
+  const anyAgentScope = discoveryOnly || workerOnly || coordinatorOnly;
+  const syncDiscovery = !agentIdOverride && (!anyAgentScope || discoveryOnly);
+  const syncWorker = !agentIdOverride && (!anyAgentScope || workerOnly);
+  const syncCoordinator = !agentIdOverride && (!anyAgentScope || coordinatorOnly);
 
   const envIdx = process.argv.indexOf("--env");
   const envArg = envIdx >= 0 ? process.argv[envIdx + 1] : "production";
@@ -660,7 +693,97 @@ async function main() {
     console.log();
   }
 
-  // ── 4. Sync override agent (--agent-id) ──────────────────────
+  // ── 4. Sync coordinator agent ─────────────────────────────────
+  // The coordinator delegates fetches to the worker via agent_toolset_20260401.
+  // It must be created AFTER the worker exists — its multiagent roster
+  // references the worker agent ID. On update, prompt/tools/skills/model are
+  // pushed the same way as the other agents; the multiagent roster is set
+  // only at creation (the worker agent ID is stable).
+
+  if (syncCoordinator && syncAgent) {
+    console.log("── Coordinator Agent ────────────────────────────");
+    const coordinatorModel = process.env.RELEASED_AGENT_MODEL || "claude-sonnet-4-6";
+    const coordinatorPrompt = buildCoordinatorSystemPrompt({
+      categories: CATEGORIES,
+      workerAgentName: WORKER_AGENT_NAME,
+    });
+    const coordinatorTools: unknown[] = [...AGENT_TOOLS];
+    const coordinatorAgentId = getCoordinatorAgentId(deployEnv, config);
+    const workerAgentIdForRoster = getWorkerAgentId(deployEnv, config);
+
+    if (coordinatorAgentId) {
+      const coordinatorAgent = await getAgent(apiKey, coordinatorAgentId);
+      // Reuse syncAgentConfig but with the coordinator tool list — overrides
+      // the AGENT_TOOLS-only payload by patching tools after the helper builds
+      // the changes summary. Cleanest path is a tiny inline duplicate so the
+      // helper stays focused.
+      const payload: {
+        skills?: typeof skillIds;
+        system: string;
+        tools: unknown[];
+        model?: string;
+      } = {
+        skills: skillIds,
+        system: coordinatorPrompt,
+        tools: coordinatorTools,
+      };
+      const changes = [
+        `${skillIds.length} skill(s)`,
+        "system prompt",
+        `${coordinatorTools.length} tools`,
+      ];
+      if (coordinatorAgent.model.id !== coordinatorModel) {
+        console.log(`  Model: changed (${coordinatorAgent.model.id} → ${coordinatorModel})`);
+        payload.model = coordinatorModel;
+        changes.push("model");
+      } else {
+        console.log(`  Model: up to date (${coordinatorModel})`);
+      }
+      console.log(`Updating coordinator agent: ${changes.join(", ")}...`);
+      if (!dryRun) {
+        const updated = await updateAgent(
+          apiKey,
+          coordinatorAgentId,
+          coordinatorAgent.version,
+          payload,
+        );
+        config.coordinatorAgentId = coordinatorAgentId;
+        saveConfig(configPath, config);
+        console.log(`✓ Coordinator agent updated to v${updated.version}`);
+      } else {
+        console.log("(would update coordinator agent)");
+      }
+    } else if (!workerAgentIdForRoster) {
+      console.log(
+        "⚠ Skipping coordinator creation: worker agent must exist first " +
+          "(multiagent roster references the worker agent ID).",
+      );
+    } else {
+      console.log(`Creating coordinator agent (worker=${workerAgentIdForRoster})...`);
+      if (!dryRun) {
+        const created = await createAgent(apiKey, {
+          name: "Releases Discovery Coordinator",
+          model: coordinatorModel,
+          system: coordinatorPrompt,
+          tools: coordinatorTools,
+          ...(skillIds.length > 0 ? { skills: skillIds } : {}),
+          multiagent: {
+            type: "coordinator",
+            agents: [{ type: "agent", id: workerAgentIdForRoster }],
+          },
+        });
+        config.coordinatorAgentId = created.id;
+        saveConfig(configPath, config);
+        console.log(`✓ Coordinator agent created: ${created.id} (v${created.version})`);
+        console.log(`  Add to wrangler.jsonc: "ANTHROPIC_COORDINATOR_AGENT_ID": "${created.id}"`);
+      } else {
+        console.log("(would create coordinator agent)");
+      }
+    }
+    console.log();
+  }
+
+  // ── 5. Sync override agent (--agent-id) ──────────────────────
   // Never touches system prompt or model. Pushes latest skill IDs and
   // AGENT_TOOLS when they have drifted. Skill resource versions are
   // already in place from step 1 and propagate via version: "latest".

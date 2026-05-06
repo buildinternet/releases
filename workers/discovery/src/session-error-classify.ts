@@ -19,6 +19,15 @@ export interface SessionErrorClassification {
   stopReason?: string;
   retryCount?: number;
   message: string;
+  /**
+   * `fatal` — the session can't continue (auth, billing, model overloaded after
+   * full retry budget on a session-level operation).
+   * `soft` — a sub-task ran out of retries (skill setup, MCP fetch) but the
+   * conversation is still alive. Log + accumulate, don't terminate the loop.
+   * Multi-agent sessions in particular fire `session.error` for transient
+   * skill-load failures while the agent goes on to make progress via fallbacks.
+   */
+  severity: "fatal" | "soft";
 }
 
 /**
@@ -27,14 +36,27 @@ export interface SessionErrorClassification {
  * definition the SDK only emits these from upstream.
  */
 export function classifyProviderSessionError(event: unknown): SessionErrorClassification | null {
-  const e = event as { type?: string; error?: { type?: string; message?: string } } | null;
+  const e = event as {
+    type?: string;
+    error?: {
+      type?: string;
+      message?: string;
+      retry_status?: { type?: string };
+    };
+  } | null;
   if (!e || e.type !== "session.error") return null;
   const errorType = e.error?.type;
   const message = e.error?.message ?? "Unknown managed-agents error";
+  // `retry_status: exhausted` on an `unknown_error` historically means a
+  // sub-task (skill setup, MCP fetch) gave up — the session continues. Other
+  // typed errors (rate limits, billing, auth) are session-fatal.
+  const severity: "fatal" | "soft" =
+    errorType === "unknown_error" && e.error?.retry_status?.type === "exhausted" ? "soft" : "fatal";
   return {
     errorSource: "provider",
     ...(errorType ? { errorType } : {}),
     message,
+    severity,
   };
 }
 

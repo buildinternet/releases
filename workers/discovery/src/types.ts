@@ -58,6 +58,12 @@ export interface Env {
   ANTHROPIC_AGENT_VERSION?: string;
   /** Pre-created Anthropic Worker Agent ID (Haiku — fetches/updates). */
   ANTHROPIC_WORKER_AGENT_ID?: string;
+  /**
+   * Pre-created Anthropic Coordinator Agent ID (Sonnet — multi-agent onboard).
+   * When set, onboard sessions route here instead of ANTHROPIC_AGENT_ID; the
+   * coordinator delegates fetches to the worker via agent_toolset_20260401.
+   */
+  ANTHROPIC_COORDINATOR_AGENT_ID?: string;
   /** Pre-created Anthropic Environment ID. */
   ANTHROPIC_ENVIRONMENT_ID?: string;
   /** Pre-created Anthropic Vault ID for MCP server access. */
