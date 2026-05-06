@@ -1,5 +1,8 @@
 import { z } from "zod";
 import { RELEASE_TYPES } from "@buildinternet/releases-core/schema";
+import { CATEGORIES } from "@buildinternet/releases-core/categories";
+
+export const CategorySchema = z.enum(CATEGORIES);
 
 export const MediaItemSchema = z.object({
   type: z.enum(["image", "video", "gif"]),

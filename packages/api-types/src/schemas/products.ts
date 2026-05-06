@@ -1,0 +1,132 @@
+import { z } from "zod";
+import { CategorySchema, ListResponseSchema } from "./shared.js";
+import { SourceTypeSchema } from "./sources.js";
+
+/**
+ * Raw `products` table row, returned by `POST /v1/products` and
+ * `PATCH /v1/products/:slug`. The OSS CLI types these responses against
+ * `Product` from `@buildinternet/releases-core/schema` (the drizzle row
+ * type), so `embeddedAt` and `deletedAt` stay on the wire even though
+ * they're internal columns. `deletedAt` is always `null` on these paths
+ * (live rows only); `embeddedAt` reflects when the product was last
+ * indexed for semantic search.
+ */
+export const ProductRowSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  orgId: z.string(),
+  url: z.string().nullable(),
+  description: z.string().nullable(),
+  category: CategorySchema.nullable(),
+  createdAt: z.string(),
+  embeddedAt: z.string().nullable(),
+  deletedAt: z.string().nullable(),
+});
+
+/**
+ * Per-product row returned by `GET /v1/products`. Adds `sourceCount` to
+ * the row shape but omits the internal `embeddedAt` / `deletedAt` columns
+ * (the list handler explicitly selects only the user-facing fields).
+ */
+export const ProductListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  slug: z.string(),
+  orgId: z.string(),
+  url: z.string().nullable(),
+  description: z.string().nullable(),
+  category: CategorySchema.nullable(),
+  createdAt: z.string(),
+  sourceCount: z.number().int().min(0),
+});
+
+export const ProductListResponseSchema = ListResponseSchema(ProductListItemSchema);
+
+/**
+ * Embedded source row returned in `ProductDetail.sources`. The detail
+ * handler explicitly selects only this small subset; reuses the shared
+ * `SourceTypeSchema` enum so source types stay in one place.
+ */
+export const ProductDetailSourceSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  name: z.string(),
+  type: SourceTypeSchema,
+  url: z.string(),
+});
+
+/**
+ * Returned by `GET /v1/products/:identifier` (and the org-scoped twin).
+ * Spreads the raw product row and adds `sources`, `tags`, `aliases`.
+ */
+export const ProductDetailSchema = ProductRowSchema.extend({
+  sources: z.array(ProductDetailSourceSchema),
+  tags: z.array(z.string()),
+  aliases: z.array(z.string()),
+});
+
+/** Body accepted by `POST /v1/products`. */
+export const CreateProductBodySchema = z.object({
+  name: z.string().min(1),
+  orgId: z.string().optional(),
+  orgSlug: z.string().optional(),
+  slug: z.string().optional(),
+  url: z.string().optional(),
+  description: z.string().optional(),
+  category: CategorySchema.optional(),
+  tags: z.array(z.string()).optional(),
+});
+
+/** Body accepted by `PATCH /v1/products/:slug`. */
+export const UpdateProductBodySchema = z.object({
+  name: z.string().optional(),
+  url: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  category: CategorySchema.nullable().optional(),
+  tags: z.array(z.string()).optional(),
+  aliases: z.array(z.string()).optional(),
+});
+
+/** Body accepted by `POST /v1/products/adopt`. */
+export const AdoptProductBodySchema = z.object({
+  sourceOrgSlug: z.string().min(1),
+  targetOrgSlug: z.string().min(1),
+  slug: z.string().optional(),
+  url: z.string().optional(),
+  dryRun: z.boolean().optional(),
+});
+
+/** Live (non-dryRun) result from `POST /v1/products/adopt`. */
+export const ProductAdoptResultSchema = z.object({
+  product: ProductRowSchema,
+  sourcesMoved: z.number().int().min(0),
+  accountsMoved: z.number().int().min(0),
+  sourceOrgDeleted: z.string(),
+});
+
+/** Dry-run preview from `POST /v1/products/adopt` with `dryRun: true`. */
+export const ProductAdoptDryRunSchema = z.object({
+  dryRun: z.literal(true),
+  product: z.object({
+    name: z.string(),
+    slug: z.string(),
+    url: z.string().nullable(),
+    orgSlug: z.string(),
+  }),
+  sourcesToMove: z.array(z.string()),
+  sourceOrgToDelete: z.string(),
+});
+
+/** Response shape returned by `POST /v1/products/adopt` (union of live + dry-run). */
+export const ProductAdoptResponseSchema = z.union([
+  ProductAdoptResultSchema,
+  ProductAdoptDryRunSchema,
+]);
+
+/** Response shape returned by `DELETE /v1/products/:identifier`. */
+export const ProductDeleteResponseSchema = z.object({
+  deleted: z.literal(true),
+  hard: z.literal(true).optional(),
+  deletedAt: z.string().optional(),
+});

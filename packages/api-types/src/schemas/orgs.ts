@@ -1,9 +1,7 @@
 import { z } from "zod";
-import { CATEGORIES } from "@buildinternet/releases-core/categories";
-import { ListResponseSchema, OverviewPageItemSchema } from "./shared.js";
+import { CategorySchema, ListResponseSchema, OverviewPageItemSchema } from "./shared.js";
 import { SourceListItemSchema } from "./sources.js";
-
-const CategorySchema = z.enum(CATEGORIES);
+import { ProductListItemSchema } from "./products.js";
 
 export const OrgListItemSchema = z.object({
   id: z.string(),
@@ -50,13 +48,16 @@ export const UpdateOrgBodySchema = z.object({
   aliases: z.array(z.string()).optional(),
 });
 
-const OrgDetailProductSchema = z.object({
-  id: z.string(),
-  slug: z.string(),
-  name: z.string(),
-  url: z.string().nullable(),
-  description: z.string().nullable(),
-  sourceCount: z.number().int().min(0),
+// Org detail's products query selects a strict subset of `ProductListItem` —
+// no category/orgId/createdAt because the parent already names the org and
+// the org detail UI doesn't surface those columns.
+const OrgDetailProductSchema = ProductListItemSchema.pick({
+  id: true,
+  slug: true,
+  name: true,
+  url: true,
+  description: true,
+  sourceCount: true,
 });
 
 const OrgDetailPlaybookSchema = z.object({
