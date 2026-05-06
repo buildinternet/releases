@@ -80,5 +80,14 @@ jobs:
           echo "Found new wrangler migration file(s):"
           echo "$added" | sed 's/^/  /'
 
+      - name: Verify GraphQL schema snapshot is up to date
+        run: |
+          bun workers/api/scripts/print-graphql-schema.ts
+          if ! git diff --exit-code packages/api-types/graphql/schema.graphql; then
+            echo "ERROR: packages/api-types/graphql/schema.graphql is stale." >&2
+            echo "Regenerate with: bun workers/api/scripts/print-graphql-schema.ts" >&2
+            exit 1
+          fi
+
       - name: Run tests
         run: bun run test

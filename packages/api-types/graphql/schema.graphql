@@ -5,9 +5,7 @@ scalar DateTime
 
 scalar JSON
 
-"""
-An image, video, or GIF attached to a release.
-"""
+"""An image, video, or GIF attached to a release."""
 type Media {
   alt: String
   r2Url: String
@@ -15,9 +13,7 @@ type Media {
   url: String!
 }
 
-"""
-Kind of media attached to a release.
-"""
+"""Kind of media attached to a release."""
 enum MediaKind {
   gif
   image
@@ -46,17 +42,13 @@ type Org {
   updatedAt: DateTime!
 }
 
-"""
-Catalog-shaped page of organizations.
-"""
+"""Catalog-shaped page of organizations."""
 type OrgConnection {
   items: [Org!]!
   pagination: Pagination!
 }
 
-"""
-Page-based pagination envelope. Mirrors REST's Pagination shape.
-"""
+"""Page-based pagination envelope. Mirrors REST's Pagination shape."""
 type Pagination {
   hasMore: Boolean
   page: Int!
@@ -66,9 +58,7 @@ type Pagination {
   totalPages: Int
 }
 
-"""
-Optional grouping layer between an Org and its Sources.
-"""
+"""Optional grouping layer between an Org and its Sources."""
 type Product {
   category: String
   createdAt: DateTime!
@@ -88,27 +78,19 @@ type Query {
   latestReleases(
     cursor: String
 
-    """
-    Drop releases whose source.type is in this list.
-    """
+    """Drop releases whose source.type is in this list."""
     excludeSourceTypes: [SourceType!]
     limit: Int = 20
     orgIdOrSlug: String
   ): ReleaseFeed!
 
-  """
-  Look up an organization by id (org_…) or slug.
-  """
+  """Look up an organization by id (org_…) or slug."""
   org(idOrSlug: String!): Org
 
-  """
-  Catalog-shaped page of organizations, newest first.
-  """
+  """Catalog-shaped page of organizations, newest first."""
   orgs(limit: Int = 20, page: Int = 1): OrgConnection!
 
-  """
-  Look up a release by id (rel_…) — or by url for legacy callers.
-  """
+  """Look up a release by id (rel_…) — or by url for legacy callers."""
   release(idOrUrl: String!): Release
 
   """
@@ -117,9 +99,7 @@ type Query {
   source(id: String!): Source
 }
 
-"""
-A single release (changelog entry).
-"""
+"""A single release (changelog entry)."""
 type Release {
   """
   Full markdown body. Often large — request only when you need it (this is the field-selection win).
@@ -129,9 +109,7 @@ type Release {
   fetchedAt: DateTime!
   id: ID!
 
-  """
-  Images / videos / GIFs attached to the release. Empty list if none.
-  """
+  """Images / videos / GIFs attached to the release. Empty list if none."""
   media: [Media!]!
   publishedAt: DateTime
   source: Source!
@@ -149,9 +127,7 @@ type ReleaseFeed {
   nextCursor: String
 }
 
-"""
-A changelog source (github / scrape / feed / agent).
-"""
+"""A changelog source (github / scrape / feed / agent)."""
 type Source {
   createdAt: DateTime!
   discovery: String!
