@@ -20,10 +20,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   // refuse anything off-list rather than splicing it into the redirect path.
   const format: Format = isFormat(rawFormat) ? rawFormat : "md";
 
-  let resolved;
-  try {
-    resolved = await api.sourceLegacyResolve(slug);
-  } catch {
+  const resolved = await api.sourceLegacyResolve(slug);
+  if (!resolved) {
     return NextResponse.json({ error: "not_found" }, { status: 404 });
   }
 

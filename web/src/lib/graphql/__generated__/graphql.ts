@@ -31,13 +31,13 @@ export type HomepageTickerQuery = {
       publishedAt: string | null;
       contentSummary: string | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
-      source: { slug: string; name: string; type: SourceType; org: { slug: string } };
+      source: { slug: string; name: string; type: SourceType; org: { slug: string; name: string } };
     }>;
   };
 };
 
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:47e71e29c8faf4eb30dabe9b5b0bba15fcf6e86287bae85752b39add85366edf" },
+  __meta__: { hash: "sha256:837eaa8dfa5c04e4426bf95b506193dee0b3f67de5be238ab9090e0b6cf81acb" },
   kind: "Document",
   definitions: [
     {
@@ -131,6 +131,7 @@ export const HomepageTickerDocument = {
                                 kind: "SelectionSet",
                                 selections: [
                                   { kind: "Field", name: { kind: "Name", value: "slug" } },
+                                  { kind: "Field", name: { kind: "Name", value: "name" } },
                                 ],
                               },
                             },
