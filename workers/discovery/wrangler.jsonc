@@ -25,6 +25,11 @@
     "ANTHROPIC_ENVIRONMENT_ID": "env_01Tq7S8F2FK1KBz68NMje2RU",
     "ANTHROPIC_VAULT_ID": "vlt_011CZvFkwFPgCkGqRqP87AKB",
     "ANTHROPIC_WORKER_AGENT_ID": "agent_011CZvdgPKDQ2eRs8gTrLnNA",
+    // Routes onboard sessions through the multi-agent coordinator (Sonnet)
+    // that delegates fetches to the worker agent. Clear this var to fall
+    // back to single-agent discovery. See workers/discovery/src/managed-
+    // agents-session.ts for the routing logic.
+    "ANTHROPIC_COORDINATOR_AGENT_ID": "agent_011Can9iMPcPuLy3oEgjGCs6",
     // Memory stores attached to every session (#537). IDs created via
     // `bun scripts/sync-agent-skills.ts --memory-stores`.
     "MEMORY_STORE_ERRATA_ID": "memstore_012MKStcUM7QxW9qPCLQtwwt",

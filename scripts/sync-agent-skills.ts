@@ -479,6 +479,19 @@ async function main() {
   let skillIds: { type: string; skill_id: string; version: string }[] = [];
   let skillsChanged = 0;
 
+  // When --discovery / --worker / --coordinator runs solo, syncSkills is
+  // false. Backfill from the cached config so the agent payload still
+  // attaches the latest known skill IDs ("latest" version is resolved at
+  // eval time, so any post-deploy skill version bump applies automatically).
+  // Without this, create-on-first-deploy would mint an agent with zero
+  // skills, and update payloads would be skill-less too if we ever
+  // re-enabled the skills field on a syncSkills=false update path.
+  if (!syncSkills) {
+    for (const { skillId } of Object.values(config.skills)) {
+      skillIds.push({ type: "custom", skill_id: skillId, version: "latest" });
+    }
+  }
+
   if (syncSkills) {
     console.log(`Skills dir: ${SKILLS_DIR}`);
 

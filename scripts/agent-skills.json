@@ -26,5 +26,6 @@
   "memoryStores": {
     "errata": "memstore_012MKStcUM7QxW9qPCLQtwwt",
     "toolNotes": "memstore_01Jc5WAiqp4fwSJUmjR2excj"
-  }
+  },
+  "coordinatorAgentId": "agent_011Can9iMPcPuLy3oEgjGCs6"
 }
