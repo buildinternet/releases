@@ -30,7 +30,14 @@ import type { LatestCacheBinding } from "../lib/latest-cache.js";
 // tsconfig's `include` extends to the JSON file specifically.
 import rawManifest from "../../../../web/src/lib/graphql/__generated__/persisted-documents.json" with { type: "json" };
 
-/** Sentinel header set by the route handler after a successful Bearer check. */
+/**
+ * Sentinel header set by the route handler when the request should bypass
+ * the persisted-operations gate and the KV cache. Two conditions stamp it:
+ * a successful Bearer auth (real admin), or a non-production deployment
+ * (so GraphiQL stays usable without an API key in dev/staging). The header
+ * is stripped from inbound requests before re-stamping, so it can't be
+ * spoofed by callers.
+ */
 export const GRAPHQL_ADMIN_HEADER = "x-releases-graphql-admin";
 
 // Bare sha256 (no `sha256:` prefix) is what Apollo APQ wire format uses.

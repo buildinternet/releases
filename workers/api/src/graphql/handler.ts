@@ -43,12 +43,16 @@ export const graphqlRoutes = new Hono<Env>();
 graphqlRoutes.all("/graphql", async (c) => {
   const isAdmin = await isValidBearerAuth(c);
 
-  // Strip any client-supplied admin sentinel and re-stamp only if Bearer
-  // auth checked out. The sentinel is what persistedOperationsPlugin reads
-  // to decide whether to allow arbitrary documents — we MUST control it.
+  // Strip any client-supplied bypass sentinel and re-stamp only when
+  // we trust the request: real admin Bearer auth, OR a non-production
+  // deployment (where GraphiQL is already exposed and the persisted-ops
+  // gate would otherwise lock it out for non-admin developers). The
+  // sentinel is what persistedOperationsPlugin reads to decide whether
+  // to allow arbitrary documents — we MUST control it.
   const headers = new Headers(c.req.raw.headers);
   headers.delete(GRAPHQL_ADMIN_HEADER);
-  if (isAdmin) headers.set(GRAPHQL_ADMIN_HEADER, "1");
+  const bypassPersistedGate = isAdmin || c.env.ENVIRONMENT !== "production";
+  if (bypassPersistedGate) headers.set(GRAPHQL_ADMIN_HEADER, "1");
 
   // GraphiQL pings (GET, no body) skip cache + body parsing entirely.
   if (c.req.method !== "POST") {

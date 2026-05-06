@@ -18,6 +18,7 @@ import {
   purgeKeysForHomepageTicker,
   storeIfCacheable,
 } from "../src/graphql/persisted.js";
+import { hardeningPlugins } from "../src/graphql/plugins.js";
 
 interface Ctx {
   env: { ENVIRONMENT?: string };
@@ -36,10 +37,13 @@ const SCHEMA = createSchema({
   },
 });
 
+// Mirrors the plugin order in workers/api/src/graphql/handler.ts so the
+// integration tests catch any ordering surprises (depth/cost/aliases/tokens
+// → introspection gate → persisted-ops).
 function makeYoga() {
   return createYoga<Ctx>({
     schema: SCHEMA as Parameters<typeof createYoga<Ctx>>[0]["schema"],
-    plugins: [persistedOperationsPlugin()],
+    plugins: [...hardeningPlugins<Ctx>(), persistedOperationsPlugin()],
     graphiql: false,
     landingPage: false,
   });
