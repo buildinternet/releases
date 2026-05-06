@@ -36,6 +36,6 @@
     "graphql": "^16.13.2",
     "tailwindcss": "^4.2.2",
     "typescript": "^6.0.3",
-    "vercel": "^52.0.0"
+    "vercel": "^53.1.1"
   }
 }
