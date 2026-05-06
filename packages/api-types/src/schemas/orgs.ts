@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
-import { ListResponseSchema } from "./shared.js";
+import { ListResponseSchema, OverviewPageItemSchema } from "./shared.js";
+import { SourceListItemSchema } from "./sources.js";
 
 const CategorySchema = z.enum(CATEGORIES);
 
@@ -47,4 +48,43 @@ export const UpdateOrgBodySchema = z.object({
   category: CategorySchema.nullable().optional(),
   tags: z.array(z.string()).optional(),
   aliases: z.array(z.string()).optional(),
+});
+
+const OrgDetailProductSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  name: z.string(),
+  url: z.string().nullable(),
+  description: z.string().nullable(),
+  sourceCount: z.number().int().min(0),
+});
+
+const OrgDetailPlaybookSchema = z.object({
+  scope: z.literal("playbook"),
+  content: z.string(),
+  updatedAt: z.string(),
+});
+
+export const OrgDetailSchema = z.object({
+  id: z.string().optional(),
+  slug: z.string(),
+  name: z.string(),
+  domain: z.string().nullable(),
+  description: z.string().nullable().optional(),
+  category: CategorySchema.nullable().optional(),
+  avatarUrl: z.string().nullable(),
+  tags: z.array(z.string()).optional(),
+  sourceCount: z.number().int().min(0),
+  releaseCount: z.number().int().min(0),
+  releasesLast30Days: z.number().int().min(0),
+  avgReleasesPerWeek: z.number(),
+  lastFetchedAt: z.string().nullable(),
+  lastPolledAt: z.string().nullable(),
+  trackingSince: z.string(),
+  aliases: z.array(z.string()).optional(),
+  accounts: z.array(OrgAccountItemSchema),
+  products: z.array(OrgDetailProductSchema),
+  sources: z.array(SourceListItemSchema),
+  overview: OverviewPageItemSchema.nullable().optional(),
+  playbook: OrgDetailPlaybookSchema.nullable().optional(),
 });

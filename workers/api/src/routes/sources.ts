@@ -1,5 +1,19 @@
 import { Hono } from "hono";
-import { eq, desc, count, and, or, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
+import { describeRoute, resolver } from "hono-openapi";
+import {
+  eq,
+  desc,
+  count,
+  and,
+  or,
+  min,
+  isNull,
+  isNotNull,
+  sql,
+  gte,
+  inArray,
+  type SQL,
+} from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   sources,
@@ -14,6 +28,7 @@ import {
   sourceChangelogFiles,
   type ReleaseType,
 } from "@buildinternet/releases-core/schema";
+import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 import { buildListResponse, parseListPagination } from "../lib/pagination.js";
 import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
@@ -25,6 +40,12 @@ import {
   selectChangelogFile,
 } from "@buildinternet/releases-core/changelog-slice";
 import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-api-types";
+import {
+  SourceListResultSchema,
+  SourceDetailSchema,
+  SourceChangelogResponseSchema,
+  ErrorResponseSchema,
+} from "@buildinternet/releases-api-types";
 import {
   getStatusHub,
   orgWhere,
@@ -59,7 +80,11 @@ import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-
 import { publishReleaseEvents } from "../events/publish.js";
 import type { InsertedReleaseRow } from "../events/build-event.js";
 import { buildEmbedConfig } from "../lib/embed-config.js";
-import { RELEASES_BATCH_CHUNK_SIZE, RELEASES_ID_IN_CHUNK_SIZE } from "../lib/d1-limits.js";
+import {
+  RELEASES_BATCH_CHUNK_SIZE,
+  RELEASES_ID_IN_CHUNK_SIZE,
+  IN_ARRAY_CHUNK_SIZE,
+} from "../lib/d1-limits.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import { notifyIndexNowForSource } from "../lib/indexnow.js";
 import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
@@ -67,189 +92,212 @@ import { logEvent } from "@releases/lib/log-event";
 
 export const sourceRoutes = new Hono<Env>();
 
-import { SOURCE_TYPES, type SourceType } from "../lib/source-types.js";
-export { SOURCE_TYPES, type SourceType, parseExcludeSourceTypes } from "../lib/source-types.js";
+sourceRoutes.get(
+  "/sources",
+  describeRoute({
+    tags: ["Sources"],
+    summary: "List sources",
+    description:
+      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?independent=true`. Free-text search via `?q=`.",
+    responses: {
+      200: {
+        description: "Sources (bare array unless `?envelope=true`)",
+        content: { "application/json": { schema: resolver(SourceListResultSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const independent = c.req.query("independent") === "true";
+    const orgId = c.req.query("orgId");
+    const orgSlug = c.req.query("orgSlug");
+    const filterByUrls = c.req.query("filterByUrls") === "true";
+    const hasFeed = c.req.query("has_feed") === "true";
+    // Accept both ?q= (server-side search alias) and legacy ?query=
+    const queryText = c.req.query("q") ?? c.req.query("query");
+    const includeHidden = c.req.query("include_hidden") === "true";
+    const categoryFilter = c.req.query("category");
 
-sourceRoutes.get("/sources", async (c) => {
-  const db = createDb(c.env.DB);
-  const independent = c.req.query("independent") === "true";
-  const orgId = c.req.query("orgId");
-  const orgSlug = c.req.query("orgSlug");
-  const filterByUrls = c.req.query("filterByUrls") === "true";
-  const hasFeed = c.req.query("has_feed") === "true";
-  // Accept both ?q= (server-side search alias) and legacy ?query=
-  const queryText = c.req.query("q") ?? c.req.query("query");
-  const includeHidden = c.req.query("include_hidden") === "true";
-  const categoryFilter = c.req.query("category");
+    // Pagination: default limit 100, hard cap 500. `?offset=` is also accepted
+    // and overrides `?page=` so callers that pre-compute offsets keep working.
+    const url = new URL(c.req.url);
+    const offsetParam = c.req.query("offset");
+    const pagination = parseListPagination(url.searchParams, {
+      defaultPageSize: 100,
+      maxPageSize: 500,
+    });
+    const { page, pageSize: limit } = pagination;
+    const rawOffset = offsetParam ? parseInt(offsetParam, 10) : pagination.offset;
+    const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
 
-  // Pagination: default limit 100, hard cap 500. `?offset=` is also accepted
-  // and overrides `?page=` so callers that pre-compute offsets keep working.
-  const url = new URL(c.req.url);
-  const offsetParam = c.req.query("offset");
-  const pagination = parseListPagination(url.searchParams, {
-    defaultPageSize: 100,
-    maxPageSize: 500,
-  });
-  const { page, pageSize: limit } = pagination;
-  const rawOffset = offsetParam ? parseInt(offsetParam, 10) : pagination.offset;
-  const offset = isNaN(rawOffset) || rawOffset < 0 ? 0 : rawOffset;
+    // Filter by URLs — return raw source rows matching the provided url params.
+    // URLs come from query string, so chunk at the D1 100-bind cap.
+    if (filterByUrls) {
+      const urls = c.req.queries("url") ?? [];
+      if (urls.length === 0) return c.json([]);
+      const rows: (typeof sources.$inferSelect)[] = [];
+      for (let i = 0; i < urls.length; i += IN_ARRAY_CHUNK_SIZE) {
+        const chunk = urls.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+        // oxlint-disable-next-line no-await-in-loop -- sequential chunks under the D1 bind-param cap
+        const chunkRows = await db.select().from(sources).where(inArray(sources.url, chunk));
+        rows.push(...chunkRows);
+      }
+      return c.json(rows);
+    }
 
-  // Filter by URLs — return raw source rows matching the provided url params
-  if (filterByUrls) {
-    const urls = c.req.queries("url") ?? [];
-    if (urls.length === 0) return c.json([]);
-    const rows = await db.select().from(sources).where(inArray(sources.url, urls));
-    return c.json(rows);
-  }
+    // Filter by org ID
+    if (orgId) {
+      const rows = await db
+        .select()
+        .from(sources)
+        .where(eq(sources.orgId, orgId))
+        .orderBy(sources.name);
+      return c.json(rows);
+    }
 
-  // Filter by org ID
-  if (orgId) {
-    const rows = await db
-      .select()
-      .from(sources)
-      .where(eq(sources.orgId, orgId))
-      .orderBy(sources.name);
-    return c.json(rows);
-  }
+    // Build conditions for metadata-based filters
+    const conditions = [];
 
-  // Build conditions for metadata-based filters
-  const conditions = [];
+    if (independent) {
+      conditions.push(isNull(sources.orgId));
+    }
 
-  if (independent) {
-    conditions.push(isNull(sources.orgId));
-  }
+    // Resolve org by slug
+    let resolvedOrgId: string | undefined;
+    if (orgSlug) {
+      const [org] = await db.select().from(organizations).where(orgWhere(orgSlug));
+      if (!org) return c.json([]);
+      resolvedOrgId = org.id;
+      conditions.push(eq(sources.orgId, org.id));
+    }
 
-  // Resolve org by slug
-  let resolvedOrgId: string | undefined;
-  if (orgSlug) {
-    const [org] = await db.select().from(organizations).where(orgWhere(orgSlug));
-    if (!org) return c.json([]);
-    resolvedOrgId = org.id;
-    conditions.push(eq(sources.orgId, org.id));
-  }
+    // `productSlug` query param accepts a `prod_` ID (matched globally) or a
+    // slug. Slugs are unique per-org (idx_products_org_slug), so when orgSlug
+    // is present we resolve to a single product in that org. Without orgSlug,
+    // we fan out to every product sharing the slug and filter sources to that
+    // ID set — picking the first row would silently mask cross-org duplicates
+    // if any ever land. There are none on prod today; this is the safe shape.
+    const productSlug = c.req.query("productSlug");
+    if (productSlug) {
+      if (isProductId(productSlug)) {
+        const [product] = await db
+          .select({ id: products.id })
+          .from(products)
+          .where(and(eq(products.id, productSlug), isNull(products.deletedAt)))
+          .limit(1);
+        if (!product) return c.json([]);
+        conditions.push(eq(sources.productId, product.id));
+      } else {
+        const slugMatch = resolvedOrgId
+          ? and(eq(products.slug, productSlug), eq(products.orgId, resolvedOrgId))
+          : eq(products.slug, productSlug);
+        const matches = await db
+          .select({ id: products.id })
+          .from(products)
+          .where(and(slugMatch, isNull(products.deletedAt)));
+        if (matches.length === 0) return c.json([]);
+        if (matches.length === 1) {
+          conditions.push(eq(sources.productId, matches[0]!.id));
+        } else {
+          const ids = matches.map((m) => m.id);
+          const chunks: SQL[] = [];
+          for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
+            chunks.push(inArray(sources.productId, ids.slice(i, i + IN_ARRAY_CHUNK_SIZE)));
+          }
+          // OR the chunks together so the WHERE clause stays under D1's
+          // 100-bind cap even if a slug ever fans out to >90 products.
+          conditions.push(chunks.length === 1 ? chunks[0]! : or(...chunks)!);
+        }
+      }
+    }
 
-  // `productSlug` query param accepts a `prod_` ID (matched globally) or a
-  // slug. Slugs are unique per-org (idx_products_org_slug), so when orgSlug
-  // is present we resolve to a single product in that org. Without orgSlug,
-  // we fan out to every product sharing the slug and filter sources to that
-  // ID set — picking the first row would silently mask cross-org duplicates
-  // if any ever land. There are none on prod today; this is the safe shape.
-  const productSlug = c.req.query("productSlug");
-  if (productSlug) {
-    if (isProductId(productSlug)) {
-      const [product] = await db
-        .select({ id: products.id })
-        .from(products)
-        .where(and(eq(products.id, productSlug), isNull(products.deletedAt)))
-        .limit(1);
-      if (!product) return c.json([]);
-      conditions.push(eq(sources.productId, product.id));
-    } else {
-      const slugMatch = resolvedOrgId
-        ? and(eq(products.slug, productSlug), eq(products.orgId, resolvedOrgId))
-        : eq(products.slug, productSlug);
-      const matches = await db
-        .select({ id: products.id })
-        .from(products)
-        .where(and(slugMatch, isNull(products.deletedAt)));
-      if (matches.length === 0) return c.json([]);
+    if (hasFeed) {
       conditions.push(
-        matches.length === 1
-          ? eq(sources.productId, matches[0]!.id)
-          : inArray(
-              sources.productId,
-              matches.map((m) => m.id),
-            ),
+        sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL AND json_extract(${sources.metadata}, '$.feedUrl') != ''`,
       );
     }
-  }
 
-  if (hasFeed) {
-    conditions.push(
-      sql`json_extract(${sources.metadata}, '$.feedUrl') IS NOT NULL AND json_extract(${sources.metadata}, '$.feedUrl') != ''`,
-    );
-  }
+    if (queryText) {
+      const lower = queryText.toLowerCase();
+      conditions.push(
+        or(
+          likeContains(sql`lower(${sources.name})`, lower),
+          likeContains(sql`lower(${sources.slug})`, lower),
+          likeContains(sql`lower(${sources.url})`, lower),
+        )!,
+      );
+    }
 
-  if (queryText) {
-    const lower = queryText.toLowerCase();
-    conditions.push(
-      or(
-        likeContains(sql`lower(${sources.name})`, lower),
-        likeContains(sql`lower(${sources.slug})`, lower),
-        likeContains(sql`lower(${sources.url})`, lower),
-      )!,
-    );
-  }
-
-  if (categoryFilter) {
-    conditions.push(
-      sql`(
+    if (categoryFilter) {
+      conditions.push(
+        sql`(
         EXISTS (SELECT 1 FROM organizations o2 WHERE o2.id = ${sources.orgId} AND o2.category = ${categoryFilter})
         OR EXISTS (SELECT 1 FROM products p2 WHERE p2.id = ${sources.productId} AND p2.category = ${categoryFilter})
       )`,
-    );
-  }
+      );
+    }
 
-  const rawType = c.req.query("type");
-  if (rawType && (SOURCE_TYPES as readonly string[]).includes(rawType)) {
-    conditions.push(eq(sources.type, rawType as SourceType));
-  }
+    const rawType = c.req.query("type");
+    if (rawType && (SOURCE_TYPES as readonly string[]).includes(rawType)) {
+      conditions.push(eq(sources.type, rawType as SourceType));
+    }
 
-  const staleOnly = parseBoolParam(c.req.query("stale"));
+    const staleOnly = parseBoolParam(c.req.query("stale"));
 
-  const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
-  const wantsEnvelope = c.req.query("envelope") === "true";
+    const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+    const wantsEnvelope = c.req.query("envelope") === "true";
 
-  const sort = parseEnumParam(c.req.query("sort"), SOURCE_SORT_FIELDS, "name");
-  const dir = parseSortDir(c.req.query("dir"), "asc");
+    const sort = parseEnumParam(c.req.query("sort"), SOURCE_SORT_FIELDS, "name");
+    const dir = parseSortDir(c.req.query("dir"), "asc");
 
-  const [rows, totalItems] = await Promise.all([
-    getSourcesWithStats(db, whereClause, { limit, offset, sort, dir, includeHidden, staleOnly }),
-    wantsEnvelope
-      ? countSourcesForList(db, whereClause, { includeHidden, staleOnly })
-      : Promise.resolve(null),
-  ]);
+    const [rows, totalItems] = await Promise.all([
+      getSourcesWithStats(db, whereClause, { limit, offset, sort, dir, includeHidden, staleOnly }),
+      wantsEnvelope
+        ? countSourcesForList(db, whereClause, { includeHidden, staleOnly })
+        : Promise.resolve(null),
+    ]);
 
-  // Derive page from offset when caller pre-computed it — keeps the envelope's
-  // page/hasMore accurate for `?offset=...` callers that skip `?page=...`.
-  const effectivePage = offsetParam ? Math.floor(offset / limit) + 1 : page;
+    // Derive page from offset when caller pre-computed it — keeps the envelope's
+    // page/hasMore accurate for `?offset=...` callers that skip `?page=...`.
+    const effectivePage = offsetParam ? Math.floor(offset / limit) + 1 : page;
 
-  const result: SourceWithOrg[] = rows.map((src) => ({
-    id: src.id,
-    slug: src.slug,
-    name: src.name,
-    type: src.type,
-    url: src.url,
-    orgSlug: src.org_slug,
-    orgName: src.org_name,
-    productName: src.product_name,
-    productSlug: src.product_slug,
-    isPrimary: Boolean(src.is_primary),
-    isHidden: Boolean(src.is_hidden),
-    discovery: src.discovery ?? "curated",
-    metadata: src.metadata ?? null,
-    releaseCount: src.release_count,
-    latestVersion: src.latest_version ?? null,
-    latestDate: src.latest_date ?? null,
-    lastFetchedAt: src.last_fetched_at ?? null,
-    lastPolledAt: src.last_polled_at ?? null,
-    fetchPriority: src.fetch_priority ?? null,
-    changeDetectedAt: src.change_detected_at ?? null,
-    consecutiveNoChange: src.consecutive_no_change ?? 0,
-    consecutiveErrors: src.consecutive_errors ?? 0,
-    nextFetchAfter: src.next_fetch_after ?? null,
-    medianGapDays: src.median_gap_days ?? null,
-    lastRetieredAt: src.last_retiered_at ?? null,
-  }));
+    const result: SourceWithOrg[] = rows.map((src) => ({
+      id: src.id,
+      slug: src.slug,
+      name: src.name,
+      type: src.type,
+      url: src.url,
+      orgSlug: src.org_slug,
+      orgName: src.org_name,
+      productName: src.product_name,
+      productSlug: src.product_slug,
+      isPrimary: Boolean(src.is_primary),
+      isHidden: Boolean(src.is_hidden),
+      discovery: src.discovery ?? "curated",
+      metadata: src.metadata ?? null,
+      releaseCount: src.release_count,
+      latestVersion: src.latest_version ?? null,
+      latestDate: src.latest_date ?? null,
+      lastFetchedAt: src.last_fetched_at ?? null,
+      lastPolledAt: src.last_polled_at ?? null,
+      fetchPriority: src.fetch_priority ?? null,
+      changeDetectedAt: src.change_detected_at ?? null,
+      consecutiveNoChange: src.consecutive_no_change ?? 0,
+      consecutiveErrors: src.consecutive_errors ?? 0,
+      nextFetchAfter: src.next_fetch_after ?? null,
+      medianGapDays: src.median_gap_days ?? null,
+      lastRetieredAt: src.last_retiered_at ?? null,
+    }));
 
-  if (wantsEnvelope && totalItems != null) {
-    return c.json(
-      buildListResponse(result, { page: effectivePage, pageSize: limit, offset }, totalItems),
-    );
-  }
+    if (wantsEnvelope && totalItems != null) {
+      return c.json(
+        buildListResponse(result, { page: effectivePage, pageSize: limit, offset }, totalItems),
+      );
+    }
 
-  return c.json(result);
-});
+    return c.json(result);
+  },
+);
 
 // ── Fetchable sources (must be before :slug route) ──
 
@@ -951,8 +999,28 @@ const getSourceChangelogHandler = async (c: import("hono").Context<Env>) => {
     ),
   );
 };
-sourceRoutes.get("/sources/:slug/changelog", getSourceChangelogHandler);
-sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug/changelog", getSourceChangelogHandler);
+const getSourceChangelogRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Get source changelog",
+  description:
+    "Returns the source's tracked CHANGELOG.md (or the file selected by `?path=`). Range params: `?offset=`, `?limit=` (chars), `?tokens=` (cl100k_base budget). Always emits the full `files` index so clients can render a file picker.",
+  responses: {
+    200: {
+      description: "Changelog slice with file index",
+      content: { "application/json": { schema: resolver(SourceChangelogResponseSchema) } },
+    },
+    404: {
+      description: "Source or changelog file not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get("/sources/:slug/changelog", getSourceChangelogRoute, getSourceChangelogHandler);
+sourceRoutes.get(
+  "/orgs/:orgSlug/sources/:sourceSlug/changelog",
+  getSourceChangelogRoute,
+  getSourceChangelogHandler,
+);
 
 /**
  * Admin-only: list changelog file rows whose content length exceeds
@@ -1233,144 +1301,200 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
 
   return c.json(result);
 };
-sourceRoutes.get("/sources/:slug", getSourceDetailHandler);
-sourceRoutes.get("/orgs/:orgSlug/sources/:sourceSlug", getSourceDetailHandler);
-
-sourceRoutes.post("/sources", async (c) => {
-  const db = createDb(c.env.DB);
-  const body = await c.req.json<{
-    name: string;
-    url: string;
-    type?: string;
-    slug?: string;
-    orgId?: string;
-    orgSlug?: string;
-    metadata?: string;
-    isPrimary?: boolean;
-  }>();
-
-  if (!body.name || !body.url) {
-    return c.json({ error: "bad_request", message: "Missing required fields: name, url" }, 400);
-  }
-
-  const baseSlug = body.slug ?? toSlug(body.name);
-  if (isReservedSlug(baseSlug, "nested")) {
-    return c.json(
-      {
-        error: "slug_reserved",
-        message: `Slug "${baseSlug}" is reserved and cannot be used for a source. Choose a different slug or rename the source.`,
-        slug: baseSlug,
+const getSourceDetailRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Get source detail",
+  description:
+    "Resolves by slug or `src_…` ID on the bare path, or by org-scoped slug pair. Paginated `releases` array (`?page=`, `?pageSize=`); `?include_coverage=true` exposes coverage rows.",
+  responses: {
+    200: {
+      description: "Source detail with paginated releases",
+      content: {
+        "application/json": { schema: resolver(SourceDetailSchema) },
+        "text/markdown": { schema: { type: "string" } },
       },
-      409,
-    );
-  }
-
-  // Auto-detect feed type when metadata contains a feedUrl and no explicit type was provided
-  let type = body.type ?? "scrape";
-  if (!body.type && body.metadata) {
-    try {
-      const meta = JSON.parse(body.metadata);
-      if (meta.feedUrl) type = "feed";
-    } catch {
-      /* invalid metadata JSON — ignore */
-    }
-  }
-
-  // org_id is required and must resolve to a real org. orgId wins over orgSlug
-  // when both are supplied. Guard here until the Phase C NOT NULL migration lands.
-  let orgId: string | null = null;
-  const orgRef = body.orgId ?? body.orgSlug;
-  if (orgRef) {
-    const [org] = await db.select().from(organizations).where(orgWhere(orgRef));
-    orgId = org?.id ?? null;
-  }
-  if (!orgId) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: "orgId or orgSlug is required (must resolve to an existing org)",
-      },
-      400,
-    );
-  }
-
-  // Insert with auto-suffix on slug collision: try base, then base-2 … base-20.
-  // Loop-with-catch is race-safe: no TOCTOU gap between check and insert.
-  const MAX_SLUG_ATTEMPTS = 20;
-  const createdAt = new Date().toISOString();
-  const insertValues = (slug: string) => ({
-    name: body.name,
-    slug,
-    type: type as "github" | "scrape" | "feed" | "agent",
-    url: body.url,
-    orgId,
-    metadata: body.metadata ?? "{}",
-    createdAt,
-    ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
-  });
-
-  let source: typeof sources.$inferSelect | undefined;
-
-  for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
-    const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
-    try {
-      // oxlint-disable-next-line no-await-in-loop -- sequential retry loop: each attempt depends on the previous collision
-      const [row] = await db.insert(sources).values(insertValues(slug)).returning();
-      source = row;
-      break;
-    } catch (err) {
-      if (isConflictError(err)) {
-        continue;
-      }
-      throw err;
-    }
-  }
-
-  if (!source) {
-    // All 20 slug attempts collided — fall back to the original 409 path.
-    return c.json(
-      {
-        error: "conflict",
-        message: `Source with slug "${baseSlug}" already exists (exhausted ${MAX_SLUG_ATTEMPTS} suffix attempts)`,
-      },
-      409,
-    );
-  }
-
-  // Onboarding tail. `X-Onboard-Mode: manual` skips the workflow's backfill
-  // step; the inline fallback path has no backfill to skip (CLI calls
-  // `/sources/:slug/fetch` separately).
-  const inlineFallback = () => {
-    if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
-    c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
-  };
-
-  if (c.env.ONBOARD_USE_WORKFLOW === "true" && c.env.ONBOARD_SOURCE_WORKFLOW) {
-    const skipBackfill = c.req.header("x-onboard-mode") === "manual";
-    const workflow = c.env.ONBOARD_SOURCE_WORKFLOW;
-    // Fire-and-forget: control-plane RPC must not block the response.
-    // Deterministic id makes a transient retry safe (CF rejects duplicates).
-    c.executionCtx.waitUntil(
-      workflow
-        .create({
-          id: `onboard-source-${source.id}`,
-          params: { sourceId: source.id, skipBackfill },
-        })
-        .catch((err) => {
-          logEvent("warn", {
-            component: "sources",
-            event: "onboard-workflow-dispatch-failed",
-            err: err instanceof Error ? err : String(err),
-          });
-          inlineFallback();
-        }),
-    );
-  } else {
-    inlineFallback();
-  }
-
-  return c.json(source, 201);
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
 });
+sourceRoutes.get("/sources/:slug", getSourceDetailRoute, getSourceDetailHandler);
+sourceRoutes.get(
+  "/orgs/:orgSlug/sources/:sourceSlug",
+  getSourceDetailRoute,
+  getSourceDetailHandler,
+);
+
+sourceRoutes.post(
+  "/sources",
+  describeRoute({
+    tags: ["Sources"],
+    summary: "Create source",
+    description:
+      "Body fields: `name`, `url` (required); `type?`, `slug?`, `orgId?` / `orgSlug?` (one required), `metadata?`, `isPrimary?`. Slug auto-suffixes on collision (up to 20 attempts).",
+    security: [{ bearerAuth: [] }],
+    responses: {
+      201: { description: "Source created" },
+      400: {
+        description: "Missing required fields or unresolved org",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+      409: {
+        description: "Slug conflict or reserved slug",
+        content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+      },
+    },
+  }),
+  async (c) => {
+    const db = createDb(c.env.DB);
+    const body = await c.req.json<{
+      name: string;
+      url: string;
+      type?: string;
+      slug?: string;
+      orgId?: string;
+      orgSlug?: string;
+      metadata?: string;
+      isPrimary?: boolean;
+    }>();
+
+    if (!body.name || !body.url) {
+      return c.json({ error: "bad_request", message: "Missing required fields: name, url" }, 400);
+    }
+
+    const baseSlug = body.slug ?? toSlug(body.name);
+    if (isReservedSlug(baseSlug, "nested")) {
+      return c.json(
+        {
+          error: "slug_reserved",
+          message: `Slug "${baseSlug}" is reserved and cannot be used for a source. Choose a different slug or rename the source.`,
+          slug: baseSlug,
+        },
+        409,
+      );
+    }
+
+    // Reject unknown source types at the boundary — the typed cast in
+    // insertValues only narrows for TS; D1's text column has no enum CHECK,
+    // so an unvalidated body.type would persist as-is.
+    if (body.type !== undefined && !(SOURCE_TYPES as readonly string[]).includes(body.type)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid source type "${body.type}". Allowed: ${SOURCE_TYPES.join(", ")}.`,
+        },
+        400,
+      );
+    }
+    // Auto-detect feed type when metadata contains a feedUrl and no explicit type was provided
+    let type: SourceType = (body.type as SourceType | undefined) ?? "scrape";
+    if (!body.type && body.metadata) {
+      try {
+        const meta = JSON.parse(body.metadata);
+        if (meta.feedUrl) type = "feed";
+      } catch {
+        /* invalid metadata JSON — ignore */
+      }
+    }
+
+    // org_id is required and must resolve to a real org. orgId wins over orgSlug
+    // when both are supplied. Guard here until the Phase C NOT NULL migration lands.
+    let orgId: string | null = null;
+    const orgRef = body.orgId ?? body.orgSlug;
+    if (orgRef) {
+      const [org] = await db.select().from(organizations).where(orgWhere(orgRef));
+      orgId = org?.id ?? null;
+    }
+    if (!orgId) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "orgId or orgSlug is required (must resolve to an existing org)",
+        },
+        400,
+      );
+    }
+
+    // Insert with auto-suffix on slug collision: try base, then base-2 … base-20.
+    // Loop-with-catch is race-safe: no TOCTOU gap between check and insert.
+    const MAX_SLUG_ATTEMPTS = 20;
+    const createdAt = new Date().toISOString();
+    const insertValues = (slug: string) => ({
+      name: body.name,
+      slug,
+      type,
+      url: body.url,
+      orgId,
+      metadata: body.metadata ?? "{}",
+      createdAt,
+      ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
+    });
+
+    let source: typeof sources.$inferSelect | undefined;
+
+    for (let attempt = 0; attempt < MAX_SLUG_ATTEMPTS; attempt++) {
+      const slug = attempt === 0 ? baseSlug : `${baseSlug}-${attempt + 1}`;
+      try {
+        // oxlint-disable-next-line no-await-in-loop -- sequential retry loop: each attempt depends on the previous collision
+        const [row] = await db.insert(sources).values(insertValues(slug)).returning();
+        source = row;
+        break;
+      } catch (err) {
+        if (isConflictError(err)) {
+          continue;
+        }
+        throw err;
+      }
+    }
+
+    if (!source) {
+      // All 20 slug attempts collided — fall back to the original 409 path.
+      return c.json(
+        {
+          error: "conflict",
+          message: `Source with slug "${baseSlug}" already exists (exhausted ${MAX_SLUG_ATTEMPTS} suffix attempts)`,
+        },
+        409,
+      );
+    }
+
+    // Onboarding tail. `X-Onboard-Mode: manual` skips the workflow's backfill
+    // step; the inline fallback path has no backfill to skip (CLI calls
+    // `/sources/:slug/fetch` separately).
+    const inlineFallback = () => {
+      if (orgId) c.executionCtx.waitUntil(regeneratePlaybook(db, orgId));
+      c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, source.id));
+    };
+
+    if (c.env.ONBOARD_USE_WORKFLOW === "true" && c.env.ONBOARD_SOURCE_WORKFLOW) {
+      const skipBackfill = c.req.header("x-onboard-mode") === "manual";
+      const workflow = c.env.ONBOARD_SOURCE_WORKFLOW;
+      // Fire-and-forget: control-plane RPC must not block the response.
+      // Deterministic id makes a transient retry safe (CF rejects duplicates).
+      c.executionCtx.waitUntil(
+        workflow
+          .create({
+            id: `onboard-source-${source.id}`,
+            params: { sourceId: source.id, skipBackfill },
+          })
+          .catch((err) => {
+            logEvent("warn", {
+              component: "sources",
+              event: "onboard-workflow-dispatch-failed",
+              err: err instanceof Error ? err : String(err),
+            });
+            inlineFallback();
+          }),
+      );
+    } else {
+      inlineFallback();
+    }
+
+    return c.json(source, 201);
+  },
+);
 
 const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   const db = createDb(c.env.DB);
@@ -1463,8 +1587,30 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   }
   return c.json(updated);
 };
-sourceRoutes.patch("/sources/:slug", patchSourceHandler);
-sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug", patchSourceHandler);
+const patchSourceRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Update source",
+  description:
+    "All body fields optional. Re-embeds the source in Vectorize when `name` or `url` changes; cron/poll fields (`lastFetchedAt`, `consecutiveErrors`, …) skip re-embed. Slug uniqueness is checked before write.",
+  security: [{ bearerAuth: [] }],
+  responses: {
+    200: { description: "Source updated" },
+    400: {
+      description: "No updatable fields supplied or unrecognized fields",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+    409: {
+      description: "Slug conflict or reserved slug",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.patch("/sources/:slug", patchSourceRoute, patchSourceHandler);
+sourceRoutes.patch("/orgs/:orgSlug/sources/:sourceSlug", patchSourceRoute, patchSourceHandler);
 
 sourceRoutes.delete("/sources/:slug", async (c) => {
   const db = createDb(c.env.DB);

@@ -1,6 +1,10 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
-import { OrgListResponseSchema, ErrorResponseSchema } from "@buildinternet/releases-api-types";
+import {
+  OrgListResponseSchema,
+  OrgDetailSchema,
+  ErrorResponseSchema,
+} from "@buildinternet/releases-api-types";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
@@ -136,8 +140,7 @@ orgRoutes.get(
       200: {
         description: "Organization detail",
         content: {
-          // application/json is the default; schema lands when OrgDetail ports to Zod (sources PR).
-          "application/json": {},
+          "application/json": { schema: resolver(OrgDetailSchema) },
           "text/markdown": { schema: { type: "string" } },
         },
       },

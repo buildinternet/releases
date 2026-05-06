@@ -2,11 +2,12 @@ import { Hono } from "hono";
 import { and, eq, inArray, isNotNull, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import { releases, organizations, sources } from "@buildinternet/releases-core/schema";
+import { SOURCE_TYPES } from "@buildinternet/releases-core/source-enums";
 import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseReleaseMedia } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
-import { SOURCE_TYPES, parseExcludeSourceTypes } from "../lib/source-types.js";
+import { parseExcludeSourceTypes } from "../lib/source-types.js";
 import {
   buildLatestCacheKey,
   isCacheableLatestRequest,

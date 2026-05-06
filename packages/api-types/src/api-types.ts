@@ -4,11 +4,22 @@
  */
 
 import type { z } from "zod";
+import type { SourceType } from "@buildinternet/releases-core/source-enums";
+
+export type {
+  SourceType,
+  SourceDiscovery,
+  SourceFetchPriority,
+} from "@buildinternet/releases-core/source-enums";
 import type {
   MediaItemSchema,
   PaginationSchema,
   StatsSchema,
   ErrorResponseSchema,
+  ReleaseTypeSchema,
+  ReleaseItemSchema,
+  ReleaseSummaryItemSchema,
+  OverviewPageItemSchema,
 } from "./schemas/shared.js";
 import type {
   OrgListItemSchema,
@@ -18,7 +29,19 @@ import type {
   OrgTagsResponseSchema,
   CreateOrgBodySchema,
   UpdateOrgBodySchema,
+  OrgDetailSchema,
 } from "./schemas/orgs.js";
+import type {
+  SourceListItemSchema,
+  SourceWithOrgSchema,
+  SourceListResponseSchema,
+  SourceListResultSchema,
+  SourceDetailSchema,
+  SourcePatchInputSchema,
+  CreateSourceBodySchema,
+  ChangelogFileSummarySchema,
+  SourceChangelogResponseSchema,
+} from "./schemas/sources.js";
 
 export {
   MediaItemSchema,
@@ -26,6 +49,10 @@ export {
   ListResponseSchema,
   StatsSchema,
   ErrorResponseSchema,
+  ReleaseTypeSchema,
+  ReleaseItemSchema,
+  ReleaseSummaryItemSchema,
+  OverviewPageItemSchema,
 } from "./schemas/shared.js";
 export {
   OrgListItemSchema,
@@ -35,7 +62,19 @@ export {
   OrgTagsResponseSchema,
   CreateOrgBodySchema,
   UpdateOrgBodySchema,
+  OrgDetailSchema,
 } from "./schemas/orgs.js";
+export {
+  SourceListItemSchema,
+  SourceWithOrgSchema,
+  SourceListResponseSchema,
+  SourceListResultSchema,
+  SourceDetailSchema,
+  SourcePatchInputSchema,
+  CreateSourceBodySchema,
+  ChangelogFileSummarySchema,
+  SourceChangelogResponseSchema,
+} from "./schemas/sources.js";
 
 // ── Media ──
 
@@ -74,203 +113,19 @@ export type OrgTagsResponse = z.infer<typeof OrgTagsResponseSchema>;
 export type CreateOrgBody = z.infer<typeof CreateOrgBodySchema>;
 export type UpdateOrgBody = z.infer<typeof UpdateOrgBodySchema>;
 
-export interface OrgDetail {
-  id?: string;
-  slug: string;
-  name: string;
-  domain: string | null;
-  description?: string | null;
-  category?: string | null;
-  avatarUrl: string | null;
-  tags?: string[];
-  sourceCount: number;
-  releaseCount: number;
-  releasesLast30Days: number;
-  avgReleasesPerWeek: number;
-  lastFetchedAt: string | null;
-  lastPolledAt: string | null;
-  trackingSince: string;
-  aliases?: string[];
-  accounts: OrgAccountItem[];
-  products: Array<{
-    id: string;
-    slug: string;
-    name: string;
-    url: string | null;
-    description: string | null;
-    sourceCount: number;
-  }>;
-  sources: SourceListItem[];
-  overview?: OverviewPageItem | null;
-  playbook?: { scope: "playbook"; content: string; updatedAt: string } | null;
-}
+export type OrgDetail = z.infer<typeof OrgDetailSchema>;
 
 // ── Sources ──
 
-export interface SourceListItem {
-  slug: string;
-  name: string;
-  type: string;
-  url?: string;
-  orgSlug?: string | null;
-  releaseCount: number;
-  latestVersion: string | null;
-  latestDate: string | null;
-  latestAddedAt?: string | null;
-  isPrimary?: boolean;
-  isHidden?: boolean;
-  /**
-   * How the row was created. Optional on the wire so older API responses
-   * (mid-deploy or pinned old workers) degrade gracefully — consumers that
-   * see `undefined` should treat it as `"curated"`.
-   */
-  discovery?: "curated" | "agent" | "on_demand";
-  fetchPriority?: "normal" | "low" | "paused" | null;
-  lastFetchedAt?: string | null;
-  lastPolledAt?: string | null;
-  changeDetectedAt?: string | null;
-  consecutiveNoChange?: number | null;
-  consecutiveErrors?: number | null;
-  nextFetchAfter?: string | null;
-  medianGapDays?: number | null;
-  lastRetieredAt?: string | null;
-  metadata?: string | null;
-  productName?: string | null;
-  productSlug?: string | null;
-}
-
-/**
- * Canonical shape returned by GET /v1/sources (list) and used by both
- * local-mode queries and the remote API client. Superset of SourceListItem
- * with required fields (id, orgName, orgSlug) that the CLI `list` command needs.
- */
-export interface SourceWithOrg {
-  id: string;
-  name: string;
-  slug: string;
-  type: string;
-  url: string;
-  orgName: string | null;
-  orgSlug: string | null;
-  productName: string | null;
-  productSlug: string | null;
-  isPrimary: boolean;
-  isHidden: boolean | null;
-  discovery?: "curated" | "agent" | "on_demand";
-  metadata: string | null;
-  releaseCount: number;
-  latestVersion: string | null;
-  latestDate: string | null;
-  lastFetchedAt: string | null;
-  lastPolledAt: string | null;
-  fetchPriority: string | null;
-  changeDetectedAt: string | null;
-  consecutiveNoChange: number | null;
-  consecutiveErrors: number | null;
-  nextFetchAfter: string | null;
-  medianGapDays: number | null;
-  lastRetieredAt: string | null;
-}
-
-/** Fields accepted by PATCH /v1/sources/:slug. */
-export interface SourcePatchInput {
-  name?: string;
-  url?: string;
-  type?: string;
-  slug?: string;
-  metadata?: string;
-  orgId?: string | null;
-  productId?: string | null;
-  lastFetchedAt?: string | null;
-  lastContentHash?: string | null;
-  fetchPriority?: string;
-  consecutiveNoChange?: number;
-  consecutiveErrors?: number;
-  nextFetchAfter?: string | null;
-  isPrimary?: boolean;
-  isHidden?: boolean;
-  changeDetectedAt?: string | null;
-  lastPolledAt?: string | null;
-}
-
-/** Lightweight summary of a changelog file — used for the file index. */
-export interface ChangelogFileSummary {
-  path: string;
-  filename: string;
-  url: string;
-  bytes: number;
-  fetchedAt: string;
-}
-
-export interface SourceChangelogResponse {
-  path: string;
-  filename: string;
-  url: string;
-  rawUrl: string;
-  content: string;
-  bytes: number;
-  fetchedAt: string;
-  /** Character offset of the first character in `content` within the full file. */
-  offset: number;
-  /** The limit (in chars) that was applied to produce this slice. */
-  limit: number;
-  /** Next offset to request for the next slice, or null if `content` is the tail. */
-  nextOffset: number | null;
-  /** Total length of the full file in characters. */
-  totalChars: number;
-  /** Requested token budget when in token mode (cl100k_base). */
-  tokens?: number;
-  /** Encoded token count of the returned `content`. Set in token mode. */
-  sliceTokens?: number;
-  /** Full-file token count (cl100k_base). Always populated. */
-  totalTokens: number;
-  /** True when the upstream file exceeded the 1MB cap and content was sliced. */
-  truncated: boolean;
-  /** Byte offset where the file was truncated, or null when not truncated. */
-  truncatedAt: number | null;
-  /**
-   * Index of every changelog file tracked for this source (root plus any
-   * discovered per-package files). Always present even for single-file
-   * sources so clients can lazily render a file picker.
-   */
-  files: ChangelogFileSummary[];
-}
-
-export interface SourceDetail {
-  slug: string;
-  name: string;
-  type: string;
-  url: string;
-  /**
-   * Hidden sources are reachable by direct URL but excluded from listings,
-   * sitemap, and AI features. Set on on-demand lookups and admin-suppressed
-   * rows; absent on canonical curated/agent sources.
-   */
-  isHidden?: boolean;
-  /**
-   * Pairs with `isHidden` to distinguish admin-suppressed rows (`curated` /
-   * `agent` + hidden) from rows materialized by `/v1/lookups` (`on_demand`).
-   * Optional for graceful degradation against older API responses.
-   */
-  discovery?: "curated" | "agent" | "on_demand";
-  changelogUrl?: string | null;
-  hasChangelogFile?: boolean;
-  org: { slug: string; name: string } | null;
-  releaseCount: number;
-  releasesLast30Days: number;
-  avgReleasesPerWeek: number;
-  latestVersion: string | null;
-  latestDate: string | null;
-  lastFetchedAt: string | null;
-  lastPolledAt: string | null;
-  trackingSince: string;
-  releases: ReleaseItem[];
-  pagination: Pagination;
-  summaries: {
-    rolling: ReleaseSummaryItem | null;
-    monthly: ReleaseSummaryItem[];
-  };
-}
+export type SourceListItem = z.infer<typeof SourceListItemSchema>;
+export type SourceWithOrg = z.infer<typeof SourceWithOrgSchema>;
+export type SourceListResponse = z.infer<typeof SourceListResponseSchema>;
+export type SourceListResult = z.infer<typeof SourceListResultSchema>;
+export type SourcePatchInput = z.infer<typeof SourcePatchInputSchema>;
+export type CreateSourceBody = z.infer<typeof CreateSourceBodySchema>;
+export type ChangelogFileSummary = z.infer<typeof ChangelogFileSummarySchema>;
+export type SourceChangelogResponse = z.infer<typeof SourceChangelogResponseSchema>;
+export type SourceDetail = z.infer<typeof SourceDetailSchema>;
 
 // ── Admin telemetry: orgs rollup ──
 
@@ -306,20 +161,9 @@ export interface OrgsRollupResponse extends ListResponse<OrgsRollupRow> {
  * Optional on the wire so older API responses (mid-deploy or pinned old workers)
  * degrade gracefully — consumers that see `undefined` should treat it as `"feature"`.
  */
-export type ReleaseType = "feature" | "rollup";
+export type ReleaseType = z.infer<typeof ReleaseTypeSchema>;
 
-export interface ReleaseItem {
-  id?: string;
-  version: string | null;
-  title: string;
-  summary: string;
-  content?: string;
-  publishedAt: string | null;
-  url: string | null;
-  media?: MediaItem[];
-  /** Release type. See {@link ReleaseType}. */
-  type?: ReleaseType;
-}
+export type ReleaseItem = z.infer<typeof ReleaseItemSchema>;
 
 export interface ReleaseDetail {
   id: string;
@@ -353,14 +197,7 @@ export type ReleaseCoverageResponse =
   | { role: "coverage"; canonical: ReleaseCoverageRow; covers: [] }
   | { role: "canonical"; canonical: null; covers: ReleaseCoverageRow[] };
 
-export interface ReleaseSummaryItem {
-  year?: number | null;
-  month?: number | null;
-  windowDays?: number | null;
-  summary: string;
-  releaseCount: number;
-  generatedAt: string;
-}
+export type ReleaseSummaryItem = z.infer<typeof ReleaseSummaryItemSchema>;
 
 // ── Search ──
 
@@ -560,16 +397,7 @@ export interface UnifiedSearchResponse {
 
 // ── Overview Pages ──
 
-export interface OverviewPageItem {
-  scope: "org" | "product";
-  orgSlug?: string | null;
-  productSlug?: string | null;
-  content: string;
-  releaseCount: number;
-  lastContributingReleaseAt: string | null;
-  generatedAt: string;
-  updatedAt: string;
-}
+export type OverviewPageItem = z.infer<typeof OverviewPageItemSchema>;
 
 /** @deprecated Use OverviewPageItem */
 export type KnowledgePageItem = OverviewPageItem;
@@ -724,7 +552,7 @@ export interface ProductDetail {
   description: string | null;
   category: string | null;
   createdAt: string;
-  sources: Array<{ id: string; slug: string; name: string; type: string; url: string }>;
+  sources: Array<{ id: string; slug: string; name: string; type: SourceType; url: string }>;
   tags: string[];
 }
 

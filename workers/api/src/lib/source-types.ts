@@ -1,12 +1,12 @@
-export const SOURCE_TYPES = ["github", "scrape", "feed", "agent"] as const;
-export type SourceType = (typeof SOURCE_TYPES)[number];
+import { SOURCE_TYPES, type SourceType } from "@buildinternet/releases-core/source-enums";
 
 const SOURCE_TYPE_SET: ReadonlySet<string> = new Set(SOURCE_TYPES);
 
 /**
- * Normalize and validate `?exclude=` input shared by REST. Trims, lowers,
- * dedupes, and rejects unknown tokens with the offenders. The GraphQL
- * `excludeSourceTypes` arg uses a typed enum instead, so this is REST-only.
+ * Normalize and validate REST `?exclude=` input. Trims, lowers, dedupes, and
+ * rejects unknown tokens with the offenders. The GraphQL `excludeSourceTypes`
+ * arg uses a typed enum and validates at the schema layer instead — this
+ * helper is REST-only.
  */
 export function parseExcludeSourceTypes(
   raw: ReadonlyArray<string> | string | null | undefined,
