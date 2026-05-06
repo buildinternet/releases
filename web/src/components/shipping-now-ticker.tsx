@@ -68,14 +68,15 @@ function ActivityIcon() {
 function chevronTarget(
   r: TickerRelease,
 ): { href: string; external: boolean; label: string } | null {
+  const orgName = r.source.org.name;
   if (r.url) {
-    return { href: r.url, external: true, label: `Open ${r.source.name} release in a new tab` };
+    return { href: r.url, external: true, label: `Open ${orgName} release in a new tab` };
   }
   if (r.source.org.slug) {
     return {
       href: `/${r.source.org.slug}`,
       external: false,
-      label: `More from ${r.source.name}`,
+      label: `More from ${orgName}`,
     };
   }
   return null;
