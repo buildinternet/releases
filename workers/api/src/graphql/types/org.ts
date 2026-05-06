@@ -1,4 +1,5 @@
 import { builder } from "../builder.js";
+import { OrgDiscoveryEnum } from "./enums.js";
 
 export const OrgType = builder.objectType("Org", {
   description: "An organization (the entity that produces one or more products / sources).",
@@ -10,7 +11,7 @@ export const OrgType = builder.objectType("Org", {
     description: t.exposeString("description", { nullable: true }),
     category: t.exposeString("category", { nullable: true }),
     avatarUrl: t.exposeString("avatarUrl", { nullable: true }),
-    discovery: t.exposeString("discovery"),
+    discovery: t.field({ type: OrgDiscoveryEnum, resolve: (o) => o.discovery }),
     createdAt: t.expose("createdAt", { type: "DateTime" }),
     updatedAt: t.expose("updatedAt", { type: "DateTime" }),
 

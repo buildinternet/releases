@@ -28,7 +28,7 @@ type Org {
   category: String
   createdAt: DateTime!
   description: String
-  discovery: String!
+  discovery: OrgDiscovery!
   domain: String
   id: ID!
   name: String!
@@ -46,6 +46,15 @@ type Org {
 type OrgConnection {
   items: [Org!]!
   pagination: Pagination!
+}
+
+"""
+How an organization entered the registry: hand-curated, materialized by the discovery agent, or created on-demand via /v1/lookups.
+"""
+enum OrgDiscovery {
+  agent
+  curated
+  on_demand
 }
 
 """Page-based pagination envelope. Mirrors REST's Pagination shape."""
@@ -114,7 +123,7 @@ type Release {
   publishedAt: DateTime
   source: Source!
   title: String!
-  type: String!
+  type: ReleaseType!
   url: String
   version: String
 }
@@ -125,6 +134,14 @@ Feed-shaped page of releases. `nextCursor` is null when the feed is exhausted.
 type ReleaseFeed {
   items: [Release!]!
   nextCursor: String
+}
+
+"""
+Whether a release is a normal feature/changelog entry or a seasonal/quarterly rollup catch-all.
+"""
+enum ReleaseType {
+  feature
+  rollup
 }
 
 """A changelog source (github / scrape / feed / agent)."""

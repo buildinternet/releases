@@ -9,6 +9,9 @@ import { TypedDocumentNode as DocumentNode } from "@graphql-typed-document-node/
 /** Kind of media attached to a release. */
 export type MediaKind = "gif" | "image" | "video";
 
+/** Whether a release is a normal feature/changelog entry or a seasonal/quarterly rollup catch-all. */
+export type ReleaseType = "feature" | "rollup";
+
 /** How a source is ingested: GitHub releases API, scraped HTML, parsed feed, or AI agent. */
 export type SourceType = "agent" | "feed" | "github" | "scrape";
 
@@ -23,7 +26,7 @@ export type HomepageTickerQuery = {
       id: string;
       title: string;
       version: string | null;
-      type: string;
+      type: ReleaseType;
       url: string | null;
       publishedAt: string | null;
       contentSummary: string | null;
