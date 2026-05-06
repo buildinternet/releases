@@ -16,7 +16,7 @@
     "./source-edit": "./src/source-edit.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-core": "workspace:*"
   }
 }

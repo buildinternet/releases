@@ -18,7 +18,7 @@
     "./github-probe": "./src/github-probe.ts"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.91.1",
+    "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/core-internal": "workspace:*",
     "@releases/lib": "workspace:*",
