@@ -50,6 +50,9 @@
     "web",
     "packages/*"
   ],
+  "catalog": {
+    "@anthropic-ai/sdk": "^0.95.0"
+  },
   "keywords": [
     "changelog",
     "releases",
@@ -70,7 +73,7 @@
     "@releases/lib": "workspace:*",
     "@releases/rendering": "workspace:*",
     "@releases/search": "workspace:*",
-    "@anthropic-ai/sdk": "^0.95.0",
+    "@anthropic-ai/sdk": "catalog:",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "dayjs": "^1.11.20",
     "drizzle-orm": "^0.45.2",
