@@ -91,6 +91,10 @@
     // IndexNow ingest pings (#649). On in prod; staging stays off. The
     // ownership file is served by web/src/proxy.ts at /{INDEXNOW_KEY}.txt.
     "INDEXNOW_ENABLED": "true",
+    // Discriminator read by /v1/graphql to gate GraphiQL + introspection.
+    // Production deploys advertise "production"; the staging block overrides
+    // to "staging".
+    "ENVIRONMENT": "production",
   },
   "d1_databases": [
     {
@@ -308,6 +312,8 @@
         // never fires. See workers/api/src/lib/indexnow.ts.
         "WEB_BASE_URL": "https://releases.sh",
         "INDEXNOW_ENABLED": "false",
+        // Discriminator read by /v1/graphql to gate GraphiQL + introspection.
+        "ENVIRONMENT": "staging",
       },
       "d1_databases": [
         {

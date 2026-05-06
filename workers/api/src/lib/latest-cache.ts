@@ -6,6 +6,7 @@
  */
 
 import { logEvent } from "@releases/lib/log-event";
+import { purgeKeysForHomepageTicker } from "../graphql/persisted.js";
 
 export interface LatestCacheBinding {
   get(key: string, type: "json"): Promise<unknown>;
@@ -146,7 +147,10 @@ export async function invalidateLatestCache(
   env: InvalidationEnv,
   meta: { nReleases: number; sourceId: string },
 ): Promise<void> {
-  const keys = CACHEABLE_DEFAULT_SHAPES.map(defaultShapeKey);
+  // REST shapes from CACHEABLE_DEFAULT_SHAPES + GraphQL homepage ticker
+  // hash from the persisted-operations manifest. Invalidation is best-effort;
+  // the 5-minute TTL is the safety net on either side.
+  const keys = [...CACHEABLE_DEFAULT_SHAPES.map(defaultShapeKey), ...purgeKeysForHomepageTicker()];
   const logCtx = { cacheKeys: keys, sourceId: meta.sourceId, nReleases: meta.nReleases };
 
   if (env.INVALIDATION_ENABLED !== "true") {

@@ -1,7 +1,6 @@
 import "server-only";
 
 import type { TypedDocumentNode } from "@graphql-typed-document-node/core";
-import { type DocumentNode, print } from "graphql";
 import {
   apiSetupSteps,
   ApiSetupError,
@@ -33,32 +32,50 @@ export class GraphQLRequestError extends Error {
   }
 }
 
-// Memoize SDL serialization per static document. `print` walks the AST every
-// call; on a typed-document export this output is identical forever, so paying
-// it once per worker isolate is enough.
-const printedDocumentCache = new WeakMap<DocumentNode, string>();
-function printOnce(document: DocumentNode): string {
-  const cached = printedDocumentCache.get(document);
-  if (cached) return cached;
-  const sdl = print(document);
-  printedDocumentCache.set(document, sdl);
-  return sdl;
+// Codegen embeds `__meta__.hash` on every TypedDocumentNode when the
+// `persistedDocuments` preset option is on (see web/codegen.ts). The API
+// rejects requests without a known hash from non-admin callers, so we
+// pull it off the document and send it in Apollo APQ wire format.
+interface PersistedDocument {
+  __meta__?: { hash?: string };
+}
+
+// Apollo APQ wire format expects the bare sha256 (no `sha256:` prefix). The
+// API mirrors this strip in workers/api/src/graphql/persisted.ts — keep the
+// two in sync if the algorithm ever changes.
+const HASH_PREFIX = "sha256:";
+function persistedHashOf(document: PersistedDocument): string {
+  const hash = document.__meta__?.hash;
+  if (!hash) {
+    // Should never happen — codegen embeds the hash on every operation. If
+    // it does, the server would reject the request anyway, so fail fast
+    // here with a clearer message.
+    throw new Error("graphql document is missing a persisted-query hash");
+  }
+  return hash.startsWith(HASH_PREFIX) ? hash.slice(HASH_PREFIX.length) : hash;
 }
 
 /**
  * Server-side GraphQL fetch. Reuses `webApiHeaders` + `applyCacheInit` from
  * `lib/api.ts` so a GraphQL call inside a server component behaves the same
  * as REST equivalents — proxy key, web user-agent, 60s ISR default.
+ *
+ * Sends the persisted-query hash, never the document itself, so the API's
+ * persisted-operations gate accepts the request.
  */
 export async function graphqlRequest<TData, TVariables>(
   document: TypedDocumentNode<TData, TVariables>,
   variables: TVariables,
   init?: FetchCacheInit,
 ): Promise<TData> {
+  const sha256Hash = persistedHashOf(document as PersistedDocument);
   const fetchInit: RequestInit = {
     method: "POST",
     headers: { ...webApiHeaders(), "Content-Type": "application/json" },
-    body: JSON.stringify({ query: printOnce(document), variables }),
+    body: JSON.stringify({
+      extensions: { persistedQuery: { version: 1, sha256Hash } },
+      variables,
+    }),
   };
   applyCacheInit(fetchInit, init);
 

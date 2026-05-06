@@ -186,6 +186,10 @@ export type Env = {
     // Public web base URL — used by the IndexNow helper to build canonical
     // URLs. Defaults to https://releases.sh when unset.
     WEB_BASE_URL?: string;
+    // Deploy-environment discriminator. Set to "production" in the top-level
+    // wrangler.jsonc vars and "staging" in the env.staging block. Read by
+    // /v1/graphql to gate GraphiQL + introspection. Absent in `wrangler dev`.
+    ENVIRONMENT?: string;
   };
 };
 

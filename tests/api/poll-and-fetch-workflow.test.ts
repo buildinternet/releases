@@ -14,9 +14,12 @@ import { PollAndFetchWorkflow } from "../../workers/api/src/workflows/poll-and-f
 import type { PollAndFetchWorkflowEnv } from "../../workers/api/src/workflows/poll-and-fetch";
 import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
 import { CACHEABLE_DEFAULT_SHAPES } from "../../workers/api/src/lib/latest-cache";
+import { purgeKeysForHomepageTicker } from "../../workers/api/src/graphql/persisted";
 
-// One logical invalidation deletes one KV key per cacheable shape.
-const CACHE_DELETES_PER_INVALIDATION = CACHEABLE_DEFAULT_SHAPES.length;
+// One logical invalidation deletes one KV key per cacheable REST shape plus
+// one per persisted-cached GraphQL hash (today: just the homepage ticker).
+const CACHE_DELETES_PER_INVALIDATION =
+  CACHEABLE_DEFAULT_SHAPES.length + purgeKeysForHomepageTicker().length;
 
 function mkDb() {
   const sqlite = new Database(":memory:");
