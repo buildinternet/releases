@@ -40,6 +40,9 @@ interface PersistedDocument {
   __meta__?: { hash?: string };
 }
 
+// Apollo APQ wire format expects the bare sha256 (no `sha256:` prefix). The
+// API mirrors this strip in workers/api/src/graphql/persisted.ts — keep the
+// two in sync if the algorithm ever changes.
 const HASH_PREFIX = "sha256:";
 function persistedHashOf(document: PersistedDocument): string {
   const hash = document.__meta__?.hash;

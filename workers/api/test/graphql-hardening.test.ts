@@ -1,5 +1,5 @@
 /**
- * Tier-1 hardening (#755) — query-shape limits + introspection gate.
+ * Query-shape limits + introspection gate.
  *
  * These tests exercise the Yoga plugin pipeline (parse → validate → execute),
  * not the resolvers, so we use a tiny stand-in schema to control depth

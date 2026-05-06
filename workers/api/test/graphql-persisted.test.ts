@@ -1,5 +1,5 @@
 /**
- * Persisted operations + KV response cache (#755 part 3).
+ * Persisted operations + KV response cache.
  *
  * The plugin gates non-admin callers to the manifest of hashes committed by
  * `bun web/codegen.ts`. The cache layer wraps the route handler and stores
@@ -45,58 +45,40 @@ function makeYoga() {
   });
 }
 
-async function postPersisted(
+async function postGraphql(
   yoga: ReturnType<typeof makeYoga>,
-  hash: string,
-  variables: Record<string, unknown> = {},
+  body: Record<string, unknown>,
   isAdmin = false,
 ) {
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (isAdmin) headers[GRAPHQL_ADMIN_HEADER] = "1";
   const res = await yoga.fetch(
-    new Request("http://t/graphql", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        extensions: { persistedQuery: { version: 1, sha256Hash: hash } },
-        variables,
-      }),
-    }),
+    new Request("http://t/graphql", { method: "POST", headers, body: JSON.stringify(body) }),
     { env: {} },
   );
   return (await res.json()) as { data?: unknown; errors?: Array<{ message: string }> };
 }
 
-async function postRaw(yoga: ReturnType<typeof makeYoga>, query: string, isAdmin = false) {
-  const headers: Record<string, string> = { "content-type": "application/json" };
-  if (isAdmin) headers[GRAPHQL_ADMIN_HEADER] = "1";
-  const res = await yoga.fetch(
-    new Request("http://t/graphql", {
-      method: "POST",
-      headers,
-      body: JSON.stringify({ query }),
-    }),
-    { env: {} },
-  );
-  return (await res.json()) as { data?: unknown; errors?: Array<{ message: string }> };
-}
+const persistedBody = (hash: string, variables: Record<string, unknown> = {}) => ({
+  extensions: { persistedQuery: { version: 1, sha256Hash: hash } },
+  variables,
+});
 
 describe("persisted operations gate", () => {
   it("rejects an unknown hash for non-admin callers", async () => {
-    const fakeHash = "0".repeat(64);
-    const out = await postPersisted(makeYoga(), fakeHash);
+    const out = await postGraphql(makeYoga(), persistedBody("0".repeat(64)));
     expect(out.errors).toBeDefined();
     expect(out.errors?.[0]?.message).toMatch(/PersistedQueryNotFound/);
   });
 
   it("rejects an arbitrary document for non-admin callers", async () => {
-    const out = await postRaw(makeYoga(), "query { hello }");
+    const out = await postGraphql(makeYoga(), { query: "query { hello }" });
     expect(out.errors).toBeDefined();
     expect(out.errors?.[0]?.message).toMatch(/PersistedQueryOnly/);
   });
 
   it("allows arbitrary documents when the admin sentinel is present", async () => {
-    const out = await postRaw(makeYoga(), "query { hello }", true);
+    const out = await postGraphql(makeYoga(), { query: "query { hello }" }, true);
     expect(out.errors).toBeUndefined();
     expect(out.data).toEqual({ hello: "world" });
   });

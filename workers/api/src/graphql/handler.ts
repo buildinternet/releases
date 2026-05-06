@@ -5,6 +5,7 @@ import type { Env } from "../index.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { createLoaders } from "./loaders.js";
 import {
+  CACHEABLE_HASHES,
   GRAPHQL_ADMIN_HEADER,
   lookupCached,
   persistedOperationsPlugin,
@@ -70,9 +71,10 @@ graphqlRoutes.all("/graphql", async (c) => {
 
   const response = await yoga.fetch(augmented, { env: c.env, isAdmin });
 
-  // Yoga always returns JSON for /v1/graphql; reading the body is cheap.
-  // Tee it so the original is still streamed to the client.
-  if (response.ok && parsedBody.hash) {
+  // Skip the response-body read entirely unless the hash is in the cache
+  // allowlist — admin-driven hashed requests would otherwise pay a clone +
+  // text() cost just to be discarded inside storeIfCacheable.
+  if (response.ok && parsedBody.hash && CACHEABLE_HASHES.has(parsedBody.hash)) {
     const responseText = await response.clone().text();
     const waitUntil = (p: Promise<unknown>) => c.executionCtx.waitUntil(p);
     await storeIfCacheable(c.env.LATEST_CACHE, augmented, parsedBody, responseText, waitUntil);

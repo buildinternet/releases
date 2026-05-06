@@ -14,9 +14,8 @@
  *
  * Admin callers (Authorization: Bearer matches RELEASED_API_KEY) bypass
  * both: they may send arbitrary documents and their responses are not
- * cached. The route handler stamps a server-trusted sentinel header
- * (X-Releases-Graphql-Admin) after stripping any client-supplied copy
- * of the same header.
+ * cached. The route handler stamps the X-Releases-Graphql-Admin sentinel
+ * after stripping any client-supplied copy.
  */
 import {
   defaultExtractPersistedOperationId,
@@ -24,6 +23,7 @@ import {
   type ExtractPersistedOperationId,
 } from "@graphql-yoga/plugin-persisted-operations";
 import { logEvent } from "@releases/lib/log-event";
+import type { LatestCacheBinding } from "../lib/latest-cache.js";
 // The codegen output ships under web/. The API trusts web's manifest because
 // they're versioned together in the monorepo — schema.graphql is the same
 // pattern. The relative path crosses workspaces but stays inside the repo;
@@ -33,39 +33,49 @@ import rawManifest from "../../../../web/src/lib/graphql/__generated__/persisted
 /** Sentinel header set by the route handler after a successful Bearer check. */
 export const GRAPHQL_ADMIN_HEADER = "x-releases-graphql-admin";
 
-/**
- * Strip the codegen `sha256:` prefix from manifest keys so it matches the
- * bare hash clients send via `extensions.persistedQuery.sha256Hash` (Apollo
- * APQ wire format).
- */
+// Bare sha256 (no `sha256:` prefix) is what Apollo APQ wire format uses.
+// Keep in sync with web/src/lib/graphql/client.ts which strips the same
+// prefix on the way out.
 const HASH_PREFIX = "sha256:";
+const stripHashPrefix = (key: string) =>
+  key.startsWith(HASH_PREFIX) ? key.slice(HASH_PREFIX.length) : key;
+
 const MANIFEST: Record<string, string> = Object.fromEntries(
   Object.entries(rawManifest as Record<string, string>).map(([key, doc]) => [
-    key.startsWith(HASH_PREFIX) ? key.slice(HASH_PREFIX.length) : key,
+    stripHashPrefix(key),
     doc,
   ]),
 );
+
+// Operation-name → hash lookup, built once at module load. Used by
+// CACHEABLE_HASHES and by purge helpers below — pre-building avoids
+// re-scanning the manifest on every cache invalidation.
+const HASH_BY_OP_NAME: Map<string, string> = (() => {
+  const m = new Map<string, string>();
+  for (const [hash, doc] of Object.entries(MANIFEST)) {
+    const match = doc.match(/\bquery\s+(\w+)\s*\(/);
+    if (match?.[1]) m.set(match[1], hash);
+  }
+  return m;
+})();
 
 /**
  * Hashes whose responses are safe to cache. New entries here MUST come with
  * a matching purge in invalidateLatestCache (see lib/latest-cache.ts) — the
  * 5-minute TTL is the safety net, not the primary freshness mechanism.
  *
- * Today this is the homepage ticker (one query, pinned variables). Look it
- * up by operation name rather than hardcoding the hash so a SELECT-set tweak
- * to the query (which changes the hash) doesn't silently disable caching.
+ * Look up by operation name rather than hardcoding the hash so a SELECT-set
+ * tweak to the query (which changes the hash) doesn't silently disable
+ * caching.
  */
 const CACHEABLE_OPERATION_NAMES = ["HomepageTicker"];
-function findHashByName(name: string): string | null {
-  const needle = `query ${name}(`;
-  for (const [hash, doc] of Object.entries(MANIFEST)) {
-    if (doc.includes(needle)) return hash;
-  }
-  return null;
-}
 export const CACHEABLE_HASHES: ReadonlySet<string> = new Set(
-  CACHEABLE_OPERATION_NAMES.map(findHashByName).filter((h): h is string => h !== null),
+  CACHEABLE_OPERATION_NAMES.map((n) => HASH_BY_OP_NAME.get(n)).filter(
+    (h): h is string => h !== undefined,
+  ),
 );
+
+const KEY_PREFIX = "gql:v1:";
 
 /**
  * Stable cache key per (hash, variables). Variables are sorted by key so
@@ -82,22 +92,37 @@ export function buildGraphqlCacheKey(hash: string, variables: unknown): string {
           ),
         )
       : "";
-  return `gql:v1:${hash}:${v}`;
+  return `${KEY_PREFIX}${hash}:${v}`;
 }
-
-const KEY_PREFIX = "gql:v1:";
 
 export const GRAPHQL_CACHE_TTL_SECONDS = 300;
 
-export interface GraphqlCacheBinding {
-  get(key: string, type: "json"): Promise<unknown>;
-  put(key: string, value: string, options?: { expirationTtl?: number }): Promise<void>;
-  delete(key: string): Promise<void>;
-}
+// Same KV-shaped contract as /v1/releases/latest's read-through cache —
+// reuse the type so any future widening (e.g. metadata, list) lands once.
+export type GraphqlCacheBinding = LatestCacheBinding;
 
-/** Guard that excludes admin callers from cache reads/writes. */
 function isAdminRequest(req: Request): boolean {
   return req.headers.get(GRAPHQL_ADMIN_HEADER) === "1";
+}
+
+interface CacheBody {
+  hash: string | null;
+  variables: unknown;
+}
+
+/**
+ * Returns the cache key when the request is a cache candidate, or null when
+ * it's not (no binding, no hash, hash not in allowlist, or admin caller).
+ * Centralizes the predicate shared by lookupCached + storeIfCacheable.
+ */
+function cacheKeyFor(
+  kv: GraphqlCacheBinding | undefined,
+  request: Request,
+  body: CacheBody,
+): string | null {
+  if (!kv || !body.hash || !CACHEABLE_HASHES.has(body.hash)) return null;
+  if (isAdminRequest(request)) return null;
+  return buildGraphqlCacheKey(body.hash, body.variables);
 }
 
 /**
@@ -122,20 +147,15 @@ export function persistedOperationsPlugin() {
 
 /**
  * Read-through KV cache. Lookup happens before yoga runs; on miss we fall
- * through and store the response on the way out.
- *
- * Returns a cached `Response` if present, or `null` if the caller should
- * proceed with normal execution. The companion `storeIfCacheable` writes
- * the response back after yoga finishes.
+ * through and `storeIfCacheable` writes the response back on the way out.
  */
 export async function lookupCached(
   kv: GraphqlCacheBinding | undefined,
   request: Request,
-  body: { hash: string | null; variables: unknown },
+  body: CacheBody,
 ): Promise<Response | null> {
-  if (!kv || !body.hash || !CACHEABLE_HASHES.has(body.hash)) return null;
-  if (isAdminRequest(request)) return null;
-  const key = buildGraphqlCacheKey(body.hash, body.variables);
+  const key = cacheKeyFor(kv, request, body);
+  if (!key || !kv) return null;
   const cached = await kv.get(key, "json").catch(() => null);
   if (cached === null || cached === undefined) return null;
   return new Response(JSON.stringify(cached), {
@@ -147,16 +167,21 @@ export async function lookupCached(
  * Store the response body in KV when the request was cacheable. Caller
  * passes the raw text so we don't double-parse. Uses waitUntil where
  * available; otherwise awaits inline so test runs see the write.
+ *
+ * The caller is expected to gate on `CACHEABLE_HASHES.has(hash)` before
+ * even reading the response body — this function re-checks defensively
+ * so it's safe to call unconditionally, but the read-and-discard cost
+ * for non-cacheable hashes belongs upstream.
  */
 export async function storeIfCacheable(
   kv: GraphqlCacheBinding | undefined,
   request: Request,
-  body: { hash: string | null; variables: unknown },
+  body: CacheBody,
   responseText: string,
   waitUntil?: (p: Promise<unknown>) => void,
 ): Promise<void> {
-  if (!kv || !body.hash || !CACHEABLE_HASHES.has(body.hash)) return;
-  if (isAdminRequest(request)) return;
+  const key = cacheKeyFor(kv, request, body);
+  if (!key || !kv) return;
   // Don't cache error responses — the parsed body's `errors` field is the
   // signal the resolver failed. Storing it would pin the failure for the TTL.
   let parsed: { errors?: unknown } | null = null;
@@ -167,7 +192,6 @@ export async function storeIfCacheable(
   }
   if (parsed?.errors) return;
 
-  const key = buildGraphqlCacheKey(body.hash, body.variables);
   const write = kv
     .put(key, responseText, { expirationTtl: GRAPHQL_CACHE_TTL_SECONDS })
     .catch((err) => {
@@ -178,18 +202,17 @@ export async function storeIfCacheable(
 }
 
 /**
- * Purge cached responses for one operation across all known variable shapes.
+ * Purge cached responses for the homepage ticker after a publish.
  *
  * The KV API has no prefix-delete, so we either need a list-and-delete walk
- * (extra reads) or a small set of well-known variable shapes per op. The
- * homepage ticker pins `{ limit: 20, exclude: ["github"] }`, so a single
- * key covers the only writer today. Keep this in sync with the homepage
- * call site (web/src/app/page.tsx).
+ * (extra reads) or well-known variable shapes per op. The homepage ticker
+ * pins `{ limit: 20, exclude: ["github"] }`, so one key covers the only
+ * writer today. Keep in sync with web/src/app/page.tsx.
  */
 export const HOMEPAGE_TICKER_VARS = { exclude: ["github"], limit: 20 };
 
 export function purgeKeysForHomepageTicker(): string[] {
-  const hash = findHashByName("HomepageTicker");
+  const hash = HASH_BY_OP_NAME.get("HomepageTicker");
   if (!hash) return [];
   return [buildGraphqlCacheKey(hash, HOMEPAGE_TICKER_VARS)];
 }
