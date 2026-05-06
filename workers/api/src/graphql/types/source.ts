@@ -1,4 +1,5 @@
 import { builder } from "../builder.js";
+import { SourceTypeEnum } from "./enums.js";
 
 export const SourceType = builder.objectType("Source", {
   description: "A changelog source (github / scrape / feed / agent).",
@@ -6,7 +7,7 @@ export const SourceType = builder.objectType("Source", {
     id: t.exposeID("id"),
     slug: t.exposeString("slug"),
     name: t.exposeString("name"),
-    type: t.exposeString("type"),
+    type: t.field({ type: SourceTypeEnum, resolve: (s) => s.type }),
     url: t.exposeString("url"),
     fetchPriority: t.exposeString("fetchPriority", { nullable: true }),
     lastFetchedAt: t.expose("lastFetchedAt", { type: "DateTime", nullable: true }),

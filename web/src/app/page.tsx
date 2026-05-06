@@ -1,4 +1,7 @@
-import { api, ApiSetupError, type LatestReleaseItem } from "@/lib/api";
+import { api, ApiSetupError } from "@/lib/api";
+import { graphqlRequest } from "@/lib/graphql/client";
+import { HomepageTickerDocument } from "@/lib/graphql/__generated__/graphql";
+import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { SetupMessage } from "@/components/setup-message";
@@ -6,15 +9,19 @@ import { OrgTable } from "@/components/org-table";
 import { InstallTabs } from "@/components/install-tabs";
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
 
+type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
+
 export default async function HomePage() {
   let stats, orgs;
-  let latest: LatestReleaseItem[] = [];
+  let latest: TickerItem[] = [];
   try {
-    [stats, orgs, latest] = await Promise.all([
+    let ticker: HomepageTickerQuery | null;
+    [stats, orgs, ticker] = await Promise.all([
       api.stats(),
       api.orgs(),
-      api.homepageLatestReleases().catch(() => [] as LatestReleaseItem[]),
+      graphqlRequest(HomepageTickerDocument, { limit: 20, exclude: ["github"] }).catch(() => null),
     ]);
+    latest = ticker?.latestReleases.items ?? [];
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (

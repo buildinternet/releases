@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, not, or, sql } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
 import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
@@ -8,6 +8,8 @@ import "./types/org.js";
 import "./types/product.js";
 import "./types/source.js";
 import "./types/release.js";
+import "./types/media.js";
+import { SourceTypeEnum } from "./types/enums.js";
 
 const isOrgId = (s: string) => s.startsWith("org_");
 const isReleaseId = (s: string) => s.startsWith("rel_");
@@ -129,9 +131,20 @@ builder.queryType({
         limit: t.arg.int({ required: false, defaultValue: DEFAULT_PAGE_SIZE }),
         cursor: t.arg.string({ required: false }),
         orgIdOrSlug: t.arg.string({ required: false }),
+        excludeSourceTypes: t.arg({
+          type: [SourceTypeEnum],
+          required: false,
+          description: "Drop releases whose source.type is in this list.",
+        }),
       },
       resolve: async (_root, args, ctx) => {
         const pageSize = clampLimit(args.limit);
+
+        const excludeFilter =
+          args.excludeSourceTypes && args.excludeSourceTypes.length > 0
+            ? not(inArray(sources.type, args.excludeSourceTypes))
+            : undefined;
+
         let orgFilter = undefined;
         if (args.orgIdOrSlug) {
           const org = isOrgId(args.orgIdOrSlug)
@@ -174,7 +187,13 @@ builder.queryType({
           .from(releasesVisible)
           .innerJoin(sources, eq(sources.id, releasesVisible.sourceId))
           .where(
-            and(eq(sources.isHidden, false), isNull(sources.deletedAt), orgFilter, cursorFilter),
+            and(
+              eq(sources.isHidden, false),
+              isNull(sources.deletedAt),
+              orgFilter,
+              excludeFilter,
+              cursorFilter,
+            ),
           )
           .orderBy(desc(releasesVisible.publishedAt), desc(releasesVisible.id))
           .limit(pageSize + 1);

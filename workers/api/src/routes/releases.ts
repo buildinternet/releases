@@ -7,6 +7,7 @@ import { releaseCoverage } from "@releases/db/schema-coverage.js";
 import type { Env } from "../index.js";
 import { orgWhere, sourceMatchByIdOrSlug, parseBoolParam, parseReleaseMedia } from "../utils.js";
 import { getLatestReleasesAcross } from "../queries/releases.js";
+import { parseExcludeSourceTypes } from "../lib/source-types.js";
 import {
   buildLatestCacheKey,
   isCacheableLatestRequest,
@@ -49,7 +50,6 @@ releaseRoutes.get("/releases", async (c) => {
 
 // Cacheable "latest releases" feed. Shape documented in
 // docs/architecture/remote-mode.md.
-const VALID_SOURCE_TYPES: ReadonlySet<string> = new Set(SOURCE_TYPES);
 
 releaseRoutes.get("/releases/latest", async (c) => {
   const rawCount = parseInt(c.req.query("count") ?? String(DEFAULT_LATEST_COUNT), 10);
@@ -58,27 +58,20 @@ releaseRoutes.get("/releases/latest", async (c) => {
   const orgParam = c.req.query("org");
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
 
-  // `?exclude=github` (or `?exclude=github,scrape`) drops releases whose
-  // source.type is in the list. Reject typos with a 400 — silently
-  // ignoring them would return an unfiltered feed for callers expecting
-  // filtering, and worse, cache-collide with the unfiltered default.
-  const excludeRaw = c.req.query("exclude") ?? "";
-  const excludeTokens = excludeRaw
-    .split(",")
-    .map((t) => t.trim().toLowerCase())
-    .filter((t) => t.length > 0);
-  const invalidExcludes = [...new Set(excludeTokens.filter((t) => !VALID_SOURCE_TYPES.has(t)))];
-  if (invalidExcludes.length > 0) {
+  // Reject typos with a 400 — silent fallthrough would return unfiltered
+  // releases AND cache-collide with the default homepage shape.
+  const parsedExclude = parseExcludeSourceTypes(c.req.query("exclude"));
+  if (!parsedExclude.ok) {
     return c.json(
       {
         error: "bad_request",
-        message: `Invalid \`exclude\` source types: ${invalidExcludes.join(", ")}. Allowed: ${[...VALID_SOURCE_TYPES].join(", ")}.`,
+        message: `Invalid \`exclude\` source types: ${parsedExclude.invalid.join(", ")}. Allowed: ${SOURCE_TYPES.join(", ")}.`,
       },
       400,
     );
   }
-  // Dedupe + sort so any param ordering or duplicate hits the same cache key.
-  const excludeSourceTypes = [...new Set(excludeTokens)].toSorted();
+  // Sort so any param ordering hits the same cache key.
+  const excludeSourceTypes = [...parsedExclude.values].toSorted();
 
   if (sourceParam && orgParam) {
     return c.json(

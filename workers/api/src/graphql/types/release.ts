@@ -1,3 +1,4 @@
+import { parseReleaseMedia } from "../../utils.js";
 import { builder } from "../builder.js";
 
 export const ReleaseType = builder.objectType("Release", {
@@ -15,6 +16,12 @@ export const ReleaseType = builder.objectType("Release", {
     content: t.exposeString("content", {
       description:
         "Full markdown body. Often large — request only when you need it (this is the field-selection win).",
+    }),
+
+    media: t.field({
+      type: ["Media"],
+      description: "Images / videos / GIFs attached to the release. Empty list if none.",
+      resolve: (release, _args, ctx) => parseReleaseMedia(release.media, ctx.mediaOrigin),
     }),
 
     source: t.field({
