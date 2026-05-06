@@ -223,12 +223,12 @@ function getCoordinatorAgentId(env: DeployEnv, config: SkillConfig | null): stri
   if (env === "staging") {
     return config?.coordinatorAgentId ?? process.env.ANTHROPIC_COORDINATOR_AGENT_ID ?? null;
   }
-  return (
-    process.env.ANTHROPIC_COORDINATOR_AGENT_ID ??
-    readWranglerVar("ANTHROPIC_COORDINATOR_AGENT_ID") ??
-    config?.coordinatorAgentId ??
-    null
-  );
+  // No `readWranglerVar` fallback for prod: the coordinator var only exists
+  // in the [env.staging] block today, and `readWranglerVar` matches the first
+  // regex hit in the file regardless of block, so it would silently return
+  // the staging coordinator on a prod sync. Operators wire prod via env or
+  // the cached config; explicit beats implicit.
+  return process.env.ANTHROPIC_COORDINATOR_AGENT_ID ?? config?.coordinatorAgentId ?? null;
 }
 
 function displayTitleFromDir(dir: string): string {
@@ -723,15 +723,18 @@ async function main() {
         tools: unknown[];
         model?: string;
       } = {
-        skills: skillIds,
         system: coordinatorPrompt,
         tools: coordinatorTools,
       };
-      const changes = [
-        `${skillIds.length} skill(s)`,
-        "system prompt",
-        `${coordinatorTools.length} tools`,
-      ];
+      // Only push skills when this run actually rebuilt the skill set. Without
+      // this guard, a `--coordinator`-only run (which leaves syncSkills=false
+      // and skillIds=[]) would write `skills: []` and strip every skill from
+      // the agent.
+      const changes = ["system prompt", `${coordinatorTools.length} tools`];
+      if (syncSkills) {
+        payload.skills = skillIds;
+        changes.unshift(`${skillIds.length} skill(s)`);
+      }
       if (coordinatorAgent.model.id !== coordinatorModel) {
         console.log(`  Model: changed (${coordinatorAgent.model.id} → ${coordinatorModel})`);
         payload.model = coordinatorModel;

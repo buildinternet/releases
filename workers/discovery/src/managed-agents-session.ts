@@ -289,21 +289,33 @@ export class ManagedAgentsSession extends DurableObject<Env> {
 
       if (aggInput === undefined && aggOutput === undefined && !byThread?.length) return undefined;
 
-      const cost = estimateCost(
-        {
-          inputTokens: aggInput,
-          outputTokens: aggOutput,
-          cacheWriteTokens: aggCacheW,
-          cacheReadTokens: aggCacheR,
-        },
-        model,
-      );
+      // Multi-agent sessions span model tiers (coordinator Sonnet, worker
+      // Haiku). Pricing the aggregate token total at a single rate would
+      // overprice Haiku output and underprice Sonnet input. Per-thread
+      // `estimatedUsd` was already computed at the correct model in the
+      // map above; sum those instead. Single-agent sessions (no byThread)
+      // fall back to the standard aggregate-then-price path.
+      let estimatedUsd: number | undefined;
+      if (byThread && byThread.length > 0) {
+        const sum = byThread.reduce<number>((s, t) => s + (t.estimatedUsd ?? 0), 0);
+        estimatedUsd = sum > 0 ? sum : undefined;
+      } else {
+        estimatedUsd = estimateCost(
+          {
+            inputTokens: aggInput,
+            outputTokens: aggOutput,
+            cacheWriteTokens: aggCacheW,
+            cacheReadTokens: aggCacheR,
+          },
+          model,
+        )?.totalUsd;
+      }
       logEvent("info", {
         component: "managed-agents",
         event: "session-usage",
         usage,
         model,
-        estimatedUsd: cost?.totalUsd ?? null,
+        estimatedUsd: estimatedUsd ?? null,
         threadCount: byThread?.length ?? null,
       });
       return {
@@ -312,7 +324,7 @@ export class ManagedAgentsSession extends DurableObject<Env> {
         ...(aggCacheW !== undefined ? { cacheWriteTokens: aggCacheW } : {}),
         ...(aggCacheR !== undefined ? { cacheReadTokens: aggCacheR } : {}),
         model,
-        ...(cost ? { estimatedUsd: cost.totalUsd } : {}),
+        ...(estimatedUsd !== undefined ? { estimatedUsd } : {}),
         ...(byThread && byThread.length > 0 ? { byThread } : {}),
       };
     } catch {
