@@ -2,6 +2,11 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { SOURCE_STALE_DAYS } from "@buildinternet/releases-core/sources";
+import type {
+  SourceType,
+  SourceDiscovery,
+  SourceFetchPriority,
+} from "@buildinternet/releases-core/source-enums";
 import type { D1Db } from "../db.js";
 
 export { SOURCE_STALE_DAYS };
@@ -10,17 +15,17 @@ export type SourceListRow = {
   id: string;
   slug: string;
   name: string;
-  type: string;
+  type: SourceType;
   url: string;
   org_id: string | null;
   product_id: string | null;
   is_primary: number | null;
   is_hidden: number | null;
-  discovery: "curated" | "agent" | "on_demand" | null;
+  discovery: SourceDiscovery | null;
   metadata: string | null;
   last_fetched_at: string | null;
   last_polled_at: string | null;
-  fetch_priority: string | null;
+  fetch_priority: SourceFetchPriority | null;
   change_detected_at: string | null;
   consecutive_no_change: number | null;
   consecutive_errors: number | null;

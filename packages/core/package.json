@@ -11,6 +11,7 @@
   },
   "exports": {
     "./schema": "./src/schema.ts",
+    "./source-enums": "./src/source-enums.ts",
     "./categories": "./src/categories.ts",
     "./dates": "./src/dates.ts",
     "./changelog-range": "./src/changelog-range.ts",
