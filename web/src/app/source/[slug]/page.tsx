@@ -24,12 +24,8 @@ export default async function LegacySourceRedirect({
   const { slug } = await params;
   const { tab, path, offset } = await searchParams;
 
-  let resolved;
-  try {
-    resolved = await api.sourceLegacyResolve(slug);
-  } catch {
-    notFound();
-  }
+  const resolved = await api.sourceLegacyResolve(slug);
+  if (!resolved) notFound();
 
   const forward = new URLSearchParams();
   if (tab) forward.set("tab", tab);

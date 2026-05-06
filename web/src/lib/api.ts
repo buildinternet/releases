@@ -267,12 +267,14 @@ export const api = {
    *
    * Hits `/v1/lookups/source-by-slug`, the dedicated bookmark-resolver
    * endpoint introduced when the bare API path stopped accepting slugs
-   * (#698). The endpoint returns the oldest match for a given slug — a
-   * deterministic answer for bookmarks even when the same slug appears
-   * under multiple orgs after #690.
+   * (#698). It's auth-gated under `adminRoutes` so the call goes through
+   * `adminFetchApi` — server-only, never returned to the client. The
+   * endpoint returns the oldest match for a given slug — a deterministic
+   * answer for bookmarks even when the same slug appears under multiple
+   * orgs after #690.
    */
   sourceLegacyResolve: (slug: string) =>
-    fetchApi<{ sourceId: string; sourceSlug: string; orgSlug: string }>(
+    adminFetchApi<{ sourceId: string; sourceSlug: string; orgSlug: string }>(
       `/v1/lookups/source-by-slug?slug=${encodeURIComponent(slug)}`,
     ),
   productDetail: (ref: { orgSlug: string; productSlug: string }) =>

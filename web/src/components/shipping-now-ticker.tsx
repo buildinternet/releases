@@ -91,7 +91,7 @@ function Row({ slide }: { slide: Slide }) {
       {/* Top row on mobile · left side on desktop */}
       <div className="flex items-center gap-2 sm:gap-3 min-w-0">
         <span className="font-medium text-stone-900 dark:text-stone-100 sm:min-w-[110px] truncate">
-          {release.source.name}
+          {release.source.org.name}
         </span>
         {release.version && (
           <span className="font-mono text-[11px] text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded whitespace-nowrap">
