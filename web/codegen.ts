@@ -28,6 +28,14 @@ const config: CodegenConfig = {
         // need it. Plain `TypedDocumentNode` exports + types is enough for
         // SSR-only callers.
         fragmentMasking: false,
+        // Generate a sha256 hash for every operation, embed it on the
+        // TypedDocumentNode under `__meta__.hash`, and emit a flat
+        // `persisted-documents.json` manifest of `{ [hash]: query }`.
+        // The API worker (workers/api/src/graphql/persisted.ts) reads the
+        // manifest at module load to allowlist known operations — clients
+        // send the hash, never the document, so arbitrary queries are
+        // rejected from non-admin callers.
+        persistedDocuments: true,
       },
     },
   },

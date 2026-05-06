@@ -365,9 +365,11 @@ describe("invalidateLatestCache", () => {
     );
     expect(kv.delete).toHaveBeenCalledWith("latest:v1:count=10");
     expect(kv.delete).toHaveBeenCalledWith("latest:v1:count=20&exclude=github");
-    expect(kv.delete).toHaveBeenCalledTimes(2);
+    // 2 REST shapes + 1 GraphQL homepage hash (from purgeKeysForHomepageTicker
+    // in workers/api/src/graphql/persisted.ts).
+    expect(kv.delete).toHaveBeenCalledTimes(3);
     expect(logs.filter((l) => l.component === "invalidation" && l.event === "purged")).toHaveLength(
-      2,
+      3,
     );
   });
 
@@ -384,7 +386,9 @@ describe("invalidateLatestCache", () => {
       { nReleases: 2, sourceId: "src_abc" },
     );
     expect(result).toBeUndefined();
-    expect(kv.delete).toHaveBeenCalledTimes(2);
+    // 2 REST shapes + 1 GraphQL homepage hash; first call throws, others
+    // still run and log per-key.
+    expect(kv.delete).toHaveBeenCalledTimes(3);
     expect(
       logs.some(
         (l) =>

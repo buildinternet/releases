@@ -18,7 +18,8 @@
       "@releases/rendering/*": ["../../packages/rendering/src/*"],
       "@releases/search/*": ["../../packages/search/src/*"],
       "@releases/*": ["../../src/*"]
-    }
+    },
+    "resolveJsonModule": true
   },
-  "include": ["src/**/*.ts"]
+  "include": ["src/**/*.ts", "../../web/src/lib/graphql/__generated__/persisted-documents.json"]
 }

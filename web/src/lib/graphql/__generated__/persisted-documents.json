@@ -1,0 +1,3 @@
+{
+  "sha256:47e71e29c8faf4eb30dabe9b5b0bba15fcf6e86287bae85752b39add85366edf": "query HomepageTicker($exclude: [SourceType!]!, $limit: Int!) { latestReleases(limit: $limit, excludeSourceTypes: $exclude) { items { contentSummary id media { alt r2Url type url } publishedAt source { name org { slug } slug type } title type url version } } }"
+}

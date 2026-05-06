@@ -34,6 +34,7 @@ export type HomepageTickerQuery = {
 };
 
 export const HomepageTickerDocument = {
+  __meta__: { hash: "sha256:47e71e29c8faf4eb30dabe9b5b0bba15fcf6e86287bae85752b39add85366edf" },
   kind: "Document",
   definitions: [
     {

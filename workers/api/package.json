@@ -9,6 +9,12 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.91.1",
+    "@envelop/disable-introspection": "^9.1.1",
+    "@escape.tech/graphql-armor-cost-limit": "^2.4.3",
+    "@escape.tech/graphql-armor-max-aliases": "^2.6.2",
+    "@escape.tech/graphql-armor-max-depth": "^2.4.2",
+    "@escape.tech/graphql-armor-max-tokens": "^2.5.1",
+    "@graphql-yoga/plugin-persisted-operations": "^3.21.0",
     "@hono/standard-validator": "^0.2.2",
     "@hono/zod-validator": "^0.7.6",
     "@pothos/core": "^4.12.0",
