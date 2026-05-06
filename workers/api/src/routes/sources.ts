@@ -1,6 +1,19 @@
 import { Hono } from "hono";
 import { describeRoute, resolver } from "hono-openapi";
-import { eq, desc, count, and, or, min, isNull, isNotNull, sql, gte, inArray } from "drizzle-orm";
+import {
+  eq,
+  desc,
+  count,
+  and,
+  or,
+  min,
+  isNull,
+  isNotNull,
+  sql,
+  gte,
+  inArray,
+  type SQL,
+} from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   sources,
@@ -183,14 +196,18 @@ sourceRoutes.get(
           .from(products)
           .where(and(slugMatch, isNull(products.deletedAt)));
         if (matches.length === 0) return c.json([]);
-        conditions.push(
-          matches.length === 1
-            ? eq(sources.productId, matches[0]!.id)
-            : inArray(
-                sources.productId,
-                matches.map((m) => m.id),
-              ),
-        );
+        if (matches.length === 1) {
+          conditions.push(eq(sources.productId, matches[0]!.id));
+        } else {
+          const ids = matches.map((m) => m.id);
+          const chunks: SQL[] = [];
+          for (let i = 0; i < ids.length; i += IN_ARRAY_CHUNK_SIZE) {
+            chunks.push(inArray(sources.productId, ids.slice(i, i + IN_ARRAY_CHUNK_SIZE)));
+          }
+          // OR the chunks together so the WHERE clause stays under D1's
+          // 100-bind cap even if a slug ever fans out to >90 products.
+          conditions.push(chunks.length === 1 ? chunks[0]! : or(...chunks)!);
+        }
       }
     }
 
@@ -1359,8 +1376,20 @@ sourceRoutes.post(
       );
     }
 
+    // Reject unknown source types at the boundary — the typed cast in
+    // insertValues only narrows for TS; D1's text column has no enum CHECK,
+    // so an unvalidated body.type would persist as-is.
+    if (body.type !== undefined && !(SOURCE_TYPES as readonly string[]).includes(body.type)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Invalid source type "${body.type}". Allowed: ${SOURCE_TYPES.join(", ")}.`,
+        },
+        400,
+      );
+    }
     // Auto-detect feed type when metadata contains a feedUrl and no explicit type was provided
-    let type = body.type ?? "scrape";
+    let type: SourceType = (body.type as SourceType | undefined) ?? "scrape";
     if (!body.type && body.metadata) {
       try {
         const meta = JSON.parse(body.metadata);
@@ -1395,7 +1424,7 @@ sourceRoutes.post(
     const insertValues = (slug: string) => ({
       name: body.name,
       slug,
-      type: type as "github" | "scrape" | "feed" | "agent",
+      type,
       url: body.url,
       orgId,
       metadata: body.metadata ?? "{}",
