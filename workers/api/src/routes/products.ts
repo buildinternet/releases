@@ -25,10 +25,10 @@ import {
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
+  findProductForOrgSlug,
   isConflictError,
   getOrCreateTagsD1,
   orgWhere,
-  productMatchByIdOrSlug,
   replaceAliases,
   resolveProductFromContext,
 } from "../utils.js";
@@ -156,26 +156,34 @@ productRoutes.post(
         404,
       );
 
+    // Self-adopt would have `migrateOrgToProduct` delete the only org and
+    // strand the new product — refuse before any writes.
+    if (sourceOrg.id === targetOrg.id) {
+      return c.json(
+        {
+          error: "conflict",
+          message: "sourceOrgSlug and targetOrgSlug must refer to different orgs",
+        },
+        409,
+      );
+    }
+
     const sourcesToMove = await db
       .select()
       .from(sourcesActive)
       .where(eq(sourcesActive.orgId, sourceOrg.id));
 
     if (body.mergeInto) {
-      const [existingProduct] = await db
-        .select()
-        .from(products)
-        .where(productMatchByIdOrSlug(body.mergeInto));
+      // Product slugs are unique per-org, not globally — scope by targetOrg
+      // so a slug collision in another org doesn't resolve the wrong row.
+      const existingProduct = await findProductForOrgSlug(db, targetOrg.id, body.mergeInto);
       if (!existingProduct) {
-        return c.json({ error: "not_found", message: `Product not found: ${body.mergeInto}` }, 404);
-      }
-      if (existingProduct.orgId !== targetOrg.id) {
         return c.json(
           {
-            error: "conflict",
-            message: `Product "${existingProduct.slug}" belongs to org "${existingProduct.orgId}", not target "${targetOrg.slug}"`,
+            error: "not_found",
+            message: `Product "${body.mergeInto}" not found under org "${targetOrg.slug}"`,
           },
-          409,
+          404,
         );
       }
 
@@ -285,11 +293,17 @@ async function migrateOrgToProduct(
     .select()
     .from(orgAccounts)
     .where(eq(orgAccounts.orgId, sourceOrgId));
-  if (accountsToMove.length > 0) {
+  // org_accounts insert binds 5 cols/row (id default + orgId + platform +
+  // handle + createdAt). D1 caps prepared-statement params at 100, so
+  // chunk at floor(100 / 5) = 20 to stay under the limit on busy orgs.
+  const ACCOUNTS_INSERT_CHUNK = 20;
+  for (let i = 0; i < accountsToMove.length; i += ACCOUNTS_INSERT_CHUNK) {
+    const chunk = accountsToMove.slice(i, i + ACCOUNTS_INSERT_CHUNK);
+    // oxlint-disable-next-line no-await-in-loop -- sequential chunks under the D1 bind-param cap
     await db
       .insert(orgAccounts)
       .values(
-        accountsToMove.map((a) => ({
+        chunk.map((a) => ({
           orgId: targetOrgId,
           platform: a.platform,
           handle: a.handle,

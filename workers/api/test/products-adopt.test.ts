@@ -128,7 +128,7 @@ describe("POST /v1/products/adopt", () => {
     expect(res.status).toBe(400);
   });
 
-  it("mergeInto against a product belonging to a different org is 409", async () => {
+  it("mergeInto by slug only resolves products under the target org (404 otherwise)", async () => {
     const db = mkDb();
     await seedTwoOrgs(db);
     await db
@@ -150,7 +150,87 @@ describe("POST /v1/products/adopt", () => {
         }),
       }),
     );
+    expect(res.status).toBe(404);
+  });
+
+  it("mergeInto by slug picks the target org's product when slugs collide across orgs", async () => {
+    const db = mkDb();
+    await seedTwoOrgs(db);
+    await db
+      .insert(organizations)
+      .values({ id: "org_other", slug: "other-org", name: "Other", category: "cloud" });
+    // Same slug in two orgs — must resolve to the one under the target.
+    await db.insert(products).values([
+      { id: "prod_other_shared", orgId: "org_other", slug: "shared-shell", name: "Other" },
+      { id: "prod_target_shared", orgId: "org_target", slug: "shared-shell", name: "Target" },
+    ]);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("http://x/v1/products/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceOrgSlug: "source-org",
+          targetOrgSlug: "target-org",
+          mergeInto: "shared-shell",
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const json: any = await res.json();
+    expect(json.product.id).toBe("prod_target_shared");
+    expect(json.mergedInto).toBe("shared-shell");
+  });
+
+  it("mergeInto accepts a prod_ ID directly", async () => {
+    const db = mkDb();
+    await seedTwoOrgs(db);
+    await db.insert(products).values({
+      id: "prod_existing",
+      orgId: "org_target",
+      slug: "existing-shell",
+      name: "Existing",
+    });
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("http://x/v1/products/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceOrgSlug: "source-org",
+          targetOrgSlug: "target-org",
+          mergeInto: "prod_existing",
+        }),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const json: any = await res.json();
+    expect(json.product.id).toBe("prod_existing");
+    expect(json.mergedInto).toBe("existing-shell");
+  });
+
+  it("self-adopt (sourceOrg === targetOrg) is rejected with 409 before any writes", async () => {
+    const db = mkDb();
+    await seedTwoOrgs(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("http://x/v1/products/adopt", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sourceOrgSlug: "target-org",
+          targetOrgSlug: "target-org",
+        }),
+      }),
+    );
     expect(res.status).toBe(409);
+
+    // Target org must still exist — the migration helper would have deleted it.
+    const remainingOrgs = await db.select().from(organizations);
+    expect(remainingOrgs.length).toBe(2);
   });
 
   it("mergeInto dryRun previews without writing", async () => {
