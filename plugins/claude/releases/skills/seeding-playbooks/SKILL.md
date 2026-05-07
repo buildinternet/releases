@@ -142,6 +142,7 @@ Before writing, answer these questions from the data:
 - What's the real publish cadence? Count releases per month from dates.
 - Are there fetch errors in the logs? What kind?
 - Are there releases with missing dates, empty content, or data quality issues?
+- **Is the source actually being fetched?** Compare `lastFetchedAt` to the cadence you just measured. An empty fetch-log + stale `lastFetchedAt` (older than ~3× the publish interval) means the cron is silently skipping this source — usually because the change-detector quirk is `unreliable`. Do not write "all releases ingested successfully" or "no errors" in that case; the source is stranded, not healthy.
 
 ## Step 3: Write skill-style notes grounded in data
 
