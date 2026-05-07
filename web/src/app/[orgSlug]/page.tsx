@@ -44,16 +44,6 @@ export async function generateMetadata({
   }
 }
 
-function formatDate(iso: string | null) {
-  if (!iso) return "—";
-  return new Date(iso).toLocaleDateString("en-US", {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-    timeZone: "UTC",
-  });
-}
-
 export default async function OrgPage({
   params,
   searchParams,
@@ -117,10 +107,7 @@ export default async function OrgPage({
 
   const sidebarSections = [
     {
-      items: [
-        ...(org.domain ? [{ label: "Domain", value: org.domain }] : []),
-        { label: "Tracking Since", value: formatDate(org.trackingSince) },
-      ],
+      items: org.domain ? [{ label: "Domain", value: org.domain }] : [],
     },
     ...taxonomySidebarSections({ category: org.category, tags: org.tags }),
   ];
@@ -243,6 +230,7 @@ export default async function OrgPage({
             formatPath={`/${orgSlug}`}
             lastCheckedAt={org.lastPolledAt ?? org.lastFetchedAt}
             lastFetchedAt={org.lastFetchedAt}
+            trackingSince={org.trackingSince}
           />
         </div>
       </div>

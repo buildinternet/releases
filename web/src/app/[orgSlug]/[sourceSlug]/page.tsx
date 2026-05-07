@@ -158,7 +158,6 @@ export default async function SourcePage({
         ...(source.changelogUrl
           ? [{ label: "Changelog", value: "View changelog", externalLink: source.changelogUrl }]
           : []),
-        { label: "Tracking Since", value: formatDate(source.trackingSince) },
       ],
     },
   ];
@@ -274,6 +273,7 @@ export default async function SourcePage({
             formatPath={`/${orgSlug}/${sourceSlug}`}
             lastCheckedAt={source.lastPolledAt ?? source.lastFetchedAt}
             lastFetchedAt={source.lastFetchedAt}
+            trackingSince={source.trackingSince}
           />
         </div>
       </div>
