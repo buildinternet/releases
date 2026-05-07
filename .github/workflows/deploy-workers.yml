@@ -58,6 +58,11 @@ jobs:
             api:
               - *shared
               - 'workers/api/**'
+              # The API worker compiles the persisted-document allowlist into
+              # the bundle (workers/api/src/graphql/persisted.ts). When the web
+              # codegen mints a new hash, the API must redeploy or non-admin
+              # callers hit PERSISTED_QUERY_NOT_IN_LIST.
+              - 'web/src/lib/graphql/__generated__/persisted-documents.json'
             mcp:
               - *shared
               - 'workers/mcp/**'

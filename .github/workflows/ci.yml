@@ -105,3 +105,25 @@ jobs:
 
       - name: Run tests
         run: bun run test
+
+  worker-lockfiles:
+    name: Worker lockfile (${{ matrix.worker }})
+    # workers/discovery, workers/mcp, and workers/webhooks are excluded
+    # from the root workspace and carry their own bun.lock. The deploy
+    # job runs `bun install --frozen-lockfile` per worker, so a stale
+    # lockfile only surfaces post-merge as a deploy failure (e.g. PR #778
+    # bumped @anthropic-ai/sdk in package.json but didn't refresh
+    # workers/mcp/bun.lock). Catch that at PR time.
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        worker: [discovery, mcp, webhooks]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: latest
+      - name: Verify frozen install
+        working-directory: workers/${{ matrix.worker }}
+        run: bun install --frozen-lockfile
