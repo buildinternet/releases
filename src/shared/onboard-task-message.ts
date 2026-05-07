@@ -31,23 +31,18 @@ export function buildOnboardTaskMessage(opts: OnboardTaskMessageOptions): string
     ? `\n<github_org>${escapeForPromptTag(opts.githubOrg)}</github_org>`
     : "";
 
-  const hasScope = Boolean(opts.intoOrgSlug);
-  const scopeInstruction = hasScope
-    ? `\n\nSCOPE OVERRIDE: Attach every source you add to the existing org \`${escapeForPromptTag(
-        opts.intoOrgSlug!,
-      )}\`${
-        opts.intoProductSlug ? ` and product \`${escapeForPromptTag(opts.intoProductSlug)}\`` : ""
-      }. Do NOT call manage_org(action=add) or manage_product(action=add) — both already exist. Pass \`organization="${escapeForPromptTag(
-        opts.intoOrgSlug!,
-      )}"\`${
-        opts.intoProductSlug ? ` and \`product="${escapeForPromptTag(opts.intoProductSlug)}"\`` : ""
+  const orgSlug = opts.intoOrgSlug ? escapeForPromptTag(opts.intoOrgSlug) : null;
+  const productSlug = opts.intoProductSlug ? escapeForPromptTag(opts.intoProductSlug) : null;
+  const scopeInstruction = orgSlug
+    ? `\n\nSCOPE OVERRIDE: Attach every source you add to the existing org \`${orgSlug}\`${
+        productSlug ? ` and product \`${productSlug}\`` : ""
+      }. Do NOT call manage_org(action=add) or manage_product(action=add) — both already exist. Pass \`organization="${orgSlug}"\`${
+        productSlug ? ` and \`product="${productSlug}"\`` : ""
       } on every manage_source(action=add). Skip the playbook step if it already exists for this org.`
     : "";
-  const scopeBlock = hasScope
+  const scopeBlock = orgSlug
     ? `\n<scope>
-into_org=${escapeForPromptTag(opts.intoOrgSlug!)}${
-        opts.intoProductSlug ? `\ninto_product=${escapeForPromptTag(opts.intoProductSlug)}` : ""
-      }
+into_org=${orgSlug}${productSlug ? `\ninto_product=${productSlug}` : ""}
 </scope>`
     : "";
 
