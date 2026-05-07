@@ -34,16 +34,25 @@ export function SourceReleaseList({
   const [pristine, setPristine] = useState(true);
   const loadMoreAbortRef = useRef<AbortController | null>(null);
 
+  const trimmedSearch = search.trim();
   const buildQuery = useCallback(
     (extra: Record<string, string> = {}) => {
       const params = new URLSearchParams();
       if (includePrereleases) params.set("include_prereleases", "true");
-      if (search) params.set("q", search);
+      if (trimmedSearch) params.set("q", trimmedSearch);
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
       return params.toString();
     },
-    [includePrereleases, search],
+    [includePrereleases, trimmedSearch],
   );
+
+  // Flip `pristine` once the debounced search lands so the fetch effect skips
+  // the wasted empty-q request that would otherwise fire between `searchInput`
+  // updating and `search` catching up. Prerelease toggle flips pristine inline
+  // since its effect on the query is synchronous.
+  useEffect(() => {
+    if (pristine && trimmedSearch) setPristine(false);
+  }, [pristine, trimmedSearch]);
 
   useEffect(() => {
     if (pristine) return;
@@ -106,10 +115,7 @@ export function SourceReleaseList({
         <input
           type="search"
           value={searchInput}
-          onChange={(e) => {
-            setPristine(false);
-            setSearchInput(e.target.value);
-          }}
+          onChange={(e) => setSearchInput(e.target.value)}
           placeholder="Filter releases…"
           aria-label="Filter releases"
           className="w-full text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
