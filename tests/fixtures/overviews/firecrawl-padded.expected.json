@@ -1,0 +1,16 @@
+{
+  "result": "needs_revision",
+  "explanation": "Body is salted with the exact filler phrases the rubric forbids: `continues to evolve`, `received substantial improvements`, `exciting new directions`, `robust enhancement`, `continues to evolve their developer experience`. The opening sentence is a vague summary instead of one concrete focus statement. The agent should strip the filler and let the concrete release facts (which are still in the body) carry the prose.",
+  "criteria": [
+    {
+      "name": "No filler phrases like \"continues to evolve\", \"received improvements\", \"substantial updates\", \"robust enhancements\", or \"exciting new features\"",
+      "passed": false,
+      "evidence": "Body contains `continues to evolve` (twice), `received substantial improvements`, `exciting new directions`, and `robust enhancement`."
+    },
+    {
+      "name": "Opens with one concrete sentence on the org's current focus",
+      "passed": false,
+      "evidence": "Opening sentence is a generic platform-positioning statement rather than a concrete focus claim."
+    }
+  ]
+}

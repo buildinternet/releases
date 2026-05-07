@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./evaluate": "./src/evaluate.ts",
+    "./grader-prompt": "./src/grader-prompt.ts",
     "./playbook": "./src/playbook.ts",
     "./providers": "./src/providers.ts"
   },

@@ -1,0 +1,11 @@
+{
+  "result": "needs_revision",
+  "explanation": "Body is 337 words — exceeds the rubric's 300-word hard ceiling. Content quality is otherwise strong (specific version numbers, model retirement dates, flag names; bold leads name the actual changes), but the word count is a hard fail. The agent should condense the Claude Code 2.1.x section, which spans many small features that don't all need to be enumerated, to bring the body under 300 words.",
+  "criteria": [
+    {
+      "name": "Word count is between 80 and 300 words",
+      "passed": false,
+      "evidence": "Body is 337 words; the 300-word hard ceiling is exceeded."
+    }
+  ]
+}

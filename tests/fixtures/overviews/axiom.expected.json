@@ -1,0 +1,5 @@
+{
+  "result": "satisfied",
+  "explanation": "Tests the omission-over-confabulation principle: org has only 1 release in window per the source list, but the body is 219 words spanning Metrics GA, the Dashboards API, and export tooling — all genuine product changes with specific names. The body does not pad with vague claims; it covers the actual surface area shipped. No headings, bold leads name the actual change, past tense.",
+  "criteria": []
+}
