@@ -106,14 +106,30 @@ export type AgentToolCall =
 
 // ── Anthropic tool schemas ───────────────────────────────────────────
 
+/**
+ * Name of the MCP server registered on each agent. Must match the
+ * `mcp_server_name` referenced by the MCP toolset and the credential
+ * entry stored in the Anthropic vault for auth.
+ */
+export const MCP_SERVER_NAME = "releases";
+
+/** Public URL for the MCP server, per environment. */
+export const MCP_SERVER_URL = {
+  production: "https://mcp.releases.sh",
+  staging: "https://mcp-staging.releases.sh",
+} as const;
+
+export type AgentEnv = keyof typeof MCP_SERVER_URL;
+
 /** Tool definitions in Anthropic custom tool format, for agent/environment registration. */
 export const AGENT_TOOLS = [
   { type: "agent_toolset_20260401", default_config: { enabled: true } },
 
   // Read tools (list_catalog, get_catalog_entry, list_organizations,
   // get_latest_releases, search, summarize_changes, compare_products) are
-  // served by the MCP server via vault credentials. The custom surface below
-  // is writes, utilities, and session tools.
+  // served by the MCP server registered via `mcp_servers` + the `mcp_toolset`
+  // entry returned by `buildMcpToolset`. The custom surface below is writes,
+  // utilities, and session tools.
 
   // ── Consolidated write tools (prefer these) ──
   {
@@ -313,6 +329,38 @@ export const AGENT_TOOLS = [
     },
   },
 ] as const;
+
+/**
+ * MCP toolset entry to attach to an agent's `tools` list.
+ *
+ * Without this entry the model has no MCP tools registered — vault credentials
+ * surface in the Anthropic UI but the platform never exposes the tools to the
+ * model, so calls land as `agent.custom_tool_use` and are denied with
+ * "Permission to use <tool> has been denied" because the platform default
+ * policy resolves to deny in non-interactive sessions.
+ *
+ * `permission_policy.always_allow` is required because the discovery DO is
+ * headless — no human to approve `always_ask` prompts.
+ */
+export function buildMcpToolset() {
+  return {
+    type: "mcp_toolset" as const,
+    mcp_server_name: MCP_SERVER_NAME,
+    default_config: {
+      enabled: true,
+      permission_policy: { type: "always_allow" as const },
+    },
+  };
+}
+
+/** MCP server URL definition for the agent's `mcp_servers` array. */
+export function buildMcpServerDefinition(env: AgentEnv) {
+  return {
+    name: MCP_SERVER_NAME,
+    type: "url" as const,
+    url: MCP_SERVER_URL[env],
+  };
+}
 
 /** Names of tools that are dispatched via the API (everything except report_state). */
 export const API_TOOL_NAMES: string[] = AGENT_TOOLS.filter(

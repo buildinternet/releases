@@ -40,7 +40,11 @@ import { resolve } from "path";
 import { buildDiscoverySystemPrompt } from "../src/shared/discovery-prompt.js";
 import { buildWorkerSystemPrompt } from "../src/shared/worker-prompt.js";
 import { buildCoordinatorSystemPrompt } from "../src/shared/coordinator-prompt.js";
-import { AGENT_TOOLS } from "../src/shared/agent-tools.js";
+import {
+  AGENT_TOOLS,
+  buildMcpServerDefinition,
+  buildMcpToolset,
+} from "../src/shared/agent-tools.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 
 // Display name of the worker agent the coordinator delegates to. Must match
@@ -334,6 +338,7 @@ async function createAgent(
     model: string;
     system: string;
     tools: unknown[];
+    mcp_servers?: { name: string; type: "url"; url: string }[];
     skills?: { type: string; skill_id: string; version: string }[];
     multiagent?: {
       type: "coordinator";
@@ -360,6 +365,7 @@ async function updateAgent(
     skills?: { type: string; skill_id: string; version: string }[];
     system?: string;
     tools?: unknown[];
+    mcp_servers?: { name: string; type: "url"; url: string }[] | null;
     model?: string;
   },
 ): Promise<{ version: number }> {
@@ -613,16 +619,20 @@ async function main() {
    */
   async function syncAgentConfig(params: AgentSyncParams): Promise<void> {
     const { label, agentId: id, prompt, model, remoteAgent, onSuccess } = params;
+    const tools = [...AGENT_TOOLS, buildMcpToolset()];
+    const mcpServers = [buildMcpServerDefinition(deployEnv)];
     const payload: {
       skills?: typeof skillIds;
       system: string;
       tools: unknown[];
+      mcp_servers?: { name: string; type: "url"; url: string }[];
       model?: string;
     } = {
       system: prompt,
-      tools: [...AGENT_TOOLS],
+      tools,
+      mcp_servers: mcpServers,
     };
-    const changes = ["system prompt", `${AGENT_TOOLS.length} tools`];
+    const changes = ["system prompt", `${tools.length} tools (incl. mcp_toolset)`, "mcp_servers"];
     // Only push skills when this run actually rebuilt the skill set. Without
     // this guard, a `--discovery`/`--worker`-only run with --agent (which
     // leaves syncSkills=false) and a stale/empty cached config would write
@@ -700,7 +710,8 @@ async function main() {
           name: "Releases Worker Agent",
           model: workerModel,
           system: workerPrompt,
-          tools: [...AGENT_TOOLS],
+          tools: [...AGENT_TOOLS, buildMcpToolset()],
+          mcp_servers: [buildMcpServerDefinition(deployEnv)],
           ...(skillIds.length > 0 ? { skills: skillIds } : {}),
         });
         config.workerAgentId = created.id;
@@ -728,7 +739,8 @@ async function main() {
       categories: CATEGORIES,
       workerAgentName: WORKER_AGENT_NAME,
     });
-    const coordinatorTools: unknown[] = [...AGENT_TOOLS];
+    const coordinatorTools: unknown[] = [...AGENT_TOOLS, buildMcpToolset()];
+    const coordinatorMcpServers = [buildMcpServerDefinition(deployEnv)];
     const coordinatorAgentId = getCoordinatorAgentId(deployEnv, config);
     const workerAgentIdForRoster = getWorkerAgentId(deployEnv, config);
 
@@ -742,16 +754,22 @@ async function main() {
         skills?: typeof skillIds;
         system: string;
         tools: unknown[];
+        mcp_servers?: { name: string; type: "url"; url: string }[];
         model?: string;
       } = {
         system: coordinatorPrompt,
         tools: coordinatorTools,
+        mcp_servers: coordinatorMcpServers,
       };
       // Only push skills when this run actually rebuilt the skill set. Without
       // this guard, a `--coordinator`-only run (which leaves syncSkills=false
       // and skillIds=[]) would write `skills: []` and strip every skill from
       // the agent.
-      const changes = ["system prompt", `${coordinatorTools.length} tools`];
+      const changes = [
+        "system prompt",
+        `${coordinatorTools.length} tools (incl. mcp_toolset)`,
+        "mcp_servers",
+      ];
       if (syncSkills) {
         payload.skills = skillIds;
         changes.unshift(`${skillIds.length} skill(s)`);
@@ -790,6 +808,7 @@ async function main() {
           model: coordinatorModel,
           system: coordinatorPrompt,
           tools: coordinatorTools,
+          mcp_servers: coordinatorMcpServers,
           ...(skillIds.length > 0 ? { skills: skillIds } : {}),
           multiagent: {
             type: "coordinator",
@@ -819,6 +838,7 @@ async function main() {
     const payload: {
       skills?: typeof skillIds;
       tools?: unknown[];
+      mcp_servers?: { name: string; type: "url"; url: string }[];
     } = {};
     const changes: string[] = [];
 
@@ -827,8 +847,10 @@ async function main() {
       changes.push(`${skillsChanged} skill(s)`);
     }
 
-    payload.tools = [...AGENT_TOOLS];
-    changes.push(`${AGENT_TOOLS.length} tools`);
+    const overrideTools = [...AGENT_TOOLS, buildMcpToolset()];
+    payload.tools = overrideTools;
+    payload.mcp_servers = [buildMcpServerDefinition(deployEnv)];
+    changes.push(`${overrideTools.length} tools (incl. mcp_toolset)`, "mcp_servers");
 
     console.log(`  Tools: pushing current`);
     console.log(`  System prompt: preserved (override never rewrites)`);

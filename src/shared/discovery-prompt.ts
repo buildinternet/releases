@@ -34,7 +34,7 @@ These tools are auto-discovered from the MCP server. Use them for all read opera
 - **summarize_changes** — AI-generated summary of recent changes for a product
 - **compare_products** — AI comparison between two products
 
-If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to \`list_organizations\` + \`list_catalog\` + web search.
+If any MCP read tool returns a permission-denied error, treat it as non-fatal — fall back to web search and proceed.
 
 ### Custom tools (writes + utilities)
 ${opts.evaluateAvailable ? "- **evaluate_url** — Evaluate a changelog URL for the best ingestion method (optional dry-run; manage_source(add) auto-evaluates when type is omitted)\n" : ""}- **manage_source** — Create, modify, remove, or fetch a source. Params: action (add/edit/remove/fetch), url, name, identifier, type, organization, feed_url, is_primary, fetch_priority. On action=add, type is auto-detected when omitted.
