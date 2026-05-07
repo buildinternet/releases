@@ -547,7 +547,17 @@ export function createTypedExecutor(opts: APIClientOptions) {
           const body: Record<string, unknown> = { name, url };
           if (resolvedType) body.type = resolvedType;
           if (input.organization) body.orgSlug = input.organization;
-          if (input.product) body.productSlug = input.product;
+          if (input.product) {
+            // Route typed `prod_…` IDs to `productId` and slugs to
+            // `productSlug` so the server's id-only branch (which doesn't
+            // need an org context) is reached when the agent already has an
+            // ID. Slugs go through the slug branch where org-membership
+            // gets enforced. The check is intentionally local — pulling in
+            // workers/api/utils.ts isProductId would cross package boundaries.
+            const productRef = String(input.product);
+            if (productRef.startsWith("prod_")) body.productId = productRef;
+            else body.productSlug = productRef;
+          }
           if (hasFeedMeta) body.metadata = JSON.stringify({ feedUrl, feedType });
           if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
 

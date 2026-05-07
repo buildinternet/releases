@@ -106,6 +106,39 @@ describe("source attribution in mutation responses", () => {
     expect(body.productSlug).toBe("chrome");
   });
 
+  it("POST rejects a productId from a different org with 400", async () => {
+    // Cross-org pairing guard: a `prod_…` ID that resolves but belongs to a
+    // different org must not silently attach (#794 review). The error
+    // message reuses the "not found in this org" phrasing.
+    const db = mkDb();
+    await seed(db);
+    await db.insert(organizations).values({
+      id: "org_other",
+      slug: "other",
+      name: "Other",
+      category: "cloud",
+    });
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Other Source",
+          url: "https://other.test/changelog",
+          orgSlug: "other",
+          productId: "prod_chrome",
+        }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as Record<string, unknown>;
+    expect(body.error).toBe("bad_request");
+    expect(String(body.message)).toContain("not found in this org");
+  });
+
   it("POST rejects unknown productSlug with 400", async () => {
     const db = mkDb();
     await seed(db);
@@ -191,7 +224,7 @@ describe("source attribution in mutation responses", () => {
     await seed(db);
     const fetch = mkApp(db);
 
-    await fetch(
+    const createRes = await fetch(
       new Request("https://x.test/v1/sources", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -203,8 +236,9 @@ describe("source attribution in mutation responses", () => {
         }),
       }),
     );
+    const created = (await createRes.json()) as { slug: string };
 
-    const res = await fetch(new Request("https://x.test/v1/orgs/google/sources/chrome-releases"));
+    const res = await fetch(new Request(`https://x.test/v1/orgs/google/sources/${created.slug}`));
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>;
     expect(body.productId).toBe("prod_chrome");

@@ -43,6 +43,7 @@ import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-ap
 import {
   SourceListResultSchema,
   SourceDetailSchema,
+  SourceMutationResponseSchema,
   SourceChangelogResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -1400,12 +1401,15 @@ sourceRoutes.post(
     tags: ["Sources"],
     summary: "Create source",
     description:
-      "Body fields: `name`, `url` (required); `type?`, `slug?`, `orgId?` / `orgSlug?` (one required), `metadata?`, `isPrimary?`. Slug auto-suffixes on collision (up to 20 attempts).",
+      "Body fields: `name`, `url` (required); `type?`, `slug?`, `orgId?` / `orgSlug?` (one required), `productId?` / `productSlug?`, `metadata?`, `isPrimary?`. Slug auto-suffixes on collision (up to 20 attempts). Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
     security: [{ bearerAuth: [] }],
     responses: {
-      201: { description: "Source created" },
+      201: {
+        description: "Source created (with resolved org + product attribution)",
+        content: { "application/json": { schema: resolver(SourceMutationResponseSchema) } },
+      },
       400: {
-        description: "Missing required fields or unresolved org",
+        description: "Missing required fields, unresolved org, or product not in org",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       409: {
@@ -1489,29 +1493,37 @@ sourceRoutes.post(
     // Resolve productId. `productId` wins over `productSlug` when both
     // supplied. Pre-#794 this endpoint silently ignored a `productId` body
     // field — agents that passed `--product chrome` got back a source with
-    // no product attached.
+    // no product attached. Both branches enforce `products.orgId === orgId`
+    // so a typed `prod_…` from a different org can't smuggle a cross-org
+    // pairing past the resolution step.
     let productId: string | null = null;
     if (body.productId) {
       const [product] = await db
         .select({ id: products.id })
         .from(products)
-        .where(and(eq(products.id, body.productId), isNull(products.deletedAt)))
+        .where(
+          and(
+            eq(products.id, body.productId),
+            eq(products.orgId, orgId),
+            isNull(products.deletedAt),
+          ),
+        )
         .limit(1);
       if (!product) {
         return c.json(
-          { error: "bad_request", message: `productId "${body.productId}" not found` },
+          { error: "bad_request", message: `productId "${body.productId}" not found in this org` },
           400,
         );
       }
       productId = product.id;
     } else if (body.productSlug) {
-      const slugCond = isProductId(body.productSlug)
+      const idMatch = isProductId(body.productSlug)
         ? eq(products.id, body.productSlug)
-        : and(eq(products.slug, body.productSlug), eq(products.orgId, orgId));
+        : eq(products.slug, body.productSlug);
       const [product] = await db
         .select({ id: products.id })
         .from(products)
-        .where(and(slugCond, isNull(products.deletedAt)))
+        .where(and(idMatch, eq(products.orgId, orgId), isNull(products.deletedAt)))
         .limit(1);
       if (!product) {
         return c.json(
@@ -1702,10 +1714,13 @@ const patchSourceRoute = describeRoute({
   tags: ["Sources"],
   summary: "Update source",
   description:
-    "All body fields optional. Re-embeds the source in Vectorize when `name` or `url` changes; cron/poll fields (`lastFetchedAt`, `consecutiveErrors`, …) skip re-embed. Slug uniqueness is checked before write.",
+    "All body fields optional. Re-embeds the source in Vectorize when `name` or `url` changes; cron/poll fields (`lastFetchedAt`, `consecutiveErrors`, …) skip re-embed. Slug uniqueness is checked before write. Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
   security: [{ bearerAuth: [] }],
   responses: {
-    200: { description: "Source updated" },
+    200: {
+      description: "Source updated (with resolved org + product attribution)",
+      content: { "application/json": { schema: resolver(SourceMutationResponseSchema) } },
+    },
     400: {
       description: "No updatable fields supplied or unrecognized fields",
       content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
