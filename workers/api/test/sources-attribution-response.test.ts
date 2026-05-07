@@ -211,6 +211,7 @@ describe("source attribution in mutation responses", () => {
         }),
       }),
     );
+    expect(createRes.status).toBe(201);
     const created = (await createRes.json()) as { slug: string };
 
     const patchRes = await fetch(
@@ -243,6 +244,7 @@ describe("source attribution in mutation responses", () => {
         }),
       }),
     );
+    expect(createRes.status).toBe(201);
     const created = (await createRes.json()) as { slug: string };
 
     const patchRes = await fetch(
@@ -257,6 +259,45 @@ describe("source attribution in mutation responses", () => {
     const body = (await patchRes.json()) as Record<string, unknown>;
     expect(body.productId).toBe("prod_chrome");
     expect(body.productSlug).toBe("chrome");
+    expect(body.org).toEqual({ id: "org_google", slug: "google", name: "Google" });
+  });
+
+  it("PATCH clears product attribution when productId: null is supplied", async () => {
+    // The cross-org guard skips when `productId` is null — clearing the
+    // attribution must stay valid (#794 review). Org block is preserved;
+    // only the product fields drop out.
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const createRes = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Chrome Releases",
+          url: "https://chromereleases.googleblog.com/",
+          orgSlug: "google",
+          productSlug: "chrome",
+        }),
+      }),
+    );
+    expect(createRes.status).toBe(201);
+    const created = (await createRes.json()) as { slug: string; productId: string };
+    expect(created.productId).toBe("prod_chrome");
+
+    const patchRes = await fetch(
+      new Request(`https://x.test/v1/orgs/google/sources/${created.slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: null }),
+      }),
+    );
+
+    expect(patchRes.status).toBe(200);
+    const body = (await patchRes.json()) as Record<string, unknown>;
+    expect(body.productId).toBeNull();
+    expect(body.productSlug).toBeNull();
     expect(body.org).toEqual({ id: "org_google", slug: "google", name: "Google" });
   });
 
@@ -277,6 +318,7 @@ describe("source attribution in mutation responses", () => {
         }),
       }),
     );
+    expect(createRes.status).toBe(201);
     const created = (await createRes.json()) as { slug: string };
 
     const res = await fetch(new Request(`https://x.test/v1/orgs/google/sources/${created.slug}`));
