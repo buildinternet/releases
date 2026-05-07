@@ -1,5 +1,5 @@
 import { describe, it, expect } from "bun:test";
-import { sanitizeVersion } from "../../packages/adapters/src/extract/shared";
+import { sanitizeVersion } from "@releases/adapters/extract/shared";
 
 // LLM-driven extract / agent fetch occasionally emits a literal placeholder
 // in the `version` field instead of omitting it. The web frontend promotes

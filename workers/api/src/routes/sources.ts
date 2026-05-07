@@ -484,7 +484,10 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
         // and demotes title to a byline, so a placeholder leaks all the way
         // to the UI. Strip them here as a server-side safety net — the AI
         // extract path already calls `sanitizeVersion` on its own output.
-        version: sanitizeVersion(r.version ?? undefined) ?? null,
+        // Type-guard the JSON: sanitizeVersion calls .trim(), which would
+        // throw on a number or object payload (the body type is the request
+        // contract, not a runtime guarantee).
+        version: typeof r.version === "string" ? (sanitizeVersion(r.version) ?? null) : null,
         type: r.type ?? "feature",
         title: r.title,
         content: r.content,
@@ -1678,8 +1681,10 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
         id: body.id,
         sourceId: src.id,
         // See batch handler: strip LLM placeholders ("<UNKNOWN>", "n/a") so
-        // they don't leak into the version slot the web UI promotes.
-        version: sanitizeVersion(body.version) ?? null,
+        // they don't leak into the version slot the web UI promotes. Type-
+        // guard the JSON value before .trim() so non-string payloads are
+        // safely coerced to null instead of throwing.
+        version: typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null,
         type: body.type ?? "feature",
         title: body.title,
         content: body.content,
@@ -1775,7 +1780,12 @@ sourceRoutes.patch("/releases/:id", async (c) => {
 
   const updates: Record<string, unknown> = {};
   if (body.title !== undefined) updates.title = body.title;
-  if (body.version !== undefined) updates.version = sanitizeVersion(body.version) ?? null;
+  if (body.version !== undefined) {
+    // Type-guard the JSON so a non-string (or null) payload coerces to null
+    // instead of throwing inside sanitizeVersion's .trim() call.
+    updates.version =
+      typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
+  }
   if (body.content !== undefined) updates.content = body.content;
   if (body.url !== undefined) updates.url = body.url;
   if (body.publishedAt !== undefined) updates.publishedAt = body.publishedAt;
