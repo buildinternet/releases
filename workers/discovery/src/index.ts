@@ -34,15 +34,19 @@ function getAnthropicConfig(env: Env): AnthropicConfig | Response {
   return { agentId, agentVersion, environmentId };
 }
 
-function jsonResponse(data: object, status = 200): Response {
+function jsonResponse(data: object, status = 200, headers?: Record<string, string>): Response {
   return new Response(JSON.stringify(data), {
     status,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
   });
 }
 
-function errorResponse(message: string, status: number): Response {
-  return jsonResponse({ error: message }, status);
+function errorResponse(
+  message: string,
+  status: number,
+  extra?: { headers?: Record<string, string>; body?: Record<string, unknown> },
+): Response {
+  return jsonResponse({ error: message, ...extra?.body }, status, extra?.headers);
 }
 
 async function checkAuth(request: Request, env: Env): Promise<Response | null> {
@@ -169,9 +173,39 @@ export default {
                 : minutesAgo !== undefined
                   ? `${existing.status} ${minutesAgo}m ago`
                   : existing.status;
+            // Compute the precise unblock time (#794, item 6). Without this,
+            // the agent has to grep DEDUP_WINDOW_MINUTES out of the source
+            // code to know when to retry. We expose it three ways:
+            //   - `Retry-After: <seconds>` header (HTTP-standard)
+            //   - `retryAfter` ISO-8601 timestamp on the JSON body
+            //   - the same timestamp interpolated into the human message
+            // Running sessions don't have a deterministic unblock time —
+            // they unblock when the session resolves, not at a fixed offset.
+            // For those we still emit a header pointing at the dedup-window
+            // upper bound (worst case) so callers always have something to
+            // back off against.
+            const dedupWindowMs = DEDUP_WINDOW_MINUTES * 60_000;
+            const baseTime = existing.lastUpdatedAt ?? Date.now();
+            const unblockAt = baseTime + dedupWindowMs;
+            const retryAfterSeconds = Math.max(1, Math.ceil((unblockAt - Date.now()) / 1000));
+            const unblockIso = new Date(unblockAt).toISOString();
+            const retrySuffix =
+              existing.status === "running"
+                ? " Wait until the running session resolves before retrying."
+                : ` Retry after ${unblockIso}.`;
             return errorResponse(
-              `Discovery for "${body.company}" was ${ageDescriptor} (session ${existing.sessionId.slice(0, 8)}) — within the ${DEDUP_WINDOW_MINUTES}m dedup window. Wait or reuse the existing session.`,
+              `Discovery for "${body.company}" was ${ageDescriptor} (session ${existing.sessionId.slice(0, 8)}) — within the ${DEDUP_WINDOW_MINUTES}m dedup window.${retrySuffix}`,
               409,
+              {
+                headers: { "Retry-After": String(retryAfterSeconds) },
+                body: {
+                  retryAfter: unblockIso,
+                  retryAfterSeconds,
+                  dedupWindowMinutes: DEDUP_WINDOW_MINUTES,
+                  existingSessionId: existing.sessionId,
+                  existingStatus: existing.status,
+                },
+              },
             );
           }
           const runningCount = sessions.filter((s) => s.status === "running").length;
@@ -198,6 +232,8 @@ export default {
           company: body.company,
           domain: body.domain,
           githubOrg: body.githubOrg,
+          intoOrgSlug: body.intoOrgSlug,
+          intoProductSlug: body.intoProductSlug,
           mode: "onboard",
           ...ctx,
         }),

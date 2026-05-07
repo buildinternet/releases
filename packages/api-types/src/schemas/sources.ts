@@ -105,6 +105,19 @@ const SourceDetailSummariesSchema = z.object({
   monthly: z.array(ReleaseSummaryItemSchema),
 });
 
+/**
+ * Resolved attribution block returned alongside a source row. `id` is
+ * additive vs the legacy `{ slug, name }` shape — older clients that ignored
+ * it still parse cleanly. `productId` / `productSlug` are sibling top-level
+ * fields on the source response (kept flat to mirror `orgId`), not nested
+ * inside this block.
+ */
+export const SourceOrgRefSchema = z.object({
+  id: z.string(),
+  slug: z.string(),
+  name: z.string(),
+});
+
 export const SourceDetailSchema = z.object({
   id: z.string(),
   slug: z.string(),
@@ -112,6 +125,8 @@ export const SourceDetailSchema = z.object({
   type: SourceTypeSchema,
   url: z.string(),
   orgId: z.string().nullable(),
+  productId: z.string().nullable(),
+  productSlug: z.string().nullable(),
   // Hidden sources are reachable by direct URL but excluded from listings,
   // sitemap, and AI features. On-demand lookups and admin-suppressed rows
   // set this true; canonical curated/agent sources leave it false.
@@ -124,7 +139,7 @@ export const SourceDetailSchema = z.object({
   metadata: z.string(),
   changelogUrl: z.string().nullable().optional(),
   hasChangelogFile: z.boolean().optional(),
-  org: z.object({ slug: z.string(), name: z.string() }).nullable(),
+  org: SourceOrgRefSchema.nullable(),
   releaseCount: z.number().int().min(0),
   releasesLast30Days: z.number().int().min(0),
   avgReleasesPerWeek: z.number(),
@@ -136,6 +151,36 @@ export const SourceDetailSchema = z.object({
   releases: z.array(ReleaseItemSchema),
   pagination: PaginationSchema,
   summaries: SourceDetailSummariesSchema,
+});
+
+/**
+ * Response returned by `POST /v1/sources` and `PATCH /v1/sources/:slug`.
+ *
+ * Pre-#794 these endpoints returned the bare drizzle row, leaving callers to
+ * round-trip a separate `GET` to confirm the resolved org/product attribution.
+ * Now they return the same source row plus a resolved `org { id, slug, name }`
+ * block and `productSlug`, so an agent can answer "did the write take?" from
+ * the response alone.
+ *
+ * Wire fields are loosely-typed (`z.unknown()`) for the timestamps/counters
+ * that aren't load-bearing for callers — the row is large and we don't want
+ * to hand-mirror every column. Stable, agent-relevant fields are typed.
+ */
+export const SourceMutationResponseSchema = z.looseObject({
+  id: z.string(),
+  slug: z.string(),
+  name: z.string(),
+  type: SourceTypeSchema,
+  url: z.string(),
+  orgId: z.string().nullable(),
+  productId: z.string().nullable(),
+  productSlug: z.string().nullable(),
+  org: SourceOrgRefSchema.nullable(),
+  metadata: z.string().nullable(),
+  isPrimary: z.boolean().nullable().optional(),
+  isHidden: z.boolean().nullable().optional(),
+  discovery: SourceDiscoverySchema.optional(),
+  createdAt: z.string().optional(),
 });
 
 /** Body accepted by `PATCH /v1/sources/:slug`. */
@@ -167,6 +212,14 @@ export const CreateSourceBodySchema = z.object({
   slug: z.string().optional(),
   orgId: z.string().optional(),
   orgSlug: z.string().optional(),
+  /**
+   * Either accepted; `productId` wins when both are supplied. `productSlug`
+   * resolves within the requested org (slug uniqueness is per-org). The
+   * legacy `productId` ingestion path is preserved for callers that already
+   * resolve products client-side; new agent flows should pass `productSlug`.
+   */
+  productId: z.string().optional(),
+  productSlug: z.string().optional(),
   metadata: z.string().optional(),
   isPrimary: z.boolean().optional(),
 });

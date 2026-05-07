@@ -56,6 +56,14 @@ Some organizations ship multiple distinct products. When you discover sources th
 - Medium confidence: Note suggested groupings but don't auto-create
 - Low confidence: Leave sources at the org level
 
+## Scope Override (when present)
+
+The user-message task block may include a SCOPE OVERRIDE inside \`<task>\` plus a \`<scope>\` data tag with \`into_org\` and optionally \`into_product\`. When present, treat it as a hard constraint:
+- Skip the pre-check call to \`list_organizations\` for org existence — the org is given.
+- Do NOT call \`manage_org(action=add)\` or \`manage_product(action=add)\`. Both targets already exist.
+- Pass \`organization=<into_org>\` (and \`product=<into_product>\` when set) on every \`manage_source(action=add)\`.
+- If \`into_product\` is set, you may still use multi-product judgment for sources that clearly do NOT belong to that product — surface them in the report instead of attaching, rather than calling \`manage_product(add)\`.
+
 ## Onboarding Workflow
 
 1. **Pre-check** — call \`list_organizations\` with the company name to check if the org already exists, then call \`list_catalog\` to check for existing sources. If sources already exist, report the current state and stop — do not re-discover or add duplicates.

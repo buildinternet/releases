@@ -43,6 +43,7 @@ import type { SourceWithOrg, SourcePatchInput } from "@buildinternet/releases-ap
 import {
   SourceListResultSchema,
   SourceDetailSchema,
+  SourceMutationResponseSchema,
   SourceChangelogResponseSchema,
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
@@ -92,6 +93,46 @@ import { resolveOrgSlug, resolveProductSlug } from "../lib/slug-lookups.js";
 import { logEvent } from "@releases/lib/log-event";
 
 export const sourceRoutes = new Hono<Env>();
+
+/**
+ * Resolve `org { id, slug, name }` and `productSlug` for a source row, both
+ * in a single batched read. Returned shape matches `SourceMutationResponse`
+ * — see `packages/api-types/src/schemas/sources.ts` for the contract.
+ *
+ * Used by the create / update / detail handlers so callers can answer
+ * "did the write take?" from the response alone instead of round-tripping
+ * a follow-up GET (issue #794).
+ */
+async function attachSourceAttribution<
+  T extends { id: string; orgId: string | null; productId: string | null },
+>(
+  db: ReturnType<typeof createDb>,
+  src: T,
+): Promise<
+  T & { org: { id: string; slug: string; name: string } | null; productSlug: string | null }
+> {
+  const [orgRows, productRows] = await Promise.all([
+    src.orgId
+      ? db
+          .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
+          .from(organizations)
+          .where(eq(organizations.id, src.orgId))
+          .limit(1)
+      : Promise.resolve([] as Array<{ id: string; slug: string; name: string }>),
+    src.productId
+      ? db
+          .select({ slug: products.slug })
+          .from(products)
+          .where(eq(products.id, src.productId))
+          .limit(1)
+      : Promise.resolve([] as Array<{ slug: string }>),
+  ]);
+  return {
+    ...src,
+    org: orgRows[0] ?? null,
+    productSlug: productRows[0]?.slug ?? null,
+  };
+}
 
 sourceRoutes.get(
   "/sources",
@@ -1136,9 +1177,21 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   // Fire all independent reads in parallel — one D1 roundtrip wave instead of ~7 sequential ones.
   const orgQuery = src.orgId
     ? db
-        .select({ slug: organizations.slug, name: organizations.name })
+        .select({
+          id: organizations.id,
+          slug: organizations.slug,
+          name: organizations.name,
+        })
         .from(organizations)
         .where(eq(organizations.id, src.orgId))
+    : Promise.resolve([]);
+
+  const productQuery = src.productId
+    ? db
+        .select({ slug: products.slug })
+        .from(products)
+        .where(eq(products.id, src.productId))
+        .limit(1)
     : Promise.resolve([]);
 
   // On page > 1 we can't derive latestVersion/latestDate from the paginated rows, so issue it in the same wave.
@@ -1160,6 +1213,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const [
     releaseRows,
     orgRows,
+    productRows,
     metricsRows,
     earliestRows,
     summaryRows,
@@ -1168,6 +1222,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   ] = await Promise.all([
     getSourceReleasesPaginated(db, src.id, pageSize, offset, { includeCoverage }),
     orgQuery,
+    productQuery,
     db
       .select({
         total: count(),
@@ -1196,7 +1251,8 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     latestByDateQuery,
   ]);
 
-  const org = (orgRows[0] as { slug: string; name: string } | undefined) ?? null;
+  const org = (orgRows[0] as { id: string; slug: string; name: string } | undefined) ?? null;
+  const productSlug = (productRows[0] as { slug: string } | undefined)?.slug ?? null;
   const metrics = metricsRows[0];
   const earliest = earliestRows[0];
   const hasChangelogFile = changelogExistsRows.length > 0;
@@ -1262,6 +1318,8 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     type: src.type,
     url: src.url,
     orgId: src.orgId,
+    productId: src.productId,
+    productSlug,
     org,
     isPrimary: src.isPrimary ?? false,
     isHidden: Boolean(src.isHidden),
@@ -1343,12 +1401,15 @@ sourceRoutes.post(
     tags: ["Sources"],
     summary: "Create source",
     description:
-      "Body fields: `name`, `url` (required); `type?`, `slug?`, `orgId?` / `orgSlug?` (one required), `metadata?`, `isPrimary?`. Slug auto-suffixes on collision (up to 20 attempts).",
+      "Body fields: `name`, `url` (required); `type?`, `slug?`, `orgId?` / `orgSlug?` (one required), `productId?` / `productSlug?`, `metadata?`, `isPrimary?`. Slug auto-suffixes on collision (up to 20 attempts). Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
     security: [{ bearerAuth: [] }],
     responses: {
-      201: { description: "Source created" },
+      201: {
+        description: "Source created (with resolved org + product attribution)",
+        content: { "application/json": { schema: resolver(SourceMutationResponseSchema) } },
+      },
       400: {
-        description: "Missing required fields or unresolved org",
+        description: "Missing required fields, unresolved org, or product not in org",
         content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
       },
       409: {
@@ -1366,6 +1427,8 @@ sourceRoutes.post(
       slug?: string;
       orgId?: string;
       orgSlug?: string;
+      productId?: string;
+      productSlug?: string;
       metadata?: string;
       isPrimary?: boolean;
     }>();
@@ -1427,6 +1490,53 @@ sourceRoutes.post(
       );
     }
 
+    // Resolve productId. `productId` wins over `productSlug` when both
+    // supplied. Pre-#794 this endpoint silently ignored a `productId` body
+    // field — agents that passed `--product chrome` got back a source with
+    // no product attached. Both branches enforce `products.orgId === orgId`
+    // so a typed `prod_…` from a different org can't smuggle a cross-org
+    // pairing past the resolution step.
+    let productId: string | null = null;
+    if (body.productId) {
+      const [product] = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(
+          and(
+            eq(products.id, body.productId),
+            eq(products.orgId, orgId),
+            isNull(products.deletedAt),
+          ),
+        )
+        .limit(1);
+      if (!product) {
+        return c.json(
+          { error: "bad_request", message: `productId "${body.productId}" not found in this org` },
+          400,
+        );
+      }
+      productId = product.id;
+    } else if (body.productSlug) {
+      const idMatch = isProductId(body.productSlug)
+        ? eq(products.id, body.productSlug)
+        : eq(products.slug, body.productSlug);
+      const [product] = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(idMatch, eq(products.orgId, orgId), isNull(products.deletedAt)))
+        .limit(1);
+      if (!product) {
+        return c.json(
+          {
+            error: "bad_request",
+            message: `productSlug "${body.productSlug}" not found in this org`,
+          },
+          400,
+        );
+      }
+      productId = product.id;
+    }
+
     // Insert with auto-suffix on slug collision: try base, then base-2 … base-20.
     // Loop-with-catch is race-safe: no TOCTOU gap between check and insert.
     const MAX_SLUG_ATTEMPTS = 20;
@@ -1437,6 +1547,7 @@ sourceRoutes.post(
       type,
       url: body.url,
       orgId,
+      ...(productId && { productId }),
       metadata: body.metadata ?? "{}",
       createdAt,
       ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
@@ -1502,7 +1613,8 @@ sourceRoutes.post(
       inlineFallback();
     }
 
-    return c.json(source, 201);
+    const enriched = await attachSourceAttribution(db, source);
+    return c.json(enriched, 201);
   },
 );
 
@@ -1541,6 +1653,45 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (body.metadata !== undefined) updates.metadata = body.metadata;
   if (body.orgId !== undefined) updates.orgId = body.orgId;
   if (body.productId !== undefined) updates.productId = body.productId;
+
+  // Mirror the cross-org guard from POST /v1/sources (#794 review): the
+  // PATCH path must not let a `prod_…` from a different org attach to
+  // this source. Resolve against the post-update orgId so a single
+  // PATCH that re-orgs *and* sets a product is checked against the new
+  // org, not the old one. `productId: null` (clearing) skips the check.
+  if (typeof body.productId === "string" && body.productId.length > 0) {
+    const effectiveOrgId =
+      typeof body.orgId === "string" && body.orgId.length > 0 ? body.orgId : src.orgId;
+    if (!effectiveOrgId) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Cannot set productId on a source with no org. Set orgId in the same patch.`,
+        },
+        400,
+      );
+    }
+    const [product] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(
+        and(
+          eq(products.id, body.productId),
+          eq(products.orgId, effectiveOrgId),
+          isNull(products.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!product) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `productId "${body.productId}" not found in this org`,
+        },
+        400,
+      );
+    }
+  }
   if (body.lastFetchedAt !== undefined) updates.lastFetchedAt = body.lastFetchedAt;
   if (body.lastContentHash !== undefined) updates.lastContentHash = body.lastContentHash;
   if (body.fetchPriority !== undefined) updates.fetchPriority = body.fetchPriority;
@@ -1595,16 +1746,20 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (semanticChanged) {
     c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, src.id));
   }
-  return c.json(updated);
+  const enriched = await attachSourceAttribution(db, updated);
+  return c.json(enriched);
 };
 const patchSourceRoute = describeRoute({
   tags: ["Sources"],
   summary: "Update source",
   description:
-    "All body fields optional. Re-embeds the source in Vectorize when `name` or `url` changes; cron/poll fields (`lastFetchedAt`, `consecutiveErrors`, …) skip re-embed. Slug uniqueness is checked before write.",
+    "All body fields optional. Re-embeds the source in Vectorize when `name` or `url` changes; cron/poll fields (`lastFetchedAt`, `consecutiveErrors`, …) skip re-embed. Slug uniqueness is checked before write. Response carries the row plus a resolved `org { id, slug, name }` block and `productSlug`.",
   security: [{ bearerAuth: [] }],
   responses: {
-    200: { description: "Source updated" },
+    200: {
+      description: "Source updated (with resolved org + product attribution)",
+      content: { "application/json": { schema: resolver(SourceMutationResponseSchema) } },
+    },
     400: {
       description: "No updatable fields supplied or unrecognized fields",
       content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
