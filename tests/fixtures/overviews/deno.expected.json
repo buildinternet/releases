@@ -1,5 +1,16 @@
 {
-  "result": "satisfied",
-  "explanation": "210 words, no headings, opens on Deno's three concurrent focus areas, three themed sections with concrete bold leads (node:http rewrite + version specifics, OpenTelemetry coverage, Fresh 2 islands). Past tense, technical specificity (version numbers, API names, flag names). No filler.",
-  "criteria": []
+  "result": "needs_revision",
+  "explanation": "Two problems under the v2 rubric. Voice: the first section lead — `**\\`node:http\\` was rewritten with llhttp and a native \\`TCPWrap\\` binding in v2.7.13**` — uses internal implementation names (`llhttp`, `TCPWrap`) and a version number as the headline noun. That's pure changelog phrasing; the user-facing claim is that Deno's HTTP layer became Rust-native, with implementation as supporting prose. Format: the OpenTelemetry section packs six concrete items into a comma-separated paragraph that should bullet. Word count and other criteria are fine. (Compare with `deno-rewritten.md`, which preserves the same content but applies both rules.)",
+  "criteria": [
+    {
+      "name": "Section headline uses user-visible capability before implementation",
+      "passed": false,
+      "evidence": "First section lead names `llhttp` and `TCPWrap` (internal implementation) and `v2.7.13` (version) as the headline. The user-facing change — Rust-native HTTP — is delivered as supporting context."
+    },
+    {
+      "name": "Sections with 3+ concrete items should bullet, not prose",
+      "passed": false,
+      "evidence": "The OpenTelemetry section enumerates six items (console exporter, span attribute copying, permission-audit routing, --cpu-prof, function-level coverage, deno doc npm support) in a single comma-separated paragraph."
+    }
+  ]
 }

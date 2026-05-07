@@ -1,0 +1,5 @@
+{
+  "result": "satisfied",
+  "explanation": "Library-shape carve-out fixture. Prisma's primary product IS the library, so SDK / CLI / driver-adapter releases ARE the user-facing news. Each section is structured per smart brevity (tease + prose for short sections, tease + bullets for the multi-item driver-adapter section). Section leads describe what the user gets (`Prisma Postgres setup is now a single interactive command`), not the implementation noun (`prisma bootstrap`). Trailing wrap-up sentence handles the routine security patch in one mention, per the CVE-consolidation rule. 219 words, in sweet spot.",
+  "criteria": []
+}

@@ -1,11 +1,16 @@
 {
   "result": "needs_revision",
-  "explanation": "Body is 337 words — exceeds the rubric's 300-word hard ceiling. Content quality is otherwise strong (specific version numbers, model retirement dates, flag names; bold leads name the actual changes), but the word count is a hard fail. The agent should condense the Claude Code 2.1.x section, which spans many small features that don't all need to be enumerated, to bring the body under 300 words.",
+  "explanation": "Body is 337 words — exceeds the rubric's 300-word hard ceiling. Under v2 the underlying problem is also a smart-brevity issue: the Claude Code 2.1.x section packs ~14 features into a single comma-separated paragraph (vim visual mode, /usage, custom themes, --from-pr, native binaries, sandbox.network.deniedDomains, PID isolation, ultrareview, push-notification, MCP OAuth fixes, alwaysLoad). Bulleting that section would both bring the body under 300 words and improve scannability. Section leads are otherwise release-notes voice; weighting is fine.",
   "criteria": [
     {
       "name": "Word count is between 80 and 300 words",
       "passed": false,
       "evidence": "Body is 337 words; the 300-word hard ceiling is exceeded."
+    },
+    {
+      "name": "A sentence with four or more comma-separated items should be bullets",
+      "passed": false,
+      "evidence": "The Claude Code 2.1.x section packs roughly 14 features into a single comma-separated paragraph that should be a bullet list."
     }
   ]
 }

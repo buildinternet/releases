@@ -1,5 +1,16 @@
 {
-  "result": "satisfied",
-  "explanation": "Clean overview at 241 words. No headings, opens with a concrete sentence on Linear's deployment-loop focus, three themed sections with bold leads that name the actual change (Linear Releases, Linear Agent + MCP, Linear Agent automations + Code Intelligence). Past tense throughout. One inline image illustrating the release sidebar — within the 1-2 media item budget. No filler phrases.",
-  "criteria": []
+  "result": "needs_revision",
+  "explanation": "Production overview that passed the v1 rubric. Under the v2 rules it fails on smart-brevity / format: the Linear Agent + MCP section packs four distinct concrete items into a single 60-word comma-separated paragraph (MCP servers list, allowlists, triage automations, Code Intelligence) — that should be bullets per the new sentence-list-to-bullets rule. The Microsoft Teams section is similarly dense. Voice and weighting are fine; bold leads describe user-facing changes; word count is in range (241). The fix is to convert dense multi-item sections to tease + bullets.",
+  "criteria": [
+    {
+      "name": "Sections with 3+ concrete items should bullet, not prose",
+      "passed": false,
+      "evidence": "The Linear Agent + MCP section packs four distinct items (MCP server connections, allowlist gating, triage automations, Code Intelligence rollout) into one paragraph; the Microsoft Teams section similarly bundles bot mentions, custom launchers, and a five-tool deeplink list."
+    },
+    {
+      "name": "A sentence with four or more comma-separated items should be bullets",
+      "passed": false,
+      "evidence": "`Granola, Glean, Notion, PostHog` and `Amp, Devin, Factory, Warp, Windsurf, and others` are both four-plus-item comma lists that read better as bullets."
+    }
+  ]
 }
