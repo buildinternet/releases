@@ -19,6 +19,14 @@ Changelog indexer and registry for AI agents and developers. The user-facing CLI
 - Format: `bun run format:check`
 - **Evals (`tests/evals/`) are manual and on-demand only.** They call AI APIs, cost money, and take minutes. `bun run eval:evaluation` is the only in-repo suite (URL evaluation, ~30s). Parsing + discovery evals live in the OSS CLI repo.
 
+## Local development
+
+The four `dev:*` scripts (`dev:web`, `dev:api`, `dev:mcp`, `dev:discovery`) run each service through [portless](https://github.com/vercel-labs/portless) so they're reachable on stable HTTPS subdomains instead of port numbers — `https://releases.localhost` for the web frontend, `https://{api,mcp,discovery}.releases.localhost` for the workers. First run trusts a local CA and starts a daemon on port 443; subsequent runs reuse it. Apps mapping lives in `portless.json` for direct `portless` invocations from a workspace dir; the actual dev scripts pass `--name` explicitly so `portless run` picks up the override even outside a workspace.
+
+- **Worktrees:** linked git worktrees are detected automatically and the branch name is prepended (`feat-x.releases.localhost`, `feat-x.api.releases.localhost`, …) so multiple checkouts coexist without collision. No config needed — this is built into `portless run`.
+- **Override:** set `PORTLESS_NAME=foo` to swap the base name across all four services in one go (`foo.localhost`, `api.foo.localhost`, …). Useful when sharing a machine, demoing on a custom domain, or sidestepping a stuck route. Worktree prefixing still applies on top.
+- **Ports:** wrangler is invoked with `--port $PORT --ip 127.0.0.1` so it binds to the ephemeral port portless assigns; Next.js gets `--port $PORT` via `bun run dev`. Don't hard-code dev ports in wrangler.jsonc — portless's auto-assignment is what avoids conflicts when multiple services run simultaneously.
+
 ## Workspaces and carved-out packages
 
 Root `package.json` declares `workers/api`, `web`, and `packages/*` as workspaces. `workers/discovery/`, `workers/mcp/`, and `workers/webhooks/` are intentionally excluded — wrangler manages their dependencies independently.

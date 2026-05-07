@@ -5,10 +5,10 @@
   "description": "Changelog indexer and registry for AI agents and developers",
   "type": "module",
   "scripts": {
-    "dev:web": "cd web && bun run dev",
-    "dev:api": "wrangler dev --config workers/api/wrangler.jsonc",
-    "dev:discovery": "wrangler dev --config workers/discovery/wrangler.jsonc",
-    "dev:mcp": "wrangler dev --config workers/mcp/wrangler.jsonc",
+    "dev:web": "cd web && portless run --name ${PORTLESS_NAME:-releases} bun run dev -- --port $PORT",
+    "dev:api": "portless run --name api.${PORTLESS_NAME:-releases} wrangler dev --config workers/api/wrangler.jsonc --port $PORT --ip 127.0.0.1",
+    "dev:discovery": "portless run --name discovery.${PORTLESS_NAME:-releases} wrangler dev --config workers/discovery/wrangler.jsonc --port $PORT --ip 127.0.0.1",
+    "dev:mcp": "portless run --name mcp.${PORTLESS_NAME:-releases} wrangler dev --config workers/mcp/wrangler.jsonc --port $PORT --ip 127.0.0.1",
     "deploy:api": "wrangler deploy --config workers/api/wrangler.jsonc",
     "deploy:discovery": "wrangler deploy --config workers/discovery/wrangler.jsonc",
     "deploy:mcp": "wrangler deploy --config workers/mcp/wrangler.jsonc",
@@ -89,6 +89,7 @@
     "husky": "^9.1.7",
     "lint-staged": "^17.0.2",
     "oxlint": "^1.63.0",
+    "portless": "^0.12.0",
     "prettier": "^3.8.3",
     "typescript": "^6.0.3",
     "wrangler": "^4.88.0"
