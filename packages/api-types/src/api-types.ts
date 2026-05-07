@@ -620,6 +620,13 @@ export interface OrgReleasesResponse {
   pagination: { nextCursor: string | null; limit: number };
 }
 
+// Source-scoped release feed — the source identity is encoded in the URL, so
+// items omit the redundant `source` block carried by the org feed.
+export interface SourceReleasesResponse {
+  releases: ReleaseItem[];
+  pagination: { nextCursor: string | null; limit: number };
+}
+
 // ── Products ──
 
 // `Category` lives in @buildinternet/releases-core/categories — import it from

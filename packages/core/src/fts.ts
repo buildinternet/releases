@@ -17,3 +17,18 @@ export function toFtsMatchQuery(input: string): string {
   if (tokens.length === 0) return '""';
   return tokens.map((tok) => `"${tok}"`).join(" ");
 }
+
+/**
+ * Prefix-matching variant of {@link toFtsMatchQuery} — appends FTS5's `*`
+ * phrase-prefix operator to each token so partial words match (e.g. typing
+ * "cach" hits "caching"). Used by inline filter inputs where the user is
+ * still typing; full-text search uses the exact-token helper above.
+ */
+export function toFtsPrefixMatchQuery(input: string): string {
+  const tokens = input
+    .split(/\s+/)
+    .map((tok) => tok.replace(/"/g, "").trim())
+    .filter(Boolean);
+  if (tokens.length === 0) return '""';
+  return tokens.map((tok) => `"${tok}"*`).join(" ");
+}

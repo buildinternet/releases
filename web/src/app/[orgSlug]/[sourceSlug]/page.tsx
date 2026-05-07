@@ -19,8 +19,8 @@ import { CliCommand } from "@/components/cli-command";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
 import Link from "next/link";
 
-const getSource = cache((orgSlug: string, sourceSlug: string, page = 1) =>
-  api.sourceDetail({ orgSlug, sourceSlug }, page),
+const getSource = cache((orgSlug: string, sourceSlug: string) =>
+  api.sourceDetail({ orgSlug, sourceSlug }),
 );
 
 /**
@@ -105,11 +105,10 @@ export default async function SourcePage({
   searchParams,
 }: {
   params: Promise<{ orgSlug: string; sourceSlug: string }>;
-  searchParams: Promise<{ page?: string; tab?: string; path?: string; offset?: string }>;
+  searchParams: Promise<{ tab?: string; path?: string; offset?: string }>;
 }) {
   const { orgSlug, sourceSlug } = await params;
-  const { page: pageParam, tab, path: changelogPath, offset: offsetParam } = await searchParams;
-  const page = parseInt(pageParam ?? "1", 10) || 1;
+  const { tab, path: changelogPath, offset: offsetParam } = await searchParams;
   // `offset` arrives from search chunk deep-links — see the independent
   // source page for the same parsing rationale.
   const changelogOffset = (() => {
@@ -127,7 +126,7 @@ export default async function SourcePage({
   let heatmap;
   try {
     [source, activity, heatmap] = await Promise.all([
-      getSource(orgSlug, sourceSlug, page),
+      getSource(orgSlug, sourceSlug),
       api.sourceActivity({ orgSlug, sourceSlug }, activityFrom).catch(() => null),
       api.sourceHeatmap({ orgSlug, sourceSlug }).catch(() => null),
     ]);
@@ -255,7 +254,6 @@ export default async function SourcePage({
               source={source}
               orgSlug={orgSlug}
               tab={tab}
-              basePath={`/${orgSlug}/${sourceSlug}`}
               changelogPath={changelogPath}
               changelogOffset={changelogOffset}
             />

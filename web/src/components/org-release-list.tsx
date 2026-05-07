@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
 import type { OrgReleaseItem } from "@/lib/api";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
+import { useDebounced } from "@/hooks/use-debounced";
 
 interface OrgReleaseListProps {
   orgSlug: string;
@@ -35,6 +36,11 @@ export function OrgReleaseList({
 }: OrgReleaseListProps) {
   const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
+  // `searchInput` is the live <input> value; `search` is the debounced copy
+  // that drives the fetch. Splitting the two avoids firing a request on every
+  // keystroke while keeping the input visually responsive.
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebounced(searchInput, 250);
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
@@ -77,10 +83,11 @@ export function OrgReleaseList({
       const types = FILTER_GROUPS[filterGroup].types;
       if (types.length > 0) params.set("source_type", types.join(","));
       if (includePrereleases) params.set("include_prereleases", "true");
+      if (search) params.set("q", search);
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
       return params.toString();
     },
-    [filterGroup, includePrereleases],
+    [filterGroup, includePrereleases, search],
   );
 
   // Refetch when filters change (skip the initial render — the SSR rows
@@ -88,9 +95,11 @@ export function OrgReleaseList({
   useEffect(() => {
     if (pristine) return;
     // Cancel any in-flight pagination so its response can't append to the
-    // newly-filtered list once it lands.
+    // newly-filtered list once it lands. Re-assign the ref so a subsequent
+    // loadMore can also abort *this* fetch if the user paginates again.
     loadMoreAbortRef.current?.abort();
     const controller = new AbortController();
+    loadMoreAbortRef.current = controller;
     setLoading(true);
     setFetchError(null);
     fetch(`/api/org-releases/${orgSlug}?${buildQuery()}`, { signal: controller.signal })
@@ -137,6 +146,8 @@ export function OrgReleaseList({
   // detector, so feed/scrape/agent orgs can also produce prerelease rows.
   // The source-type tab strip is independent: it's only useful when the org
   // mixes types, since a single-type strip would be a one-button row.
+  // The search input shows whenever there's at least one source — same gate
+  // as the prerelease checkbox.
   const showSourceTypeTabs = filterTabs.length > 0;
   const showFilterRow = showSourceTypeTabs || availableSourceTypes.length > 0;
 
@@ -169,7 +180,18 @@ export function OrgReleaseList({
                 );
               })}
           </div>
-          <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none ml-auto shrink-0">
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(e) => {
+              setPristine(false);
+              setSearchInput(e.target.value);
+            }}
+            placeholder="Filter releases…"
+            aria-label="Filter releases"
+            className="ml-auto flex-1 min-w-0 max-w-xs text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
+          />
+          <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none shrink-0">
             <input
               type="checkbox"
               checked={includePrereleases}

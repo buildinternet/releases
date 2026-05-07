@@ -192,6 +192,67 @@ export async function getSourceReleasesPaginated(
   `);
 }
 
+export type SourceFeedReleaseRow = SourceReleaseRow & {
+  fetched_at: string | null;
+  prerelease: 0 | 1;
+};
+
+/**
+ * Cursor-based source release feed used by the inline filter UI on the source
+ * page. Mirrors {@link getOrgReleasesFeed} — same cursor shape, same FTS join
+ * pattern — so the two endpoints stay aligned.
+ */
+export async function getSourceReleasesFeed(
+  d1: D1Database,
+  sourceId: string,
+  cursor: { cursorWhere: string; cursorBindings: string[] },
+  limit: number,
+  opts: {
+    includeCoverage?: boolean;
+    includePrereleases?: boolean;
+    /** FTS5 MATCH expression — pass through `toFtsMatchQuery` before calling. */
+    ftsMatch?: string;
+  } = {},
+): Promise<SourceFeedReleaseRow[]> {
+  const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
+  const filterBindings: string[] = [];
+  const prereleaseWhere = opts.includePrereleases
+    ? ""
+    : "AND (r.prerelease IS NULL OR r.prerelease = 0)";
+  let ftsWhere = "";
+  if (opts.ftsMatch) {
+    // `releases_visible` is a view, so it doesn't expose `rowid` — map FTS
+    // rowid → release id through the underlying `releases` table.
+    ftsWhere =
+      "AND r.id IN (SELECT releases.id FROM releases_fts JOIN releases ON releases.rowid = releases_fts.rowid WHERE releases_fts MATCH ?)";
+    filterBindings.push(opts.ftsMatch);
+  }
+
+  const stmt = d1
+    .prepare(
+      `
+    SELECT r.id, r.version, r.type, r.title, r.content_summary, r.content,
+           r.published_at, r.fetched_at, r.url, r.media, r.prerelease
+    FROM ${releasesTable} r
+    WHERE r.source_id = ?
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${prereleaseWhere}
+      ${ftsWhere}
+      ${cursor.cursorWhere}
+    ORDER BY
+      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
+      r.published_at DESC,
+      r.fetched_at DESC,
+      r.id DESC
+    LIMIT ?
+  `,
+    )
+    .bind(sourceId, ...filterBindings, ...cursor.cursorBindings, limit);
+
+  const { results } = await stmt.all<SourceFeedReleaseRow>();
+  return results;
+}
+
 export type ActivityBucketRow = {
   week_start: string;
   cnt: number;

@@ -1,6 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import { Database } from "bun:sqlite";
-import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
+import { toFtsMatchQuery, toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
 
 describe("toFtsMatchQuery", () => {
   test("wraps a single token in a phrase quote", () => {
@@ -27,6 +27,31 @@ describe("toFtsMatchQuery", () => {
   test("collapses empty / whitespace-only input to an empty phrase", () => {
     expect(toFtsMatchQuery("")).toBe('""');
     expect(toFtsMatchQuery("   ")).toBe('""');
+  });
+});
+
+describe("toFtsPrefixMatchQuery", () => {
+  test("appends `*` to each phrase for prefix matching", () => {
+    expect(toFtsPrefixMatchQuery("cach")).toBe('"cach"*');
+    expect(toFtsPrefixMatchQuery("dark mode")).toBe('"dark"* "mode"*');
+  });
+
+  test("partial token matches a longer word in a real FTS5 table", () => {
+    const sqlite = new Database(":memory:");
+    sqlite.run(`CREATE VIRTUAL TABLE t USING fts5(body)`);
+    sqlite.run(`INSERT INTO t(body) VALUES ('introduces caching for faster calls')`);
+    const exact = sqlite.query(`SELECT rowid FROM t WHERE t MATCH ?`).all(toFtsMatchQuery("cach"));
+    const prefix = sqlite
+      .query(`SELECT rowid FROM t WHERE t MATCH ?`)
+      .all(toFtsPrefixMatchQuery("cach"));
+    expect(exact.length).toBe(0);
+    expect(prefix.length).toBe(1);
+    sqlite.close();
+  });
+
+  test("collapses empty input to an empty phrase", () => {
+    expect(toFtsPrefixMatchQuery("")).toBe('""');
+    expect(toFtsPrefixMatchQuery("   ")).toBe('""');
   });
 });
 

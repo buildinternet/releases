@@ -325,6 +325,8 @@ export async function getOrgReleasesFeed(
     includeCoverage?: boolean;
     sourceTypes?: string[];
     includePrereleases?: boolean;
+    /** FTS5 MATCH expression — pass through `toFtsMatchQuery` before calling. */
+    ftsMatch?: string;
   } = {},
 ): Promise<OrgReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
@@ -337,6 +339,14 @@ export async function getOrgReleasesFeed(
   const prereleaseWhere = opts.includePrereleases
     ? ""
     : "AND (r.prerelease IS NULL OR r.prerelease = 0)";
+  let ftsWhere = "";
+  if (opts.ftsMatch) {
+    // `releases_visible` is a view, so it doesn't expose `rowid` — map FTS
+    // rowid → release id through the underlying `releases` table.
+    ftsWhere =
+      "AND r.id IN (SELECT releases.id FROM releases_fts JOIN releases ON releases.rowid = releases_fts.rowid WHERE releases_fts MATCH ?)";
+    filterBindings.push(opts.ftsMatch);
+  }
 
   const stmt = d1
     .prepare(
@@ -350,6 +360,7 @@ export async function getOrgReleasesFeed(
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${sourceTypeWhere}
       ${prereleaseWhere}
+      ${ftsWhere}
       ${cursor.cursorWhere}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
