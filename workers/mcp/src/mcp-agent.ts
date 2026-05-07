@@ -17,6 +17,7 @@ import {
   getProduct,
   listCatalog,
   getCatalogEntry,
+  lookupDomain,
   summarizeChanges,
   compareProducts,
   type SearchToolReturn,
@@ -351,6 +352,12 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
           .describe(
             "Scope release results to sources belonging to this organization. Accepts an org_ id, slug, or registered domain.",
           ),
+        domain: z
+          .string()
+          .optional()
+          .describe(
+            "Scope to the org owning this domain. Input is normalized (scheme/path/www stripped, lowercased), so `https://vercel.com/` and `vercel.com` both work. Falls back to a 'no match' message when the domain isn't owned by anything indexed. Use this instead of `organization` when you have a URL-shaped input.",
+          ),
         entity: z
           .string()
           .optional()
@@ -627,6 +634,26 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       },
     },
     withMedia(async (params) => getOrganization(db, params)),
+  );
+
+  server.registerTool(
+    "lookup_domain",
+    {
+      ...titled("Lookup by domain", READ_ONLY_HINTS),
+      description: [
+        "Resolve a domain to the org or product that owns it. The domain is normalized first (scheme, `www.`, path, and trailing slash stripped, lowercased), so `https://vercel.com/about` and `vercel.com` both look up the same row.",
+        "",
+        "Returns the matching org (with primary-vs-alias distinction) and any products whose alias targets the same domain. Pure resolution — does not probe the domain or materialize anything; unknown domains surface a 'no match' message. Use `lookup_domain` when you have a URL-shaped input; use `get_organization` when you already have a slug or id.",
+      ].join("\n"),
+      inputSchema: {
+        domain: z
+          .string()
+          .describe(
+            "Domain to resolve. Any URL-shaped form is accepted; the server normalizes it.",
+          ),
+      },
+    },
+    async (params) => lookupDomain(db, params),
   );
 
   server.registerTool(

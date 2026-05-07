@@ -54,6 +54,7 @@ describe("MCP tool annotations", () => {
       "list_organizations",
       "list_products",
       "list_sources",
+      "lookup_domain",
       "search",
       "search_registry",
       "search_releases",

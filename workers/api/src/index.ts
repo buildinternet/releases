@@ -243,16 +243,17 @@ const publicReadRoutes = [
   "categories",
   "related",
   "sitemap",
+  // /lookups: GETs (source-by-slug, product-by-slug, by-domain) are public
+  // resolution primitives. POST /v1/lookups (on-demand GitHub indexer) is
+  // gated as a write by publicReadAuthMiddleware's SAFE_METHODS check.
+  "lookups",
 ];
 for (const r of publicReadRoutes) {
   v1.use(`/${r}`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
   v1.use(`/${r}/*`, publicReadAuthMiddleware, publicRateLimitMiddleware, dbHealthCheck);
 }
 
-// Admin-only routes: all methods require auth. /v1/lookups is here (not in
-// publicReadRoutes) because the route only exposes a side-effecting POST —
-// public GETs aren't a thing on it. MCP fallbacks present a Bearer via the
-// API service binding (see workers/mcp/src/mcp-agent.ts maybeLookup).
+// Admin-only routes: all methods require auth.
 const adminRoutes = [
   "sessions",
   "evaluate",
@@ -270,7 +271,6 @@ const adminRoutes = [
   "errata",
   "webhooks",
   "workflows",
-  "lookups",
 ];
 for (const r of adminRoutes) {
   v1.use(`/${r}`, authMiddleware, dbHealthCheck);
@@ -348,6 +348,12 @@ v1.use("/status/usage", cacheControl(30));
 v1.use("/products", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/products/:slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true }));
+// /lookups GET endpoints — pure resolution primitives backed by indexed
+// columns; cheap to compute, safe to cache. POST /v1/lookups (the on-demand
+// GitHub indexer) is auth-gated and unaffected by these GET-only directives.
+v1.use("/lookups/by-domain", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/lookups/source-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/lookups/product-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/categories/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/tags/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/openapi.json", cacheControl(3600, { staleWhileRevalidate: 300, isPublic: true }));

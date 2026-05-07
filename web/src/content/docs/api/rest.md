@@ -281,18 +281,31 @@ Get full release details by ID, including content and media assets.
 
 Hybrid search across orgs, products, sources, releases, and CHANGELOG chunks. FTS5 and vector similarity are fused with Reciprocal Rank Fusion; hybrid is the default.
 
-| Param    | Description                                                                                         |
-| -------- | --------------------------------------------------------------------------------------------------- |
-| `q`      | Search query (required)                                                                             |
-| `limit`  | Max results (default 20)                                                                            |
-| `offset` | Pagination offset                                                                                   |
-| `mode`   | `lexical`, `semantic`, or `hybrid` (default `hybrid`). `lexical` returns the legacy FTS-only shape. |
+| Param    | Description                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `q`      | Search query (required)                                                                                                                                                                                                                                                                                                                                                                             |
+| `limit`  | Max results (default 20)                                                                                                                                                                                                                                                                                                                                                                            |
+| `offset` | Pagination offset                                                                                                                                                                                                                                                                                                                                                                                   |
+| `mode`   | `lexical`, `semantic`, or `hybrid` (default `hybrid`). `lexical` returns the legacy FTS-only shape.                                                                                                                                                                                                                                                                                                 |
+| `domain` | Scope results to the org owning this domain. URL-shaped input is normalized server-side, so `https://vercel.com/`, `www.vercel.com`, and `vercel.com` all resolve to the same scope. When the domain isn't owned by anything indexed, the response carries `domainStatus: "not_found"` with empty `orgs`/`catalog`/`releases` arrays so callers can distinguish "no scope" from "no hits in scope." |
 
 Hybrid and semantic responses include a ranked `chunks` array interleaved with release hits, plus `mode`, `degraded`, and `degradedReason` fields. `degraded: true` means the request fell back to lexical because Vectorize or the embedding provider was unavailable — results are still returned.
 
 Each chunk hit carries `sourceSlug`, `orgSlug`, `filePath`, `offset`, `length`, `heading`, `snippet`, and `score` so clients can chain into `GET /v1/sources/:slug/changelog?offset=...` for surrounding context.
 
-When the query parses as a `{org}/{repo}` GitHub coordinate **and** no entity (org or catalog source) matched, the response includes a `lookup` field describing the result of an on-demand probe (see [`POST /v1/lookups`](#post-v1lookups)). The optional `github:` prefix is also accepted (e.g. `github:org/repo`). Tangential release / chunk hits do not suppress the lookup — a coordinate is treated as a precise question about one repo. `lookup` is `null` when the query is not coordinate-shaped or when an entity match was returned.
+When the query parses as a `{org}/{repo}` GitHub coordinate **and** no entity (org or catalog source) matched, the response includes a `lookup` field describing the result of an on-demand probe (see [`POST /v1/lookups`](#post-v1lookups)). The optional `github:` prefix is also accepted (e.g. `github:org/repo`). Tangential release / chunk hits do not suppress the lookup — a coordinate is treated as a precise question about one repo. `lookup` is `null` when the query is not coordinate-shaped or when an entity match was returned. The on-demand lookup is also suppressed when `domain=` is set (the caller has already named an entity).
+
+### `GET /v1/lookups/by-domain`
+
+Resolve a domain to the org or product that owns it. Pure resolution — unlike the GitHub coordinate path (`POST /v1/lookups`), an unknown domain just returns `404 not_found`; nothing is probed or materialized.
+
+```bash
+curl "https://api.releases.sh/v1/lookups/by-domain?domain=vercel.com"
+```
+
+Input is normalized before matching (scheme, `www.`, path/query/fragment, port, and trailing dot stripped, lowercased), so `https://www.vercel.com/about?utm=foo` and `vercel.com` look up the same row. The response carries the canonical form back as `domain`.
+
+The response includes the matching org (`null` when nothing matches via `organizations.domain` or an org-targeted alias) and any products whose alias targets the same domain. `org.matchedVia` is `"primary"` when the hit was on `organizations.domain` and `"alias"` when it was on `domain_aliases.domain`.
 
 ### `POST /v1/lookups`
 

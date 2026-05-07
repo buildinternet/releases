@@ -55,13 +55,18 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         name: "search",
         title: "Search",
         description:
-          "Unified search across organizations, the catalog (products + standalone sources), and release content on releases.sh. Returns a single envelope with `orgs`, `catalog`, `releases`, and `chunks` — use `catalog` entries' `kind: 'product' | 'source'` discriminator to branch on entry shape.",
+          "Unified search across organizations, the catalog (products + standalone sources), and release content on releases.sh. Returns a single envelope with `orgs`, `catalog`, `releases`, and `chunks` — use `catalog` entries' `kind: 'product' | 'source'` discriminator to branch on entry shape. Pass `domain` to scope to one org by domain (input is normalized, so `https://vercel.com/` works the same as `vercel.com`).",
         inputSchema: {
           type: "object",
           properties: {
             query: {
               type: "string",
               description: "Free-text search query (product name, feature, keyword).",
+            },
+            domain: {
+              type: "string",
+              description:
+                "Scope to the org owning this domain. Normalized server-side. Returns `domainStatus: 'not_found'` with empty arrays when nothing owns the domain.",
             },
             limit: { type: "integer", minimum: 1, maximum: 50, default: 20 },
           },
@@ -70,9 +75,38 @@ export function WebMcpProvider({ apiBaseUrl }: { apiBaseUrl: string }) {
         annotations: { readOnlyHint: true },
         execute: async (input) => {
           const query = String(input.query ?? "").trim();
+          const domain = input.domain ? String(input.domain).trim() : "";
           const limit = Number(input.limit ?? 20);
           if (!query) throw new Error("`query` is required");
-          return apiFetch(`/v1/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+          const qs = new URLSearchParams({ q: query, limit: String(limit) });
+          if (domain) qs.set("domain", domain);
+          return apiFetch(`/v1/search?${qs.toString()}`);
+        },
+      },
+      { signal },
+    );
+
+    mc.registerTool(
+      {
+        name: "lookup_domain",
+        title: "Lookup by domain",
+        description:
+          "Resolve a domain to the org or product that owns it on releases.sh. Input is normalized server-side (scheme, `www.`, path stripped, lowercased). Returns the matching org plus any products whose alias targets the domain. Pure resolution — unknown domains return a 404, no on-demand probing.",
+        inputSchema: {
+          type: "object",
+          properties: {
+            domain: {
+              type: "string",
+              description: "Domain to resolve. Any URL-shaped form is accepted.",
+            },
+          },
+          required: ["domain"],
+        },
+        annotations: { readOnlyHint: true },
+        execute: async (input) => {
+          const domain = String(input.domain ?? "").trim();
+          if (!domain) throw new Error("`domain` is required");
+          return apiFetch(`/v1/lookups/by-domain?domain=${encodeURIComponent(domain)}`);
         },
       },
       { signal },

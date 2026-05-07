@@ -26,8 +26,10 @@ import {
   listSources,
   listOrganizations,
   listProducts,
+  lookupDomain,
   search,
 } from "../../workers/mcp/src/tools.js";
+import { domainAliases } from "@buildinternet/releases-core/schema";
 
 function resultText(r: { content: Array<{ type: string; text?: string }> }): string {
   const first = r.content[0];
@@ -532,6 +534,91 @@ describe("search (unified)", () => {
     );
     // Bare "nextjs" must not appear without an org prefix in the catalog lines.
     expect(text).toContain("vercel/nextjs");
+  });
+
+  it("scopes results when domain resolves to an org", async () => {
+    // Releases under Vercel only; Anthropic must not appear in either
+    // section even though the FTS query matches both fixtures.
+    const out = await search(asD1(fixture.db), {
+      query: "release",
+      domain: "https://vercel.com/",
+      mode: "lexical",
+    });
+    const text = resultText(out.result);
+    expect(text).toContain("Vercel");
+    expect(text).not.toContain("Claude");
+  });
+
+  it("returns a friendly message when the domain isn't owned by anything", async () => {
+    const text = resultText(
+      (
+        await search(asD1(fixture.db), {
+          query: "anything",
+          domain: "nope.example",
+          mode: "lexical",
+        })
+      ).result,
+    );
+    expect(text).toContain("No organization owns the domain `nope.example`");
+  });
+
+  it("rejects malformed domain input", async () => {
+    const text = resultText(
+      (
+        await search(asD1(fixture.db), {
+          query: "anything",
+          domain: "not a domain",
+          mode: "lexical",
+        })
+      ).result,
+    );
+    expect(text).toContain("doesn't look like a valid hostname");
+  });
+});
+
+describe("lookup_domain", () => {
+  const fixture = useFixture(seed);
+
+  it("resolves a primary domain to its owning org", async () => {
+    const text = resultText(await lookupDomain(asD1(fixture.db), { domain: "vercel.com" }));
+    expect(text).toContain("Vercel");
+    expect(text).toContain("matched via primary");
+  });
+
+  it("normalizes URL-shaped input", async () => {
+    const text = resultText(
+      await lookupDomain(asD1(fixture.db), { domain: "https://www.vercel.com/about?utm=foo" }),
+    );
+    expect(text).toContain("**Domain:** `vercel.com`");
+    expect(text).toContain("Vercel");
+  });
+
+  it("resolves via an alias when the primary domain doesn't match", async () => {
+    const [vercel] = await fixture.db
+      .select({ id: organizations.id })
+      .from(organizations)
+      .where(eq(organizations.slug, "vercel"))
+      .limit(1);
+    await fixture.db.insert(domainAliases).values({
+      id: "da_old_vercel",
+      domain: "old-vercel.com",
+      orgId: vercel.id,
+    });
+
+    const text = resultText(await lookupDomain(asD1(fixture.db), { domain: "old-vercel.com" }));
+    expect(text).toContain("Vercel");
+    expect(text).toContain("matched via alias");
+    expect(text).toContain("primary domain: `vercel.com`");
+  });
+
+  it("returns 'no match' when the domain isn't owned", async () => {
+    const text = resultText(await lookupDomain(asD1(fixture.db), { domain: "nope.example.com" }));
+    expect(text).toContain("No org or product owns the domain `nope.example.com`");
+  });
+
+  it("rejects unparseable input with a hint", async () => {
+    const text = resultText(await lookupDomain(asD1(fixture.db), { domain: "not a domain" }));
+    expect(text).toContain("doesn't look like a valid hostname");
   });
 });
 
