@@ -77,6 +77,12 @@ export interface ManageSourceInput {
   type?: "github" | "scrape" | "feed" | "agent";
   /** Organization slug or ID. Used on add; ignored elsewhere. */
   organization?: string;
+  /**
+   * Product slug or ID. Used on add to attach the new source under an
+   * existing product (within the supplied organization). Slugs are scoped
+   * per-org. Issue #794, item 4.
+   */
+  product?: string;
   /** Pre-known feed URL for add. */
   feed_url?: string;
   /** Pre-known feed type for add (rss / atom / jsonfeed). Required when `feed_url` is supplied directly. */
@@ -168,6 +174,11 @@ export const AGENT_TOOLS = [
         organization: {
           type: "string",
           description: "Organization ID (org_...) or slug — used on add",
+        },
+        product: {
+          type: "string",
+          description:
+            "Product ID (prod_...) or slug — used on add to attach the source under an existing product. Slugs resolve within the supplied organization (per-org uniqueness). Pass alongside `organization`.",
         },
         feed_url: { type: "string", description: "Direct feed URL, if pre-known (add only)" },
         feed_type: {
@@ -536,6 +547,7 @@ export function createTypedExecutor(opts: APIClientOptions) {
           const body: Record<string, unknown> = { name, url };
           if (resolvedType) body.type = resolvedType;
           if (input.organization) body.orgSlug = input.organization;
+          if (input.product) body.productSlug = input.product;
           if (hasFeedMeta) body.metadata = JSON.stringify({ feedUrl, feedType });
           if (input.is_primary !== undefined) body.isPrimary = input.is_primary;
 

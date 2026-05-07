@@ -36,6 +36,8 @@ import type {
   SourceListResponseSchema,
   SourceListResultSchema,
   SourceDetailSchema,
+  SourceMutationResponseSchema,
+  SourceOrgRefSchema,
   SourcePatchInputSchema,
   CreateSourceBodySchema,
   ChangelogFileSummarySchema,
@@ -84,6 +86,8 @@ export {
   SourceListResponseSchema,
   SourceListResultSchema,
   SourceDetailSchema,
+  SourceMutationResponseSchema,
+  SourceOrgRefSchema,
   SourcePatchInputSchema,
   CreateSourceBodySchema,
   ChangelogFileSummarySchema,
@@ -154,6 +158,8 @@ export type CreateSourceBody = z.infer<typeof CreateSourceBodySchema>;
 export type ChangelogFileSummary = z.infer<typeof ChangelogFileSummarySchema>;
 export type SourceChangelogResponse = z.infer<typeof SourceChangelogResponseSchema>;
 export type SourceDetail = z.infer<typeof SourceDetailSchema>;
+export type SourceMutationResponse = z.infer<typeof SourceMutationResponseSchema>;
+export type SourceOrgRef = z.infer<typeof SourceOrgRefSchema>;
 
 // ── Admin telemetry: orgs rollup ──
 

@@ -21,6 +21,7 @@ import {
 import { escapeForPromptTag } from "@releases/lib/prompt-escape.js";
 import { createTypedExecutor, handleCustomToolUse } from "@releases/shared/agent-tools.js";
 import { buildDiscoverySystemPrompt } from "@releases/shared/discovery-prompt.js";
+import { buildOnboardTaskMessage } from "@releases/shared/onboard-task-message.js";
 import { buildMemoryStoreResources } from "@releases/shared/memory-store-attach.js";
 import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { scrapeFetch } from "./scrape-fetch.js";
@@ -76,6 +77,14 @@ export interface SessionParams {
   orgId?: string;
   /** Correlation ID from the originating client for end-to-end tracing. */
   correlationId?: string;
+  /**
+   * Onboard scope (issue #794, item 4). When set, the user-message task
+   * block carries a `<scope>` data tag with operator-authoritative
+   * guidance to attach all sources to the existing org/product instead of
+   * auto-creating new ones.
+   */
+  intoOrgSlug?: string;
+  intoProductSlug?: string;
 }
 
 const SESSION_TIMEOUT_MS = 15 * 60 * 1000;
@@ -570,17 +579,13 @@ ${idList}
         // <task>/<company>/... block. Single-agent discovery (legacy path)
         // continues to inline the discovery system prompt because that's how
         // the agent was configured before the prompt-on-definition cleanup.
-        const domainBlock = params.domain
-          ? `\n<domain>${escapeForPromptTag(params.domain)}</domain>`
-          : "";
-        const githubOrgBlock = params.githubOrg
-          ? `\n<github_org>${escapeForPromptTag(params.githubOrg)}</github_org>`
-          : "";
-        const taskBlock = `<task>
-Find and evaluate changelog sources for the company described in <company>.${domainBlock ? " Their website domain is in <domain>." : ""}${githubOrgBlock ? " Their GitHub organization is in <github_org>." : ""}
-</task>
-
-<company>${escapeForPromptTag(params.company)}</company>${domainBlock}${githubOrgBlock}`;
+        const taskBlock = buildOnboardTaskMessage({
+          company: params.company,
+          domain: params.domain,
+          githubOrg: params.githubOrg,
+          intoOrgSlug: params.intoOrgSlug,
+          intoProductSlug: params.intoProductSlug,
+        });
         if (agentRole === "coordinator") {
           prompt = taskBlock;
         } else {

@@ -4,6 +4,19 @@ export interface OnboardRequest {
   company: string;
   domain?: string;
   githubOrg?: string;
+  /**
+   * Optional scope: pin every source the agent adds to this existing org +
+   * (optional) product, instead of letting the agent auto-create new ones.
+   * Used to onboard a new product under an existing multi-product org
+   * without leaving an orphan org + manual cleanup. Issue #794, item 4.
+   *
+   * The agent is instructed (via a `<scope>` data tag in the task block) to
+   * skip `manage_org(action=add)` / `manage_product(action=add)` entirely and
+   * pass `organization=<intoOrgSlug>` (+ `product=<intoProductSlug>`) on every
+   * `manage_source(action=add)` call.
+   */
+  intoOrgSlug?: string;
+  intoProductSlug?: string;
 }
 
 export interface OnboardResponse {

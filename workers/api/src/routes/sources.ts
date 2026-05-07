@@ -93,6 +93,46 @@ import { logEvent } from "@releases/lib/log-event";
 
 export const sourceRoutes = new Hono<Env>();
 
+/**
+ * Resolve `org { id, slug, name }` and `productSlug` for a source row, both
+ * in a single batched read. Returned shape matches `SourceMutationResponse`
+ * — see `packages/api-types/src/schemas/sources.ts` for the contract.
+ *
+ * Used by the create / update / detail handlers so callers can answer
+ * "did the write take?" from the response alone instead of round-tripping
+ * a follow-up GET (issue #794).
+ */
+async function attachSourceAttribution<
+  T extends { id: string; orgId: string | null; productId: string | null },
+>(
+  db: ReturnType<typeof createDb>,
+  src: T,
+): Promise<
+  T & { org: { id: string; slug: string; name: string } | null; productSlug: string | null }
+> {
+  const [orgRows, productRows] = await Promise.all([
+    src.orgId
+      ? db
+          .select({ id: organizations.id, slug: organizations.slug, name: organizations.name })
+          .from(organizations)
+          .where(eq(organizations.id, src.orgId))
+          .limit(1)
+      : Promise.resolve([] as Array<{ id: string; slug: string; name: string }>),
+    src.productId
+      ? db
+          .select({ slug: products.slug })
+          .from(products)
+          .where(eq(products.id, src.productId))
+          .limit(1)
+      : Promise.resolve([] as Array<{ slug: string }>),
+  ]);
+  return {
+    ...src,
+    org: orgRows[0] ?? null,
+    productSlug: productRows[0]?.slug ?? null,
+  };
+}
+
 sourceRoutes.get(
   "/sources",
   describeRoute({
@@ -1136,9 +1176,21 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   // Fire all independent reads in parallel — one D1 roundtrip wave instead of ~7 sequential ones.
   const orgQuery = src.orgId
     ? db
-        .select({ slug: organizations.slug, name: organizations.name })
+        .select({
+          id: organizations.id,
+          slug: organizations.slug,
+          name: organizations.name,
+        })
         .from(organizations)
         .where(eq(organizations.id, src.orgId))
+    : Promise.resolve([]);
+
+  const productQuery = src.productId
+    ? db
+        .select({ slug: products.slug })
+        .from(products)
+        .where(eq(products.id, src.productId))
+        .limit(1)
     : Promise.resolve([]);
 
   // On page > 1 we can't derive latestVersion/latestDate from the paginated rows, so issue it in the same wave.
@@ -1160,6 +1212,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   const [
     releaseRows,
     orgRows,
+    productRows,
     metricsRows,
     earliestRows,
     summaryRows,
@@ -1168,6 +1221,7 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
   ] = await Promise.all([
     getSourceReleasesPaginated(db, src.id, pageSize, offset, { includeCoverage }),
     orgQuery,
+    productQuery,
     db
       .select({
         total: count(),
@@ -1196,7 +1250,8 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     latestByDateQuery,
   ]);
 
-  const org = (orgRows[0] as { slug: string; name: string } | undefined) ?? null;
+  const org = (orgRows[0] as { id: string; slug: string; name: string } | undefined) ?? null;
+  const productSlug = (productRows[0] as { slug: string } | undefined)?.slug ?? null;
   const metrics = metricsRows[0];
   const earliest = earliestRows[0];
   const hasChangelogFile = changelogExistsRows.length > 0;
@@ -1262,6 +1317,8 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     type: src.type,
     url: src.url,
     orgId: src.orgId,
+    productId: src.productId,
+    productSlug,
     org,
     isPrimary: src.isPrimary ?? false,
     isHidden: Boolean(src.isHidden),
@@ -1366,6 +1423,8 @@ sourceRoutes.post(
       slug?: string;
       orgId?: string;
       orgSlug?: string;
+      productId?: string;
+      productSlug?: string;
       metadata?: string;
       isPrimary?: boolean;
     }>();
@@ -1427,6 +1486,45 @@ sourceRoutes.post(
       );
     }
 
+    // Resolve productId. `productId` wins over `productSlug` when both
+    // supplied. Pre-#794 this endpoint silently ignored a `productId` body
+    // field — agents that passed `--product chrome` got back a source with
+    // no product attached.
+    let productId: string | null = null;
+    if (body.productId) {
+      const [product] = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(eq(products.id, body.productId), isNull(products.deletedAt)))
+        .limit(1);
+      if (!product) {
+        return c.json(
+          { error: "bad_request", message: `productId "${body.productId}" not found` },
+          400,
+        );
+      }
+      productId = product.id;
+    } else if (body.productSlug) {
+      const slugCond = isProductId(body.productSlug)
+        ? eq(products.id, body.productSlug)
+        : and(eq(products.slug, body.productSlug), eq(products.orgId, orgId));
+      const [product] = await db
+        .select({ id: products.id })
+        .from(products)
+        .where(and(slugCond, isNull(products.deletedAt)))
+        .limit(1);
+      if (!product) {
+        return c.json(
+          {
+            error: "bad_request",
+            message: `productSlug "${body.productSlug}" not found in this org`,
+          },
+          400,
+        );
+      }
+      productId = product.id;
+    }
+
     // Insert with auto-suffix on slug collision: try base, then base-2 … base-20.
     // Loop-with-catch is race-safe: no TOCTOU gap between check and insert.
     const MAX_SLUG_ATTEMPTS = 20;
@@ -1437,6 +1535,7 @@ sourceRoutes.post(
       type,
       url: body.url,
       orgId,
+      ...(productId && { productId }),
       metadata: body.metadata ?? "{}",
       createdAt,
       ...(body.isPrimary !== undefined && { isPrimary: body.isPrimary }),
@@ -1502,7 +1601,8 @@ sourceRoutes.post(
       inlineFallback();
     }
 
-    return c.json(source, 201);
+    const enriched = await attachSourceAttribution(db, source);
+    return c.json(enriched, 201);
   },
 );
 
@@ -1595,7 +1695,8 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (semanticChanged) {
     c.executionCtx.waitUntil(embedSourceSideEffect(c.env, db, src.id));
   }
-  return c.json(updated);
+  const enriched = await attachSourceAttribution(db, updated);
+  return c.json(enriched);
 };
 const patchSourceRoute = describeRoute({
   tags: ["Sources"],
