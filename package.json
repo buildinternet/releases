@@ -63,10 +63,10 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "^0.2.131",
+    "@anthropic-ai/claude-agent-sdk": "^0.2.132",
     "@buildinternet/releases-core": "workspace:*",
-    "@buildinternet/releases-lib": "^0.20.2",
-    "@buildinternet/releases-skills": "^0.20.2",
+    "@buildinternet/releases-lib": "^0.30.0",
+    "@buildinternet/releases-skills": "^0.30.0",
     "@buildinternet/releases-api-types": "workspace:*",
     "@releases/adapters": "workspace:*",
     "@releases/ai-internal": "workspace:*",
@@ -79,13 +79,13 @@
     "dayjs": "^1.11.20",
     "drizzle-orm": "^0.45.2",
     "js-tiktoken": "^1.0.21",
-    "nanoid": "^5.1.9",
-    "zod": "^4.3.6"
+    "nanoid": "^5.1.11",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/bun": "^1.3.13",
     "drizzle-kit": "^0.31.10",
-    "hono": "^4.12.15",
+    "hono": "^4.12.18",
     "husky": "^9.1.7",
     "lint-staged": "^17.0.2",
     "oxlint": "^1.63.0",
