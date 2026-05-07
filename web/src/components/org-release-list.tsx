@@ -14,12 +14,17 @@ interface OrgReleaseListProps {
   availableSourceTypes: SourceType[];
 }
 
-const SOURCE_TYPE_LABELS: Record<SourceType, string> = {
-  github: "GitHub",
-  feed: "Feed",
-  scrape: "Scrape",
-  agent: "Agent",
-};
+// Source types collapse into two filter groups for the user-facing tabs.
+// GitHub is a distinct, well-known surface; everything else (feed / scrape /
+// agent) is plumbing the user shouldn't have to reason about, so we present
+// it as a single "Web" group.
+const WEB_SOURCE_TYPES: readonly SourceType[] = ["feed", "scrape", "agent"];
+const FILTER_GROUPS = {
+  all: { label: "All", types: [] as SourceType[] },
+  web: { label: "Web", types: [...WEB_SOURCE_TYPES] as SourceType[] },
+  github: { label: "GitHub", types: ["github"] as SourceType[] },
+} as const;
+type FilterGroup = keyof typeof FILTER_GROUPS;
 
 export function OrgReleaseList({
   orgSlug,
@@ -28,7 +33,7 @@ export function OrgReleaseList({
   multipleSourcesExist,
   availableSourceTypes,
 }: OrgReleaseListProps) {
-  const [sourceType, setSourceType] = useState<string>("all");
+  const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
@@ -40,24 +45,28 @@ export function OrgReleaseList({
   const [pristine, setPristine] = useState(true);
 
   const filterTabs = useMemo(() => {
-    // Hide the source-type tab strip when there's only one underlying type;
-    // the filter would always be a single-button row.
-    if (availableSourceTypes.length <= 1) return [];
+    // The Web vs. GitHub split is only useful when the org actually has both
+    // sides; a one-button row collapses to no filter.
+    const hasGithub = availableSourceTypes.includes("github");
+    const hasWeb = availableSourceTypes.some((t) => WEB_SOURCE_TYPES.includes(t));
+    if (!hasGithub || !hasWeb) return [];
     return [
-      { value: "all", label: "All" },
-      ...availableSourceTypes.map((t) => ({ value: t, label: SOURCE_TYPE_LABELS[t] })),
+      { value: "all" as const, label: FILTER_GROUPS.all.label },
+      { value: "web" as const, label: FILTER_GROUPS.web.label },
+      { value: "github" as const, label: FILTER_GROUPS.github.label },
     ];
   }, [availableSourceTypes]);
 
   const buildQuery = useCallback(
     (extra: Record<string, string> = {}) => {
       const params = new URLSearchParams();
-      if (sourceType !== "all") params.set("source_type", sourceType);
+      const types = FILTER_GROUPS[filterGroup].types;
+      if (types.length > 0) params.set("source_type", types.join(","));
       if (includePrereleases) params.set("include_prereleases", "true");
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
       return params.toString();
     },
-    [sourceType, includePrereleases],
+    [filterGroup, includePrereleases],
   );
 
   // Refetch when filters change (skip the initial render — the SSR rows
@@ -108,21 +117,21 @@ export function OrgReleaseList({
   return (
     <div>
       {showFilterRow && (
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-2 -mt-2">
-          <div className="flex flex-wrap items-center gap-1">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-3 mb-3">
+          <div className="flex items-center gap-1 shrink-0">
             {showSourceTypeTabs &&
               filterTabs.map((tab) => {
-                const active = sourceType === tab.value;
+                const active = filterGroup === tab.value;
                 return (
                   <button
                     key={tab.value}
                     type="button"
                     onClick={() => {
                       setPristine(false);
-                      setSourceType(tab.value);
+                      setFilterGroup(tab.value);
                     }}
                     className={
-                      "text-[12px] px-2 py-1 rounded-md transition-colors " +
+                      "text-[12px] px-2 py-1 rounded-md transition-colors whitespace-nowrap " +
                       (active
                         ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
                         : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
@@ -133,7 +142,7 @@ export function OrgReleaseList({
                 );
               })}
           </div>
-          <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none ml-auto shrink-0">
             <input
               type="checkbox"
               checked={includePrereleases}
