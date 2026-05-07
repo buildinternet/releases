@@ -44,18 +44,28 @@ export function OrgReleaseList({
   // instantly; flipping any filter triggers a fetch and replaces them.
   const [pristine, setPristine] = useState(true);
 
+  const hasGithub = availableSourceTypes.includes("github");
+  const hasWeb = availableSourceTypes.some((t) => WEB_SOURCE_TYPES.includes(t));
+
   const filterTabs = useMemo(() => {
     // The Web vs. GitHub split is only useful when the org actually has both
     // sides; a one-button row collapses to no filter.
-    const hasGithub = availableSourceTypes.includes("github");
-    const hasWeb = availableSourceTypes.some((t) => WEB_SOURCE_TYPES.includes(t));
     if (!hasGithub || !hasWeb) return [];
     return [
       { value: "all" as const, label: FILTER_GROUPS.all.label },
       { value: "web" as const, label: FILTER_GROUPS.web.label },
       { value: "github" as const, label: FILTER_GROUPS.github.label },
     ];
-  }, [availableSourceTypes]);
+  }, [hasGithub, hasWeb]);
+
+  // Defensive: if the available source types change such that the active
+  // group disappears, fall back to "all" so buildQuery never sends a
+  // source_type that's no longer represented in the org's catalog.
+  useEffect(() => {
+    if ((filterGroup === "github" && !hasGithub) || (filterGroup === "web" && !hasWeb)) {
+      setFilterGroup("all");
+    }
+  }, [filterGroup, hasGithub, hasWeb]);
 
   const buildQuery = useCallback(
     (extra: Record<string, string> = {}) => {
