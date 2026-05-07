@@ -21,8 +21,27 @@ export interface OnboardTaskMessageOptions {
   company: string;
   domain?: string;
   githubOrg?: string;
+  /** Pin every source the agent adds to this existing org. */
   intoOrgSlug?: string;
+  /**
+   * Pin every source to this existing product. Intentionally ignored when
+   * `intoOrgSlug` is not also provided — product slugs are per-org, so a
+   * product without an org is meaningless. Callers that pass only
+   * `intoProductSlug` will get the unscoped onboarding flow with no
+   * SCOPE OVERRIDE block emitted.
+   */
   intoProductSlug?: string;
+}
+
+/**
+ * `escapeForPromptTag` preserves newlines (legitimate for multi-line
+ * text inside `<task>`, `<company>`, …) but the `<scope>` block is a
+ * structured key-value list where extra newlines would let a malicious
+ * caller-supplied slug inject fake keys (`google\ninto_admin=true` →
+ * two `into_*` lines). Strip CR/LF locally for the `<scope>` block.
+ */
+function sanitizeScopeValue(value: string): string {
+  return escapeForPromptTag(value).replace(/[\r\n]/g, "");
 }
 
 export function buildOnboardTaskMessage(opts: OnboardTaskMessageOptions): string {
@@ -31,8 +50,8 @@ export function buildOnboardTaskMessage(opts: OnboardTaskMessageOptions): string
     ? `\n<github_org>${escapeForPromptTag(opts.githubOrg)}</github_org>`
     : "";
 
-  const orgSlug = opts.intoOrgSlug ? escapeForPromptTag(opts.intoOrgSlug) : null;
-  const productSlug = opts.intoProductSlug ? escapeForPromptTag(opts.intoProductSlug) : null;
+  const orgSlug = opts.intoOrgSlug ? sanitizeScopeValue(opts.intoOrgSlug) : null;
+  const productSlug = opts.intoProductSlug ? sanitizeScopeValue(opts.intoProductSlug) : null;
   const scopeInstruction = orgSlug
     ? `\n\nSCOPE OVERRIDE: Attach every source you add to the existing org \`${orgSlug}\`${
         productSlug ? ` and product \`${productSlug}\`` : ""

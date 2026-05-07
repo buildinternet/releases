@@ -186,6 +186,47 @@ describe("source attribution in mutation responses", () => {
     expect(body.org).toEqual({ id: "org_google", slug: "google", name: "Google" });
   });
 
+  it("PATCH rejects a productId from a different org with 400", async () => {
+    // Mirrors the POST cross-org guard (#794 review). PATCH was the
+    // asymmetric weak link — without this check an attacker could bypass
+    // the create-time check by patching productId after the fact.
+    const db = mkDb();
+    await seed(db);
+    await db.insert(organizations).values({
+      id: "org_other",
+      slug: "other",
+      name: "Other",
+      category: "cloud",
+    });
+    const fetch = mkApp(db);
+
+    const createRes = await fetch(
+      new Request("https://x.test/v1/sources", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: "Other Source",
+          url: "https://other.test/changelog",
+          orgSlug: "other",
+        }),
+      }),
+    );
+    const created = (await createRes.json()) as { slug: string };
+
+    const patchRes = await fetch(
+      new Request(`https://x.test/v1/orgs/other/sources/${created.slug}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ productId: "prod_chrome" }),
+      }),
+    );
+
+    expect(patchRes.status).toBe(400);
+    const body = (await patchRes.json()) as Record<string, unknown>;
+    expect(body.error).toBe("bad_request");
+    expect(String(body.message)).toContain("not found in this org");
+  });
+
   it("PATCH returns enriched response after updating productId", async () => {
     const db = mkDb();
     await seed(db);

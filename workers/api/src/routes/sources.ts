@@ -1653,6 +1653,45 @@ const patchSourceHandler = async (c: import("hono").Context<Env>) => {
   if (body.metadata !== undefined) updates.metadata = body.metadata;
   if (body.orgId !== undefined) updates.orgId = body.orgId;
   if (body.productId !== undefined) updates.productId = body.productId;
+
+  // Mirror the cross-org guard from POST /v1/sources (#794 review): the
+  // PATCH path must not let a `prod_…` from a different org attach to
+  // this source. Resolve against the post-update orgId so a single
+  // PATCH that re-orgs *and* sets a product is checked against the new
+  // org, not the old one. `productId: null` (clearing) skips the check.
+  if (typeof body.productId === "string" && body.productId.length > 0) {
+    const effectiveOrgId =
+      typeof body.orgId === "string" && body.orgId.length > 0 ? body.orgId : src.orgId;
+    if (!effectiveOrgId) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `Cannot set productId on a source with no org. Set orgId in the same patch.`,
+        },
+        400,
+      );
+    }
+    const [product] = await db
+      .select({ id: products.id })
+      .from(products)
+      .where(
+        and(
+          eq(products.id, body.productId),
+          eq(products.orgId, effectiveOrgId),
+          isNull(products.deletedAt),
+        ),
+      )
+      .limit(1);
+    if (!product) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: `productId "${body.productId}" not found in this org`,
+        },
+        400,
+      );
+    }
+  }
   if (body.lastFetchedAt !== undefined) updates.lastFetchedAt = body.lastFetchedAt;
   if (body.lastContentHash !== undefined) updates.lastContentHash = body.lastContentHash;
   if (body.fetchPriority !== undefined) updates.fetchPriority = body.fetchPriority;
