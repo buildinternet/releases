@@ -77,7 +77,14 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.7,
     }));
 
-    dynamicEntries = [...orgEntries, ...productEntries, ...sourceEntries];
+    const collectionEntries: MetadataRoute.Sitemap = (data.collections ?? []).map((co) => ({
+      url: `${BASE_URL}/collections/${co.slug}`,
+      lastModified: new Date(co.updatedAt),
+      changeFrequency: "weekly",
+      priority: 0.6,
+    }));
+
+    dynamicEntries = [...orgEntries, ...productEntries, ...sourceEntries, ...collectionEntries];
   } catch (err) {
     if (!(err instanceof ApiSetupError)) throw err;
   }

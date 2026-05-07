@@ -6,6 +6,7 @@ import {
   sourcesActive,
   productsActive,
   releases,
+  collections,
 } from "@buildinternet/releases-core/schema";
 import type { Env } from "../index.js";
 
@@ -24,8 +25,16 @@ sitemapRoutes.get("/sitemap", async (c) => {
     .leftJoin(sourcesActive, eq(sourcesActive.orgId, organizationsActive.id))
     .groupBy(organizationsActive.id);
 
+  // Collections are independent of orgs (they reference orgs but live as
+  // their own top-level resource), so always pull them — even when no orgs
+  // exist (a fresh staging DB shouldn't drop the curated collection list).
+  const collectionRows = await db
+    .select({ slug: collections.slug, updatedAt: collections.updatedAt })
+    .from(collections)
+    .orderBy(collections.slug);
+
   if (orgRows.length === 0) {
-    return c.json({ orgs: [], sources: [], products: [] });
+    return c.json({ orgs: [], sources: [], products: [], collections: collectionRows });
   }
 
   const orgIds = orgRows.map((o) => o.id);
@@ -112,5 +121,10 @@ sitemapRoutes.get("/sitemap", async (c) => {
     !p.orgId ? [] : [{ orgSlug: orgIdToSlug.get(p.orgId)!, slug: p.slug }],
   );
 
-  return c.json({ orgs, sources: sourcesOut, products: productsOut });
+  return c.json({
+    orgs,
+    sources: sourcesOut,
+    products: productsOut,
+    collections: collectionRows,
+  });
 });
