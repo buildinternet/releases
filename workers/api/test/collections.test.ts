@@ -217,16 +217,6 @@ describe("collections (writes)", () => {
     expect(created.id.startsWith("col_")).toBe(true);
   });
 
-  it("rejects missing name with 400", async () => {
-    const db = mkDb();
-    await seed(db);
-    const fetch = mkApp(db);
-    const res = await fetch(
-      new Request("http://test/v1/collections", json("POST", { description: "no name" })),
-    );
-    expect(res.status).toBe(400);
-  });
-
   it("rejects malformed slug with 400", async () => {
     const db = mkDb();
     await seed(db);

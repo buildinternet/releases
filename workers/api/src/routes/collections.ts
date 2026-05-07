@@ -1,6 +1,5 @@
 import { Hono } from "hono";
-import { eq, and } from "drizzle-orm";
-import { count } from "drizzle-orm";
+import { eq, and, inArray, isNull, count } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   collections,
@@ -36,6 +35,7 @@ export const collectionRoutes = new Hono<Env>();
 // only the `/collections/...` namespace matters. Lowercased alphanumeric +
 // hyphens, must start with an alnum, 2–64 chars.
 const SLUG_RE = /^[a-z0-9][a-z0-9-]{1,63}$/;
+const SLUG_HINT = "Use lowercase letters, digits, and hyphens (2–64 chars, alnum start).";
 
 function rowToWire(row: typeof collections.$inferSelect): CollectionRow {
   return {
@@ -48,27 +48,77 @@ function rowToWire(row: typeof collections.$inferSelect): CollectionRow {
   };
 }
 
+async function findCollectionBySlug(db: ReturnType<typeof createDb>, slug: string) {
+  const [row] = await db
+    .select({ id: collections.id })
+    .from(collections)
+    .where(eq(collections.slug, slug));
+  return row ?? null;
+}
+
 async function resolveOrgIdForMember(
   db: ReturnType<typeof createDb>,
   m: CollectionMemberInput,
 ): Promise<{ ok: true; orgId: string } | { ok: false; status: 400 | 404; message: string }> {
-  if (!m.orgId && !m.orgSlug) {
+  const ref = m.orgId ?? m.orgSlug;
+  if (!ref) {
     return { ok: false, status: 400, message: "Each member requires orgId or orgSlug" };
   }
-  if (m.orgId) {
-    const [row] = await db
+  const [row] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(ref));
+  if (!row) return { ok: false, status: 404, message: `Org not found: ${ref}` };
+  return { ok: true, orgId: row.id };
+}
+
+// Batched variant for PUT: resolves every member in at most two IN-queries
+// (one for `org_…` ids, one for slugs) instead of N round-trips. Membership
+// lists are bounded — D1's 100-bind cap leaves plenty of headroom for any
+// realistic collection.
+async function resolveOrgIdsBatch(
+  db: ReturnType<typeof createDb>,
+  members: CollectionMemberInput[],
+): Promise<
+  | { ok: true; resolved: { orgId: string; position: number }[] }
+  | { ok: false; status: 400 | 404; message: string }
+> {
+  const ids = new Set<string>();
+  const slugs = new Set<string>();
+  for (const m of members) {
+    const ref = m.orgId ?? m.orgSlug;
+    if (!ref) return { ok: false, status: 400, message: "Each member requires orgId or orgSlug" };
+    if (m.orgId) ids.add(m.orgId);
+    else slugs.add(m.orgSlug!);
+  }
+
+  const map = new Map<string, string>();
+  if (ids.size > 0) {
+    const rows = await db
       .select({ id: organizations.id })
       .from(organizations)
-      .where(orgWhere(m.orgId));
-    if (!row) return { ok: false, status: 404, message: `Org not found: ${m.orgId}` };
-    return { ok: true, orgId: row.id };
+      .where(and(inArray(organizations.id, [...ids]), isNull(organizations.deletedAt)));
+    for (const r of rows) map.set(r.id, r.id);
   }
-  const [row] = await db
-    .select({ id: organizations.id })
-    .from(organizations)
-    .where(orgWhere(m.orgSlug!));
-  if (!row) return { ok: false, status: 404, message: `Org not found: ${m.orgSlug}` };
-  return { ok: true, orgId: row.id };
+  if (slugs.size > 0) {
+    const rows = await db
+      .select({ id: organizations.id, slug: organizations.slug })
+      .from(organizations)
+      .where(and(inArray(organizations.slug, [...slugs]), isNull(organizations.deletedAt)));
+    for (const r of rows) map.set(r.slug, r.id);
+  }
+
+  const resolved: { orgId: string; position: number }[] = [];
+  const seen = new Set<string>();
+  for (let i = 0; i < members.length; i++) {
+    const m = members[i];
+    const ref = (m.orgId ?? m.orgSlug)!;
+    const orgId = map.get(ref);
+    if (!orgId) return { ok: false, status: 404, message: `Org not found: ${ref}` };
+    if (seen.has(orgId)) {
+      return { ok: false, status: 400, message: `Duplicate org in members list: ${orgId}` };
+    }
+    seen.add(orgId);
+    resolved.push({ orgId, position: m.position ?? i });
+  }
+  return { ok: true, resolved };
 }
 
 collectionRoutes.get("/collections", async (c) => {
@@ -210,13 +260,7 @@ collectionRoutes.post("/collections", async (c) => {
 
   const slug = (body.slug ?? toSlug(name)).trim();
   if (!SLUG_RE.test(slug)) {
-    return c.json(
-      {
-        error: "bad_request",
-        message: `Invalid slug "${slug}". Use lowercase letters, digits, and hyphens (2–64 chars, alnum start).`,
-      },
-      400,
-    );
+    return c.json({ error: "bad_request", message: `Invalid slug "${slug}". ${SLUG_HINT}` }, 400);
   }
 
   if (body.description != null && body.description.length > 2000) {
@@ -279,13 +323,7 @@ collectionRoutes.patch("/collections/:slug", async (c) => {
   if (body.slug !== undefined && body.slug !== existing.slug) {
     const next = body.slug.trim();
     if (!SLUG_RE.test(next)) {
-      return c.json(
-        {
-          error: "bad_request",
-          message: `Invalid slug "${next}". Use lowercase letters, digits, and hyphens (2–64 chars, alnum start).`,
-        },
-        400,
-      );
+      return c.json({ error: "bad_request", message: `Invalid slug "${next}". ${SLUG_HINT}` }, 400);
     }
     updates.slug = next;
   }
@@ -321,10 +359,7 @@ collectionRoutes.delete("/collections/:slug", async (c) => {
   const slug = c.req.param("slug");
   const db = createDb(c.env.DB);
 
-  const [existing] = await db
-    .select({ id: collections.id })
-    .from(collections)
-    .where(eq(collections.slug, slug));
+  const existing = await findCollectionBySlug(db, slug);
   if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
 
   // ON DELETE CASCADE on collection_members.collection_id handles membership.
@@ -343,37 +378,23 @@ collectionRoutes.put("/collections/:slug/members", async (c) => {
     return c.json({ error: "bad_request", message: "Body requires { orgs: [...] }" }, 400);
   }
 
-  const [existing] = await db
-    .select({ id: collections.id })
-    .from(collections)
-    .where(eq(collections.slug, slug));
+  const existing = await findCollectionBySlug(db, slug);
   if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
 
-  const resolved: { orgId: string; position: number }[] = [];
-  const seen = new Set<string>();
-  for (let i = 0; i < body.orgs.length; i++) {
-    const m = body.orgs[i];
-    const r = await resolveOrgIdForMember(db, m);
-    if (!r.ok)
-      return c.json(
-        { error: r.status === 404 ? "not_found" : "bad_request", message: r.message },
-        r.status,
-      );
-    if (seen.has(r.orgId)) {
-      return c.json(
-        { error: "bad_request", message: `Duplicate org in members list: ${r.orgId}` },
-        400,
-      );
-    }
-    seen.add(r.orgId);
-    resolved.push({ orgId: r.orgId, position: m.position ?? i });
+  const r = await resolveOrgIdsBatch(db, body.orgs);
+  if (!r.ok) {
+    return c.json(
+      { error: r.status === 404 ? "not_found" : "bad_request", message: r.message },
+      r.status,
+    );
   }
+  const { resolved } = r;
 
   // No D1 transaction primitive — delete + insert is acceptable here because
   // membership writes are admin-only and low-frequency.
+  const now = new Date().toISOString();
   await db.delete(collectionMembers).where(eq(collectionMembers.collectionId, existing.id));
   if (resolved.length > 0) {
-    const now = new Date().toISOString();
     await db.insert(collectionMembers).values(
       resolved.map((m) => ({
         collectionId: existing.id,
@@ -383,10 +404,7 @@ collectionRoutes.put("/collections/:slug/members", async (c) => {
       })),
     );
   }
-  await db
-    .update(collections)
-    .set({ updatedAt: new Date().toISOString() })
-    .where(eq(collections.id, existing.id));
+  await db.update(collections).set({ updatedAt: now }).where(eq(collections.id, existing.id));
 
   return c.json({ collectionSlug: slug, members: resolved });
 });
@@ -396,31 +414,28 @@ collectionRoutes.post("/collections/:slug/members", async (c) => {
   const db = createDb(c.env.DB);
   const body = await c.req.json<AddCollectionMemberRequest>();
 
-  const [existing] = await db
-    .select({ id: collections.id })
-    .from(collections)
-    .where(eq(collections.slug, slug));
+  const existing = await findCollectionBySlug(db, slug);
   if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
 
   const r = await resolveOrgIdForMember(db, body);
-  if (!r.ok)
+  if (!r.ok) {
     return c.json(
       { error: r.status === 404 ? "not_found" : "bad_request", message: r.message },
       r.status,
     );
+  }
 
+  const position = body.position ?? 0;
+  const now = new Date().toISOString();
   try {
     await db.insert(collectionMembers).values({
       collectionId: existing.id,
       orgId: r.orgId,
-      position: body.position ?? 0,
-      createdAt: new Date().toISOString(),
+      position,
+      createdAt: now,
     });
-    await db
-      .update(collections)
-      .set({ updatedAt: new Date().toISOString() })
-      .where(eq(collections.id, existing.id));
-    return c.json({ collectionSlug: slug, orgId: r.orgId, position: body.position ?? 0 }, 201);
+    await db.update(collections).set({ updatedAt: now }).where(eq(collections.id, existing.id));
+    return c.json({ collectionSlug: slug, orgId: r.orgId, position }, 201);
   } catch (err) {
     if (isConflictError(err)) {
       return c.json(
@@ -441,10 +456,7 @@ collectionRoutes.delete("/collections/:slug/members/:org", async (c) => {
   const orgRef = c.req.param("org");
   const db = createDb(c.env.DB);
 
-  const [existing] = await db
-    .select({ id: collections.id })
-    .from(collections)
-    .where(eq(collections.slug, slug));
+  const existing = await findCollectionBySlug(db, slug);
   if (!existing) return c.json({ error: "not_found", message: "Collection not found" }, 404);
 
   const [org] = await db

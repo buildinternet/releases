@@ -48,6 +48,26 @@ AI-generated knowledge pages (`knowledge_pages` table, scope `org`) summarize re
 
 **Planning manifest (#715).** `GET /v1/admin/overviews` (admin-only) returns a paginated, sortable list of every org with the freshness signals an orchestrator needs to plan a maintenance sweep — `overviewUpdatedAt`, `lastContributingReleaseAt`, `orgLastActivity`, and crucially `releasesSinceOverview` (the count of releases shipped since the overview was generated). Each row carries a `staleness` of `missing | behind | fresh`. Filters: `staleDays=N` (include `behind` rows whose overview is at least N days old), `missing=true` (include rows with no overview at all), `hasActivity=true` (drop orgs with zero recent releases). With `format=plan`, each row also gets `action` (`missing | refresh | skip`) and `needsFetch` (true when active sources exist but ingest is lagging — the threshold is 7 days without a release). The `?check=true` query on `/v1/orgs/:slug/overview/inputs` returns a lightweight pre-flight payload (`{orgSlug, selected, totalAvailable, hasExistingContent, wouldRegenerate, windowDays}`) so an orchestrator can decide whether to dispatch without paying for the full release-content + media hydration.
 
+## Collections
+
+Curated, named groups of orgs that drive a "playlist" page (e.g. `/collections/frontier-ai-labs`). Independent of the fixed `category` taxonomy, so a collection can mix orgs across categories or surface a tighter subset than any category covers. Schema is two tables: `collections` (slug-keyed) and `collection_members` (`collection_id`, `org_id`, `position`).
+
+Read surface:
+
+- `GET /v1/collections` — list with member counts.
+- `GET /v1/collections/:slug` — detail, member orgs joined through `organizations_public` so hidden/`on_demand` orgs don't leak.
+- `GET /v1/collections/:slug/releases` — interleaved cross-org feed. Cursor shape and ordering match `/v1/orgs/:slug/releases`, so the same web cursor parser drives both surfaces.
+
+Write surface (admin-only, gated by `publicReadAuthMiddleware`'s SAFE_METHODS check via the `publicReadRoutes` allowlist):
+
+- `POST /v1/collections`, `PATCH /v1/collections/:slug`, `DELETE /v1/collections/:slug` — CRUD on the collection itself. Slug rename is allowed via PATCH.
+- `PUT /v1/collections/:slug/members` — replace membership atomically (delete + insert; D1 has no transaction primitive). The handler resolves every member in at most two `IN` queries (one for `org_…` ids, one for slugs) before touching the join table. Position defaults to array index, so order = order.
+- `POST /v1/collections/:slug/members`, `DELETE /v1/collections/:slug/members/:org` — single-member add/remove. `:org` accepts either an `org_…` id or a slug.
+
+Web: `web/src/app/collections/[slug]/page.tsx` renders the header + member chips, then `CollectionReleaseList` for the paginated feed. Each row carries an `org` discriminator the byline uses to label which lab a release came from.
+
+Seed model: the first collection (`frontier-ai-labs`) is created via migration (`20260507000003_seed_frontier_ai_labs.sql`); the CLI admin commands are the layer above the write API. Membership is intentionally curated — orgs onboarded later are not retroactively added to existing collections.
+
 ## Media pipeline
 
 Extracted media URLs go through `filterJunkMedia()` in `packages/rendering/src/media.ts` (drops tracking pixels, favicons, and AI-classified chrome), then `processMediaForR2()` downloads and uploads survivors to R2. `normalizeMediaUrl()` unwraps Next.js/Vercel image optimizer URLs (`/_next/image?url=...`, including Next `basePath` variants) to the underlying CDN asset before upload — those proxy endpoints 404 for off-origin fetchers. The web renders `r2Url ?? url`, and `FallbackImage` / `FallbackPlainImage` in `web/src/components/fallback-image.tsx` show an "Image unavailable" placeholder on load error.
