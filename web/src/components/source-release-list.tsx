@@ -78,12 +78,16 @@ export function SourceReleaseList({
     const controller = new AbortController();
     loadMoreAbortRef.current = controller;
     setLoading(true);
+    setFetchError(null);
     try {
       const res = await fetch(
         `/api/source-releases/${orgSlug}/${sourceSlug}?${buildQuery({ cursor })}`,
         { signal: controller.signal },
       );
-      if (!res.ok) return;
+      if (!res.ok) {
+        setFetchError("Failed to load more releases.");
+        return;
+      }
       const data = await res.json();
       if (controller.signal.aborted) return;
       setReleases((prev) => [...prev, ...data.releases]);
