@@ -33,16 +33,14 @@ async function seedTwoOrgs(db: ReturnType<typeof mkDb>) {
     { id: "org_target", slug: "target-org", name: "Target", category: "cloud" },
     { id: "org_source", slug: "source-org", name: "Source", category: "cloud" },
   ]);
-  await db
-    .insert(sources)
-    .values({
-      id: "src_one",
-      orgId: "org_source",
-      slug: "src-one",
-      name: "One",
-      type: "feed",
-      url: "https://x/1",
-    });
+  await db.insert(sources).values({
+    id: "src_one",
+    orgId: "org_source",
+    slug: "src-one",
+    name: "One",
+    type: "feed",
+    url: "https://x/1",
+  });
 }
 
 describe("POST /v1/products/adopt", () => {
@@ -74,14 +72,12 @@ describe("POST /v1/products/adopt", () => {
   it("mergeInto reuses an existing product instead of creating one", async () => {
     const db = mkDb();
     await seedTwoOrgs(db);
-    await db
-      .insert(products)
-      .values({
-        id: "prod_existing",
-        orgId: "org_target",
-        slug: "existing-shell",
-        name: "Existing",
-      });
+    await db.insert(products).values({
+      id: "prod_existing",
+      orgId: "org_target",
+      slug: "existing-shell",
+      name: "Existing",
+    });
     const fetch = mkApp(db);
 
     const res = await fetch(
@@ -109,14 +105,12 @@ describe("POST /v1/products/adopt", () => {
   it("mergeInto + slug is rejected with 400", async () => {
     const db = mkDb();
     await seedTwoOrgs(db);
-    await db
-      .insert(products)
-      .values({
-        id: "prod_existing",
-        orgId: "org_target",
-        slug: "existing-shell",
-        name: "Existing",
-      });
+    await db.insert(products).values({
+      id: "prod_existing",
+      orgId: "org_target",
+      slug: "existing-shell",
+      name: "Existing",
+    });
     const fetch = mkApp(db);
 
     const res = await fetch(
@@ -162,14 +156,12 @@ describe("POST /v1/products/adopt", () => {
   it("mergeInto dryRun previews without writing", async () => {
     const db = mkDb();
     await seedTwoOrgs(db);
-    await db
-      .insert(products)
-      .values({
-        id: "prod_existing",
-        orgId: "org_target",
-        slug: "existing-shell",
-        name: "Existing",
-      });
+    await db.insert(products).values({
+      id: "prod_existing",
+      orgId: "org_target",
+      slug: "existing-shell",
+      name: "Existing",
+    });
     const fetch = mkApp(db);
 
     const res = await fetch(
