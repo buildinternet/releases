@@ -53,8 +53,9 @@
     // Feature flag for the daily force-drain cron (#518). When true, the
     // 04:00 UTC cron flags stranded scrape/agent sources (unreliable quirk
     // or `last_fetched_at` older than FORCE_DRAIN_STALE_HOURS) so the
-    // 01:00 scrape-agent-sweep picks them up tomorrow. Default off.
-    "FORCE_DRAIN_CRON_ENABLED": "false",
+    // 01:00 scrape-agent-sweep picks them up tomorrow. Capped at
+    // FORCE_SWEEP_MAX_SESSIONS (10/day) so the blast radius is bounded.
+    "FORCE_DRAIN_CRON_ENABLED": "true",
     "FORCE_DRAIN_STALE_HOURS": "72",
     "FORCE_SWEEP_MAX_SESSIONS": "10",
     "MEDIA_ORIGIN": "https://media.releases.sh",
@@ -285,7 +286,9 @@
         "ONBOARD_USE_WORKFLOW": "false",
         // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #517.
         "SCRAPE_CHANGE_DETECT_ENABLED": "false",
-        // Mirrors prod default; not read in staging (CRON_ENABLED=false). See #518.
+        // Off in staging — CRON_ENABLED=false means no cron fires anyway, but
+        // keep the flag explicitly off so an accidental staging cron flip
+        // doesn't dispatch managed-agent sessions against staging. See #518.
         "FORCE_DRAIN_CRON_ENABLED": "false",
         "FORCE_DRAIN_STALE_HOURS": "72",
         "FORCE_SWEEP_MAX_SESSIONS": "10",

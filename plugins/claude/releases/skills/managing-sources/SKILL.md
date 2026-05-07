@@ -227,8 +227,9 @@ In a managed-agent session, also read `releases-errata` `/orgs/<org_id>/observat
 
 1. `releases list <slug> --json` — Check actual version formats, titles, content length, publishedAt patterns
 2. `releases admin source fetch-log <slug> --json` — Check for errors, success rates, stale data
-3. Analyze: calculate real cadence from dates, identify empty content or null fields, spot date drift
-4. Write notes citing specific data points, not general assumptions
+3. Compare `lastFetchedAt` to the cadence you measure in step 1. **An empty fetch-log is not the same as "ingested successfully".** If `lastFetchedAt` is older than ~3× the typical interval between releases (e.g. last fetch was 5 weeks ago for a weekly source), the cron is no-op'ing this source — likely because the change-detector quirk is `unreliable` and nothing else is flagging it. Don't rubber-stamp the source as healthy; surface this to the human operator (or, if you authored the `unreliable` quirk yourself, reconsider whether a more targeted detector would work — e.g. `body-hash` against a CSS-selector slice instead of the whole page).
+4. Analyze: calculate real cadence from dates, identify empty content or null fields, spot date drift
+5. Write notes citing specific data points, not general assumptions
 
 Use the verified approach for high-value orgs, when onboarding new orgs with scrape sources, or when refreshing stale compilation-only playbooks. The difference: "this source likely needs JS rendering" (compilation) vs "all 50 releases have empty content — the RSS feed delivers summaries only, needs crawl mode on per-release pages" (verified).
 
