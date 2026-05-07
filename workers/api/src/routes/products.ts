@@ -25,6 +25,7 @@ import {
   ErrorResponseSchema,
 } from "@buildinternet/releases-api-types";
 import {
+  findProductForOrgSlug,
   isConflictError,
   getOrCreateTagsD1,
   orgWhere,
@@ -120,12 +121,23 @@ productRoutes.post(
       targetOrgSlug: string;
       slug?: string;
       url?: string;
+      mergeInto?: string;
       dryRun?: boolean;
     }>();
 
     if (!body.sourceOrgSlug || !body.targetOrgSlug) {
       return c.json(
         { error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" },
+        400,
+      );
+    }
+
+    if (body.mergeInto && (body.slug || body.url)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "mergeInto cannot be combined with slug or url (existing product is reused)",
+        },
         400,
       );
     }
@@ -144,6 +156,62 @@ productRoutes.post(
         404,
       );
 
+    // Self-adopt would have `migrateOrgToProduct` delete the only org and
+    // strand the new product — refuse before any writes.
+    if (sourceOrg.id === targetOrg.id) {
+      return c.json(
+        {
+          error: "conflict",
+          message: "sourceOrgSlug and targetOrgSlug must refer to different orgs",
+        },
+        409,
+      );
+    }
+
+    const sourcesToMove = await db
+      .select()
+      .from(sourcesActive)
+      .where(eq(sourcesActive.orgId, sourceOrg.id));
+
+    if (body.mergeInto) {
+      // Product slugs are unique per-org, not globally — scope by targetOrg
+      // so a slug collision in another org doesn't resolve the wrong row.
+      const existingProduct = await findProductForOrgSlug(db, targetOrg.id, body.mergeInto);
+      if (!existingProduct) {
+        return c.json(
+          {
+            error: "not_found",
+            message: `Product "${body.mergeInto}" not found under org "${targetOrg.slug}"`,
+          },
+          404,
+        );
+      }
+
+      if (body.dryRun) {
+        return c.json({
+          dryRun: true,
+          mergeInto: existingProduct.slug,
+          product: {
+            name: existingProduct.name,
+            slug: existingProduct.slug,
+            url: existingProduct.url,
+            orgSlug: targetOrg.slug,
+          },
+          sourcesToMove: sourcesToMove.map((s) => s.slug),
+          sourceOrgToDelete: sourceOrg.slug,
+        });
+      }
+
+      const moved = await migrateOrgToProduct(db, sourceOrg.id, targetOrg.id, existingProduct.id);
+      return c.json({
+        product: existingProduct,
+        mergedInto: existingProduct.slug,
+        sourcesMoved: moved.sourcesMoved,
+        accountsMoved: moved.accountsMoved,
+        sourceOrgDeleted: sourceOrg.slug,
+      });
+    }
+
     const productSlug = body.slug ?? sourceOrg.slug;
     if (isReservedSlug(productSlug, "nested")) {
       return c.json(
@@ -156,10 +224,6 @@ productRoutes.post(
       );
     }
 
-    const sourcesToMove = await db
-      .select()
-      .from(sourcesActive)
-      .where(eq(sourcesActive.orgId, sourceOrg.id));
     const productUrl = body.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
 
     if (body.dryRun) {
@@ -198,44 +262,61 @@ productRoutes.post(
       throw err;
     }
 
-    // Move sources to target org and link to new product
-    if (sourcesToMove.length > 0) {
-      await db
-        .update(sources)
-        .set({ orgId: targetOrg.id, productId: product.id })
-        .where(eq(sources.orgId, sourceOrg.id));
-    }
-
-    // Move org accounts to target org (skip duplicates)
-    const accountsToMove = await db
-      .select()
-      .from(orgAccounts)
-      .where(eq(orgAccounts.orgId, sourceOrg.id));
-    if (accountsToMove.length > 0) {
-      await db
-        .insert(orgAccounts)
-        .values(
-          accountsToMove.map((a) => ({
-            orgId: targetOrg.id,
-            platform: a.platform,
-            handle: a.handle,
-            createdAt: a.createdAt,
-          })),
-        )
-        .onConflictDoNothing();
-    }
-
-    // Delete source org (cascade removes its now-migrated accounts)
-    await db.delete(organizations).where(eq(organizations.id, sourceOrg.id));
-
+    const moved = await migrateOrgToProduct(db, sourceOrg.id, targetOrg.id, product.id);
     return c.json({
       product,
-      sourcesMoved: sourcesToMove.length,
-      accountsMoved: accountsToMove.length,
+      sourcesMoved: moved.sourcesMoved,
+      accountsMoved: moved.accountsMoved,
       sourceOrgDeleted: sourceOrg.slug,
     });
   },
 );
+
+/**
+ * Move every source + org_account from `sourceOrgId` to `targetOrgId` (linking
+ * sources to `productId`), then delete the now-empty source org. Steps run in
+ * order — the org delete must come last because its FKs cascade.
+ */
+async function migrateOrgToProduct(
+  db: ReturnType<typeof createDb>,
+  sourceOrgId: string,
+  targetOrgId: string,
+  productId: string,
+): Promise<{ sourcesMoved: number; accountsMoved: number }> {
+  const movedSources = await db
+    .update(sources)
+    .set({ orgId: targetOrgId, productId })
+    .where(eq(sources.orgId, sourceOrgId))
+    .returning({ id: sources.id });
+
+  const accountsToMove = await db
+    .select()
+    .from(orgAccounts)
+    .where(eq(orgAccounts.orgId, sourceOrgId));
+  // org_accounts insert binds 5 cols/row (id default + orgId + platform +
+  // handle + createdAt). D1 caps prepared-statement params at 100, so
+  // chunk at floor(100 / 5) = 20 to stay under the limit on busy orgs.
+  const ACCOUNTS_INSERT_CHUNK = 20;
+  for (let i = 0; i < accountsToMove.length; i += ACCOUNTS_INSERT_CHUNK) {
+    const chunk = accountsToMove.slice(i, i + ACCOUNTS_INSERT_CHUNK);
+    // oxlint-disable-next-line no-await-in-loop -- sequential chunks under the D1 bind-param cap
+    await db
+      .insert(orgAccounts)
+      .values(
+        chunk.map((a) => ({
+          orgId: targetOrgId,
+          platform: a.platform,
+          handle: a.handle,
+          createdAt: a.createdAt,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  await db.delete(organizations).where(eq(organizations.id, sourceOrgId));
+
+  return { sourcesMoved: movedSources.length, accountsMoved: accountsToMove.length };
+}
 
 // Get product by id (preferred) or slug. Registered at both the bare
 // `/products/:identifier` path and the org-scoped `/orgs/:orgSlug/products/:productSlug`.
