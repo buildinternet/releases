@@ -126,7 +126,7 @@ export function OrgReleaseList({
       setCursor(data.pagination.nextCursor);
     } catch (err) {
       if ((err as Error).name === "AbortError") return;
-      throw err;
+      setFetchError("Failed to load more releases.");
     } finally {
       if (!controller.signal.aborted) setLoading(false);
     }
