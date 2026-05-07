@@ -136,6 +136,7 @@ export function OrgReleaseList({
                   <button
                     key={tab.value}
                     type="button"
+                    aria-pressed={active}
                     onClick={() => {
                       setPristine(false);
                       setFilterGroup(tab.value);
