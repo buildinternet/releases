@@ -2,8 +2,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { SourceTypeIcon } from "./source-type-icon";
 import { InfoTooltip } from "./info-tooltip";
-import { LocalTimestamp } from "./local-timestamp";
-import { formatRelativeDate } from "@/lib/formatters";
+import { formatDate, formatRelativeDate } from "@/lib/formatters";
 
 const STALE_AFTER_DAYS = 14;
 
@@ -29,10 +28,12 @@ interface SidebarProps {
   sections: SidebarSection[];
   accounts?: { platform: string; handle: string }[];
   formatPath?: string;
-  /** ISO timestamp for the "last checked" indicator — rendered with relative-time tooltip and stale warning. */
+  /** ISO timestamp for the "last checked" indicator — rendered as a prominent labeled item with stale warning. */
   lastCheckedAt?: string | null;
   /** ISO timestamp for the most recent successful full fetch — shown in the stale tooltip when it differs from lastCheckedAt. */
   lastFetchedAt?: string | null;
+  /** ISO timestamp for when tracking began — rendered as a small footnote at the bottom. */
+  trackingSince?: string | null;
 }
 
 export function Sidebar({
@@ -41,9 +42,33 @@ export function Sidebar({
   formatPath,
   lastCheckedAt,
   lastFetchedAt,
+  trackingSince,
 }: SidebarProps) {
+  const stale = isStale(lastCheckedAt);
   return (
     <div className="w-full md:w-[200px] shrink-0">
+      {lastCheckedAt && (
+        <div className="mb-6">
+          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-1.5 flex items-center gap-1">
+            Last Checked
+            {stale && (
+              <InfoTooltip
+                text={
+                  lastFetchedAt && lastFetchedAt !== lastCheckedAt
+                    ? `Last checked ${formatRelativeDate(lastCheckedAt)}; last successful fetch ${formatRelativeDate(lastFetchedAt)}. This data may be out of date.`
+                    : `Last checked ${formatRelativeDate(lastCheckedAt)} — this data may be out of date.`
+                }
+              />
+            )}
+          </div>
+          <div
+            className="text-sm font-medium tabular-nums text-stone-900 dark:text-stone-100"
+            title={new Date(lastCheckedAt).toLocaleString()}
+          >
+            {formatRelativeDate(lastCheckedAt)}
+          </div>
+        </div>
+      )}
       {sections.map((section, si) => (
         <div
           key={si}
@@ -111,20 +136,11 @@ export function Sidebar({
           </div>
         </div>
       )}
-      {(lastCheckedAt || formatPath) && (
+      {(trackingSince || formatPath) && (
         <div className="border-t border-stone-200 dark:border-stone-800 pt-4 mb-6">
-          {lastCheckedAt && (
-            <div className="text-[11px] mb-3 cursor-default text-stone-400 dark:text-stone-500 flex items-center gap-1">
-              <LocalTimestamp iso={lastCheckedAt} prefix="Last checked " />
-              {isStale(lastCheckedAt) && (
-                <InfoTooltip
-                  text={
-                    lastFetchedAt && lastFetchedAt !== lastCheckedAt
-                      ? `Last checked ${formatRelativeDate(lastCheckedAt)}; last successful fetch ${formatRelativeDate(lastFetchedAt)}. This data may be out of date.`
-                      : `Last checked ${formatRelativeDate(lastCheckedAt)} — this data may be out of date.`
-                  }
-                />
-              )}
+          {trackingSince && (
+            <div className="text-[11px] mb-3 text-stone-400 dark:text-stone-500">
+              Tracking since {formatDate(trackingSince)}
             </div>
           )}
           {formatPath && (
