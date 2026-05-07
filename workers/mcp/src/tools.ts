@@ -2,12 +2,14 @@
 // WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
-import { eq, desc, inArray, and, or, lt, sql } from "drizzle-orm";
+import { eq, desc, inArray, and, or, lt, sql, asc } from "drizzle-orm";
 import {
   sources,
   releases,
   releasesVisible,
   organizations,
+  organizationsActive,
+  productsActive,
   usageLog,
   orgAccounts,
   tags,
@@ -23,6 +25,7 @@ import {
 import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
+import { normalizeDomain } from "@buildinternet/releases-core/domain";
 import { getEntityType, normalizeReleaseId } from "@buildinternet/releases-core/id";
 import {
   buildChangelogResponse,
@@ -1069,6 +1072,85 @@ export async function getOrganization(
   return text(lines.join("\n"));
 }
 
+// ── lookup_domain ────────────────────────────────────────────────────
+
+/**
+ * Pure resolution: normalize the domain, exact-match against
+ * `organizations.domain` and `domain_aliases.domain`, and return the
+ * matching org (with aliases) plus any products whose alias targets the
+ * domain. Mirrors `GET /v1/lookups/by-domain` on the API. Unknown domains
+ * surface as a "not found" message — no on-demand probing for domains.
+ */
+export async function lookupDomain(db: D1Db, params: { domain: string }): Promise<ToolResult> {
+  const domain = normalizeDomain(params.domain);
+  if (!domain) {
+    return text(
+      `"${params.domain}" doesn't look like a valid hostname (need at least \`example.com\`).`,
+    );
+  }
+
+  const [orgRow] = await db
+    .select({
+      id: organizationsActive.id,
+      slug: organizationsActive.slug,
+      name: organizationsActive.name,
+      domain: organizationsActive.domain,
+      description: organizationsActive.description,
+      category: organizationsActive.category,
+      matchedVia: sql<
+        "primary" | "alias"
+      >`CASE WHEN ${organizationsActive.domain} = ${domain} THEN 'primary' ELSE 'alias' END`,
+    })
+    .from(organizationsActive)
+    .leftJoin(domainAliases, eq(domainAliases.orgId, organizationsActive.id))
+    .where(or(eq(organizationsActive.domain, domain), eq(domainAliases.domain, domain)))
+    .orderBy(asc(organizationsActive.createdAt), asc(organizationsActive.id))
+    .limit(1);
+
+  const productRows = await db
+    .select({
+      id: productsActive.id,
+      slug: productsActive.slug,
+      name: productsActive.name,
+      orgSlug: organizationsActive.slug,
+      orgName: organizationsActive.name,
+      category: productsActive.category,
+    })
+    .from(productsActive)
+    .innerJoin(domainAliases, eq(domainAliases.productId, productsActive.id))
+    .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
+    .where(eq(domainAliases.domain, domain))
+    .orderBy(asc(productsActive.name), asc(productsActive.id));
+
+  if (!orgRow && productRows.length === 0) {
+    return text(`No org or product owns the domain \`${domain}\` in this registry.`);
+  }
+
+  const lines: string[] = [`**Domain:** \`${domain}\``];
+
+  if (orgRow) {
+    lines.push("", `## Organization`);
+    lines.push(
+      `**${orgRow.name}** \`${orgRow.slug}\` — matched via ${orgRow.matchedVia}` +
+        (orgRow.matchedVia === "alias" && orgRow.domain
+          ? ` (primary domain: \`${orgRow.domain}\`)`
+          : ""),
+    );
+    if (orgRow.category) lines.push(`Category: ${orgRow.category}`);
+    if (orgRow.description) lines.push(orgRow.description);
+  }
+
+  if (productRows.length > 0) {
+    lines.push("", `## Products`);
+    for (const p of productRows) {
+      const cat = p.category ? ` | ${p.category}` : "";
+      lines.push(`- **${p.name}** \`${p.orgSlug}/${p.slug}\` (org: ${p.orgName})${cat}`);
+    }
+  }
+
+  return text(lines.join("\n"));
+}
+
 // ── summarize_changes ────────────────────────────────────────────────
 
 export async function summarizeChanges(
@@ -1755,6 +1837,7 @@ export async function search(
     query: string;
     type?: SearchType[];
     organization?: string;
+    domain?: string;
     entity?: string;
     limit?: number;
     mode?: SearchMode;
@@ -1781,6 +1864,39 @@ export async function search(
         counts: empty,
       };
     }
+  }
+  // `domain` is the normalized-input form of `organization`. It's its own
+  // param so callers don't have to feel out which kinds of strings findOrg
+  // accepts — pass `https://vercel.com/`, get the same scope as `vercel`.
+  // When both are passed, `domain` is additive: it has to agree with the
+  // org already resolved, otherwise we treat it as a contradiction.
+  if (params.domain) {
+    const normalized = normalizeDomain(params.domain);
+    if (!normalized) {
+      return {
+        result: text(
+          `"${params.domain}" doesn't look like a valid hostname (need at least \`example.com\`).`,
+        ),
+        counts: empty,
+      };
+    }
+    const resolved = await findOrg(db, normalized);
+    if (!resolved) {
+      return {
+        result: text(`No organization owns the domain \`${normalized}\` in this registry.`),
+        counts: empty,
+      };
+    }
+    if (orgScope && orgScope.id !== resolved.id) {
+      return {
+        result: text(
+          `\`organization\` and \`domain\` resolved to different orgs (` +
+            `${orgScope.slug} vs ${resolved.slug}). Pass only one.`,
+        ),
+        counts: empty,
+      };
+    }
+    orgScope = resolved;
   }
 
   let entitySourceIds: string[] | null = null;

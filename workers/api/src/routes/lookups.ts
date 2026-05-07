@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import { asc, desc, eq, sql } from "drizzle-orm";
 import {
+  domainAliases,
   organizations,
   organizationsActive,
   productsActive,
@@ -12,6 +13,8 @@ import { RELEASE_URL_UPSERT } from "@releases/core-internal/release-upsert";
 import { probeRepo, ProbeRateLimitError, ProbeServerError } from "@releases/adapters/github-probe";
 import { newOrgId, newSourceId, newReleaseId } from "@buildinternet/releases-core/id";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { normalizeDomain } from "@buildinternet/releases-core/domain";
+import { findOrgByDomain } from "../queries/search.js";
 import { resolveRelatedOrg, type RelatedOrgResult } from "../lib/lookup-related-org.js";
 import { readNegCache, writeNegCache } from "../lib/lookup-neg-cache.js";
 import { createDb } from "../db.js";
@@ -387,6 +390,10 @@ lookupRoutes.post("/lookups", async (c) => {
  *
  * `Sunset` header is set so callers know this is a migration aid, not a
  * permanent shape — it'll be removed when the bookmark window elapses.
+ *
+ * Public read — pure resolution primitive. Auth on /v1/lookups is
+ * gate-by-method (publicReadAuthMiddleware), so the POST below still
+ * requires a Bearer.
  */
 lookupRoutes.get("/lookups/source-by-slug", async (c) => {
   const slug = c.req.query("slug")?.trim();
@@ -439,4 +446,50 @@ lookupRoutes.get("/lookups/product-by-slug", async (c) => {
   }
   c.header("Sunset", "Sun, 01 Nov 2026 00:00:00 GMT");
   return c.json(row);
+});
+
+/**
+ * Domain → canonical owner lookup. Pure resolution; unlike the GitHub
+ * coordinate path (`POST /v1/lookups`), an unknown domain is just
+ * `404 not_found` — never probed or materialized. The product list is
+ * separate because a domain alias can target a product directly; we
+ * return both shapes so the caller doesn't round-trip again.
+ */
+lookupRoutes.get("/lookups/by-domain", async (c) => {
+  const domain = normalizeDomain(c.req.query("domain") ?? "");
+  if (!domain) {
+    return c.json(
+      { error: "bad_request", message: "domain query param must be a valid hostname" },
+      400,
+    );
+  }
+
+  const db = createDb(c.env.DB);
+  const [orgRow, productRows] = await Promise.all([
+    findOrgByDomain(db, domain),
+    db
+      .select({
+        id: productsActive.id,
+        slug: productsActive.slug,
+        name: productsActive.name,
+        orgId: productsActive.orgId,
+        orgSlug: organizationsActive.slug,
+        orgName: organizationsActive.name,
+        category: productsActive.category,
+      })
+      .from(productsActive)
+      .innerJoin(domainAliases, eq(domainAliases.productId, productsActive.id))
+      .innerJoin(organizationsActive, eq(organizationsActive.id, productsActive.orgId))
+      .where(eq(domainAliases.domain, domain))
+      .orderBy(asc(productsActive.name), asc(productsActive.id)),
+  ]);
+
+  if (!orgRow && productRows.length === 0) {
+    return c.json(
+      { error: "not_found", message: `No org or product owns domain "${domain}"` },
+      404,
+    );
+  }
+
+  return c.json({ domain, org: orgRow, products: productRows });
 });

@@ -1,7 +1,13 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { lookupRoutes } from "../../workers/api/src/routes/lookups.js";
-import { organizations, products, sources, releases } from "@buildinternet/releases-core/schema";
+import {
+  domainAliases,
+  organizations,
+  products,
+  sources,
+  releases,
+} from "@buildinternet/releases-core/schema";
 import { eq } from "drizzle-orm";
 
 let testDb: TestDatabase;
@@ -619,5 +625,143 @@ describe("GET /v1/lookups/product-by-slug", () => {
       orgSlug: "acme",
     });
     expect(res.headers.get("Sunset")).toBe("Sun, 01 Nov 2026 00:00:00 GMT");
+  });
+});
+
+describe("GET /v1/lookups/by-domain", () => {
+  async function getByDomain(domain: string | undefined): Promise<Response> {
+    const env = makeEnv(makeKv());
+    const path =
+      domain === undefined
+        ? "/lookups/by-domain"
+        : `/lookups/by-domain?domain=${encodeURIComponent(domain)}`;
+    return lookupRoutes.request(path, { method: "GET" }, env);
+  }
+
+  test("400 when domain param is missing", async () => {
+    const res = await getByDomain(undefined);
+    expect(res.status).toBe(400);
+  });
+
+  test("400 when domain doesn't normalize", async () => {
+    const res = await getByDomain("not a domain");
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("bad_request");
+  });
+
+  test("404 when no org or product owns the domain", async () => {
+    const res = await getByDomain("nope.example");
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("not_found");
+  });
+
+  test("200 with org when domain matches organizations.domain (primary)", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      domain: "acme.com",
+      discovery: "curated",
+    });
+
+    const res = await getByDomain("acme.com");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      domain: string;
+      org: { id: string; matchedVia: string } | null;
+      products: unknown[];
+    };
+    expect(body.domain).toBe("acme.com");
+    expect(body.org?.id).toBe("org_acme");
+    expect(body.org?.matchedVia).toBe("primary");
+    expect(body.products).toHaveLength(0);
+  });
+
+  test("200 with org when domain matches a domain_alias (alias)", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      domain: "acme.com",
+      discovery: "curated",
+    });
+    await testDb.db.insert(domainAliases).values({
+      id: "da_old",
+      domain: "old-acme.com",
+      orgId: "org_acme",
+    });
+
+    const res = await getByDomain("old-acme.com");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      org: { id: string; matchedVia: string } | null;
+    };
+    expect(body.org?.id).toBe("org_acme");
+    expect(body.org?.matchedVia).toBe("alias");
+  });
+
+  test("normalizes input — strips https://, www., trailing slash", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      domain: "acme.com",
+      discovery: "curated",
+    });
+
+    const res = await getByDomain("https://www.acme.com/");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { domain: string; org: { id: string } | null };
+    expect(body.domain).toBe("acme.com");
+    expect(body.org?.id).toBe("org_acme");
+  });
+
+  test("returns products whose alias targets the domain", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      discovery: "curated",
+    });
+    await testDb.db.insert(products).values({
+      id: "prod_widget",
+      name: "Widget",
+      slug: "widget",
+      orgId: "org_acme",
+    });
+    await testDb.db.insert(domainAliases).values({
+      id: "da_widget",
+      domain: "widget.io",
+      productId: "prod_widget",
+    });
+
+    const res = await getByDomain("widget.io");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      org: unknown | null;
+      products: Array<{ id: string; orgSlug: string }>;
+    };
+    // Org alias and product alias share the same column — querying by
+    // domain.orgId only matches when domainAliases.orgId is set, so a
+    // product-only alias surfaces as products without an org.
+    expect(body.org).toBeNull();
+    expect(body.products).toHaveLength(1);
+    expect(body.products[0]?.id).toBe("prod_widget");
+    expect(body.products[0]?.orgSlug).toBe("acme");
+  });
+
+  test("excludes tombstoned orgs", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_dead",
+      name: "Dead",
+      slug: "dead",
+      domain: "dead.com",
+      discovery: "curated",
+      deletedAt: "2026-04-01T00:00:00.000Z",
+    });
+    const res = await getByDomain("dead.com");
+    expect(res.status).toBe(404);
   });
 });

@@ -369,6 +369,50 @@ export interface SearchChunkHit {
   score: number;
 }
 
+// ── Lookup by domain (entity resolution) ──
+
+/**
+ * Returned by GET /v1/lookups/by-domain. Pure resolution: the server
+ * normalizes the input domain, exact-matches against
+ * `organizations.domain` (primary) and `domain_aliases.domain` (alias for
+ * either an org or a product), and returns whatever it finds. Unknown
+ * domains 404 — there is no on-demand probing for domains, unlike the
+ * GitHub coordinate path.
+ */
+export interface DomainLookupResponse {
+  /** Normalized domain that was matched (lowercased, no scheme/path/www). */
+  domain: string;
+  /**
+   * Owning organization, if one exists. `matchedVia` distinguishes a hit
+   * on `organizations.domain` (`"primary"`) from an alias hit
+   * (`"alias"`) so the UI can render the difference.
+   */
+  org: {
+    id: string;
+    slug: string;
+    name: string;
+    domain: string | null;
+    description: string | null;
+    category: string | null;
+    avatarUrl: string | null;
+    matchedVia: "primary" | "alias";
+  } | null;
+  /**
+   * Products whose alias points at this domain. Multiple are possible
+   * when an org owns several products that all set the same alias —
+   * unusual, but allowed.
+   */
+  products: Array<{
+    id: string;
+    slug: string;
+    name: string;
+    orgId: string;
+    orgSlug: string;
+    orgName: string;
+    category: string | null;
+  }>;
+}
+
 // ── Lookup (on-demand GitHub index) ──
 
 export type LookupStatus = "indexed" | "existing" | "empty" | "not_found" | "deferred";
@@ -407,6 +451,21 @@ export interface LookupResultPayload {
 
 export interface UnifiedSearchResponse {
   query: string;
+  /**
+   * Normalized form of `?domain=` when the caller passed it. The server
+   * does the normalization once and echoes the canonical form back so
+   * clients don't have to re-normalize for analytics or display. Absent
+   * when no domain filter was applied.
+   */
+  domain?: string;
+  /**
+   * Outcome of the `?domain=` resolution step. `"matched"` means the
+   * domain resolved to a known org and results below are scoped to it.
+   * `"not_found"` means the domain didn't match anything; in that case
+   * orgs/catalog/releases will all be empty arrays — the caller can
+   * distinguish "no hits in scope" from "scope didn't exist."
+   */
+  domainStatus?: "matched" | "not_found";
   orgs: SearchOrgHit[];
   /** Products and standalone sources folded into a single list. */
   catalog: SearchCatalogHit[];

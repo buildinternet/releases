@@ -1,7 +1,12 @@
 import { describe, test, expect, beforeEach, afterEach, mock } from "bun:test";
 import { createTestDb, type TestDatabase } from "../db-helper.js";
 import { searchRoutes } from "../../workers/api/src/routes/search.js";
-import { organizations, sources } from "@buildinternet/releases-core/schema";
+import {
+  domainAliases,
+  organizations,
+  releases,
+  sources,
+} from "@buildinternet/releases-core/schema";
 
 let testDb: TestDatabase;
 const realFetch = globalThis.fetch;
@@ -192,5 +197,142 @@ describe("GET /search — coordinate lookup fallback", () => {
 
     expect(body.lookup).not.toBeNull();
     expect(body.lookup?.status).toBe("not_found");
+  });
+});
+
+describe("GET /search — domain filter", () => {
+  async function callSearchWithDomain(
+    env: ReturnType<typeof makeEnv>,
+    query: string,
+    domain: string,
+  ): Promise<Response> {
+    return searchRoutes.request(
+      `/search?q=${encodeURIComponent(query)}&domain=${encodeURIComponent(domain)}&mode=lexical`,
+      { method: "GET" },
+      env,
+      makeExecutionCtx(),
+    );
+  }
+
+  test("400 when domain doesn't normalize", async () => {
+    const res = await callSearchWithDomain(makeEnv(makeKv()), "anything", "not a domain");
+    expect(res.status).toBe(400);
+  });
+
+  test("returns empty result envelope with domainStatus=not_found when domain isn't owned", async () => {
+    const res = await callSearchWithDomain(makeEnv(makeKv()), "anything", "nope.example");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      domainStatus: string;
+      domain: string;
+      orgs: unknown[];
+      releases: unknown[];
+      lookup: unknown;
+    };
+    expect(body.domainStatus).toBe("not_found");
+    expect(body.domain).toBe("nope.example");
+    expect(body.orgs).toHaveLength(0);
+    expect(body.releases).toHaveLength(0);
+    // Domain miss does not trigger the GitHub on-demand lookup.
+    expect(body.lookup).toBeNull();
+  });
+
+  test("scopes orgs and releases to the org owning the primary domain", async () => {
+    await testDb.db.insert(organizations).values([
+      {
+        id: "org_acme",
+        name: "Acme",
+        slug: "acme",
+        domain: "acme.com",
+        discovery: "curated",
+      },
+      // A second org that would otherwise match the FTS query — proves the
+      // domain filter does scope, not just expand.
+      { id: "org_other", name: "Other", slug: "other", discovery: "curated" },
+    ]);
+    await testDb.db.insert(sources).values([
+      {
+        id: "src_acme",
+        name: "Acme Foo",
+        slug: "foo",
+        type: "github",
+        url: "https://github.com/acme/foo",
+        orgId: "org_acme",
+        discovery: "curated",
+      },
+      {
+        id: "src_other",
+        name: "Other Foo",
+        slug: "foo-other",
+        type: "github",
+        url: "https://github.com/other/foo",
+        orgId: "org_other",
+        discovery: "curated",
+      },
+    ]);
+    await testDb.db.insert(releases).values([
+      {
+        id: "rel_acme_1",
+        sourceId: "src_acme",
+        title: "Acme login flow",
+        content: "shipped login auth",
+        publishedAt: "2026-04-01T00:00:00Z",
+      },
+      {
+        id: "rel_other_1",
+        sourceId: "src_other",
+        title: "Other login flow",
+        content: "shipped login auth",
+        publishedAt: "2026-04-02T00:00:00Z",
+      },
+    ]);
+
+    const res = await callSearchWithDomain(makeEnv(makeKv()), "login", "acme.com");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      domain: string;
+      domainStatus: string;
+      orgs: Array<{ slug: string }>;
+      releases: Array<{ id: string; orgSlug: string | null }>;
+    };
+    expect(body.domain).toBe("acme.com");
+    expect(body.domainStatus).toBe("matched");
+    // Only the acme org should appear; the FTS query alone would also match
+    // "Other Foo" without the scope.
+    expect(body.orgs.map((o) => o.slug)).toEqual(["acme"]);
+    expect(body.releases.map((r) => r.id)).toEqual(["rel_acme_1"]);
+  });
+
+  test("matches via domain_aliases (alias domain)", async () => {
+    await testDb.db.insert(organizations).values({
+      id: "org_acme",
+      name: "Acme",
+      slug: "acme",
+      domain: "acme.com",
+      discovery: "curated",
+    });
+    await testDb.db.insert(domainAliases).values({
+      id: "da_old",
+      domain: "old-acme.com",
+      orgId: "org_acme",
+    });
+    await testDb.db.insert(sources).values({
+      id: "src_acme",
+      name: "Acme Foo",
+      slug: "foo",
+      type: "github",
+      url: "https://github.com/acme/foo",
+      orgId: "org_acme",
+      discovery: "curated",
+    });
+
+    const res = await callSearchWithDomain(makeEnv(makeKv()), "Foo", "old-acme.com");
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as {
+      domainStatus: string;
+      orgs: Array<{ slug: string }>;
+    };
+    expect(body.domainStatus).toBe("matched");
+    expect(body.orgs.map((o) => o.slug)).toEqual(["acme"]);
   });
 });

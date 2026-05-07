@@ -10,6 +10,7 @@ import type {
 } from "@buildinternet/releases-api-types";
 import { createDb } from "../db.js";
 import {
+  findOrgByDomain,
   searchOrgs,
   searchProducts,
   searchSources,
@@ -21,8 +22,14 @@ import { runHybridSearch, type HybridMode } from "../lib/search-hybrid.js";
 import { logSearch } from "../lib/log-search.js";
 import { isValidBearerAuth } from "../middleware/auth.js";
 import { hydrateMediaUrls, resolveR2Url, parseBoolParam } from "../utils.js";
-import type { SearchSurface } from "@buildinternet/releases-core/schema";
+import {
+  organizationsActive,
+  sources,
+  type SearchSurface,
+} from "@buildinternet/releases-core/schema";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
+import { normalizeDomain } from "@buildinternet/releases-core/domain";
+import { eq } from "drizzle-orm";
 import { runLookup } from "./lookups.js";
 import { embedSourceSideEffect } from "./sources.js";
 
@@ -124,6 +131,26 @@ function parseMode(raw: string | undefined): HybridMode {
   return "hybrid";
 }
 
+/**
+ * Resolve a `?domain=` filter to the org id we should narrow on. Product-only
+ * aliases fall back to `miss` — narrowing by them would require a
+ * sourceId-list filter, which isn't a documented use case yet.
+ */
+async function resolveDomainScope(
+  db: ReturnType<typeof createDb>,
+  raw: string,
+): Promise<
+  | { kind: "invalid" }
+  | { kind: "miss"; domain: string }
+  | { kind: "hit"; orgId: string; domain: string }
+> {
+  const domain = normalizeDomain(raw);
+  if (!domain) return { kind: "invalid" };
+  const org = await findOrgByDomain(db, domain);
+  if (org) return { kind: "hit", orgId: org.id, domain };
+  return { kind: "miss", domain };
+}
+
 searchRoutes.get("/search", async (c) => {
   const q = c.req.query("q") ?? "";
   if (!q) {
@@ -135,6 +162,7 @@ searchRoutes.get("/search", async (c) => {
   const offset = parseInt(c.req.query("offset") ?? "0", 10);
   const mode = parseMode(c.req.query("mode"));
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+  const rawDomain = c.req.query("domain");
   const db = createDb(c.env.DB);
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
 
@@ -151,6 +179,25 @@ searchRoutes.get("/search", async (c) => {
   // Parse once — reused by both the lexical and hybrid branches below.
   const coordinate = parseCoordinate(q);
 
+  // Optional `?domain=` narrows the result set to a single org. We resolve
+  // up front and short-circuit on invalid/miss so we don't waste a
+  // round-trip running a full search whose results would all be filtered
+  // away. `domainResolution` is also surfaced on the response so callers
+  // can distinguish "domain isn't owned" from "domain is owned but the
+  // query had no hits."
+  const domainResolution = rawDomain ? await resolveDomainScope(db, rawDomain) : null;
+  if (domainResolution?.kind === "invalid") {
+    return c.json(
+      {
+        error: "bad_request",
+        message: "domain query param must be a valid hostname",
+      },
+      400,
+    );
+  }
+  const scopeOrgId = domainResolution?.kind === "hit" ? domainResolution.orgId : undefined;
+  const domainMissed = domainResolution?.kind === "miss";
+
   // Trigger embedding as a side effect when a new source was just indexed.
   // The try/catch guards against test environments that have no ExecutionContext.
   function maybeEmbed(lookup: Awaited<ReturnType<typeof runLookup>> | null): void {
@@ -163,23 +210,99 @@ searchRoutes.get("/search", async (c) => {
     }
   }
 
+  // Domain miss → empty result envelope. Skip the SQL entirely and skip
+  // the on-demand GitHub lookup (which is a separate primitive — domain
+  // misses don't probe).
+  if (domainMissed) {
+    const result = {
+      query: q,
+      domain: domainResolution.domain,
+      domainStatus: "not_found" as const,
+      orgs: [],
+      catalog: [],
+      products: [],
+      sources: [],
+      releases: [],
+      ...(mode !== "lexical" ? { chunks: [], mode, degraded: false } : {}),
+      lookup: null,
+    };
+    c.executionCtx.waitUntil(
+      logSearch(c.env, {
+        surface,
+        clientKind,
+        authed,
+        query: q,
+        mode: mode === "lexical" ? "lexical" : mode,
+        orgHits: 0,
+        catalogHits: 0,
+        releaseHits: 0,
+        chunkHits: 0,
+        durationMs: Date.now() - startedAt,
+        anonId,
+        userAgent,
+      }),
+    );
+    if (wantsMarkdown(c)) return markdownResponse(c, searchToMarkdown(result));
+    return c.json(result);
+  }
+
   // Entity lookups stay lexical — semantic lives behind /search_registry on
   // MCP. The /search endpoint keeps its historical shape so orgs/products
   // keep rendering the way the web UI expects.
+  //
+  // When narrowing by domain, the resolved org is surfaced unconditionally
+  // as the (only) org hit — the caller has named an entity, so confirming
+  // it is more useful than re-running the LIKE on the org name. Catalog
+  // and releases still respect the query within the scoped org.
+  const [scopedOrgRow] = scopeOrgId
+    ? await db
+        .select({
+          slug: organizationsActive.slug,
+          name: organizationsActive.name,
+          domain: organizationsActive.domain,
+          category: organizationsActive.category,
+        })
+        .from(organizationsActive)
+        .where(eq(organizationsActive.id, scopeOrgId))
+        .limit(1)
+    : [];
+
   const [orgs, rawProducts, rawSources] = await Promise.all([
-    searchOrgs(db, q, limit),
-    searchProducts(db, q, limit),
-    searchSources(db, q, limit),
+    scopedOrgRow
+      ? Promise.resolve([
+          {
+            slug: scopedOrgRow.slug,
+            name: scopedOrgRow.name,
+            domain: scopedOrgRow.domain,
+            avatarUrl: null,
+            category: scopedOrgRow.category,
+          },
+        ])
+      : searchOrgs(db, q, limit, { orgId: scopeOrgId }),
+    searchProducts(db, q, limit, { orgId: scopeOrgId }),
+    searchSources(db, q, limit, { orgId: scopeOrgId }),
   ]);
   const catalog = foldSourcesIntoCatalog(rawProducts, rawSources);
+
+  // Pre-compute the source-id list when narrowing — needed for the hybrid
+  // path's `orgSourceIds` filter.
+  let scopeSourceIds: string[] | undefined;
+  if (scopeOrgId) {
+    const rows = await db
+      .select({ id: sources.id })
+      .from(sources)
+      .where(eq(sources.orgId, scopeOrgId));
+    scopeSourceIds = rows.map((r) => r.id);
+  }
 
   // When mode==="lexical" we keep the legacy path bit-for-bit (including
   // the cascading enrichment from matched entities) to preserve the cache
   // key semantics for the existing web UI.
   if (mode === "lexical") {
-    const ftsRows = await searchReleasesFts(db, q, limit, offset, { includeCoverage }).catch(
-      () => [] as RawSearchReleaseRow[],
-    );
+    const ftsRows = await searchReleasesFts(db, q, limit, offset, {
+      includeCoverage,
+      orgId: scopeOrgId,
+    }).catch(() => [] as RawSearchReleaseRow[]);
     let rawReleases = ftsRows;
     if (rawReleases.length === 0 && (orgs.length > 0 || catalog.length > 0)) {
       rawReleases = await searchReleasesFromMatchedEntities(
@@ -195,15 +318,19 @@ searchRoutes.get("/search", async (c) => {
     // On-demand GitHub lookup: a coordinate-shaped query is a precise
     // question about one repo, so only entity matches (org / catalog
     // source) suppress it. Tangential FTS hits on a single segment token
-    // (e.g. "shopify" in another org's release body) don't.
+    // (e.g. "shopify" in another org's release body) don't. Skip when
+    // narrowing by domain — the caller has already specified an entity.
     let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
-    if (coordinate && orgs.length === 0 && catalog.length === 0) {
+    if (coordinate && !scopeOrgId && orgs.length === 0 && catalog.length === 0) {
       lookup = await runLookup(c.env, db, coordinate);
       maybeEmbed(lookup);
     }
 
     const result = {
       query: q,
+      ...(domainResolution
+        ? { domain: domainResolution.domain, domainStatus: "matched" as const }
+        : {}),
       orgs,
       catalog,
       products: catalog,
@@ -241,6 +368,9 @@ searchRoutes.get("/search", async (c) => {
       topK: limit,
       mode,
       includeCoverage,
+      // Domain narrowing reaches into the hybrid layer via the existing
+      // `orgSourceIds` filter so vector + FTS results both stay scoped.
+      ...(scopeSourceIds && scopeSourceIds.length > 0 ? { orgSourceIds: scopeSourceIds } : {}),
     },
     { waitUntil: c.executionCtx.waitUntil.bind(c.executionCtx) },
   );
@@ -290,15 +420,19 @@ searchRoutes.get("/search", async (c) => {
     }));
 
   // On-demand GitHub lookup: same gate as the lexical branch — entity
-  // matches suppress it, release/chunk hits don't.
+  // matches suppress it, release/chunk hits don't. Domain narrowing also
+  // suppresses (the caller has already named an entity).
   let lookup: Awaited<ReturnType<typeof runLookup>> | null = null;
-  if (coordinate && orgs.length === 0 && catalog.length === 0) {
+  if (coordinate && !scopeOrgId && orgs.length === 0 && catalog.length === 0) {
     lookup = await runLookup(c.env, db, coordinate);
     maybeEmbed(lookup);
   }
 
   const result = {
     query: q,
+    ...(domainResolution
+      ? { domain: domainResolution.domain, domainStatus: "matched" as const }
+      : {}),
     orgs,
     catalog,
     products: catalog,
