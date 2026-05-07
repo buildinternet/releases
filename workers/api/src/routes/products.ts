@@ -28,6 +28,7 @@ import {
   isConflictError,
   getOrCreateTagsD1,
   orgWhere,
+  productMatchByIdOrSlug,
   replaceAliases,
   resolveProductFromContext,
 } from "../utils.js";
@@ -120,12 +121,23 @@ productRoutes.post(
       targetOrgSlug: string;
       slug?: string;
       url?: string;
+      mergeInto?: string;
       dryRun?: boolean;
     }>();
 
     if (!body.sourceOrgSlug || !body.targetOrgSlug) {
       return c.json(
         { error: "bad_request", message: "Missing required fields: sourceOrgSlug, targetOrgSlug" },
+        400,
+      );
+    }
+
+    if (body.mergeInto && (body.slug || body.url)) {
+      return c.json(
+        {
+          error: "bad_request",
+          message: "mergeInto cannot be combined with slug or url (existing product is reused)",
+        },
         400,
       );
     }
@@ -144,6 +156,54 @@ productRoutes.post(
         404,
       );
 
+    const sourcesToMove = await db
+      .select()
+      .from(sourcesActive)
+      .where(eq(sourcesActive.orgId, sourceOrg.id));
+
+    if (body.mergeInto) {
+      const [existingProduct] = await db
+        .select()
+        .from(products)
+        .where(productMatchByIdOrSlug(body.mergeInto));
+      if (!existingProduct) {
+        return c.json({ error: "not_found", message: `Product not found: ${body.mergeInto}` }, 404);
+      }
+      if (existingProduct.orgId !== targetOrg.id) {
+        return c.json(
+          {
+            error: "conflict",
+            message: `Product "${existingProduct.slug}" belongs to org "${existingProduct.orgId}", not target "${targetOrg.slug}"`,
+          },
+          409,
+        );
+      }
+
+      if (body.dryRun) {
+        return c.json({
+          dryRun: true,
+          mergeInto: existingProduct.slug,
+          product: {
+            name: existingProduct.name,
+            slug: existingProduct.slug,
+            url: existingProduct.url,
+            orgSlug: targetOrg.slug,
+          },
+          sourcesToMove: sourcesToMove.map((s) => s.slug),
+          sourceOrgToDelete: sourceOrg.slug,
+        });
+      }
+
+      const moved = await migrateOrgToProduct(db, sourceOrg.id, targetOrg.id, existingProduct.id);
+      return c.json({
+        product: existingProduct,
+        mergedInto: existingProduct.slug,
+        sourcesMoved: moved.sourcesMoved,
+        accountsMoved: moved.accountsMoved,
+        sourceOrgDeleted: sourceOrg.slug,
+      });
+    }
+
     const productSlug = body.slug ?? sourceOrg.slug;
     if (isReservedSlug(productSlug, "nested")) {
       return c.json(
@@ -156,10 +216,6 @@ productRoutes.post(
       );
     }
 
-    const sourcesToMove = await db
-      .select()
-      .from(sourcesActive)
-      .where(eq(sourcesActive.orgId, sourceOrg.id));
     const productUrl = body.url ?? (sourceOrg.domain ? `https://${sourceOrg.domain}` : null);
 
     if (body.dryRun) {
@@ -198,44 +254,55 @@ productRoutes.post(
       throw err;
     }
 
-    // Move sources to target org and link to new product
-    if (sourcesToMove.length > 0) {
-      await db
-        .update(sources)
-        .set({ orgId: targetOrg.id, productId: product.id })
-        .where(eq(sources.orgId, sourceOrg.id));
-    }
-
-    // Move org accounts to target org (skip duplicates)
-    const accountsToMove = await db
-      .select()
-      .from(orgAccounts)
-      .where(eq(orgAccounts.orgId, sourceOrg.id));
-    if (accountsToMove.length > 0) {
-      await db
-        .insert(orgAccounts)
-        .values(
-          accountsToMove.map((a) => ({
-            orgId: targetOrg.id,
-            platform: a.platform,
-            handle: a.handle,
-            createdAt: a.createdAt,
-          })),
-        )
-        .onConflictDoNothing();
-    }
-
-    // Delete source org (cascade removes its now-migrated accounts)
-    await db.delete(organizations).where(eq(organizations.id, sourceOrg.id));
-
+    const moved = await migrateOrgToProduct(db, sourceOrg.id, targetOrg.id, product.id);
     return c.json({
       product,
-      sourcesMoved: sourcesToMove.length,
-      accountsMoved: accountsToMove.length,
+      sourcesMoved: moved.sourcesMoved,
+      accountsMoved: moved.accountsMoved,
       sourceOrgDeleted: sourceOrg.slug,
     });
   },
 );
+
+/**
+ * Move every source + org_account from `sourceOrgId` to `targetOrgId` (linking
+ * sources to `productId`), then delete the now-empty source org. Steps run in
+ * order — the org delete must come last because its FKs cascade.
+ */
+async function migrateOrgToProduct(
+  db: ReturnType<typeof createDb>,
+  sourceOrgId: string,
+  targetOrgId: string,
+  productId: string,
+): Promise<{ sourcesMoved: number; accountsMoved: number }> {
+  const movedSources = await db
+    .update(sources)
+    .set({ orgId: targetOrgId, productId })
+    .where(eq(sources.orgId, sourceOrgId))
+    .returning({ id: sources.id });
+
+  const accountsToMove = await db
+    .select()
+    .from(orgAccounts)
+    .where(eq(orgAccounts.orgId, sourceOrgId));
+  if (accountsToMove.length > 0) {
+    await db
+      .insert(orgAccounts)
+      .values(
+        accountsToMove.map((a) => ({
+          orgId: targetOrgId,
+          platform: a.platform,
+          handle: a.handle,
+          createdAt: a.createdAt,
+        })),
+      )
+      .onConflictDoNothing();
+  }
+
+  await db.delete(organizations).where(eq(organizations.id, sourceOrgId));
+
+  return { sourcesMoved: movedSources.length, accountsMoved: accountsToMove.length };
+}
 
 // Get product by id (preferred) or slug. Registered at both the bare
 // `/products/:identifier` path and the org-scoped `/orgs/:orgSlug/products/:productSlug`.

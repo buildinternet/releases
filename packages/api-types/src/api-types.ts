@@ -721,8 +721,18 @@ export interface Session {
   sessionId: string;
   company: string;
   type: "onboard" | "update";
+  /** Sub-agent that ran this session. Surfaces on the detail GET. */
+  agent?: "sonnet" | "haiku";
+  /** Identifies the client that started this session (e.g. hostname). */
+  runner?: string;
+  /** Correlation ID for end-to-end tracing across CLI → API → managed agent. */
+  correlationId?: string;
+  /** Anthropic session ID for linking to console logs. */
+  anthropicSessionId?: string;
   status: "running" | "complete" | "error" | "cancelled";
   step?: string;
+  sourcesFound?: number;
+  sourcesValidated?: number;
   totalSources?: number;
   sourcesFetched?: number;
   releasesFound?: number;
@@ -739,6 +749,22 @@ export interface Session {
   stopReason?: string;
   /** Number of provider `session.error` events observed before terminal. */
   retryCount?: number;
+  /** Non-fatal warnings collected during the session. */
+  warnings?: string[];
+  /**
+   * Token usage + estimated cost from the managed-agents session. `estimatedUsd`
+   * is a snapshot of Anthropic list prices at session-completion time.
+   */
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    cacheWriteTokens?: number;
+    cacheReadTokens?: number;
+    model?: string;
+    estimatedUsd?: number;
+  };
+  /** Final agent-reported state (sources, etc.) for terminal sessions. */
+  result?: Record<string, unknown>;
   activeSources?: string[];
   cancelRequested?: boolean;
 }

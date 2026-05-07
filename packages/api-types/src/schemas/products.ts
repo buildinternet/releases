@@ -88,18 +88,31 @@ export const UpdateProductBodySchema = z.object({
   aliases: z.array(z.string()).optional(),
 });
 
-/** Body accepted by `POST /v1/products/adopt`. */
+/**
+ * Body accepted by `POST /v1/products/adopt`.
+ *
+ * `mergeInto` (slug or `prod_…` ID) folds the source org into an existing
+ * product under `targetOrgSlug` instead of creating a new one. When set,
+ * `slug` and `url` must be omitted (the existing product's values stand).
+ */
 export const AdoptProductBodySchema = z.object({
   sourceOrgSlug: z.string().min(1),
   targetOrgSlug: z.string().min(1),
   slug: z.string().optional(),
   url: z.string().optional(),
+  mergeInto: z.string().optional(),
   dryRun: z.boolean().optional(),
 });
 
-/** Live (non-dryRun) result from `POST /v1/products/adopt`. */
+/**
+ * Live (non-dryRun) result from `POST /v1/products/adopt`.
+ *
+ * `mergedInto` is set when the request used `mergeInto` — its value is the
+ * existing product's slug, signalling that no new product was created.
+ */
 export const ProductAdoptResultSchema = z.object({
   product: ProductRowSchema,
+  mergedInto: z.string().optional(),
   sourcesMoved: z.number().int().min(0),
   accountsMoved: z.number().int().min(0),
   sourceOrgDeleted: z.string(),
@@ -108,6 +121,7 @@ export const ProductAdoptResultSchema = z.object({
 /** Dry-run preview from `POST /v1/products/adopt` with `dryRun: true`. */
 export const ProductAdoptDryRunSchema = z.object({
   dryRun: z.literal(true),
+  mergeInto: z.string().optional(),
   product: z.object({
     name: z.string(),
     slug: z.string(),
