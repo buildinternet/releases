@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import { Database } from "bun:sqlite";
 import { drizzle } from "drizzle-orm/bun-sqlite";
+import { eq } from "drizzle-orm";
 import { applyMigrations } from "../../../tests/db-helper";
 import {
   organizations,
@@ -187,5 +188,218 @@ describe("collections", () => {
     const body = await res.json();
     expect(body.releases).toEqual([]);
     expect(body.pagination.nextCursor).toBeNull();
+  });
+});
+
+const json = (method: string, body: unknown) => ({
+  method,
+  headers: { "content-type": "application/json" },
+  body: JSON.stringify(body),
+});
+
+describe("collections (writes)", () => {
+  it("creates a collection (slug derived from name when omitted)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections",
+        json("POST", { name: "Inference Providers", description: "API-first inference." }),
+      ),
+    );
+    expect(res.status).toBe(201);
+    const created = await res.json();
+    expect(created.slug).toBe("inference-providers");
+    expect(created.name).toBe("Inference Providers");
+    expect(created.description).toBe("API-first inference.");
+    expect(created.id.startsWith("col_")).toBe(true);
+  });
+
+  it("rejects missing name with 400", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections", json("POST", { description: "no name" })),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("rejects malformed slug with 400", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections", json("POST", { name: "Bad", slug: "Has Spaces" })),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("returns 409 on duplicate slug", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections",
+        json("POST", { name: "Test Frontier Labs", slug: "test-frontier-labs" }),
+      ),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("patches name and description", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-frontier-labs",
+        json("PATCH", { name: "Renamed Labs", description: "Updated." }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const updated = await res.json();
+    expect(updated.name).toBe("Renamed Labs");
+    expect(updated.description).toBe("Updated.");
+    expect(updated.slug).toBe("test-frontier-labs");
+  });
+
+  it("renames slug via PATCH and returns 404 on the old slug", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set",
+        json("PATCH", { slug: "renamed-empty" }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const after = await fetch(new Request("http://test/v1/collections/test-empty-set"));
+    expect(after.status).toBe(404);
+    const renamed = await fetch(new Request("http://test/v1/collections/renamed-empty"));
+    expect(renamed.status).toBe(200);
+  });
+
+  it("DELETEs a collection (cascade clears members)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-frontier-labs", { method: "DELETE" }),
+    );
+    expect(res.status).toBe(204);
+    const after = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
+    expect(after.status).toBe(404);
+    const remaining = await db
+      .select()
+      .from(collectionMembers)
+      .where(eq(collectionMembers.collectionId, "col_test_fal"));
+    expect(remaining).toEqual([]);
+  });
+
+  it("PUT replaces full membership atomically (positions follow array index)", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-frontier-labs/members",
+        json("PUT", { orgs: [{ orgSlug: "openai" }, { orgSlug: "anthropic" }] }),
+      ),
+    );
+    expect(res.status).toBe(200);
+    const detail = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
+    const body = await detail.json();
+    expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["openai", "anthropic"]);
+  });
+
+  it("PUT rejects duplicate orgs in the same payload", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-frontier-labs/members",
+        json("PUT", {
+          orgs: [{ orgSlug: "openai" }, { orgId: "org_oai" }],
+        }),
+      ),
+    );
+    expect(res.status).toBe(400);
+  });
+
+  it("POST adds a single member", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-empty-set/members",
+        json("POST", { orgSlug: "openai", position: 0 }),
+      ),
+    );
+    expect(res.status).toBe(201);
+    const detail = await fetch(new Request("http://test/v1/collections/test-empty-set"));
+    const body = await detail.json();
+    expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["openai"]);
+  });
+
+  it("POST returns 409 when org is already a member", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-frontier-labs/members",
+        json("POST", { orgSlug: "anthropic" }),
+      ),
+    );
+    expect(res.status).toBe(409);
+  });
+
+  it("POST returns 404 when org is unknown", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request(
+        "http://test/v1/collections/test-frontier-labs/members",
+        json("POST", { orgSlug: "no-such-org" }),
+      ),
+    );
+    expect(res.status).toBe(404);
+    const body = await res.json();
+    expect(body.error).toBe("not_found");
+  });
+
+  it("DELETE removes a single member by slug", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-frontier-labs/members/openai", {
+        method: "DELETE",
+      }),
+    );
+    expect(res.status).toBe(204);
+    const detail = await fetch(new Request("http://test/v1/collections/test-frontier-labs"));
+    const body = await detail.json();
+    expect(body.orgs.map((o: { slug: string }) => o.slug)).toEqual(["anthropic"]);
+  });
+
+  it("DELETE on a non-member returns 404", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-empty-set/members/openai", {
+        method: "DELETE",
+      }),
+    );
+    expect(res.status).toBe(404);
   });
 });

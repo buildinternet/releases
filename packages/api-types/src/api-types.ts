@@ -703,6 +703,47 @@ export interface CollectionDetail {
   orgs: CollectionMemberOrg[];
 }
 
+/** Body for POST /v1/collections. `slug` derives from `name` via toSlug() if omitted. */
+export interface CreateCollectionRequest {
+  slug?: string;
+  name: string;
+  description?: string | null;
+}
+
+/** Body for PATCH /v1/collections/:slug. All fields optional; slug rename is allowed. */
+export interface UpdateCollectionRequest {
+  slug?: string;
+  name?: string;
+  description?: string | null;
+}
+
+/** A single member entry accepted by the member-write endpoints. */
+export interface CollectionMemberInput {
+  /** Either `orgId` (org_…) or `orgSlug` is required; if both are given, `orgId` wins. */
+  orgId?: string;
+  orgSlug?: string;
+  /** Authoring position (default 0). For PUT, omit to use array index. */
+  position?: number;
+}
+
+/** Body for POST /v1/collections/:slug/members. */
+export type AddCollectionMemberRequest = CollectionMemberInput;
+
+/** Body for PUT /v1/collections/:slug/members. Replaces the full membership atomically. */
+export interface ReplaceCollectionMembersRequest {
+  orgs: CollectionMemberInput[];
+}
+
+/** Bare row returned by POST/PATCH on /v1/collections. */
+export interface CollectionRow {
+  id: string;
+  slug: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ── Releases (enriched) ──
 
 /** Flat release shape returned by GET /v1/releases/:id with source metadata. */
