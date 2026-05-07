@@ -244,10 +244,21 @@ export const api = {
     const qs = params.toString();
     return fetchApi<OrgActivity>(`/v1/orgs/${slug}/activity${qs ? `?${qs}` : ""}`);
   },
-  orgReleases: (slug: string, cursor?: string, limit = 20) => {
+  orgReleases: (
+    slug: string,
+    opts: {
+      cursor?: string;
+      limit?: number;
+      sourceType?: string;
+      includePrereleases?: boolean;
+    } = {},
+  ) => {
+    const { cursor, limit = 20, sourceType, includePrereleases } = opts;
     const params = new URLSearchParams();
     if (cursor) params.set("cursor", cursor);
     if (limit !== 20) params.set("limit", String(limit));
+    if (sourceType && sourceType !== "all") params.set("source_type", sourceType);
+    if (includePrereleases) params.set("include_prereleases", "true");
     const qs = params.toString();
     return fetchApi<OrgReleasesResponse>(`/v1/orgs/${slug}/releases${qs ? `?${qs}` : ""}`);
   },

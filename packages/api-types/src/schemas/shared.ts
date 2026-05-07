@@ -52,6 +52,11 @@ export const ReleaseItemSchema = z.object({
   // `.optional()` — older API responses (mid-deploy or pinned old workers)
   // may omit `type`; consumers should treat `undefined` as `"feature"`.
   type: ReleaseTypeSchema.optional(),
+  // Pre-release flag (alpha/beta/rc/preview/nightly). Computed at ingest —
+  // GitHub uses the API's authoritative `prerelease` field; other adapters
+  // fall back to a SemVer-prerelease regex. `.optional()` for the same
+  // older-response degrade-gracefully reason as `type`.
+  prerelease: z.boolean().optional(),
 });
 
 export const ReleaseSummaryItemSchema = z.object({

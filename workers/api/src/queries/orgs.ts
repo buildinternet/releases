@@ -308,6 +308,7 @@ export type OrgReleaseRow = {
   published_at: string | null;
   url: string | null;
   media: string | null;
+  prerelease: 0 | 1;
   source_slug: string;
   source_name: string;
   source_type: string;
@@ -320,19 +321,35 @@ export async function getOrgReleasesFeed(
   orgId: string,
   cursor: { cursorWhere: string; cursorBindings: string[] },
   limit: number,
-  opts: { includeCoverage?: boolean } = {},
+  opts: {
+    includeCoverage?: boolean;
+    sourceTypes?: string[];
+    includePrereleases?: boolean;
+  } = {},
 ): Promise<OrgReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
+  const filterBindings: string[] = [];
+  let sourceTypeWhere = "";
+  if (opts.sourceTypes && opts.sourceTypes.length > 0) {
+    sourceTypeWhere = `AND s.type IN (${opts.sourceTypes.map(() => "?").join(",")})`;
+    filterBindings.push(...opts.sourceTypes);
+  }
+  const prereleaseWhere = opts.includePrereleases
+    ? ""
+    : "AND (r.prerelease IS NULL OR r.prerelease = 0)";
+
   const stmt = d1
     .prepare(
       `
     SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
-           r.published_at, r.fetched_at, r.url, r.media,
+           r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
     FROM ${releasesTable} r
     INNER JOIN sources_active s ON s.id = r.source_id
     WHERE s.org_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${sourceTypeWhere}
+      ${prereleaseWhere}
       ${cursor.cursorWhere}
     ORDER BY
       CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
@@ -342,7 +359,7 @@ export async function getOrgReleasesFeed(
     LIMIT ?
   `,
     )
-    .bind(orgId, ...cursor.cursorBindings, limit);
+    .bind(orgId, ...filterBindings, ...cursor.cursorBindings, limit);
 
   const { results } = await stmt.all<OrgReleaseRow>();
   return results;

@@ -1,0 +1,17 @@
+-- Add `prerelease` flag to releases.
+--
+-- Computed once at ingest:
+--   - GitHub adapter: from the `prerelease` field on the GitHub releases API.
+--   - Other adapters: from a SemVer-prerelease regex on `version`
+--     (e.g. `v0.42.0-preview.1`, `v0.41.0-rc.2`, `v0.42.0-nightly.20260506`).
+--
+-- Default-hidden on the org feed (`/v1/orgs/:slug/releases`); callers opt
+-- in via `?include_prereleases=true`.
+--
+-- No standalone index on `prerelease` — the column has ~5% selectivity (most
+-- rows are 0), so the SQLite optimizer would never pick it as a scan driver
+-- over the existing `idx_releases_source_suppressed_published` composite
+-- that already covers the per-org join. If query plans regress on a future
+-- read pattern, the right move is extending that composite to include
+-- `prerelease`, not adding a standalone bool index.
+ALTER TABLE releases ADD COLUMN prerelease INTEGER NOT NULL DEFAULT 0;

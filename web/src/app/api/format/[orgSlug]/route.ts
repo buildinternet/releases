@@ -19,7 +19,7 @@ export async function GET(
     try {
       [org, feed] = await Promise.all([
         api.orgDetail(orgSlug),
-        api.orgReleases(orgSlug, undefined, ATOM_DEFAULT_MAX_ENTRIES),
+        api.orgReleases(orgSlug, { limit: ATOM_DEFAULT_MAX_ENTRIES }),
       ]);
     } catch {
       return NextResponse.json(
@@ -35,7 +35,7 @@ export async function GET(
     try {
       [org, feed] = await Promise.all([
         api.orgDetail(orgSlug),
-        api.orgReleases(orgSlug, undefined, 10),
+        api.orgReleases(orgSlug, { limit: 10 }),
       ]);
     } catch {
       return NextResponse.json(

@@ -7,9 +7,9 @@
 
 export const D1_MAX_BINDINGS = 100;
 
-// `releases` INSERT binds 13 placeholders per row: id, source_id, version,
+// `releases` INSERT binds 14 placeholders per row: id, source_id, version,
 // type, title, content, url, content_hash, metadata, media, published_at,
-// suppressed, fetched_at. 7 rows * 13 = 91 bindings.
+// prerelease, suppressed, fetched_at. 7 rows * 14 = 98 bindings.
 export const RELEASES_BATCH_CHUNK_SIZE = 7;
 
 // IN-clause chunk for id lookups/updates on releases. An UPDATE adds one

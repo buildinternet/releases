@@ -25,6 +25,7 @@ import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import type { RawRelease } from "@releases/adapters/types.js";
+import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
   embedAndUpsertChangelogFile,
@@ -613,6 +614,7 @@ export async function fetchOne(
       url: raw.url ?? null,
       contentHash: contentHash(raw),
       publishedAt: raw.publishedAt?.toISOString() ?? null,
+      prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
       // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
       // and direct rendering both see the underlying CDN asset.
       media: JSON.stringify(
@@ -1292,6 +1294,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
     body: string | null;
     html_url: string;
     published_at: string | null;
+    prerelease: boolean;
   }> = await res.json();
 
   return data.slice(0, 200).map((rel) => ({
@@ -1300,6 +1303,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
     content: rel.body || "",
     url: rel.html_url,
     publishedAt: rel.published_at ? new Date(rel.published_at) : undefined,
+    prerelease: rel.prerelease === true,
   }));
 }
 

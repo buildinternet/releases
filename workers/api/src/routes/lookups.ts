@@ -49,6 +49,7 @@ async function fetchGitHubReleases(
     content: string;
     url: string;
     publishedAt: Date | undefined;
+    prerelease: boolean;
   }>
 > {
   const headers: Record<string, string> = {
@@ -71,6 +72,7 @@ async function fetchGitHubReleases(
     body: string | null;
     html_url: string;
     published_at: string | null;
+    prerelease: boolean;
   }> = await res.json();
 
   return data.map((rel) => ({
@@ -79,6 +81,7 @@ async function fetchGitHubReleases(
     content: rel.body || "",
     url: rel.html_url,
     publishedAt: rel.published_at ? new Date(rel.published_at) : undefined,
+    prerelease: rel.prerelease === true,
   }));
 }
 
@@ -303,6 +306,7 @@ export async function runLookup(
         url: r.url,
         // publishedAt is text (ISO string) in the schema; RawRelease carries Date | undefined
         publishedAt: r.publishedAt ? r.publishedAt.toISOString() : null,
+        prerelease: r.prerelease,
       }));
       for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
         const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);

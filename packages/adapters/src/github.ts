@@ -404,6 +404,7 @@ interface GitHubRelease {
   body: string | null;
   html_url: string;
   published_at: string | null;
+  prerelease: boolean;
 }
 
 // Re-fetch protection: The UNIQUE constraints on releases (source_id, url)
@@ -467,6 +468,7 @@ export const github: Adapter = {
           content: rel.body || "",
           url: rel.html_url,
           publishedAt,
+          prerelease: rel.prerelease === true,
         });
 
         if (maxEntries && releases.length >= maxEntries) {
