@@ -7,7 +7,7 @@ The artifact is the overview body — markdown only, no surrounding metadata. Wh
 ## Format
 
 - Body has NO markdown headings (no `#`, `##`, `###`, etc., anywhere in the body). The UI renders the org name and section structure; a leading title or any heading inside the body is a fail.
-- Body does NOT lead with a duplicated title (a line that is just the org name) or a generic positioning statement (e.g. "X is a leading platform for Y"). Possessive subjects in normal sentence prose are fine when the sentence pivots immediately into concrete shipped information — `Linear's current focus is the full deployment loop — Linear Releases shipped in late April…` passes; `Linear is a project-management platform.` fails.
+- Body does NOT lead with a duplicated title (a line that is just the org name) or a generic positioning statement (e.g. "X is a leading platform for Y"). The Voice section also prohibits the org name as a sentence subject anywhere in the body — including the opener.
 - Each primary themed section uses one of these two shapes:
   1. **Bold tease** + tight bullet list of concrete items.
   2. **Bold tease** + one to two short prose sentences (each ≤25 words).
@@ -18,7 +18,7 @@ The artifact is the overview body — markdown only, no surrounding metadata. Wh
 
 ## Content
 
-- Opens with one concrete sentence on the org's current focus or recent ship, ≤25 words. "Recently shipped X and Y" passes; "X's current focus is Y" passes when Y is a specific shipped area or product and the same sentence delivers concrete information; "Continues to evolve their platform" fails.
+- Opens with one concrete sentence on a recent ship, ≤25 words. "Recently shipped X and Y" passes; "Continues to evolve their platform" fails. The opener follows the same self-reference rule as the rest of the body — `Linear's current focus is...` fails because the page header already shows "Linear".
 - Body has two to five primary themed sections, each with a bold tease. One-section overviews pass only when the source material is genuinely thin (see faithfulness — short bodies are preferred to padded ones). A trailing wrap-up paragraph (per the Format rules above) does not count toward the section limit.
 - When multiple sources contribute, sections synthesize by topic across sources rather than summarizing each source separately. A section that reads as a per-source recap is a fail.
 - Breaking changes and deprecations are called out inline where they fall, not buried.
@@ -28,8 +28,11 @@ The artifact is the overview body — markdown only, no surrounding metadata. Wh
 ## Voice (release notes, not changelog)
 
 - Each section describes a user-visible capability before its implementation. "Agents can drive a real browser session with natural language" leads; "the `/interact` endpoint accepts `prompt` and `actions[]`" supports. The bold tease is the user-facing claim; supporting prose or bullets carry the implementation detail.
-- Pure changelog phrasing as the section headline is a fail: endpoint names, parameter names, internal class names, or version numbers as the _headline noun_ are flags. `**Rust FFI v0.12.53 introduced a breaking VideoFrame API change**` fails; `**LiveKit's Rust frame pipeline added per-frame metadata (breaking)**` passes.
+- Pure changelog phrasing as the section headline is a fail: endpoint names, parameter names, internal class names, or version numbers as the _headline noun_ are flags. `**Rust FFI v0.12.53 introduced a breaking VideoFrame API change**` fails; `**The Rust frame pipeline added per-frame metadata (breaking)**` passes.
 - Code, package names, and versions remain useful in supporting prose. The test is whether a reader who doesn't already use the product would learn what shipped from the section lead alone.
+- **No org-name self-reference as a sentence subject.** The page header already shows the org name, so `Linear's current focus is X` and `Deno completed its rewrite` bury the news in a self-reference. Rephrase: `Recently shipped X` or `The Node.js HTTP layer is now Rust-native`. Product names that contain the org name — `Linear Agent`, `Prisma Postgres`, `Cloudflare Workers`, `Linear Releases` — are fine; they're proper product names, not self-reference. Org name in compound predicate position (`connects to GitHub`, `integrates with Slack`) is also fine.
+- **No editorializing about strategy or impact.** State what shipped; don't grade it. `further improving developer experience`, `doubling down on AI`, `leap forward`, `powerful new direction`, `pushing forward`, `clear edge over alternatives` — all fail.
+- **Prefer plain language.** Avoid corporate jargon — `leverage` → `use`; `utilize` → `use`; `facilitate` → `help`. Don't use `next-generation`, `cutting-edge`, `world-class`, `best-in-class`, `seamless`, `transformative`, or `comprehensive`. Precise technical terms (GC pressure, prepared statements, OAuth, cold start, retries) stay — the rule targets buzzwords, not domain vocabulary.
 
 ## Weighting (the right things lead)
 

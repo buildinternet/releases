@@ -1,0 +1,26 @@
+{
+  "result": "needs_revision",
+  "explanation": "The body is dense with self-references (Acme as a sentence subject in nearly every sentence and section lead), editorial commentary about strategy and impact, and corporate jargon. The page header already shows the org name, so 'Acme'-as-subject buries each section's actual news. Every claim is also a vague hand-wave — no specific feature names, version numbers, or release details — so the body would also fail faithfulness if inputs were supplied.",
+  "criteria": [
+    {
+      "name": "No org-name self-reference as a sentence subject",
+      "passed": false,
+      "evidence": "Opens with 'Acme's recent work...' and uses 'Acme' / 'Acme team' / 'Acme Cloud' / 'Acme's observability suite' as the subject across every section."
+    },
+    {
+      "name": "No editorializing about strategy or impact",
+      "passed": false,
+      "evidence": "'further improved', 'pushing forward', 'transformative new SDK', 'leap forward', 'doubled down', 'clear edge over alternatives'."
+    },
+    {
+      "name": "Prefer plain language; avoid corporate jargon",
+      "passed": false,
+      "evidence": "'leverage cutting-edge', 'world-class developer experiences', 'seamless integrations', 'next-generation workloads', 'utilize advanced storage features', 'comprehensive rethinking', 'best-in-class performance'."
+    },
+    {
+      "name": "No vague hand-waves; concrete shipped items",
+      "passed": false,
+      "evidence": "'powerful new capabilities', 'advanced storage features', 'comprehensive rethinking of the developer experience' — no specific features, versions, or release names anywhere."
+    }
+  ]
+}

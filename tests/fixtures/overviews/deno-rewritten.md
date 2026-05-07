@@ -1,6 +1,6 @@
-Deno completed its Rust-native Node.js HTTP rewrite, expanded observability tooling, and shipped Fresh 2.3 with zero-JS pages by default.
+The Rust-native Node.js HTTP rewrite landed, observability tooling expanded, and Fresh 2.3 shipped zero-JS pages by default.
 
-**Deno's Node.js HTTP layer is now Rust-native.** v2.7.13 swapped in llhttp and a native TCP binding, following the same rewrite pattern earlier landed for TLS and pipes. Faster, lower GC pressure, and closer to Node-on-V8 fidelity for HTTP-heavy code.
+**The Node.js HTTP layer is now Rust-native.** v2.7.13 swapped in llhttp and a native TCP binding, following the same rewrite pattern earlier landed for TLS and pipes. Faster, lower GC pressure, and closer to Node behavior for HTTP-heavy code.
 
 **Observability and profiling tooling expanded across patch releases.**
 
