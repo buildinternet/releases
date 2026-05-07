@@ -27,6 +27,7 @@ import {
   newTelemetryEventId,
   newSearchQueryId,
   newWebhookSubscriptionId,
+  newCollectionId,
 } from "./id.js";
 
 export const RELEASE_TYPES = ["feature", "rollup"] as const;
@@ -177,6 +178,47 @@ export const productTags = sqliteTable(
   (table) => [
     uniqueIndex("idx_product_tags_pk").on(table.productId, table.tagId),
     index("idx_product_tags_tag").on(table.tagId),
+  ],
+);
+
+// Collections are curated, named groups of orgs that drive a public
+// "playlist" page (e.g. /collections/frontier-ai-labs). Independent of the
+// fixed `category` taxonomy on `organizations` so a collection can mix orgs
+// across categories or surface a tighter subset than any single category. The
+// only read paths today are GET /v1/collections, GET /v1/collections/:slug,
+// and GET /v1/collections/:slug/releases (interleaved cross-org feed).
+export const collections = sqliteTable("collections", {
+  id: text("id").primaryKey().$defaultFn(newCollectionId),
+  slug: text("slug").notNull().unique(),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: text("created_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+  updatedAt: text("updated_at")
+    .notNull()
+    .$defaultFn(() => new Date().toISOString()),
+});
+
+export const collectionMembers = sqliteTable(
+  "collection_members",
+  {
+    collectionId: text("collection_id")
+      .notNull()
+      .references(() => collections.id, { onDelete: "cascade" }),
+    orgId: text("org_id")
+      .notNull()
+      .references(() => organizations.id, { onDelete: "cascade" }),
+    // Authoring order — surfaces in the playlist header on the web page. Ties
+    // resolve by org name in the route handler so equal positions stay stable.
+    position: integer("position").notNull().default(0),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [
+    uniqueIndex("idx_collection_members_pk").on(table.collectionId, table.orgId),
+    index("idx_collection_members_org").on(table.orgId),
   ],
 );
 
@@ -367,6 +409,10 @@ export type Product = typeof products.$inferSelect;
 export type NewProduct = typeof products.$inferInsert;
 export type Tag = typeof tags.$inferSelect;
 export type NewTag = typeof tags.$inferInsert;
+export type Collection = typeof collections.$inferSelect;
+export type NewCollection = typeof collections.$inferInsert;
+export type CollectionMember = typeof collectionMembers.$inferSelect;
+export type NewCollectionMember = typeof collectionMembers.$inferInsert;
 export type FetchLog = typeof fetchLog.$inferSelect;
 export type NewFetchLog = typeof fetchLog.$inferInsert;
 
