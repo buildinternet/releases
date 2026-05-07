@@ -192,7 +192,13 @@ export function extractNotesFromLegacyPlaybook(content: string): string | null {
 // ── Playbook frontmatter (typed config embedded in notes) ──
 
 export const fetchQuirkSchema = z.object({
-  changeDetector: z.enum(["etag", "content-length", "body-hash", "unreliable"]),
+  changeDetector: z.enum([
+    "etag",
+    "content-length",
+    "body-hash",
+    "body-hash-filtered",
+    "unreliable",
+  ]),
   rationale: z.string().min(1),
   tier: z.enum(["normal", "low"]).optional(),
   changeProbeUrl: z.url().optional(),

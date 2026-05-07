@@ -364,14 +364,39 @@ export interface BodyHashCheckResult {
 }
 
 /**
+ * Strip volatile markup that churns per-request on SSR pages — `<script>`,
+ * `<style>`, `<link>`, `<meta>`, and HTML comments — before hashing. Pure
+ * regex sweep; no DOM parser. Inputs identical except for stripped elements
+ * produce identical output.
+ *
+ * Targets the `body-hash-filtered` detector (#789): Next.js / Vercel / Astro
+ * SSR pages whose article markup is stable but whose `<head>` and inline
+ * scripts (hydration tokens, chunk URLs, nonces) differ on every render.
+ */
+export function stripVolatileMarkup(html: string): string {
+  return html
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, "")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style\s*>/gi, "")
+    .replace(/<link\b[^>]*\/?>/gi, "")
+    .replace(/<meta\b[^>]*\/?>/gi, "")
+    .replace(/<!--[\s\S]*?-->/g, "");
+}
+
+/**
  * GET a URL, SHA-256 the body, and compare against a stored hash. Used by
  * the `body-hash` change detector (#517) for pages whose HEAD returns no
  * stable validator. Pays full-body bandwidth per poll — reserve for sources
  * that need it, not as a default.
+ *
+ * `opts.filter` runs the body through `stripVolatileMarkup` before hashing,
+ * for the `body-hash-filtered` detector (#789). Same `pageContentHash`
+ * storage; sources switching from `body-hash` will see one `unknown`
+ * outcome on the first probe before settling.
  */
 export async function bodyHashCheck(
   url: string,
   storedHash: string | undefined,
+  opts?: { filter?: boolean },
 ): Promise<BodyHashCheckResult> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -386,7 +411,8 @@ export async function bodyHashCheck(
     const responseMs = Date.now() - start;
     if (!res.ok) return { status: "unknown", responseMs };
 
-    const body = await res.text();
+    const rawBody = await res.text();
+    const body = opts?.filter ? stripVolatileMarkup(rawBody) : rawBody;
     const hashBytes = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(body));
     const contentHash = Array.from(new Uint8Array(hashBytes))
       .map((b) => b.toString(16).padStart(2, "0"))

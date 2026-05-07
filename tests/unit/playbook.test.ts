@@ -296,6 +296,18 @@ fetchQuirks:
     const { frontmatter } = parsePlaybookNotes(notes);
     expect(frontmatter).toBeNull();
   });
+
+  it("accepts the body-hash-filtered detector value (#789)", () => {
+    const notes = `---
+fetchQuirks:
+  lightfield:
+    changeDetector: body-hash-filtered
+    rationale: Next.js SSR; body churns but article markup is stable after filter
+---
+`;
+    const { frontmatter } = parsePlaybookNotes(notes);
+    expect(frontmatter?.fetchQuirks?.lightfield?.changeDetector).toBe("body-hash-filtered");
+  });
 });
 
 describe("serializePlaybookNotes", () => {
