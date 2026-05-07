@@ -367,6 +367,51 @@ export function parseSortDir(
   return fallback;
 }
 
+/** Clamp a `?limit=` query param to [1, max], falling back to `defaultVal`. */
+export function parseLimitParam(raw: string | undefined, defaultVal: number, max: number): number {
+  const n = parseInt(raw ?? String(defaultVal), 10);
+  if (isNaN(n) || n < 1) return defaultVal;
+  return Math.min(n, max);
+}
+
+/**
+ * Parse a release-feed cursor of the form `publishedAt|id` (with `|id` as a
+ * fallback for releases that lack publishedAt). Returns the SQL `WHERE`
+ * fragment plus its bind values, scoped to alias `r` on the releases table.
+ * Used by `/v1/orgs/:slug/releases` and the source equivalent — the cursor
+ * shape and ordering match {@link getOrgReleasesFeed} and
+ * {@link getSourceReleasesFeed}.
+ */
+export function parseFeedCursor(cursorParam: string | null): {
+  cursorWhere: string;
+  cursorBindings: string[];
+} {
+  if (!cursorParam) return { cursorWhere: "", cursorBindings: [] };
+  const pipeIdx = cursorParam.indexOf("|");
+  const cursorDate =
+    pipeIdx > 0 ? cursorParam.slice(0, pipeIdx) : pipeIdx === -1 ? cursorParam : "";
+  const cursorId = pipeIdx >= 0 ? cursorParam.slice(pipeIdx + 1) : "";
+  if (cursorDate && cursorId) {
+    return {
+      cursorWhere: `AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))`,
+      cursorBindings: [cursorDate, cursorDate, cursorId],
+    };
+  }
+  if (cursorId) {
+    return {
+      cursorWhere: `AND (r.published_at IS NOT NULL OR r.id < ?)`,
+      cursorBindings: [cursorId],
+    };
+  }
+  if (cursorDate) {
+    return {
+      cursorWhere: `AND r.published_at < ?`,
+      cursorBindings: [cursorDate],
+    };
+  }
+  return { cursorWhere: "", cursorBindings: [] };
+}
+
 export function heatmapDateRange(): { from: string; to: string; toExclusive: string } {
   const today = new Date();
   const to = today.toISOString().slice(0, 10);

@@ -51,6 +51,8 @@ import {
   getStatusHub,
   orgWhere,
   isProductId,
+  parseFeedCursor,
+  parseLimitParam,
   resolveSourceFromContext,
   isConflictError,
   computeAvgPerWeek,
@@ -73,10 +75,12 @@ import {
   getSourcesWithStats,
   countSourcesForList,
   getSourceReleasesPaginated,
+  getSourceReleasesFeed,
   getSourceActivityBuckets,
   getSourceHeatmapData,
   SOURCE_SORT_FIELDS,
 } from "../queries/sources.js";
+import { toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
 import { embedAndUpsertEntities, type EntityKind } from "@releases/search/embed-entities.js";
@@ -1399,6 +1403,78 @@ sourceRoutes.get(
   "/orgs/:orgSlug/sources/:sourceSlug",
   getSourceDetailRoute,
   getSourceDetailHandler,
+);
+
+// Cursor-paginated source release feed with optional inline FTS filter (`q`),
+// prerelease toggle, and coverage flag — companion to `/v1/orgs/:slug/releases`.
+const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
+  const cursorParam = c.req.query("cursor") ?? null;
+  const limit = parseLimitParam(c.req.query("limit"), 20, 100);
+  const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+  const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
+  const qRaw = c.req.query("q")?.trim() ?? "";
+  const ftsMatch = qRaw ? toFtsPrefixMatchQuery(qRaw) : undefined;
+
+  const db = createDb(c.env.DB);
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  const results = await getSourceReleasesFeed(
+    c.env.DB,
+    src.id,
+    parseFeedCursor(cursorParam),
+    limit + 1,
+    { includeCoverage, includePrereleases, ftsMatch },
+  );
+
+  const hasMore = results.length > limit;
+  const pageRows = hasMore ? results.slice(0, limit) : results;
+  let nextCursor: string | null = null;
+  if (hasMore && pageRows.length > 0) {
+    const last = pageRows[pageRows.length - 1];
+    nextCursor = last.published_at ? `${last.published_at}|${last.id}` : `|${last.id}`;
+  }
+
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+  const releasesFormatted = pageRows.map((r) => ({
+    id: r.id,
+    version: r.version,
+    type: r.type,
+    title: r.title,
+    summary:
+      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    content: hydrateMediaUrls(r.content, mediaOrigin),
+    publishedAt: r.published_at,
+    url: r.url,
+    media: parseReleaseMedia(r.media, mediaOrigin),
+    prerelease: r.prerelease === 1,
+  }));
+
+  return c.json({ releases: releasesFormatted, pagination: { nextCursor, limit } });
+};
+
+const getSourceReleasesFeedRoute = describeRoute({
+  tags: ["Sources"],
+  summary: "Source release feed",
+  description:
+    "Cursor-paginated release feed scoped to one source. Supports inline FTS filter via `?q=`, prerelease toggle (`?include_prereleases=`), and coverage flag (`?include_coverage=`). Cursor shape matches `/v1/orgs/:slug/releases`.",
+  responses: {
+    200: { description: "Releases page" },
+    404: {
+      description: "Source not found",
+      content: { "application/json": { schema: resolver(ErrorResponseSchema) } },
+    },
+  },
+});
+sourceRoutes.get(
+  "/orgs/:orgSlug/sources/:sourceSlug/releases",
+  getSourceReleasesFeedRoute,
+  getSourceReleasesFeedHandler,
+);
+sourceRoutes.get(
+  "/sources/:slug/releases",
+  getSourceReleasesFeedRoute,
+  getSourceReleasesFeedHandler,
 );
 
 sourceRoutes.post(

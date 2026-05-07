@@ -1,15 +1,13 @@
 import { Suspense } from "react";
 import type { SourceDetail } from "@/lib/api";
-import { ReleaseListItem } from "./release-item";
-import { Pagination } from "./pagination";
 import { ChangelogView, ChangelogSkeleton } from "./changelog-view";
 import { HighlightsView } from "./highlights-view";
+import { SourceReleaseList } from "./source-release-list";
 
 interface SourceMainContentProps {
   source: SourceDetail;
   orgSlug: string;
   tab: string | undefined;
-  basePath: string;
   changelogPath?: string;
   /**
    * Byte offset into the active CHANGELOG file. When set (via
@@ -26,7 +24,6 @@ export function SourceMainContent({
   source,
   orgSlug,
   tab,
-  basePath,
   changelogPath,
   changelogOffset,
 }: SourceMainContentProps) {
@@ -61,23 +58,18 @@ export function SourceMainContent({
     );
   }
 
+  // Hand the client component a cursor so its "Load more" can continue from
+  // where SSR left off. Format must match `parseFeedCursor` on the API.
+  const last = source.releases[source.releases.length - 1];
+  const initialCursor =
+    source.pagination.hasMore && last ? `${last.publishedAt ?? ""}|${last.id ?? ""}` : null;
+
   return (
-    <>
-      {source.releases.map((release, i) => (
-        <ReleaseListItem
-          key={i}
-          release={release}
-          hideDate={
-            i > 0 &&
-            release.publishedAt?.slice(0, 10) === source.releases[i - 1].publishedAt?.slice(0, 10)
-          }
-        />
-      ))}
-      <Pagination
-        page={source.pagination.page}
-        totalPages={source.pagination.totalPages ?? 1}
-        basePath={basePath}
-      />
-    </>
+    <SourceReleaseList
+      orgSlug={orgSlug}
+      sourceSlug={source.slug}
+      initialReleases={source.releases}
+      initialCursor={initialCursor}
+    />
   );
 }

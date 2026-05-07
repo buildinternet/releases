@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
 import type { OrgReleaseItem } from "@/lib/api";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
+import { useDebounced } from "@/hooks/use-debounced";
 
 interface OrgReleaseListProps {
   orgSlug: string;
@@ -35,6 +36,11 @@ export function OrgReleaseList({
 }: OrgReleaseListProps) {
   const [filterGroup, setFilterGroup] = useState<FilterGroup>("all");
   const [includePrereleases, setIncludePrereleases] = useState(false);
+  // `searchInput` is the live <input> value; `search` is the debounced copy
+  // that drives the fetch. Splitting the two avoids firing a request on every
+  // keystroke while keeping the input visually responsive.
+  const [searchInput, setSearchInput] = useState("");
+  const search = useDebounced(searchInput, 250);
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
@@ -71,26 +77,39 @@ export function OrgReleaseList({
     }
   }, [filterGroup, hasGithub, hasWeb]);
 
+  const trimmedSearch = search.trim();
   const buildQuery = useCallback(
     (extra: Record<string, string> = {}) => {
       const params = new URLSearchParams();
       const types = FILTER_GROUPS[filterGroup].types;
       if (types.length > 0) params.set("source_type", types.join(","));
       if (includePrereleases) params.set("include_prereleases", "true");
+      if (trimmedSearch) params.set("q", trimmedSearch);
       for (const [k, v] of Object.entries(extra)) params.set(k, v);
       return params.toString();
     },
-    [filterGroup, includePrereleases],
+    [filterGroup, includePrereleases, trimmedSearch],
   );
+
+  // Flip `pristine` once the debounced search query lands so the fetch effect
+  // skips the wasted empty-q request that would otherwise fire on the very
+  // first keystroke (between `searchInput` updating and `search` catching up).
+  // Tabs / prerelease toggle flip pristine inline since their effect on the
+  // query is synchronous.
+  useEffect(() => {
+    if (pristine && trimmedSearch) setPristine(false);
+  }, [pristine, trimmedSearch]);
 
   // Refetch when filters change (skip the initial render — the SSR rows
   // already match the default filter state).
   useEffect(() => {
     if (pristine) return;
     // Cancel any in-flight pagination so its response can't append to the
-    // newly-filtered list once it lands.
+    // newly-filtered list once it lands. Re-assign the ref so a subsequent
+    // loadMore can also abort *this* fetch if the user paginates again.
     loadMoreAbortRef.current?.abort();
     const controller = new AbortController();
+    loadMoreAbortRef.current = controller;
     setLoading(true);
     setFetchError(null);
     fetch(`/api/org-releases/${orgSlug}?${buildQuery()}`, { signal: controller.signal })
@@ -115,11 +134,15 @@ export function OrgReleaseList({
     const controller = new AbortController();
     loadMoreAbortRef.current = controller;
     setLoading(true);
+    setFetchError(null);
     try {
       const res = await fetch(`/api/org-releases/${orgSlug}?${buildQuery({ cursor })}`, {
         signal: controller.signal,
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        setFetchError("Failed to load more releases.");
+        return;
+      }
       const data = await res.json();
       if (controller.signal.aborted) return;
       setReleases((prev) => [...prev, ...data.releases]);
@@ -137,50 +160,62 @@ export function OrgReleaseList({
   // detector, so feed/scrape/agent orgs can also produce prerelease rows.
   // The source-type tab strip is independent: it's only useful when the org
   // mixes types, since a single-type strip would be a one-button row.
+  // The search input shows whenever there's at least one source — same gate
+  // as the prerelease checkbox.
   const showSourceTypeTabs = filterTabs.length > 0;
   const showFilterRow = showSourceTypeTabs || availableSourceTypes.length > 0;
 
   return (
     <div>
       {showFilterRow && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-3 mb-3">
-          <div className="flex items-center gap-1 shrink-0">
-            {showSourceTypeTabs &&
-              filterTabs.map((tab) => {
-                const active = filterGroup === tab.value;
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => {
-                      setPristine(false);
-                      setFilterGroup(tab.value);
-                    }}
-                    className={
-                      "text-[12px] px-2 py-1 rounded-md transition-colors whitespace-nowrap " +
-                      (active
-                        ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
-                        : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
+        <div className="mt-3 mb-3 space-y-2">
+          <input
+            type="search"
+            value={searchInput}
+            onChange={(e) => setSearchInput(e.target.value)}
+            placeholder="Filter releases…"
+            aria-label="Filter releases"
+            className="w-full text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
+          />
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex items-center gap-1 shrink-0">
+              {showSourceTypeTabs &&
+                filterTabs.map((tab) => {
+                  const active = filterGroup === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => {
+                        setPristine(false);
+                        setFilterGroup(tab.value);
+                      }}
+                      className={
+                        "text-[12px] px-2 py-1 rounded-md transition-colors whitespace-nowrap " +
+                        (active
+                          ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
+                          : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
+                      }
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+            </div>
+            <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none ml-auto shrink-0">
+              <input
+                type="checkbox"
+                checked={includePrereleases}
+                onChange={(e) => {
+                  setPristine(false);
+                  setIncludePrereleases(e.target.checked);
+                }}
+                className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
+              />
+              <span>Show prereleases</span>
+            </label>
           </div>
-          <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none ml-auto shrink-0">
-            <input
-              type="checkbox"
-              checked={includePrereleases}
-              onChange={(e) => {
-                setPristine(false);
-                setIncludePrereleases(e.target.checked);
-              }}
-              className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
-            />
-            <span>Show prereleases</span>
-          </label>
         </div>
       )}
 

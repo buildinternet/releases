@@ -3,20 +3,21 @@ import { webApiHeaders } from "@/lib/api";
 
 const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 
-export async function GET(req: NextRequest, { params }: { params: Promise<{ slug: string }> }) {
-  const { slug } = await params;
+export async function GET(
+  req: NextRequest,
+  { params }: { params: Promise<{ orgSlug: string; sourceSlug: string }> },
+) {
+  const { orgSlug, sourceSlug } = await params;
   const cursor = req.nextUrl.searchParams.get("cursor") ?? "";
-  const sourceType = req.nextUrl.searchParams.get("source_type") ?? "";
   const includePrereleases = req.nextUrl.searchParams.get("include_prereleases") ?? "";
   const q = req.nextUrl.searchParams.get("q") ?? "";
 
   const qs = new URLSearchParams();
   if (cursor) qs.set("cursor", cursor);
-  if (sourceType) qs.set("source_type", sourceType);
   if (includePrereleases) qs.set("include_prereleases", includePrereleases);
   if (q) qs.set("q", q);
 
-  const res = await fetch(`${API_URL}/v1/orgs/${slug}/releases?${qs}`, {
+  const res = await fetch(`${API_URL}/v1/orgs/${orgSlug}/sources/${sourceSlug}/releases?${qs}`, {
     headers: webApiHeaders(),
   });
   const data = await res.json();

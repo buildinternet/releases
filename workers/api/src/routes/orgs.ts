@@ -26,6 +26,7 @@ import { isValidCategory } from "@buildinternet/releases-core/categories";
 import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
+import { toFtsPrefixMatchQuery } from "@buildinternet/releases-core/fts";
 import {
   isConflictError,
   computeAvgPerWeek,
@@ -35,6 +36,8 @@ import {
   hydrateMediaUrls,
   parseReleaseMedia,
   parseBoolParam,
+  parseFeedCursor,
+  parseLimitParam,
   replaceAliases,
 } from "../utils.js";
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
@@ -1164,11 +1167,12 @@ orgRoutes.get("/orgs/:slug/sparklines", async (c) => {
 orgRoutes.get("/orgs/:slug/releases", async (c) => {
   const slug = c.req.param("slug");
   const cursorParam = c.req.query("cursor") ?? null;
-  const parsedLimit = parseInt(c.req.query("limit") ?? "20", 10);
-  const limit = isNaN(parsedLimit) || parsedLimit < 1 ? 20 : Math.min(parsedLimit, 100);
+  const limit = parseLimitParam(c.req.query("limit"), 20, 100);
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
   const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
   const sourceTypes = parseSourceTypesLenient(c.req.query("source_type"));
+  const qRaw = c.req.query("q")?.trim() ?? "";
+  const ftsMatch = qRaw ? toFtsPrefixMatchQuery(qRaw) : undefined;
 
   const db = createDb(c.env.DB);
 
@@ -1181,33 +1185,12 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
 
   if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
 
-  // Parse cursor — format is "publishedAt|id"
-  let cursorWhere = "";
-  const cursorBindings: string[] = [];
-  if (cursorParam) {
-    const pipeIdx = cursorParam.indexOf("|");
-    const cursorDate =
-      pipeIdx > 0 ? cursorParam.slice(0, pipeIdx) : pipeIdx === -1 ? cursorParam : "";
-    const cursorId = pipeIdx >= 0 ? cursorParam.slice(pipeIdx + 1) : "";
-    if (cursorDate && cursorId) {
-      cursorWhere = `AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))`;
-      cursorBindings.push(cursorDate, cursorDate, cursorId);
-    } else if (cursorId) {
-      // id-only cursor for releases without publishedAt
-      cursorWhere = `AND (r.published_at IS NOT NULL OR r.id < ?)`;
-      cursorBindings.push(cursorId);
-    } else if (cursorDate) {
-      cursorWhere = `AND r.published_at < ?`;
-      cursorBindings.push(cursorDate);
-    }
-  }
-
   const results = await getOrgReleasesFeed(
     c.env.DB,
     org.id,
-    { cursorWhere, cursorBindings },
+    parseFeedCursor(cursorParam),
     limit + 1,
-    { includeCoverage, sourceTypes, includePrereleases },
+    { includeCoverage, sourceTypes, includePrereleases, ftsMatch },
   );
 
   const hasMore = results.length > limit;
