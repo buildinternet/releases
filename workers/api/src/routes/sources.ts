@@ -1680,17 +1680,19 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     type?: ReleaseType;
   }>();
 
+  // See batch handler: strip LLM placeholders ("<UNKNOWN>", "n/a") so
+  // they don't leak into the version slot the web UI promotes. Type-guard
+  // the JSON value before .trim() so non-string payloads are safely coerced
+  // to null instead of throwing.
+  const version = typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
+
   try {
     const [release] = await db
       .insert(releases)
       .values({
         id: body.id,
         sourceId: src.id,
-        // See batch handler: strip LLM placeholders ("<UNKNOWN>", "n/a") so
-        // they don't leak into the version slot the web UI promotes. Type-
-        // guard the JSON value before .trim() so non-string payloads are
-        // safely coerced to null instead of throwing.
-        version: typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null,
+        version,
         type: body.type ?? "feature",
         title: body.title,
         content: body.content,
@@ -1699,6 +1701,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
         contentHash: body.contentHash ?? null,
         metadata: body.metadata ?? "{}",
         publishedAt: body.publishedAt ?? null,
+        prerelease: isPrereleaseVersion(version),
         fetchedAt: body.fetchedAt ?? new Date().toISOString(),
       })
       .onConflictDoNothing()

@@ -36,7 +36,11 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
-import { RELEASES_ID_IN_CHUNK_SIZE, CHANGELOG_CHUNK_INSERT_CHUNK_SIZE } from "../lib/d1-limits.js";
+import {
+  RELEASES_BATCH_CHUNK_SIZE,
+  RELEASES_ID_IN_CHUNK_SIZE,
+  CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
+} from "../lib/d1-limits.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
@@ -625,8 +629,8 @@ export async function fetchOne(
 
     let inserted = 0;
     const publishRows: InsertedReleaseRow[] = [];
-    for (let i = 0; i < rows.length; i += 5) {
-      const chunk = rows.slice(i, i + 5);
+    for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
       // Build publish rows from the RETURNING set (not zipped against
       // `chunk`) because onConflictDoNothing skips conflicting rows and
       // RETURNING omits them, so index alignment would drift.

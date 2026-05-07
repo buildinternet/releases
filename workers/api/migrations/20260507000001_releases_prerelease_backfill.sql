@@ -34,6 +34,8 @@ WHERE prerelease = 0
     OR version LIKE '%-insider%'
     OR version LIKE '%-experimental%'
     OR version LIKE '%-early-access%'
+    OR version LIKE '%-next%'
+    OR version LIKE '%-milestone%'
     OR version LIKE '%.alpha%'
     OR version LIKE '%.beta%'
     OR version LIKE '%.rc%'

@@ -33,6 +33,7 @@ export function OrgReleaseList({
   const [releases, setReleases] = useState(initialReleases);
   const [cursor, setCursor] = useState(initialCursor);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   // Track whether the current state is the unmodified initial render. While
   // true, we render the SSR-provided rows directly so filter tabs paint
   // instantly; flipping any filter triggers a fetch and replaces them.
@@ -65,15 +66,16 @@ export function OrgReleaseList({
     if (pristine) return;
     const controller = new AbortController();
     setLoading(true);
+    setFetchError(null);
     fetch(`/api/org-releases/${orgSlug}?${buildQuery()}`, { signal: controller.signal })
-      .then((res) => (res.ok ? res.json() : null))
+      .then((res) => (res.ok ? res.json() : Promise.reject(new Error(`HTTP ${res.status}`))))
       .then((data) => {
-        if (!data) return;
         setReleases(data.releases);
         setCursor(data.pagination.nextCursor);
       })
       .catch((err) => {
-        if (err.name !== "AbortError") throw err;
+        if (err.name === "AbortError") return;
+        setFetchError("Failed to load releases.");
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
@@ -95,34 +97,41 @@ export function OrgReleaseList({
     }
   }, [cursor, orgSlug, buildQuery]);
 
-  const showFilterRow = filterTabs.length > 0 || availableSourceTypes.includes("github");
+  // The prerelease checkbox is useful for any org that has at least one
+  // tracked source — non-GitHub adapters fall back to the version-pattern
+  // detector, so feed/scrape/agent orgs can also produce prerelease rows.
+  // The source-type tab strip is independent: it's only useful when the org
+  // mixes types, since a single-type strip would be a one-button row.
+  const showSourceTypeTabs = filterTabs.length > 0;
+  const showFilterRow = showSourceTypeTabs || availableSourceTypes.length > 0;
 
   return (
     <div>
       {showFilterRow && (
         <div className="flex flex-wrap items-center justify-between gap-3 mb-2 -mt-2">
           <div className="flex flex-wrap items-center gap-1">
-            {filterTabs.map((tab) => {
-              const active = sourceType === tab.value;
-              return (
-                <button
-                  key={tab.value}
-                  type="button"
-                  onClick={() => {
-                    setPristine(false);
-                    setSourceType(tab.value);
-                  }}
-                  className={
-                    "text-[12px] px-2 py-1 rounded-md transition-colors " +
-                    (active
-                      ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
-                      : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
-                  }
-                >
-                  {tab.label}
-                </button>
-              );
-            })}
+            {showSourceTypeTabs &&
+              filterTabs.map((tab) => {
+                const active = sourceType === tab.value;
+                return (
+                  <button
+                    key={tab.value}
+                    type="button"
+                    onClick={() => {
+                      setPristine(false);
+                      setSourceType(tab.value);
+                    }}
+                    className={
+                      "text-[12px] px-2 py-1 rounded-md transition-colors " +
+                      (active
+                        ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
+                        : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
+                    }
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
           </div>
           <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none">
             <input
@@ -139,13 +148,21 @@ export function OrgReleaseList({
         </div>
       )}
 
+      {fetchError && releases.length > 0 && (
+        <div className="text-center py-2 mb-2 text-amber-700 dark:text-amber-400 text-[12px] bg-amber-50 dark:bg-amber-950/30 rounded">
+          {fetchError}
+        </div>
+      )}
+
       {releases.length === 0 ? (
         <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">
           {loading
             ? "Loading…"
-            : pristine
-              ? "No releases yet."
-              : "No releases match these filters."}
+            : fetchError
+              ? fetchError
+              : pristine
+                ? "No releases yet."
+                : "No releases match these filters."}
         </div>
       ) : (
         <>

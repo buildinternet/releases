@@ -162,6 +162,7 @@ export function createLoaders(db: D1Db) {
             metadata: releasesVisible.metadata,
             media: releasesVisible.media,
             publishedAt: releasesVisible.publishedAt,
+            prerelease: releasesVisible.prerelease,
             suppressed: releasesVisible.suppressed,
             suppressedReason: releasesVisible.suppressedReason,
             fetchedAt: releasesVisible.fetchedAt,
