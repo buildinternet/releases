@@ -375,3 +375,60 @@ export async function getOrgReleasesFeed(
   const { results } = await stmt.all<OrgReleaseRow>();
   return results;
 }
+
+export type CollectionReleaseRow = OrgReleaseRow & {
+  org_slug: string;
+  org_name: string;
+};
+
+// Drizzle-flavored mirror of `parseFeedCursor` — the collection feed uses the
+// Drizzle handle so tests work on bun-sqlite, and `sql` templates have no
+// `?`-binding escape hatch. Cursor wire format matches `parseFeedCursor`
+// exactly so the same web cursor parser works on both surfaces.
+function feedCursorSql(cursorParam: string | null) {
+  if (!cursorParam) return sql``;
+  const pipeIdx = cursorParam.indexOf("|");
+  const cursorDate = pipeIdx === -1 ? cursorParam : cursorParam.slice(0, pipeIdx);
+  const cursorId = pipeIdx === -1 ? "" : cursorParam.slice(pipeIdx + 1);
+  if (cursorDate && cursorId) {
+    return sql`AND ((r.published_at < ${cursorDate}) OR (r.published_at = ${cursorDate} AND r.id < ${cursorId}))`;
+  }
+  if (cursorId) return sql`AND (r.published_at IS NOT NULL OR r.id < ${cursorId})`;
+  if (cursorDate) return sql`AND r.published_at < ${cursorDate}`;
+  return sql``;
+}
+
+/** Multi-org release feed for a collection. Same ordering shape as {@link getOrgReleasesFeed}. */
+export async function getCollectionReleasesFeed(
+  db: D1Db,
+  orgIds: string[],
+  cursorParam: string | null,
+  limit: number,
+  opts: { includePrereleases?: boolean } = {},
+): Promise<CollectionReleaseRow[]> {
+  if (orgIds.length === 0) return [];
+  const cursor = feedCursorSql(cursorParam);
+  const prereleaseWhere = opts.includePrereleases
+    ? sql``
+    : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
+
+  return db.all<CollectionReleaseRow>(sql`
+    SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
+           r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
+           s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
+           o.slug AS org_slug, o.name AS org_name
+    FROM releases_visible r
+    INNER JOIN sources_active s ON s.id = r.source_id
+    INNER JOIN organizations_active o ON o.id = s.org_id
+    WHERE s.org_id IN ${orgIds}
+      AND (r.suppressed IS NULL OR r.suppressed = 0)
+      ${prereleaseWhere}
+      ${cursor}
+    ORDER BY
+      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
+      r.published_at DESC,
+      r.fetched_at DESC,
+      r.id DESC
+    LIMIT ${limit}
+  `);
+}

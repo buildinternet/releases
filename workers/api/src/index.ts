@@ -41,6 +41,7 @@ import { webhooksRoutes } from "./routes/webhooks.js";
 import { workflowsRoutes } from "./routes/workflows.js";
 import { telemetryRoutes } from "./routes/telemetry.js";
 import { taxonomyRoutes } from "./routes/taxonomy.js";
+import { collectionRoutes } from "./routes/collections.js";
 import { mountOpenApi } from "./openapi.js";
 import { BareSlugRejected } from "./utils.js";
 import { pollAndFetch, queryDueSources } from "./cron/poll-fetch.js";
@@ -241,6 +242,7 @@ const publicReadRoutes = [
   "products",
   "tags",
   "categories",
+  "collections",
   "related",
   "sitemap",
   // /lookups: GETs (source-by-slug, product-by-slug, by-domain) are public
@@ -356,6 +358,12 @@ v1.use("/lookups/source-by-slug", cacheControl(60, { staleWhileRevalidate: 30, i
 v1.use("/lookups/product-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/categories/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/tags/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/collections", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/collections/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use(
+  "/collections/:slug/releases",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+);
 v1.use("/openapi.json", cacheControl(3600, { staleWhileRevalidate: 300, isPublic: true }));
 
 // Route modules — releaseRoutes is mounted before sourceRoutes so the static
@@ -390,6 +398,7 @@ v1.route("/", webhooksRoutes);
 v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);
 v1.route("/", taxonomyRoutes);
+v1.route("/", collectionRoutes);
 
 // Static endpoint — categories are defined in code, not DB
 v1.get("/categories", (c) => {

@@ -22,6 +22,8 @@ import type {
   TagDetail,
   ListResponse,
   MediaItem,
+  CollectionListItem,
+  CollectionDetail,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 
@@ -63,7 +65,29 @@ export type {
   ReleaseCoverageResponse,
   CategoryDetail,
   TagDetail,
+  CollectionListItem,
+  CollectionDetail,
 };
+
+/** A single row on /v1/collections/:slug/releases — release card + its origin org. */
+export interface CollectionReleaseItem {
+  id: string;
+  version: string | null;
+  type?: "feature" | "rollup";
+  title: string;
+  summary: string;
+  publishedAt: string | null;
+  url: string | null;
+  media: MediaItem[];
+  prerelease: boolean;
+  source: { slug: string; name: string; type: string };
+  org: { slug: string; name: string };
+}
+
+export interface CollectionReleasesResponse {
+  releases: CollectionReleaseItem[];
+  pagination: { nextCursor: string | null; limit: number };
+}
 
 export const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 // Trusted-proxy secret — bypasses the API's per-IP rate limiter for
@@ -292,6 +316,22 @@ export const api = {
     fetchApi<ProductDetail>(`/v1/orgs/${ref.orgSlug}/products/${ref.productSlug}`),
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
   tagDetail: (slug: string) => fetchApi<TagDetail>(`/v1/tags/${slug}`),
+  collections: () => fetchApi<CollectionListItem[]>("/v1/collections"),
+  collectionDetail: (slug: string) => fetchApi<CollectionDetail>(`/v1/collections/${slug}`),
+  collectionReleases: (
+    slug: string,
+    opts: { cursor?: string; limit?: number; includePrereleases?: boolean } = {},
+  ) => {
+    const { cursor, limit = 20, includePrereleases } = opts;
+    const params = new URLSearchParams();
+    if (cursor) params.set("cursor", cursor);
+    if (limit !== 20) params.set("limit", String(limit));
+    if (includePrereleases) params.set("include_prereleases", "true");
+    const qs = params.toString();
+    return fetchApi<CollectionReleasesResponse>(
+      `/v1/collections/${slug}/releases${qs ? `?${qs}` : ""}`,
+    );
+  },
   sourceChangelog: (
     ref: { orgSlug: string; sourceSlug: string },
     range?: { path?: string; offset?: number; limit?: number },

@@ -674,6 +674,35 @@ export interface TagDetail {
   products: TaxonomyProduct[];
 }
 
+// ── Collections ──
+//
+// Curated, named groups of orgs that drive a public "playlist" page (e.g.
+// /collections/frontier-ai-labs). Independent of the fixed `category` taxonomy.
+
+export interface CollectionMemberOrg {
+  slug: string;
+  name: string;
+  domain: string | null;
+  avatarUrl: string | null;
+  description: string | null;
+}
+
+/** Item shape on GET /v1/collections (list). */
+export interface CollectionListItem {
+  slug: string;
+  name: string;
+  description: string | null;
+  memberCount: number;
+}
+
+/** Detail shape on GET /v1/collections/:slug. */
+export interface CollectionDetail {
+  slug: string;
+  name: string;
+  description: string | null;
+  orgs: CollectionMemberOrg[];
+}
+
 // ── Releases (enriched) ──
 
 /** Flat release shape returned by GET /v1/releases/:id with source metadata. */
