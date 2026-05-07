@@ -13,6 +13,6 @@
     "@buildinternet/releases-core": "workspace:*",
     "@releases/adapters": "workspace:*",
     "yaml": "^2.8.3",
-    "zod": "^4.3.6"
+    "zod": "^4.4.3"
   }
 }
