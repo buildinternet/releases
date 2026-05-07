@@ -721,8 +721,13 @@ export interface Session {
   sessionId: string;
   company: string;
   type: "onboard" | "update";
-  /** Sub-agent that ran this session. Surfaces on the detail GET. */
-  agent?: "sonnet" | "haiku";
+  /**
+   * Sub-agent label that ran this session — `"coordinator"` is the parent
+   * orchestrator (typically Sonnet) when a multi-agent session delegates,
+   * `"sonnet"` / `"haiku"` are direct single-agent runs. Surfaces on the
+   * detail GET.
+   */
+  agent?: "sonnet" | "haiku" | "coordinator";
   /** Identifies the client that started this session (e.g. hostname). */
   runner?: string;
   /** Correlation ID for end-to-end tracing across CLI → API → managed agent. */
