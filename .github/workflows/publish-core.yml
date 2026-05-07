@@ -57,12 +57,11 @@ jobs:
 
       - name: Configure npm auth
         if: steps.check.outputs.already == 'false'
-        working-directory: packages/core
         env:
           NPM_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
-          echo "registry=https://registry.npmjs.org/" >> .npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
+          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
 
       - name: Publish
         if: steps.check.outputs.already == 'false'
@@ -71,7 +70,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry-run }}
         run: |
           if [ "${DRY_RUN}" = "true" ]; then
-            bun publish --dry-run
+            npm publish --dry-run
           else
-            bun publish
+            npm publish
           fi

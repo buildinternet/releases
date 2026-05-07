@@ -17,7 +17,7 @@
     "README.md"
   ],
   "dependencies": {
-    "@buildinternet/releases-core": "workspace:*",
+    "@buildinternet/releases-core": "^0.18.0",
     "zod": "^4.3.6"
   },
   "publishConfig": {
