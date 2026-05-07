@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
+import { useState, useCallback, useEffect, useMemo, useRef } from "react";
 import { ReleaseListItem } from "./release-item";
 import type { OrgReleaseItem } from "@/lib/api";
 import type { SourceType } from "@buildinternet/releases-core/source-enums";
@@ -43,6 +43,10 @@ export function OrgReleaseList({
   // true, we render the SSR-provided rows directly so filter tabs paint
   // instantly; flipping any filter triggers a fetch and replaces them.
   const [pristine, setPristine] = useState(true);
+  // Tracks the in-flight pagination fetch so we can abort it when the user
+  // flips a filter mid-page-load. Without this, an old page's response can
+  // race the filter switch and append stale rows to the new filtered list.
+  const loadMoreAbortRef = useRef<AbortController | null>(null);
 
   const hasGithub = availableSourceTypes.includes("github");
   const hasWeb = availableSourceTypes.some((t) => WEB_SOURCE_TYPES.includes(t));
@@ -83,6 +87,9 @@ export function OrgReleaseList({
   // already match the default filter state).
   useEffect(() => {
     if (pristine) return;
+    // Cancel any in-flight pagination so its response can't append to the
+    // newly-filtered list once it lands.
+    loadMoreAbortRef.current?.abort();
     const controller = new AbortController();
     setLoading(true);
     setFetchError(null);
@@ -104,15 +111,24 @@ export function OrgReleaseList({
 
   const loadMore = useCallback(async () => {
     if (!cursor) return;
+    loadMoreAbortRef.current?.abort();
+    const controller = new AbortController();
+    loadMoreAbortRef.current = controller;
     setLoading(true);
     try {
-      const res = await fetch(`/api/org-releases/${orgSlug}?${buildQuery({ cursor })}`);
+      const res = await fetch(`/api/org-releases/${orgSlug}?${buildQuery({ cursor })}`, {
+        signal: controller.signal,
+      });
       if (!res.ok) return;
       const data = await res.json();
+      if (controller.signal.aborted) return;
       setReleases((prev) => [...prev, ...data.releases]);
       setCursor(data.pagination.nextCursor);
+    } catch (err) {
+      if ((err as Error).name === "AbortError") return;
+      throw err;
     } finally {
-      setLoading(false);
+      if (!controller.signal.aborted) setLoading(false);
     }
   }, [cursor, orgSlug, buildQuery]);
 
