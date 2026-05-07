@@ -722,10 +722,15 @@ export interface Session {
   company: string;
   type: "onboard" | "update";
   /**
-   * Sub-agent label that ran this session — `"coordinator"` is the parent
-   * orchestrator (typically Sonnet) when a multi-agent session delegates,
-   * `"sonnet"` / `"haiku"` are direct single-agent runs. Surfaces on the
-   * detail GET.
+   * Sub-agent **role** label that ran this session — `"coordinator"` is the
+   * parent orchestrator (typically Sonnet) when a multi-agent session
+   * delegates, `"sonnet"` / `"haiku"` are direct single-agent runs.
+   * Surfaces on the detail GET.
+   *
+   * This is a logical role label, not the runtime model identifier. The
+   * resolved Anthropic model string (e.g. `claude-sonnet-4-6`,
+   * `claude-haiku-4-5`) lives on `usage.model` when the session reported
+   * one — consult that field for the concrete model.
    */
   agent?: "sonnet" | "haiku" | "coordinator";
   /** Identifies the client that started this session (e.g. hostname). */
@@ -768,7 +773,25 @@ export interface Session {
     model?: string;
     estimatedUsd?: number;
   };
-  /** Final agent-reported state (sources, etc.) for terminal sessions. */
+  /**
+   * Final agent-reported state for terminal `onboard` sessions — the JSON
+   * blob the agent passed to its `releases_report_state` tool, plus an
+   * `agentSessionId` field stitched in server-side. Empty on `update`
+   * sessions and pre-report errors. Typed as `Record<string, unknown>`
+   * because the shape is owned by the discovery system prompt and may
+   * grow new fields without a wire bump; the keys produced today are:
+   *
+   * - `product` (`string`) — company name
+   * - `domain` (`string | null`) — discovered domain
+   * - `githubOrg` (`string | null`) — discovered GitHub org
+   * - `startedAt`, `updatedAt` (ISO strings)
+   * - `status` (e.g. `"awaiting_review"`)
+   * - `sources` (`Array<{ url, type, slug, label, confidence,
+   *   validated, validationError?, releaseCount, releasesFetched,
+   *   fetched, contentDepth }>`)
+   * - `agentSessionId` (`string`) — Anthropic session ID, useful for
+   *   cross-referencing console logs
+   */
   result?: Record<string, unknown>;
   activeSources?: string[];
   cancelRequested?: boolean;
