@@ -113,10 +113,17 @@ export type AgentToolCall =
  */
 export const MCP_SERVER_NAME = "releases";
 
-/** Public URL for the MCP server, per environment. */
+/**
+ * Public URL for the MCP server, per environment.
+ *
+ * Must match the `mcp_server_url` on the vault credential exactly — the
+ * platform pairs agent → credential by URL, not by `mcp_server_name`. The
+ * MCP transport endpoint is `/mcp` (see `workers/mcp/src/index.ts`); the
+ * bare host serves a landing page only.
+ */
 export const MCP_SERVER_URL = {
-  production: "https://mcp.releases.sh",
-  staging: "https://mcp-staging.releases.sh",
+  production: "https://mcp.releases.sh/mcp",
+  staging: "https://mcp-staging.releases.sh/mcp",
 } as const;
 
 export type AgentEnv = keyof typeof MCP_SERVER_URL;
