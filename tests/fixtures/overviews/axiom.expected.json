@@ -1,0 +1,16 @@
+{
+  "result": "needs_revision",
+  "explanation": "Axiom is an observability platform with SDKs, NOT a library-shape org — the platform (metrics, dashboards, evals) is the headline product, and `axiom-go` is one of multiple SDKs. Under the v2 weighting rule the `axiom-go` v0.28–v0.31.1 section should consolidate into a wrap-up sentence rather than occupy a primary section equal to Metrics GA and the Dashboards API. The `axiom-go` section is also dense changelog prose that lists six concrete version-by-version items in one comma-separated paragraph — should bullet. Voice is otherwise OK and word count is in range (219).",
+  "criteria": [
+    {
+      "name": "When org has product-blog content alongside SDK / library content, blog leads",
+      "passed": false,
+      "evidence": "`axiom-go` SDK release notes occupy a primary section (`**axiom-go shipped v0.28 through v0.31.1.**`) alongside Metrics GA and Dashboards API. Per the weighting rule, SDK bumps should consolidate to a wrap-up unless they ship a new capability."
+    },
+    {
+      "name": "Sections with 3+ concrete items should bullet, not prose",
+      "passed": false,
+      "evidence": "The axiom-go section packs six version-by-version items (edge support, variadic SetClientOptions, messages decoding, proxy support, Go 1.25 minimum, OTel semconv v1.39.0, zstd compression, newToken payload) into a comma-separated paragraph."
+    }
+  ]
+}

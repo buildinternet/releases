@@ -1,0 +1,16 @@
+{
+  "result": "needs_revision",
+  "explanation": "Body opens with `# Mastra` as a level-1 heading. The rubric explicitly forbids any markdown heading anywhere in the body — the UI renders the org name itself, and a leading title duplicates it. Everything else (bold leads, word count, past tense, content sections) is fine; strip the heading and the body passes.",
+  "criteria": [
+    {
+      "name": "Body has NO markdown headings",
+      "passed": false,
+      "evidence": "First line is `# Mastra`."
+    },
+    {
+      "name": "Body has NO leading line that restates the org's name",
+      "passed": false,
+      "evidence": "The leading heading is the org name."
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "result": "needs_revision",
+  "explanation": "Bold section leads are generic category labels (`**Releases.**`, `**Editor improvements.**`, `**Customer Requests and Initiatives.**`) instead of phrases that capture the actual change. The opening sentence and first paragraph still pass — the issue is concentrated in the section leads. The rubric explicitly calls out `**SDK updates.**`-style leads as fails; same problem here. Each lead should be rewritten to name a specific feature shipped (e.g., `**Linear Agent gained MCP server connectivity to external tools.**`).",
+  "criteria": [
+    {
+      "name": "Section leads are bold phrases that capture the actual change, not generic category labels",
+      "passed": false,
+      "evidence": "Section leads include `**Releases.**`, `**Editor improvements.**`, and `**Customer Requests and Initiatives.**` — all category labels, no specific change."
+    }
+  ]
+}

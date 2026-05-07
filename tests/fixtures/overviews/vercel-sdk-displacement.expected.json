@@ -1,0 +1,16 @@
+{
+  "result": "needs_revision",
+  "explanation": "Tests the multi-product weighting rule. Vercel Flags reached general availability — that's the flagship launch — yet the body buries it as a wrap-up sentence after four primary sections (AI SDK beta, Next.js canary, AI Gateway model access, platform behavior changes). The AI SDK section is a routine library bump that should consolidate, not lead. The Flags GA belongs as the first primary section. The fix is to reorder: lead with Flags GA, keep AI Gateway and Next.js canary as primary sections, consolidate AI SDK + Turborepo + platform retention changes into a wrap-up bullet group.",
+  "criteria": [
+    {
+      "name": "When the org has product-blog content alongside SDK / library content, blog leads",
+      "passed": false,
+      "evidence": "Vercel Flags GA — a flagship product launch — appears as a trailing wrap-up sentence after the AI SDK beta section, which is a routine library version bump."
+    },
+    {
+      "name": "Multi-product orgs must weight by user impact",
+      "passed": false,
+      "evidence": "AI SDK Voyage adapter (lesser) and Next.js canary improvements (lesser) occupy primary section weight equal to or greater than Flags GA (flagship)."
+    }
+  ]
+}
