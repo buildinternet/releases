@@ -17,7 +17,13 @@ import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { buildDiscoveryPrompt } from "./discovery.js";
 import type { DiscoveryState, DiscoveryOptions, DiscoveryStatusEvent } from "./discovery.js";
 import { buildDiscoverySystemPrompt } from "../shared/discovery-prompt.js";
-import { AGENT_TOOLS, createTypedExecutor, handleCustomToolUse } from "../shared/agent-tools.js";
+import {
+  AGENT_TOOLS,
+  buildMcpServerDefinition,
+  buildMcpToolset,
+  createTypedExecutor,
+  handleCustomToolUse,
+} from "../shared/agent-tools.js";
 import { buildMemoryStoreResources } from "../shared/memory-store-attach.js";
 
 // ── Cached IDs ────────────────────────────────────────────────────
@@ -105,6 +111,8 @@ async function ensureAgentAndEnv(
       version: cached.agentVersion,
       system: currentPrompt,
       model: config.agentModel(),
+      tools: [...AGENT_TOOLS, buildMcpToolset()],
+      mcp_servers: [buildMcpServerDefinition("production")],
     });
 
     const cfg: ManagedAgentConfig = {
@@ -134,7 +142,8 @@ async function ensureAgentAndEnv(
     name: "Releases Discovery Agent",
     model: config.agentModel(),
     system: currentPrompt,
-    tools: AGENT_TOOLS,
+    tools: [...AGENT_TOOLS, buildMcpToolset()],
+    mcp_servers: [buildMcpServerDefinition("production")],
   });
 
   const cfg: ManagedAgentConfig = {
