@@ -221,6 +221,14 @@ export function ReleaseListItem({
             </a>
           )}
           <RollupBadge type={release.type} />
+          {release.prerelease && (
+            <span
+              title="Pre-release (beta, rc, nightly, preview)"
+              className="text-[10px] uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 rounded px-1.5 py-0.5 leading-none"
+            >
+              pre
+            </span>
+          )}
         </div>
         {showSubtitle && (
           <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{release.title}</div>

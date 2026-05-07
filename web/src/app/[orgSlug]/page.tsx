@@ -180,6 +180,7 @@ export default async function OrgPage({
                   initialReleases={initialReleases.releases}
                   initialCursor={initialReleases.pagination.nextCursor}
                   multipleSourcesExist={org.sources.length > 1}
+                  availableSourceTypes={Array.from(new Set(org.sources.map((s) => s.type)))}
                 />
               ) : (
                 <div className="text-center py-12 text-stone-400 dark:text-stone-500 text-sm">

@@ -36,6 +36,7 @@ const mockRow = (i: number) => ({
   url: `https://example.invalid/${i}`,
   contentHash: "h",
   publishedAt: "2026-01-01",
+  prerelease: false,
   media: "[]",
 });
 

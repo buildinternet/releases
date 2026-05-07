@@ -19,3 +19,18 @@ export function parseExcludeSourceTypes(
   if (invalid.length > 0) return { ok: false, invalid };
   return { ok: true, values: normalized as SourceType[] };
 }
+
+/**
+ * Lenient sibling of {@link parseExcludeSourceTypes} for catalog-shaped
+ * surfaces that should tolerate stale clients — unknown tokens are silently
+ * dropped instead of erroring. Used by the org release-feed `?source_type=`
+ * filter.
+ */
+export function parseSourceTypesLenient(
+  raw: ReadonlyArray<string> | string | null | undefined,
+): SourceType[] {
+  const tokens = (typeof raw === "string" ? raw.split(",") : (raw ?? []))
+    .map((t) => t.trim().toLowerCase())
+    .filter((t) => t.length > 0);
+  return [...new Set(tokens)].filter((t): t is SourceType => SOURCE_TYPE_SET.has(t));
+}

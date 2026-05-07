@@ -25,6 +25,7 @@
     "./sources": "./src/sources.ts",
     "./reserved-slugs": "./src/reserved-slugs.ts",
     "./tokens": "./src/tokens.ts",
+    "./prerelease": "./src/prerelease.ts",
     "./cli-contracts": "./src/cli-contracts.ts",
     "./cursor": "./src/cursor.ts"
   },

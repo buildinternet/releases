@@ -67,6 +67,7 @@ import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatt
 import { fetchOne } from "../cron/poll-fetch.js";
 import { getSourceMeta } from "@releases/adapters/feed.js";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
+import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import type { Env } from "../index.js";
 import {
   getSourcesWithStats,
@@ -508,6 +509,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
       publishedAt?: string | null;
       media?: string | null;
       type?: ReleaseType;
+      prerelease?: boolean;
     }>;
   }>();
 
@@ -517,8 +519,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
     let inserted = 0;
     const publishRows: InsertedReleaseRow[] = [];
     for (let i = 0; i < body.releases.length; i += RELEASES_BATCH_CHUNK_SIZE) {
-      const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r) => ({
-        sourceId: src.id,
+      const chunk = body.releases.slice(i, i + RELEASES_BATCH_CHUNK_SIZE).map((r) => {
         // LLM-driven agent fetches occasionally emit literal placeholders
         // ("<UNKNOWN>", "n/a", "none") instead of omitting the version.
         // The web frontend promotes a non-null version to the heading slot
@@ -528,15 +529,20 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
         // Type-guard the JSON: sanitizeVersion calls .trim(), which would
         // throw on a number or object payload (the body type is the request
         // contract, not a runtime guarantee).
-        version: typeof r.version === "string" ? (sanitizeVersion(r.version) ?? null) : null,
-        type: r.type ?? "feature",
-        title: r.title,
-        content: r.content,
-        url: r.url ?? null,
-        contentHash: r.contentHash ?? null,
-        publishedAt: r.publishedAt ?? null,
-        media: r.media ?? "[]",
-      }));
+        const version = typeof r.version === "string" ? (sanitizeVersion(r.version) ?? null) : null;
+        return {
+          sourceId: src.id,
+          version,
+          type: r.type ?? "feature",
+          title: r.title,
+          content: r.content,
+          url: r.url ?? null,
+          contentHash: r.contentHash ?? null,
+          publishedAt: r.publishedAt ?? null,
+          prerelease: r.prerelease ?? isPrereleaseVersion(version),
+          media: r.media ?? "[]",
+        };
+      });
       // RETURNING is built here — not zipped against `chunk` — because
       // RELEASE_URL_UPSERT has a conditional WHERE clause that causes the
       // database to omit rows where the update didn't apply. The returned
@@ -1829,17 +1835,19 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     type?: ReleaseType;
   }>();
 
+  // See batch handler: strip LLM placeholders ("<UNKNOWN>", "n/a") so
+  // they don't leak into the version slot the web UI promotes. Type-guard
+  // the JSON value before .trim() so non-string payloads are safely coerced
+  // to null instead of throwing.
+  const version = typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null;
+
   try {
     const [release] = await db
       .insert(releases)
       .values({
         id: body.id,
         sourceId: src.id,
-        // See batch handler: strip LLM placeholders ("<UNKNOWN>", "n/a") so
-        // they don't leak into the version slot the web UI promotes. Type-
-        // guard the JSON value before .trim() so non-string payloads are
-        // safely coerced to null instead of throwing.
-        version: typeof body.version === "string" ? (sanitizeVersion(body.version) ?? null) : null,
+        version,
         type: body.type ?? "feature",
         title: body.title,
         content: body.content,
@@ -1848,6 +1856,7 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
         contentHash: body.contentHash ?? null,
         metadata: body.metadata ?? "{}",
         publishedAt: body.publishedAt ?? null,
+        prerelease: isPrereleaseVersion(version),
         fetchedAt: body.fetchedAt ?? new Date().toISOString(),
       })
       .onConflictDoNothing()

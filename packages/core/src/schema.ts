@@ -259,6 +259,7 @@ export const releases = sqliteTable(
     metadata: text("metadata").default("{}"),
     media: text("media").default("[]"),
     publishedAt: text("published_at"),
+    prerelease: integer("prerelease", { mode: "boolean" }).notNull().default(false),
     suppressed: integer("suppressed", { mode: "boolean" }).default(false),
     suppressedReason: text("suppressed_reason"),
     fetchedAt: text("fetched_at")
@@ -820,6 +821,7 @@ export const releasesVisible = sqliteView("releases_visible", {
   metadata: text("metadata"),
   media: text("media"),
   publishedAt: text("published_at"),
+  prerelease: integer("prerelease", { mode: "boolean" }).notNull(),
   suppressed: integer("suppressed", { mode: "boolean" }),
   suppressedReason: text("suppressed_reason"),
   fetchedAt: text("fetched_at").notNull(),

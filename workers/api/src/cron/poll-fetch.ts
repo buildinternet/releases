@@ -25,6 +25,7 @@ import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import type { RawRelease } from "@releases/adapters/types.js";
+import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
   embedAndUpsertChangelogFile,
@@ -35,7 +36,11 @@ import { buildEmbedConfig } from "../lib/embed-config.js";
 import { runWithConcurrency } from "../lib/concurrency.js";
 import type { VectorizeIndex } from "@releases/search/vector-search.js";
 import { embedAndUpsertReleases } from "@releases/search/embed-releases.js";
-import { RELEASES_ID_IN_CHUNK_SIZE, CHANGELOG_CHUNK_INSERT_CHUNK_SIZE } from "../lib/d1-limits.js";
+import {
+  RELEASES_BATCH_CHUNK_SIZE,
+  RELEASES_ID_IN_CHUNK_SIZE,
+  CHANGELOG_CHUNK_INSERT_CHUNK_SIZE,
+} from "../lib/d1-limits.js";
 import { publishReleaseEvents } from "../events/publish.js";
 import { invalidateLatestCache } from "../lib/latest-cache.js";
 import type { InvalidationEnv } from "../lib/latest-cache.js";
@@ -619,6 +624,7 @@ export async function fetchOne(
       url: raw.url ?? null,
       contentHash: contentHash(raw),
       publishedAt: raw.publishedAt?.toISOString() ?? null,
+      prerelease: raw.prerelease ?? isPrereleaseVersion(raw.version),
       // Unwrap Next.js/Vercel image optimizer URLs so downstream R2 upload
       // and direct rendering both see the underlying CDN asset.
       media: JSON.stringify(
@@ -629,8 +635,8 @@ export async function fetchOne(
 
     let inserted = 0;
     const publishRows: InsertedReleaseRow[] = [];
-    for (let i = 0; i < rows.length; i += 5) {
-      const chunk = rows.slice(i, i + 5);
+    for (let i = 0; i < rows.length; i += RELEASES_BATCH_CHUNK_SIZE) {
+      const chunk = rows.slice(i, i + RELEASES_BATCH_CHUNK_SIZE);
       // Build publish rows from the RETURNING set (not zipped against
       // `chunk`) because onConflictDoNothing skips conflicting rows and
       // RETURNING omits them, so index alignment would drift.
@@ -1298,6 +1304,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
     body: string | null;
     html_url: string;
     published_at: string | null;
+    prerelease: boolean;
   }> = await res.json();
 
   return data.slice(0, 200).map((rel) => ({
@@ -1306,6 +1313,7 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
     content: rel.body || "",
     url: rel.html_url,
     publishedAt: rel.published_at ? new Date(rel.published_at) : undefined,
+    prerelease: rel.prerelease === true,
   }));
 }
 

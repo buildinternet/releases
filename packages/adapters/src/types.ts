@@ -9,6 +9,14 @@ export interface RawRelease {
   isBreaking?: boolean;
   type?: ReleaseType;
   media?: Array<{ type: "image" | "video" | "gif"; url: string; alt?: string }>;
+  /**
+   * Whether this is a pre-release (beta, rc, nightly, preview, etc.). Set
+   * authoritatively by adapters with first-class signals (GitHub releases
+   * API exposes `prerelease`); other adapters leave it undefined and let
+   * the upsert path fall back to a version-pattern heuristic via
+   * `isPrereleaseVersion()`.
+   */
+  prerelease?: boolean;
 }
 
 export interface FetchOptions {

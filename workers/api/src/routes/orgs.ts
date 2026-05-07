@@ -23,6 +23,7 @@ import {
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
+import { parseSourceTypesLenient } from "../lib/source-types.js";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import { isReservedSlug } from "@buildinternet/releases-core/reserved-slugs";
 import {
@@ -1166,6 +1167,8 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
   const parsedLimit = parseInt(c.req.query("limit") ?? "20", 10);
   const limit = isNaN(parsedLimit) || parsedLimit < 1 ? 20 : Math.min(parsedLimit, 100);
   const includeCoverage = parseBoolParam(c.req.query("include_coverage"));
+  const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
+  const sourceTypes = parseSourceTypesLenient(c.req.query("source_type"));
 
   const db = createDb(c.env.DB);
 
@@ -1204,7 +1207,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     org.id,
     { cursorWhere, cursorBindings },
     limit + 1,
-    { includeCoverage },
+    { includeCoverage, sourceTypes, includePrereleases },
   );
 
   const hasMore = results.length > limit;
@@ -1229,6 +1232,7 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     publishedAt: r.published_at,
     url: r.url,
     media: parseReleaseMedia(r.media, mediaOrigin),
+    prerelease: r.prerelease === 1,
     source: {
       slug: r.source_slug,
       name: r.source_name,
