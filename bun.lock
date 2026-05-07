@@ -63,7 +63,7 @@
     },
     "packages/api-types": {
       "name": "@buildinternet/releases-api-types",
-      "version": "0.7.0",
+      "version": "0.8.1",
       "dependencies": {
         "@buildinternet/releases-core": "workspace:*",
         "zod": "^4.3.6",
@@ -71,7 +71,7 @@
     },
     "packages/core": {
       "name": "@buildinternet/releases-core",
-      "version": "0.17.0",
+      "version": "0.18.0",
       "dependencies": {
         "drizzle-orm": "^0.45.2",
         "js-tiktoken": "^1.0.21",
