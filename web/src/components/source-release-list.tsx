@@ -98,7 +98,7 @@ export function SourceReleaseList({
 
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-3 mb-3">
+      <div className="mt-3 mb-3 space-y-2">
         <input
           type="search"
           value={searchInput}
@@ -108,9 +108,9 @@ export function SourceReleaseList({
           }}
           placeholder="Filter releases…"
           aria-label="Filter releases"
-          className="flex-1 min-w-0 max-w-xs text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
+          className="w-full text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
         />
-        <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none ml-auto shrink-0">
+        <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none">
           <input
             type="checkbox"
             checked={includePrereleases}

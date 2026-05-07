@@ -154,32 +154,7 @@ export function OrgReleaseList({
   return (
     <div>
       {showFilterRow && (
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-2 mt-3 mb-3">
-          <div className="flex items-center gap-1 shrink-0">
-            {showSourceTypeTabs &&
-              filterTabs.map((tab) => {
-                const active = filterGroup === tab.value;
-                return (
-                  <button
-                    key={tab.value}
-                    type="button"
-                    aria-pressed={active}
-                    onClick={() => {
-                      setPristine(false);
-                      setFilterGroup(tab.value);
-                    }}
-                    className={
-                      "text-[12px] px-2 py-1 rounded-md transition-colors whitespace-nowrap " +
-                      (active
-                        ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
-                        : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
-                    }
-                  >
-                    {tab.label}
-                  </button>
-                );
-              })}
-          </div>
+        <div className="mt-3 mb-3 space-y-2">
           <input
             type="search"
             value={searchInput}
@@ -189,20 +164,47 @@ export function OrgReleaseList({
             }}
             placeholder="Filter releases…"
             aria-label="Filter releases"
-            className="ml-auto flex-1 min-w-0 max-w-xs text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
+            className="w-full text-[12px] px-2 py-1 rounded-md bg-white dark:bg-stone-900 border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-200 placeholder:text-stone-400 dark:placeholder:text-stone-500 focus:outline-none focus:border-stone-300 dark:focus:border-stone-600"
           />
-          <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none shrink-0">
-            <input
-              type="checkbox"
-              checked={includePrereleases}
-              onChange={(e) => {
-                setPristine(false);
-                setIncludePrereleases(e.target.checked);
-              }}
-              className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
-            />
-            <span>Show prereleases</span>
-          </label>
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="flex items-center gap-1 shrink-0">
+              {showSourceTypeTabs &&
+                filterTabs.map((tab) => {
+                  const active = filterGroup === tab.value;
+                  return (
+                    <button
+                      key={tab.value}
+                      type="button"
+                      aria-pressed={active}
+                      onClick={() => {
+                        setPristine(false);
+                        setFilterGroup(tab.value);
+                      }}
+                      className={
+                        "text-[12px] px-2 py-1 rounded-md transition-colors whitespace-nowrap " +
+                        (active
+                          ? "bg-stone-100 dark:bg-stone-800 text-stone-900 dark:text-stone-100 font-medium"
+                          : "text-stone-500 dark:text-stone-400 hover:text-stone-700 dark:hover:text-stone-200")
+                      }
+                    >
+                      {tab.label}
+                    </button>
+                  );
+                })}
+            </div>
+            <label className="flex items-center gap-2 text-[12px] text-stone-500 dark:text-stone-400 cursor-pointer select-none ml-auto shrink-0">
+              <input
+                type="checkbox"
+                checked={includePrereleases}
+                onChange={(e) => {
+                  setPristine(false);
+                  setIncludePrereleases(e.target.checked);
+                }}
+                className="h-3.5 w-3.5 accent-stone-700 dark:accent-stone-300"
+              />
+              <span>Show prereleases</span>
+            </label>
+          </div>
         </div>
       )}
 
