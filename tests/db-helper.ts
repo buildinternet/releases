@@ -107,6 +107,11 @@ export function clearAllTables(db: TestDb): void {
   db.delete(schema.ignoredUrls).run();
   db.delete(schema.tags).run();
   db.delete(schema.domainAliases).run();
+  // collection_members cascades from collections; clear collections after the
+  // join is gone to keep deletion order explicit. The seed migration creates
+  // `frontier-ai-labs`, so leaving it in would leak into every test.
+  db.delete(schema.collectionMembers).run();
+  db.delete(schema.collections).run();
   db.delete(schema.organizations).run();
   db.delete(schema.blockedUrls).run();
 }

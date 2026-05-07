@@ -6,7 +6,13 @@
 import { describe, test, expect, beforeEach, afterAll, beforeAll } from "bun:test";
 import { Hono } from "hono";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
-import { organizations, sources, products, releases } from "@buildinternet/releases-core/schema";
+import {
+  organizations,
+  sources,
+  products,
+  releases,
+  collections,
+} from "@buildinternet/releases-core/schema";
 import { sitemapRoutes } from "../../workers/api/src/routes/sitemap.js";
 
 let testDatabase: TestDatabase;
@@ -16,6 +22,7 @@ type SitemapResponse = {
   orgs: { slug: string; lastActivity: string | null }[];
   sources: { orgSlug: string; slug: string; latestDate: string | null }[];
   products: { orgSlug: string; slug: string }[];
+  collections: { slug: string; updatedAt: string }[];
 };
 
 async function callSitemap(): Promise<SitemapResponse> {
@@ -41,7 +48,38 @@ beforeEach(() => {
 describe("GET /sitemap", () => {
   test("returns empty payload when DB has no orgs", async () => {
     const result = await callSitemap();
-    expect(result).toEqual({ orgs: [], sources: [], products: [] });
+    // Empty-org responses still include `collections` (this DB also has none).
+    expect(result).toEqual({ orgs: [], sources: [], products: [], collections: [] });
+  });
+
+  test("emits collection slugs sorted, with updatedAt for lastmod", async () => {
+    const db = testDatabase.db;
+    db.insert(collections)
+      .values([
+        {
+          id: "col_b",
+          slug: "b-collection",
+          name: "B",
+          updatedAt: "2026-04-01T00:00:00Z",
+          createdAt: "2026-03-01T00:00:00Z",
+        },
+        {
+          id: "col_a",
+          slug: "a-collection",
+          name: "A",
+          updatedAt: "2026-04-15T00:00:00Z",
+          createdAt: "2026-03-01T00:00:00Z",
+        },
+      ])
+      .run();
+
+    // Membership shouldn't matter for sitemap inclusion — empty collections
+    // are still real URLs that should be discoverable.
+    const result = await callSitemap();
+    expect(result.collections).toEqual([
+      { slug: "a-collection", updatedAt: "2026-04-15T00:00:00Z" },
+      { slug: "b-collection", updatedAt: "2026-04-01T00:00:00Z" },
+    ]);
   });
 
   test("emits an org entry with null lastActivity when it has no sources", async () => {

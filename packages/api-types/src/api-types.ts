@@ -133,6 +133,7 @@ export interface SitemapPayload {
   orgs: Array<{ slug: string; lastActivity: string | null }>;
   sources: Array<{ orgSlug: string; slug: string; latestDate: string | null }>;
   products: Array<{ orgSlug: string; slug: string }>;
+  collections: Array<{ slug: string; updatedAt: string }>;
 }
 
 // ── Organizations ──
