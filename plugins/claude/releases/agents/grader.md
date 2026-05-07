@@ -49,11 +49,11 @@ Return exactly one JSON object — no markdown fences, no surrounding prose:
 
 A typical dispatch looks like:
 
-```
+```ts
 Agent({
   subagent_type: "grader",
   prompt: "Grade /tmp/vercel-overview.md against /Users/.../src/shared/rubrics/overview.md.",
-})
+});
 ```
 
 The subagent shares context with the parent Claude Code instance, so it isn't a perfect stand-in for the platform grader's separate-context guarantee. End-to-end realism happens in staging managed agents. This surface is for rubric authoring and regression checks.

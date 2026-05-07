@@ -34,11 +34,30 @@ const OUTPUT_SCHEMA = `{
   ]
 }`;
 
+function escapeLabel(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;");
+}
+
+function neutralizeClosingTag(body: string, tag: "rubric" | "artifact"): string {
+  // A body containing a literal `</rubric>` or `</artifact>` would otherwise
+  // close the data envelope and let downstream content read as instructions.
+  return body.replace(new RegExp(`</${tag}>`, "gi"), `</__${tag}__>`);
+}
+
 export function buildGraderPrompt(input: BuildGraderPromptInput): string {
-  const rubricHeader = input.rubricLabel ? `<rubric source="${input.rubricLabel}">` : "<rubric>";
+  const rubricHeader = input.rubricLabel
+    ? `<rubric source="${escapeLabel(input.rubricLabel)}">`
+    : "<rubric>";
   const artifactHeader = input.artifactLabel
-    ? `<artifact source="${input.artifactLabel}">`
+    ? `<artifact source="${escapeLabel(input.artifactLabel)}">`
     : "<artifact>";
+
+  const safeRubric = neutralizeClosingTag(input.rubric.trim(), "rubric");
+  const safeArtifact = neutralizeClosingTag(input.artifact.trim(), "artifact");
 
   return `You are a rubric grader. You receive a rubric and an artifact, score the artifact per criterion in the rubric, and return a single JSON object.
 
@@ -57,10 +76,10 @@ Output exactly one JSON object matching this shape — no surrounding markdown, 
 ${OUTPUT_SCHEMA}
 
 ${rubricHeader}
-${input.rubric.trim()}
+${safeRubric}
 </rubric>
 
 ${artifactHeader}
-${input.artifact.trim()}
+${safeArtifact}
 </artifact>`;
 }
