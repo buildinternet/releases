@@ -57,11 +57,12 @@ jobs:
 
       - name: Configure npm auth
         if: steps.check.outputs.already == 'false'
+        working-directory: packages/api-types
         env:
           NPM_TOKEN: ${{ secrets.NPM_PUBLISHING_TOKEN }}
         run: |
-          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > ~/.npmrc
-          echo "registry=https://registry.npmjs.org/" >> ~/.npmrc
+          echo "//registry.npmjs.org/:_authToken=${NPM_TOKEN}" > .npmrc
+          echo "registry=https://registry.npmjs.org/" >> .npmrc
 
       - name: Publish
         if: steps.check.outputs.already == 'false'
