@@ -227,7 +227,7 @@ In a managed-agent session, also read `releases-errata` `/orgs/<org_id>/observat
 
 1. `releases list <slug> --json` — Check actual version formats, titles, content length, publishedAt patterns
 2. `releases admin source fetch-log <slug> --json` — Check for errors, success rates, stale data
-3. Compare `lastFetchedAt` to the cadence you measure in step 1. **An empty fetch-log is not the same as "ingested successfully".** If `lastFetchedAt` is older than ~3× the typical interval between releases (e.g. last fetch was 5 weeks ago for a weekly source), the cron is no-op'ing this source — likely because the change-detector quirk is `unreliable` and nothing else is flagging it. Don't rubber-stamp the source as healthy; surface this to the human operator (or, if you authored the `unreliable` quirk yourself, reconsider whether a more targeted detector would work — e.g. `body-hash` against a CSS-selector slice instead of the whole page).
+3. Compare `lastFetchedAt` to the cadence you measure in step 1. **An empty fetch-log is not the same as "ingested successfully".** If `lastFetchedAt` is older than ~3× the typical interval between releases (e.g. last fetch was 5 weeks ago for a weekly source), the cron is no-op'ing this source. The likely cause: the `changeDetector` is `unreliable` and nothing else is flagging the source. Don't rubber-stamp it as healthy — surface this to the human operator, or (if you authored the `unreliable` quirk yourself) reconsider whether a more targeted detector would work, e.g. `body-hash-filtered` for SSR pages whose raw body churns but article markup is stable, or `body-hash` against a CSS-selector slice in a future revision.
 4. Analyze: calculate real cadence from dates, identify empty content or null fields, spot date drift
 5. Write notes citing specific data points, not general assumptions
 
@@ -252,7 +252,9 @@ fetchQuirks:
 (your prose notes here)
 ```
 
-Only edit the fence when a source's fetch behavior genuinely changes (e.g. you verified a new ETag stability, or the site switched to SSR). Valid `changeDetector` values: `etag`, `content-length`, `body-hash`, `unreliable`. Optional keys: `tier` (`normal` | `low`), `changeProbeUrl` (alternate HEAD target).
+Only edit the fence when a source's fetch behavior genuinely changes (e.g. you verified a new ETag stability, or the site switched to SSR). Valid `changeDetector` values: `etag`, `content-length`, `body-hash`, `body-hash-filtered`, `unreliable`. Optional keys: `tier` (`normal` | `low`), `changeProbeUrl` (alternate HEAD target).
+
+Pick `body-hash-filtered` when the page is SSR (Next.js / Vercel / Astro) and the raw body hash churns per-request (hydration tokens, chunk URLs, nonces) but the article markup is stable. The detector strips `<script>`, `<style>`, `<link>`, `<meta>`, and HTML comments before hashing. If `body-hash` already works, leave it — `body-hash-filtered` is for cases that would otherwise be tagged `unreliable` and lean on the daily force-drain cron.
 
 **Changing source configuration:** The header reflects current source metadata. To change things like `parseInstructions`, `fetchPriority`, or `crawlEnabled`, use `manage_source` action "edit" with metadata — the header updates automatically.
 

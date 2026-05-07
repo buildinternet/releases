@@ -314,6 +314,9 @@ export async function pollOne(
  *   etag / content-length → `headCheckUrl` against the page URL with
  *                           `page*` validators stored in metadata.
  *   body-hash             → GET + SHA-256 against `pageContentHash`.
+ *   body-hash-filtered    → GET + SHA-256 after stripping volatile markup
+ *                           (script/style/link/meta/comments). For SSR
+ *                           pages whose body churns per-request (#789).
  *   unreliable            → no-op; Phase 3 force-drain cron handles these.
  *   absent                → no-op; source is stranded until populated.
  *
@@ -383,8 +386,11 @@ async function pollScrapeOrAgentByQuirk(
     let status: ChangeStatus;
 
     switch (detector) {
-      case "body-hash": {
-        const result = await bodyHashCheck(probeUrl, meta.pageContentHash);
+      case "body-hash":
+      case "body-hash-filtered": {
+        const result = await bodyHashCheck(probeUrl, meta.pageContentHash, {
+          filter: detector === "body-hash-filtered",
+        });
         metaUpdates = {};
         if (result.contentHash) metaUpdates.pageContentHash = result.contentHash;
         status = result.status;
@@ -410,7 +416,7 @@ async function pollScrapeOrAgentByQuirk(
     }
 
     const changed = await persistOutcome(metaUpdates, status);
-    logOutcome(detector, status === "changed" ? "changed" : "unchanged");
+    logOutcome(detector, status === "changed" || status === "unknown" ? "changed" : "unchanged");
     return { source, changed };
   } catch (err) {
     await db.update(sources).set({ lastPolledAt: nowIso }).where(eq(sources.id, source.id));

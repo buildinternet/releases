@@ -30,6 +30,7 @@ type HeadCheckStub = (
 type BodyHashStub = (
   url: string,
   storedHash: string | undefined,
+  opts?: { filter?: boolean },
 ) => Promise<{
   status: "changed" | "unchanged" | "unknown";
   contentHash?: string;
@@ -39,7 +40,11 @@ type BodyHashStub = (
 let headCheckImpl: HeadCheckStub = async () => ({ status: "unchanged", responseMs: 1 });
 let bodyHashImpl: BodyHashStub = async () => ({ status: "unchanged", responseMs: 1 });
 let headCheckCalls: Array<{ url: string; stored: Record<string, string | undefined> }> = [];
-let bodyHashCalls: Array<{ url: string; storedHash: string | undefined }> = [];
+let bodyHashCalls: Array<{
+  url: string;
+  storedHash: string | undefined;
+  opts?: { filter?: boolean };
+}> = [];
 
 mock.module("@releases/adapters/feed.js", () => ({
   FEED_4XX_INVALIDATE_THRESHOLD: 3,
@@ -50,9 +55,9 @@ mock.module("@releases/adapters/feed.js", () => ({
     headCheckCalls.push({ url, stored });
     return headCheckImpl(url, stored);
   }) satisfies HeadCheckStub,
-  bodyHashCheck: (async (url, storedHash) => {
-    bodyHashCalls.push({ url, storedHash });
-    return bodyHashImpl(url, storedHash);
+  bodyHashCheck: (async (url, storedHash, opts) => {
+    bodyHashCalls.push({ url, storedHash, opts });
+    return bodyHashImpl(url, storedHash, opts);
   }) satisfies BodyHashStub,
   fetchAndParseFeed: async () => ({
     releases: [],
@@ -144,6 +149,14 @@ fetchQuirks:
   claude:
     changeDetector: unreliable
     rationale: SSR nonces; body hash churns
+---
+`;
+
+const BODY_HASH_FILTERED_QUIRK_NOTES = `---
+fetchQuirks:
+  lightfield:
+    changeDetector: body-hash-filtered
+    rationale: Next.js SSR; article markup stable after stripping scripts/hydration
 ---
 `;
 
@@ -263,6 +276,46 @@ describe("pollOne — scrape/agent change detectors (#517)", () => {
     const after = readSource(db, "src_brex_api");
     expect(after.changeDetectedAt).not.toBeNull();
     expect(readSourceMeta(db, "src_brex_api").pageContentHash).toBe("new-hash");
+  });
+
+  it("body-hash-filtered quirk: routes to bodyHashCheck with filter:true and persists pageContentHash", async () => {
+    const db = mkDb();
+    seedOrgWithSource(db, {
+      orgId: "org_lf",
+      orgSlug: "lightfield",
+      orgName: "Lightfield",
+      sourceId: "src_lightfield",
+      sourceSlug: "lightfield",
+      sourceUrl: "https://lightfield.app/blog?category=changelog",
+      metadata: { pageContentHash: "old-hash" },
+      playbookNotes: BODY_HASH_FILTERED_QUIRK_NOTES,
+    });
+
+    bodyHashImpl = async () => ({
+      status: "changed",
+      contentHash: "filtered-new-hash",
+      responseMs: 25,
+    });
+
+    const notesMap = await loadPlaybookNotesForSources(db as any, [
+      readSource(db, "src_lightfield") as any,
+    ]);
+    const source = readSource(db, "src_lightfield");
+
+    const result = await pollOne(db as any, source as any, new Date(), {
+      changeDetectEnabled: true,
+      playbookNotes: notesMap.get(source.orgId!) ?? null,
+    });
+
+    expect(result.changed).toBe(true);
+    expect(bodyHashCalls).toHaveLength(1);
+    expect(bodyHashCalls[0].storedHash).toBe("old-hash");
+    expect(bodyHashCalls[0].opts).toEqual({ filter: true });
+    expect(headCheckCalls).toHaveLength(0);
+
+    const after = readSource(db, "src_lightfield");
+    expect(after.changeDetectedAt).not.toBeNull();
+    expect(readSourceMeta(db, "src_lightfield").pageContentHash).toBe("filtered-new-hash");
   });
 
   it("unreliable quirk: no probe, no changeDetectedAt", async () => {

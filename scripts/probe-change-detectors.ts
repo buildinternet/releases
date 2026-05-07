@@ -14,6 +14,9 @@
  *                       append-only changelogs.
  *   - `body-hash`     — No validator, but GET + SHA-256 is stable across 2
  *                       requests. Works, pays full-body bandwidth per poll.
+ *   - `body-hash-filtered` — Raw body churns, but stripping script/style/link/
+ *                       meta/comments yields a stable hash (#789). Targets
+ *                       Next.js / Vercel / Astro SSR pages.
  *   - `unreliable`    — Nothing stable. Phase 3 force-drain cron handles these.
  *
  * Read-only. No writes to D1 or the API. Output is a markdown report at
@@ -28,7 +31,8 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
-import { RELEASES_BOT_UA } from "../packages/adapters/src/user-agent.js";
+import { stripVolatileMarkup } from "@releases/adapters/feed";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 
 type SourceRow = {
   slug: string;
@@ -40,7 +44,7 @@ type SourceRow = {
 
 type Candidate = SourceRow & { parsedMetadata: Record<string, unknown> };
 
-type QuirkClass = "etag" | "content-length" | "body-hash" | "unreliable";
+type QuirkClass = "etag" | "content-length" | "body-hash" | "body-hash-filtered" | "unreliable";
 
 type Probe = {
   slug: string;
@@ -110,7 +114,7 @@ async function headOnce(url: string): Promise<Headers | null> {
   }
 }
 
-async function bodyHash(url: string): Promise<string | null> {
+async function bodyHash(url: string, opts?: { filter?: boolean }): Promise<string | null> {
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": RELEASES_BOT_UA },
@@ -118,7 +122,8 @@ async function bodyHash(url: string): Promise<string | null> {
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS * 2),
     });
     if (!res.ok) return null;
-    const text = await res.text();
+    const raw = await res.text();
+    const text = opts?.filter ? stripVolatileMarkup(raw) : raw;
     return createHash("sha256").update(text).digest("hex");
   } catch {
     return null;
@@ -160,11 +165,10 @@ async function classify(row: Candidate): Promise<Probe> {
         rationale: "HEAD unsupported; GET body SHA-256 stable across two requests.",
       };
     }
-    return {
-      ...base,
-      class: "unreliable",
-      rationale: "HEAD unsupported and GET body hash differs per request.",
-    };
+    return classifyFilteredOrUnreliable(
+      base,
+      "HEAD unsupported and GET body hash differs per request",
+    );
   }
 
   const e1 = h1.get("etag");
@@ -224,11 +228,42 @@ async function classify(row: Candidate): Promise<Probe> {
       rationale: "HEAD returned no stable validator; GET body SHA-256 stable.",
     };
   }
+  return classifyFilteredOrUnreliable(
+    base,
+    "No stable HEAD validator and body hash differs per request",
+  );
+}
+
+/**
+ * Last-resort retry: if the raw body hash diverges, two GETs through the
+ * `body-hash-filtered` strip (#789) might still match. Pick that classifier
+ * so the source can self-flag instead of leaning on force-drain.
+ */
+async function classifyFilteredOrUnreliable(
+  base: Omit<Probe, "class" | "rationale">,
+  divergenceContext: string,
+): Promise<Probe> {
+  const f1 = await bodyHash(base.pageUrl, { filter: true });
+  if (!f1) {
+    return {
+      ...base,
+      class: "unreliable",
+      rationale: `${divergenceContext}; filtered probe failed.`,
+    };
+  }
+  await sleep(BODY_GAP_MS);
+  const f2 = await bodyHash(base.pageUrl, { filter: true });
+  if (f1 === f2) {
+    return {
+      ...base,
+      class: "body-hash-filtered",
+      rationale: `${divergenceContext}; SHA-256 stable after stripping script/style/link/meta/comments.`,
+    };
+  }
   return {
     ...base,
     class: "unreliable",
-    rationale:
-      "No stable HEAD validator and body hash differs per request (SSR nonces or dynamic content).",
+    rationale: `${divergenceContext}; even filtered hash differs per request.`,
   };
 }
 
@@ -239,7 +274,13 @@ function toMarkdown(probes: Probe[]): string {
       acc[p.class] = (acc[p.class] ?? 0) + 1;
       return acc;
     },
-    { etag: 0, "content-length": 0, "body-hash": 0, unreliable: 0 },
+    {
+      etag: 0,
+      "content-length": 0,
+      "body-hash": 0,
+      "body-hash-filtered": 0,
+      unreliable: 0,
+    },
   );
 
   const lines: string[] = [];
@@ -263,6 +304,9 @@ function toMarkdown(probes: Probe[]): string {
   );
   lines.push(
     `| \`body-hash\` | ${summary["body-hash"]} | GET + SHA-256. Works, pays full-body bandwidth |`,
+  );
+  lines.push(
+    `| \`body-hash-filtered\` | ${summary["body-hash-filtered"]} | GET + SHA-256 after stripping script/style/link/meta/comments. For SSR pages |`,
   );
   lines.push(
     `| \`unreliable\` | ${summary.unreliable} | Phase 3 force-drain cron. Retier to \`low\` |`,
@@ -309,7 +353,7 @@ async function main(): Promise<void> {
   }, {});
   log("");
   log(
-    `etag=${counts.etag ?? 0} · content-length=${counts["content-length"] ?? 0} · body-hash=${counts["body-hash"] ?? 0} · unreliable=${counts.unreliable ?? 0}`,
+    `etag=${counts.etag ?? 0} · content-length=${counts["content-length"] ?? 0} · body-hash=${counts["body-hash"] ?? 0} · body-hash-filtered=${counts["body-hash-filtered"] ?? 0} · unreliable=${counts.unreliable ?? 0}`,
   );
 
   const reportPath = resolve(process.cwd(), ".context/515-change-detectors.md");
