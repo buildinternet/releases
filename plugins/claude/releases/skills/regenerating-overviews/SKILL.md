@@ -64,7 +64,7 @@ Structure:
 2. Two to five themed sections. Each section uses one of two shapes:
    - **Bold tease** + a tight bullet list of concrete items.
    - **Bold tease** + one to two short prose sentences (each ≤25 words).
-   Sections with three or more concrete items SHOULD bullet — don't pack them into a comma-separated paragraph. A prose sentence with four or more comma-listed items is a tell that bullets would read better. A bullet that itself enumerates a small set ("works with A, B, C, and D") is fine; the rule targets dense prose lists.
+   Sections with three or more concrete items SHOULD bullet — don't pack them into a comma-separated paragraph. A prose sentence with four or more comma-listed items is the tell. A bullet that itself enumerates a small set ("works with A, B, C, and D") is fine.
 3. The bold tease is the user-facing claim, not the implementation. Good: "**Linear Agent gained MCP context reach.**" Bad: "**Linear Agent v2.4 added /mcp endpoint with allowlist param.**" Pure changelog phrasing as the section headline — endpoint names, parameter names, internal class names, version numbers as the headline noun — is wrong. Versions and code can carry weight in supporting prose or bullets, just not as the lead.
 4. Breaking changes and deprecations get called out inline where they fall.
 5. When multiple sources contribute, synthesize across them by topic — don't summarize each separately.
@@ -155,18 +155,6 @@ Optional flags (omit and the CLI re-fetches inputs to derive both):
 - `--last-contributing-at <iso>` — defaults to the first selected release's `publishedAt`
 
 The CLI POSTs to `/v1/orgs/:slug/overview` (existing dumb upsert). Last-write-wins on conflict.
-
-## Output Quality Rules
-
-These come from the system prompt above but are worth restating because they're the most common failure modes:
-
-- **No markdown headings.** No `#`, `##`, etc. The UI renders the org name itself. A leading heading ruins the inline preview.
-- **Bold tease names the user-facing change**, not the implementation. `**Linear Agent gained MCP context reach.**` beats `**SDK updates.**` and beats `**Linear Agent v2.4 added /mcp endpoint with allowlist param.**`. The tease is the release-note headline; supporting prose or bullets carry the implementation detail.
-- **Bullets for sections with three or more concrete items.** Don't pack them into a comma-separated paragraph. A sentence listing four or more items is a tell that bullets would read better.
-- **Lead with the product blog when SDK/library content is also in scope.** SDK / library version bumps that don't ship a new capability consolidate into a wrap-up sentence or short final bullet group. Library-shape carve-out: when the org's primary product IS the library/CLI/runtime, library releases ARE the user-facing news.
-- **120–250 words target.** Hard ceiling 300. If the signal is thin, write 80 words; don't pad.
-- **Past tense, active voice for ship verbs.** "shipped", "added", "removed". No "is shipping", no "received improvements". Present tense is fine when describing what a shipped feature does.
-- **Amend, don't rewrite** when `existingContent` is set. Preserve themes that are still current; drop ones that have aged out.
 
 ## Failure Modes to Watch For
 

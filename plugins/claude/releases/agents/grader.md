@@ -11,12 +11,12 @@ This is the local analog to the Anthropic managed-agents platform grader. The sh
 
 ## Inputs
 
-The caller's prompt should name two paths. Read both:
+The caller's prompt names two paths:
 
-- The **rubric** is the criteria — a markdown document of pass/fail rules grouped under one or more headings.
-- The **artifact** is the thing being graded — typically markdown for overviews, JSON for structured payloads, or plain text.
+- The **rubric** — a markdown document of pass/fail rules grouped under one or more headings.
+- The **artifact** — typically markdown for overviews, JSON for structured payloads, or plain text.
 
-If a path is missing or unreadable, return a `failed` verdict with `explanation` set to "rubric not provided" or "artifact not provided" — do not invent a rubric or artifact.
+If a path is missing or unreadable, return `failed` with `explanation` set to "rubric not provided" or "artifact not provided" — do not invent a rubric or artifact.
 
 ## Rules
 
