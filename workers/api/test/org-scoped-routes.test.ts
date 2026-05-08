@@ -296,6 +296,46 @@ describe("org-scoped write endpoints — dual-registered handlers", () => {
     expect(body.metadata.feedUrl).toBe("https://example.com/feed");
   });
 
+  it("PATCH metadata with exactly 20 changelogPaths → 200", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const paths = Array.from({ length: 20 }, (_, i) => `packages/pkg-${i}/CHANGELOG.md`);
+    const res = await fetch(
+      new Request("https://x.test/v1/orgs/acme/sources/cli/metadata", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changelogPaths: paths }),
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { metadata: { changelogPaths: string[] } };
+    expect(body.metadata.changelogPaths).toHaveLength(20);
+  });
+
+  it("PATCH metadata with 21 changelogPaths → 400 bad_request", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+
+    const paths = Array.from({ length: 21 }, (_, i) => `packages/pkg-${i}/CHANGELOG.md`);
+    const res = await fetch(
+      new Request("https://x.test/v1/orgs/acme/sources/cli/metadata", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ changelogPaths: paths }),
+      }),
+    );
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { error: string; message: string };
+    expect(body.error).toBe("bad_request");
+    expect(body.message).toContain("21");
+    expect(body.message).toContain("20");
+  });
+
   it("POST /v1/orgs/:orgSlug/sources/:sourceSlug/content-hash reaches the handler", async () => {
     const db = mkDb();
     await seed(db);

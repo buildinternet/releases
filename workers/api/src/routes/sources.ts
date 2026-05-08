@@ -75,6 +75,7 @@ import {
   parseOwnerRepo,
 } from "@releases/adapters/github-discovery";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import { CHANGELOG_MAX_FILES } from "@releases/adapters/github";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import type { Env } from "../index.js";
 import {
@@ -848,6 +849,20 @@ const patchMetadataHandler = async (c: import("hono").Context<Env>) => {
   }
   if (!patch || typeof patch !== "object" || Array.isArray(patch)) {
     return c.json({ error: "bad_request", message: "Body must be a JSON object" }, 400);
+  }
+
+  if (
+    "changelogPaths" in patch &&
+    Array.isArray(patch.changelogPaths) &&
+    patch.changelogPaths.length > CHANGELOG_MAX_FILES
+  ) {
+    return c.json(
+      {
+        error: "bad_request",
+        message: `changelogPaths length ${patch.changelogPaths.length} exceeds the cap of ${CHANGELOG_MAX_FILES}`,
+      },
+      400,
+    );
   }
 
   const src = await resolveSourceFromContext(c, db);
