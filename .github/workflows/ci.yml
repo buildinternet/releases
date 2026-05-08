@@ -6,6 +6,12 @@ on:
   push:
     branches: [main]
 
+# Cancel in-progress runs on the same PR ref when a new commit lands. Pushes
+# to main never cancel — every merge should produce a green run.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   lint:
     name: Lint & Format
@@ -17,6 +23,12 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
 
       - run: bun install --frozen-lockfile
 
@@ -38,6 +50,12 @@ jobs:
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
+
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
 
       - run: bun install --frozen-lockfile
 
@@ -107,23 +125,34 @@ jobs:
         run: bun run test
 
   worker-lockfiles:
-    name: Worker lockfile (${{ matrix.worker }})
+    name: Worker lockfiles
     # workers/discovery, workers/mcp, and workers/webhooks are excluded
     # from the root workspace and carry their own bun.lock. The deploy
     # job runs `bun install --frozen-lockfile` per worker, so a stale
     # lockfile only surfaces post-merge as a deploy failure (e.g. PR #778
     # bumped @anthropic-ai/sdk in package.json but didn't refresh
     # workers/mcp/bun.lock). Catch that at PR time.
+    #
+    # Run sequentially in one job (not a matrix) — three frozen installs
+    # in series share a runner and the bun cache instead of paying for
+    # three checkouts + three setup-bun steps.
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        worker: [discovery, mcp, webhooks]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
         with:
           bun-version: latest
-      - name: Verify frozen install
-        working-directory: workers/${{ matrix.worker }}
+      - uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-workers-${{ hashFiles('workers/discovery/bun.lock', 'workers/mcp/bun.lock', 'workers/webhooks/bun.lock') }}
+          restore-keys: ${{ runner.os }}-bun-
+      - name: Verify discovery
+        working-directory: workers/discovery
+        run: bun install --frozen-lockfile
+      - name: Verify mcp
+        working-directory: workers/mcp
+        run: bun install --frozen-lockfile
+      - name: Verify webhooks
+        working-directory: workers/webhooks
         run: bun install --frozen-lockfile
