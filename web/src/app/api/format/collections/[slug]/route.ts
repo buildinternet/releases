@@ -52,14 +52,17 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     return markdownResponse(`${detail}\n## Recent Releases\n\n${releases}`, { cache: "dynamic" });
   }
 
-  let collection;
+  let collection, feed;
   try {
-    collection = await api.collectionDetail(slug);
+    [collection, feed] = await Promise.all([
+      api.collectionDetail(slug),
+      api.collectionReleases(slug, { limit: 20 }),
+    ]);
   } catch {
     return NextResponse.json(
       { error: "not_found", message: "Collection not found" },
       { status: 404 },
     );
   }
-  return NextResponse.json(collection);
+  return NextResponse.json({ ...collection, releases: feed.releases, pagination: feed.pagination });
 }
