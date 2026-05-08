@@ -46,10 +46,60 @@ export type SourceListRow = {
 // `includeHidden` selects sources_active (shows hidden rows) vs. the default
 // sources_visible (hides them). Both views already filter deleted_at.
 
+export interface SourceListFilterOpts {
+  includeHidden?: boolean;
+  staleOnly?: boolean;
+  /**
+   * When true, only include sources that have NO row in `source_changelog_files`.
+   * Used by the admin "find candidates for a CHANGELOG.md attach" workflow.
+   */
+  missingChangelog?: boolean;
+  /**
+   * When set, only include sources whose 30-day visible release count is at
+   * least this value. Used to focus the missing-CHANGELOG list on active
+   * sources where attaching a file is worth the effort.
+   */
+  minReleasesLast30Days?: number;
+}
+
+/** AND a list of optional clauses, dropping nulls. Returns null when empty. */
+function andWhere(clauses: (SQL | null | undefined)[]): SQL | null {
+  const present = clauses.filter((c): c is SQL => c != null);
+  if (present.length === 0) return null;
+  return present.reduce((acc, cur) => sql`${acc} AND ${cur}`);
+}
+
+function changelogActivityJoinAndWhere(opts: SourceListFilterOpts): {
+  join: SQL;
+  where: SQL | null;
+} {
+  const needsChangelogJoin = opts.missingChangelog === true;
+  const needsActivityJoin = opts.minReleasesLast30Days != null && opts.minReleasesLast30Days > 0;
+
+  const changelogJoin = needsChangelogJoin
+    ? sql`LEFT JOIN (SELECT DISTINCT source_id FROM source_changelog_files) scf ON scf.source_id = sources.id`
+    : sql``;
+  const activityJoin = needsActivityJoin
+    ? sql`LEFT JOIN (
+        SELECT r.source_id, COUNT(*) AS cnt
+        FROM releases_visible r
+        WHERE r.published_at IS NOT NULL AND r.published_at >= ${daysAgoIso(30)}
+        GROUP BY r.source_id
+      ) rcl ON rcl.source_id = sources.id`
+    : sql``;
+
+  const where = andWhere([
+    needsChangelogJoin ? sql`scf.source_id IS NULL` : null,
+    needsActivityJoin ? sql`COALESCE(rcl.cnt, 0) >= ${opts.minReleasesLast30Days!}` : null,
+  ]);
+
+  return { join: sql`${changelogJoin} ${activityJoin}`, where };
+}
+
 export async function countSourcesForList(
   db: D1Db,
   whereClause?: SQL,
-  opts: { includeHidden?: boolean; staleOnly?: boolean } = {},
+  opts: SourceListFilterOpts = {},
 ): Promise<number> {
   const fromView = opts.includeHidden ? sql`sources_active` : sql`sources_visible`;
   const staleJoin = opts.staleOnly
@@ -58,14 +108,15 @@ export async function countSourcesForList(
   const staleWhere = opts.staleOnly
     ? sql`(rs.latest_date IS NULL OR rs.latest_date < ${daysAgoIso(SOURCE_STALE_DAYS)})`
     : null;
-  const combinedWhere =
-    whereClause && staleWhere ? sql`${whereClause} AND ${staleWhere}` : (whereClause ?? staleWhere);
+  const filterExtras = changelogActivityJoinAndWhere(opts);
+  const combinedWhere = andWhere([whereClause, staleWhere, filterExtras.where]);
   const rows = await db.all<{ total: number }>(sql`
     SELECT COUNT(*) AS total
     FROM ${fromView} sources
     LEFT JOIN organizations_active organizations ON organizations.id = sources.org_id
     LEFT JOIN products_active products ON products.id = sources.product_id
     ${staleJoin}
+    ${filterExtras.join}
     ${combinedWhere ? sql`WHERE ${combinedWhere}` : sql``}
   `);
   return rows[0]?.total ?? 0;
@@ -108,13 +159,11 @@ function sourceOrderBy(sort: SourceSortField, dir: SortDir): SQL {
 export async function getSourcesWithStats(
   db: D1Db,
   whereClause?: SQL,
-  opts?: {
+  opts?: SourceListFilterOpts & {
     limit?: number;
     offset?: number;
     sort?: SourceSortField;
     dir?: SortDir;
-    includeHidden?: boolean;
-    staleOnly?: boolean;
   },
 ): Promise<SourceListRow[]> {
   const limitClause = opts?.limit != null ? sql`LIMIT ${opts.limit}` : sql``;
@@ -124,8 +173,8 @@ export async function getSourcesWithStats(
   const staleWhere = opts?.staleOnly
     ? sql`(rs.latest_date IS NULL OR rs.latest_date < ${daysAgoIso(SOURCE_STALE_DAYS)})`
     : null;
-  const combinedWhere =
-    whereClause && staleWhere ? sql`${whereClause} AND ${staleWhere}` : (whereClause ?? staleWhere);
+  const filterExtras = changelogActivityJoinAndWhere(opts ?? {});
+  const combinedWhere = andWhere([whereClause, staleWhere, filterExtras.where]);
   return db.all<SourceListRow>(sql`
     SELECT
       sources.*,
@@ -154,6 +203,7 @@ export async function getSourcesWithStats(
       FROM releases_visible r
       GROUP BY r.source_id
     ) rs ON rs.source_id = sources.id
+    ${filterExtras.join}
     ${combinedWhere ? sql`WHERE ${combinedWhere}` : sql``}
     ORDER BY ${orderBy}
     ${limitClause} ${offsetClause}

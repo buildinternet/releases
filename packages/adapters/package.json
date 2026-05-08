@@ -9,6 +9,7 @@
     "./user-agent": "./src/user-agent.ts",
     "./content-hash": "./src/content-hash.ts",
     "./github": "./src/github.ts",
+    "./github-discovery": "./src/github-discovery.ts",
     "./cloudflare": "./src/cloudflare.ts",
     "./crawl": "./src/crawl.ts",
     "./feed": "./src/feed.ts",

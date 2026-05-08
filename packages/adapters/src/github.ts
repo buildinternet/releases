@@ -5,26 +5,30 @@ import { AdapterError } from "@releases/lib/errors";
 import { logger } from "@buildinternet/releases-lib/logger";
 import { sha256Hex } from "@releases/core-internal/hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
+import {
+  CHANGELOG_FILENAMES,
+  buildGitHubHeaders,
+  discoverChangelogPaths as discoverChangelogPathsCore,
+  parseOwnerRepo as parseOwnerRepoCore,
+} from "@releases/adapters/github-discovery";
+import type {
+  ChangelogPathOrigin,
+  DiscoveredChangelogPath,
+} from "@releases/adapters/github-discovery";
+
+export {
+  CHANGELOG_FILENAMES,
+  parseWorkspaces,
+  parsePnpmWorkspaces,
+  pickChangelogInDir,
+} from "@releases/adapters/github-discovery";
+export type { ChangelogPathOrigin, DiscoveredChangelogPath };
 
 function parseOwnerRepo(url: string): { owner: string; repo: string } {
-  const match = url.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!match) {
-    throw new AdapterError("github", `Cannot parse owner/repo from URL: ${url}`);
-  }
-  return { owner: match[1], repo: match[2].replace(/\.git$/, "") };
+  const parsed = parseOwnerRepoCore(url);
+  if (!parsed) throw new AdapterError("github", `Cannot parse owner/repo from URL: ${url}`);
+  return parsed;
 }
-
-export const CHANGELOG_FILENAMES = [
-  "CHANGELOG.md",
-  "CHANGELOG.rst",
-  "CHANGELOG.txt",
-  "CHANGELOG",
-  "CHANGES.md",
-  "CHANGES.rst",
-  "HISTORY.md",
-  "RELEASES.md",
-  "NEWS.md",
-];
 
 export const CHANGELOG_MAX_BYTES = 1024 * 1024; // 1MB
 export const CHANGELOG_MAX_FILES = 20;
@@ -41,42 +45,11 @@ export interface FetchedChangelogFile {
   truncated: boolean;
 }
 
-interface GitHubContentEntry {
-  name: string;
-  type: "file" | "dir" | "symlink" | "submodule";
-}
-
-interface PackageJsonShape {
-  workspaces?: string[] | { packages?: string[] };
-}
-
-/**
- * Parse the `workspaces` field out of a package.json, tolerating both the
- * array form and the `{ packages: [...] }` form used by some monorepos.
- * Returns an empty array if the field is missing or malformed. This is the
- * authoritative signal for phase 1 monorepo discovery — pnpm-only repos
- * (pnpm-workspace.yaml without a package.json workspaces field) fall back
- * to the `source.metadata.changelogPaths` override.
- */
-export function parseWorkspaces(pkgJsonText: string): string[] {
-  let parsed: PackageJsonShape;
-  try {
-    parsed = JSON.parse(pkgJsonText);
-  } catch {
-    return [];
-  }
-  const ws = parsed.workspaces;
-  if (!ws) return [];
-  if (Array.isArray(ws)) return ws.filter((x): x is string => typeof x === "string");
-  if (Array.isArray(ws.packages))
-    return ws.packages.filter((x): x is string => typeof x === "string");
-  return [];
-}
-
-/** Pick the first matching changelog filename from a directory listing. */
-export function pickChangelogInDir(entries: GitHubContentEntry[]): string | null {
-  const files = new Set(entries.filter((e) => e.type === "file").map((e) => e.name));
-  return CHANGELOG_FILENAMES.find((name) => files.has(name)) ?? null;
+function buildHeaders(): {
+  apiHeaders: Record<string, string>;
+  rawHeaders: Record<string, string>;
+} {
+  return buildGitHubHeaders(config.githubToken(), RELEASES_BOT_UA);
 }
 
 function truncateToByteCap(content: string): {
@@ -107,37 +80,6 @@ function truncateToByteCap(content: string): {
     bytes: encoder.encode(sliced).length,
     truncated: true,
   };
-}
-
-interface ListingCache {
-  map: Map<string, GitHubContentEntry[] | null>;
-}
-
-async function listContents(
-  owner: string,
-  repo: string,
-  dirPath: string,
-  apiHeaders: Record<string, string>,
-  cache: ListingCache,
-): Promise<GitHubContentEntry[] | null> {
-  const key = dirPath;
-  if (cache.map.has(key)) return cache.map.get(key) ?? null;
-  try {
-    const url = dirPath
-      ? `https://api.github.com/repos/${owner}/${repo}/contents/${dirPath}`
-      : `https://api.github.com/repos/${owner}/${repo}/contents/`;
-    const res = await fetch(url, { headers: apiHeaders });
-    if (!res.ok) {
-      cache.map.set(key, null);
-      return null;
-    }
-    const entries = (await res.json()) as GitHubContentEntry[];
-    cache.map.set(key, entries);
-    return entries;
-  } catch {
-    cache.map.set(key, null);
-    return null;
-  }
 }
 
 async function fetchAndBuildFile(
@@ -185,171 +127,71 @@ async function fetchAndBuildFile(
 }
 
 /**
- * Fetch all CHANGELOG files for a GitHub source — root plus any per-package
- * files discovered via `package.json#workspaces`. Capped at CHANGELOG_MAX_FILES
- * per source. The `source.metadata.changelogPaths: string[]` override, when
- * set, bypasses discovery entirely and uses the provided paths verbatim.
- * Each fetched file is capped at 1MB; content exceeding the cap is truncated
- * and flagged via `truncated: true`.
+ * Plan the set of CHANGELOG paths the adapter would fetch for `source`,
+ * without performing the body fetches. Node-flavored wrapper around the
+ * worker-safe planner in `./github-discovery.ts` — pulls the GitHub token
+ * from `config.githubToken()` and uses the standard `RELEASES_BOT_UA`.
+ */
+export async function discoverChangelogPaths(source: Source): Promise<DiscoveredChangelogPath[]> {
+  const headers = buildHeaders();
+  const planned = await discoverChangelogPathsCore(source, headers);
+  if (planned === null) {
+    logger.warn(
+      `discoverChangelogPaths: cannot parse owner/repo for ${source.slug}: ${source.url}`,
+    );
+    return [];
+  }
+  return planned;
+}
+
+/**
+ * Fetch all CHANGELOG files for a GitHub source. Discovery and override
+ * resolution live in {@link discoverChangelogPaths}; this function fetches
+ * each planned path that exists and applies the per-source `CHANGELOG_MAX_FILES`
+ * cap. Each fetched file is capped at 1MB; content exceeding the cap is
+ * truncated and flagged via `truncated: true`.
  */
 export async function fetchChangelogFiles(source: Source): Promise<FetchedChangelogFile[]> {
-  let owner: string;
-  let repo: string;
-  try {
-    ({ owner, repo } = parseOwnerRepo(source.url));
-  } catch (err) {
-    logger.warn(
-      `fetchChangelogFiles: cannot parse owner/repo for ${source.slug}: ${err instanceof Error ? err.message : String(err)}`,
-    );
+  const parsed = parseOwnerRepoCore(source.url);
+  if (!parsed) {
+    logger.warn(`fetchChangelogFiles: cannot parse owner/repo for ${source.slug}: ${source.url}`);
     return [];
   }
+  const { owner, repo } = parsed;
+  const headers = buildHeaders();
 
-  const token = config.githubToken();
-  const apiHeaders: Record<string, string> = {
-    Accept: "application/vnd.github+json",
-    "User-Agent": RELEASES_BOT_UA,
-  };
-  if (token) apiHeaders.Authorization = `Bearer ${token}`;
-  const rawHeaders: Record<string, string> = { "User-Agent": RELEASES_BOT_UA };
-  if (token) rawHeaders.Authorization = `Bearer ${token}`;
-
-  const cache: ListingCache = { map: new Map() };
-  let requestCount = 0;
-
-  // Override path: skip discovery entirely.
-  const meta = parseMetadata(source.metadata);
-  const override = Array.isArray(meta?.changelogPaths)
-    ? (meta.changelogPaths as unknown[]).filter((x): x is string => typeof x === "string")
-    : null;
-
-  if (override && override.length > 0) {
-    // Interpret each override entry as a full file path (relative to repo
-    // root). We split it into `dir` and `filename` and fetch directly.
-    // Always include root as well for back-compat.
-    const files: FetchedChangelogFile[] = [];
-    const rootListing = await listContents(owner, repo, "", apiHeaders, cache);
-    requestCount++;
-    if (rootListing) {
-      const rootFilename = pickChangelogInDir(rootListing);
-      if (rootFilename) {
-        const f = await fetchAndBuildFile(owner, repo, "", rootFilename, rawHeaders, source.slug);
-        requestCount++;
-        if (f) files.push(f);
-      }
-    }
-    const seen = new Set(files.map((f) => f.path));
-    for (const entry of override) {
-      if (files.length >= CHANGELOG_MAX_FILES) {
-        logger.info(
-          `fetchChangelogFiles(${source.slug}): hit CHANGELOG_MAX_FILES cap, skipping remaining overrides`,
-        );
-        break;
-      }
-      const normalized = entry.replace(/^\.?\//, "");
-      if (seen.has(normalized)) continue;
-      const lastSlash = normalized.lastIndexOf("/");
-      const dir = lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
-      const filename = lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
-      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; iterate override paths sequentially
-      const f = await fetchAndBuildFile(owner, repo, dir, filename, rawHeaders, source.slug);
-      requestCount++;
-      if (f) {
-        files.push(f);
-        seen.add(f.path);
-      }
-    }
-    logger.info(
-      `fetchChangelogFiles(${source.slug}): ${files.length} files, ${requestCount} requests (override)`,
-    );
-    return files;
-  }
-
-  // Discovery path: root listing → pick root CHANGELOG → read root
-  // package.json → parse workspaces → resolve globs → scan each package dir.
-  const rootListing = await listContents(owner, repo, "", apiHeaders, cache);
-  requestCount++;
-  if (!rootListing) {
-    logger.info(`fetchChangelogFiles(${source.slug}): 0 files, ${requestCount} requests`);
-    return [];
-  }
+  const planned = (await discoverChangelogPathsCore(source, headers)) ?? [];
+  const fetchable = planned.filter((p) => p.exists);
 
   const files: FetchedChangelogFile[] = [];
-  const rootFilename = pickChangelogInDir(rootListing);
-  if (rootFilename) {
-    const f = await fetchAndBuildFile(owner, repo, "", rootFilename, rawHeaders, source.slug);
-    requestCount++;
+  // Why: log line distinguishes operator-driven overrides from auto-discovery
+  // so we can spot misconfigured `metadata.changelogPaths` in cron output.
+  const isOverride = planned.some((p) => p.origin === "override");
+  let truncatedFetch = false;
+  for (const entry of fetchable) {
+    if (files.length >= CHANGELOG_MAX_FILES) {
+      truncatedFetch = true;
+      break;
+    }
+    const lastSlash = entry.path.lastIndexOf("/");
+    const dir = lastSlash === -1 ? "" : entry.path.slice(0, lastSlash);
+    const filename = lastSlash === -1 ? entry.path : entry.path.slice(lastSlash + 1);
+    // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; fetch each changelog file sequentially
+    const f = await fetchAndBuildFile(owner, repo, dir, filename, headers.rawHeaders, source.slug);
     if (f) files.push(f);
   }
 
-  // Look for a root package.json to parse workspaces. We only trigger
-  // monorepo discovery when this file exists — pnpm-only repos without a
-  // package.json workspaces field fall back to the `changelogPaths` override.
-  const hasRootPkgJson = rootListing.some((e) => e.type === "file" && e.name === "package.json");
-  if (hasRootPkgJson) {
-    const pkgJsonUrl = `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/package.json`;
-    let pkgText: string | null = null;
-    try {
-      const res = await fetch(pkgJsonUrl, { headers: rawHeaders });
-      requestCount++;
-      if (res.ok) pkgText = await res.text();
-    } catch {
-      pkgText = null;
-    }
-    const globs = pkgText ? parseWorkspaces(pkgText) : [];
-    const packageDirs: string[] = [];
-    for (const glob of globs) {
-      if (packageDirs.length + files.length >= CHANGELOG_MAX_FILES) break;
-      const trimmed = glob.replace(/\/$/, "");
-      if (trimmed.startsWith("!") || trimmed.includes("**")) continue;
-      if (trimmed.endsWith("/*")) {
-        const parent = trimmed.slice(0, -2);
-        if (!parent || parent.includes("*")) continue;
-        // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; globs resolved sequentially
-        const parentEntries = await listContents(owner, repo, parent, apiHeaders, cache);
-        requestCount++;
-        if (!parentEntries) continue;
-        for (const entry of parentEntries) {
-          if (entry.type !== "dir") continue;
-          packageDirs.push(`${parent}/${entry.name}`);
-          if (packageDirs.length + files.length >= CHANGELOG_MAX_FILES) break;
-        }
-      } else if (!trimmed.includes("*")) {
-        packageDirs.push(trimmed);
-      }
-    }
-
-    for (const dir of packageDirs) {
-      if (files.length >= CHANGELOG_MAX_FILES) {
-        logger.info(`fetchChangelogFiles(${source.slug}): hit CHANGELOG_MAX_FILES cap`);
-        break;
-      }
-      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; package dirs scanned sequentially
-      const dirEntries = await listContents(owner, repo, dir, apiHeaders, cache);
-      requestCount++;
-      if (!dirEntries) continue;
-      const filename = pickChangelogInDir(dirEntries);
-      if (!filename) continue;
-      // oxlint-disable-next-line no-await-in-loop -- GitHub REST API rate limit; fetch each changelog file sequentially
-      const f = await fetchAndBuildFile(owner, repo, dir, filename, rawHeaders, source.slug);
-      requestCount++;
-      if (f) files.push(f);
-    }
+  if (truncatedFetch) {
+    logger.info(
+      `fetchChangelogFiles(${source.slug}): hit CHANGELOG_MAX_FILES cap${
+        isOverride ? ", skipping remaining overrides" : ""
+      }`,
+    );
   }
-
   logger.info(
-    `fetchChangelogFiles(${source.slug}): ${files.length} files, ${requestCount} requests`,
+    `fetchChangelogFiles(${source.slug}): ${files.length} files${isOverride ? " (override)" : ""}`,
   );
   return files;
-}
-
-function parseMetadata(raw: string | null): Record<string, unknown> | null {
-  if (!raw) return null;
-  try {
-    const parsed = JSON.parse(raw);
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
-  } catch {
-    return null;
-  }
 }
 
 /**
