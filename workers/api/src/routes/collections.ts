@@ -15,12 +15,16 @@ import {
   parseReleaseMedia,
   isConflictError,
   orgWhere,
+  hydrateMediaUrls,
 } from "../utils.js";
 import { getCollectionReleasesFeed } from "../queries/orgs.js";
+import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
+import { collectionReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import type { Env } from "../index.js";
 import type {
   CollectionDetail,
   CollectionListItem,
+  CollectionReleaseItem,
   CollectionRow,
   CreateCollectionRequest,
   UpdateCollectionRequest,
@@ -189,7 +193,7 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
   const db = createDb(c.env.DB);
 
   const [collection] = await db
-    .select({ id: collections.id })
+    .select({ id: collections.id, name: collections.name })
     .from(collections)
     .where(eq(collections.slug, slug));
   if (!collection) {
@@ -204,11 +208,10 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
     .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
     .where(eq(collectionMembers.collectionId, collection.id));
 
+  // `getCollectionReleasesFeed` short-circuits on an empty orgIds list, so an
+  // empty-membership collection flows through the same response path as a
+  // populated one and honors `Accept: text/markdown` via wantsMarkdown below.
   const orgIds = memberRows.map((m) => m.orgId);
-  if (orgIds.length === 0) {
-    return c.json({ releases: [], pagination: { nextCursor: null, limit } });
-  }
-
   const results = await getCollectionReleasesFeed(db, orgIds, cursorParam, limit + 1, {
     includePrereleases,
   });
@@ -223,13 +226,14 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
   }
 
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
-  const releasesFormatted = pageRows.map((r) => ({
+  const releasesFormatted: CollectionReleaseItem[] = pageRows.map((r) => ({
     id: r.id,
     version: r.version,
     type: r.type,
     title: r.title,
     summary:
       r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
     media: parseReleaseMedia(r.media, mediaOrigin),
@@ -238,7 +242,16 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
     org: { slug: r.org_slug, name: r.org_name },
   }));
 
-  return c.json({ releases: releasesFormatted, pagination: { nextCursor, limit } });
+  const pagination = { nextCursor, limit };
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(
+      c,
+      collectionReleaseFeedToMarkdown(slug, collection.name, releasesFormatted, pagination),
+    );
+  }
+
+  return c.json({ releases: releasesFormatted, pagination });
 });
 
 // ── Admin writes ──────────────────────────────────────────────────────────

@@ -10,6 +10,7 @@ import {
 } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
+import { Sidebar } from "@/components/sidebar";
 import { OrgAvatar } from "@/components/org-avatar";
 import { CollectionReleaseList } from "@/components/collection-release-list";
 
@@ -28,7 +29,14 @@ export async function generateMetadata({
       title: detail.name,
       description:
         detail.description ?? `Releases from ${detail.orgs.map((o) => o.name).join(", ")}.`,
-      alternates: { canonical: `/collections/${slug}` },
+      alternates: {
+        canonical: `/collections/${slug}`,
+        types: {
+          "application/atom+xml": [
+            { url: `/collections/${slug}.atom`, title: `${detail.name} release notes` },
+          ],
+        },
+      },
     };
   } catch {
     return { title: "Collection" };
@@ -102,12 +110,15 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
           </div>
         )}
 
-        <div className="mt-8">
-          <CollectionReleaseList
-            collectionSlug={slug}
-            initialReleases={releases.releases}
-            initialCursor={releases.pagination.nextCursor}
-          />
+        <div className="flex flex-col md:flex-row gap-10 mt-8 pb-6">
+          <div className="flex-1 min-w-0">
+            <CollectionReleaseList
+              collectionSlug={slug}
+              initialReleases={releases.releases}
+              initialCursor={releases.pagination.nextCursor}
+            />
+          </div>
+          <Sidebar sections={[]} formatPath={`/collections/${slug}`} />
         </div>
       </div>
     </div>

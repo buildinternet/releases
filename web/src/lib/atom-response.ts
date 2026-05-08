@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import type { SourceDetail, OrgDetail, OrgReleasesResponse } from "@/lib/api";
-import { sourceToAtom, orgReleasesToAtom } from "@/lib/atom";
+import type {
+  SourceDetail,
+  OrgDetail,
+  OrgReleasesResponse,
+  CollectionDetail,
+  CollectionReleasesResponse,
+} from "@/lib/api";
+import { sourceToAtom, orgReleasesToAtom, collectionReleasesToAtom } from "@/lib/atom";
 import { atomEtag, formatLastModified, shouldReturn304 } from "@releases/rendering/atom-http";
 import { getBaseUrl } from "@/lib/base-url";
 
@@ -50,6 +56,26 @@ export function sourceAtomResponse(request: NextRequest, source: SourceDetail): 
   const baseUrl = getBaseUrl(request);
   const body = sourceToAtom(source, { baseUrl });
   const lastModified = source.releases[0]?.publishedAt ?? source.lastFetchedAt ?? null;
+  return atomResponse(request, body, { lastModified });
+}
+
+/** Render a collection's aggregated release feed into an Atom response. */
+export function collectionAtomResponse(
+  request: NextRequest,
+  collection: Pick<CollectionDetail, "slug" | "name" | "description">,
+  feed: CollectionReleasesResponse,
+): NextResponse {
+  const baseUrl = getBaseUrl(request);
+  const body = collectionReleasesToAtom(
+    {
+      collectionSlug: collection.slug,
+      collectionName: collection.name,
+      description: collection.description,
+      releases: feed.releases,
+    },
+    { baseUrl },
+  );
+  const lastModified = feed.releases[0]?.publishedAt ?? null;
   return atomResponse(request, body, { lastModified });
 }
 

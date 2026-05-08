@@ -16,6 +16,8 @@ import type {
   ProductDetail,
   UnifiedSearchResponse,
   OverviewPageItem,
+  CollectionDetail,
+  CollectionReleaseItem,
 } from "@buildinternet/releases-api-types";
 
 // Re-export under the old names for any callers still using them
@@ -402,6 +404,48 @@ export function productToMarkdown(
   return lines.join("\n");
 }
 
+// ── Release Feed → Markdown (shared helpers) ───────────────────────
+
+function pushReleaseBlock(
+  lines: string[],
+  release: OrgReleaseItem | CollectionReleaseItem,
+  extraAttrs: string,
+): void {
+  const dateStr = formatIsoDate(release.publishedAt);
+  lines.push(
+    `<Release${attr("version", release.version)}${attr("date", dateStr)}${attr("published", release.publishedAt)}${attr("url", release.url)}${extraAttrs}>`,
+  );
+
+  if (release.title && release.title !== release.version) {
+    lines.push(`## ${release.title}`);
+    lines.push("");
+  }
+
+  const body = release.content || release.summary;
+  if (body) {
+    lines.push(body);
+  }
+
+  lines.push("</Release>");
+  lines.push("");
+}
+
+function pushPaginationFooter(
+  lines: string[],
+  pagination: { nextCursor: string | null; limit: number },
+  feedUrl: string | null,
+): void {
+  if (!pagination.nextCursor) return;
+  const cursorAttrs = [`cursor="${pagination.nextCursor}"`];
+  if (feedUrl) {
+    cursorAttrs.push(
+      `next="${feedUrl}?cursor=${encodeURIComponent(pagination.nextCursor)}&limit=${pagination.limit}"`,
+    );
+  }
+  lines.push(`<Pagination ${cursorAttrs.join(" ")} />`);
+  lines.push("");
+}
+
 // ── Org Release Feed → Markdown ────────────────────────────────────
 
 export function orgReleaseFeedToMarkdown(
@@ -425,35 +469,112 @@ export function orgReleaseFeedToMarkdown(
   lines.push("");
 
   for (const release of releases) {
-    const dateStr = formatIsoDate(release.publishedAt);
+    pushReleaseBlock(lines, release, attr("source", release.source.slug));
+  }
+
+  pushPaginationFooter(
+    lines,
+    pagination,
+    opts.baseUrl ? `${opts.baseUrl}/${orgSlug}/releases` : null,
+  );
+
+  return lines.join("\n");
+}
+
+// ── Collection → Markdown ──────────────────────────────────────────
+
+export function collectionToMarkdown(
+  collection: CollectionDetail,
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+
+  lines.push("---");
+  lines.push(yamlLine("name", collection.name));
+  lines.push(yamlLine("slug", collection.slug));
+  if (collection.description) {
+    lines.push(yamlLine("description", collection.description));
+  }
+  lines.push(yamlLine("member_count", collection.orgs.length));
+  if (opts.baseUrl) {
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/collections/${collection.slug}`));
+  }
+  lines.push("---");
+  lines.push("");
+
+  lines.push(`# ${collection.name}`);
+  lines.push("");
+  if (collection.description) {
+    lines.push(collection.description);
+    lines.push("");
+  }
+
+  lines.push(`## Organizations (${collection.orgs.length})`);
+  lines.push("");
+  if (collection.orgs.length === 0) {
+    lines.push("_No organizations yet._");
+  } else {
+    for (const org of collection.orgs) {
+      const url = opts.baseUrl ? `${opts.baseUrl}/${org.slug}` : `/${org.slug}`;
+      const tail = org.domain ? ` — ${org.domain}` : "";
+      lines.push(`- [${org.name}](${url})${tail}`);
+    }
+  }
+  lines.push("");
+
+  if (opts.baseUrl) {
+    lines.push("## Fetching more");
+    lines.push("");
     lines.push(
-      `<Release${attr("version", release.version)}${attr("date", dateStr)}${attr("published", release.publishedAt)}${attr("url", release.url)}${attr("source", release.source.slug)}>`,
+      "Append `.md` (markdown), `.json` (raw data), or `.atom` (feed) to any URL on this page.",
     );
-
-    if (release.title && release.title !== release.version) {
-      lines.push(`## ${release.title}`);
-      lines.push("");
-    }
-
-    const body = release.content || release.summary;
-    if (body) {
-      lines.push(body);
-    }
-
-    lines.push("</Release>");
+    lines.push("");
+    lines.push(
+      `- Aggregated release feed: \`${opts.baseUrl}/collections/${collection.slug}.atom\``,
+    );
     lines.push("");
   }
 
+  return lines.join("\n");
+}
+
+// ── Collection Release Feed → Markdown ─────────────────────────────
+
+export function collectionReleaseFeedToMarkdown(
+  slug: string,
+  name: string,
+  releases: CollectionReleaseItem[],
+  pagination: { nextCursor: string | null; limit: number },
+  opts: FormatOptions = {},
+): string {
+  const lines: string[] = [];
+
+  lines.push("---");
+  lines.push(yamlLine("collection", slug));
+  lines.push(yamlLine("collection_name", name));
+  lines.push(yamlLine("release_count", releases.length));
   if (pagination.nextCursor) {
-    const cursorAttrs = [`cursor="${pagination.nextCursor}"`];
-    if (opts.baseUrl) {
-      cursorAttrs.push(
-        `next="${opts.baseUrl}/${orgSlug}/releases?cursor=${encodeURIComponent(pagination.nextCursor)}&limit=${pagination.limit}"`,
-      );
-    }
-    lines.push(`<Pagination ${cursorAttrs.join(" ")} />`);
-    lines.push("");
+    lines.push(yamlLine("has_more", "true"));
   }
+  if (opts.baseUrl) {
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/collections/${slug}`));
+  }
+  lines.push("---");
+  lines.push("");
+
+  for (const release of releases) {
+    pushReleaseBlock(
+      lines,
+      release,
+      `${attr("org", release.org.slug)}${attr("source", release.source.slug)}`,
+    );
+  }
+
+  pushPaginationFooter(
+    lines,
+    pagination,
+    opts.baseUrl ? `${opts.baseUrl}/collections/${slug}/releases` : null,
+  );
 
   return lines.join("\n");
 }

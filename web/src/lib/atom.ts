@@ -1,6 +1,7 @@
 export {
   sourceToAtom,
   orgReleasesToAtom,
+  collectionReleasesToAtom,
   ATOM_DEFAULT_MAX_ENTRIES,
 } from "@releases/rendering/atom";
 
