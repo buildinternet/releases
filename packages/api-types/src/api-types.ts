@@ -720,9 +720,11 @@ export interface CollectionReleaseItem extends OrgReleaseItem {
    * Product the release belongs to, if the source is bound to one. Powers
    * the timeline's same-product rollup ("3 earlier Claude Code releases
    * today") on the collections view. `null` for orgs without products or
-   * standalone sources.
+   * standalone sources. Optional on the wire so older workers mid-rollout
+   * (and hand-constructed test fixtures) don't trip the typecheck — clients
+   * should treat missing and `null` identically.
    */
-  product: { slug: string; name: string } | null;
+  product?: { slug: string; name: string } | null;
 }
 
 export interface CollectionReleasesResponse {

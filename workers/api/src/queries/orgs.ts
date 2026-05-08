@@ -437,7 +437,7 @@ export async function getCollectionReleasesFeed(
     FROM releases_visible r
     INNER JOIN sources_active s ON s.id = r.source_id
     INNER JOIN organizations_active o ON o.id = s.org_id
-    LEFT JOIN products p ON p.id = s.product_id
+    LEFT JOIN products_active p ON p.id = s.product_id
     WHERE s.org_id IN ${orgIds}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${prereleaseWhere}
