@@ -314,6 +314,7 @@ v1.use(
   varyOnAccept(),
 );
 v1.use("/orgs/:slug/accounts", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use("/orgs/:slug/collections", cacheControl(120, { staleWhileRevalidate: 60, isPublic: true }));
 // Catalog + org-scoped source/product GETs (#690): same cache profile as the
 // bare resource routes since they hit the same handlers.
 v1.use("/orgs/:slug/catalog", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));

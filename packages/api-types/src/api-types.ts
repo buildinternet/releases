@@ -688,7 +688,7 @@ export interface CollectionMemberOrg {
   description: string | null;
 }
 
-/** Item shape on GET /v1/collections (list). */
+/** Item shape on GET /v1/collections (list) and GET /v1/orgs/:slug/collections. */
 export interface CollectionListItem {
   slug: string;
   name: string;

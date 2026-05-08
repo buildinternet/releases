@@ -4,6 +4,7 @@ import {
   OrgListResponseSchema,
   OrgDetailSchema,
   ErrorResponseSchema,
+  type CollectionListItem,
 } from "@buildinternet/releases-api-types";
 import { eq, count, max, min, and, sql, inArray, gte, desc } from "drizzle-orm";
 import { createDb } from "../db.js";
@@ -20,6 +21,8 @@ import {
   orgTags,
   domainAliases,
   knowledgePages,
+  collections,
+  collectionMembers,
 } from "@buildinternet/releases-core/schema";
 import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { isValidCategory } from "@buildinternet/releases-core/categories";
@@ -729,6 +732,38 @@ orgRoutes.get("/orgs/:slug/catalog", async (c) => {
     org: { id: org.id, slug: org.slug, name: org.name },
     items,
   });
+});
+
+// Collections this org is a member of, ordered by collection name.
+orgRoutes.get("/orgs/:slug/collections", async (c) => {
+  const db = createDb(c.env.DB);
+  const slug = c.req.param("slug");
+
+  const [org] = await db.select({ id: organizations.id }).from(organizations).where(orgWhere(slug));
+  if (!org) return c.json({ error: "not_found", message: "Organization not found" }, 404);
+
+  const rows = await db
+    .select({
+      slug: collections.slug,
+      name: collections.name,
+      description: collections.description,
+      memberCount: sql<number>`(
+        SELECT COUNT(*) FROM ${collectionMembers} cm
+        WHERE cm.collection_id = ${collections.id}
+      )`,
+    })
+    .from(collections)
+    .innerJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
+    .where(eq(collectionMembers.orgId, org.id))
+    .orderBy(collections.name);
+
+  const body: CollectionListItem[] = rows.map((r) => ({
+    slug: r.slug,
+    name: r.name,
+    description: r.description,
+    memberCount: Number(r.memberCount),
+  }));
+  return c.json(body);
 });
 
 orgRoutes.get("/orgs/:slug/accounts", async (c) => {

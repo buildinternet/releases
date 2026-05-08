@@ -301,6 +301,7 @@ export const api = {
   categoryDetail: (slug: string) => fetchApi<CategoryDetail>(`/v1/categories/${slug}`),
   tagDetail: (slug: string) => fetchApi<TagDetail>(`/v1/tags/${slug}`),
   collections: () => fetchApi<CollectionListItem[]>("/v1/collections"),
+  orgCollections: (slug: string) => fetchApi<CollectionListItem[]>(`/v1/orgs/${slug}/collections`),
   collectionDetail: (slug: string) => fetchApi<CollectionDetail>(`/v1/collections/${slug}`),
   collectionReleases: (
     slug: string,
