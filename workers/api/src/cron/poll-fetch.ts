@@ -26,6 +26,11 @@ import { FeedHttpError } from "@releases/lib/errors";
 import { contentHash } from "@releases/adapters/content-hash";
 import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import type { RawRelease } from "@releases/adapters/types.js";
+import {
+  discoverChangelogPaths,
+  buildGitHubHeaders,
+  parseOwnerRepo,
+} from "@releases/adapters/github-discovery";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
@@ -858,29 +863,8 @@ export async function fetchOne(
   }
 }
 
-// Source of truth: src/adapters/github.ts#fetchChangelogFiles. Worker uses
-// Web Crypto + Hono db binding, so the implementation is duplicated rather
-// than imported to keep the worker bundle free of Node/Bun globals.
-
-const CHANGELOG_FILENAMES = [
-  "CHANGELOG.md",
-  "CHANGELOG.rst",
-  "CHANGELOG.txt",
-  "CHANGELOG",
-  "CHANGES.md",
-  "CHANGES.rst",
-  "HISTORY.md",
-  "RELEASES.md",
-  "NEWS.md",
-];
-
 const CHANGELOG_MAX_BYTES = 1024 * 1024;
 const CHANGELOG_MAX_FILES = 20;
-
-interface GitHubContentEntry {
-  name: string;
-  type: "file" | "dir" | "symlink" | "submodule";
-}
 
 async function sha256HexWorker(input: string): Promise<string> {
   const buf = new TextEncoder().encode(input);
@@ -910,50 +894,6 @@ function truncateToByteCap(content: string): {
   }
   const sliced = content.slice(0, lo);
   return { content: sliced, bytes: encoder.encode(sliced).length, truncated: true };
-}
-
-function parseWorkspaces(pkgJsonText: string): string[] {
-  try {
-    const parsed = JSON.parse(pkgJsonText) as { workspaces?: unknown };
-    const ws = parsed.workspaces;
-    if (!ws) return [];
-    if (Array.isArray(ws)) return ws.filter((x): x is string => typeof x === "string");
-    if (
-      typeof ws === "object" &&
-      ws !== null &&
-      Array.isArray((ws as { packages?: unknown }).packages)
-    ) {
-      return (ws as { packages: unknown[] }).packages.filter(
-        (x): x is string => typeof x === "string",
-      );
-    }
-    return [];
-  } catch {
-    return [];
-  }
-}
-
-async function listDirContents(
-  owner: string,
-  repo: string,
-  dir: string,
-  apiHeaders: Record<string, string>,
-): Promise<GitHubContentEntry[] | null> {
-  try {
-    const url = dir
-      ? `https://api.github.com/repos/${owner}/${repo}/contents/${dir}`
-      : `https://api.github.com/repos/${owner}/${repo}/contents/`;
-    const res = await fetch(url, { headers: apiHeaders });
-    if (!res.ok) return null;
-    return (await res.json()) as GitHubContentEntry[];
-  } catch {
-    return null;
-  }
-}
-
-function pickChangelog(entries: GitHubContentEntry[]): string | null {
-  const files = new Set(entries.filter((e) => e.type === "file").map((e) => e.name));
-  return CHANGELOG_FILENAMES.find((name) => files.has(name)) ?? null;
 }
 
 interface WorkerFetchedFile {
@@ -1025,14 +965,13 @@ async function fetchOneFile(
 }
 
 /**
- * Discover and refresh all tracked CHANGELOG files for a GitHub source —
- * root plus per-package files resolved from `package.json#workspaces`.
- * Capped at CHANGELOG_MAX_FILES. Emits one info log summarizing file/request
- * counts. Callers (cron) wrap this in a try/catch so the outer fetch never
- * fails on a changelog refresh error.
- */
-/**
  * Refresh the GitHub CHANGELOG mirror for a source.
+ *
+ * Path planning is delegated to `discoverChangelogPaths` from
+ * `@releases/adapters/github-discovery` (the same planner the probe endpoint
+ * uses), so pnpm-workspace.yaml, package.json#workspaces, and
+ * metadata.changelogPaths overrides are all handled identically. The worker
+ * retains its own fetch + D1 upsert for the persistence half.
  *
  * Historical default: upsert files AND embed changed ones inline (fire-and-
  * forget). When `opts.skipEmbed` is true, returns the changed file list so
@@ -1047,122 +986,37 @@ export async function refreshChangelogFile(
   opts?: { skipEmbed?: boolean },
 ): Promise<{ changedFiles: ChangedChangelogFile[] }> {
   const skipEmbed = opts?.skipEmbed ?? false;
-  const match = source.url.match(/github\.com\/([^/]+)\/([^/]+)/);
-  if (!match) return { changedFiles: [] };
-  const [, owner, rawRepo] = match;
-  const repo = rawRepo.replace(/\.git$/, "");
+  if (!parseOwnerRepo(source.url)) return { changedFiles: [] };
 
-  const apiHeaders: Record<string, string> = {
-    Accept: "application/vnd.github+json",
-    "User-Agent": RELEASES_BOT_UA,
-  };
-  if (token) apiHeaders.Authorization = `Bearer ${token}`;
-  const rawHeaders: Record<string, string> = { "User-Agent": RELEASES_BOT_UA };
-  if (token) rawHeaders.Authorization = `Bearer ${token}`;
+  const headers = buildGitHubHeaders(token, RELEASES_BOT_UA);
 
-  let requestCount = 0;
-  const fetched: WorkerFetchedFile[] = [];
-
-  // Override path via source.metadata.changelogPaths.
-  let override: string[] | null = null;
-  if (source.metadata) {
-    try {
-      const meta = JSON.parse(source.metadata) as { changelogPaths?: unknown };
-      if (Array.isArray(meta.changelogPaths)) {
-        override = (meta.changelogPaths as unknown[]).filter(
-          (x): x is string => typeof x === "string",
-        );
-      }
-    } catch {
-      override = null;
-    }
-  }
-
-  const rootListing = await listDirContents(owner, repo, "", apiHeaders);
-  requestCount++;
-  if (!rootListing) {
+  // Delegate path planning to the shared planner so pnpm-workspace.yaml,
+  // package.json#workspaces, and metadata.changelogPaths overrides are all
+  // handled identically to what the probe endpoint reports.
+  const planned = await discoverChangelogPaths(source, headers);
+  if (!planned) {
     logEvent("info", {
       component: "cron-poll-fetch",
       event: "changelog-no-root-listing",
       sourceSlug: source.slug,
-      requestCount,
     });
     return { changedFiles: [] };
   }
-  const rootFilename = pickChangelog(rootListing);
-  if (rootFilename) {
-    const f = await fetchOneFile(owner, repo, "", rootFilename, rawHeaders, source.slug);
+
+  const owner = parseOwnerRepo(source.url)!.owner;
+  const repo = parseOwnerRepo(source.url)!.repo;
+
+  const fetchable = planned.filter((p) => p.exists).slice(0, CHANGELOG_MAX_FILES);
+  let requestCount = 0;
+  const fetched: WorkerFetchedFile[] = [];
+  for (const entry of fetchable) {
+    const lastSlash = entry.path.lastIndexOf("/");
+    const dir = lastSlash === -1 ? "" : entry.path.slice(0, lastSlash);
+    const filename = lastSlash === -1 ? entry.path : entry.path.slice(lastSlash + 1);
+    // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub raw content API; fetch sequentially
+    const f = await fetchOneFile(owner, repo, dir, filename, headers.rawHeaders, source.slug);
     requestCount++;
     if (f) fetched.push(f);
-  }
-
-  if (override && override.length > 0) {
-    const seen = new Set(fetched.map((f) => f.path));
-    for (const entry of override) {
-      if (fetched.length >= CHANGELOG_MAX_FILES) break;
-      const normalized = entry.replace(/^\.?\//, "");
-      if (seen.has(normalized)) continue;
-      const lastSlash = normalized.lastIndexOf("/");
-      const dir = lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
-      const filename = lastSlash === -1 ? normalized : normalized.slice(lastSlash + 1);
-      // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub raw content API
-      const f = await fetchOneFile(owner, repo, dir, filename, rawHeaders, source.slug);
-      requestCount++;
-      if (f) {
-        fetched.push(f);
-        seen.add(f.path);
-      }
-    }
-  } else {
-    const hasPkg = rootListing.some((e) => e.type === "file" && e.name === "package.json");
-    if (hasPkg) {
-      let pkgText: string | null = null;
-      try {
-        const pr = await fetch(
-          `https://raw.githubusercontent.com/${owner}/${repo}/HEAD/package.json`,
-          { headers: rawHeaders },
-        );
-        requestCount++;
-        if (pr.ok) pkgText = await pr.text();
-      } catch {
-        pkgText = null;
-      }
-      const globs = pkgText ? parseWorkspaces(pkgText) : [];
-      const packageDirs: string[] = [];
-      for (const glob of globs) {
-        if (packageDirs.length + fetched.length >= CHANGELOG_MAX_FILES) break;
-        const trimmed = glob.replace(/\/$/, "");
-        if (trimmed.startsWith("!") || trimmed.includes("**")) continue;
-        if (trimmed.endsWith("/*")) {
-          const parent = trimmed.slice(0, -2);
-          if (!parent || parent.includes("*")) continue;
-          // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub API; each glob dir fetched sequentially
-          const parentEntries = await listDirContents(owner, repo, parent, apiHeaders);
-          requestCount++;
-          if (!parentEntries) continue;
-          for (const entry of parentEntries) {
-            if (entry.type !== "dir") continue;
-            packageDirs.push(`${parent}/${entry.name}`);
-            if (packageDirs.length + fetched.length >= CHANGELOG_MAX_FILES) break;
-          }
-        } else if (!trimmed.includes("*")) {
-          packageDirs.push(trimmed);
-        }
-      }
-      for (const dir of packageDirs) {
-        if (fetched.length >= CHANGELOG_MAX_FILES) break;
-        // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub API; each package dir fetched sequentially
-        const entries = await listDirContents(owner, repo, dir, apiHeaders);
-        requestCount++;
-        if (!entries) continue;
-        const filename = pickChangelog(entries);
-        if (!filename) continue;
-        // oxlint-disable-next-line no-await-in-loop -- rate-limited GitHub raw content API
-        const f = await fetchOneFile(owner, repo, dir, filename, rawHeaders, source.slug);
-        requestCount++;
-        if (f) fetched.push(f);
-      }
-    }
   }
 
   logEvent("info", {

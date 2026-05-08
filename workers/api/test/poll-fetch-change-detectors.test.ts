@@ -65,6 +65,7 @@ mock.module("@releases/adapters/feed.js", () => ({
     lastModified: null,
     contentLength: null,
   }),
+  filterByCategoryAllow: (releases: unknown[]) => releases,
 }));
 
 const { pollOne, loadPlaybookNotesForSources } = await import("../src/cron/poll-fetch.js");
