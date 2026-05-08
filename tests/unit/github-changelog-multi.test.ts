@@ -5,6 +5,7 @@ import {
   parseWorkspaces,
   parsePnpmWorkspaces,
   pickChangelogInDir,
+  truncateToByteCap,
   CHANGELOG_MAX_BYTES,
 } from "@releases/adapters/github";
 import type { Source } from "@buildinternet/releases-core/schema";
@@ -252,8 +253,12 @@ describe("fetchChangelogFiles", () => {
     expect(files.map((f) => f.path)).toEqual(["CHANGELOG.md"]);
   });
 
-  it("truncates content exceeding 1MB and flags truncated: true", async () => {
-    const oversized = "x".repeat(CHANGELOG_MAX_BYTES + 1024);
+  it("truncates content exceeding 1MB, keeps the suffix (recent entries), and flags truncated: true", async () => {
+    // Simulate a CHANGELOG where the suffix (end of string) contains the
+    // recent entries. We prefix with padding so total size exceeds the cap.
+    const padding = "old entries\n".repeat(Math.ceil(CHANGELOG_MAX_BYTES / 12) + 100);
+    const recent = "# Recent entry\n";
+    const oversized = padding + recent;
     installFetch((url) => {
       if (url.endsWith("/repos/owner/repo/contents/")) {
         return json([{ name: "CHANGELOG.md", type: "file" }]);
@@ -267,8 +272,11 @@ describe("fetchChangelogFiles", () => {
     const files = await fetchChangelogFiles(mkSource());
     expect(files).toHaveLength(1);
     expect(files[0].truncated).toBe(true);
-    expect(files[0].bytes).toBe(CHANGELOG_MAX_BYTES);
-    expect(files[0].content.length).toBe(CHANGELOG_MAX_BYTES);
+    expect(files[0].bytes).toBeLessThanOrEqual(CHANGELOG_MAX_BYTES);
+    // The suffix is kept — the recent entry must be present in the output.
+    expect(files[0].content.endsWith(recent)).toBe(true);
+    // The prefix (old entries) should have been dropped.
+    expect(files[0].content.startsWith("old entries")).toBe(false);
   });
 
   it("handles root listing failure without throwing", async () => {
@@ -291,6 +299,46 @@ describe("parsePnpmWorkspaces", () => {
 
   it("returns [] when packages key absent", () => {
     expect(parsePnpmWorkspaces("name: solo\nversion: 1.0.0\n")).toEqual([]);
+  });
+});
+
+describe("truncateToByteCap", () => {
+  it("returns the content unchanged when it fits within the cap", () => {
+    const content = "small content";
+    const result = truncateToByteCap(content);
+    expect(result.truncated).toBe(false);
+    expect(result.content).toBe(content);
+    expect(result.bytes).toBe(new TextEncoder().encode(content).length);
+  });
+
+  it("keeps the suffix (not the prefix) when truncating", () => {
+    // Build a string that exceeds the cap: a long prefix of junk + a short
+    // distinct tail. After truncation the tail must survive.
+    const tail = "## v99.0.0 — recent release\n";
+    const filler = "a".repeat(CHANGELOG_MAX_BYTES + 100);
+    const input = filler + tail;
+    const result = truncateToByteCap(input);
+    expect(result.truncated).toBe(true);
+    expect(result.bytes).toBeLessThanOrEqual(CHANGELOG_MAX_BYTES);
+    expect(result.content.endsWith(tail)).toBe(true);
+  });
+
+  it("does not produce a partial multi-byte code point at the boundary", () => {
+    // Build a string just under the cap of all ASCII, then append a 3-byte
+    // UTF-8 character (e.g. U+2603 SNOWMAN, encoded as 0xE2 0x98 0x83) so
+    // that the total byte length straddles the cap.
+    const snowman = "☃"; // 3 bytes in UTF-8
+    const asciiPad = "x".repeat(CHANGELOG_MAX_BYTES - 2); // cap - 2 bytes → fits 1 byte short of cap
+    const input = asciiPad + snowman; // total = cap + 1 byte → must truncate
+    const encoder = new TextEncoder();
+    expect(encoder.encode(input).length).toBeGreaterThan(CHANGELOG_MAX_BYTES);
+
+    const result = truncateToByteCap(input);
+    expect(result.truncated).toBe(true);
+    // Verify round-trip: decoding the output produces valid Unicode (no replacement chars).
+    const decoded = new TextDecoder("utf-8", { fatal: true });
+    expect(() => decoded.decode(encoder.encode(result.content))).not.toThrow();
+    expect(result.bytes).toBeLessThanOrEqual(CHANGELOG_MAX_BYTES);
   });
 });
 

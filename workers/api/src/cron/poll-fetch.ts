@@ -31,6 +31,7 @@ import {
   buildGitHubHeaders,
   parseOwnerRepo,
 } from "@releases/adapters/github-discovery";
+import { CHANGELOG_MAX_FILES, truncateToByteCap } from "@releases/adapters/github";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import { normalizeMediaUrl } from "@releases/rendering/media-url.js";
 import {
@@ -863,37 +864,12 @@ export async function fetchOne(
   }
 }
 
-const CHANGELOG_MAX_BYTES = 1024 * 1024;
-const CHANGELOG_MAX_FILES = 20;
-
 async function sha256HexWorker(input: string): Promise<string> {
   const buf = new TextEncoder().encode(input);
   const hash = await crypto.subtle.digest("SHA-256", buf);
   return Array.from(new Uint8Array(hash))
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
-}
-
-function truncateToByteCap(content: string): {
-  content: string;
-  bytes: number;
-  truncated: boolean;
-} {
-  const encoder = new TextEncoder();
-  const bytes = encoder.encode(content).length;
-  if (bytes <= CHANGELOG_MAX_BYTES) return { content, bytes, truncated: false };
-  let lo = 0;
-  let hi = content.length;
-  while (lo < hi) {
-    const mid = (lo + hi + 1) >>> 1;
-    if (encoder.encode(content.slice(0, mid)).length <= CHANGELOG_MAX_BYTES) {
-      lo = mid;
-    } else {
-      hi = mid - 1;
-    }
-  }
-  const sliced = content.slice(0, lo);
-  return { content: sliced, bytes: encoder.encode(sliced).length, truncated: true };
 }
 
 interface WorkerFetchedFile {
