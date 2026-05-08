@@ -5,6 +5,8 @@ export {
   productToMarkdown,
   overviewToMarkdown,
   knowledgeToMarkdown,
+  collectionToMarkdown,
+  collectionReleaseFeedToMarkdown,
 } from "@releases/rendering/formatters";
 
 export type {

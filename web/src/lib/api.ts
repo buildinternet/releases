@@ -24,6 +24,8 @@ import type {
   MediaItem,
   CollectionListItem,
   CollectionDetail,
+  CollectionReleaseItem,
+  CollectionReleasesResponse,
 } from "@buildinternet/releases-api-types";
 import { parseCoordinate } from "@buildinternet/releases-core/lookup-coordinate";
 
@@ -67,27 +69,9 @@ export type {
   TagDetail,
   CollectionListItem,
   CollectionDetail,
+  CollectionReleaseItem,
+  CollectionReleasesResponse,
 };
-
-/** A single row on /v1/collections/:slug/releases — release card + its origin org. */
-export interface CollectionReleaseItem {
-  id: string;
-  version: string | null;
-  type?: "feature" | "rollup";
-  title: string;
-  summary: string;
-  publishedAt: string | null;
-  url: string | null;
-  media: MediaItem[];
-  prerelease: boolean;
-  source: { slug: string; name: string; type: string };
-  org: { slug: string; name: string };
-}
-
-export interface CollectionReleasesResponse {
-  releases: CollectionReleaseItem[];
-  pagination: { nextCursor: string | null; limit: number };
-}
 
 export const API_URL = process.env.RELEASED_API_URL ?? "http://localhost:3456";
 // Trusted-proxy secret — bypasses the API's per-IP rate limiter for

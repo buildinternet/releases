@@ -179,6 +179,40 @@ describe("collections", () => {
     expect(body.releases.map((r: { id: string }) => r.id)).toEqual(["rel_a1", "rel_o1", "rel_a2"]);
   });
 
+  it("includes full release content for the cross-org feed", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(new Request("http://test/v1/collections/test-frontier-labs/releases"));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // The web release card falls back from `content` to `summary` when
+    // expanding — without `content` "Show more" silently shows the same
+    // truncated text. Mirrors the org-feed shape on /v1/orgs/:slug/releases.
+    expect(body.releases[0]).toMatchObject({
+      id: "rel_a1",
+      content: "Released Claude 4.7.",
+      summary: "Released Claude 4.7.",
+    });
+  });
+
+  it("renders the feed as markdown when Accept prefers it", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-frontier-labs/releases", {
+        headers: { accept: "text/markdown" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/markdown");
+    const body = await res.text();
+    expect(body).toContain("collection: test-frontier-labs");
+    expect(body).toContain("collection_name: Test Frontier Labs");
+    expect(body).toContain("Released Claude 4.7.");
+  });
+
   it("returns an empty feed (not 500) for membership-empty collections", async () => {
     const db = mkDb();
     await seed(db);

@@ -6,7 +6,12 @@
  * emit an identical feed.
  */
 
-import type { ReleaseItem, SourceDetail, OrgReleaseItem } from "@buildinternet/releases-api-types";
+import type {
+  ReleaseItem,
+  SourceDetail,
+  OrgReleaseItem,
+  CollectionReleaseItem,
+} from "@buildinternet/releases-api-types";
 
 export interface AtomFeedOptions {
   /** Canonical base URL, e.g. "https://releases.sh". Required for stable ids. */
@@ -126,7 +131,7 @@ function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated:
 // ── Feed assembly ────────────────────────────────────────────────────
 
 interface FeedShell {
-  scope: "org" | "source";
+  scope: "org" | "source" | "collection";
   slug: string;
   title: string;
   subtitle?: string;
@@ -245,6 +250,42 @@ export function orgReleasesToAtom(
       authorName: params.orgName,
       entries,
       pinnedEntry: overviewEntry,
+    },
+    opts,
+  );
+}
+
+/** Atom feed for a collection — aggregated releases across multiple member orgs. */
+export function collectionReleasesToAtom(
+  params: {
+    collectionSlug: string;
+    collectionName: string;
+    description: string | null;
+    releases: CollectionReleaseItem[];
+  },
+  opts: AtomFeedOptions,
+): string {
+  const collectionPath = `${opts.baseUrl}/collections/${params.collectionSlug}`;
+
+  const entries: EntryInput[] = params.releases.map((release) => ({
+    release,
+    sourceSlug: release.source.slug,
+    sourceName: release.source.name,
+    orgName: release.org.name,
+    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
+  }));
+
+  return buildFeed(
+    {
+      scope: "collection",
+      slug: params.collectionSlug,
+      title: `${params.collectionName} — releases`,
+      subtitle:
+        params.description ?? `Aggregated releases from organizations in ${params.collectionName}`,
+      selfUrl: `${collectionPath}.atom`,
+      alternateUrl: collectionPath,
+      authorName: params.collectionName,
+      entries,
     },
     opts,
   );

@@ -704,6 +704,21 @@ export interface CollectionDetail {
   orgs: CollectionMemberOrg[];
 }
 
+/**
+ * Cross-org release feed row. Same shape as `OrgReleaseItem` plus the origin
+ * `org` block, so the web's release card can render it identically — full
+ * `content` lets "Show more" expand to the body instead of the truncated
+ * `summary`.
+ */
+export interface CollectionReleaseItem extends OrgReleaseItem {
+  org: { slug: string; name: string };
+}
+
+export interface CollectionReleasesResponse {
+  releases: CollectionReleaseItem[];
+  pagination: { nextCursor: string | null; limit: number };
+}
+
 /** Body for POST /v1/collections. `slug` derives from `name` via toSlug() if omitted. */
 export interface CreateCollectionRequest {
   slug?: string;
