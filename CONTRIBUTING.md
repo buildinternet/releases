@@ -61,7 +61,7 @@ bun test --watch             # re-run on file changes
 
 Tests live in `tests/` with this structure:
 
-```
+```text
 tests/
   db-helper.ts          # createTestDb() — in-memory bun:sqlite + drizzle + migrations
   tsconfig.json         # separate type-check config for tests
@@ -126,7 +126,7 @@ bun run db:pull              # sync remote D1 data into local D1
 
 PR titles follow [Conventional Commits](https://www.conventionalcommits.org/) with an optional scope identifying the workspace or surface:
 
-```
+```text
 feat(api): admin write endpoints for collections
 fix(sitemap): include /collections/<slug>
 chore(api-types): publish 0.9.0 with collection write types
