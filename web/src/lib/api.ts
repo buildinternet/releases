@@ -24,6 +24,7 @@ import type {
   MediaItem,
   CollectionListItem,
   CollectionDetail,
+  CollectionMemberOrg,
   CollectionReleaseItem,
   CollectionReleasesResponse,
 } from "@buildinternet/releases-api-types";
@@ -69,6 +70,7 @@ export type {
   TagDetail,
   CollectionListItem,
   CollectionDetail,
+  CollectionMemberOrg,
   CollectionReleaseItem,
   CollectionReleasesResponse,
 };

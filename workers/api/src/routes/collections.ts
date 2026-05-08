@@ -6,6 +6,7 @@ import {
   collectionMembers,
   organizations,
   organizationsPublic,
+  orgAccounts,
 } from "@buildinternet/releases-core/schema";
 import { newCollectionId } from "@buildinternet/releases-core/id";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -127,23 +128,67 @@ async function resolveOrgIdsBatch(
 
 collectionRoutes.get("/collections", async (c) => {
   const db = createDb(c.env.DB);
-  const rows = await db
-    .select({
-      slug: collections.slug,
-      name: collections.name,
-      description: collections.description,
-      memberCount: count(collectionMembers.orgId),
-    })
-    .from(collections)
-    .leftJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
-    .groupBy(collections.id)
-    .orderBy(collections.name);
 
-  const body: CollectionListItem[] = rows.map((r) => ({
+  const [countRows, memberRows] = await Promise.all([
+    db
+      .select({
+        slug: collections.slug,
+        name: collections.name,
+        description: collections.description,
+        memberCount: count(collectionMembers.orgId),
+      })
+      .from(collections)
+      .leftJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
+      .groupBy(collections.id)
+      .orderBy(collections.name),
+
+    // All members joined with org + github handle. Fan-out is bounded by total
+    // (collections × members) and collections are small (<10 orgs typical), so
+    // grouping client-side is cheaper than a window-function query.
+    db
+      .select({
+        collectionSlug: collections.slug,
+        position: collectionMembers.position,
+        slug: organizationsPublic.slug,
+        name: organizationsPublic.name,
+        domain: organizationsPublic.domain,
+        avatarUrl: organizationsPublic.avatarUrl,
+        description: organizationsPublic.description,
+        githubHandle: orgAccounts.handle,
+      })
+      .from(collectionMembers)
+      .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
+      .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+      .leftJoin(
+        orgAccounts,
+        and(eq(orgAccounts.orgId, organizationsPublic.id), eq(orgAccounts.platform, "github")),
+      )
+      .orderBy(collectionMembers.position, organizationsPublic.name),
+  ]);
+
+  const previewBySlug = new Map<string, CollectionListItem["previewMembers"]>();
+  const PREVIEW_LIMIT = 3;
+  for (const m of memberRows) {
+    const arr = previewBySlug.get(m.collectionSlug) ?? [];
+    if (arr.length < PREVIEW_LIMIT) {
+      arr.push({
+        slug: m.slug,
+        name: m.name,
+        domain: m.domain,
+        avatarUrl: m.avatarUrl,
+        githubHandle: m.githubHandle,
+        description: m.description,
+      });
+      previewBySlug.set(m.collectionSlug, arr);
+    }
+  }
+
+  const body: CollectionListItem[] = countRows.map((r) => ({
     slug: r.slug,
     name: r.name,
     description: r.description,
     memberCount: Number(r.memberCount),
+    previewMembers: previewBySlug.get(r.slug) ?? [],
   }));
   return c.json(body);
 });
@@ -159,7 +204,9 @@ collectionRoutes.get("/collections/:slug", async (c) => {
 
   // Join to organizations_public so soft-deleted / on_demand orgs never leak
   // through a collection (curators shouldn't be able to surface a hidden org
-  // by adding it to one).
+  // by adding it to one). LEFT JOIN org_accounts so the avatar fallback can
+  // resolve `https://github.com/<handle>.png` for orgs without a stored
+  // avatarUrl — matches the org page's behavior.
   const orgs = await db
     .select({
       slug: organizationsPublic.slug,
@@ -167,9 +214,14 @@ collectionRoutes.get("/collections/:slug", async (c) => {
       domain: organizationsPublic.domain,
       avatarUrl: organizationsPublic.avatarUrl,
       description: organizationsPublic.description,
+      githubHandle: orgAccounts.handle,
     })
     .from(collectionMembers)
     .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+    .leftJoin(
+      orgAccounts,
+      and(eq(orgAccounts.orgId, organizationsPublic.id), eq(orgAccounts.platform, "github")),
+    )
     .where(eq(collectionMembers.collectionId, collection.id))
     .orderBy(collectionMembers.position, organizationsPublic.name);
 

@@ -1,7 +1,8 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { api, ApiSetupError, type CollectionListItem } from "@/lib/api";
+import { api, ApiSetupError, type CollectionListItem, type CollectionMemberOrg } from "@/lib/api";
 import { Header } from "@/components/header";
+import { OrgAvatar } from "@/components/org-avatar";
 import { SetupMessage } from "@/components/setup-message";
 
 const TITLE = "Collections";
@@ -65,7 +66,7 @@ export default async function CollectionsListPage() {
               <li key={c.slug} className="py-4">
                 <Link
                   href={`/collections/${c.slug}`}
-                  className="group flex items-baseline justify-between gap-4"
+                  className="group flex items-start justify-between gap-4"
                 >
                   <div className="min-w-0">
                     <div className="text-base font-semibold text-stone-900 dark:text-stone-100 group-hover:text-stone-600 dark:group-hover:text-stone-300">
@@ -75,6 +76,9 @@ export default async function CollectionsListPage() {
                       <div className="mt-0.5 text-sm text-stone-500 dark:text-stone-400">
                         {c.description}
                       </div>
+                    )}
+                    {c.previewMembers && c.previewMembers.length > 0 && (
+                      <MemberPreview members={c.previewMembers} totalCount={c.memberCount} />
                     )}
                   </div>
                   <div className="shrink-0 text-[12px] tabular-nums text-stone-400 dark:text-stone-500">
@@ -86,6 +90,40 @@ export default async function CollectionsListPage() {
           </ul>
         )}
       </div>
+    </div>
+  );
+}
+
+function MemberPreview({
+  members,
+  totalCount,
+}: {
+  members: CollectionMemberOrg[];
+  totalCount: number;
+}) {
+  const remaining = totalCount - members.length;
+  return (
+    <div className="mt-2 flex items-center gap-1.5 text-[12px] text-stone-500 dark:text-stone-400">
+      <div className="flex -space-x-1.5">
+        {members.map((m) => (
+          <span
+            key={m.slug}
+            title={m.name}
+            className="ring-2 ring-white dark:ring-stone-950 rounded-full"
+          >
+            <OrgAvatar
+              avatarUrl={m.avatarUrl}
+              githubHandle={m.githubHandle}
+              name={m.name}
+              size={20}
+            />
+          </span>
+        ))}
+      </div>
+      <span className="truncate">
+        {members.map((m) => m.name).join(", ")}
+        {remaining > 0 && ` + ${remaining} more`}
+      </span>
     </div>
   );
 }
