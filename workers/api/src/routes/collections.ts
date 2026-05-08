@@ -10,6 +10,7 @@ import {
 import { newCollectionId } from "@buildinternet/releases-core/id";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import {
+  buildFeedCursor,
   parseLimitParam,
   parseBoolParam,
   parseReleaseMedia,
@@ -280,8 +281,7 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
 
   let nextCursor: string | null = null;
   if (hasMore && pageRows.length > 0) {
-    const last = pageRows[pageRows.length - 1];
-    nextCursor = `${last.published_at ?? ""}|${last.id}`;
+    nextCursor = buildFeedCursor(pageRows[pageRows.length - 1]);
   }
 
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
