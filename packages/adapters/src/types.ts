@@ -17,6 +17,12 @@ export interface RawRelease {
    * `isPrereleaseVersion()`.
    */
   prerelease?: boolean;
+  /**
+   * Source-supplied category labels (e.g. RSS `<category>` terms or JSON
+   * Feed `tags`). Used by the per-source `categoryAllow` filter in poll-fetch
+   * to drop noise from mixed-topic feeds without paying for an agent pass.
+   */
+  categories?: string[];
 }
 
 export interface FetchOptions {

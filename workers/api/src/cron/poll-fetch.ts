@@ -15,6 +15,7 @@ import {
   headCheckUrl,
   bodyHashCheck,
   fetchAndParseFeed,
+  filterByCategoryAllow,
   getSourceMeta,
   FEED_4XX_INVALIDATE_THRESHOLD,
   CLEARED_FEED_FIELDS,
@@ -534,6 +535,21 @@ export async function fetchOne(
         Object.keys(conditionalHeaders).length > 0 ? conditionalHeaders : undefined,
       );
       rawReleases = result.releases;
+
+      if (meta.categoryAllow && meta.categoryAllow.length > 0) {
+        const filtered = filterByCategoryAllow(rawReleases, meta.categoryAllow);
+        if (filtered.dropped > 0) {
+          logEvent("info", {
+            component: "cron-poll-fetch",
+            event: "category-filter-applied",
+            sourceSlug: source.slug,
+            kept: filtered.kept.length,
+            dropped: filtered.dropped,
+            categoryAllow: meta.categoryAllow,
+          });
+        }
+        rawReleases = filtered.kept;
+      }
 
       // Dry-run is a pure probe — skip persisting new etag/lastModified so a
       // follow-up real fetch sees the same upstream state the dry-run saw.

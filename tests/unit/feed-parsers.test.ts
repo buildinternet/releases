@@ -15,7 +15,9 @@ import {
   iframeSrcToWatchUrl,
   parseFeedLinks,
   getSourceMeta,
+  filterByCategoryAllow,
 } from "@releases/adapters/feed";
+import type { RawRelease } from "@releases/adapters/types";
 
 const fixturesDir = join(import.meta.dirname, "../fixtures/feeds");
 
@@ -699,5 +701,103 @@ describe("getSourceMeta", () => {
     const source = { metadata: "" } as any;
     const meta = getSourceMeta(source);
     expect(meta).toEqual({});
+  });
+});
+
+// ── Categories on parsed items ──────────────────────────────────────
+
+describe("parseRss categories", () => {
+  it("captures <category> labels per item", () => {
+    const xml = `<?xml version="1.0"?>
+<rss version="2.0"><channel>
+  <title>Example</title>
+  <link>https://example.com/</link>
+  <item>
+    <title>Product launch</title>
+    <link>https://example.com/a</link>
+    <category><![CDATA[Product]]></category>
+    <category><![CDATA[API]]></category>
+    <pubDate>Mon, 01 Jan 2024 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Customer story</title>
+    <link>https://example.com/b</link>
+    <category><![CDATA[B2B Story]]></category>
+    <pubDate>Mon, 02 Jan 2024 00:00:00 GMT</pubDate>
+  </item>
+  <item>
+    <title>Untagged post</title>
+    <link>https://example.com/c</link>
+    <pubDate>Mon, 03 Jan 2024 00:00:00 GMT</pubDate>
+  </item>
+</channel></rss>`;
+    const releases = parseRss(xml);
+    expect(releases).toHaveLength(3);
+    expect(releases[0].categories).toEqual(["Product", "API"]);
+    expect(releases[1].categories).toEqual(["B2B Story"]);
+    expect(releases[2].categories).toBeUndefined();
+  });
+});
+
+describe("parseJsonFeed categories", () => {
+  it("captures `tags` per item", () => {
+    const json = JSON.stringify({
+      version: "https://jsonfeed.org/version/1.1",
+      title: "Example",
+      items: [
+        { id: "1", title: "Tagged", url: "https://e.com/a", tags: ["Product", "API"] },
+        { id: "2", title: "Untagged", url: "https://e.com/b" },
+      ],
+    });
+    const releases = parseJsonFeed(json);
+    expect(releases[0].categories).toEqual(["Product", "API"]);
+    expect(releases[1].categories).toBeUndefined();
+  });
+});
+
+// ── Category allowlist filter ───────────────────────────────────────
+
+describe("filterByCategoryAllow", () => {
+  const items: RawRelease[] = [
+    { title: "Product post", content: "", categories: ["Product"] },
+    { title: "Customer story", content: "", categories: ["B2B Story"] },
+    { title: "API doc update", content: "", categories: ["API", "Product"] },
+    { title: "Uncategorized", content: "" },
+    { title: "Mixed-case match", content: "", categories: ["product"] },
+  ];
+
+  it("keeps items whose categories intersect the allowlist (case-insensitive)", () => {
+    const { kept, dropped } = filterByCategoryAllow(items, ["Product"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Product post",
+      "API doc update",
+      "Mixed-case match",
+    ]);
+    expect(dropped).toBe(2);
+  });
+
+  it("drops uncategorized items when an allowlist is set", () => {
+    const { kept, dropped } = filterByCategoryAllow(
+      [{ title: "Untagged", content: "" }],
+      ["Product"],
+    );
+    expect(kept).toHaveLength(0);
+    expect(dropped).toBe(1);
+  });
+
+  it("treats an empty allowlist as passthrough", () => {
+    const { kept, dropped } = filterByCategoryAllow(items, []);
+    expect(kept).toEqual(items);
+    expect(dropped).toBe(0);
+  });
+
+  it("supports multi-value allowlists with intersection semantics", () => {
+    const { kept, dropped } = filterByCategoryAllow(items, ["Product", "Release"]);
+    expect(kept.map((i) => i.title)).toEqual([
+      "Product post",
+      "API doc update",
+      "Mixed-case match",
+    ]);
+    expect(dropped).toBe(2);
   });
 });

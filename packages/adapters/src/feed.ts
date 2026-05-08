@@ -450,6 +450,9 @@ export function parseRss(xml: string): RawRelease[] {
     if (!item.title) continue;
     const body = item.content ?? item.description ?? "";
     const dateRaw = item.updated ?? item.published;
+    const categories = item.categories
+      .map((c) => c.label ?? c.term)
+      .filter((c): c is string => Boolean(c));
     releases.push({
       title: item.title,
       content: htmlToMarkdown(decodeHtmlEntities(body)),
@@ -458,12 +461,34 @@ export function parseRss(xml: string): RawRelease[] {
       version: extractVersionFromTitle(item.title),
       isBreaking: detectBreaking(item.title, body),
       media: extractMedia(body),
+      categories: categories.length > 0 ? categories : undefined,
     });
   }
   return releases;
 }
 
 export const parseAtom = parseRss;
+
+/**
+ * Keep only items whose `categories` intersect `allow` (case-insensitive).
+ * Items with no categories are dropped, since this is intended for feeds
+ * that tag every entry. Empty `allow` short-circuits to passthrough.
+ */
+export function filterByCategoryAllow(
+  items: RawRelease[],
+  allow: readonly string[],
+): { kept: RawRelease[]; dropped: number } {
+  if (allow.length === 0) return { kept: items, dropped: 0 };
+  const allowSet = new Set(allow.map((c) => c.toLowerCase()));
+  const kept: RawRelease[] = [];
+  let dropped = 0;
+  for (const item of items) {
+    const match = item.categories?.some((c) => allowSet.has(c.toLowerCase())) ?? false;
+    if (match) kept.push(item);
+    else dropped++;
+  }
+  return { kept, dropped };
+}
 
 export function parseJsonFeed(json: string): RawRelease[] {
   const feed = JSON.parse(json);
@@ -475,6 +500,7 @@ export function parseJsonFeed(json: string): RawRelease[] {
     url?: string;
     date_published?: string;
     date_modified?: string;
+    tags?: string[];
   }> = feed.items ?? [];
 
   return items
@@ -482,6 +508,7 @@ export function parseJsonFeed(json: string): RawRelease[] {
     .map((item) => {
       const html = item.content_html ?? item.summary ?? "";
       const dateStr = item.date_published ?? item.date_modified;
+      const categories = (item.tags ?? []).filter((t): t is string => Boolean(t));
       return {
         title: item.title!,
         content: item.content_text ?? htmlToMarkdown(html),
@@ -490,6 +517,7 @@ export function parseJsonFeed(json: string): RawRelease[] {
         version: extractVersionFromTitle(item.title!),
         isBreaking: detectBreaking(item.title!, item.content_text ?? html),
         media: html ? extractMedia(html) : [],
+        categories: categories.length > 0 ? categories : undefined,
       };
     });
 }
