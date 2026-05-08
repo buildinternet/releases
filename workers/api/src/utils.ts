@@ -374,17 +374,10 @@ export function parseLimitParam(raw: string | undefined, defaultVal: number, max
   return Math.min(n, max);
 }
 
-/**
- * Build a release-feed cursor from the last row on the current page. Mirrors
- * the parser shape in {@link parseFeedCursor} / `feedCursorSql`.
- */
-export function buildFeedCursor(last: {
-  published_at: string | null;
-  fetched_at: string;
-  id: string;
-}): string {
-  return last.published_at ? `${last.published_at}|${last.fetched_at}|${last.id}` : `|${last.id}`;
-}
+// Re-exported so existing api callers (collections.ts, sources.ts, …) keep
+// importing from `../utils.js`. The encoder lives in `@releases/core-internal/
+// collection-feed` so MCP and REST emit byte-identical cursor strings.
+export { buildFeedCursor } from "@releases/core-internal/collection-feed";
 
 /**
  * Parse a release-feed cursor and return the SQL `WHERE` fragment plus its

@@ -377,76 +377,9 @@ export async function getOrgReleasesFeed(
   return results;
 }
 
-export type CollectionReleaseRow = OrgReleaseRow & {
-  org_slug: string;
-  org_name: string;
-  product_slug: string | null;
-  product_name: string | null;
-};
-
-// Drizzle-flavored mirror of `parseFeedCursor` — the collection feed uses the
-// Drizzle handle so tests work on bun-sqlite, and `sql` templates have no
-// `?`-binding escape hatch. Cursor wire format matches `parseFeedCursor`
-// exactly so the same web cursor parser works on both surfaces.
-function feedCursorSql(cursorParam: string | null) {
-  if (!cursorParam) return sql``;
-  const parts = cursorParam.split("|");
-
-  if (parts.length === 3) {
-    const [pub, fet, id] = parts;
-    if (pub && fet && id) {
-      return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.fetched_at < ${fet}) OR (r.published_at = ${pub} AND r.fetched_at = ${fet} AND r.id < ${id}))`;
-    }
-    if (!pub && fet && id) {
-      return sql`AND (r.published_at IS NOT NULL OR (r.fetched_at < ${fet}) OR (r.fetched_at = ${fet} AND r.id < ${id}))`;
-    }
-  }
-
-  if (parts.length === 2) {
-    const [pub, id] = parts;
-    if (pub && id) {
-      return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.id < ${id}))`;
-    }
-    if (!pub && id) return sql`AND (r.published_at IS NOT NULL OR r.id < ${id})`;
-  }
-
-  if (parts.length === 1 && parts[0]) return sql`AND r.published_at < ${parts[0]}`;
-  return sql``;
-}
-
-/** Multi-org release feed for a collection. Same ordering shape as {@link getOrgReleasesFeed}. */
-export async function getCollectionReleasesFeed(
-  db: D1Db,
-  orgIds: string[],
-  cursorParam: string | null,
-  limit: number,
-  opts: { includePrereleases?: boolean } = {},
-): Promise<CollectionReleaseRow[]> {
-  if (orgIds.length === 0) return [];
-  const cursor = feedCursorSql(cursorParam);
-  const prereleaseWhere = opts.includePrereleases
-    ? sql``
-    : sql`AND (r.prerelease IS NULL OR r.prerelease = 0)`;
-
-  return db.all<CollectionReleaseRow>(sql`
-    SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
-           r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
-           s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug, o.name AS org_name,
-           p.slug AS product_slug, p.name AS product_name
-    FROM releases_visible r
-    INNER JOIN sources_active s ON s.id = r.source_id
-    INNER JOIN organizations_active o ON o.id = s.org_id
-    LEFT JOIN products_active p ON p.id = s.product_id
-    WHERE s.org_id IN ${orgIds}
-      AND (r.suppressed IS NULL OR r.suppressed = 0)
-      ${prereleaseWhere}
-      ${cursor}
-    ORDER BY
-      CASE WHEN r.published_at IS NOT NULL THEN 0 ELSE 1 END,
-      r.published_at DESC,
-      r.fetched_at DESC,
-      r.id DESC
-    LIMIT ${limit}
-  `);
-}
+// Shared with the MCP worker's `get_collection_releases` tool — see
+// @releases/core-internal/collection-feed.
+export {
+  getCollectionReleasesFeed,
+  type CollectionReleaseRow,
+} from "@releases/core-internal/collection-feed";

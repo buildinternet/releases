@@ -6,7 +6,8 @@
   "exports": {
     "./release-upsert": "./src/release-upsert.ts",
     "./hash": "./src/hash.ts",
-    "./webhook-sign": "./src/webhook-sign.ts"
+    "./webhook-sign": "./src/webhook-sign.ts",
+    "./collection-feed": "./src/collection-feed.ts"
   },
   "dependencies": {
     "@buildinternet/releases-core": "workspace:*",
