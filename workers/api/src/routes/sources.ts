@@ -68,7 +68,7 @@ import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiati
 import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
 import { fetchOne } from "../cron/poll-fetch.js";
-import { getSourceMeta } from "@releases/adapters/feed.js";
+import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
 import {
   discoverChangelogPaths,
@@ -450,7 +450,7 @@ sourceRoutes.post("/sources/:slug/fetch", async (c) => {
   const meta = getSourceMeta(src);
   if (
     src.type === "feed" ||
-    src.type === "github" ||
+    isGitHubFetched(src, meta) ||
     (src.type === "scrape" && meta.feedUrl != null)
   ) {
     // Feed, GitHub, and scrape sources with a discovered feedUrl: fetch server-side

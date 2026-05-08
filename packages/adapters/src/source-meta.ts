@@ -145,9 +145,14 @@ export function effectiveGitHubUrl(source: Source, meta?: SourceMetadata): strin
 
 /**
  * Synthesize a release URL from a template. Defaults to the Mintlify-style
- * anchor convention used by most static doc generators (`#1-2-3`). Custom
- * templates may interpolate `${sourceUrl}`, `${version}`, and
- * `${versionDashed}` (dots → dashes).
+ * anchor convention used by most static doc generators: a leading `v` is
+ * stripped (GitHub tags commonly have one; doc-page heading slugs almost
+ * never do), then dots become dashes (e.g. tag `v2.1.136` → `#2-1-136`).
+ *
+ * Custom templates may interpolate `${sourceUrl}`, `${version}` (raw, e.g.
+ * `v2.1.136`), or `${versionDashed}` (raw with dots → dashes, e.g.
+ * `v2-1-136`). To opt out of the default `v` strip, write the template
+ * explicitly: `${sourceUrl}#${versionDashed}` keeps the prefix.
  */
 export function synthesizeReleaseUrl(args: {
   sourceUrl: string;
@@ -156,7 +161,9 @@ export function synthesizeReleaseUrl(args: {
 }): string {
   const versionDashed = args.version.replaceAll(".", "-");
   if (!args.template) {
-    return `${args.sourceUrl}#${versionDashed}`;
+    const stripped = args.version.replace(/^v/i, "");
+    const strippedDashed = stripped.replaceAll(".", "-");
+    return `${args.sourceUrl}#${strippedDashed}`;
   }
   return args.template
     .replaceAll("${sourceUrl}", args.sourceUrl)

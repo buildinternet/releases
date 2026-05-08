@@ -149,7 +149,8 @@ describe("fetchOne — metadata.githubUrl override", () => {
     ).toBe(true);
     expect(fetchedUrls.some((u) => u.startsWith("https://code.claude.com/"))).toBe(false);
 
-    // Inserted release URLs use the docs-anchor form (Mintlify default), not the GitHub tag URL
+    // Inserted release URLs use the docs-anchor form (Mintlify default —
+    // leading `v` stripped from the GitHub tag), not the GitHub tag URL.
     const rows = await db.select().from(releases).where(eq(releases.sourceId, "src_a"));
     const urls = rows.map((r) => r.url).toSorted();
     expect(urls).toEqual([

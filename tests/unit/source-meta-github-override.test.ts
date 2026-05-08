@@ -94,13 +94,26 @@ describe("synthesizeReleaseUrl", () => {
     ).toBe("https://code.claude.com/docs/en/changelog#2-1-133");
   });
 
-  it("dashes a single-segment version cleanly", () => {
+  it("strips a leading v from GitHub-style tags in the default template", () => {
+    // GitHub tags conventionally carry a `v` prefix; doc-page heading slugs
+    // almost never do. The default normalizes so the synthesized URL collides
+    // with existing scrape rows by URL.
+    expect(
+      synthesizeReleaseUrl({
+        sourceUrl: "https://code.claude.com/docs/en/changelog",
+        version: "v2.1.133",
+      }),
+    ).toBe("https://code.claude.com/docs/en/changelog#2-1-133");
+  });
+
+  it("preserves the raw version when a custom template uses ${versionDashed}", () => {
     expect(
       synthesizeReleaseUrl({
         sourceUrl: "https://docs.example.com/changelog",
-        version: "v3",
+        version: "v2.1.0",
+        template: "${sourceUrl}#${versionDashed}",
       }),
-    ).toBe("https://docs.example.com/changelog#v3");
+    ).toBe("https://docs.example.com/changelog#v2-1-0");
   });
 
   it("renders ${sourceUrl} and ${version} placeholders verbatim", () => {
