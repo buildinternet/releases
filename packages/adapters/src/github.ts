@@ -52,7 +52,15 @@ function buildHeaders(): {
   return buildGitHubHeaders(config.githubToken(), RELEASES_BOT_UA);
 }
 
-function truncateToByteCap(content: string): {
+/**
+ * Truncate `content` to the largest UTF-8-safe suffix that fits within
+ * `CHANGELOG_MAX_BYTES`. CHANGELOGs are newest-at-top, so we keep the tail
+ * (recent entries) and discard the head (historical entries).
+ *
+ * The binary search converges on the smallest start index whose suffix fits
+ * under the cap — O(log n) over content length.
+ */
+export function truncateToByteCap(content: string): {
   content: string;
   bytes: number;
   truncated: boolean;
@@ -62,19 +70,18 @@ function truncateToByteCap(content: string): {
   if (bytes <= CHANGELOG_MAX_BYTES) {
     return { content, bytes, truncated: false };
   }
-  // Slice by codepoint until we fit within the byte cap. Binary search keeps
-  // this O(log n) over content length.
+  // Binary-search for the smallest start index whose suffix fits the cap.
   let lo = 0;
   let hi = content.length;
   while (lo < hi) {
-    const mid = (lo + hi + 1) >>> 1;
-    if (encoder.encode(content.slice(0, mid)).length <= CHANGELOG_MAX_BYTES) {
-      lo = mid;
+    const mid = (lo + hi) >>> 1;
+    if (encoder.encode(content.slice(mid)).length <= CHANGELOG_MAX_BYTES) {
+      hi = mid;
     } else {
-      hi = mid - 1;
+      lo = mid + 1;
     }
   }
-  const sliced = content.slice(0, lo);
+  const sliced = content.slice(lo);
   return {
     content: sliced,
     bytes: encoder.encode(sliced).length,
