@@ -18,7 +18,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from "bun:test";
-import { parseFeedCursor } from "../../workers/api/src/utils.js";
+import { buildFeedCursor, parseFeedCursor } from "../../workers/api/src/utils.js";
 import { getCollectionReleasesFeed } from "../../workers/api/src/queries/orgs.js";
 import type { D1Db } from "../../workers/api/src/db.js";
 import { createTestDb, clearAllTables, type TestDatabase } from "../db-helper.js";
@@ -161,7 +161,7 @@ describe("release-feed cursor end-to-end (collection feed)", () => {
     expect(page1.map((r) => r.id)).toEqual(["rel_aaa", "rel_ccc"]);
 
     const last = page1[page1.length - 1]!;
-    const cursor = `${last.published_at}|${last.fetched_at}|${last.id}`;
+    const cursor = buildFeedCursor(last);
     const page2 = await getCollectionReleasesFeed(asD1(db), ["org_1"], cursor, 2);
     expect(page2.map((r) => r.id)).toEqual(["rel_bbb"]);
   });
