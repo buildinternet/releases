@@ -82,6 +82,39 @@
   color: inherit;
 }
 
+/* ── View transitions ── */
+/* Tighten the default crossfade so navigation feels responsive rather than sluggish. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 180ms;
+  animation-timing-function: ease-out;
+}
+
+/* Header and footer are spatial anchors — keep them fixed across navigation
+   instead of crossfading, which otherwise causes a brief double-render flash. */
+::view-transition-group(site-header),
+::view-transition-group(site-footer) {
+  animation: none;
+  z-index: 100;
+}
+::view-transition-old(site-header),
+::view-transition-old(site-footer) {
+  display: none;
+}
+::view-transition-new(site-header),
+::view-transition-new(site-footer) {
+  animation: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(*),
+  ::view-transition-new(*),
+  ::view-transition-group(*) {
+    animation-duration: 0s !important;
+    animation-delay: 0s !important;
+  }
+}
+
 /* ── Shiki – dual-theme syntax highlighting via CSS variables ── */
 .shiki,
 .shiki span {
