@@ -47,6 +47,10 @@ import {
   type SearchCatalogHit,
   type RawSourceHit,
 } from "@buildinternet/releases-api-types";
+import {
+  buildFeedCursor,
+  getCollectionReleasesFeed,
+} from "@releases/core-internal/collection-feed";
 import type { D1Db } from "./db.js";
 import type Anthropic from "@anthropic-ai/sdk";
 import {
@@ -180,6 +184,10 @@ function formatRelease(r: {
   const header = [r.title, r.version, r.publishedAt].filter(Boolean).join(" | ");
   const urlLine = r.url ? `<url>${r.url}</url>\n` : "";
   return `<release>\n<title>${header}</title>\n${urlLine}<content>\n${r.content}\n</content>\n</release>`;
+}
+
+function formatReleaseTitle(r: { title: string; type: ReleaseType }): string {
+  return r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
 }
 
 async function callAnthropic(
@@ -484,7 +492,7 @@ export async function searchReleases(
     title: string;
     summary: string;
     version: string | null;
-    type: string;
+    type: ReleaseType;
     publishedAt: string | null;
     sourceSlug: string;
     sourceName: string;
@@ -523,7 +531,7 @@ export async function searchReleases(
 
   const lexicalText = rows
     .map((r) => {
-      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      const titleLine = formatReleaseTitle(r);
       const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
       return `[release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`;
     })
@@ -786,7 +794,7 @@ export async function getLatestReleases(
   const body = pageRows
     .map((r) => {
       const preview = (r.contentSummary || r.content).slice(0, 500);
-      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      const titleLine = formatReleaseTitle(r);
       const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
       return [
         titleLine,
@@ -1347,7 +1355,7 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
   const body = r.content && r.content.length > 0 ? r.content : (r.contentSummary ?? "");
 
   const lines: string[] = [];
-  const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+  const titleLine = formatReleaseTitle(r);
   lines.push(titleLine);
   lines.push(`ID: ${r.id}`);
   if (r.version) lines.push(`Version: ${r.version}`);
@@ -1986,7 +1994,7 @@ export async function search(
     title: string;
     summary: string;
     version: string | null;
-    type: string;
+    type: ReleaseType;
     publishedAt: string | null;
     sourceSlug: string;
     sourceName: string;
@@ -2124,7 +2132,7 @@ export async function search(
   } else if (releaseResult?.mode === "lexical" && releaseResult.rows.length > 0) {
     const lines: string[] = ["## Releases"];
     for (const r of releaseResult.rows) {
-      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      const titleLine = formatReleaseTitle(r);
       const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
       lines.push(
         `- [release] ${titleLine}\n  id: ${r.id}\n  source: ${r.sourceName} (${srcCoord}) | ${r.publishedAt ?? "N/A"}\n  ${r.summary}`,
@@ -2304,67 +2312,19 @@ export async function getCollectionReleases(
     };
   }
 
-  const conditions = [
-    inArray(sources.orgId, orgIds),
-    sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
-    sql`(${releasesVisible.suppressed} IS NULL OR ${releasesVisible.suppressed} = 0)`,
-  ];
-  if (params.include_prereleases !== true) {
-    conditions.push(
-      sql`(${releasesVisible.prerelease} IS NULL OR ${releasesVisible.prerelease} = 0)`,
-    );
-  }
+  // Shared query + cursor with `GET /v1/collections/:slug/releases` so MCP and
+  // REST agree on row ordering and `nextCursor` strings — see
+  // @releases/core-internal/collection-feed.
+  const results = await getCollectionReleasesFeed(db, orgIds, params.cursor ?? null, limit + 1, {
+    includePrereleases: params.include_prereleases ?? false,
+  });
 
-  // Reuse the MCP cursor format (lastPublishedAt|lastId, base64) so all feed
-  // tools share one encoding. The REST surface uses a richer 3-part cursor
-  // for tie-breaking on fetched_at, but we don't expose that complexity here.
-  if (params.cursor) {
-    const decoded = decodeReleaseCursor(params.cursor);
-    if (decoded) {
-      const cursorClause = decoded.lastPublishedAt
-        ? or(
-            lt(releasesVisible.publishedAt, decoded.lastPublishedAt),
-            and(
-              eq(releasesVisible.publishedAt, decoded.lastPublishedAt),
-              lt(releasesVisible.id, decoded.lastId),
-            ),
-          )
-        : lt(releasesVisible.id, decoded.lastId);
-      if (cursorClause) conditions.push(cursorClause);
-    }
-  }
-
-  const rows = await db
-    .select({
-      id: releasesVisible.id,
-      title: releasesVisible.title,
-      version: releasesVisible.version,
-      type: releasesVisible.type,
-      content: releasesVisible.content,
-      contentSummary: releasesVisible.contentSummary,
-      publishedAt: releasesVisible.publishedAt,
-      sourceName: sources.name,
-      sourceSlug: sources.slug,
-      orgSlug: organizations.slug,
-      orgName: organizations.name,
-    })
-    .from(releasesVisible)
-    .innerJoin(sources, eq(releasesVisible.sourceId, sources.id))
-    .innerJoin(organizations, eq(sources.orgId, organizations.id))
-    .where(and(...conditions))
-    .orderBy(desc(releasesVisible.publishedAt), desc(releasesVisible.id))
-    .limit(limit + 1);
-
-  const hasMore = rows.length > limit;
-  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+  const hasMore = results.length > limit;
+  const pageRows = hasMore ? results.slice(0, limit) : results;
 
   let nextCursor: string | null = null;
   if (hasMore && pageRows.length > 0) {
-    const last = pageRows[pageRows.length - 1];
-    nextCursor = encodeReleaseCursor({
-      lastPublishedAt: last.publishedAt ?? null,
-      lastId: last.id,
-    });
+    nextCursor = buildFeedCursor(pageRows[pageRows.length - 1]);
   }
 
   const cursorMeta = buildCursorMeta({
@@ -2388,12 +2348,12 @@ export async function getCollectionReleases(
 
   const body = pageRows
     .map((r) => {
-      const preview = (r.contentSummary || r.content).slice(0, 500);
-      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
-      const srcCoord = `${r.orgSlug}/${r.sourceSlug}`;
+      const preview = (r.content_summary || r.content).slice(0, 500);
+      const titleLine = formatReleaseTitle(r);
+      const srcCoord = `${r.org_slug}/${r.source_slug}`;
       return [
         titleLine,
-        `Org: ${r.orgName} (${r.orgSlug}) | Source: ${r.sourceName} (${srcCoord}) | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
+        `Org: ${r.org_name} (${r.org_slug}) | Source: ${r.source_name} (${srcCoord}) | Version: ${r.version ?? "N/A"} | Date: ${r.published_at ?? "N/A"}`,
         preview,
       ].join("\n");
     })

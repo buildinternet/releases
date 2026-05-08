@@ -35,7 +35,8 @@ describe("parseFeedCursor", () => {
   it("emits a 3-arg lex predicate for the new publishedAt|fetchedAt|id format", () => {
     const result = parseFeedCursor("2026-04-01T00:00:00Z|2026-04-03T00:00:00Z|rel_ccc");
     expect(result.cursorWhere).toBe(
-      "AND ((r.published_at < ?) OR " +
+      "AND (r.published_at IS NULL OR " +
+        "(r.published_at < ?) OR " +
         "(r.published_at = ? AND r.fetched_at < ?) OR " +
         "(r.published_at = ? AND r.fetched_at = ? AND r.id < ?))",
     );
@@ -52,7 +53,8 @@ describe("parseFeedCursor", () => {
   it("accepts the legacy publishedAt|id format (back-compat for in-flight cursors)", () => {
     const result = parseFeedCursor("2026-04-01T00:00:00Z|rel_ccc");
     expect(result.cursorWhere).toBe(
-      "AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))",
+      "AND (r.published_at IS NULL OR " +
+        "(r.published_at < ?) OR (r.published_at = ? AND r.id < ?))",
     );
     expect(result.cursorBindings).toEqual([
       "2026-04-01T00:00:00Z",
@@ -61,17 +63,17 @@ describe("parseFeedCursor", () => {
     ]);
   });
 
-  it("treats |id as the null-publishedAt segment", () => {
+  it("treats |id as the null-publishedAt segment (legacy 2-part)", () => {
     const result = parseFeedCursor("|rel_xxx");
-    expect(result.cursorWhere).toBe("AND (r.published_at IS NOT NULL OR r.id < ?)");
+    expect(result.cursorWhere).toBe("AND (r.published_at IS NULL AND r.id < ?)");
     expect(result.cursorBindings).toEqual(["rel_xxx"]);
   });
 
-  it("emits a fetched_at-aware predicate for null-publishedAt new format", () => {
+  it("emits a null-scoped fetched_at predicate for the null-publishedAt new format", () => {
     const result = parseFeedCursor("|2026-04-03T00:00:00Z|rel_xxx");
     expect(result.cursorWhere).toBe(
-      "AND (r.published_at IS NOT NULL OR " +
-        "(r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?))",
+      "AND (r.published_at IS NULL AND " +
+        "((r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?)))",
     );
     expect(result.cursorBindings).toEqual([
       "2026-04-03T00:00:00Z",
@@ -82,7 +84,7 @@ describe("parseFeedCursor", () => {
 
   it("falls back to a single-arg predicate for date-only cursors", () => {
     const result = parseFeedCursor("2026-04-01T00:00:00Z");
-    expect(result.cursorWhere).toBe("AND r.published_at < ?");
+    expect(result.cursorWhere).toBe("AND (r.published_at IS NULL OR r.published_at < ?)");
     expect(result.cursorBindings).toEqual(["2026-04-01T00:00:00Z"]);
   });
 });
@@ -205,5 +207,73 @@ describe("release-feed cursor end-to-end (collection feed)", () => {
       10,
     );
     expect(rows.map((r) => r.id)).toEqual(["rel_old"]);
+  });
+
+  /**
+   * The ORDER BY puts dated rows before undated ones. Without `r.published_at
+   * IS NULL OR …` in the dated-cursor branches, paginating past the last
+   * dated row would silently drop every undated release. Page 1 takes both
+   * dated rows; page 2 (cursor anchored at the last dated row) must surface
+   * the two undated rows.
+   */
+  it("advances from the dated tail into the null-published rows", async () => {
+    const db = tdb.db;
+    await db
+      .insert(organizations)
+      .values({ id: "org_1", name: "Org", slug: "org-mixed", discovery: "curated" });
+    await db.insert(sources).values({
+      id: "src_1",
+      name: "S",
+      slug: "src-1",
+      type: "github",
+      url: "https://github.com/x/src-1",
+      orgId: "org_1",
+      discovery: "curated",
+    });
+    await db.insert(releases).values([
+      {
+        id: "rel_dated_a",
+        sourceId: "src_1",
+        title: "Dated A",
+        content: "a",
+        type: "feature",
+        publishedAt: "2026-04-02T00:00:00Z",
+        fetchedAt: "2026-04-02T00:00:00Z",
+      },
+      {
+        id: "rel_dated_b",
+        sourceId: "src_1",
+        title: "Dated B",
+        content: "b",
+        type: "feature",
+        publishedAt: "2026-04-01T00:00:00Z",
+        fetchedAt: "2026-04-01T00:00:00Z",
+      },
+      {
+        id: "rel_null_x",
+        sourceId: "src_1",
+        title: "Undated X",
+        content: "x",
+        type: "feature",
+        publishedAt: null,
+        fetchedAt: "2026-04-05T00:00:00Z",
+      },
+      {
+        id: "rel_null_y",
+        sourceId: "src_1",
+        title: "Undated Y",
+        content: "y",
+        type: "feature",
+        publishedAt: null,
+        fetchedAt: "2026-04-04T00:00:00Z",
+      },
+    ]);
+
+    const page1 = await getCollectionReleasesFeed(asD1(db), ["org_1"], null, 2);
+    expect(page1.map((r) => r.id)).toEqual(["rel_dated_a", "rel_dated_b"]);
+
+    const cursor = buildFeedCursor(page1[page1.length - 1]!);
+    const page2 = await getCollectionReleasesFeed(asD1(db), ["org_1"], cursor, 2);
+    expect(page2.map((r) => r.id)).toEqual(["rel_null_x", "rel_null_y"]);
   });
 });
