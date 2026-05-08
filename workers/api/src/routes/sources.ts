@@ -51,6 +51,7 @@ import {
   getStatusHub,
   orgWhere,
   isProductId,
+  buildFeedCursor,
   parseFeedCursor,
   parseLimitParam,
   resolveSourceFromContext,
@@ -1587,8 +1588,7 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
   const pageRows = hasMore ? results.slice(0, limit) : results;
   let nextCursor: string | null = null;
   if (hasMore && pageRows.length > 0) {
-    const last = pageRows[pageRows.length - 1];
-    nextCursor = last.published_at ? `${last.published_at}|${last.id}` : `|${last.id}`;
+    nextCursor = buildFeedCursor(pageRows[pageRows.length - 1]);
   }
 
   const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";

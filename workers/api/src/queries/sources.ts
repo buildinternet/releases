@@ -243,7 +243,7 @@ export async function getSourceReleasesPaginated(
 }
 
 export type SourceFeedReleaseRow = SourceReleaseRow & {
-  fetched_at: string | null;
+  fetched_at: string;
   prerelease: 0 | 1;
 };
 

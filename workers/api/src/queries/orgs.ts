@@ -306,6 +306,7 @@ export type OrgReleaseRow = {
   content: string;
   content_summary: string | null;
   published_at: string | null;
+  fetched_at: string;
   url: string | null;
   media: string | null;
   prerelease: 0 | 1;
@@ -387,14 +388,27 @@ export type CollectionReleaseRow = OrgReleaseRow & {
 // exactly so the same web cursor parser works on both surfaces.
 function feedCursorSql(cursorParam: string | null) {
   if (!cursorParam) return sql``;
-  const pipeIdx = cursorParam.indexOf("|");
-  const cursorDate = pipeIdx === -1 ? cursorParam : cursorParam.slice(0, pipeIdx);
-  const cursorId = pipeIdx === -1 ? "" : cursorParam.slice(pipeIdx + 1);
-  if (cursorDate && cursorId) {
-    return sql`AND ((r.published_at < ${cursorDate}) OR (r.published_at = ${cursorDate} AND r.id < ${cursorId}))`;
+  const parts = cursorParam.split("|");
+
+  if (parts.length === 3) {
+    const [pub, fet, id] = parts;
+    if (pub && fet && id) {
+      return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.fetched_at < ${fet}) OR (r.published_at = ${pub} AND r.fetched_at = ${fet} AND r.id < ${id}))`;
+    }
+    if (!pub && fet && id) {
+      return sql`AND (r.published_at IS NOT NULL OR (r.fetched_at < ${fet}) OR (r.fetched_at = ${fet} AND r.id < ${id}))`;
+    }
   }
-  if (cursorId) return sql`AND (r.published_at IS NOT NULL OR r.id < ${cursorId})`;
-  if (cursorDate) return sql`AND r.published_at < ${cursorDate}`;
+
+  if (parts.length === 2) {
+    const [pub, id] = parts;
+    if (pub && id) {
+      return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.id < ${id}))`;
+    }
+    if (!pub && id) return sql`AND (r.published_at IS NOT NULL OR r.id < ${id})`;
+  }
+
+  if (parts.length === 1 && parts[0]) return sql`AND r.published_at < ${parts[0]}`;
   return sql``;
 }
 

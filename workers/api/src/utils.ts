@@ -375,40 +375,83 @@ export function parseLimitParam(raw: string | undefined, defaultVal: number, max
 }
 
 /**
- * Parse a release-feed cursor of the form `publishedAt|id` (with `|id` as a
- * fallback for releases that lack publishedAt). Returns the SQL `WHERE`
- * fragment plus its bind values, scoped to alias `r` on the releases table.
- * Used by `/v1/orgs/:slug/releases` and the source equivalent — the cursor
- * shape and ordering match {@link getOrgReleasesFeed} and
- * {@link getSourceReleasesFeed}.
+ * Build a release-feed cursor from the last row on the current page. Mirrors
+ * the parser shape in {@link parseFeedCursor} / `feedCursorSql`.
+ */
+export function buildFeedCursor(last: {
+  published_at: string | null;
+  fetched_at: string;
+  id: string;
+}): string {
+  return last.published_at ? `${last.published_at}|${last.fetched_at}|${last.id}` : `|${last.id}`;
+}
+
+/**
+ * Parse a release-feed cursor and return the SQL `WHERE` fragment plus its
+ * bind values, scoped to alias `r` on the releases table. Used by
+ * `getOrgReleasesFeed` / `getSourceReleasesFeed` (raw D1) and mirrored by
+ * `feedCursorSql` (Drizzle) for `getCollectionReleasesFeed`.
+ *
+ * Wire format: `publishedAt|fetchedAt|id` (current) — encodes the full sort
+ * key so same-`publishedAt` ties tie-break on `fetched_at` then `id`,
+ * matching the ORDER BY. Legacy `publishedAt|id` cursors from in-flight
+ * paginators still parse (they degrade to the prior tie-break-on-id shape).
+ * `|id` covers the null-`publishedAt` segment.
+ *
+ * The `r.published_at IS NOT NULL OR …` arm in the null-published branches
+ * preserves the legacy `|id` behavior — non-null rows already came before
+ * the cursor in the ORDER BY, so re-including them is a known wart that
+ * predates this change. Scope of #806 is the same-`publishedAt` tie fix
+ * for the dominant non-null path.
  */
 export function parseFeedCursor(cursorParam: string | null): {
   cursorWhere: string;
   cursorBindings: string[];
 } {
   if (!cursorParam) return { cursorWhere: "", cursorBindings: [] };
-  const pipeIdx = cursorParam.indexOf("|");
-  const cursorDate =
-    pipeIdx > 0 ? cursorParam.slice(0, pipeIdx) : pipeIdx === -1 ? cursorParam : "";
-  const cursorId = pipeIdx >= 0 ? cursorParam.slice(pipeIdx + 1) : "";
-  if (cursorDate && cursorId) {
-    return {
-      cursorWhere: `AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))`,
-      cursorBindings: [cursorDate, cursorDate, cursorId],
-    };
+  const parts = cursorParam.split("|");
+
+  if (parts.length === 3) {
+    const [pub, fet, id] = parts;
+    if (pub && fet && id) {
+      return {
+        cursorWhere:
+          "AND ((r.published_at < ?) OR " +
+          "(r.published_at = ? AND r.fetched_at < ?) OR " +
+          "(r.published_at = ? AND r.fetched_at = ? AND r.id < ?))",
+        cursorBindings: [pub, pub, fet, pub, fet, id],
+      };
+    }
+    if (!pub && fet && id) {
+      return {
+        cursorWhere:
+          "AND (r.published_at IS NOT NULL OR " +
+          "(r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?))",
+        cursorBindings: [fet, fet, id],
+      };
+    }
   }
-  if (cursorId) {
-    return {
-      cursorWhere: `AND (r.published_at IS NOT NULL OR r.id < ?)`,
-      cursorBindings: [cursorId],
-    };
+
+  if (parts.length === 2) {
+    const [pub, id] = parts;
+    if (pub && id) {
+      return {
+        cursorWhere: "AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))",
+        cursorBindings: [pub, pub, id],
+      };
+    }
+    if (!pub && id) {
+      return {
+        cursorWhere: "AND (r.published_at IS NOT NULL OR r.id < ?)",
+        cursorBindings: [id],
+      };
+    }
   }
-  if (cursorDate) {
-    return {
-      cursorWhere: `AND r.published_at < ?`,
-      cursorBindings: [cursorDate],
-    };
+
+  if (parts.length === 1 && parts[0]) {
+    return { cursorWhere: "AND r.published_at < ?", cursorBindings: [parts[0]] };
   }
+
   return { cursorWhere: "", cursorBindings: [] };
 }
 
