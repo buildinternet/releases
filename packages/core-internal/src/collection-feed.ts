@@ -31,9 +31,9 @@ export type CollectionReleaseRow = {
 
 /**
  * Build a release-feed cursor from the last row on the current page. Wire
- * format: `publishedAt|fetchedAt|id` (or `|id` when published_at is null) —
- * encodes the full sort key so same-`publishedAt` ties tie-break on
- * `fetched_at` then `id`, matching the ORDER BY in
+ * format: `publishedAt|fetchedAt|id` — always 3 parts, with `publishedAt`
+ * empty when null. Encodes the full sort key so same-`publishedAt` ties
+ * tie-break on `fetched_at` then `id`, matching the ORDER BY in
  * {@link getCollectionReleasesFeed}.
  */
 export function buildFeedCursor(last: {
@@ -41,7 +41,7 @@ export function buildFeedCursor(last: {
   fetched_at: string;
   id: string;
 }): string {
-  return last.published_at ? `${last.published_at}|${last.fetched_at}|${last.id}` : `|${last.id}`;
+  return `${last.published_at ?? ""}|${last.fetched_at}|${last.id}`;
 }
 
 /**
@@ -50,9 +50,10 @@ export function buildFeedCursor(last: {
  * used by single-source / single-org feeds, so the same web cursor parser
  * works on every surface.
  *
- * Legacy `publishedAt|id` cursors from in-flight paginators still parse
- * (degrade to the prior tie-break-on-id shape). `|id` covers the
- * null-`publishedAt` segment.
+ * Legacy 2-part `publishedAt|id` cursors from in-flight paginators still
+ * parse (degrade to the prior tie-break-on-id shape). The null-published
+ * tail uses `AND r.published_at IS NULL` so non-null rows already shown on
+ * earlier pages don't reappear at the boundary.
  */
 function feedCursorSql(cursorParam: string | null): SQL {
   if (!cursorParam) return sql``;
@@ -64,7 +65,7 @@ function feedCursorSql(cursorParam: string | null): SQL {
       return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.fetched_at < ${fet}) OR (r.published_at = ${pub} AND r.fetched_at = ${fet} AND r.id < ${id}))`;
     }
     if (!pub && fet && id) {
-      return sql`AND (r.published_at IS NOT NULL OR (r.fetched_at < ${fet}) OR (r.fetched_at = ${fet} AND r.id < ${id}))`;
+      return sql`AND (r.published_at IS NULL AND ((r.fetched_at < ${fet}) OR (r.fetched_at = ${fet} AND r.id < ${id})))`;
     }
   }
 
@@ -73,7 +74,10 @@ function feedCursorSql(cursorParam: string | null): SQL {
     if (pub && id) {
       return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.id < ${id}))`;
     }
-    if (!pub && id) return sql`AND (r.published_at IS NOT NULL OR r.id < ${id})`;
+    // Legacy `|id` shape — no fetched_at to tie-break on, so accept any
+    // null-published row whose id is smaller. Slightly weaker than the
+    // 3-part shape; only reachable from in-flight pre-#806 cursors.
+    if (!pub && id) return sql`AND (r.published_at IS NULL AND r.id < ${id})`;
   }
 
   if (parts.length === 1 && parts[0]) return sql`AND r.published_at < ${parts[0]}`;

@@ -61,17 +61,17 @@ describe("parseFeedCursor", () => {
     ]);
   });
 
-  it("treats |id as the null-publishedAt segment", () => {
+  it("treats |id as the null-publishedAt segment (legacy 2-part)", () => {
     const result = parseFeedCursor("|rel_xxx");
-    expect(result.cursorWhere).toBe("AND (r.published_at IS NOT NULL OR r.id < ?)");
+    expect(result.cursorWhere).toBe("AND (r.published_at IS NULL AND r.id < ?)");
     expect(result.cursorBindings).toEqual(["rel_xxx"]);
   });
 
-  it("emits a fetched_at-aware predicate for null-publishedAt new format", () => {
+  it("emits a null-scoped fetched_at predicate for the null-publishedAt new format", () => {
     const result = parseFeedCursor("|2026-04-03T00:00:00Z|rel_xxx");
     expect(result.cursorWhere).toBe(
-      "AND (r.published_at IS NOT NULL OR " +
-        "(r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?))",
+      "AND (r.published_at IS NULL AND " +
+        "((r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?)))",
     );
     expect(result.cursorBindings).toEqual([
       "2026-04-03T00:00:00Z",

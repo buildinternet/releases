@@ -385,17 +385,13 @@ export { buildFeedCursor } from "@releases/core-internal/collection-feed";
  * `getOrgReleasesFeed` / `getSourceReleasesFeed` (raw D1) and mirrored by
  * `feedCursorSql` (Drizzle) for `getCollectionReleasesFeed`.
  *
- * Wire format: `publishedAt|fetchedAt|id` (current) — encodes the full sort
- * key so same-`publishedAt` ties tie-break on `fetched_at` then `id`,
- * matching the ORDER BY. Legacy `publishedAt|id` cursors from in-flight
- * paginators still parse (they degrade to the prior tie-break-on-id shape).
- * `|id` covers the null-`publishedAt` segment.
- *
- * The `r.published_at IS NOT NULL OR …` arm in the null-published branches
- * preserves the legacy `|id` behavior — non-null rows already came before
- * the cursor in the ORDER BY, so re-including them is a known wart that
- * predates this change. Scope of #806 is the same-`publishedAt` tie fix
- * for the dominant non-null path.
+ * Wire format: `publishedAt|fetchedAt|id` — always 3 parts, with
+ * `publishedAt` empty when null. Encodes the full sort key so
+ * same-`publishedAt` ties tie-break on `fetched_at` then `id`, matching the
+ * ORDER BY. Legacy 2-part `publishedAt|id` cursors from in-flight paginators
+ * still parse (degrade to the prior tie-break-on-id shape). The
+ * null-published tail uses `AND r.published_at IS NULL` so non-null rows
+ * already shown on earlier pages don't reappear at the boundary.
  */
 export function parseFeedCursor(cursorParam: string | null): {
   cursorWhere: string;
@@ -418,8 +414,8 @@ export function parseFeedCursor(cursorParam: string | null): {
     if (!pub && fet && id) {
       return {
         cursorWhere:
-          "AND (r.published_at IS NOT NULL OR " +
-          "(r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?))",
+          "AND (r.published_at IS NULL AND " +
+          "((r.fetched_at < ?) OR (r.fetched_at = ? AND r.id < ?)))",
         cursorBindings: [fet, fet, id],
       };
     }
@@ -433,9 +429,11 @@ export function parseFeedCursor(cursorParam: string | null): {
         cursorBindings: [pub, pub, id],
       };
     }
+    // Legacy `|id` shape — no fetched_at to tie-break on; only reachable
+    // from in-flight pre-#806 cursors.
     if (!pub && id) {
       return {
-        cursorWhere: "AND (r.published_at IS NOT NULL OR r.id < ?)",
+        cursorWhere: "AND (r.published_at IS NULL AND r.id < ?)",
         cursorBindings: [id],
       };
     }
