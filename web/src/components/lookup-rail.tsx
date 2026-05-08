@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { LookupResultPayload } from "@/lib/api";
 import { formatDate } from "@/lib/formatters";
+import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 
 /**
@@ -84,7 +85,7 @@ function LookupHeading({ query, payload }: { query: string; payload: LookupResul
           <a
             href={ghUrl}
             target="_blank"
-            rel="noopener noreferrer"
+            rel={EXTERNAL_UGC_REL}
             className="text-stone-700 dark:text-stone-200 hover:underline"
           >
             github.com/{query}
@@ -112,7 +113,7 @@ function LookupHeading({ query, payload }: { query: string; payload: LookupResul
           <a
             href={ghUrl}
             target="_blank"
-            rel="noopener noreferrer"
+            rel={EXTERNAL_UGC_REL}
             className="text-stone-700 dark:text-stone-200 hover:underline"
           >
             github.com/{query}

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
+import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 
 export type TickerRelease = HomepageTickerQuery["latestReleases"]["items"][number];
 type Slide = { release: TickerRelease; relative: string | null };
@@ -226,7 +227,7 @@ export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
             <a
               href={target.href}
               target="_blank"
-              rel="noopener noreferrer"
+              rel={EXTERNAL_UGC_REL}
               aria-label={target.label}
               className="flex items-center px-3 border-l border-stone-200 dark:border-stone-800 text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-200 hover:bg-stone-50 dark:hover:bg-stone-800/40 transition-colors text-sm"
             >

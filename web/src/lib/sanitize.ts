@@ -3,6 +3,16 @@
 const SAFE_LINK_PATTERN = /^(https?:\/\/|mailto:|\/(?!\/))/;
 const SAFE_IMG_PATTERN = /^https?:\/\//;
 
+/**
+ * Rel attribute for outbound links to externally-sourced (scraped) content
+ * — release/changelog bodies, release canonical URLs, and any URL we did
+ * not author ourselves. `ugc` flags the link as third-party content per
+ * https://developers.google.com/search/docs/crawling-indexing/qualify-outbound-links;
+ * `nofollow` keeps us from passing PageRank to arbitrary scraped destinations;
+ * `noopener noreferrer` is the standard cross-window safety pair.
+ */
+export const EXTERNAL_UGC_REL = "nofollow ugc noopener noreferrer";
+
 /** Returns true if the href is safe for use in an <a> tag. */
 export function isSafeHref(href: string | undefined | null): href is string {
   if (!href || typeof href !== "string") return false;

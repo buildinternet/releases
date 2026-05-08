@@ -53,6 +53,14 @@ export function FallbackPlainImage({ src, alt, className }: FallbackPlainImagePr
   if (failed) return <Placeholder className={className} />;
   return (
     // eslint-disable-next-line @next/next/no-img-element
-    <img src={src} alt={alt} loading="lazy" className={className} onError={() => setFailed(true)} />
+    <img
+      src={src}
+      alt={alt}
+      loading="lazy"
+      decoding="async"
+      referrerPolicy="no-referrer"
+      className={className}
+      onError={() => setFailed(true)}
+    />
   );
 }

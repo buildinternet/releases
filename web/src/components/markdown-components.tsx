@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
+import { EXTERNAL_UGC_REL, isSafeHref, isSafeImgSrc } from "@/lib/sanitize";
 import { FallbackPlainImage } from "./fallback-image";
 
 interface MarkdownComponentOptions {
@@ -95,9 +95,8 @@ export function createMarkdownComponents(opts: MarkdownComponentOptions = {}): R
         );
       }
 
-      // Regular link
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer">
+        <a href={href} target="_blank" rel={EXTERNAL_UGC_REL}>
           {children}
         </a>
       );
@@ -127,7 +126,7 @@ export const collapsedMarkdownComponents: Record<string, any> = {
     if (/youtube|vimeo|loom/i.test(href)) return <>{children}</>;
     if (/\.(mp4|webm)(\?.*)?$/i.test(href)) return null;
     return (
-      <a href={href} target="_blank" rel="noopener noreferrer">
+      <a href={href} target="_blank" rel={EXTERNAL_UGC_REL}>
         {children}
       </a>
     );

@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Suspense } from "react";
 import { api, ApiSetupError } from "@/lib/api";
+import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { SourceTypeIcon } from "@/components/source-type-icon";
@@ -176,7 +177,7 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
               <a
                 href={release.url}
                 target="_blank"
-                rel="noopener noreferrer"
+                rel={EXTERNAL_UGC_REL}
                 className="hover:text-stone-600 dark:hover:text-stone-300"
               >
                 View original ↗
