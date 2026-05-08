@@ -18,6 +18,9 @@ import {
   listCatalog,
   getCatalogEntry,
   lookupDomain,
+  listCollections,
+  getCollection,
+  getCollectionReleases,
   summarizeChanges,
   compareProducts,
   type SearchToolReturn,
@@ -654,6 +657,68 @@ export function createServer(env: Env, ctx?: ExecutionContext, opts?: CreateServ
       },
     },
     async (params) => lookupDomain(db, params),
+  );
+
+  server.registerTool(
+    "list_collections",
+    {
+      ...titled("List collections", READ_ONLY_HINTS),
+      description: [
+        "List curated collections — named cross-org playlists (e.g. 'Frontier AI Labs') independent of the fixed category taxonomy.",
+        "",
+        "Use `get_collection` for a collection's full member list, or `get_collection_releases` for the interleaved cross-org release feed. Paginated: defaults to 50 entries per page; pass `page: 2` for the next slice.",
+      ].join("\n"),
+      inputSchema: withPagination({}),
+    },
+    async (params) => listCollections(db, params),
+  );
+
+  server.registerTool(
+    "get_collection",
+    {
+      ...titled("Get collection", READ_ONLY_HINTS),
+      description:
+        "Detail for a single collection — name, description, and the ordered list of member organizations. Hidden / on-demand orgs never leak through; only publicly visible orgs appear in the member list.",
+      inputSchema: {
+        slug: z.string().describe("Collection slug (e.g. 'frontier-ai-labs')."),
+      },
+    },
+    withMedia(async (params) => getCollection(db, params)),
+  );
+
+  server.registerTool(
+    "get_collection_releases",
+    {
+      ...titled("Get collection releases", READ_ONLY_HINTS),
+      description: [
+        "Interleaved cross-org release feed for a collection — same shape as `get_latest_releases` but scoped to the collection's member orgs.",
+        "",
+        "Cursor-paginated: pass `limit` for slice size (default 20), `cursor` to continue from a prior call. The result's `_meta.pagination` carries `kind: 'cursor'`, `hasMore`, and `nextCursor` when more rows exist; the response text echoes `nextCursor` so an LLM caller can chain without parsing `_meta`. Cursors are stable under inserts.",
+      ].join("\n"),
+      inputSchema: {
+        slug: z.string().describe("Collection slug (e.g. 'frontier-ai-labs')."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(200)
+          .optional()
+          .describe("Slice size (1–200). Defaults to 20."),
+        cursor: z
+          .string()
+          .optional()
+          .describe(
+            "Opaque continuation token from a prior call's `_meta.pagination.nextCursor`. Stale cursors are silently ignored — the call returns a fresh head of the feed.",
+          ),
+        include_prereleases: z
+          .boolean()
+          .optional()
+          .describe(
+            "Include prerelease tags (alphas, betas, RCs). Defaults to false so the feed matches the public web view.",
+          ),
+      },
+    },
+    withMedia(async (params) => getCollectionReleases(db, params)),
   );
 
   server.registerTool(
