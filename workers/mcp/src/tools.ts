@@ -9,6 +9,7 @@ import {
   releasesVisible,
   organizations,
   organizationsActive,
+  organizationsPublic,
   productsActive,
   usageLog,
   orgAccounts,
@@ -19,6 +20,8 @@ import {
   domainAliases,
   sourceChangelogFiles,
   knowledgePages,
+  collections,
+  collectionMembers,
   type ReleaseType,
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
@@ -955,49 +958,51 @@ export async function getOrganization(
   if (!org) return text(`No organization found matching "${params.identifier}"`);
   const includeOverview = params.include_overview === true;
 
-  const [accounts, tagRows, orgSources, orgProducts, aliases, overviewRow] = await Promise.all([
-    db
-      .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
-      .from(orgAccounts)
-      .where(eq(orgAccounts.orgId, org.id)),
-    db
-      .select({ name: tags.name })
-      .from(orgTags)
-      .innerJoin(tags, eq(orgTags.tagId, tags.id))
-      .where(eq(orgTags.orgId, org.id)),
-    db
-      .select({
-        slug: sources.slug,
-        name: sources.name,
-        type: sources.type,
-        url: sources.url,
-        lastFetchedAt: sources.lastFetchedAt,
-      })
-      .from(sources)
-      .where(eq(sources.orgId, org.id)),
-    db
-      .select({
-        slug: products.slug,
-        name: products.name,
-        url: products.url,
-        description: products.description,
-      })
-      .from(products)
-      .where(eq(products.orgId, org.id)),
-    db
-      .select({ domain: domainAliases.domain })
-      .from(domainAliases)
-      .where(eq(domainAliases.orgId, org.id)),
-    db
-      .select({
-        content: knowledgePages.content,
-        generatedAt: knowledgePages.generatedAt,
-        releaseCount: knowledgePages.releaseCount,
-      })
-      .from(knowledgePages)
-      .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
-      .limit(1),
-  ]);
+  const [accounts, tagRows, orgSources, orgProducts, aliases, overviewRow, orgCollections] =
+    await Promise.all([
+      db
+        .select({ platform: orgAccounts.platform, handle: orgAccounts.handle })
+        .from(orgAccounts)
+        .where(eq(orgAccounts.orgId, org.id)),
+      db
+        .select({ name: tags.name })
+        .from(orgTags)
+        .innerJoin(tags, eq(orgTags.tagId, tags.id))
+        .where(eq(orgTags.orgId, org.id)),
+      db
+        .select({
+          slug: sources.slug,
+          name: sources.name,
+          type: sources.type,
+          url: sources.url,
+          lastFetchedAt: sources.lastFetchedAt,
+        })
+        .from(sources)
+        .where(eq(sources.orgId, org.id)),
+      db
+        .select({
+          slug: products.slug,
+          name: products.name,
+          url: products.url,
+          description: products.description,
+        })
+        .from(products)
+        .where(eq(products.orgId, org.id)),
+      db
+        .select({ domain: domainAliases.domain })
+        .from(domainAliases)
+        .where(eq(domainAliases.orgId, org.id)),
+      db
+        .select({
+          content: knowledgePages.content,
+          generatedAt: knowledgePages.generatedAt,
+          releaseCount: knowledgePages.releaseCount,
+        })
+        .from(knowledgePages)
+        .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
+        .limit(1),
+      getCollectionsForOrg(db, org.id),
+    ]);
 
   const lines: string[] = [];
 
@@ -1044,6 +1049,10 @@ export async function getOrganization(
     lines.push(`Aliases: ${aliases.map((a) => a.domain).join(", ")}`);
   } else {
     lines.push("Aliases: none");
+  }
+
+  if (orgCollections.length > 0) {
+    lines.push(`Collections: ${orgCollections.map((c) => `${c.name} (${c.slug})`).join(", ")}`);
   }
 
   if (orgProducts.length > 0) {
@@ -2149,4 +2158,271 @@ export async function search(
   };
 
   return { result: text(sections.join("\n\n")), counts };
+}
+
+// ── list_collections / get_collection / get_collection_releases ──────
+//
+// Read-only mirrors of the REST endpoints in workers/api/src/routes/collections.ts.
+// Membership joins through `organizations_public` so on_demand / soft-deleted
+// orgs never leak through a collection — same model as the API, the web feed,
+// and the org-overview surfaces.
+
+export async function listCollections(db: D1Db, params: McpPaginationInput): Promise<ToolResult> {
+  const pagination = parseMcpPagination(params);
+
+  type Row = {
+    slug: string;
+    name: string;
+    description: string | null;
+    memberCount: number;
+  };
+
+  // `totalItems` counts every collection row; per-row `memberCount` only
+  // counts visible members (joined through organizationsPublic). The two
+  // counts measure different things on purpose — the total is for pagination,
+  // the per-row count is for display.
+  const [totalRow, rows] = await Promise.all([
+    db.all<{ n: number }>(sql`SELECT COUNT(*) as n FROM ${collections}`),
+    db.all<Row>(sql`
+      SELECT c.slug, c.name, c.description,
+        (SELECT COUNT(*) FROM ${collectionMembers} cm
+          INNER JOIN ${organizationsPublic} op ON op.id = cm.org_id
+          WHERE cm.collection_id = c.id) AS memberCount
+      FROM ${collections} c
+      ORDER BY c.name
+      LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}
+    `),
+  ]);
+  const totalItems = Number(totalRow[0]?.n ?? 0);
+  if (totalItems === 0) {
+    return emptyListResult({
+      message: "No collections yet.",
+      pagination,
+    });
+  }
+
+  const body = rows
+    .map((r) => {
+      const descLine = r.description ? `\n  ${r.description}` : "";
+      const noun = Number(r.memberCount) === 1 ? "org" : "orgs";
+      return `**${r.name}**\n  Slug: ${r.slug} | ${r.memberCount} ${noun}${descLine}`;
+    })
+    .join("\n\n");
+
+  return paginatedText({
+    body,
+    noun: "collections",
+    pagination,
+    returned: rows.length,
+    totalItems,
+  });
+}
+
+export async function getCollection(db: D1Db, params: { slug: string }): Promise<ToolResult> {
+  const slug = params.slug.trim();
+  const [collection] = await db
+    .select({
+      id: collections.id,
+      slug: collections.slug,
+      name: collections.name,
+      description: collections.description,
+    })
+    .from(collections)
+    .where(eq(collections.slug, slug));
+  if (!collection) return text(`No collection found with slug "${slug}".`);
+
+  // Match the REST endpoint: members joined through organizationsPublic so
+  // hidden / soft-deleted orgs don't leak.
+  const orgs = await db
+    .select({
+      slug: organizationsPublic.slug,
+      name: organizationsPublic.name,
+      domain: organizationsPublic.domain,
+      description: organizationsPublic.description,
+    })
+    .from(collectionMembers)
+    .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+    .where(eq(collectionMembers.collectionId, collection.id))
+    .orderBy(collectionMembers.position, organizationsPublic.name);
+
+  const lines: string[] = [];
+  lines.push(`**Collection: ${collection.name}**`);
+  lines.push(`Slug: ${collection.slug}`);
+  if (collection.description) lines.push(`Description: ${collection.description}`);
+  lines.push("");
+  if (orgs.length === 0) {
+    lines.push("Members: none");
+  } else {
+    const noun = orgs.length === 1 ? "org" : "orgs";
+    lines.push(`Members (${orgs.length} ${noun}):`);
+    for (const o of orgs) {
+      const tail = o.domain ? ` — ${o.domain}` : "";
+      lines.push(`- **${o.name}** (${o.slug})${tail}`);
+      if (o.description) lines.push(`  ${o.description}`);
+    }
+  }
+  return text(lines.join("\n"));
+}
+
+export async function getCollectionReleases(
+  db: D1Db,
+  params: {
+    slug: string;
+    limit?: number;
+    cursor?: string;
+    include_prereleases?: boolean;
+  },
+): Promise<ToolResult> {
+  const slug = params.slug.trim();
+  const limit = parseFeedLimit(params.limit ?? 20);
+
+  const [collection] = await db
+    .select({ id: collections.id, name: collections.name })
+    .from(collections)
+    .where(eq(collections.slug, slug));
+  if (!collection) return text(`No collection found with slug "${slug}".`);
+
+  // Visible-orgs only (matches the REST surface).
+  const memberRows = await db
+    .select({ orgId: organizationsPublic.id })
+    .from(collectionMembers)
+    .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+    .where(eq(collectionMembers.collectionId, collection.id));
+  const orgIds = memberRows.map((m) => m.orgId);
+
+  if (orgIds.length === 0) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `Collection "${collection.name}" has no visible member orgs yet.`,
+        },
+      ],
+      _meta: {
+        pagination: buildCursorMeta({ returned: 0, limit, hasMore: false, nextCursor: null }),
+      },
+    };
+  }
+
+  const conditions = [
+    inArray(sources.orgId, orgIds),
+    sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
+    sql`(${releasesVisible.suppressed} IS NULL OR ${releasesVisible.suppressed} = 0)`,
+  ];
+  if (params.include_prereleases !== true) {
+    conditions.push(
+      sql`(${releasesVisible.prerelease} IS NULL OR ${releasesVisible.prerelease} = 0)`,
+    );
+  }
+
+  // Reuse the MCP cursor format (lastPublishedAt|lastId, base64) so all feed
+  // tools share one encoding. The REST surface uses a richer 3-part cursor
+  // for tie-breaking on fetched_at, but we don't expose that complexity here.
+  if (params.cursor) {
+    const decoded = decodeReleaseCursor(params.cursor);
+    if (decoded) {
+      const cursorClause = decoded.lastPublishedAt
+        ? or(
+            lt(releasesVisible.publishedAt, decoded.lastPublishedAt),
+            and(
+              eq(releasesVisible.publishedAt, decoded.lastPublishedAt),
+              lt(releasesVisible.id, decoded.lastId),
+            ),
+          )
+        : lt(releasesVisible.id, decoded.lastId);
+      if (cursorClause) conditions.push(cursorClause);
+    }
+  }
+
+  const rows = await db
+    .select({
+      id: releasesVisible.id,
+      title: releasesVisible.title,
+      version: releasesVisible.version,
+      type: releasesVisible.type,
+      content: releasesVisible.content,
+      contentSummary: releasesVisible.contentSummary,
+      publishedAt: releasesVisible.publishedAt,
+      sourceName: sources.name,
+      sourceSlug: sources.slug,
+      orgSlug: organizations.slug,
+      orgName: organizations.name,
+    })
+    .from(releasesVisible)
+    .innerJoin(sources, eq(releasesVisible.sourceId, sources.id))
+    .innerJoin(organizations, eq(sources.orgId, organizations.id))
+    .where(and(...conditions))
+    .orderBy(desc(releasesVisible.publishedAt), desc(releasesVisible.id))
+    .limit(limit + 1);
+
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+  let nextCursor: string | null = null;
+  if (hasMore && pageRows.length > 0) {
+    const last = pageRows[pageRows.length - 1];
+    nextCursor = encodeReleaseCursor({
+      lastPublishedAt: last.publishedAt ?? null,
+      lastId: last.id,
+    });
+  }
+
+  const cursorMeta = buildCursorMeta({
+    returned: pageRows.length,
+    limit,
+    hasMore,
+    nextCursor,
+  });
+
+  if (pageRows.length === 0) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: `No releases yet in collection "${collection.name}".`,
+        },
+      ],
+      _meta: { pagination: cursorMeta },
+    };
+  }
+
+  const body = pageRows
+    .map((r) => {
+      const preview = (r.contentSummary || r.content).slice(0, 500);
+      const titleLine = r.type === "rollup" ? `**${r.title}** _(rollup)_` : `**${r.title}**`;
+      const srcCoord = `${r.orgSlug}/${r.sourceSlug}`;
+      return [
+        titleLine,
+        `Org: ${r.orgName} (${r.orgSlug}) | Source: ${r.sourceName} (${srcCoord}) | Version: ${r.version ?? "N/A"} | Date: ${r.publishedAt ?? "N/A"}`,
+        preview,
+      ].join("\n");
+    })
+    .join("\n\n---\n\n");
+
+  const footer = hasMore
+    ? `\n\n_Showing ${pageRows.length} of more. Pass \`cursor: "${nextCursor}", limit: ${limit}\` to continue._`
+    : "";
+
+  return {
+    content: [{ type: "text" as const, text: body + footer }],
+    _meta: { pagination: cursorMeta },
+  };
+}
+
+/**
+ * Collections this org is a member of, ordered by collection name. Hidden
+ * orgs (e.g. on_demand) never appear in any collection's visible member list,
+ * but a curated org may still join multiple collections — list them so callers
+ * can see overlap.
+ */
+export async function getCollectionsForOrg(
+  db: D1Db,
+  orgId: string,
+): Promise<{ slug: string; name: string }[]> {
+  return db
+    .select({ slug: collections.slug, name: collections.name })
+    .from(collectionMembers)
+    .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
+    .where(eq(collectionMembers.orgId, orgId))
+    .orderBy(collections.name);
 }

@@ -28,7 +28,7 @@ export interface McpPaginationMeta {
   nextPage?: number;
 }
 
-export type ListNoun = "sources" | "organizations" | "products" | "catalog entries";
+export type ListNoun = "sources" | "organizations" | "products" | "catalog entries" | "collections";
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;

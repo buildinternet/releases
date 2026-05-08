@@ -46,11 +46,14 @@ describe("MCP tool annotations", () => {
     const names = tools.map((t) => t.name).toSorted();
     expect(names).toEqual([
       "get_catalog_entry",
+      "get_collection",
+      "get_collection_releases",
       "get_latest_releases",
       "get_organization",
       "get_product",
       "get_release",
       "list_catalog",
+      "list_collections",
       "list_organizations",
       "list_products",
       "list_sources",
