@@ -18,7 +18,7 @@ import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { regeneratePlaybook } from "../playbook-regen.js";
 import { embedSourceSideEffect } from "../routes/sources.js";
 import { fetchOne, embedReleasesForSource, type FetchOneEnv } from "../cron/poll-fetch.js";
-import { getSourceMeta } from "@releases/adapters/feed.js";
+import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { logEvent } from "@releases/lib/log-event";
 
@@ -115,7 +115,7 @@ export class OnboardSourceWorkflow extends WorkflowEntrypoint<
         const meta = getSourceMeta(source);
         const serverSideFetchable =
           source.type === "feed" ||
-          source.type === "github" ||
+          isGitHubFetched(source, meta) ||
           (source.type === "scrape" && meta.feedUrl != null);
 
         if (serverSideFetchable) {
