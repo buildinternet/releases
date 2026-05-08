@@ -6,7 +6,13 @@ import { parseFeed as libParseFeed } from "@rowanmanning/feed-parser";
 
 // Re-export source-meta helpers so consumers can pull everything feed-related
 // from a single path.
-export { getSourceMeta, type SourceMetadata } from "@releases/adapters/source-meta";
+export {
+  getSourceMeta,
+  isGitHubFetched,
+  effectiveGitHubUrl,
+  synthesizeReleaseUrl,
+  type SourceMetadata,
+} from "@releases/adapters/source-meta";
 import type { SourceMetadata } from "@releases/adapters/source-meta";
 
 /**

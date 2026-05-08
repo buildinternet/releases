@@ -51,6 +51,21 @@ export interface SourceMetadata {
   changelogUrl?: string;
   changelogDetectedAt?: string;
 
+  /**
+   * Fetch override — when set, the ingest path treats this source as a GitHub
+   * coordinate even though `source.type` may be `scrape`. `source.url` stays
+   * the human-readable docs URL; `metadata.githubUrl` carries the repo URL the
+   * worker actually hits. See `docs/architecture/remote-mode.md` —
+   * "Display URL vs. fetch routing".
+   */
+  githubUrl?: string;
+  /**
+   * Optional release-URL template applied when fetching via `githubUrl`.
+   * Supports `${sourceUrl}`, `${version}`, and `${versionDashed}` placeholders.
+   * Default: `${sourceUrl}#${versionDashed}` (Mintlify anchor convention).
+   */
+  releaseUrlTemplate?: string;
+
   // Content depth assessment — set during onboarding. If "summary-only",
   // prefer enabling crawlEnabled so per-release pages are fetched during parse.
   feedContentDepth?: "full" | "summary-only";
@@ -106,4 +121,45 @@ export function getSourceMeta(source: Source): SourceMetadata {
   } catch {
     return {};
   }
+}
+
+/**
+ * True when the source is fetched from GitHub: either declared as
+ * `type: "github"` or a `scrape`/`feed` source with a `metadata.githubUrl`
+ * fetch override (#831). Single helper so dispatcher branches stay aligned.
+ */
+export function isGitHubFetched(source: Source, meta?: SourceMetadata): boolean {
+  if (source.type === "github") return true;
+  const m = meta ?? getSourceMeta(source);
+  return typeof m.githubUrl === "string" && m.githubUrl.length > 0;
+}
+
+/**
+ * Returns the URL the GitHub fetch path should hit. Prefers the metadata
+ * override when set; otherwise falls back to `source.url`.
+ */
+export function effectiveGitHubUrl(source: Source, meta?: SourceMetadata): string {
+  const m = meta ?? getSourceMeta(source);
+  return m.githubUrl ?? source.url;
+}
+
+/**
+ * Synthesize a release URL from a template. Defaults to the Mintlify-style
+ * anchor convention used by most static doc generators (`#1-2-3`). Custom
+ * templates may interpolate `${sourceUrl}`, `${version}`, and
+ * `${versionDashed}` (dots → dashes).
+ */
+export function synthesizeReleaseUrl(args: {
+  sourceUrl: string;
+  version: string;
+  template?: string;
+}): string {
+  const versionDashed = args.version.replaceAll(".", "-");
+  if (!args.template) {
+    return `${args.sourceUrl}#${versionDashed}`;
+  }
+  return args.template
+    .replaceAll("${sourceUrl}", args.sourceUrl)
+    .replaceAll("${versionDashed}", versionDashed)
+    .replaceAll("${version}", args.version);
 }

@@ -17,6 +17,9 @@ import {
   fetchAndParseFeed,
   filterByCategoryAllow,
   getSourceMeta,
+  isGitHubFetched,
+  effectiveGitHubUrl,
+  synthesizeReleaseUrl,
   FEED_4XX_INVALIDATE_THRESHOLD,
   CLEARED_FEED_FIELDS,
 } from "@releases/adapters/feed.js";
@@ -175,14 +178,16 @@ export async function queryDueSources(
 ): Promise<Source[]> {
   const notPaused = sql`${sourcesVisible.fetchPriority} != 'paused'`;
   // Include sources that have a feed URL OR are GitHub type (GitHub sources
-  // don't store a feedUrl — they use the GitHub releases API directly).
+  // don't store a feedUrl — they use the GitHub releases API directly), OR
+  // carry a `metadata.githubUrl` fetch override (#831 — scrape sources opting
+  // into the GitHub releases API while keeping a human-readable canonical URL).
   // Behind SCRAPE_CHANGE_DETECT_ENABLED (#517), also include scrape/agent
   // sources with no feedUrl — `pollOne` routes those to a detector from the
   // playbook's `fetchQuirks` (unreliable class is a no-op, so the widened
   // filter doesn't explode poll volume).
   const pollable = opts?.changeDetectEnabled
-    ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} IN ('scrape','agent'))`
-    : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github')`;
+    ? sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github' OR ${sourcesVisible.type} IN ('scrape','agent'))`
+    : sql`(json_extract(${sourcesVisible.metadata}, '$.feedUrl') IS NOT NULL OR json_extract(${sourcesVisible.metadata}, '$.githubUrl') IS NOT NULL OR ${sourcesVisible.type} = 'github')`;
 
   // Build OR conditions for each tier using sql template to avoid enum type issues
   const tierConditions = (Object.keys(TIER_INTERVALS) as PollTier[]).map((tier) => {
@@ -245,9 +250,10 @@ export async function pollOne(
   const nowIso = now.toISOString();
   const meta = getSourceMeta(source);
 
-  // GitHub sources don't have feeds to HEAD-check — mark as changed so
-  // the fetch phase always runs (dedup happens at the DB insert level)
-  if (source.type === "github") {
+  // GitHub sources (canonical or via metadata.githubUrl override) don't have
+  // feeds to HEAD-check — mark as changed so the fetch phase always runs
+  // (dedup happens at the DB insert level).
+  if (isGitHubFetched(source, meta)) {
     await db
       .update(sources)
       .set({ lastPolledAt: nowIso, changeDetectedAt: nowIso })
@@ -500,8 +506,10 @@ export async function fetchOne(
   try {
     let rawReleases: RawRelease[];
 
-    if (source.type === "github") {
-      rawReleases = await fetchGitHub(source, env.GITHUB_TOKEN);
+    if (isGitHubFetched(source, meta)) {
+      rawReleases = await fetchGitHub(source, env.GITHUB_TOKEN, {
+        repoUrl: effectiveGitHubUrl(source, meta),
+      });
     } else {
       if (!meta.feedUrl || !meta.feedType) {
         logEvent("warn", {
@@ -752,7 +760,7 @@ export async function fetchOne(
     // Refresh canonical CHANGELOG file for GitHub sources (mirrors CLI fetch step
     // in src/cli/commands/fetch.ts). Never fail the outer fetch if this errors.
     // Workflows path skips this and drives refresh + embed from separate steps.
-    if (!skipSideEffects && source.type === "github") {
+    if (!skipSideEffects && isGitHubFetched(source, meta)) {
       try {
         await refreshChangelogFile(db, source, env.GITHUB_TOKEN, env);
       } catch (err) {
@@ -962,14 +970,20 @@ export async function refreshChangelogFile(
   opts?: { skipEmbed?: boolean },
 ): Promise<{ changedFiles: ChangedChangelogFile[] }> {
   const skipEmbed = opts?.skipEmbed ?? false;
-  if (!parseOwnerRepo(source.url)) return { changedFiles: [] };
+  // Resolve the effective fetch URL (metadata.githubUrl overrides source.url
+  // for scrape sources opting into the GitHub fetch path — #831). Shadow the
+  // source object so the discovery planner sees the override without mutation.
+  const meta = getSourceMeta(source);
+  const repoUrl = effectiveGitHubUrl(source, meta);
+  if (!parseOwnerRepo(repoUrl)) return { changedFiles: [] };
+  const fetchSource: Source = repoUrl === source.url ? source : { ...source, url: repoUrl };
 
   const headers = buildGitHubHeaders(token, RELEASES_BOT_UA);
 
   // Delegate path planning to the shared planner so pnpm-workspace.yaml,
   // package.json#workspaces, and metadata.changelogPaths overrides are all
   // handled identically to what the probe endpoint reports.
-  const planned = await discoverChangelogPaths(source, headers);
+  const planned = await discoverChangelogPaths(fetchSource, headers);
   if (!planned) {
     logEvent("info", {
       component: "cron-poll-fetch",
@@ -979,8 +993,8 @@ export async function refreshChangelogFile(
     return { changedFiles: [] };
   }
 
-  const owner = parseOwnerRepo(source.url)!.owner;
-  const repo = parseOwnerRepo(source.url)!.repo;
+  const owner = parseOwnerRepo(repoUrl)!.owner;
+  const repo = parseOwnerRepo(repoUrl)!.repo;
 
   const fetchable = planned.filter((p) => p.exists).slice(0, CHANGELOG_MAX_FILES);
   let requestCount = 0;
@@ -1124,8 +1138,14 @@ export interface ChangedChangelogFile {
 
 // ── GitHub fetch (Worker-side) ──
 
-async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]> {
-  const match = source.url.match(/github\.com\/([^/]+)\/([^/]+)/);
+async function fetchGitHub(
+  source: Source,
+  token?: string,
+  opts?: { repoUrl?: string },
+): Promise<RawRelease[]> {
+  const meta = getSourceMeta(source);
+  const repoUrl = opts?.repoUrl ?? effectiveGitHubUrl(source, meta);
+  const match = repoUrl.match(/github\.com\/([^/]+)\/([^/]+)/);
   if (!match) return [];
   const [, owner, rawRepo] = match;
   const repo = rawRepo.replace(/\.git$/, "");
@@ -1153,14 +1173,28 @@ async function fetchGitHub(source: Source, token?: string): Promise<RawRelease[]
     prerelease: boolean;
   }> = await res.json();
 
-  return data.slice(0, 200).map((rel) => ({
-    version: rel.tag_name,
-    title: rel.name || rel.tag_name,
-    content: rel.body || "",
-    url: rel.html_url,
-    publishedAt: rel.published_at ? new Date(rel.published_at) : undefined,
-    prerelease: rel.prerelease === true,
-  }));
+  // Override mode: rewrite release URLs through the template so dedup against
+  // existing scrape rows lines up via UNIQUE(source_id, url). See #831.
+  const overrideMode = meta.githubUrl != null && meta.githubUrl.length > 0;
+
+  return data.slice(0, 200).map((rel) => {
+    const url =
+      overrideMode && rel.tag_name
+        ? synthesizeReleaseUrl({
+            sourceUrl: source.url,
+            version: rel.tag_name,
+            template: meta.releaseUrlTemplate,
+          })
+        : rel.html_url;
+    return {
+      version: rel.tag_name,
+      title: rel.name || rel.tag_name,
+      content: rel.body || "",
+      url,
+      publishedAt: rel.published_at ? new Date(rel.published_at) : undefined,
+      prerelease: rel.prerelease === true,
+    };
+  });
 }
 
 // ── Embedding side effects ──

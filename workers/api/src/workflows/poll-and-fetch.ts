@@ -24,7 +24,7 @@ import {
   loadPlaybookNotesForSources,
   type FetchOneEnv,
 } from "../cron/poll-fetch.js";
-import { getSourceMeta } from "@releases/adapters/feed.js";
+import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 
 /**
@@ -157,7 +157,14 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
       // hit — mirror the inline `pollAndFetch` filter. Falsy check (not `!= null`)
       // matches the gate inside fetchOne (poll-fetch.ts:446) so an empty-string
       // feedUrl can't slip past either. See #486 / #517.
-      if ((source.type === "scrape" || source.type === "agent") && !getSourceMeta(source).feedUrl) {
+      // A scrape source carrying `metadata.githubUrl` is server-side fetchable
+      // via the GitHub path even without a feedUrl, so it doesn't defer (#831).
+      const sourceMeta = getSourceMeta(source);
+      if (
+        (source.type === "scrape" || source.type === "agent") &&
+        !sourceMeta.feedUrl &&
+        !isGitHubFetched(source, sourceMeta)
+      ) {
         logEvent("info", {
           component: "poll-fetch-workflow",
           event: "defer-to-scrape-agent",
@@ -195,8 +202,9 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
 
       // Refresh GitHub CHANGELOG mirror + embed chunks. Runs in two steps so a
       // retry on embed doesn't re-fetch the repo tree. `skipEmbed` defers the
-      // embed loop to the next step.
-      if (source.type === "github") {
+      // embed loop to the next step. Also covers `metadata.githubUrl`-override
+      // scrape sources so the changelog file gets mirrored either way (#831).
+      if (isGitHubFetched(source, sourceMeta)) {
         currentStep = "refresh-changelog-file";
         const refreshResult = await step.do("refresh-changelog-file", RETRY_FETCH, async () => {
           return await refreshChangelogFile(db, source, fetchEnv.GITHUB_TOKEN, fetchEnv, {
