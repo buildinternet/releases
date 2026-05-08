@@ -125,6 +125,24 @@ export function generatePlaybookHeader(input: PlaybookInput): string {
     }
   }
 
+  // Category allowlists — shown as footnotes below the table
+  const sourcesWithCategoryAllow = [...active, ...disabled]
+    .map((s) => ({ source: s, meta: getSourceMeta(s) }))
+    .filter(({ meta }) => meta.categoryAllow && meta.categoryAllow.length > 0);
+  if (sourcesWithCategoryAllow.length > 0) {
+    lines.push(`## Category Allowlists`);
+    lines.push("");
+    lines.push(
+      `> Feed items whose \`<category>\` doesn't intersect the allowlist are dropped at ingest. Items with no category are dropped too.`,
+    );
+    lines.push("");
+    for (const { source, meta } of sourcesWithCategoryAllow) {
+      const list = meta.categoryAllow!.map((c) => `\`${c}\``).join(", ");
+      lines.push(`**${source.name}** (\`${source.slug}\`): ${list}`);
+      lines.push("");
+    }
+  }
+
   return lines.join("\n");
 }
 

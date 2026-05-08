@@ -55,6 +55,17 @@ export interface SourceMetadata {
   // prefer enabling crawlEnabled so per-release pages are fetched during parse.
   feedContentDepth?: "full" | "summary-only";
 
+  /**
+   * Optional allowlist of feed `<category>` values (or JSON-feed `tags`).
+   * When present, the cron keeps only items whose categories intersect this
+   * list (case-insensitive on label, falling back to term). Items without
+   * any category are also dropped, since this is meant for feeds that tag
+   * every entry. Useful on mixed-topic feeds where the upstream tags are
+   * reliable — e.g. OpenAI News tags entries `Product`, `Research`,
+   * `B2B Story`, etc.
+   */
+  categoryAllow?: string[];
+
   // Per-source AI guidance
   parseInstructions?: string; // freeform text appended to AI parsing prompts
 

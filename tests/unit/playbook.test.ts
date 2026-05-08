@@ -118,6 +118,33 @@ describe("generatePlaybookHeader", () => {
     expect(header).toContain("manage_source(action=edit)");
   });
 
+  it("shows categoryAllow in a separate section", () => {
+    const header = generatePlaybookHeader({
+      orgName: "Acme",
+      orgSlug: "acme",
+      sources: [
+        makeSource({
+          name: "News feed",
+          slug: "news-feed",
+          metadata: JSON.stringify({ categoryAllow: ["Product", "Release"] }),
+        }),
+      ],
+    });
+
+    expect(header).toContain("## Category Allowlists");
+    expect(header).toContain("**News feed** (`news-feed`): `Product`, `Release`");
+  });
+
+  it("omits the Category Allowlists section when no source has one configured", () => {
+    const header = generatePlaybookHeader({
+      orgName: "Acme",
+      orgSlug: "acme",
+      sources: [makeSource({})],
+    });
+
+    expect(header).not.toContain("## Category Allowlists");
+  });
+
   it("shows priority in type column for non-normal priorities", () => {
     const header = generatePlaybookHeader({
       orgName: "Acme",
