@@ -8,7 +8,7 @@ import Link from "next/link";
 import type { ReleaseItem } from "@/lib/api";
 import Image from "next/image";
 import { FallbackImage } from "./fallback-image";
-import { isOptimizableImage } from "@/lib/sanitize";
+import { EXTERNAL_UGC_REL, isOptimizableImage } from "@/lib/sanitize";
 import { SourceTypeIcon } from "./source-type-icon";
 import { markdownComponents, collapsedMarkdownComponents } from "./markdown-components";
 import { formatDate } from "@/lib/formatters";
@@ -213,7 +213,7 @@ export function ReleaseListItem({
             <a
               href={release.url}
               target="_blank"
-              rel="noopener noreferrer"
+              rel={EXTERNAL_UGC_REL}
               aria-label="Open original source"
               className="text-stone-400 dark:text-stone-500 hover:text-stone-700 dark:hover:text-stone-300 text-xs inline-flex items-center justify-center w-7 h-7 -my-2 -mx-1 rounded"
             >

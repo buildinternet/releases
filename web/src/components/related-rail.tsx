@@ -205,6 +205,8 @@ function ReleaseCard({ item, scope }: { item: RelatedReleaseItem; scope: "org" |
           alt={item.thumbnail.alt ?? ""}
           className="shrink-0 w-14 h-14 rounded-md object-cover bg-stone-100 dark:bg-stone-800"
           loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
         />
       )}
     </Link>
@@ -280,6 +282,8 @@ function SourceCard({ item, scope }: { item: RelatedSourceItem; scope: "org" | "
           alt=""
           className="shrink-0 w-14 h-14 rounded-md object-cover bg-stone-100 dark:bg-stone-800"
           loading="lazy"
+          decoding="async"
+          referrerPolicy="no-referrer"
         />
       )}
     </Link>
