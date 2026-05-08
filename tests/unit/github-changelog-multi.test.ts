@@ -1,7 +1,9 @@
 import { describe, it, expect, afterEach } from "bun:test";
 import {
   fetchChangelogFiles,
+  discoverChangelogPaths,
   parseWorkspaces,
+  parsePnpmWorkspaces,
   pickChangelogInDir,
   CHANGELOG_MAX_BYTES,
 } from "@releases/adapters/github";
@@ -203,6 +205,9 @@ describe("fetchChangelogFiles", () => {
           { name: "package.json", type: "file" },
         ]);
       }
+      if (url.endsWith("/repos/owner/repo/contents/custom/dir")) {
+        return json([{ name: "CHANGELOG.md", type: "file" }]);
+      }
       if (url.endsWith("raw.githubusercontent.com/owner/repo/HEAD/CHANGELOG.md")) {
         return text("# root");
       }
@@ -219,6 +224,32 @@ describe("fetchChangelogFiles", () => {
     );
     const paths = files.map((f) => f.path).toSorted();
     expect(paths).toEqual(["CHANGELOG.md", "custom/dir/CHANGELOG.md"]);
+  });
+
+  it("skips override entries that don't exist on HEAD", async () => {
+    installFetch((url) => {
+      if (url.endsWith("/repos/owner/repo/contents/")) {
+        return json([
+          { name: "CHANGELOG.md", type: "file" },
+          { name: "package.json", type: "file" },
+          { name: "missing", type: "dir" },
+        ]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/missing")) {
+        return json([{ name: "README.md", type: "file" }]);
+      }
+      if (url.endsWith("raw.githubusercontent.com/owner/repo/HEAD/CHANGELOG.md")) {
+        return text("# root");
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const files = await fetchChangelogFiles(
+      mkSource({
+        metadata: JSON.stringify({ changelogPaths: ["missing/CHANGELOG.md"] }),
+      }),
+    );
+    expect(files.map((f) => f.path)).toEqual(["CHANGELOG.md"]);
   });
 
   it("truncates content exceeding 1MB and flags truncated: true", async () => {
@@ -244,5 +275,153 @@ describe("fetchChangelogFiles", () => {
     installFetch(() => new Response("nope", { status: 500 }));
     const files = await fetchChangelogFiles(mkSource());
     expect(files).toEqual([]);
+  });
+});
+
+describe("parsePnpmWorkspaces", () => {
+  it("parses a flat packages list", () => {
+    const yaml = `packages:\n  - 'apps/*'\n  - "packages/*"\n  - tools/builder\n`;
+    expect(parsePnpmWorkspaces(yaml)).toEqual(["apps/*", "packages/*", "tools/builder"]);
+  });
+
+  it("ignores comments and other top-level keys", () => {
+    const yaml = `# header comment\npackages:\n  - apps/web   # inline comment\n  - apps/api\nlinkWorkspacePackages: true\n`;
+    expect(parsePnpmWorkspaces(yaml)).toEqual(["apps/web", "apps/api"]);
+  });
+
+  it("returns [] when packages key absent", () => {
+    expect(parsePnpmWorkspaces("name: solo\nversion: 1.0.0\n")).toEqual([]);
+  });
+});
+
+describe("discoverChangelogPaths", () => {
+  afterEach(() => {
+    restoreFetch();
+  });
+
+  it("reports root + per-package paths with origin tags", async () => {
+    installFetch((url) => {
+      if (url.endsWith("/repos/owner/repo/contents/")) {
+        return json([
+          { name: "CHANGELOG.md", type: "file" },
+          { name: "package.json", type: "file" },
+          { name: "packages", type: "dir" },
+        ]);
+      }
+      if (url.endsWith("raw.githubusercontent.com/owner/repo/HEAD/package.json")) {
+        return text(JSON.stringify({ workspaces: ["packages/*"] }));
+      }
+      if (url.endsWith("/repos/owner/repo/contents/packages")) {
+        return json([{ name: "alpha", type: "dir" }]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/packages/alpha")) {
+        return json([{ name: "CHANGELOG.md", type: "file" }]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const planned = await discoverChangelogPaths(mkSource());
+    expect(planned).toEqual([
+      { path: "CHANGELOG.md", origin: "root", exists: true },
+      { path: "packages/alpha/CHANGELOG.md", origin: "workspace", exists: true },
+    ]);
+  });
+
+  it("reports override entries with existence resolved via parent dir listing", async () => {
+    installFetch((url) => {
+      if (url.endsWith("/repos/owner/repo/contents/")) {
+        return json([
+          { name: "CHANGELOG.md", type: "file" },
+          { name: "real", type: "dir" },
+        ]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/real")) {
+        return json([{ name: "CHANGELOG.md", type: "file" }]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/missing")) {
+        return new Response("not found", { status: 404 });
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const planned = await discoverChangelogPaths(
+      mkSource({
+        metadata: JSON.stringify({
+          changelogPaths: ["real/CHANGELOG.md", "missing/CHANGELOG.md"],
+        }),
+      }),
+    );
+    expect(planned).toEqual([
+      { path: "CHANGELOG.md", origin: "root", exists: true },
+      { path: "real/CHANGELOG.md", origin: "override", exists: true },
+      { path: "missing/CHANGELOG.md", origin: "override", exists: false },
+    ]);
+  });
+
+  it("expands pnpm-workspace.yaml as a workspace declaration (origin: workspace)", async () => {
+    installFetch((url) => {
+      if (url.endsWith("/repos/owner/repo/contents/")) {
+        return json([
+          { name: "pnpm-workspace.yaml", type: "file" },
+          { name: "packages", type: "dir" },
+        ]);
+      }
+      if (url.endsWith("raw.githubusercontent.com/owner/repo/HEAD/pnpm-workspace.yaml")) {
+        return text("packages:\n  - 'packages/*'\n");
+      }
+      if (url.endsWith("/repos/owner/repo/contents/packages")) {
+        return json([{ name: "core", type: "dir" }]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/packages/core")) {
+        return json([{ name: "CHANGELOG.md", type: "file" }]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const planned = await discoverChangelogPaths(mkSource());
+    expect(planned).toEqual([
+      {
+        path: "packages/core/CHANGELOG.md",
+        origin: "workspace",
+        exists: true,
+      },
+    ]);
+  });
+
+  it("merges npm and pnpm workspace declarations when both are present", async () => {
+    installFetch((url) => {
+      if (url.endsWith("/repos/owner/repo/contents/")) {
+        return json([
+          { name: "package.json", type: "file" },
+          { name: "pnpm-workspace.yaml", type: "file" },
+          { name: "apps", type: "dir" },
+          { name: "packages", type: "dir" },
+        ]);
+      }
+      if (url.endsWith("raw.githubusercontent.com/owner/repo/HEAD/package.json")) {
+        return text(JSON.stringify({ workspaces: ["apps/*"] }));
+      }
+      if (url.endsWith("raw.githubusercontent.com/owner/repo/HEAD/pnpm-workspace.yaml")) {
+        return text("packages:\n  - 'packages/*'\n");
+      }
+      if (url.endsWith("/repos/owner/repo/contents/apps")) {
+        return json([{ name: "web", type: "dir" }]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/apps/web")) {
+        return json([{ name: "CHANGELOG.md", type: "file" }]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/packages")) {
+        return json([{ name: "core", type: "dir" }]);
+      }
+      if (url.endsWith("/repos/owner/repo/contents/packages/core")) {
+        return json([{ name: "CHANGELOG.md", type: "file" }]);
+      }
+      return new Response("not found", { status: 404 });
+    });
+
+    const planned = await discoverChangelogPaths(mkSource());
+    const paths = planned.map((p) => p.path).toSorted();
+    expect(paths).toEqual(["apps/web/CHANGELOG.md", "packages/core/CHANGELOG.md"]);
+    for (const p of planned) expect(p.origin).toBe("workspace");
   });
 });

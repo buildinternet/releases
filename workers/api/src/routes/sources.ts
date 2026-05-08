@@ -69,6 +69,12 @@ import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatt
 import { fetchOne } from "../cron/poll-fetch.js";
 import { getSourceMeta } from "@releases/adapters/feed.js";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
+import {
+  discoverChangelogPaths,
+  buildGitHubHeaders,
+  parseOwnerRepo,
+} from "@releases/adapters/github-discovery";
+import { RELEASES_BOT_UA } from "@releases/adapters/user-agent";
 import { isPrereleaseVersion } from "@buildinternet/releases-core/prerelease";
 import type { Env } from "../index.js";
 import {
@@ -145,7 +151,7 @@ sourceRoutes.get(
     tags: ["Sources"],
     summary: "List sources",
     description:
-      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?independent=true`. Free-text search via `?q=`.",
+      "Returns a bare array by default; pass `?envelope=true` for the paginated `{items, pagination}` shape. Filter by `?orgId=`, `?orgSlug=`, `?productSlug=`, `?type=`, `?has_feed=`, `?stale=`, `?category=`, `?independent=true`, `?hasChangelog=false` (sources with no tracked CHANGELOG file), `?minRels30d=N` (sources with at least N visible releases in the last 30 days). Free-text search via `?q=`.",
     responses: {
       200: {
         description: "Sources (bare array unless `?envelope=true`)",
@@ -192,21 +198,18 @@ sourceRoutes.get(
       return c.json(rows);
     }
 
-    // Filter by org ID
-    if (orgId) {
-      const rows = await db
-        .select()
-        .from(sources)
-        .where(eq(sources.orgId, orgId))
-        .orderBy(sources.name);
-      return c.json(rows);
-    }
-
     // Build conditions for metadata-based filters
     const conditions = [];
 
     if (independent) {
       conditions.push(isNull(sources.orgId));
+    }
+
+    // Filter by org ID. Folded into `conditions` so the new ?hasChangelog,
+    // ?minRels30d, and ?envelope filters compose with `?orgId=` instead of
+    // taking the legacy fast-path that returns a bare unfiltered array.
+    if (orgId) {
+      conditions.push(eq(sources.orgId, orgId));
     }
 
     // Resolve org by slug
@@ -291,17 +294,33 @@ sourceRoutes.get(
 
     const staleOnly = parseBoolParam(c.req.query("stale"));
 
+    // `?hasChangelog=false` filters to sources with NO row in
+    // `source_changelog_files`. The `=true` form (only sources that DO have
+    // a changelog) is intentionally not implemented — the use case is
+    // operator-driven attach workflows, not an inverse listing.
+    const missingChangelog = c.req.query("hasChangelog") === "false";
+    const minRels30dRaw = c.req.query("minRels30d");
+    let minReleasesLast30Days: number | undefined;
+    if (minRels30dRaw != null) {
+      const parsed = parseInt(minRels30dRaw, 10);
+      if (Number.isFinite(parsed) && parsed > 0) minReleasesLast30Days = parsed;
+    }
+
     const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
     const wantsEnvelope = c.req.query("envelope") === "true";
 
     const sort = parseEnumParam(c.req.query("sort"), SOURCE_SORT_FIELDS, "name");
     const dir = parseSortDir(c.req.query("dir"), "asc");
 
+    const filterOpts = {
+      includeHidden,
+      staleOnly,
+      missingChangelog,
+      minReleasesLast30Days,
+    };
     const [rows, totalItems] = await Promise.all([
-      getSourcesWithStats(db, whereClause, { limit, offset, sort, dir, includeHidden, staleOnly }),
-      wantsEnvelope
-        ? countSourcesForList(db, whereClause, { includeHidden, staleOnly })
-        : Promise.resolve(null),
+      getSourcesWithStats(db, whereClause, { limit, offset, sort, dir, ...filterOpts }),
+      wantsEnvelope ? countSourcesForList(db, whereClause, filterOpts) : Promise.resolve(null),
     ]);
 
     // Derive page from offset when caller pre-computed it — keeps the envelope's
@@ -1166,6 +1185,128 @@ sourceRoutes.patch(
   "/orgs/:orgSlug/sources/:sourceSlug/changelog/tokens",
   patchChangelogTokensHandler,
 );
+
+/**
+ * Admin-only: dry-run the CHANGELOG path discovery for a GitHub source. Runs
+ * the same planner used by the cron fetch path (root listing, every workspace
+ * declaration we recognize, override resolution) and returns the resolved
+ * path list without fetching bodies or writing to D1. Used by operators when
+ * configuring `metadata.changelogPaths` to find candidate paths before
+ * committing to an override.
+ *
+ * Pre-checks the repo via `GET /repos/:owner/:repo` so a transient
+ * GitHub error (rate-limit, auth, 5xx) doesn't get reported to the operator
+ * as `200 {paths: []}` — i.e. "no changelogs found" when really we couldn't
+ * reach GitHub.
+ */
+const probeChangelogsHandler = async (c: import("hono").Context<Env>) => {
+  const db = createDb(c.env.DB);
+  const src = await resolveSourceFromContext(c, db);
+  if (!src) return c.json({ error: "not_found", message: "Source not found" }, 404);
+
+  if (src.type !== "github") {
+    return c.json(
+      {
+        error: "unsupported_source_type",
+        message: `Changelog probe is only available for GitHub sources (got type: ${src.type})`,
+      },
+      400,
+    );
+  }
+
+  const ownerRepo = parseOwnerRepo(src.url);
+  if (!ownerRepo) {
+    return c.json(
+      { error: "bad_source_url", message: `Cannot parse owner/repo from URL: ${src.url}` },
+      400,
+    );
+  }
+
+  const token = await c.env.GITHUB_TOKEN?.get();
+  const headers = buildGitHubHeaders(token, RELEASES_BOT_UA);
+
+  const repoStatus = await classifyRepoStatus(ownerRepo, headers.apiHeaders);
+  if (repoStatus.kind !== "ok") {
+    return c.json(repoStatus.body, repoStatus.status);
+  }
+
+  const planned = await discoverChangelogPaths(src, headers);
+  return c.json({
+    sourceId: src.id,
+    sourceSlug: src.slug,
+    url: src.url,
+    paths: planned ?? [],
+  });
+};
+
+/**
+ * Distinguish the four states callers care about for a probe precheck:
+ * - 404 → repo doesn't exist (probe responds 404)
+ * - 401/403 → auth/permission failure (probe responds 502)
+ * - 429 → rate-limited (probe responds 503)
+ * - 5xx / network error → upstream issue (probe responds 502)
+ *
+ * Pre-existing planner code swallows all of these into "empty result"; the
+ * probe surfaces them so an operator distinguishes "no CHANGELOG found" from
+ * "we couldn't read this repo."
+ */
+async function classifyRepoStatus(
+  ownerRepo: { owner: string; repo: string },
+  apiHeaders: Record<string, string>,
+): Promise<
+  | { kind: "ok" }
+  | { kind: "fail"; status: 404 | 502 | 503; body: { error: string; message: string } }
+> {
+  const { owner, repo } = ownerRepo;
+  let res: Response;
+  try {
+    res = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: apiHeaders });
+  } catch (err) {
+    return {
+      kind: "fail",
+      status: 502,
+      body: {
+        error: "github_upstream_error",
+        message: `GitHub network error: ${err instanceof Error ? err.message : String(err)}`,
+      },
+    };
+  }
+  if (res.ok) return { kind: "ok" };
+  if (res.status === 404) {
+    return {
+      kind: "fail",
+      status: 404,
+      body: { error: "repo_not_found", message: `${owner}/${repo} not found on GitHub` },
+    };
+  }
+  if (res.status === 401 || res.status === 403) {
+    return {
+      kind: "fail",
+      status: 502,
+      body: {
+        error: "github_auth_error",
+        message: `GitHub returned ${res.status} for ${owner}/${repo}`,
+      },
+    };
+  }
+  if (res.status === 429) {
+    return {
+      kind: "fail",
+      status: 503,
+      body: { error: "github_rate_limited", message: "GitHub rate limit exceeded" },
+    };
+  }
+  return {
+    kind: "fail",
+    status: 502,
+    body: {
+      error: "github_upstream_error",
+      message: `GitHub returned ${res.status} for ${owner}/${repo}`,
+    },
+  };
+}
+sourceRoutes.post("/sources/:slug/changelog/probe", probeChangelogsHandler);
+sourceRoutes.post("/orgs/:orgSlug/sources/:sourceSlug/changelog/probe", probeChangelogsHandler);
 
 // Registered at both `/sources/:slug` (id-or-slug, id preferred) and
 // `/orgs/:orgSlug/sources/:sourceSlug` (org-scoped, both segments id-or-slug).
