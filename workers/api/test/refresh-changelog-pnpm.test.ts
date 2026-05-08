@@ -16,10 +16,11 @@ import { refreshChangelogFile } from "../src/cron/poll-fetch.js";
 // ── fetch mock ──────────────────────────────────────────────────────────────
 
 type FetchHandler = (url: string) => Response | Promise<Response>;
-let originalFetch: typeof fetch;
+// Capture the real fetch at module load so restoreFetch can never roll back
+// to a mock or to undefined if a test throws before installFetch runs.
+const originalFetch: typeof fetch = globalThis.fetch;
 
 function installFetch(handler: FetchHandler) {
-  originalFetch = globalThis.fetch;
   (globalThis as { fetch: typeof fetch }).fetch = (async (
     input: RequestInfo | URL,
   ): Promise<Response> => {
