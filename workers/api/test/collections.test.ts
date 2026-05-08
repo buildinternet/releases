@@ -223,6 +223,22 @@ describe("collections", () => {
     expect(body.releases).toEqual([]);
     expect(body.pagination.nextCursor).toBeNull();
   });
+
+  it("honors markdown negotiation for empty-membership collections", async () => {
+    const db = mkDb();
+    await seed(db);
+    const fetch = mkApp(db);
+    const res = await fetch(
+      new Request("http://test/v1/collections/test-empty-set/releases", {
+        headers: { accept: "text/markdown" },
+      }),
+    );
+    expect(res.status).toBe(200);
+    expect(res.headers.get("Content-Type")).toContain("text/markdown");
+    const body = await res.text();
+    expect(body).toContain("collection: test-empty-set");
+    expect(body).toContain("release_count: 0");
+  });
 });
 
 const json = (method: string, body: unknown) => ({

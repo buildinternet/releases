@@ -208,11 +208,10 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
     .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
     .where(eq(collectionMembers.collectionId, collection.id));
 
+  // `getCollectionReleasesFeed` short-circuits on an empty orgIds list, so an
+  // empty-membership collection flows through the same response path as a
+  // populated one and honors `Accept: text/markdown` via wantsMarkdown below.
   const orgIds = memberRows.map((m) => m.orgId);
-  if (orgIds.length === 0) {
-    return c.json({ releases: [], pagination: { nextCursor: null, limit } });
-  }
-
   const results = await getCollectionReleasesFeed(db, orgIds, cursorParam, limit + 1, {
     includePrereleases,
   });
