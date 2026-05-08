@@ -116,10 +116,9 @@ describe("collections", () => {
     // Filter past the seed migration's `frontier-ai-labs` row so the
     // assertion isn't coupled to its membership count.
     const ours = body.filter((c: { slug: string }) => c.slug.startsWith("test-"));
-    // Hidden orgs still count against memberCount (join is to the base
-    // collection_members row), but previewMembers joins through
-    // organizations_public so on_demand / soft-deleted orgs don't surface
-    // in the visible preview.
+    // memberCount and previewMembers both join through organizations_public
+    // so on_demand / soft-deleted orgs are excluded from the count *and*
+    // hidden from the preview — "3 orgs" never disagrees with "showing 2".
     expect(ours).toEqual([
       {
         slug: "test-empty-set",
@@ -132,7 +131,7 @@ describe("collections", () => {
         slug: "test-frontier-labs",
         name: "Test Frontier Labs",
         description: null,
-        memberCount: 3,
+        memberCount: 2,
         previewMembers: [
           {
             slug: "anthropic",

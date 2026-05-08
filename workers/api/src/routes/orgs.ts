@@ -747,8 +747,11 @@ orgRoutes.get("/orgs/:slug/collections", async (c) => {
       slug: collections.slug,
       name: collections.name,
       description: collections.description,
+      // Count visible members only — joining through organizations_public
+      // matches /v1/collections so the count and the rendered list agree.
       memberCount: sql<number>`(
         SELECT COUNT(*) FROM ${collectionMembers} cm
+        INNER JOIN organizations_public op ON op.id = cm.org_id
         WHERE cm.collection_id = ${collections.id}
       )`,
     })

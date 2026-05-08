@@ -1,12 +1,11 @@
 import { Hono } from "hono";
-import { eq, and, inArray, isNull, count } from "drizzle-orm";
+import { eq, and, inArray, isNull, count, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   collections,
   collectionMembers,
   organizations,
   organizationsPublic,
-  orgAccounts,
 } from "@buildinternet/releases-core/schema";
 import { newCollectionId } from "@buildinternet/releases-core/id";
 import { toSlug } from "@buildinternet/releases-core/slug";
@@ -129,22 +128,34 @@ async function resolveOrgIdsBatch(
 collectionRoutes.get("/collections", async (c) => {
   const db = createDb(c.env.DB);
 
+  // Pick a single deterministic github handle per org via correlated subquery
+  // so a multi-handle org doesn't fan out the JOIN. `org_accounts` only
+  // enforces UNIQUE(platform, handle) globally — not per (org, platform).
+  const githubHandleSql = sql<string | null>`(
+    SELECT handle FROM org_accounts
+    WHERE org_id = ${organizationsPublic.id} AND platform = 'github'
+    ORDER BY created_at, id LIMIT 1
+  )`;
+
   const [countRows, memberRows] = await Promise.all([
+    // memberCount counts publicly visible members only — joining through
+    // organizations_public hides on_demand / soft-deleted orgs from the
+    // tally, matching what GET /v1/collections/:slug returns.
     db
       .select({
         slug: collections.slug,
         name: collections.name,
         description: collections.description,
-        memberCount: count(collectionMembers.orgId),
+        memberCount: count(organizationsPublic.id),
       })
       .from(collections)
       .leftJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
+      .leftJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
       .groupBy(collections.id)
       .orderBy(collections.name),
 
-    // All members joined with org + github handle. Fan-out is bounded by total
-    // (collections × members) and collections are small (<10 orgs typical), so
-    // grouping client-side is cheaper than a window-function query.
+    // Members joined with org + github handle. Collections are small (<10 orgs
+    // typical), so grouping client-side is cheaper than a window-function query.
     db
       .select({
         collectionSlug: collections.slug,
@@ -154,15 +165,11 @@ collectionRoutes.get("/collections", async (c) => {
         domain: organizationsPublic.domain,
         avatarUrl: organizationsPublic.avatarUrl,
         description: organizationsPublic.description,
-        githubHandle: orgAccounts.handle,
+        githubHandle: githubHandleSql,
       })
       .from(collectionMembers)
       .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
       .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-      .leftJoin(
-        orgAccounts,
-        and(eq(orgAccounts.orgId, organizationsPublic.id), eq(orgAccounts.platform, "github")),
-      )
       .orderBy(collectionMembers.position, organizationsPublic.name),
   ]);
 
@@ -204,9 +211,9 @@ collectionRoutes.get("/collections/:slug", async (c) => {
 
   // Join to organizations_public so soft-deleted / on_demand orgs never leak
   // through a collection (curators shouldn't be able to surface a hidden org
-  // by adding it to one). LEFT JOIN org_accounts so the avatar fallback can
-  // resolve `https://github.com/<handle>.png` for orgs without a stored
-  // avatarUrl — matches the org page's behavior.
+  // by adding it to one). The github handle is pulled via correlated subquery
+  // — a LEFT JOIN on org_accounts would fan out members for orgs with multiple
+  // github rows, since the table only enforces UNIQUE(platform, handle).
   const orgs = await db
     .select({
       slug: organizationsPublic.slug,
@@ -214,14 +221,14 @@ collectionRoutes.get("/collections/:slug", async (c) => {
       domain: organizationsPublic.domain,
       avatarUrl: organizationsPublic.avatarUrl,
       description: organizationsPublic.description,
-      githubHandle: orgAccounts.handle,
+      githubHandle: sql<string | null>`(
+        SELECT handle FROM org_accounts
+        WHERE org_id = ${organizationsPublic.id} AND platform = 'github'
+        ORDER BY created_at, id LIMIT 1
+      )`,
     })
     .from(collectionMembers)
     .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
-    .leftJoin(
-      orgAccounts,
-      and(eq(orgAccounts.orgId, organizationsPublic.id), eq(orgAccounts.platform, "github")),
-    )
     .where(eq(collectionMembers.collectionId, collection.id))
     .orderBy(collectionMembers.position, organizationsPublic.name);
 
