@@ -6,7 +6,7 @@ import { Header } from "@/components/header";
 import { SearchBar } from "@/components/search-bar";
 import { SetupMessage } from "@/components/setup-message";
 import { OrgTable } from "@/components/org-table";
-import { InstallTabs } from "@/components/install-tabs";
+import { InstallStepsInline, InstallStepsSidebar } from "@/components/install-steps";
 import { ShippingNowTicker } from "@/components/shipping-now-ticker";
 
 type TickerItem = HomepageTickerQuery["latestReleases"]["items"][number];
@@ -80,16 +80,18 @@ export default async function HomePage() {
             releases
           </span>
         </div>
-        <div className="mt-8">
-          <div className="text-[11px] font-semibold uppercase tracking-wider text-stone-400 dark:text-stone-500 mb-3">
-            Get Started
-          </div>
-          <InstallTabs />
+        <div className="mt-8 xl:hidden">
+          <InstallStepsInline />
         </div>
       </div>
       {latest.length > 0 && <ShippingNowTicker releases={latest} />}
-      <div className="max-w-4xl mx-auto px-6 pb-12">
-        {orgs && orgs.length > 0 && <OrgTable orgs={orgs} />}
+      <div className="max-w-[1240px] mx-auto px-6 pb-12 xl:grid xl:grid-cols-[minmax(0,1fr)_320px] xl:gap-12">
+        <aside className="hidden xl:block xl:order-2 xl:pt-2">
+          <InstallStepsSidebar />
+        </aside>
+        <div className="xl:order-1 max-w-4xl xl:max-w-none w-full mx-auto">
+          {orgs && orgs.length > 0 && <OrgTable orgs={orgs} />}
+        </div>
       </div>
     </div>
   );
