@@ -299,6 +299,8 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
     prerelease: r.prerelease === 1,
     source: { slug: r.source_slug, name: r.source_name, type: r.source_type },
     org: { slug: r.org_slug, name: r.org_name },
+    product:
+      r.product_slug && r.product_name ? { slug: r.product_slug, name: r.product_name } : null,
   }));
 
   const pagination = { nextCursor, limit };

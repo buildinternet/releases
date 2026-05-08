@@ -380,6 +380,8 @@ export async function getOrgReleasesFeed(
 export type CollectionReleaseRow = OrgReleaseRow & {
   org_slug: string;
   org_name: string;
+  product_slug: string | null;
+  product_name: string | null;
 };
 
 // Drizzle-flavored mirror of `parseFeedCursor` — the collection feed uses the
@@ -430,10 +432,12 @@ export async function getCollectionReleasesFeed(
     SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
-           o.slug AS org_slug, o.name AS org_name
+           o.slug AS org_slug, o.name AS org_name,
+           p.slug AS product_slug, p.name AS product_name
     FROM releases_visible r
     INNER JOIN sources_active s ON s.id = r.source_id
     INNER JOIN organizations_active o ON o.id = s.org_id
+    LEFT JOIN products p ON p.id = s.product_id
     WHERE s.org_id IN ${orgIds}
       AND (r.suppressed IS NULL OR r.suppressed = 0)
       ${prereleaseWhere}
