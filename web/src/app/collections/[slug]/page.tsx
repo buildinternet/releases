@@ -71,7 +71,9 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
             Home
           </Link>
           <span className="mx-1.5">/</span>
-          <span className="text-stone-400 dark:text-stone-500">Collections</span>
+          <Link href="/collections" className="hover:text-stone-600 dark:hover:text-stone-300">
+            Collections
+          </Link>
           <span className="mx-1.5">/</span>
           <span className="text-stone-600 dark:text-stone-300 font-medium">{detail.name}</span>
         </div>
@@ -97,7 +99,7 @@ export default async function CollectionPage({ params }: { params: Promise<{ slu
                 >
                   <OrgAvatar
                     avatarUrl={org.avatarUrl}
-                    githubHandle={null}
+                    githubHandle={org.githubHandle}
                     name={org.name}
                     size={20}
                   />

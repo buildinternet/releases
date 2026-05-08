@@ -116,15 +116,40 @@ describe("collections", () => {
     // Filter past the seed migration's `frontier-ai-labs` row so the
     // assertion isn't coupled to its membership count.
     const ours = body.filter((c: { slug: string }) => c.slug.startsWith("test-"));
+    // memberCount and previewMembers both join through organizations_public
+    // so on_demand / soft-deleted orgs are excluded from the count *and*
+    // hidden from the preview — "3 orgs" never disagrees with "showing 2".
     expect(ours).toEqual([
-      // Hidden orgs still count against memberCount — the join is to the
-      // base collection_members row, not the visibility-filtered org view.
-      { slug: "test-empty-set", name: "Test Empty Set", description: null, memberCount: 0 },
+      {
+        slug: "test-empty-set",
+        name: "Test Empty Set",
+        description: null,
+        memberCount: 0,
+        previewMembers: [],
+      },
       {
         slug: "test-frontier-labs",
         name: "Test Frontier Labs",
         description: null,
-        memberCount: 3,
+        memberCount: 2,
+        previewMembers: [
+          {
+            slug: "anthropic",
+            name: "Anthropic",
+            domain: null,
+            avatarUrl: null,
+            githubHandle: null,
+            description: null,
+          },
+          {
+            slug: "openai",
+            name: "OpenAI",
+            domain: null,
+            avatarUrl: null,
+            githubHandle: null,
+            description: null,
+          },
+        ],
       },
     ]);
   });

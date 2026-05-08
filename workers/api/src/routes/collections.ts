@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { eq, and, inArray, isNull, count } from "drizzle-orm";
+import { eq, and, inArray, isNull, count, sql } from "drizzle-orm";
 import { createDb } from "../db.js";
 import {
   collections,
@@ -127,23 +127,75 @@ async function resolveOrgIdsBatch(
 
 collectionRoutes.get("/collections", async (c) => {
   const db = createDb(c.env.DB);
-  const rows = await db
-    .select({
-      slug: collections.slug,
-      name: collections.name,
-      description: collections.description,
-      memberCount: count(collectionMembers.orgId),
-    })
-    .from(collections)
-    .leftJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
-    .groupBy(collections.id)
-    .orderBy(collections.name);
 
-  const body: CollectionListItem[] = rows.map((r) => ({
+  // Pick a single deterministic github handle per org via correlated subquery
+  // so a multi-handle org doesn't fan out the JOIN. `org_accounts` only
+  // enforces UNIQUE(platform, handle) globally — not per (org, platform).
+  const githubHandleSql = sql<string | null>`(
+    SELECT handle FROM org_accounts
+    WHERE org_id = ${organizationsPublic.id} AND platform = 'github'
+    ORDER BY created_at, id LIMIT 1
+  )`;
+
+  const [countRows, memberRows] = await Promise.all([
+    // memberCount counts publicly visible members only — joining through
+    // organizations_public hides on_demand / soft-deleted orgs from the
+    // tally, matching what GET /v1/collections/:slug returns.
+    db
+      .select({
+        slug: collections.slug,
+        name: collections.name,
+        description: collections.description,
+        memberCount: count(organizationsPublic.id),
+      })
+      .from(collections)
+      .leftJoin(collectionMembers, eq(collectionMembers.collectionId, collections.id))
+      .leftJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+      .groupBy(collections.id)
+      .orderBy(collections.name),
+
+    // Members joined with org + github handle. Collections are small (<10 orgs
+    // typical), so grouping client-side is cheaper than a window-function query.
+    db
+      .select({
+        collectionSlug: collections.slug,
+        position: collectionMembers.position,
+        slug: organizationsPublic.slug,
+        name: organizationsPublic.name,
+        domain: organizationsPublic.domain,
+        avatarUrl: organizationsPublic.avatarUrl,
+        description: organizationsPublic.description,
+        githubHandle: githubHandleSql,
+      })
+      .from(collectionMembers)
+      .innerJoin(collections, eq(collections.id, collectionMembers.collectionId))
+      .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))
+      .orderBy(collectionMembers.position, organizationsPublic.name),
+  ]);
+
+  const previewBySlug = new Map<string, CollectionListItem["previewMembers"]>();
+  const PREVIEW_LIMIT = 3;
+  for (const m of memberRows) {
+    const arr = previewBySlug.get(m.collectionSlug) ?? [];
+    if (arr.length < PREVIEW_LIMIT) {
+      arr.push({
+        slug: m.slug,
+        name: m.name,
+        domain: m.domain,
+        avatarUrl: m.avatarUrl,
+        githubHandle: m.githubHandle,
+        description: m.description,
+      });
+      previewBySlug.set(m.collectionSlug, arr);
+    }
+  }
+
+  const body: CollectionListItem[] = countRows.map((r) => ({
     slug: r.slug,
     name: r.name,
     description: r.description,
     memberCount: Number(r.memberCount),
+    previewMembers: previewBySlug.get(r.slug) ?? [],
   }));
   return c.json(body);
 });
@@ -159,7 +211,9 @@ collectionRoutes.get("/collections/:slug", async (c) => {
 
   // Join to organizations_public so soft-deleted / on_demand orgs never leak
   // through a collection (curators shouldn't be able to surface a hidden org
-  // by adding it to one).
+  // by adding it to one). The github handle is pulled via correlated subquery
+  // — a LEFT JOIN on org_accounts would fan out members for orgs with multiple
+  // github rows, since the table only enforces UNIQUE(platform, handle).
   const orgs = await db
     .select({
       slug: organizationsPublic.slug,
@@ -167,6 +221,11 @@ collectionRoutes.get("/collections/:slug", async (c) => {
       domain: organizationsPublic.domain,
       avatarUrl: organizationsPublic.avatarUrl,
       description: organizationsPublic.description,
+      githubHandle: sql<string | null>`(
+        SELECT handle FROM org_accounts
+        WHERE org_id = ${organizationsPublic.id} AND platform = 'github'
+        ORDER BY created_at, id LIMIT 1
+      )`,
     })
     .from(collectionMembers)
     .innerJoin(organizationsPublic, eq(organizationsPublic.id, collectionMembers.orgId))

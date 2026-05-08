@@ -685,15 +685,19 @@ export interface CollectionMemberOrg {
   name: string;
   domain: string | null;
   avatarUrl: string | null;
+  /** GitHub handle from org_accounts; lets the avatar fall back to github.com/<handle>.png. */
+  githubHandle: string | null;
   description: string | null;
 }
 
-/** Item shape on GET /v1/collections (list). */
+/** Item shape on GET /v1/collections (list) and GET /v1/orgs/:slug/collections. */
 export interface CollectionListItem {
   slug: string;
   name: string;
   description: string | null;
   memberCount: number;
+  /** First few members for inline preview on the list page (capped at 3). */
+  previewMembers?: CollectionMemberOrg[];
 }
 
 /** Detail shape on GET /v1/collections/:slug. */

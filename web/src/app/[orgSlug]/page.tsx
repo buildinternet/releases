@@ -2,7 +2,14 @@ import { cache } from "react";
 import { safeStringifyJsonLd } from "@/lib/json-ld";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
-import { api, adminApi, ApiSetupError, type OrgHeatmap, type OrgReleasesResponse } from "@/lib/api";
+import {
+  api,
+  adminApi,
+  ApiSetupError,
+  type OrgHeatmap,
+  type OrgReleasesResponse,
+  type CollectionListItem,
+} from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
 import { Sidebar } from "@/components/sidebar";
@@ -16,7 +23,7 @@ import { PlaybookView } from "@/components/playbook-view";
 import { OrgFetchLogView } from "@/components/org-fetch-log-view";
 import { SourceTable } from "@/components/source-table";
 import { CliCommand } from "@/components/cli-command";
-import { taxonomySidebarSections } from "@/components/taxonomy-chips";
+import { taxonomySidebarSections, TaxonomyChips } from "@/components/taxonomy-chips";
 
 const getOrg = cache((slug: string) => api.orgDetail(slug));
 
@@ -58,6 +65,8 @@ export default async function OrgPage({
   const twoYearsAgo = new Date();
   twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
   const activityFrom = twoYearsAgo.toISOString().slice(0, 10);
+
+  const collectionsP = api.orgCollections(orgSlug).catch(() => [] as CollectionListItem[]);
 
   let org;
   let activity;
@@ -105,11 +114,31 @@ export default async function OrgPage({
       : null;
   const hasPlaybook = process.env.NODE_ENV === "development" && !!playbook;
 
+  const collections = await collectionsP;
   const sidebarSections = [
     {
       items: org.domain ? [{ label: "Domain", value: org.domain }] : [],
     },
     ...taxonomySidebarSections({ category: org.category, tags: org.tags }),
+    ...(collections.length > 0
+      ? [
+          {
+            items: [
+              {
+                label: "Featured in",
+                value: (
+                  <TaxonomyChips
+                    items={collections.map((c) => ({
+                      label: c.name,
+                      href: `/collections/${c.slug}`,
+                    }))}
+                  />
+                ),
+              },
+            ],
+          },
+        ]
+      : []),
   ];
 
   const orgUrl = `https://releases.sh/${orgSlug}`;
