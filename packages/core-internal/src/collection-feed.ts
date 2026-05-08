@@ -50,10 +50,19 @@ export function buildFeedCursor(last: {
  * used by single-source / single-org feeds, so the same web cursor parser
  * works on every surface.
  *
+ * The ORDER BY puts non-null `published_at` rows before nulls (see CASE
+ * expression in {@link getCollectionReleasesFeed}), so the null-tail rules
+ * differ by which side the cursor sits on:
+ *
+ * - Dated cursor (`pub|fet|id`, `pub|id`, or `pub`): match any null-published
+ *   row plus any dated row that lex-sorts after the cursor. Without the
+ *   `r.published_at IS NULL OR …` arm, paginating past the last dated row
+ *   would silently drop every undated release.
+ * - Null-tail cursor (`|fet|id`, `|id`): restrict to null-published rows —
+ *   every dated row already came before the cursor in the ORDER BY.
+ *
  * Legacy 2-part `publishedAt|id` cursors from in-flight paginators still
- * parse (degrade to the prior tie-break-on-id shape). The null-published
- * tail uses `AND r.published_at IS NULL` so non-null rows already shown on
- * earlier pages don't reappear at the boundary.
+ * parse (they degrade to the prior tie-break-on-id shape).
  */
 function feedCursorSql(cursorParam: string | null): SQL {
   if (!cursorParam) return sql``;
@@ -62,7 +71,7 @@ function feedCursorSql(cursorParam: string | null): SQL {
   if (parts.length === 3) {
     const [pub, fet, id] = parts;
     if (pub && fet && id) {
-      return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.fetched_at < ${fet}) OR (r.published_at = ${pub} AND r.fetched_at = ${fet} AND r.id < ${id}))`;
+      return sql`AND (r.published_at IS NULL OR (r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.fetched_at < ${fet}) OR (r.published_at = ${pub} AND r.fetched_at = ${fet} AND r.id < ${id}))`;
     }
     if (!pub && fet && id) {
       return sql`AND (r.published_at IS NULL AND ((r.fetched_at < ${fet}) OR (r.fetched_at = ${fet} AND r.id < ${id})))`;
@@ -72,7 +81,7 @@ function feedCursorSql(cursorParam: string | null): SQL {
   if (parts.length === 2) {
     const [pub, id] = parts;
     if (pub && id) {
-      return sql`AND ((r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.id < ${id}))`;
+      return sql`AND (r.published_at IS NULL OR (r.published_at < ${pub}) OR (r.published_at = ${pub} AND r.id < ${id}))`;
     }
     // Legacy `|id` shape — no fetched_at to tie-break on, so accept any
     // null-published row whose id is smaller. Slightly weaker than the
@@ -80,7 +89,9 @@ function feedCursorSql(cursorParam: string | null): SQL {
     if (!pub && id) return sql`AND (r.published_at IS NULL AND r.id < ${id})`;
   }
 
-  if (parts.length === 1 && parts[0]) return sql`AND r.published_at < ${parts[0]}`;
+  if (parts.length === 1 && parts[0]) {
+    return sql`AND (r.published_at IS NULL OR r.published_at < ${parts[0]})`;
+  }
   return sql``;
 }
 

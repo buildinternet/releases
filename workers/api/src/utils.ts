@@ -389,9 +389,14 @@ export { buildFeedCursor } from "@releases/core-internal/collection-feed";
  * `publishedAt` empty when null. Encodes the full sort key so
  * same-`publishedAt` ties tie-break on `fetched_at` then `id`, matching the
  * ORDER BY. Legacy 2-part `publishedAt|id` cursors from in-flight paginators
- * still parse (degrade to the prior tie-break-on-id shape). The
- * null-published tail uses `AND r.published_at IS NULL` so non-null rows
- * already shown on earlier pages don't reappear at the boundary.
+ * still parse (degrade to the prior tie-break-on-id shape).
+ *
+ * The ORDER BY puts non-null `published_at` rows before nulls, so:
+ * - Dated cursor: also matches `r.published_at IS NULL` (otherwise
+ *   pagination silently drops every undated release once it crosses the
+ *   dated boundary).
+ * - Null-tail cursor: scoped to `r.published_at IS NULL` (non-null rows
+ *   already came before this cursor in the ORDER BY).
  */
 export function parseFeedCursor(cursorParam: string | null): {
   cursorWhere: string;
@@ -405,7 +410,8 @@ export function parseFeedCursor(cursorParam: string | null): {
     if (pub && fet && id) {
       return {
         cursorWhere:
-          "AND ((r.published_at < ?) OR " +
+          "AND (r.published_at IS NULL OR " +
+          "(r.published_at < ?) OR " +
           "(r.published_at = ? AND r.fetched_at < ?) OR " +
           "(r.published_at = ? AND r.fetched_at = ? AND r.id < ?))",
         cursorBindings: [pub, pub, fet, pub, fet, id],
@@ -425,7 +431,9 @@ export function parseFeedCursor(cursorParam: string | null): {
     const [pub, id] = parts;
     if (pub && id) {
       return {
-        cursorWhere: "AND ((r.published_at < ?) OR (r.published_at = ? AND r.id < ?))",
+        cursorWhere:
+          "AND (r.published_at IS NULL OR " +
+          "(r.published_at < ?) OR (r.published_at = ? AND r.id < ?))",
         cursorBindings: [pub, pub, id],
       };
     }
@@ -440,7 +448,10 @@ export function parseFeedCursor(cursorParam: string | null): {
   }
 
   if (parts.length === 1 && parts[0]) {
-    return { cursorWhere: "AND r.published_at < ?", cursorBindings: [parts[0]] };
+    return {
+      cursorWhere: "AND (r.published_at IS NULL OR r.published_at < ?)",
+      cursorBindings: [parts[0]],
+    };
   }
 
   return { cursorWhere: "", cursorBindings: [] };
