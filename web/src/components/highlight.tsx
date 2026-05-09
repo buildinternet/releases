@@ -1,6 +1,8 @@
 import type React from "react";
 import type { Element, Nodes, Parents, Root, RootContent, Text } from "hast";
-import type { Plugin } from "unified";
+
+type RehypeTransformer = (tree: Root) => void;
+type RehypePlugin<Options> = (options: Options) => RehypeTransformer;
 
 const MARK_CLASS =
   "bg-amber-200/70 dark:bg-amber-300/25 text-stone-900 dark:text-stone-100 rounded-sm px-0.5";
@@ -75,7 +77,7 @@ export function Highlight({
  * and wraps query-token matches in `<mark>`. Skips `code` and `pre` subtrees
  * so we don't gild inline code or fenced blocks.
  */
-export const rehypeHighlightTokens: Plugin<[{ tokens: string[] }], Root> = function (options) {
+export const rehypeHighlightTokens: RehypePlugin<{ tokens: string[] }> = (options) => {
   const re = buildMatcher(options.tokens);
   return (tree) => {
     if (!re) return;

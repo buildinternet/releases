@@ -4,7 +4,6 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { PluggableList } from "unified";
 import type {
   UnifiedSearchResponse,
   SearchOrgHit,
@@ -352,8 +351,13 @@ function ChunkResultCard({ hit, tokens }: { hit: SearchChunkHit; tokens: string[
   );
 }
 
-function useMarkdownHighlight(tokens: string[]): PluggableList {
-  return useMemo(() => (tokens.length ? [[rehypeHighlightTokens, { tokens }]] : []), [tokens]);
+type RehypeHighlightTuple = [typeof rehypeHighlightTokens, { tokens: string[] }];
+
+function useMarkdownHighlight(tokens: string[]) {
+  return useMemo<RehypeHighlightTuple[]>(
+    () => (tokens.length ? [[rehypeHighlightTokens, { tokens }]] : []),
+    [tokens],
+  );
 }
 
 export function SearchResults({
