@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { safeStringifyJsonLd } from "@/lib/json-ld";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 import { api, ApiSetupError } from "@/lib/api";
 import { EXTERNAL_UGC_REL } from "@/lib/sanitize";
 import { Header } from "@/components/header";
@@ -157,9 +157,11 @@ export default async function ReleaseDetailPage({ params }: { params: Promise<{ 
         {/* Header */}
         <div className="mt-6 mb-6">
           <div className="flex items-center gap-2 flex-wrap">
-            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-              {heading}
-            </h1>
+            <ViewTransition name={`rel-${id}`} default="none">
+              <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+                {heading}
+              </h1>
+            </ViewTransition>
             <RollupBadge type={release.type} />
           </div>
           {showSubtitle && (

@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { ViewTransition } from "react";
 import { SourceTypeIcon } from "./source-type-icon";
 import {
   type CadenceKey,
@@ -124,6 +125,7 @@ export function SourceCard({
   showProductBadge?: boolean;
 }) {
   const href = orgSlug ? `/${orgSlug}/${source.slug}` : `/source/${source.slug}`;
+  const transitionName = `src-${orgSlug ?? "_"}-${source.slug}`;
   const cadenceInfo = cadence ? getCadenceInfo(cadence.avgReleasesPerWeek) : null;
   const color = cadence ? getProductColor(cadence.colorIndex) : undefined;
   const capped = cadence ? cadence.totalReleaseCount >= FETCH_CAP : false;
@@ -135,9 +137,11 @@ export function SourceCard({
     >
       <div className="flex justify-between items-center">
         <div className="flex items-center gap-2">
-          <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
-            {source.name}
-          </span>
+          <ViewTransition name={transitionName} default="none">
+            <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
+              {source.name}
+            </span>
+          </ViewTransition>
           {source.isPrimary && (
             <span className="text-[10px] font-medium uppercase tracking-wide text-stone-500 dark:text-stone-400 bg-stone-100 dark:bg-stone-800 px-1.5 py-0.5 rounded">
               Primary

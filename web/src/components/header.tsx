@@ -5,7 +5,10 @@ import { GITHUB_REPO_URL, visibleNavItems } from "./nav-items";
 
 export function Header() {
   return (
-    <header className="relative border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between">
+    <header
+      className="relative border-b border-stone-200 dark:border-stone-800 px-6 py-4 flex items-center justify-between"
+      style={{ viewTransitionName: "site-header" }}
+    >
       <Link
         href="/"
         className="font-bold text-base sm:text-lg tracking-tight text-stone-900 dark:text-stone-100 flex items-center gap-2"

@@ -11,6 +11,9 @@ try {
 
 const nextConfig: NextConfig = {
   outputFileTracingRoot: path.resolve(__dirname, ".."),
+  experimental: {
+    viewTransition: true,
+  },
   transpilePackages: [
     "@buildinternet/releases-core",
     "@buildinternet/releases-api-types",

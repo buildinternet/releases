@@ -4,7 +4,10 @@ const GITHUB_REPO_URL = "https://github.com/buildinternet/releases-cli";
 
 export function Footer() {
   return (
-    <footer className="border-t border-stone-200 dark:border-stone-800 mt-auto">
+    <footer
+      className="border-t border-stone-200 dark:border-stone-800 mt-auto"
+      style={{ viewTransitionName: "site-footer" }}
+    >
       <div className="max-w-5xl mx-auto px-6 py-6 flex flex-wrap items-center justify-between gap-4 text-xs text-stone-500 dark:text-stone-400">
         <div>
           <div>
