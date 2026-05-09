@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNull, lt, not, or, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, lte, not, or, sql } from "drizzle-orm";
 import { GraphQLError } from "graphql";
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
 import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
@@ -145,6 +145,17 @@ builder.queryType({
             ? not(inArray(sources.type, args.excludeSourceTypes))
             : undefined;
 
+        // Drop releases whose upstream-supplied date is in the future. Sources
+        // occasionally publish a misdated entry (typo, scheduled-post slip);
+        // without this, the row sticks at the top of the feed until the date
+        // arrives. NULL publishedAt is preserved — those legitimately sort
+        // last and are reachable via the cursor walk.
+        const nowIso = new Date().toISOString();
+        const futureFilter = or(
+          lte(releasesVisible.publishedAt, nowIso),
+          isNull(releasesVisible.publishedAt),
+        );
+
         let orgFilter = undefined;
         if (args.orgIdOrSlug) {
           const org = isOrgId(args.orgIdOrSlug)
@@ -192,6 +203,7 @@ builder.queryType({
               isNull(sources.deletedAt),
               orgFilter,
               excludeFilter,
+              futureFilter,
               cursorFilter,
             ),
           )
