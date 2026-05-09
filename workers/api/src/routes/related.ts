@@ -69,9 +69,7 @@ interface RelatedReleaseItem {
   url: string | null;
   publishedAt: string | null;
   summary: string;
-  /** AI-generated headline (#852). Nullable; populated opportunistically. */
   contentTitle: string | null;
-  /** AI-generated smart-brevity headline (#852). */
   contentTitleShort: string | null;
   thumbnail: { url: string; alt?: string } | null;
   score: number;

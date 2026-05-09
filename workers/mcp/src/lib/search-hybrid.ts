@@ -75,9 +75,7 @@ export interface HybridReleaseHit {
     url: string | null;
     publishedAt: string | null;
     summary: string;
-    /** AI-generated headline (#852). Nullable; populated opportunistically. */
     contentTitle: string | null;
-    /** AI-generated smart-brevity headline (#852). */
     contentTitleShort: string | null;
     source: { id: string; slug: string; name: string };
     orgSlug: string | null;
@@ -167,9 +165,7 @@ interface RawReleaseRow {
   url: string | null;
   publishedAt: string | null;
   summary: string;
-  /** AI-generated headline (#852). Nullable; populated opportunistically. */
   contentTitle: string | null;
-  /** AI-generated smart-brevity headline (#852). */
   contentTitleShort: string | null;
   sourceId: string;
   sourceSlug: string;

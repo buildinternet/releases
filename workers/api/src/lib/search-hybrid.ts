@@ -96,9 +96,7 @@ export interface HybridReleaseHit {
     orgName: string | null;
     /** Release type — "feature" (default) or "rollup". */
     type: ReleaseType;
-    /** AI-generated headline (#852). Nullable; populated opportunistically. */
     contentTitle: string | null;
-    /** AI-generated smart-brevity headline (#852). */
     contentTitleShort: string | null;
   };
 }
@@ -177,9 +175,7 @@ interface RawReleaseRow {
   orgName: string | null;
   /** Release type — "feature" (default) or "rollup". */
   type: ReleaseType;
-  /** AI-generated headline (#852). Nullable; populated opportunistically. */
   contentTitle: string | null;
-  /** AI-generated smart-brevity headline (#852). */
   contentTitleShort: string | null;
 }
 
