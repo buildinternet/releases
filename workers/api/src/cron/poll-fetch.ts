@@ -1221,7 +1221,7 @@ export async function embedReleasesForSource(
         id: releases.id,
         title: releases.title,
         content: releases.content,
-        contentSummary: releases.contentSummary,
+        summary: releases.summary,
         version: releases.version,
         publishedAt: releases.publishedAt,
         sourceId: releases.sourceId,

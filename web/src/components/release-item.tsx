@@ -171,12 +171,13 @@ export function ReleaseListItem({
   const showSubtitle = hasVersion && release.title && !titleMatchesVersion;
 
   // Prefer the AI-generated smart-brevity headline as the subtitle when
-  // present (#852); fall back to the raw title in the version-prominent
-  // case. `contentTitleShort` is more informative than the raw title for
-  // most sources, so showing it whenever populated is a strict improvement.
+  // present (#852, renamed in #860); fall back to the raw title in the
+  // version-prominent case. `titleShort` is more informative than the raw
+  // title for most sources, so showing it whenever populated is a strict
+  // improvement.
   const subtitleText =
-    release.contentTitleShort?.trim() ||
-    release.contentTitle?.trim() ||
+    release.titleShort?.trim() ||
+    release.titleGenerated?.trim() ||
     (showSubtitle ? release.title : null);
 
   useEffect(() => {

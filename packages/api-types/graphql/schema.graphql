@@ -114,17 +114,28 @@ type Release {
   Full markdown body. Often large — request only when you need it (this is the field-selection win).
   """
   content: String!
-  contentSummary: String
+
+  """AI-generated summary (#852, renamed in #860). Nullable — most rows unpopulated."""
+  summary: String
 
   """
-  AI-generated self-contained news-headline form (#852). Nullable; populated opportunistically. Fall back to `title` for display.
+  AI-generated self-contained news-headline form (#852, renamed in #860). Nullable; populated opportunistically. Fall back to `title` for display.
   """
-  contentTitle: String
+  titleGenerated: String
 
   """
-  AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`.
+  AI-generated smart-brevity headline (#852, renamed in #860). Same fallback as `titleGenerated`.
   """
-  contentTitleShort: String
+  titleShort: String
+
+  """Deprecated alias for `summary`. Will be removed one minor later."""
+  contentSummary: String @deprecated(reason: "Use `summary`.")
+
+  """Deprecated alias for `titleGenerated`. Will be removed one minor later."""
+  contentTitle: String @deprecated(reason: "Use `titleGenerated`.")
+
+  """Deprecated alias for `titleShort`. Will be removed one minor later."""
+  contentTitleShort: String @deprecated(reason: "Use `titleShort`.")
   fetchedAt: DateTime!
   id: ID!
 

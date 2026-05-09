@@ -69,7 +69,11 @@ interface RelatedReleaseItem {
   url: string | null;
   publishedAt: string | null;
   summary: string;
+  titleGenerated: string | null;
+  titleShort: string | null;
+  /** @deprecated Use `titleGenerated`. */
   contentTitle: string | null;
+  /** @deprecated Use `titleShort`. */
   contentTitleShort: string | null;
   thumbnail: { url: string; alt?: string } | null;
   score: number;
@@ -211,8 +215,8 @@ async function hydrateReleaseNeighbors(
     url: string | null;
     publishedAt: string | null;
     summary: string;
-    contentTitle: string | null;
-    contentTitleShort: string | null;
+    titleGenerated: string | null;
+    titleShort: string | null;
     media: string | null;
     sourceId: string;
     sourceSlug: string;
@@ -225,9 +229,9 @@ async function hydrateReleaseNeighbors(
            r.version as version,
            r.url as url,
            r.published_at as publishedAt,
-           COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
-           r.content_title as contentTitle,
-           r.content_title_short as contentTitleShort,
+           COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.title_generated as titleGenerated,
+           r.title_short as titleShort,
            r.media as media,
            s.id as sourceId,
            s.slug as sourceSlug,
@@ -259,8 +263,10 @@ async function hydrateReleaseNeighbors(
       url: row.url,
       publishedAt: row.publishedAt,
       summary: row.summary,
-      contentTitle: row.contentTitle,
-      contentTitleShort: row.contentTitleShort,
+      titleGenerated: row.titleGenerated,
+      titleShort: row.titleShort,
+      contentTitle: row.titleGenerated,
+      contentTitleShort: row.titleShort,
       thumbnail: firstImageThumbnail(row.media, mediaOrigin),
       score: m.score,
       source: {

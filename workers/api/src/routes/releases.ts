@@ -127,9 +127,13 @@ releaseRoutes.get("/releases/latest", async (c) => {
       version: r.version,
       type: r.type,
       title: r.title,
-      summary: r.content_summary,
-      contentTitle: r.content_title,
-      contentTitleShort: r.content_title_short,
+      summary: r.summary,
+      titleGenerated: r.title_generated,
+      titleShort: r.title_short,
+      /** @deprecated Use `titleGenerated`. */
+      contentTitle: r.title_generated,
+      /** @deprecated Use `titleShort`. */
+      contentTitleShort: r.title_short,
       publishedAt: r.published_at,
       url: r.url,
       media: parseReleaseMedia(r.media, mediaOrigin),

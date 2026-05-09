@@ -7,9 +7,9 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
       type
       url
       publishedAt
-      contentSummary
-      contentTitle
-      contentTitleShort
+      summary
+      titleGenerated
+      titleShort
       media {
         type
         url

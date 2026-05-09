@@ -80,7 +80,7 @@ const RETRY_EMBED = {
 } satisfies WorkflowStepConfig;
 
 // Per-row failures are caught + logged inside the step body, so retries are
-// conservative; the `content_title_short IS NULL` predicate on the UPDATE
+// conservative; the `title_short IS NULL` predicate on the UPDATE
 // makes a step-level retry safe.
 const RETRY_GENERATE = {
   retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
@@ -111,7 +111,7 @@ async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEn
 /**
  * Per-org opt-in: when the source's org has `auto_generate_content = true`
  * and the source isn't hidden, run freshly-inserted releases through Haiku
- * 4.5 to populate `content_title` / `content_title_short` / `content_summary`.
+ * 4.5 to populate `title_generated` / `title_short` / `summary`.
  *
  * Per-row exceptions log + continue so a single bad call can't pin the
  * workflow into a retry storm. The step itself only throws on outer-loop
@@ -203,11 +203,11 @@ export async function generateContentForReleases(
       await db
         .update(releases)
         .set({
-          contentTitle: result.title,
-          contentTitleShort: result.titleShort,
-          contentSummary: result.summary,
+          titleGenerated: result.title,
+          titleShort: result.titleShort,
+          summary: result.summary,
         })
-        .where(and(eq(releases.id, row.id), sql`${releases.contentTitleShort} IS NULL`));
+        .where(and(eq(releases.id, row.id), sql`${releases.titleShort} IS NULL`));
       generated++;
     } catch (err) {
       failed++;

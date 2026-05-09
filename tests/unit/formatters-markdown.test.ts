@@ -20,6 +20,7 @@ const fullRelease: ReleaseDetail = {
   version: "15.0.0",
   title: "Next.js 15",
   content: "Full content here with **markdown**.",
+  summary: "Major release with React 19 support",
   contentSummary: "Major release with React 19 support",
   url: "https://github.com/vercel/next.js/releases/tag/v15.0.0",
   media: [],

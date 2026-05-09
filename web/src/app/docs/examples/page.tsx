@@ -27,7 +27,7 @@ const latestJson = `[
     "sourceSlug": "claude-code",
     "title": "Streaming tool use",
     "version": "1.0.16",
-    "contentSummary": "Added streaming support for tool use results in extended thinking mode.",
+    "summary": "Added streaming support for tool use results in extended thinking mode.",
     "media": [],
     "publishedAt": "2026-04-14"
   },
@@ -36,7 +36,7 @@ const latestJson = `[
     "sourceSlug": "claude-code",
     "title": "Extended thinking",
     "version": "1.0.15",
-    "contentSummary": "New extended thinking mode with budget control for Claude models.",
+    "summary": "New extended thinking mode with budget control for Claude models.",
     "media": [],
     "publishedAt": "2026-04-01"
   }

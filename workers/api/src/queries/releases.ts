@@ -2,9 +2,9 @@ export type LatestReleaseRow = {
   id: string;
   version: string | null;
   title: string;
-  content_summary: string | null;
-  content_title: string | null;
-  content_title_short: string | null;
+  summary: string | null;
+  title_generated: string | null;
+  title_short: string | null;
   published_at: string | null;
   url: string | null;
   media: string | null;
@@ -62,7 +62,7 @@ export async function getLatestReleasesAcross(
   const stmt = d1
     .prepare(
       `
-    SELECT r.id, r.version, r.title, r.content_summary, r.content_title, r.content_title_short, r.type,
+    SELECT r.id, r.version, r.title, r.summary, r.title_generated, r.title_short, r.type,
            r.published_at, r.url, r.media,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type,
            o.slug AS org_slug

@@ -28,7 +28,7 @@ export interface EmbedReleaseInput {
   id: string;
   title: string;
   content: string;
-  contentSummary: string | null;
+  summary: string | null;
   version: string | null;
   publishedAt: string | null;
   sourceId: string;
@@ -71,9 +71,7 @@ function buildReleaseText(row: EmbedReleaseInput): string {
   const parts: string[] = [row.title];
   if (row.version) parts.push(row.version);
   const body = (
-    row.contentSummary && row.contentSummary.trim().length > 0
-      ? row.contentSummary
-      : (row.content ?? "")
+    row.summary && row.summary.trim().length > 0 ? row.summary : (row.content ?? "")
   ).slice(0, CONTENT_FALLBACK_CHARS);
   if (body.length > 0) parts.push(body);
   return parts.join("\n");

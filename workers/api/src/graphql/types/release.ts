@@ -13,15 +13,35 @@ export const ReleaseType = builder.objectType("Release", {
     publishedAt: t.expose("publishedAt", { type: "DateTime", nullable: true }),
     fetchedAt: t.expose("fetchedAt", { type: "DateTime" }),
 
-    contentSummary: t.exposeString("contentSummary", { nullable: true }),
-    contentTitle: t.exposeString("contentTitle", {
+    summary: t.exposeString("summary", {
       nullable: true,
       description:
-        "AI-generated self-contained news-headline form (#852). Nullable; populated opportunistically. Fall back to `title` for display.",
+        "AI-generated summary (#852, renamed in #860). Nullable — most rows unpopulated.",
     }),
-    contentTitleShort: t.exposeString("contentTitleShort", {
+    titleGenerated: t.exposeString("titleGenerated", {
       nullable: true,
-      description: "AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`.",
+      description:
+        "AI-generated self-contained news-headline form (#852, renamed in #860). Nullable; populated opportunistically. Fall back to `title` for display.",
+    }),
+    titleShort: t.exposeString("titleShort", {
+      nullable: true,
+      description:
+        "AI-generated smart-brevity headline (#852, renamed in #860). Same fallback as `titleGenerated`.",
+    }),
+    /** @deprecated Use `summary`. */
+    contentSummary: t.exposeString("summary", {
+      nullable: true,
+      deprecationReason: "Use `summary`.",
+    }),
+    /** @deprecated Use `titleGenerated`. */
+    contentTitle: t.exposeString("titleGenerated", {
+      nullable: true,
+      deprecationReason: "Use `titleGenerated`.",
+    }),
+    /** @deprecated Use `titleShort`. */
+    contentTitleShort: t.exposeString("titleShort", {
+      nullable: true,
+      deprecationReason: "Use `titleShort`.",
     }),
     content: t.exposeString("content", {
       description:

@@ -57,11 +57,15 @@ export const ReleaseItemSchema = z.object({
   // fall back to a SemVer-prerelease regex. `.optional()` for the same
   // older-response degrade-gracefully reason as `type`.
   prerelease: z.boolean().optional(),
-  // AI-generated headline forms paired with `summary` (#852). Both nullable —
-  // most rows in the DB have neither populated, and we don't plan to backfill,
-  // so consumers must fall back to `title` for display. `.optional()` for the
-  // same mid-deploy / pinned-worker reason as `type`.
+  // AI-generated headline forms paired with `summary` (#852, renamed in #860).
+  // Both nullable — most rows in the DB have neither populated, and we don't
+  // plan to backfill, so consumers must fall back to `title` for display.
+  // `.optional()` for the same mid-deploy / pinned-worker reason as `type`.
+  titleGenerated: z.string().nullable().optional(),
+  titleShort: z.string().nullable().optional(),
+  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
   contentTitle: z.string().nullable().optional(),
+  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort: z.string().nullable().optional(),
 });
 

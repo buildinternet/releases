@@ -75,8 +75,8 @@ export interface HybridReleaseHit {
     url: string | null;
     publishedAt: string | null;
     summary: string;
-    contentTitle: string | null;
-    contentTitleShort: string | null;
+    titleGenerated: string | null;
+    titleShort: string | null;
     source: { id: string; slug: string; name: string };
     orgSlug: string | null;
     /** Release type — "feature" (default) or "rollup". */
@@ -165,8 +165,8 @@ interface RawReleaseRow {
   url: string | null;
   publishedAt: string | null;
   summary: string;
-  contentTitle: string | null;
-  contentTitleShort: string | null;
+  titleGenerated: string | null;
+  titleShort: string | null;
   sourceId: string;
   sourceSlug: string;
   sourceName: string;
@@ -188,9 +188,9 @@ async function hydrateReleases(
            r.version as version,
            r.url as url,
            r.published_at as publishedAt,
-           COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
-           r.content_title as contentTitle,
-           r.content_title_short as contentTitleShort,
+           COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.title_generated as titleGenerated,
+           r.title_short as titleShort,
            r.type as type,
            s.id as sourceId,
            s.slug as sourceSlug,
@@ -429,8 +429,8 @@ async function buildReleaseHits(
         url: row.url,
         publishedAt: row.publishedAt,
         summary: row.summary,
-        contentTitle: row.contentTitle,
-        contentTitleShort: row.contentTitleShort,
+        titleGenerated: row.titleGenerated,
+        titleShort: row.titleShort,
         source: { id: row.sourceId, slug: row.sourceSlug, name: row.sourceName },
         orgSlug: row.orgSlug,
         type: row.type,

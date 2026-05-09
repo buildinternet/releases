@@ -353,9 +353,9 @@ describe("PollAndFetchWorkflow", () => {
     expect(feed.anthropicCalls).toHaveLength(1);
 
     const [row] = db.select().from(releases).all();
-    expect(row.contentTitle).toBe("Acme One v1 fixes worktree bug");
-    expect(row.contentTitleShort).toBe("Worktree no longer drops commits");
-    expect(row.contentSummary).toBe("Fixed a worktree bug that was dropping unpushed commits.");
+    expect(row.titleGenerated).toBe("Acme One v1 fixes worktree bug");
+    expect(row.titleShort).toBe("Worktree no longer drops commits");
+    expect(row.summary).toBe("Fixed a worktree bug that was dropping unpushed commits.");
   });
 
   it("generate-content: opted-out org skips Anthropic call entirely", async () => {
@@ -381,9 +381,9 @@ describe("PollAndFetchWorkflow", () => {
     expect(feed.anthropicCalls).toHaveLength(0);
 
     const [row] = db.select().from(releases).all();
-    expect(row.contentTitle).toBeNull();
-    expect(row.contentTitleShort).toBeNull();
-    expect(row.contentSummary).toBeNull();
+    expect(row.titleGenerated).toBeNull();
+    expect(row.titleShort).toBeNull();
+    expect(row.summary).toBeNull();
   });
 
   it("generate-content: per-row Anthropic failure is logged + skipped, step still ok", async () => {
@@ -414,9 +414,9 @@ describe("PollAndFetchWorkflow", () => {
 
     // Row stays NULL — failure didn't write a placeholder.
     const [row] = db.select().from(releases).all();
-    expect(row.contentTitle).toBeNull();
-    expect(row.contentTitleShort).toBeNull();
-    expect(row.contentSummary).toBeNull();
+    expect(row.titleGenerated).toBeNull();
+    expect(row.titleShort).toBeNull();
+    expect(row.summary).toBeNull();
 
     // Embed still ran — generate-content failures don't gate downstream steps.
     expect(records.find((r) => r.name === "embed-releases")?.ok).toBe(true);
@@ -454,7 +454,7 @@ describe("PollAndFetchWorkflow", () => {
       .where(eq(organizations.id, "org_a"))
       .run();
 
-    // Pre-insert a release with content_title_short already populated, simulating
+    // Pre-insert a release with title_short already populated, simulating
     // a row the script (or a prior workflow run) already summarized.
     const releaseId = "rel_pretest";
     db.insert(releases)
@@ -463,9 +463,9 @@ describe("PollAndFetchWorkflow", () => {
         sourceId: "src_a1",
         title: "v1",
         content: "Real release body that would otherwise pass isEmptyContent.",
-        contentTitle: "preset title",
-        contentTitleShort: "preset short",
-        contentSummary: "preset summary",
+        titleGenerated: "preset title",
+        titleShort: "preset short",
+        summary: "preset summary",
       })
       .run();
 
@@ -490,9 +490,9 @@ describe("PollAndFetchWorkflow", () => {
     // …but the IS NULL guard on the UPDATE prevents the model output from
     // overwriting the preset values.
     const [row] = db.select().from(releases).where(eq(releases.id, releaseId)).all();
-    expect(row.contentTitleShort).toBe("preset short");
-    expect(row.contentTitle).toBe("preset title");
-    expect(row.contentSummary).toBe("preset summary");
+    expect(row.titleShort).toBe("preset short");
+    expect(row.titleGenerated).toBe("preset title");
+    expect(row.summary).toBe("preset summary");
   });
 
   it("empty feed: fetch succeeds but skips embed + invalidation", async () => {

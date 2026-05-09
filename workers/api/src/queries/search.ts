@@ -32,8 +32,8 @@ export interface RawSearchReleaseRow {
   publishedAt: string | null;
   /** Release type — "feature" (default) or "rollup". */
   type: ReleaseType;
-  contentTitle: string | null;
-  contentTitleShort: string | null;
+  titleGenerated: string | null;
+  titleShort: string | null;
 }
 
 /**
@@ -113,9 +113,9 @@ export async function searchReleasesFts(
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
            o.slug as orgSlug, o.name as orgName,
            r.version, r.title,
-           COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
-           r.content_title as contentTitle,
-           r.content_title_short as contentTitleShort,
+           COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.title_generated as titleGenerated,
+           r.title_short as titleShort,
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,
@@ -161,9 +161,9 @@ export async function searchReleasesFromMatchedEntities(
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName, s.type as sourceType,
            o.slug as orgSlug, o.name as orgName,
            r.version, r.title,
-           COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
-           r.content_title as contentTitle,
-           r.content_title_short as contentTitleShort,
+           COALESCE(r.summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.title_generated as titleGenerated,
+           r.title_short as titleShort,
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,

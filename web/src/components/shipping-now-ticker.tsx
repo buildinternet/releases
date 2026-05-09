@@ -17,11 +17,11 @@ const MAX_ITEMS = 20;
  * collapses to nothing once the version slug is removed). The ticker is a
  * marketing surface; if there's no headline, it's not worth a slot.
  *
- * A populated `contentTitleShort` (#852) is by definition a generated
+ * A populated `titleShort` (#852, renamed in #860) is by definition a generated
  * headline — short-circuit the bare-version filter when it's present.
  */
 function isMeaningfulRelease(r: TickerRelease): boolean {
-  if (r.contentTitleShort?.trim() || r.contentTitle?.trim()) return true;
+  if (r.titleShort?.trim() || r.titleGenerated?.trim()) return true;
   const title = (r.title ?? "").trim();
   if (!title) return false;
   const version = (r.version ?? "").trim();
@@ -34,9 +34,7 @@ function isMeaningfulRelease(r: TickerRelease): boolean {
 }
 
 function pickLabel(r: TickerRelease): string {
-  return (
-    r.contentTitleShort?.trim() || r.contentTitle?.trim() || r.title || r.version || "(untitled)"
-  );
+  return r.titleShort?.trim() || r.titleGenerated?.trim() || r.title || r.version || "(untitled)";
 }
 
 // Lucide-style "activity" pulse — one cycle of an EKG line. Animated by

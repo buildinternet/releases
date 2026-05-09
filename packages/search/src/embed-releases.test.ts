@@ -47,7 +47,7 @@ const baseRelease: EmbedReleaseInput = {
   id: "rel_1",
   title: "v1.0",
   content: "long body content",
-  contentSummary: "short summary",
+  summary: "short summary",
   version: "1.0.0",
   publishedAt: "2026-01-01T00:00:00Z",
   sourceId: "src_1",
@@ -109,7 +109,7 @@ describe("embedAndUpsertReleases", () => {
     const vec = fakeVectorize();
     const longBody = "x".repeat(5000);
     await embedAndUpsertReleases({
-      releases: [{ ...baseRelease, contentSummary: null, content: longBody, version: null }],
+      releases: [{ ...baseRelease, summary: null, content: longBody, version: null }],
       vectorIndex: vec.index,
       embedConfig: { provider: "voyage", apiKey: "k", fetchImpl },
     });
