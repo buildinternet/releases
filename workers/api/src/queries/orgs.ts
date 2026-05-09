@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
+import { nowIso } from "@buildinternet/releases-core/dates";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import type { D1Db } from "../db.js";
 import type { OrgListRow, SourceWithStats } from "./shared.js";
@@ -349,6 +350,12 @@ export async function getOrgReleasesFeed(
     filterBindings.push(opts.ftsMatch);
   }
 
+  // Drop releases whose upstream-supplied date is in the future. Sources
+  // occasionally publish a misdated entry (typo, scheduled-post slip);
+  // without this, the row sticks at the top of the feed until the date
+  // arrives. NULL published_at is preserved — those legitimately sort last.
+  const cutoff = nowIso();
+
   const stmt = d1
     .prepare(
       `
@@ -359,6 +366,7 @@ export async function getOrgReleasesFeed(
     INNER JOIN sources_active s ON s.id = r.source_id
     WHERE s.org_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)
+      AND (r.published_at IS NULL OR r.published_at <= ?)
       ${sourceTypeWhere}
       ${prereleaseWhere}
       ${ftsWhere}
@@ -371,7 +379,7 @@ export async function getOrgReleasesFeed(
     LIMIT ?
   `,
     )
-    .bind(orgId, ...filterBindings, ...cursor.cursorBindings, limit);
+    .bind(orgId, cutoff, ...filterBindings, ...cursor.cursorBindings, limit);
 
   const { results } = await stmt.all<OrgReleaseRow>();
   return results;

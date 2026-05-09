@@ -12,7 +12,7 @@ import { Database } from "bun:sqlite";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { createServer, type Env } from "../../workers/mcp/src/mcp-agent.js";
-import { applyMigrations } from "../db-helper.js";
+import { applyMigrations, makeD1Shim } from "../db-helper.js";
 
 // Minimal stub response returned by the mock API binding.
 const STUB_LOOKUP = { status: "not_found", relatedOrg: null };
@@ -28,75 +28,6 @@ function buildStubApi(calls: string[]): Env["API"] {
       });
     },
   } as unknown as Env["API"];
-}
-
-/**
- * Build a minimal D1Database shim over a bun:sqlite Database so the drizzle
- * D1 adapter (used inside createServer → createDb) can run queries against
- * the in-process SQLite fixture.
- */
-function makeD1Shim(sqlite: Database): D1Database {
-  return {
-    prepare(query: string) {
-      return {
-        bind(...args: unknown[]) {
-          const stmt = sqlite.prepare(query);
-          return {
-            async run() {
-              try {
-                stmt.run(...(args as Parameters<typeof stmt.run>));
-              } catch {
-                // ignore — some DDL-only tables may not exist in the fixture
-              }
-              return { results: [], success: true, meta: {} };
-            },
-            async all() {
-              try {
-                const results = stmt.all(...(args as Parameters<typeof stmt.all>));
-                return { results, success: true, meta: {} };
-              } catch {
-                return { results: [], success: false, meta: {} };
-              }
-            },
-            async first<T = unknown>(): Promise<T | null> {
-              try {
-                const result = stmt.get(...(args as Parameters<typeof stmt.get>));
-                return (result as T) ?? null;
-              } catch {
-                return null;
-              }
-            },
-            async raw<T = unknown[]>(): Promise<T[]> {
-              return [];
-            },
-          };
-        },
-        // D1PreparedStatement also needs .first/.all/.run without prior .bind
-        async run() {
-          return { results: [], success: true, meta: {} };
-        },
-        async all() {
-          return { results: [], success: true, meta: {} };
-        },
-        async first() {
-          return null;
-        },
-        async raw() {
-          return [];
-        },
-      } as unknown as D1PreparedStatement;
-    },
-    async batch() {
-      return [];
-    },
-    async exec(query: string) {
-      sqlite.run(query);
-      return { count: 0, duration: 0 };
-    },
-    async dump() {
-      return new ArrayBuffer(0);
-    },
-  } as unknown as D1Database;
 }
 
 async function callSearchTool(

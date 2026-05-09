@@ -2,7 +2,7 @@
 // WebMCP in `web/src/components/webmcp-provider.tsx`. When adding, renaming, or
 // changing the signature of a read-only tool here, update that provider in the
 // same PR so the remote, local-stdio, and browser surfaces don't drift.
-import { eq, desc, inArray, and, or, lt, sql, asc } from "drizzle-orm";
+import { eq, desc, inArray, and, isNull, or, lt, lte, sql, asc } from "drizzle-orm";
 import {
   sources,
   releases,
@@ -25,7 +25,7 @@ import {
   type ReleaseType,
   type SearchMode,
 } from "@buildinternet/releases-core/schema";
-import { daysAgoIso, timeAgo } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, nowIso, timeAgo } from "@buildinternet/releases-core/dates";
 import { toFtsMatchQuery } from "@buildinternet/releases-core/fts";
 import { likeContains } from "@buildinternet/releases-core/sql-like";
 import { normalizeDomain } from "@buildinternet/releases-core/domain";
@@ -714,9 +714,12 @@ export async function getLatestReleases(
   // releasesVisible already excludes suppressed + coverage rows; use base table only when
   // the caller explicitly opts into coverage.
   const releasesTable = includeCoverage ? releases : releasesVisible;
+  // See {@link getOrgReleasesFeed} for the future-dated guardrail rationale.
+  const cutoff = nowIso();
   const conditions = [
     sql`(${sources.isHidden} = 0 OR ${sources.isHidden} IS NULL)`,
     sql`(${releasesTable.suppressed} IS NULL OR ${releasesTable.suppressed} = 0)`,
+    or(lte(releasesTable.publishedAt, cutoff), isNull(releasesTable.publishedAt)),
   ];
   if (sourceFilter) conditions.push(eq(releasesTable.sourceId, sourceFilter));
   if (orgSourceIds) conditions.push(inArray(releasesTable.sourceId, orgSourceIds));

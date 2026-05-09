@@ -94,6 +94,70 @@ export function createTestDb(): TestDatabase {
 }
 
 /**
+ * Build a minimal D1Database shim over a bun:sqlite Database so code that
+ * calls into raw `d1.prepare(...).bind(...).all()` (or the drizzle D1
+ * adapter) can run against an in-process SQLite fixture. Errors on
+ * `.all/.run/.first` are swallowed and surface as empty results so tests
+ * tolerate missing fixtures (e.g. DDL-only tables not seeded).
+ */
+export function makeD1Shim(sqlite: Database): D1Database {
+  const sqliteRunner = sqlite;
+  return {
+    prepare(query: string) {
+      return {
+        bind(...args: unknown[]) {
+          const stmt = sqliteRunner.prepare(query);
+          return {
+            async run() {
+              try {
+                stmt.run(...(args as Parameters<typeof stmt.run>));
+              } catch {
+                // ignore — some DDL-only tables may not exist in the fixture
+              }
+              return { results: [], success: true, meta: {} };
+            },
+            async all() {
+              try {
+                const results = stmt.all(...(args as Parameters<typeof stmt.all>));
+                return { results, success: true, meta: {} };
+              } catch {
+                return { results: [], success: false, meta: {} };
+              }
+            },
+            async first<T = unknown>(): Promise<T | null> {
+              try {
+                const result = stmt.get(...(args as Parameters<typeof stmt.get>));
+                return (result as T) ?? null;
+              } catch {
+                return null;
+              }
+            },
+            async raw<T = unknown[]>(): Promise<T[]> {
+              return [];
+            },
+          };
+        },
+        async run() {
+          return { results: [], success: true, meta: {} };
+        },
+        async all() {
+          return { results: [], success: true, meta: {} };
+        },
+        async first() {
+          return null;
+        },
+        async raw() {
+          return [];
+        },
+      } as unknown as D1PreparedStatement;
+    },
+    async batch() {
+      return [];
+    },
+  } as unknown as D1Database;
+}
+
+/**
  * Delete all rows from every table in FK-safe order. Use inside beforeEach
  * so each test sees an empty DB without having to reason about dependencies.
  */

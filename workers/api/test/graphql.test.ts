@@ -364,6 +364,31 @@ describe("GraphQL spike", () => {
     expect(feed.items.every((r) => r.source.type === "feed")).toBe(true);
   });
 
+  it("latestReleases drops releases dated in the future", async () => {
+    // Sources occasionally publish a misdated entry (typo, scheduled-post slip);
+    // without the guardrail it would sit at the top of the feed until the date
+    // arrives. Seed one row dated a year out — it must not appear.
+    await h.db.insert(releases).values({
+      id: "rel_future_1",
+      sourceId: "src_a1_1",
+      title: "from the future",
+      content: "should be hidden",
+      url: "https://example.com/future/1",
+      publishedAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString(),
+    });
+
+    const result = await graphql({
+      schema,
+      source: `query { latestReleases(limit: 100) { items { id } } }`,
+      contextValue: ctx(h.db),
+    });
+    expect(result.errors).toBeUndefined();
+    const ids = (
+      result.data as { latestReleases: { items: Array<{ id: string }> } }
+    ).latestReleases.items.map((r) => r.id);
+    expect(ids).not.toContain("rel_future_1");
+  });
+
   it("latestReleases rejects unknown source types in excludeSourceTypes", async () => {
     // Validation now lives at the schema layer — graphql-js coerces enum
     // values during parsing and rejects unknowns before the resolver runs.
