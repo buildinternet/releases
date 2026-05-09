@@ -10,7 +10,10 @@ import {
   knowledgePages,
 } from "@buildinternet/releases-core/schema";
 import { applyMigrations } from "../db-helper";
-import { PollAndFetchWorkflow } from "../../workers/api/src/workflows/poll-and-fetch";
+import {
+  PollAndFetchWorkflow,
+  generateContentForReleases,
+} from "../../workers/api/src/workflows/poll-and-fetch";
 import type { PollAndFetchWorkflowEnv } from "../../workers/api/src/workflows/poll-and-fetch";
 import { mkFakeStep, mkFetch, mkVectorize } from "./_workflow-test-helpers";
 import { CACHEABLE_DEFAULT_SHAPES } from "../../workers/api/src/lib/latest-cache";
@@ -444,43 +447,52 @@ describe("PollAndFetchWorkflow", () => {
     expect(feed.anthropicCalls).toHaveLength(0);
   });
 
-  it("generate-content: idempotent — re-run on already-summarized row is a UPDATE no-op", async () => {
+  it("generate-content: IS NULL guard prevents overwriting an already-populated row", async () => {
     const db = mkDb();
     db.update(organizations)
       .set({ autoGenerateContent: true })
       .where(eq(organizations.id, "org_a"))
       .run();
 
-    let callCount = 0;
+    // Pre-insert a release with content_title_short already populated, simulating
+    // a row the script (or a prior workflow run) already summarized.
+    const releaseId = "rel_pretest";
+    db.insert(releases)
+      .values({
+        id: releaseId,
+        sourceId: "src_a1",
+        title: "v1",
+        content: "Real release body that would otherwise pass isEmptyContent.",
+        contentTitle: "preset title",
+        contentTitleShort: "preset short",
+        contentSummary: "preset summary",
+      })
+      .run();
+
     const feed = mkFetch({
-      feedEntries: [{ id: "https://a.test/v1", title: "v1" }],
-      anthropicBehavior: () => {
-        callCount++;
-        return {
-          title: `title-${callCount}`,
-          titleShort: `short-${callCount}`,
-          summary: `summary-${callCount}`,
-        };
-      },
+      anthropicBehavior: () => ({
+        title: "regenerated title",
+        titleShort: "regenerated short",
+        summary: "regenerated summary",
+      }),
     });
     globalThis.fetch = feed.impl;
     const env = mkEnv({
       _drizzleOverride: db,
-      RELEASES_INDEX: mkVectorize().index,
-      LATEST_CACHE: mkCacheRecorder(),
       ANTHROPIC_API_KEY: { get: async () => "test-anthropic-key" },
     });
 
-    await runWorkflow(env);
-    const [first] = db.select().from(releases).all();
-    expect(first.contentTitleShort).toBe("short-1");
+    const [source] = db.select().from(sources).where(eq(sources.id, "src_a1")).all();
+    await generateContentForReleases(db, env, source, [releaseId]);
 
-    // Re-running on the same insertedIds simulates a workflow retry path.
-    // The row already has content_title_short set, so the WHERE guard
-    // prevents the second model output from overwriting the first.
-    await runWorkflow(env);
-    const [second] = db.select().from(releases).all();
-    expect(second.contentTitleShort).toBe("short-1");
+    // The row matched the SELECT (org is opted-in) so the model was called…
+    expect(feed.anthropicCalls).toHaveLength(1);
+    // …but the IS NULL guard on the UPDATE prevents the model output from
+    // overwriting the preset values.
+    const [row] = db.select().from(releases).where(eq(releases.id, releaseId)).all();
+    expect(row.contentTitleShort).toBe("preset short");
+    expect(row.contentTitle).toBe("preset title");
+    expect(row.contentSummary).toBe("preset summary");
   });
 
   it("empty feed: fetch succeeds but skips embed + invalidation", async () => {

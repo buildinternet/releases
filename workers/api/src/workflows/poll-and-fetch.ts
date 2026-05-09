@@ -29,6 +29,7 @@ import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
 import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
 import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
+import { IN_ARRAY_CHUNK_SIZE } from "../lib/d1-limits.js";
 
 /**
  * Environment for the workflow. Bindings follow the same shape as the API
@@ -116,7 +117,7 @@ async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEn
  * workflow into a retry storm. The step itself only throws on outer-loop
  * failures (SELECT, client construction).
  */
-async function generateContentForReleases(
+export async function generateContentForReleases(
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the rest of this workflow
   db: any,
   env: PollAndFetchWorkflowEnv,
@@ -128,23 +129,41 @@ async function generateContentForReleases(
 
   // Order matters: SELECT before secret-store fetch. Most orgs are opted out,
   // and the empty-result path saves a Secrets Store round-trip per non-opted
-  // source on every cron fire.
-  const rows = await db
-    .select({
-      id: releases.id,
-      title: releases.title,
-      version: releases.version,
-      content: releases.content,
-      url: releases.url,
-      orgSlug: organizations.slug,
-      sourceName: sources.name,
-      productName: products.name,
-    })
-    .from(releases)
-    .innerJoin(sources, eq(sources.id, releases.sourceId))
-    .innerJoin(organizations, eq(organizations.id, sources.orgId))
-    .leftJoin(products, eq(products.id, sources.productId))
-    .where(and(inArray(releases.id, insertedIds), eq(organizations.autoGenerateContent, true)));
+  // source on every cron fire. The IN list is chunked for the D1 100-bind cap
+  // (90 ids + 1 boolean = 91 binds per statement); a backfill or first-time
+  // onboard can push insertedIds well past 90.
+  type ContentRow = {
+    id: string;
+    title: string;
+    version: string | null;
+    content: string;
+    url: string | null;
+    orgSlug: string;
+    sourceName: string;
+    productName: string | null;
+  };
+  const rows: ContentRow[] = [];
+  for (let i = 0; i < insertedIds.length; i += IN_ARRAY_CHUNK_SIZE) {
+    const chunk = insertedIds.slice(i, i + IN_ARRAY_CHUNK_SIZE);
+    // eslint-disable-next-line no-await-in-loop -- D1 chunked SELECT (100 bind param limit)
+    const chunkRows: ContentRow[] = await db
+      .select({
+        id: releases.id,
+        title: releases.title,
+        version: releases.version,
+        content: releases.content,
+        url: releases.url,
+        orgSlug: organizations.slug,
+        sourceName: sources.name,
+        productName: products.name,
+      })
+      .from(releases)
+      .innerJoin(sources, eq(sources.id, releases.sourceId))
+      .innerJoin(organizations, eq(organizations.id, sources.orgId))
+      .leftJoin(products, eq(products.id, sources.productId))
+      .where(and(inArray(releases.id, chunk), eq(organizations.autoGenerateContent, true)));
+    rows.push(...chunkRows);
+  }
 
   if (rows.length === 0) return;
 
@@ -159,16 +178,7 @@ async function generateContentForReleases(
   let failed = 0;
   let totalTokens = 0;
 
-  for (const row of rows as Array<{
-    id: string;
-    title: string;
-    version: string | null;
-    content: string;
-    url: string | null;
-    orgSlug: string;
-    sourceName: string;
-    productName: string | null;
-  }>) {
+  for (const row of rows) {
     try {
       // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; typical fire is 0–3 rows
       const result = await summarizeRelease(client, {
