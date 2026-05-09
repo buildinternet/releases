@@ -75,13 +75,26 @@ export function atomBody(entries: Array<{ id: string; title: string }>) {
  *
  * Anything else returns 404 so typos surface fast.
  */
+export interface AnthropicCall {
+  /** The user-message body string (the "release block" the prompt builder sends). */
+  body: string;
+}
+
 export function mkFetch(opts: {
   feedEntries?: Array<{ id: string; title: string }>;
   voyageBehavior?: () => void;
+  /** Throws here surface as upstream Anthropic errors inside the generate step. */
+  anthropicBehavior?: (call: AnthropicCall) => {
+    title: string;
+    titleShort: string;
+    summary: string;
+  };
 }) {
   const voyageCalls: Array<{ input: string[] }> = [];
+  const anthropicCalls: AnthropicCall[] = [];
   return {
     voyageCalls,
+    anthropicCalls,
     impl: (async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = typeof input === "string" ? input : String(input);
       const method = init?.method ?? "GET";
@@ -111,6 +124,34 @@ export function mkFetch(opts: {
           status: 200,
           headers: { "Content-Type": "application/json" },
         });
+      }
+
+      if (url.includes("api.anthropic.com")) {
+        const body = JSON.parse(String(init?.body ?? "{}"));
+        const userMsg = body.messages?.[0]?.content ?? "";
+        const call: AnthropicCall = { body: String(userMsg) };
+        anthropicCalls.push(call);
+        if (!opts.anthropicBehavior) {
+          return new Response("no anthropicBehavior configured", { status: 500 });
+        }
+        try {
+          const out = opts.anthropicBehavior(call);
+          const text = `<title>${out.title}</title><title_short>${out.titleShort}</title_short><summary>${out.summary}</summary>`;
+          return new Response(
+            JSON.stringify({
+              id: "msg_test",
+              type: "message",
+              role: "assistant",
+              model: "claude-haiku-4-5",
+              stop_reason: "end_turn",
+              content: [{ type: "text", text }],
+              usage: { input_tokens: 100, output_tokens: 50 },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          );
+        } catch (err) {
+          return new Response(JSON.stringify({ error: String(err) }), { status: 500 });
+        }
       }
 
       return new Response(`unexpected ${method} ${url}`, { status: 404 });

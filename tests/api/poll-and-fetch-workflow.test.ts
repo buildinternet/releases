@@ -316,6 +316,173 @@ describe("PollAndFetchWorkflow", () => {
     expect(db.select().from(fetchLog).all()).toHaveLength(0);
   });
 
+  // ── generate-content step (Phase 2) ──
+
+  it("generate-content: opted-in org populates content_* columns", async () => {
+    const db = mkDb();
+    db.update(organizations)
+      .set({ autoGenerateContent: true })
+      .where(eq(organizations.id, "org_a"))
+      .run();
+    const feed = mkFetch({
+      feedEntries: [{ id: "https://a.test/v1", title: "v1" }],
+      anthropicBehavior: () => ({
+        title: "Acme One v1 fixes worktree bug",
+        titleShort: "Worktree no longer drops commits",
+        summary: "Fixed a worktree bug that was dropping unpushed commits.",
+      }),
+    });
+    globalThis.fetch = feed.impl;
+    const env = mkEnv({
+      _drizzleOverride: db,
+      RELEASES_INDEX: mkVectorize().index,
+      LATEST_CACHE: mkCacheRecorder(),
+      ANTHROPIC_API_KEY: { get: async () => "test-anthropic-key" },
+    });
+
+    const { records, thrown } = await runWorkflow(env);
+    expect(thrown).toBeUndefined();
+
+    const stepNames = records.map((r) => r.name);
+    expect(stepNames).toContain("generate-content");
+    const generateStep = records.find((r) => r.name === "generate-content");
+    expect(generateStep?.ok).toBe(true);
+    expect(feed.anthropicCalls).toHaveLength(1);
+
+    const [row] = db.select().from(releases).all();
+    expect(row.contentTitle).toBe("Acme One v1 fixes worktree bug");
+    expect(row.contentTitleShort).toBe("Worktree no longer drops commits");
+    expect(row.contentSummary).toBe("Fixed a worktree bug that was dropping unpushed commits.");
+  });
+
+  it("generate-content: opted-out org skips Anthropic call entirely", async () => {
+    const db = mkDb();
+    // Org default `autoGenerateContent = false` (set by mkDb).
+    const feed = mkFetch({
+      feedEntries: [{ id: "https://a.test/v1", title: "v1" }],
+      // anthropicBehavior intentionally omitted — any call would 500.
+    });
+    globalThis.fetch = feed.impl;
+    const env = mkEnv({
+      _drizzleOverride: db,
+      RELEASES_INDEX: mkVectorize().index,
+      LATEST_CACHE: mkCacheRecorder(),
+      ANTHROPIC_API_KEY: { get: async () => "test-anthropic-key" },
+    });
+
+    const { records, thrown } = await runWorkflow(env);
+    expect(thrown).toBeUndefined();
+
+    const generateStep = records.find((r) => r.name === "generate-content");
+    expect(generateStep?.ok).toBe(true);
+    expect(feed.anthropicCalls).toHaveLength(0);
+
+    const [row] = db.select().from(releases).all();
+    expect(row.contentTitle).toBeNull();
+    expect(row.contentTitleShort).toBeNull();
+    expect(row.contentSummary).toBeNull();
+  });
+
+  it("generate-content: per-row Anthropic failure is logged + skipped, step still ok", async () => {
+    const db = mkDb();
+    db.update(organizations)
+      .set({ autoGenerateContent: true })
+      .where(eq(organizations.id, "org_a"))
+      .run();
+    const feed = mkFetch({
+      feedEntries: [{ id: "https://a.test/v1", title: "v1" }],
+      anthropicBehavior: () => {
+        throw new Error("upstream rate limit");
+      },
+    });
+    globalThis.fetch = feed.impl;
+    const env = mkEnv({
+      _drizzleOverride: db,
+      RELEASES_INDEX: mkVectorize().index,
+      LATEST_CACHE: mkCacheRecorder(),
+      ANTHROPIC_API_KEY: { get: async () => "test-anthropic-key" },
+    });
+
+    const { records, thrown } = await runWorkflow(env);
+    expect(thrown).toBeUndefined();
+
+    const generateStep = records.find((r) => r.name === "generate-content");
+    expect(generateStep?.ok).toBe(true);
+
+    // Row stays NULL — failure didn't write a placeholder.
+    const [row] = db.select().from(releases).all();
+    expect(row.contentTitle).toBeNull();
+    expect(row.contentTitleShort).toBeNull();
+    expect(row.contentSummary).toBeNull();
+
+    // Embed still ran — generate-content failures don't gate downstream steps.
+    expect(records.find((r) => r.name === "embed-releases")?.ok).toBe(true);
+  });
+
+  it("generate-content: missing ANTHROPIC_API_KEY is a clean no-op", async () => {
+    const db = mkDb();
+    db.update(organizations)
+      .set({ autoGenerateContent: true })
+      .where(eq(organizations.id, "org_a"))
+      .run();
+    const feed = mkFetch({
+      feedEntries: [{ id: "https://a.test/v1", title: "v1" }],
+    });
+    globalThis.fetch = feed.impl;
+    const env = mkEnv({
+      _drizzleOverride: db,
+      RELEASES_INDEX: mkVectorize().index,
+      LATEST_CACHE: mkCacheRecorder(),
+      // ANTHROPIC_API_KEY intentionally omitted.
+    });
+
+    const { records, thrown } = await runWorkflow(env);
+    expect(thrown).toBeUndefined();
+
+    const generateStep = records.find((r) => r.name === "generate-content");
+    expect(generateStep?.ok).toBe(true);
+    expect(feed.anthropicCalls).toHaveLength(0);
+  });
+
+  it("generate-content: idempotent — re-run on already-summarized row is a UPDATE no-op", async () => {
+    const db = mkDb();
+    db.update(organizations)
+      .set({ autoGenerateContent: true })
+      .where(eq(organizations.id, "org_a"))
+      .run();
+
+    let callCount = 0;
+    const feed = mkFetch({
+      feedEntries: [{ id: "https://a.test/v1", title: "v1" }],
+      anthropicBehavior: () => {
+        callCount++;
+        return {
+          title: `title-${callCount}`,
+          titleShort: `short-${callCount}`,
+          summary: `summary-${callCount}`,
+        };
+      },
+    });
+    globalThis.fetch = feed.impl;
+    const env = mkEnv({
+      _drizzleOverride: db,
+      RELEASES_INDEX: mkVectorize().index,
+      LATEST_CACHE: mkCacheRecorder(),
+      ANTHROPIC_API_KEY: { get: async () => "test-anthropic-key" },
+    });
+
+    await runWorkflow(env);
+    const [first] = db.select().from(releases).all();
+    expect(first.contentTitleShort).toBe("short-1");
+
+    // Re-running on the same insertedIds simulates a workflow retry path.
+    // The row already has content_title_short set, so the WHERE guard
+    // prevents the second model output from overwriting the first.
+    await runWorkflow(env);
+    const [second] = db.select().from(releases).all();
+    expect(second.contentTitleShort).toBe("short-1");
+  });
+
   it("empty feed: fetch succeeds but skips embed + invalidation", async () => {
     const db = mkDb();
     const feed = mkFetch({ feedEntries: [] });

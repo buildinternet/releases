@@ -10,11 +10,12 @@ import { WorkflowEntrypoint } from "cloudflare:workers";
 import type { WorkflowEvent, WorkflowStep, WorkflowStepConfig } from "cloudflare:workers";
 import { NonRetryableError } from "cloudflare:workflows";
 import { drizzle } from "drizzle-orm/d1";
-import { eq } from "drizzle-orm";
-import { sources } from "@buildinternet/releases-core/schema";
+import { and, eq, inArray, sql } from "drizzle-orm";
+import { organizations, products, releases, sources } from "@buildinternet/releases-core/schema";
 import type { Source } from "@buildinternet/releases-core/schema";
 import { SOURCE_DELETED_SENTINEL, recordWorkflowFailure } from "./_shared.js";
 import { logEvent } from "@releases/lib/log-event";
+import { summarizeRelease } from "@releases/ai-internal/release-content";
 import {
   fetchOne,
   pollOne,
@@ -26,27 +27,30 @@ import {
 } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { invalidateLatestCache, type InvalidationEnv } from "../lib/latest-cache.js";
+import { getAnthropicKey, resolveGatewayOpts, type AnthropicEnv } from "../lib/anthropic.js";
+import { buildAnthropicClient } from "@releases/lib/anthropic-client.js";
 
 /**
  * Environment for the workflow. Bindings follow the same shape as the API
  * worker Env — secrets stay as SecretBinding here and are resolved inside
  * the step closures that consume them so they never land in instance state.
  */
-export type PollAndFetchWorkflowEnv = InvalidationEnv & {
-  DB: D1Database;
-  CRON_ENABLED?: string;
-  SCRAPE_CHANGE_DETECT_ENABLED?: string;
-  GITHUB_TOKEN?: { get(): Promise<string> };
-  RELEASES_INDEX?: unknown;
-  CHANGELOG_CHUNKS_INDEX?: unknown;
-  EMBEDDING_PROVIDER?: string;
-  VOYAGE_API_KEY?: { get(): Promise<string> };
-  OPENAI_API_KEY?: { get(): Promise<string> };
-  RELEASE_HUB?: DurableObjectNamespace;
-  WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
-  /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
-  _drizzleOverride?: unknown;
-};
+export type PollAndFetchWorkflowEnv = InvalidationEnv &
+  AnthropicEnv & {
+    DB: D1Database;
+    CRON_ENABLED?: string;
+    SCRAPE_CHANGE_DETECT_ENABLED?: string;
+    GITHUB_TOKEN?: { get(): Promise<string> };
+    RELEASES_INDEX?: unknown;
+    CHANGELOG_CHUNKS_INDEX?: unknown;
+    EMBEDDING_PROVIDER?: string;
+    VOYAGE_API_KEY?: { get(): Promise<string> };
+    OPENAI_API_KEY?: { get(): Promise<string> };
+    RELEASE_HUB?: DurableObjectNamespace;
+    WEBHOOK_DELIVERY_QUEUE?: Queue<unknown>;
+    /** TEST-ONLY: bypass drizzle(env.DB) and use the provided instance directly. */
+    _drizzleOverride?: unknown;
+  };
 
 export type PollAndFetchParams = {
   /** Source row id to process. */
@@ -74,6 +78,14 @@ const RETRY_EMBED = {
   timeout: "5 minutes",
 } satisfies WorkflowStepConfig;
 
+// Per-row failures are caught + logged inside the step body, so retries are
+// conservative; the `content_title_short IS NULL` predicate on the UPDATE
+// makes a step-level retry safe.
+const RETRY_GENERATE = {
+  retries: { limit: 1, delay: "30 seconds", backoff: "exponential" },
+  timeout: "10 minutes",
+} satisfies WorkflowStepConfig;
+
 /**
  * Resolve the FetchOneEnv slice — embedding + GitHub + vector bindings — once
  * and cache it across steps. Secrets are fetched lazily inside steps that
@@ -93,6 +105,123 @@ async function resolveFetchEnv(env: PollAndFetchWorkflowEnv): Promise<FetchOneEn
     WEBHOOK_DELIVERY_QUEUE: env.WEBHOOK_DELIVERY_QUEUE,
     DB: env.DB,
   };
+}
+
+/**
+ * Per-org opt-in: when the source's org has `auto_generate_content = true`
+ * and the source isn't hidden, run freshly-inserted releases through Haiku
+ * 4.5 to populate `content_title` / `content_title_short` / `content_summary`.
+ *
+ * Per-row exceptions log + continue so a single bad call can't pin the
+ * workflow into a retry storm. The step itself only throws on outer-loop
+ * failures (SELECT, client construction).
+ */
+async function generateContentForReleases(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- drizzle override pattern; same as the rest of this workflow
+  db: any,
+  env: PollAndFetchWorkflowEnv,
+  source: Source,
+  insertedIds: string[],
+): Promise<void> {
+  // Hidden sources skip AI features per existing convention.
+  if (source.isHidden === true) return;
+
+  // Order matters: SELECT before secret-store fetch. Most orgs are opted out,
+  // and the empty-result path saves a Secrets Store round-trip per non-opted
+  // source on every cron fire.
+  const rows = await db
+    .select({
+      id: releases.id,
+      title: releases.title,
+      version: releases.version,
+      content: releases.content,
+      url: releases.url,
+      orgSlug: organizations.slug,
+      sourceName: sources.name,
+      productName: products.name,
+    })
+    .from(releases)
+    .innerJoin(sources, eq(sources.id, releases.sourceId))
+    .innerJoin(organizations, eq(organizations.id, sources.orgId))
+    .leftJoin(products, eq(products.id, sources.productId))
+    .where(and(inArray(releases.id, insertedIds), eq(organizations.autoGenerateContent, true)));
+
+  if (rows.length === 0) return;
+
+  const apiKey = await getAnthropicKey(env);
+  if (!apiKey) return;
+
+  const startedAt = Date.now();
+  const client = buildAnthropicClient({ apiKey, ...(await resolveGatewayOpts(env)) });
+
+  let generated = 0;
+  let skippedEmpty = 0;
+  let failed = 0;
+  let totalTokens = 0;
+
+  for (const row of rows as Array<{
+    id: string;
+    title: string;
+    version: string | null;
+    content: string;
+    url: string | null;
+    orgSlug: string;
+    sourceName: string;
+    productName: string | null;
+  }>) {
+    try {
+      // eslint-disable-next-line no-await-in-loop -- sequential per-row keeps cost bounded; typical fire is 0–3 rows
+      const result = await summarizeRelease(client, {
+        orgSlug: row.orgSlug,
+        sourceName: row.sourceName,
+        productName: row.productName,
+        title: row.title,
+        version: row.version,
+        url: row.url,
+        content: row.content,
+      });
+      totalTokens +=
+        result.usage.input +
+        result.usage.output +
+        result.usage.cacheCreate +
+        result.usage.cacheRead;
+      if (result.skipped) {
+        skippedEmpty++;
+        continue;
+      }
+      // eslint-disable-next-line no-await-in-loop -- per-row UPDATE; volume is negligible
+      await db
+        .update(releases)
+        .set({
+          contentTitle: result.title,
+          contentTitleShort: result.titleShort,
+          contentSummary: result.summary,
+        })
+        .where(and(eq(releases.id, row.id), sql`${releases.contentTitleShort} IS NULL`));
+      generated++;
+    } catch (err) {
+      failed++;
+      logEvent("warn", {
+        component: "auto-generate-content",
+        event: "generation-failed",
+        releaseId: row.id,
+        orgSlug: row.orgSlug,
+        err,
+      });
+    }
+  }
+
+  logEvent("info", {
+    component: "auto-generate-content",
+    event: "batch-summary",
+    sourceSlug: source.slug,
+    candidateCount: rows.length,
+    generated,
+    skippedEmpty,
+    failed,
+    totalTokens,
+    durationMs: Date.now() - startedAt,
+  });
 }
 
 export class PollAndFetchWorkflow extends WorkflowEntrypoint<
@@ -189,11 +318,22 @@ export class PollAndFetchWorkflow extends WorkflowEntrypoint<
         return result;
       });
 
+      const insertedIds = fetchResult.insertedIds ?? [];
+
+      // Runs before embed so (a) the AI headline doesn't get embedded as a
+      // separate signal, and (b) the new content_* fields land before the
+      // row reaches release-event observers.
+      if (insertedIds.length > 0) {
+        currentStep = "generate-content";
+        await step.do("generate-content", RETRY_GENERATE, async () => {
+          await generateContentForReleases(db, env, source, insertedIds);
+        });
+      }
+
       // Embed new releases. Retry-heavy — this is the failure mode the workflow
       // exists to solve. `throwOnError` makes the embed helper re-throw after
       // logging so the step picks up the failure.
       currentStep = "embed-releases";
-      const insertedIds = fetchResult.insertedIds ?? [];
       if (insertedIds.length > 0 && env.RELEASES_INDEX) {
         await step.do("embed-releases", RETRY_EMBED, async () => {
           await embedReleasesForSource(db, source, insertedIds, fetchEnv, { throwOnError: true });
