@@ -156,7 +156,8 @@ The assistant response is an array of `text` blocks; each may carry a `citations
 
 1. **Body** — concatenate every text block's `text` field, in order. That string IS the markdown body.
 2. **Citations** — track a running character offset starting at 0. For each text block:
-   - If it has `citations[]`, the cited span is `[runningOffset, runningOffset + text.length)`. For each citation, record `{ startIndex, endIndex, sourceUrl, title, citedText }` where `sourceUrl` and `title` come from the citation's `source` / `title` fields (or look them up by `search_result_index` against your input array). `citedText` is the citation's `cited_text`.
+   - If it has `citations[]`, the cited span is **always** `[runningOffset, runningOffset + text.length)` — the whole block. Anthropic emits citations at block granularity by design ("Claude cites whole blocks, not substrings"); citations carry no per-citation character offsets into the assistant text. The `start_block_index` / `end_block_index` fields on each citation refer to slices of the **source's** content array (i.e. which input text block(s) within the cited search_result were the basis for the claim), not offsets into the response. Don't try to add them to `runningOffset`.
+   - For each citation in the block, record one row `{ startIndex, endIndex, sourceUrl, title, citedText }` — all citations on the same text block share the same span. `sourceUrl` and `title` come from the citation's `source` / `title` fields (or look them up by `search_result_index` against your input array). `citedText` is the citation's `cited_text`.
    - Always advance `runningOffset += text.length`, whether or not the block had citations.
 
 Strip a leading markdown heading from the body if the model emitted one (against the prompt, but it happens) — and shift all citation offsets back by the stripped length.

@@ -23,7 +23,7 @@ interface IncomingCitation {
   startIndex: number;
   endIndex: number;
   sourceUrl: string;
-  title?: string | null;
+  title: string | null;
   citedText: string;
 }
 
@@ -184,7 +184,7 @@ app.post("/orgs/:slug/overview", async (c) => {
       startIndex: cit.startIndex,
       endIndex: cit.endIndex,
       sourceUrl: cit.sourceUrl,
-      title: cit.title ?? null,
+      title: cit.title,
       citedText: cit.citedText,
       releaseId: releaseIdByUrl.get(cit.sourceUrl.toLowerCase()) ?? null,
       createdAt: now,
