@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HomepageTickerQuery } from "@/lib/graphql/__generated__/graphql";
 import { formatRelativeDate } from "@/lib/formatters";
 
@@ -58,6 +58,7 @@ function Card({ slide }: { slide: Slide }) {
   return (
     <Link
       href={`/release/${release.id}`}
+      data-ticker-card
       className="snap-start flex-none basis-[88%] sm:basis-[calc(33.333%-0.5rem)] lg:basis-[calc(25%-0.5625rem)] flex flex-col gap-2 p-4 rounded-lg border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 hover:border-stone-300 dark:hover:border-stone-700 hover:shadow-sm transition-all shadow-[0_1px_2px_rgba(0,0,0,0.02)]"
     >
       <div className="flex items-center gap-2 min-w-0">
@@ -82,6 +83,24 @@ function Card({ slide }: { slide: Slide }) {
   );
 }
 
+function ChevronIcon({ direction }: { direction: "left" | "right" }) {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      <path d={direction === "left" ? "M15 18l-6-6 6-6" : "M9 18l6-6-6-6"} />
+    </svg>
+  );
+}
+
 export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
   const items = useMemo<Slide[]>(
     () =>
@@ -95,22 +114,86 @@ export function ShippingNowTicker({ releases }: { releases: TickerRelease[] }) {
     [releases],
   );
 
+  const scrollerRef = useRef<HTMLDivElement>(null);
+  const [canPrev, setCanPrev] = useState(false);
+  const [canNext, setCanNext] = useState(false);
+
+  const updateNav = useCallback(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    // 1px tolerance for subpixel rounding at the edges.
+    setCanPrev(el.scrollLeft > 1);
+    setCanNext(el.scrollLeft + el.clientWidth < el.scrollWidth - 1);
+  }, []);
+
+  useEffect(() => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    updateNav();
+    el.addEventListener("scroll", updateNav, { passive: true });
+    // Card widths are responsive; resize can flip overflow on/off.
+    const ro = new ResizeObserver(updateNav);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener("scroll", updateNav);
+      ro.disconnect();
+    };
+  }, [updateNav, items.length]);
+
+  const scrollByCard = useCallback((dir: 1 | -1) => {
+    const el = scrollerRef.current;
+    if (!el) return;
+    const card = el.querySelector<HTMLElement>("[data-ticker-card]");
+    const gap = parseFloat(getComputedStyle(el).columnGap || "12") || 12;
+    const step = (card?.offsetWidth ?? el.clientWidth * 0.85) + gap;
+    el.scrollBy({ left: dir * step, behavior: "smooth" });
+  }, []);
+
   if (items.length === 0) return null;
+
+  const showNav = canPrev || canNext;
 
   return (
     <section aria-label="Recent releases across the platform" className="max-w-4xl mx-auto mb-10">
-      <div className="flex items-center gap-2 px-6 mb-3 text-amber-700 dark:text-amber-300">
+      <div className="flex items-center gap-2 px-6 mb-3">
         <span className="animate-pulse text-amber-500 dark:text-amber-400">
           <ActivityIcon />
         </span>
-        <h2 className="text-[11px] font-bold uppercase tracking-wider">Recent</h2>
+        <h2 className="text-[11px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-300">
+          Recent
+        </h2>
+        {showNav && (
+          <div className="ml-auto flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => scrollByCard(-1)}
+              disabled={!canPrev}
+              aria-label="Scroll to previous releases"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:border-stone-300 dark:hover:border-stone-700 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            >
+              <ChevronIcon direction="left" />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollByCard(1)}
+              disabled={!canNext}
+              aria-label="Scroll to next releases"
+              className="flex h-7 w-7 items-center justify-center rounded-md border border-stone-200 dark:border-stone-800 bg-white dark:bg-stone-900 text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-100 hover:border-stone-300 dark:hover:border-stone-700 disabled:opacity-30 disabled:pointer-events-none transition-colors"
+            >
+              <ChevronIcon direction="right" />
+            </button>
+          </div>
+        )}
       </div>
       {/* Horizontal scroll-snap row. `[scrollbar-width:none]` +
           `[&::-webkit-scrollbar]:hidden` hide the native scrollbar without
           breaking scroll/wheel/touch behavior. The bottom padding + negative
           margin reserves space for hover-shadow lift without inflating the
           gap to the next section. */}
-      <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-6 pb-2 -mb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+      <div
+        ref={scrollerRef}
+        className="flex gap-3 overflow-x-auto snap-x snap-mandatory px-6 pb-2 -mb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
         {items.map((slide) => (
           <Card key={slide.release.id} slide={slide} />
         ))}
