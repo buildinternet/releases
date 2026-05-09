@@ -24,6 +24,8 @@
 
 import Anthropic from "@anthropic-ai/sdk";
 import { spawn } from "node:child_process";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { logger } from "@buildinternet/releases-lib/logger";
 
 const argv = process.argv.slice(2);
 const apply = argv.includes("--apply");
@@ -41,15 +43,17 @@ const orgs = !orgsArg
 const sinceDays = sinceArg ? Number.parseInt(sinceArg, 10) : 7;
 
 if (sinceArg && Number.isNaN(sinceDays)) {
-  console.error("--since must be an integer number of days");
+  logger.error("--since must be an integer number of days");
   process.exit(1);
 }
 
 const apiKey = process.env.ANTHROPIC_API_KEY;
 if (!apiKey) {
-  console.error("ANTHROPIC_API_KEY not set");
+  logger.error("ANTHROPIC_API_KEY not set");
   process.exit(1);
 }
+
+const cutoffIso = daysAgoIso(sinceDays);
 
 const MODEL = "claude-haiku-4-5";
 const MAX_BODY_CHARS = 8000;
@@ -66,7 +70,7 @@ Output exactly one <title>...</title> tag, then one <title_short>...</title_shor
 </output_structure>
 
 <title_format>
-The release block includes Org, Title, Version, URL, and Body. Use these to construct a self-contained news headline.
+The release block includes Org, Source, optionally Product, Title, Version, URL, and Body. Source is the human-readable product label (e.g. "Claude Code", "OpenAI Node SDK", "Next.js") that should appear in the headline; Product is set only when an org groups multiple products through one source. Prefer Product when present, otherwise Source. Use these to construct a self-contained news headline.
 
 - News-headline style: lead with the product (and version when applicable), then a verb-led description of the most important change.
 - Reader test: someone seeing this title in isolation, with no surrounding context, should know what changed and which product it concerns. A title like "v2.1.128" or "Various improvements" fails this test.
@@ -273,6 +277,8 @@ interface ReleaseRow {
   content: string;
   url: string;
   org_slug: string;
+  source_name: string;
+  product_name: string | null;
 }
 
 function runWrangler(args: string[]): Promise<string> {
@@ -296,13 +302,17 @@ async function fetchReleases(): Promise<ReleaseRow[]> {
     ? `AND LOWER(o.slug) IN (${orgs.map((o) => `'${o.replace(/'/g, "''")}'`).join(",")})`
     : "";
   const sql = `
-    SELECT r.id, r.title, r.version, r.content, r.url, o.slug as org_slug
+    SELECT r.id, r.title, r.version, r.content, r.url,
+           o.slug as org_slug,
+           s.name as source_name,
+           p.name as product_name
     FROM releases r
     JOIN sources s ON s.id = r.source_id
     JOIN organizations o ON o.id = s.org_id
+    LEFT JOIN products p ON p.id = s.product_id
     WHERE r.suppressed = 0
       ${orgClause}
-      AND r.fetched_at >= datetime('now', '-${sinceDays} days')
+      AND r.fetched_at >= '${cutoffIso}'
     ORDER BY o.slug, r.fetched_at DESC;
   `.trim();
 
@@ -330,8 +340,15 @@ function buildReleaseBlock(row: ReleaseRow): string {
       ? row.content.slice(0, MAX_BODY_CHARS) + "\n\n[truncated]"
       : row.content;
 
+  const productLine =
+    row.product_name && row.product_name !== row.source_name
+      ? `Product: ${row.product_name}`
+      : null;
+
   return [
     `Org: ${row.org_slug}`,
+    `Source: ${row.source_name}`,
+    productLine,
     `Title: ${row.title}`,
     row.version ? `Version: ${row.version}` : null,
     `URL: ${row.url}`,
@@ -350,9 +367,9 @@ function extractTagged(text: string, tag: string): string {
 }
 
 function fallbackTitleFromRow(row: ReleaseRow): string {
-  const orgDisplay = row.org_slug.charAt(0).toUpperCase() + row.org_slug.slice(1);
+  const display = row.product_name ?? row.source_name;
   const v = row.version ? ` ${row.version}` : "";
-  return `${orgDisplay}${v} release notes unavailable`;
+  return `${display}${v} release notes unavailable`;
 }
 
 interface UsageStats {
@@ -449,12 +466,12 @@ async function pool<T, R>(
 
 const client = new Anthropic({ apiKey });
 
-console.error(`mode: ${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"}`);
-console.error(`orgs: ${orgs ? orgs.join(",") : "all"}`);
-console.error(`since: past ${sinceDays} day${sinceDays === 1 ? "" : "s"}`);
-console.error("fetching candidate releases…");
+logger.info(`mode: ${apply ? "APPLY (writes to D1 prod)" : "DRY RUN"}`);
+logger.info(`orgs: ${orgs ? orgs.join(",") : "all"}`);
+logger.info(`since: past ${sinceDays} day${sinceDays === 1 ? "" : "s"} (cutoff ${cutoffIso})`);
+logger.info("fetching candidate releases…");
 const rows = await fetchReleases();
-console.error(`found ${rows.length} release${rows.length === 1 ? "" : "s"}`);
+logger.info(`found ${rows.length} release${rows.length === 1 ? "" : "s"}`);
 
 let totalInput = 0;
 let totalOutput = 0;
@@ -472,7 +489,7 @@ const samples: {
 
 await pool(rows, CONCURRENCY, async (row) => {
   try {
-    const { title, titleShort, summary, usage, skipped } = await summarize(client, row);
+    const { title, titleShort, summary, usage } = await summarize(client, row);
     totalInput += usage.input;
     totalOutput += usage.output;
     totalCacheCreate += usage.cacheCreate;
@@ -489,9 +506,8 @@ await pool(rows, CONCURRENCY, async (row) => {
       titleShort,
       summary,
     });
-    process.stderr.write(skipped ? "·" : ".");
   } catch (err) {
-    process.stderr.write("!");
+    logger.error(`failed for ${row.org_slug}/${row.title}: ${(err as Error).message}`);
     samples.push({
       org: row.org_slug,
       sourceTitle: row.title,
@@ -503,26 +519,24 @@ await pool(rows, CONCURRENCY, async (row) => {
   }
 });
 
-process.stderr.write("\n");
-
 // Pricing: Haiku 4.5 list — $1/M input, $5/M output. Ephemeral cache write 1.25x, read 0.1x.
 const inputCost = (totalInput * 1 + totalCacheCreate * 1.25 + totalCacheRead * 0.1) / 1_000_000;
 const outputCost = (totalOutput * 5) / 1_000_000;
 
-console.error(
-  `\n${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}`,
+logger.info(
+  `${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}`,
 );
-console.error(
+logger.info(
   `tokens: ${totalInput} in (cache create ${totalCacheCreate}, cache read ${totalCacheRead}), ${totalOutput} out`,
 );
-console.error(`est cost: $${(inputCost + outputCost).toFixed(4)} (Haiku 4.5 list price)`);
+logger.info(`est cost: $${(inputCost + outputCost).toFixed(4)} (Haiku 4.5 list price)`);
 
-console.log(`\n## Samples (sorted by body length)\n`);
 samples.sort((a, b) => a.bodyLen - b.bodyLen);
+const report: string[] = ["", "## Samples (sorted by body length)", ""];
 for (const s of samples) {
-  console.log(`### ${s.org} · ${s.sourceTitle} (${s.bodyLen} chars)`);
-  if (s.title) console.log(`**Title:** ${s.title}`);
-  if (s.titleShort) console.log(`**Short:** ${s.titleShort}`);
-  console.log(s.summary);
-  console.log();
+  report.push(`### ${s.org} · ${s.sourceTitle} (${s.bodyLen} chars)`);
+  if (s.title) report.push(`**Title:** ${s.title}`);
+  if (s.titleShort) report.push(`**Short:** ${s.titleShort}`);
+  report.push(s.summary, "");
 }
+logger.info(report.join("\n"));
