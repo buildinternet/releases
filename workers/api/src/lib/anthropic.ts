@@ -57,7 +57,7 @@ function getClient(apiKey: string, opts: GatewayOptions): Anthropic {
 
 type SecretBinding = { get(): Promise<string> };
 
-interface AnthropicEnv {
+export interface AnthropicEnv {
   ANTHROPIC_API_KEY?: SecretBinding;
   ANTHROPIC_BASE_URL?: string;
   AI_GATEWAY_TOKEN?: SecretBinding;
