@@ -5,6 +5,7 @@ import { cookies } from "next/headers";
 import { ViewTransition } from "react";
 import { ThemeProvider } from "@/components/theme-provider";
 import { WebMcpProvider } from "@/components/webmcp-provider";
+import { SearchHotkey } from "@/components/search-hotkey";
 import { Footer } from "@/components/footer";
 import "./globals.css";
 
@@ -59,6 +60,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       </head>
       <body className="font-sans bg-stone-50 dark:bg-stone-950 text-stone-900 dark:text-stone-100 antialiased min-h-screen flex flex-col">
         <ThemeProvider>
+          <SearchHotkey />
           <ViewTransition default="auto">
             <div className="flex-1 flex flex-col">{children}</div>
           </ViewTransition>

@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import type { PluggableList } from "unified";
 import type {
   UnifiedSearchResponse,
   SearchOrgHit,
@@ -49,6 +50,7 @@ import { SourceTypeIcon } from "./source-type-icon";
 import { FallbackImage } from "./fallback-image";
 import { LookupRail } from "./lookup-rail";
 import { RollupBadge } from "./rollup-badge";
+import { Highlight, rehypeHighlightTokens, tokenizeQuery } from "./highlight";
 import { formatDate } from "@/lib/formatters";
 
 type SearchFilter = "all" | "orgs" | "products" | "releases";
@@ -182,6 +184,7 @@ function ResultCard({
   sourceType,
   children,
   thumbnail,
+  tokens,
 }: {
   kindLabel?: string;
   title: string;
@@ -196,6 +199,7 @@ function ResultCard({
   sourceType?: string;
   children: React.ReactNode;
   thumbnail?: { src: string; alt: string } | null;
+  tokens: string[];
 }) {
   return (
     <div className="group/item border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4">
@@ -209,7 +213,7 @@ function ResultCard({
           href={titleHref}
           className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline min-w-0 truncate"
         >
-          {title}
+          <Highlight text={title} tokens={tokens} />
         </Link>
         {externalUrl && (
           <a
@@ -231,10 +235,12 @@ function ResultCard({
             href={`/${orgSlug}/${sourceSlug}`}
             className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300"
           >
-            {sourceName}
+            <Highlight text={sourceName} tokens={tokens} />
           </Link>
         ) : (
-          <span className="text-stone-500 dark:text-stone-400 font-medium">{sourceName}</span>
+          <span className="text-stone-500 dark:text-stone-400 font-medium">
+            <Highlight text={sourceName} tokens={tokens} />
+          </span>
         )}
         {/* Org name disambiguates sources with generic names like "Client SDK
             JS" — shown only when we have both an orgName and an orgSlug, and
@@ -248,7 +254,7 @@ function ResultCard({
               href={`/${orgSlug}`}
               className="text-stone-500 dark:text-stone-400 font-medium hover:text-stone-700 dark:hover:text-stone-300"
             >
-              {orgName}
+              <Highlight text={orgName} tokens={tokens} />
             </Link>
           </>
         )}
@@ -275,7 +281,7 @@ function ResultCard({
   );
 }
 
-function ReleaseResultCard({ hit }: { hit: SearchReleaseHit }) {
+function ReleaseResultCard({ hit, tokens }: { hit: SearchReleaseHit; tokens: string[] }) {
   const body = useMemo(
     () => stripLeadingTitle(hit.content ?? hit.summary, hit.title),
     [hit.content, hit.summary, hit.title],
@@ -289,6 +295,7 @@ function ReleaseResultCard({ hit }: { hit: SearchReleaseHit }) {
   // Prefer version as the card heading to match how feed items read;
   // fall back to title when version is absent.
   const heading = hit.version || hit.title;
+  const rehypePlugins = useMarkdownHighlight(tokens);
 
   return (
     <ResultCard
@@ -302,9 +309,14 @@ function ReleaseResultCard({ hit }: { hit: SearchReleaseHit }) {
       orgName={hit.orgName}
       sourceType={hit.sourceType}
       thumbnail={thumbnail}
+      tokens={tokens}
     >
       <div className={resultMarkdownClasses}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={searchPreviewComponents}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={rehypePlugins}
+          components={searchPreviewComponents}
+        >
           {body}
         </ReactMarkdown>
       </div>
@@ -312,8 +324,9 @@ function ReleaseResultCard({ hit }: { hit: SearchReleaseHit }) {
   );
 }
 
-function ChunkResultCard({ hit }: { hit: SearchChunkHit }) {
+function ChunkResultCard({ hit, tokens }: { hit: SearchChunkHit; tokens: string[] }) {
   const body = useMemo(() => stripLeadingChunkHeading(hit.snippet), [hit.snippet]);
+  const rehypePlugins = useMarkdownHighlight(tokens);
   return (
     <ResultCard
       kindLabel="Changelog"
@@ -324,14 +337,23 @@ function ChunkResultCard({ hit }: { hit: SearchChunkHit }) {
       orgSlug={hit.orgSlug}
       orgName={hit.orgName}
       sourceType="github"
+      tokens={tokens}
     >
       <div className={resultMarkdownClasses}>
-        <ReactMarkdown remarkPlugins={[remarkGfm]} components={searchPreviewComponents}>
+        <ReactMarkdown
+          remarkPlugins={[remarkGfm]}
+          rehypePlugins={rehypePlugins}
+          components={searchPreviewComponents}
+        >
           {body}
         </ReactMarkdown>
       </div>
     </ResultCard>
   );
+}
+
+function useMarkdownHighlight(tokens: string[]): PluggableList {
+  return useMemo(() => (tokens.length ? [[rehypeHighlightTokens, { tokens }]] : []), [tokens]);
 }
 
 export function SearchResults({
@@ -342,6 +364,8 @@ export function SearchResults({
   results: UnifiedSearchResponse | null;
 }) {
   const [filter, setFilter] = useState<SearchFilter>("all");
+
+  const tokens = useMemo(() => tokenizeQuery(query), [query]);
 
   const rankedHits = useMemo(
     () => (results ? interleaveRankedHits(results.releases, results.chunks) : []),
@@ -414,12 +438,18 @@ export function SearchResults({
                     href={`/${org.slug}`}
                     className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
                   >
-                    <span className="font-medium">{org.name}</span>
+                    <span className="font-medium">
+                      <Highlight text={org.name} tokens={tokens} />
+                    </span>
                     {org.category && (
-                      <span className="ml-2 text-xs text-stone-400">{org.category}</span>
+                      <span className="ml-2 text-xs text-stone-400">
+                        <Highlight text={org.category} tokens={tokens} />
+                      </span>
                     )}
                     {org.domain && (
-                      <span className="ml-2 text-xs text-stone-400">{org.domain}</span>
+                      <span className="ml-2 text-xs text-stone-400">
+                        <Highlight text={org.domain} tokens={tokens} />
+                      </span>
                     )}
                   </Link>
                 ))}
@@ -449,9 +479,13 @@ export function SearchResults({
                       href={href}
                       className="block p-3 rounded-lg border border-stone-200 dark:border-stone-800 hover:bg-stone-50 dark:hover:bg-stone-900 transition-colors"
                     >
-                      <span className="font-medium">{p.name}</span>
+                      <span className="font-medium">
+                        <Highlight text={p.name} tokens={tokens} />
+                      </span>
                       {p.orgName && (
-                        <span className="ml-2 text-xs text-stone-400">by {p.orgName}</span>
+                        <span className="ml-2 text-xs text-stone-400">
+                          by <Highlight text={p.orgName} tokens={tokens} />
+                        </span>
                       )}
                     </Link>
                   );
@@ -473,10 +507,18 @@ export function SearchResults({
                 {rankedHits.map((entry, i) => {
                   if (entry.kind === "release") {
                     const r = entry.hit;
-                    return <ReleaseResultCard key={`release:${r.id}:${i}`} hit={r} />;
+                    return (
+                      <ReleaseResultCard key={`release:${r.id}:${i}`} hit={r} tokens={tokens} />
+                    );
                   }
                   const c = entry.hit;
-                  return <ChunkResultCard key={`chunk:${c.sourceSlug}:${c.offset}:${i}`} hit={c} />;
+                  return (
+                    <ChunkResultCard
+                      key={`chunk:${c.sourceSlug}:${c.offset}:${i}`}
+                      hit={c}
+                      tokens={tokens}
+                    />
+                  );
                 })}
               </div>
             </section>
