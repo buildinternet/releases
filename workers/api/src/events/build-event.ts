@@ -37,6 +37,8 @@ export function buildReleaseEventPayloads(input: BuildEventsInput): ReleaseEvent
     sourceName: input.src.name,
     sourceSlug: input.src.slug,
     contentSummary: null,
+    contentTitle: null,
+    contentTitleShort: null,
     media: parseMedia(r.media),
   }));
 }

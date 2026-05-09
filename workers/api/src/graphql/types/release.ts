@@ -14,6 +14,15 @@ export const ReleaseType = builder.objectType("Release", {
     fetchedAt: t.expose("fetchedAt", { type: "DateTime" }),
 
     contentSummary: t.exposeString("contentSummary", { nullable: true }),
+    contentTitle: t.exposeString("contentTitle", {
+      nullable: true,
+      description:
+        "AI-generated self-contained news-headline form (#852). Nullable; populated opportunistically. Fall back to `title` for display.",
+    }),
+    contentTitleShort: t.exposeString("contentTitleShort", {
+      nullable: true,
+      description: "AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`.",
+    }),
     content: t.exposeString("content", {
       description:
         "Full markdown body. Often large — request only when you need it (this is the field-selection win).",

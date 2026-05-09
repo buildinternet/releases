@@ -1269,6 +1269,8 @@ orgRoutes.get("/orgs/:slug/releases", async (c) => {
     title: r.title,
     summary:
       r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    contentTitle: r.content_title,
+    contentTitleShort: r.content_title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
@@ -1324,6 +1326,8 @@ orgRoutes.get("/orgs/:slug/recent-releases", async (c) => {
       title: releasesVisible.title,
       content: releasesVisible.content,
       contentSummary: releasesVisible.contentSummary,
+      contentTitle: releasesVisible.contentTitle,
+      contentTitleShort: releasesVisible.contentTitleShort,
       url: releasesVisible.url,
       contentHash: releasesVisible.contentHash,
       metadata: releasesVisible.metadata,

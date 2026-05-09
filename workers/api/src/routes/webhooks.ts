@@ -212,6 +212,8 @@ webhooksRoutes.post("/webhooks/:id/test", async (c) => {
         sourceName: "synthetic",
         sourceSlug: "synthetic",
         contentSummary: "This is a synthetic test event from `releases admin webhook test`.",
+        contentTitle: null,
+        contentTitleShort: null,
         media: [],
       },
     },

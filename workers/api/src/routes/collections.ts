@@ -292,6 +292,8 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
     title: r.title,
     summary:
       r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    contentTitle: r.content_title,
+    contentTitleShort: r.content_title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,

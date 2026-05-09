@@ -96,6 +96,10 @@ export interface HybridReleaseHit {
     orgName: string | null;
     /** Release type — "feature" (default) or "rollup". */
     type: ReleaseType;
+    /** AI-generated headline (#852). Nullable; populated opportunistically. */
+    contentTitle: string | null;
+    /** AI-generated smart-brevity headline (#852). */
+    contentTitleShort: string | null;
   };
 }
 
@@ -173,6 +177,10 @@ interface RawReleaseRow {
   orgName: string | null;
   /** Release type — "feature" (default) or "rollup". */
   type: ReleaseType;
+  /** AI-generated headline (#852). Nullable; populated opportunistically. */
+  contentTitle: string | null;
+  /** AI-generated smart-brevity headline (#852). */
+  contentTitleShort: string | null;
 }
 
 async function hydrateReleases(
@@ -189,6 +197,8 @@ async function hydrateReleases(
            r.url as url,
            r.published_at as publishedAt,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.content_title as contentTitle,
+           r.content_title_short as contentTitleShort,
            r.content as content,
            r.media as media,
            r.type as type,
@@ -474,6 +484,8 @@ async function buildReleaseHits(
         url: row.url,
         publishedAt: row.publishedAt,
         summary: row.summary,
+        contentTitle: row.contentTitle,
+        contentTitleShort: row.contentTitleShort,
         content: row.content,
         media: row.media,
         source: {

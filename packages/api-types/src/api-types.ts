@@ -209,6 +209,14 @@ export interface ReleaseDetail {
   title: string;
   content: string;
   contentSummary: string | null;
+  /**
+   * AI-generated self-contained news-headline form of the release (#852).
+   * Nullable because most rows are unpopulated — fall back to `title` for
+   * display.
+   */
+  contentTitle: string | null;
+  /** AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`. */
+  contentTitleShort: string | null;
   url: string | null;
   media: MediaItem[];
   publishedAt: string | null;
@@ -334,6 +342,10 @@ export interface SearchReleaseHit {
   version: string | null;
   title: string;
   summary: string;
+  /** AI-generated headline (#852). Optional + nullable: most rows are unpopulated. */
+  contentTitle?: string | null;
+  /** AI-generated smart-brevity headline (#852). Same caveat as contentTitle. */
+  contentTitleShort?: string | null;
   /**
    * Full release body, media URLs hydrated through the MEDIA_ORIGIN proxy.
    * Present so the web can render the same markdown + thumbnail treatment
@@ -786,6 +798,10 @@ export interface ReleaseWithSource {
   title: string;
   content: string;
   contentSummary: string | null;
+  /** AI-generated headline (#852). See {@link ReleaseDetail.contentTitle}. */
+  contentTitle: string | null;
+  /** AI-generated smart-brevity headline (#852). */
+  contentTitleShort: string | null;
   url: string | null;
   contentHash: string | null;
   metadata: string | null;
@@ -805,6 +821,10 @@ export interface LatestRelease {
   sourceName: string;
   sourceSlug: string;
   contentSummary: string | null;
+  /** AI-generated headline (#852). See {@link ReleaseDetail.contentTitle}. */
+  contentTitle: string | null;
+  /** AI-generated smart-brevity headline (#852). */
+  contentTitleShort: string | null;
   media: MediaItem[];
 }
 

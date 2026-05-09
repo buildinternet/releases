@@ -19,6 +19,8 @@ function evt(
       sourceName: "s",
       sourceSlug: "s",
       contentSummary: null,
+      contentTitle: null,
+      contentTitleShort: null,
       media: [],
       ...overrides,
     } as any,

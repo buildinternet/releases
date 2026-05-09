@@ -305,6 +305,8 @@ export type OrgReleaseRow = {
   title: string;
   content: string;
   content_summary: string | null;
+  content_title: string | null;
+  content_title_short: string | null;
   published_at: string | null;
   fetched_at: string;
   url: string | null;
@@ -352,7 +354,8 @@ export async function getOrgReleasesFeed(
   const stmt = d1
     .prepare(
       `
-    SELECT r.id, r.version, r.title, r.content, r.content_summary, r.type,
+    SELECT r.id, r.version, r.title, r.content, r.content_summary,
+           r.content_title, r.content_title_short, r.type,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease,
            s.slug AS source_slug, s.name AS source_name, s.type AS source_type
     FROM ${releasesTable} r

@@ -128,6 +128,8 @@ releaseRoutes.get("/releases/latest", async (c) => {
       type: r.type,
       title: r.title,
       summary: r.content_summary,
+      contentTitle: r.content_title,
+      contentTitleShort: r.content_title_short,
       publishedAt: r.published_at,
       url: r.url,
       media: parseReleaseMedia(r.media, mediaOrigin),

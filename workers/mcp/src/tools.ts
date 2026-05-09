@@ -491,6 +491,8 @@ export async function searchReleases(
     id: string;
     title: string;
     summary: string;
+    contentTitle: string | null;
+    contentTitleShort: string | null;
     version: string | null;
     type: ReleaseType;
     publishedAt: string | null;
@@ -501,6 +503,8 @@ export async function searchReleases(
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
            r.version, r.title, r.type,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.content_title as contentTitle,
+           r.content_title_short as contentTitleShort,
            r.published_at as publishedAt,
            o.slug as orgSlug
     FROM releases_fts
@@ -753,6 +757,8 @@ export async function getLatestReleases(
       type: releasesTable.type,
       content: releasesTable.content,
       contentSummary: releasesTable.contentSummary,
+      contentTitle: releasesTable.contentTitle,
+      contentTitleShort: releasesTable.contentTitleShort,
       publishedAt: releasesTable.publishedAt,
       sourceName: sources.name,
       sourceSlug: sources.slug,
@@ -1334,6 +1340,8 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
       type: releases.type,
       content: releases.content,
       contentSummary: releases.contentSummary,
+      contentTitle: releases.contentTitle,
+      contentTitleShort: releases.contentTitleShort,
       publishedAt: releases.publishedAt,
       url: releases.url,
       suppressed: releases.suppressed,
@@ -1993,6 +2001,8 @@ export async function search(
     id: string;
     title: string;
     summary: string;
+    contentTitle: string | null;
+    contentTitleShort: string | null;
     version: string | null;
     type: ReleaseType;
     publishedAt: string | null;
@@ -2043,6 +2053,8 @@ export async function search(
           SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
                  r.version, r.title, r.type,
                  COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
+                 r.content_title as contentTitle,
+                 r.content_title_short as contentTitleShort,
                  r.published_at as publishedAt,
                  o.slug as orgSlug
           FROM releases_fts

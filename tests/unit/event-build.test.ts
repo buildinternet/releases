@@ -32,6 +32,8 @@ describe("buildReleaseEventPayloads", () => {
       sourceName: "Claude Code",
       sourceSlug: "claude-code",
       contentSummary: null,
+      contentTitle: null,
+      contentTitleShort: null,
       media: [{ type: "image", url: "https://ex/1.png" }],
     });
     expect(events[1].media).toEqual([]);
