@@ -15,6 +15,14 @@ export interface ReleaseEventPayload {
   sourceName: string;
   sourceSlug: string;
   contentSummary: string | null;
+  /**
+   * AI-generated headline (#852). Always null at event time — the generator
+   * runs post-insert. Present here only so the wire shape mirrors
+   * {@link LatestRelease}; clients can fall back to `title`.
+   */
+  contentTitle: string | null;
+  /** AI-generated smart-brevity headline (#852). Same caveat as contentTitle. */
+  contentTitleShort: string | null;
   media: MediaItem[];
 }
 

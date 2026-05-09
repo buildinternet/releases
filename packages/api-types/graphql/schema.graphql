@@ -115,6 +115,16 @@ type Release {
   """
   content: String!
   contentSummary: String
+
+  """
+  AI-generated self-contained news-headline form (#852). Nullable; populated opportunistically. Fall back to `title` for display.
+  """
+  contentTitle: String
+
+  """
+  AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`.
+  """
+  contentTitleShort: String
   fetchedAt: DateTime!
   id: ID!
 

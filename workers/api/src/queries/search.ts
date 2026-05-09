@@ -32,6 +32,8 @@ export interface RawSearchReleaseRow {
   publishedAt: string | null;
   /** Release type — "feature" (default) or "rollup". */
   type: ReleaseType;
+  contentTitle: string | null;
+  contentTitleShort: string | null;
 }
 
 /**
@@ -112,6 +114,8 @@ export async function searchReleasesFts(
            o.slug as orgSlug, o.name as orgName,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.content_title as contentTitle,
+           r.content_title_short as contentTitleShort,
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,
@@ -158,6 +162,8 @@ export async function searchReleasesFromMatchedEntities(
            o.slug as orgSlug, o.name as orgName,
            r.version, r.title,
            COALESCE(r.content_summary, SUBSTR(r.content, 1, 150)) as summary,
+           r.content_title as contentTitle,
+           r.content_title_short as contentTitleShort,
            r.content as content,
            r.media as media,
            r.published_at as publishedAt,
