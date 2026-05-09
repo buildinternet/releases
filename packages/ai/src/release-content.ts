@@ -7,13 +7,8 @@
  *   - the API worker's poll-fetch / scrape-agent workflows (per-org opt-in)
  *
  * Worker-safe: no `fs`, no `node:*` imports, no logger. Caller constructs
- * the Anthropic client (so the script can route directly and the worker
- * can route through AI Gateway via `@buildinternet/releases-lib/anthropic-client`).
- *
- * Cost: ~$0.005/release at list price. The system prompt is ~3,971 tokens
- * — just below Haiku 4.5's 4,096-token cache threshold, so ephemeral
- * caching never activates in practice. See issue #851 for AI Gateway /
- * alternate model exploration.
+ * the Anthropic client so the script can route directly and the worker
+ * can route through AI Gateway via `@buildinternet/releases-lib/anthropic-client`.
  */
 
 import type Anthropic from "@anthropic-ai/sdk";
@@ -22,21 +17,14 @@ const MODEL = "claude-haiku-4-5";
 const MAX_BODY_CHARS = 8000;
 const MAX_OUTPUT_TOKENS = 220;
 
-/**
- * In-prompt sentinel for the `summary` field when the model judges the
- * body has no real release notes (boilerplate-only / dependency bumps).
- * Stays a real string because the prompt instructs the model to emit it
- * as a real summary; the title fields meanwhile get a model-produced
- * formulaic headline. The empty-body short-circuit (`isEmptyContent`)
- * is a separate path — those rows skip the model entirely.
- */
+// In-prompt sentinel emitted by the model when the body is boilerplate-only.
+// The empty-body short-circuit (isEmptyContent) is a separate path — those
+// rows skip the model entirely and return all-null fields.
 const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
 
-/**
- * Boilerplate strings that, when they're the entire normalized content,
- * mean the body has no real release notes. Compared lowercase after
- * markdown + HTML-comment + badge stripping.
- */
+// Strings that, when they are the entire normalized body, indicate no real
+// release-note content. Compared lowercase after stripping markdown / HTML
+// comments / badges.
 const BOILERPLATE_BODIES = new Set([
   "chore",
   "n/a",
@@ -55,14 +43,9 @@ const BOILERPLATE_BODIES = new Set([
 ]);
 
 /**
- * True when a body has no real release-note content. Strips markdown
- * formatting, HTML comments, and image/link syntax (badges) before
- * checking whether anything alphabetic remains. A body of pure
- * "Updated dependencies" or just an `<!-- placeholder -->` returns
- * true; "Fixed VSCode bug" (16 chars) returns false.
- *
- * Callers use this to skip the AI call entirely on empty bodies — saves
- * cost and avoids stamping placeholder strings into the DB.
+ * True when a body has no real release-note content — used to skip the AI
+ * call entirely. Strips markdown, HTML comments, and badge syntax before
+ * checking whether any alphabetic words remain.
  */
 export function isEmptyContent(raw: string): boolean {
   let s = raw.trim();
@@ -288,7 +271,7 @@ This week's release brings exciting quality-of-life improvements across the app:
 
 export interface SummarizeReleaseInput {
   orgSlug: string;
-  /** Human-readable source/product label (e.g. "Claude Code"). Used in the headline. */
+  /** Human-readable label (e.g. "Claude Code"). Used in the headline. */
   sourceName: string;
   /** Set only when the org groups multiple products through one source. */
   productName: string | null;
@@ -298,7 +281,7 @@ export interface SummarizeReleaseInput {
   content: string;
 }
 
-export interface TokenUsage {
+export interface ReleaseContentUsage {
   input: number;
   output: number;
   cacheCreate: number;
@@ -310,7 +293,7 @@ export interface SummarizeReleaseResult {
   title: string | null;
   titleShort: string | null;
   summary: string | null;
-  usage: TokenUsage;
+  usage: ReleaseContentUsage;
   /** True when isEmptyContent short-circuited and no model call was made. */
   skipped: boolean;
 }
@@ -350,16 +333,11 @@ function extractTagged(text: string, tag: string): string {
 /**
  * Run a release body through Haiku 4.5 to produce title / short title /
  * summary. Returns all-null + `skipped: true` when the body has no real
- * content (callers leave the columns NULL — read paths fall back to the
- * raw release.title cleanly).
+ * content (read paths fall back to the raw release.title).
  *
- * Throws when the model returns no `<summary>` tag — that's a hard
- * failure (output_too_short or upstream API error). Caller decides
- * whether to log + leave columns NULL or surface the error.
- *
- * Title fields are independent: when the model omits `<title>` or
- * `<title_short>`, the corresponding result field is null. Callers
- * persist NULL rather than fabricating a placeholder.
+ * Throws when the model returns no `<summary>` tag (output_too_short or
+ * upstream API error). Title fields are independent — missing `<title>`
+ * or `<title_short>` yields null rather than a fabricated placeholder.
  */
 export async function summarizeRelease(
   client: Anthropic,
