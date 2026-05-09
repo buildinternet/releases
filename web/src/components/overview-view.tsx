@@ -88,7 +88,7 @@ export function OverviewView({ page }: OverviewViewProps) {
             />
           )}
         </div>
-        {overflows && !expanded && (
+        {clamped && (
           <button
             type="button"
             onClick={() => setExpanded(true)}
@@ -99,7 +99,7 @@ export function OverviewView({ page }: OverviewViewProps) {
             Show more
           </button>
         )}
-        {(!overflows || expanded) && (
+        {!clamped && (
           <div className="mt-4 pt-3 border-t border-stone-200 dark:border-stone-800 text-[11px] text-stone-400 dark:text-stone-500">
             AI-generated summaries may contain mistakes.
           </div>

@@ -108,6 +108,27 @@ describe("applyCitationMarkers", () => {
     expect(out.content.startsWith("# Acme")).toBe(false);
   });
 
+  it("drops every citation cleanly when all spans fall inside the stripped heading", () => {
+    // Heading is 12 chars; both citations sit entirely inside it. After the
+    // clamp, numbered is empty — no markers, no Sources footer, no dangling
+    // blank lines.
+    const heading = "# Acme Inc\n\n";
+    const body = "Body text without citations.";
+    const out = applyCitationMarkers(
+      heading + body,
+      [
+        cite({ startIndex: 2, endIndex: 6, sourceUrl: "https://a.com/x" }),
+        cite({ startIndex: 7, endIndex: 11, sourceUrl: "https://a.com/y" }),
+      ],
+      PAGE_ID,
+    );
+    expect(out.rendered).toEqual([]);
+    expect(out.content).toBe(body);
+    expect(out.content).not.toContain("a.com/x");
+    expect(out.content).not.toContain("a.com/y");
+    expect(out.content).not.toContain("[^");
+  });
+
   it("falls back to a hostname-shaped label when title is missing", () => {
     const out = applyCitationMarkers(
       "Hi.",

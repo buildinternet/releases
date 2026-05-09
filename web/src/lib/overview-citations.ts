@@ -21,13 +21,10 @@ interface ShiftedCitation extends OverviewCitation {
 }
 
 function shiftAndClamp(
-  citations: OverviewCitation[],
+  citations: readonly OverviewCitation[],
   offset: number,
   contentLength: number,
 ): ShiftedCitation[] {
-  if (offset === 0) {
-    return citations.map((c, i) => ({ ...c, index: i }));
-  }
   const out: ShiftedCitation[] = [];
   for (let i = 0; i < citations.length; i++) {
     const c = citations[i]!;
@@ -36,7 +33,7 @@ function shiftAndClamp(
     const shiftedStart = Math.max(0, c.startIndex - offset);
     out.push({
       ...c,
-      startIndex: shiftedStart,
+      startIndex: Math.min(shiftedStart, contentLength),
       endIndex: Math.min(shiftedEnd, contentLength),
       index: i,
     });
@@ -63,12 +60,9 @@ function footnoteLabel(pageId: string, n: number): string {
  */
 function definitionLabel(c: OverviewCitation): string {
   if (c.title && c.title.trim()) return c.title.trim();
-  try {
-    const u = new URL(c.sourceUrl);
-    return u.hostname + u.pathname;
-  } catch {
-    return c.sourceUrl;
-  }
+  if (!URL.canParse(c.sourceUrl)) return c.sourceUrl;
+  const u = new URL(c.sourceUrl);
+  return u.hostname + u.pathname;
 }
 
 export interface ApplyCitationsResult {
@@ -99,7 +93,7 @@ export function applyCitationMarkers(
 
   // Sort by start ascending so display numbering reads left-to-right; ties
   // broken by end so a longer span covers the shorter one in the same spot.
-  const shifted = shiftAndClamp([...list], stripped.offset, stripped.content.length).toSorted(
+  const shifted = shiftAndClamp(list, stripped.offset, stripped.content.length).toSorted(
     (a, b) => a.startIndex - b.startIndex || a.endIndex - b.endIndex,
   );
 
@@ -109,6 +103,13 @@ export function applyCitationMarkers(
     number: i + 1,
     label: footnoteLabel(pageId, i + 1),
   }));
+
+  // Every citation may have been dropped by the heading-strip clamp. In that
+  // case skip the marker injection and footnote block — appending an empty
+  // defs string would leave dangling blank lines at the bottom.
+  if (numbered.length === 0) {
+    return { content: stripped.content, rendered: [] };
+  }
 
   // Insert markers from rightmost endIndex backwards so earlier offsets
   // don't shift as we splice strings.
