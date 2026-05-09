@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { OverviewPageItem } from "@/lib/api";
 import { rehypeShikiPlugin } from "@/lib/shiki";
+import { applyCitationMarkers } from "@/lib/overview-citations";
 import { markdownComponents } from "./markdown-components";
 
 interface OverviewViewProps {
@@ -12,26 +13,25 @@ interface OverviewViewProps {
 }
 
 const proseClasses =
-  "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13.5px] leading-relaxed [&_p]:my-2 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300";
+  "prose prose-sm prose-stone dark:prose-invert max-w-none text-[13.5px] leading-relaxed [&_p]:my-2 [&_code]:text-[13px] [&_code]:bg-stone-100 dark:[&_code]:bg-stone-800 [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_code::before]:content-none [&_code::after]:content-none [&_a]:text-stone-600 dark:[&_a]:text-stone-400 [&_a]:no-underline text-stone-700 dark:text-stone-300 [&_sup_a]:text-stone-500 dark:[&_sup_a]:text-stone-400 [&_sup_a]:no-underline [&_sup_a]:font-medium [&_sup_a:hover]:text-stone-800 dark:[&_sup_a:hover]:text-stone-200 [&_section.footnotes]:mt-6 [&_section.footnotes]:pt-4 [&_section.footnotes]:border-t [&_section.footnotes]:border-stone-200 dark:[&_section.footnotes]:border-stone-800 [&_section.footnotes_h2]:text-[11px] [&_section.footnotes_h2]:uppercase [&_section.footnotes_h2]:tracking-wide [&_section.footnotes_h2]:text-stone-400 dark:[&_section.footnotes_h2]:text-stone-500 [&_section.footnotes_h2]:font-medium [&_section.footnotes_h2]:mb-2 [&_section.footnotes_ol]:text-[12px] [&_section.footnotes_ol]:my-0 [&_section.footnotes_ol]:pl-5";
 
 const CLAMP_HEIGHT_PX = 460;
 // Hysteresis: don't show a toggle for content that barely exceeds the clamp.
 const CLAMP_BUFFER_PX = 8;
-
-/**
- * The overview already lives inside an org page with a header — the AI
- * generator occasionally adds an `# Org Name` line anyway. Strip a leading
- * h1 so we don't render a redundant title.
- */
-function stripLeadingH1(content: string): string {
-  return content.replace(/^\s*#\s+[^\n]+\n+/, "");
-}
 
 export function OverviewView({ page }: OverviewViewProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const contentId = useId();
   const [overflows, setOverflows] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  // Memoize the citation injection — re-runs only when content or citations
+  // change. Pass contentId in so the footnote ids don't collide across two
+  // overviews on the same page.
+  const renderedContent = useMemo(
+    () => applyCitationMarkers(page.content, page.citations, contentId).content,
+    [page.content, page.citations, contentId],
+  );
 
   useEffect(() => {
     setExpanded(false);
@@ -44,7 +44,7 @@ export function OverviewView({ page }: OverviewViewProps) {
     const ro = new ResizeObserver(check);
     ro.observe(el);
     return () => ro.disconnect();
-  }, [page.content]);
+  }, [renderedContent]);
 
   const updatedDate = new Date(page.updatedAt).toLocaleDateString("en-US", {
     month: "short",
@@ -78,7 +78,7 @@ export function OverviewView({ page }: OverviewViewProps) {
               rehypePlugins={[rehypeShikiPlugin]}
               components={markdownComponents}
             >
-              {stripLeadingH1(page.content)}
+              {renderedContent}
             </ReactMarkdown>
           </div>
           {clamped && (
