@@ -68,6 +68,22 @@ export const ReleaseSummaryItemSchema = z.object({
   generatedAt: z.string(),
 });
 
+/**
+ * Inline citation attached to an overview page (#846). Each row maps a
+ * character span in `OverviewPageItem.content` back to a release URL the
+ * model cited via Anthropic's search_result blocks. Optional everywhere it
+ * appears — pages generated before #846 lands have none, and consumers
+ * should degrade gracefully.
+ */
+export const OverviewCitationSchema = z.object({
+  startIndex: z.number().int().min(0),
+  endIndex: z.number().int().min(0),
+  sourceUrl: z.string(),
+  title: z.string().nullable().optional(),
+  citedText: z.string(),
+  releaseId: z.string().nullable().optional(),
+});
+
 export const OverviewPageItemSchema = z.object({
   scope: z.enum(["org", "product"]),
   orgSlug: z.string().nullable().optional(),
@@ -77,4 +93,5 @@ export const OverviewPageItemSchema = z.object({
   lastContributingReleaseAt: z.string().nullable(),
   generatedAt: z.string(),
   updatedAt: z.string(),
+  citations: z.array(OverviewCitationSchema).optional(),
 });

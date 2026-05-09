@@ -22,6 +22,7 @@ import {
   newTagId,
   newDomainAliasId,
   newKnowledgePageId,
+  newKnowledgePageCitationId,
   newSourceChangelogFileId,
   newSourceChangelogChunkId,
   newTelemetryEventId,
@@ -632,6 +633,37 @@ export const knowledgePages = sqliteTable(
 
 export type KnowledgePage = typeof knowledgePages.$inferSelect;
 export type NewKnowledgePage = typeof knowledgePages.$inferInsert;
+
+/**
+ * Inline citations attached to a knowledge_pages row. Populated when an org
+ * overview is generated via Anthropic search_result blocks (#846); each row
+ * maps a character span in `knowledge_pages.content` back to the release post
+ * it summarizes. start_index / end_index are inclusive/exclusive offsets into
+ * the page body. release_id is best-effort: resolved from source_url at write
+ * time, set null on miss.
+ */
+export const knowledgePageCitations = sqliteTable(
+  "knowledge_page_citations",
+  {
+    id: text("id").primaryKey().$defaultFn(newKnowledgePageCitationId),
+    knowledgePageId: text("knowledge_page_id")
+      .notNull()
+      .references(() => knowledgePages.id, { onDelete: "cascade" }),
+    startIndex: integer("start_index").notNull(),
+    endIndex: integer("end_index").notNull(),
+    sourceUrl: text("source_url").notNull(),
+    title: text("title"),
+    citedText: text("cited_text").notNull(),
+    releaseId: text("release_id").references(() => releases.id, { onDelete: "set null" }),
+    createdAt: text("created_at")
+      .notNull()
+      .$defaultFn(() => new Date().toISOString()),
+  },
+  (table) => [index("idx_knowledge_page_citations_page").on(table.knowledgePageId)],
+);
+
+export type KnowledgePageCitation = typeof knowledgePageCitations.$inferSelect;
+export type NewKnowledgePageCitation = typeof knowledgePageCitations.$inferInsert;
 
 export const sourceChangelogFiles = sqliteTable(
   "source_changelog_files",

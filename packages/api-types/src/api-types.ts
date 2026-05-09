@@ -19,6 +19,7 @@ import type {
   ReleaseItemSchema,
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
+  OverviewCitationSchema,
 } from "./schemas/shared.js";
 import type {
   OrgListItemSchema,
@@ -68,6 +69,7 @@ export {
   ReleaseItemSchema,
   ReleaseSummaryItemSchema,
   OverviewPageItemSchema,
+  OverviewCitationSchema,
   CategorySchema,
 } from "./schemas/shared.js";
 export {
@@ -492,6 +494,7 @@ export interface UnifiedSearchResponse {
 // ── Overview Pages ──
 
 export type OverviewPageItem = z.infer<typeof OverviewPageItemSchema>;
+export type OverviewCitation = z.infer<typeof OverviewCitationSchema>;
 
 /** @deprecated Use OverviewPageItem */
 export type KnowledgePageItem = OverviewPageItem;
