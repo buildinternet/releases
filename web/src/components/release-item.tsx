@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useState, useRef, useEffect, useMemo, ViewTransition } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { rehypeShikiPlugin } from "@/lib/shiki";
@@ -198,12 +198,14 @@ export function ReleaseListItem({
       <div className="flex-1 min-w-0 border-b border-stone-200 dark:border-stone-800 last:border-b-0 py-4 pl-5">
         <div className="flex items-baseline gap-1.5 mb-1">
           {release.id ? (
-            <Link
-              href={`/release/${release.id}`}
-              className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline underline-offset-2"
-            >
-              {heading}
-            </Link>
+            <ViewTransition name={`rel-${release.id}`} default="none">
+              <Link
+                href={`/release/${release.id}`}
+                className="font-semibold text-[15px] text-stone-900 dark:text-stone-100 hover:underline underline-offset-2"
+              >
+                {heading}
+              </Link>
+            </ViewTransition>
           ) : (
             <span className="font-semibold text-[15px] text-stone-900 dark:text-stone-100">
               {heading}

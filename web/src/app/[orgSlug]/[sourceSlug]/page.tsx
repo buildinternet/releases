@@ -13,7 +13,7 @@ import { PromoteSourceButton } from "@/components/promote-source-button";
 import { isPromoteSourceEnabled } from "@/lib/promote-source-flag";
 import { SourceMainContent } from "@/components/source-main-content";
 import { RelatedRail } from "@/components/related-rail";
-import { Suspense } from "react";
+import { Suspense, ViewTransition } from "react";
 import { SourceTimeline } from "@/components/source-timeline";
 import { CliCommand } from "@/components/cli-command";
 import { formatSourceDate, sourceUrlSidebarItem } from "@/lib/source-display";
@@ -227,9 +227,11 @@ export default async function SourcePage({
           <span className="text-stone-600 dark:text-stone-300 font-medium">{source.name}</span>
         </div>
         <div className="flex items-center gap-2.5 mt-4">
-          <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
-            {source.name}
-          </h1>
+          <ViewTransition name={`src-${source.org.slug}-${source.slug}`} default="none">
+            <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100">
+              {source.name}
+            </h1>
+          </ViewTransition>
           <SourceTypeIcon type={source.type} size={18} />
           {hiddenBadge && <StateBadge label={hiddenBadge.label} title={hiddenBadge.title} />}
           {showPromoteButton && (
