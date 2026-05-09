@@ -353,6 +353,8 @@ export interface RelatedReleaseItem {
   url: string | null;
   publishedAt: string | null;
   summary: string;
+  contentTitle: string | null;
+  contentTitleShort: string | null;
   thumbnail: { url: string; alt?: string } | null;
   score: number;
   source: {

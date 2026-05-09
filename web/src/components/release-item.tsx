@@ -170,6 +170,15 @@ export function ReleaseListItem({
   // Show subtitle title only when we have a version AND title is different from it
   const showSubtitle = hasVersion && release.title && !titleMatchesVersion;
 
+  // Prefer the AI-generated smart-brevity headline as the subtitle when
+  // present (#852); fall back to the raw title in the version-prominent
+  // case. `contentTitleShort` is more informative than the raw title for
+  // most sources, so showing it whenever populated is a strict improvement.
+  const subtitleText =
+    release.contentTitleShort?.trim() ||
+    release.contentTitle?.trim() ||
+    (showSubtitle ? release.title : null);
+
   useEffect(() => {
     const el = contentRef.current;
     if (!el) return;
@@ -232,8 +241,8 @@ export function ReleaseListItem({
             </span>
           )}
         </div>
-        {showSubtitle && (
-          <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{release.title}</div>
+        {subtitleText && (
+          <div className="text-sm text-stone-600 dark:text-stone-400 mb-1">{subtitleText}</div>
         )}
         {sourceByline && (
           <div className="text-[12px] text-stone-400 dark:text-stone-500 mb-1 flex items-center gap-1">
