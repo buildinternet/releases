@@ -1,3 +1,4 @@
+import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { api } from "@/lib/api";
 import {
   OG_CONTENT_TYPE,
@@ -33,7 +34,9 @@ export default async function Image({
       description: product.description ?? undefined,
       metrics: [
         { label: "Sources", value: formatCount(product.sources.length) },
-        ...(product.category ? [{ label: "Category", value: product.category }] : []),
+        ...(product.category
+          ? [{ label: "Category", value: categoryDisplayName(product.category) }]
+          : []),
       ],
       avatarUrl,
     });

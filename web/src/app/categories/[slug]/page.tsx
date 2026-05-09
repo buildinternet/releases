@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { api, ApiSetupError, type CategoryDetail } from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
@@ -9,20 +10,13 @@ import { TaxonomyList } from "@/components/taxonomy-list";
 
 const getCategory = cache((slug: string) => api.categoryDetail(slug));
 
-function titleFor(slug: string) {
-  return slug
-    .split("-")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
 export async function generateMetadata({
   params,
 }: {
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
-  const title = titleFor(slug);
+  const title = categoryDisplayName(slug);
   return {
     title,
     description: `Organizations and products in the ${title} category`,
@@ -48,7 +42,7 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
     notFound();
   }
 
-  const title = titleFor(detail.slug);
+  const title = categoryDisplayName(detail.slug);
 
   return (
     <div className="min-h-screen">

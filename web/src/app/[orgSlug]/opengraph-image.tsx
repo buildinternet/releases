@@ -1,3 +1,4 @@
+import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { api } from "@/lib/api";
 import {
   OG_CONTENT_TYPE,
@@ -23,7 +24,7 @@ export default async function Image({ params }: { params: Promise<{ orgSlug: str
     return renderOgImage({
       eyebrow: "Organization",
       title: org.name,
-      subtitle: org.category ? org.category : undefined,
+      subtitle: org.category ? categoryDisplayName(org.category) : undefined,
       description,
       metrics: [
         { label: "Sources", value: formatCount(org.sourceCount) },

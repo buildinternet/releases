@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import { toSlug } from "@buildinternet/releases-core/slug";
 import type { SidebarSection } from "./sidebar";
 
@@ -39,7 +40,11 @@ export function taxonomySidebarSections({
   if (category) {
     items.push({
       label: "Category",
-      value: <TaxonomyChips items={[{ label: category, href: `/categories/${category}` }]} />,
+      value: (
+        <TaxonomyChips
+          items={[{ label: categoryDisplayName(category), href: `/categories/${category}` }]}
+        />
+      ),
     });
   }
   if (tags && tags.length > 0) {

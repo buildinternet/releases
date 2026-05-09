@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import Link from "next/link";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { categoryDisplayName } from "@buildinternet/releases-core/categories";
 import type {
   UnifiedSearchResponse,
   SearchOrgHit,
@@ -447,7 +448,7 @@ export function SearchResults({
                     </span>
                     {org.category && (
                       <span className="ml-2 text-xs text-stone-400">
-                        <Highlight text={org.category} tokens={tokens} />
+                        <Highlight text={categoryDisplayName(org.category)} tokens={tokens} />
                       </span>
                     )}
                     {org.domain && (
