@@ -166,8 +166,12 @@ function ReleaseCard({ item, scope }: { item: RelatedReleaseItem; scope: "org" |
   const href = `/release/${item.id}`;
   const heading = item.version ?? item.title;
   const showSubtitle = !!item.version && item.title && item.title !== item.version;
+  const subtitleText =
+    item.contentTitleShort?.trim() ||
+    item.contentTitle?.trim() ||
+    (showSubtitle ? item.title : null);
   const source = subtitleForSource(item.source.orgName, item.source.name, scope);
-  const preview = releasePreview(item, showSubtitle ? item.title : null);
+  const preview = releasePreview(item, subtitleText);
   return (
     <Link
       href={href}
@@ -184,9 +188,9 @@ function ReleaseCard({ item, scope }: { item: RelatedReleaseItem; scope: "org" |
             </span>
           )}
         </div>
-        {showSubtitle && (
+        {subtitleText && (
           <div className="text-[12px] text-stone-600 dark:text-stone-400 truncate mt-0.5">
-            {item.title}
+            {subtitleText}
           </div>
         )}
         {preview && (

@@ -30,6 +30,8 @@ export type HomepageTickerQuery = {
       url: string | null;
       publishedAt: string | null;
       contentSummary: string | null;
+      contentTitle: string | null;
+      contentTitleShort: string | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
       source: { slug: string; name: string; type: SourceType; org: { slug: string; name: string } };
     }>;
@@ -37,7 +39,7 @@ export type HomepageTickerQuery = {
 };
 
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:837eaa8dfa5c04e4426bf95b506193dee0b3f67de5be238ab9090e0b6cf81acb" },
+  __meta__: { hash: "sha256:c2a5a35cd255be3dc41c19c6d9b5fd501ae28333cb392553e9bec5d72a1fa6ac" },
   kind: "Document",
   definitions: [
     {
@@ -102,6 +104,8 @@ export const HomepageTickerDocument = {
                       { kind: "Field", name: { kind: "Name", value: "url" } },
                       { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
                       { kind: "Field", name: { kind: "Name", value: "contentSummary" } },
+                      { kind: "Field", name: { kind: "Name", value: "contentTitle" } },
+                      { kind: "Field", name: { kind: "Name", value: "contentTitleShort" } },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "media" },

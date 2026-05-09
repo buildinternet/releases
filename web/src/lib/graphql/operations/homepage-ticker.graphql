@@ -8,6 +8,8 @@ query HomepageTicker($limit: Int!, $exclude: [SourceType!]!) {
       url
       publishedAt
       contentSummary
+      contentTitle
+      contentTitleShort
       media {
         type
         url

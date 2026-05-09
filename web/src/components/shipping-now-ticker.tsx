@@ -16,8 +16,12 @@ const MAX_ITEMS = 20;
  * with no human-readable context ("8.4.3", "v1.2.0", or a string that
  * collapses to nothing once the version slug is removed). The ticker is a
  * marketing surface; if there's no headline, it's not worth a slot.
+ *
+ * A populated `contentTitleShort` (#852) is by definition a generated
+ * headline — short-circuit the bare-version filter when it's present.
  */
 function isMeaningfulRelease(r: TickerRelease): boolean {
+  if (r.contentTitleShort?.trim() || r.contentTitle?.trim()) return true;
   const title = (r.title ?? "").trim();
   if (!title) return false;
   const version = (r.version ?? "").trim();
@@ -30,7 +34,9 @@ function isMeaningfulRelease(r: TickerRelease): boolean {
 }
 
 function pickLabel(r: TickerRelease): string {
-  return r.title ?? r.version ?? "(untitled)";
+  return (
+    r.contentTitleShort?.trim() || r.contentTitle?.trim() || r.title || r.version || "(untitled)"
+  );
 }
 
 // Lucide-style "activity" pulse — one cycle of an EKG line. Animated by
@@ -71,7 +77,7 @@ function Card({ slide }: { slide: Slide }) {
           </span>
         )}
       </div>
-      <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-2 leading-snug min-h-[2.5rem]">
+      <p className="text-[13px] text-stone-700 dark:text-stone-300 line-clamp-2 leading-5 min-h-[2.5rem]">
         {pickLabel(release)}
       </p>
       {release.version && (
