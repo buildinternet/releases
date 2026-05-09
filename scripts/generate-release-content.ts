@@ -42,6 +42,13 @@ const orgs = !orgsArg
         .filter(Boolean);
 const sinceDays = sinceArg ? Number.parseInt(sinceArg, 10) : 7;
 
+if (Array.isArray(orgs) && orgs.length === 0) {
+  logger.error(
+    `--orgs="${orgsArg}" parsed to no valid org slugs; pass --orgs=all to include every org`,
+  );
+  process.exit(1);
+}
+
 if (sinceArg && Number.isNaN(sinceDays)) {
   logger.error("--since must be an integer number of days");
   process.exit(1);
@@ -59,9 +66,50 @@ const MODEL = "claude-haiku-4-5";
 const MAX_BODY_CHARS = 8000;
 const CONCURRENCY = 5;
 const MAX_OUTPUT_TOKENS = 220;
-const EMPTY_BODY_THRESHOLD = 40;
 const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
 const FALLBACK_TITLE_SHORT = "Release notes unavailable";
+
+// Boilerplate strings that, when they're the entire normalized content, mean
+// the body has no real release notes. Compared lowercase after markdown +
+// HTML-comment + badge stripping.
+const BOILERPLATE_BODIES = new Set([
+  "chore",
+  "n/a",
+  "na",
+  "none",
+  "tbd",
+  "wip",
+  "internal",
+  "internal release",
+  "no notes",
+  "no release notes",
+  "dependencies",
+  "dependency update",
+  "dependency updates",
+  "updated dependencies",
+]);
+
+/**
+ * True when a body has no real release-note content. Strips markdown
+ * formatting, HTML comments, and image/link syntax (badges) before
+ * checking whether anything alphabetic remains. A body of pure
+ * "Updated dependencies" or just an `<!-- placeholder -->` returns
+ * true; "Fixed VSCode bug" (16 chars) returns false.
+ */
+function isEmptyContent(raw: string): boolean {
+  let s = raw.trim();
+  if (!s) return true;
+  s = s.replace(/<!--[\s\S]*?-->/g, " ");
+  s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, " "); // images / badges
+  s = s.replace(/\[[^\]]*\]\([^)]*\)/g, " "); // links
+  s = s.replace(/[#*_`~|>]+/g, " ");
+  s = s.replace(/\b[vV]?\d+(\.\d+)+\S*\b/g, " "); // bare version tokens
+  s = s.replace(/\s+/g, " ").trim().toLowerCase();
+  if (!s) return true;
+  if (BOILERPLATE_BODIES.has(s)) return true;
+  const words = s.match(/[a-z]{3,}/g) ?? [];
+  return words.length === 0;
+}
 
 const SYSTEM_PROMPT = `You write a title, a short title, and a summary for a release-notes entry, used in a developer-facing changelog index.
 
@@ -388,7 +436,7 @@ interface SummarizeResult {
 }
 
 async function summarize(client: Anthropic, row: ReleaseRow): Promise<SummarizeResult> {
-  if (row.content.trim().length < EMPTY_BODY_THRESHOLD) {
+  if (isEmptyContent(row.content)) {
     return {
       title: fallbackTitleFromRow(row),
       titleShort: FALLBACK_TITLE_SHORT,
@@ -408,10 +456,16 @@ async function summarize(client: Anthropic, row: ReleaseRow): Promise<SummarizeR
 
   const block = res.content[0];
   const raw = block?.type === "text" ? block.text : "";
+  const summary = extractTagged(raw, "summary");
+  if (!summary) {
+    throw new Error(
+      `model output missing or empty <summary> tag (raw length ${raw.length}, stop_reason=${res.stop_reason ?? "unknown"})`,
+    );
+  }
   return {
     title: extractTagged(raw, "title") || fallbackTitleFromRow(row),
     titleShort: extractTagged(raw, "title_short") || FALLBACK_TITLE_SHORT,
-    summary: extractTagged(raw, "summary") || raw.trim(),
+    summary,
     usage: {
       input: res.usage.input_tokens,
       output: res.usage.output_tokens,
