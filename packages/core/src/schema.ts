@@ -55,6 +55,14 @@ export const organizations = sqliteTable(
     discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] })
       .notNull()
       .default("curated"),
+    // Per-org opt-in for ingest-time release content generation. When true,
+    // the poll-fetch / scrape-agent workflows call Haiku 4.5 to populate
+    // content_title / content_title_short / content_summary on newly-inserted
+    // releases. Default false — every existing org is opted out; toggle in
+    // via SQL for the initial roster.
+    autoGenerateContent: integer("auto_generate_content", { mode: "boolean" })
+      .notNull()
+      .default(false),
     // Soft-delete tombstone (#666). Read paths exclude rows where deleted_at
     // IS NOT NULL via notDeleted helpers in queries/shared.ts. On tombstone,
     // the route handler renames slug + domain to mangled forms (slug + "--" +
@@ -781,6 +789,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -846,6 +855,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
