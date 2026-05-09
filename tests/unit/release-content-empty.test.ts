@@ -27,4 +27,11 @@ describe("isEmptyContent", () => {
     expect(isEmptyContent("Fixed VSCode bug")).toBe(false);
     expect(isEmptyContent("Adds caching to the Messages API")).toBe(false);
   });
+
+  it("preserves markdown link text when judging emptiness", () => {
+    // The label carries the meaning; "[Vision support](url)" is not empty.
+    expect(isEmptyContent("[Vision support](https://example.com/docs)")).toBe(false);
+    // A bare badge (image syntax) carries no text and should still read as empty.
+    expect(isEmptyContent("![CI](https://badge.example/ci.svg)")).toBe(true);
+  });
 });

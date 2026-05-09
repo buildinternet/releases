@@ -11,8 +11,11 @@
 -- promote to an admin endpoint once the column is read by an admin UI.
 --
 -- The base column is what the workflow step reads (joined from releases
--- via org_id), so the organizations_active / organizations_public views
--- do not need to be recreated — admin reads through the views won't see
--- the column, but no read path needs that today.
+-- via org_id). The follow-up migration
+-- 20260509000300_organizations_views_with_auto_generate_content.sql
+-- recreates the organizations_active / organizations_public views so the
+-- column is also visible through them — SQLite snapshots SELECT * view
+-- column lists at create time, so adding the column to the base table
+-- does not propagate automatically.
 
 ALTER TABLE organizations ADD COLUMN auto_generate_content INTEGER NOT NULL DEFAULT 0;

@@ -52,7 +52,7 @@ export function isEmptyContent(raw: string): boolean {
   if (!s) return true;
   s = s.replace(/<!--[\s\S]*?-->/g, " ");
   s = s.replace(/!\[[^\]]*\]\([^)]*\)/g, " "); // images / badges
-  s = s.replace(/\[[^\]]*\]\([^)]*\)/g, " "); // links
+  s = s.replace(/\[([^\]]+)\]\([^)]*\)/g, "$1"); // links — keep label so "[Foo](url)" doesn't read as empty
   s = s.replace(/[#*_`~|>]+/g, " ");
   s = s.replace(/\b[vV]?\d+(\.\d+)+\S*\b/g, " "); // bare version tokens
   s = s.replace(/\s+/g, " ").trim().toLowerCase();
@@ -277,7 +277,8 @@ export interface SummarizeReleaseInput {
   productName: string | null;
   title: string;
   version: string | null;
-  url: string;
+  /** Canonical release URL. `releases.url` is nullable in the schema, so callers may omit it. */
+  url: string | null;
   content: string;
 }
 
@@ -315,7 +316,7 @@ function buildReleaseBlock(input: SummarizeReleaseInput): string {
     productLine,
     `Title: ${input.title}`,
     input.version ? `Version: ${input.version}` : null,
-    `URL: ${input.url}`,
+    input.url ? `URL: ${input.url}` : null,
     "",
     "Body:",
     body,
@@ -361,8 +362,13 @@ export async function summarizeRelease(
     messages: [{ role: "user", content: releaseBlock }],
   });
 
-  const block = res.content[0];
-  const raw = block?.type === "text" ? block.text : "";
+  // The Messages API returns an array of typed content blocks. We don't
+  // pass tools so the model only ever returns text, but it's not contractual
+  // that text sits at index 0 — concatenate every text block defensively.
+  const raw = res.content
+    .filter((block): block is Extract<typeof block, { type: "text" }> => block.type === "text")
+    .map((block) => block.text)
+    .join("");
   const summary = extractTagged(raw, "summary");
   if (!summary) {
     throw new Error(

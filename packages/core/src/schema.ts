@@ -789,6 +789,7 @@ export const organizationsActive = sqliteView("organizations_active", {
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 
@@ -854,6 +855,7 @@ export const organizationsPublic = sqliteView("organizations_public", {
   metadata: text("metadata"),
   embeddedAt: text("embedded_at"),
   discovery: text("discovery", { enum: ["curated", "agent", "on_demand"] }).notNull(),
+  autoGenerateContent: integer("auto_generate_content", { mode: "boolean" }).notNull(),
   deletedAt: text("deleted_at"),
 }).existing();
 

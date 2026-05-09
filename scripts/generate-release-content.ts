@@ -73,7 +73,7 @@ interface ReleaseRow {
   title: string;
   version: string | null;
   content: string;
-  url: string;
+  url: string | null;
   org_slug: string;
   source_name: string;
   product_name: string | null;
