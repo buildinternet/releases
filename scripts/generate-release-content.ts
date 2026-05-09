@@ -66,8 +66,12 @@ const MODEL = "claude-haiku-4-5";
 const MAX_BODY_CHARS = 8000;
 const CONCURRENCY = 5;
 const MAX_OUTPUT_TOKENS = 220;
+// In-prompt sentinel for the summary field when the model judges the body has
+// no real release notes (boilerplate-only / dependency bumps). Stays a real
+// string because the model is told to emit it as a real summary; the title
+// fields meanwhile get a model-produced formulaic headline. The empty-body
+// branch below is separate — those rows skip the model + write all NULLs.
 const EMPTY_BODY_FALLBACK = "Release notes do not describe the change.";
-const FALLBACK_TITLE_SHORT = "Release notes unavailable";
 
 // Boilerplate strings that, when they're the entire normalized content, mean
 // the body has no real release notes. Compared lowercase after markdown +
@@ -414,12 +418,6 @@ function extractTagged(text: string, tag: string): string {
   return (m?.[1] ?? "").trim();
 }
 
-function fallbackTitleFromRow(row: ReleaseRow): string {
-  const display = row.product_name ?? row.source_name;
-  const v = row.version ? ` ${row.version}` : "";
-  return `${display}${v} release notes unavailable`;
-}
-
 interface UsageStats {
   input: number;
   output: number;
@@ -428,19 +426,25 @@ interface UsageStats {
 }
 
 interface SummarizeResult {
-  title: string;
-  titleShort: string;
-  summary: string;
+  /** All three null when the body was empty — caller skips the write. */
+  title: string | null;
+  titleShort: string | null;
+  summary: string | null;
   usage: UsageStats;
   skipped: boolean;
 }
 
 async function summarize(client: Anthropic, row: ReleaseRow): Promise<SummarizeResult> {
   if (isEmptyContent(row.content)) {
+    // Empty body → don't invent a headline. Leaving the columns NULL lets
+    // read paths fall back to `release.title` cleanly. The previous behavior
+    // stamped a "Release notes unavailable" placeholder into the DB which
+    // then surfaced in the homepage ticker and org feed as if it were a
+    // real generated headline.
     return {
-      title: fallbackTitleFromRow(row),
-      titleShort: FALLBACK_TITLE_SHORT,
-      summary: EMPTY_BODY_FALLBACK,
+      title: null,
+      titleShort: null,
+      summary: null,
       usage: { input: 0, output: 0, cacheCreate: 0, cacheRead: 0 },
       skipped: true,
     };
@@ -462,9 +466,11 @@ async function summarize(client: Anthropic, row: ReleaseRow): Promise<SummarizeR
       `model output missing or empty <summary> tag (raw length ${raw.length}, stop_reason=${res.stop_reason ?? "unknown"})`,
     );
   }
+  // Title fields are independent — if the model omits a tag we write NULL
+  // for that column instead of fabricating a placeholder.
   return {
-    title: extractTagged(raw, "title") || fallbackTitleFromRow(row),
-    titleShort: extractTagged(raw, "title_short") || FALLBACK_TITLE_SHORT,
+    title: extractTagged(raw, "title") || null,
+    titleShort: extractTagged(raw, "title_short") || null,
     summary,
     usage: {
       input: res.usage.input_tokens,
@@ -482,11 +488,12 @@ function escapeSql(s: string): string {
 
 async function writeRow(
   id: string,
-  summary: string,
-  title: string,
-  titleShort: string,
+  summary: string | null,
+  title: string | null,
+  titleShort: string | null,
 ): Promise<void> {
-  const sql = `UPDATE releases SET content_summary = '${escapeSql(summary)}', content_title = '${escapeSql(title)}', content_title_short = '${escapeSql(titleShort)}' WHERE id = '${escapeSql(id)}';`;
+  const lit = (v: string | null) => (v == null ? "NULL" : `'${escapeSql(v)}'`);
+  const sql = `UPDATE releases SET content_summary = ${lit(summary)}, content_title = ${lit(title)}, content_title_short = ${lit(titleShort)} WHERE id = '${escapeSql(id)}';`;
   await runWrangler([
     "d1",
     "execute",
@@ -532,23 +539,29 @@ let totalOutput = 0;
 let totalCacheCreate = 0;
 let totalCacheRead = 0;
 let written = 0;
+let skippedEmpty = 0;
 const samples: {
   org: string;
   sourceTitle: string;
   bodyLen: number;
-  title: string;
-  titleShort: string;
-  summary: string;
+  title: string | null;
+  titleShort: string | null;
+  summary: string | null;
 }[] = [];
 
 await pool(rows, CONCURRENCY, async (row) => {
   try {
-    const { title, titleShort, summary, usage } = await summarize(client, row);
+    const { title, titleShort, summary, usage, skipped } = await summarize(client, row);
     totalInput += usage.input;
     totalOutput += usage.output;
     totalCacheCreate += usage.cacheCreate;
     totalCacheRead += usage.cacheRead;
-    if (apply) {
+    // Empty-body rows surface as `skipped: true` with all-null fields. Don't
+    // write them — leaving the columns NULL keeps the read path falling back
+    // to `release.title` instead of stamping a placeholder into the DB.
+    if (skipped) {
+      skippedEmpty++;
+    } else if (apply) {
       await writeRow(row.id, summary, title, titleShort);
       written++;
     }
@@ -566,8 +579,8 @@ await pool(rows, CONCURRENCY, async (row) => {
       org: row.org_slug,
       sourceTitle: row.title,
       bodyLen: row.content.length,
-      title: "",
-      titleShort: "",
+      title: null,
+      titleShort: null,
       summary: `ERROR: ${(err as Error).message}`,
     });
   }
@@ -578,7 +591,7 @@ const inputCost = (totalInput * 1 + totalCacheCreate * 1.25 + totalCacheRead * 0
 const outputCost = (totalOutput * 5) / 1_000_000;
 
 logger.info(
-  `${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}`,
+  `${apply ? "APPLIED" : "DRY RUN"}: processed ${rows.length} release${rows.length === 1 ? "" : "s"}${apply ? `, wrote ${written}` : ""}, skipped ${skippedEmpty} empty-body`,
 );
 logger.info(
   `tokens: ${totalInput} in (cache create ${totalCacheCreate}, cache read ${totalCacheRead}), ${totalOutput} out`,
@@ -591,6 +604,6 @@ for (const s of samples) {
   report.push(`### ${s.org} · ${s.sourceTitle} (${s.bodyLen} chars)`);
   if (s.title) report.push(`**Title:** ${s.title}`);
   if (s.titleShort) report.push(`**Short:** ${s.titleShort}`);
-  report.push(s.summary, "");
+  report.push(s.summary ?? "_(skipped — empty body)_", "");
 }
 logger.info(report.join("\n"));
