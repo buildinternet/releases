@@ -126,7 +126,7 @@ Skip the `<release-meta>` block when both version and date are missing. Skip med
 
 **Trailing text block (with existing content):**
 
-```
+```text
 Update the knowledge page for {org.name} ({org.description}). Total releases tracked: {totalAvailable}.
 Tracked sources: {sources[*].name comma-joined}.
 
@@ -139,7 +139,7 @@ Use the {selected.length} search results above as your source material. Cite spe
 
 **Trailing text block (without existing content):**
 
-```
+```text
 Create an initial knowledge page for {org.name} ({org.description}). Total releases tracked: {totalAvailable}.
 Tracked sources: {sources[*].name comma-joined}.
 
