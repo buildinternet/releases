@@ -7,9 +7,11 @@
     "./evaluate": "./src/evaluate.ts",
     "./grader-prompt": "./src/grader-prompt.ts",
     "./playbook": "./src/playbook.ts",
-    "./providers": "./src/providers.ts"
+    "./providers": "./src/providers.ts",
+    "./release-content": "./src/release-content.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "catalog:",
     "@buildinternet/releases-api-types": "workspace:*",
     "@buildinternet/releases-core": "workspace:*",
     "@releases/adapters": "workspace:*",
