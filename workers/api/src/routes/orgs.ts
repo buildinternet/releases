@@ -21,6 +21,7 @@ import {
   orgTags,
   domainAliases,
   knowledgePages,
+  knowledgePageCitations,
   collections,
   collectionMembers,
 } from "@buildinternet/releases-core/schema";
@@ -186,6 +187,7 @@ orgRoutes.get(
       latestFetchRow,
       latestPollRow,
       knowledgePageRows,
+      citationRows,
       metricsRow,
     ] = await Promise.all([
       db
@@ -248,6 +250,23 @@ orgRoutes.get(
           and(inArray(knowledgePages.scope, ["org", "playbook"]), eq(knowledgePages.orgId, org.id)),
         ),
 
+      // Citations attached to the org-scope overview page. Joined here so the
+      // bare /v1/orgs/:slug response carries them — same shape the dedicated
+      // /v1/orgs/:slug/overview endpoint returns.
+      db
+        .select({
+          startIndex: knowledgePageCitations.startIndex,
+          endIndex: knowledgePageCitations.endIndex,
+          sourceUrl: knowledgePageCitations.sourceUrl,
+          title: knowledgePageCitations.title,
+          citedText: knowledgePageCitations.citedText,
+          releaseId: knowledgePageCitations.releaseId,
+        })
+        .from(knowledgePageCitations)
+        .innerJoin(knowledgePages, eq(knowledgePageCitations.knowledgePageId, knowledgePages.id))
+        .where(and(eq(knowledgePages.scope, "org"), eq(knowledgePages.orgId, org.id)))
+        .orderBy(knowledgePageCitations.startIndex),
+
       // Recent-release metrics — scoped via subquery so this joins the parallel
       // wave instead of blocking on orgSources.
       db
@@ -309,6 +328,7 @@ orgRoutes.get(
           lastContributingReleaseAt: knowledgeRow.lastContributingReleaseAt,
           generatedAt: knowledgeRow.generatedAt,
           updatedAt: knowledgeRow.updatedAt,
+          citations: citationRows,
         }
       : null;
 
