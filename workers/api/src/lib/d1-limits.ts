@@ -22,6 +22,12 @@ export const RELEASES_ID_IN_CHUNK_SIZE = 90;
 // can supply an unbounded list (URLs, slugs, ids).
 export const IN_ARRAY_CHUNK_SIZE = 90;
 
+// `knowledge_page_citations` INSERT binds 9 placeholders per row: id,
+// knowledge_page_id, start_index, end_index, source_url, title, cited_text,
+// release_id, created_at. 11 rows * 9 = 99 bindings. In practice an overview
+// rarely produces more than ~30 citations, so this cap is mostly defensive.
+export const KNOWLEDGE_PAGE_CITATIONS_CHUNK_SIZE = 11;
+
 // `source_changelog_chunks` INSERT binds 11 placeholders per row: the nine
 // listed columns (source_changelog_file_id, source_id, offset, length,
 // tokens, content_hash, heading, vector_id, embedded_at — vectorId and
