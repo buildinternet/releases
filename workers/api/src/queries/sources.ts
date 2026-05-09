@@ -1,6 +1,6 @@
 import { sql, type SQL } from "drizzle-orm";
 import type { ReleaseType } from "@buildinternet/releases-api-types";
-import { daysAgoIso } from "@buildinternet/releases-core/dates";
+import { daysAgoIso, nowIso } from "@buildinternet/releases-core/dates";
 import { SOURCE_STALE_DAYS } from "@buildinternet/releases-core/sources";
 import type {
   SourceType,
@@ -278,6 +278,9 @@ export async function getSourceReleasesFeed(
     filterBindings.push(opts.ftsMatch);
   }
 
+  // See {@link getOrgReleasesFeed} for the future-dated guardrail rationale.
+  const cutoff = nowIso();
+
   const stmt = d1
     .prepare(
       `
@@ -286,6 +289,7 @@ export async function getSourceReleasesFeed(
     FROM ${releasesTable} r
     WHERE r.source_id = ?
       AND (r.suppressed IS NULL OR r.suppressed = 0)
+      AND (r.published_at IS NULL OR r.published_at <= ?)
       ${prereleaseWhere}
       ${ftsWhere}
       ${cursor.cursorWhere}
@@ -297,7 +301,7 @@ export async function getSourceReleasesFeed(
     LIMIT ?
   `,
     )
-    .bind(sourceId, ...filterBindings, ...cursor.cursorBindings, limit);
+    .bind(sourceId, cutoff, ...filterBindings, ...cursor.cursorBindings, limit);
 
   const { results } = await stmt.all<SourceFeedReleaseRow>();
   return results;

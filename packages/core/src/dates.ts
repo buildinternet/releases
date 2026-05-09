@@ -14,6 +14,10 @@ export function daysAgoIso(days: number): string {
   return new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 }
 
+export function nowIso(): string {
+  return new Date().toISOString();
+}
+
 export function timeAgo(isoDate: string | null): string | null {
   if (!isoDate) return null;
   const ms = Date.now() - new Date(isoDate).getTime();

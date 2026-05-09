@@ -2,6 +2,7 @@ import { and, desc, eq, inArray, isNull, lt, lte, not, or, sql } from "drizzle-o
 import { GraphQLError } from "graphql";
 import { computePagination } from "@buildinternet/releases-core/cli-contracts";
 import { fromBase64Url, toBase64Url } from "@buildinternet/releases-core/cursor";
+import { nowIso } from "@buildinternet/releases-core/dates";
 import { organizations, releasesVisible, sources } from "@buildinternet/releases-core/schema";
 import { builder } from "./builder.js";
 import "./types/org.js";
@@ -150,9 +151,9 @@ builder.queryType({
         // without this, the row sticks at the top of the feed until the date
         // arrives. NULL publishedAt is preserved — those legitimately sort
         // last and are reachable via the cursor walk.
-        const nowIso = new Date().toISOString();
+        const cutoff = nowIso();
         const futureFilter = or(
-          lte(releasesVisible.publishedAt, nowIso),
+          lte(releasesVisible.publishedAt, cutoff),
           isNull(releasesVisible.publishedAt),
         );
 
