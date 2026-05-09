@@ -157,10 +157,17 @@ The assistant response is an array of `text` blocks; each may carry a `citations
 1. **Body** — concatenate every text block's `text` field, in order. That string IS the markdown body.
 2. **Citations** — track a running character offset starting at 0. For each text block:
    - If it has `citations[]`, the cited span is **always** `[runningOffset, runningOffset + text.length)` — the whole block. Anthropic emits citations at block granularity by design ("Claude cites whole blocks, not substrings"); citations carry no per-citation character offsets into the assistant text. The `start_block_index` / `end_block_index` fields on each citation refer to slices of the **source's** content array (i.e. which input text block(s) within the cited search_result were the basis for the claim), not offsets into the response. Don't try to add them to `runningOffset`.
-   - For each citation in the block, record one row `{ startIndex, endIndex, sourceUrl, title, citedText }` — all citations on the same text block share the same span. `sourceUrl` and `title` come from the citation's `source` / `title` fields (or look them up by `search_result_index` against your input array). `citedText` is the citation's `cited_text`.
+   - For each citation in the block, record one row `{ startIndex, endIndex, sourceUrl, title, citedText }` — all citations on the same text block share the same span. **Source/title precedence:** prefer the citation's own `source` / `title` fields (Anthropic sets them on every citation per the search_result_location schema); fall back to looking up `search_result_index` against your input search_results array only if missing. `citedText` is the citation's `cited_text`.
    - Always advance `runningOffset += text.length`, whether or not the block had citations.
 
-Strip a leading markdown heading from the body if the model emitted one (against the prompt, but it happens) — and shift all citation offsets back by the stripped length.
+The offsets you write MUST match the body you send — compute them against the final body string, not an intermediate. If the model emitted a leading markdown heading (against the prompt, but it happens), strip it from the body **before** writing offsets, OR strip after and shift safely:
+
+- Compute `strippedLength` = number of characters removed from the start of the body.
+- For each citation row: subtract `strippedLength` from both `startIndex` and `endIndex`.
+- **Drop** the citation if `endIndex <= 0` (the cited block was entirely inside the stripped heading — unlikely in practice since headings rarely carry claims, but cheap to handle).
+- **Clamp** `startIndex = 0` if it went negative (citation partially overlaps the stripped region); leave the (now smaller) `endIndex` as-is.
+
+Never persist citations whose offsets would index outside the stored body — the API rejects them with `400 bad_citations`.
 
 Write the body to `/tmp/<slug>-overview.md` and the citations array (JSON) to `/tmp/<slug>-overview-citations.json`. The citations file shape is exactly what the API accepts:
 
