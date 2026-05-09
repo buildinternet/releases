@@ -212,11 +212,12 @@ export interface ReleaseDetail {
   /**
    * AI-generated self-contained news-headline form of the release (#852).
    * Nullable because most rows are unpopulated — fall back to `title` for
-   * display.
+   * display. `.optional()` for the same mid-deploy / pinned-worker reason
+   * as `type` on {@link ReleaseItem}.
    */
-  contentTitle: string | null;
+  contentTitle?: string | null;
   /** AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`. */
-  contentTitleShort: string | null;
+  contentTitleShort?: string | null;
   url: string | null;
   media: MediaItem[];
   publishedAt: string | null;
@@ -799,9 +800,9 @@ export interface ReleaseWithSource {
   content: string;
   contentSummary: string | null;
   /** AI-generated headline (#852). See {@link ReleaseDetail.contentTitle}. */
-  contentTitle: string | null;
+  contentTitle?: string | null;
   /** AI-generated smart-brevity headline (#852). */
-  contentTitleShort: string | null;
+  contentTitleShort?: string | null;
   url: string | null;
   contentHash: string | null;
   metadata: string | null;
@@ -822,9 +823,9 @@ export interface LatestRelease {
   sourceSlug: string;
   contentSummary: string | null;
   /** AI-generated headline (#852). See {@link ReleaseDetail.contentTitle}. */
-  contentTitle: string | null;
+  contentTitle?: string | null;
   /** AI-generated smart-brevity headline (#852). */
-  contentTitleShort: string | null;
+  contentTitleShort?: string | null;
   media: MediaItem[];
 }
 
