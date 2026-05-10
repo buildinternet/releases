@@ -1433,13 +1433,6 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
-    /** @deprecated Use `summary`. */
-    contentSummary:
-      r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    /** @deprecated Use `titleGenerated`. */
-    contentTitle: r.title_generated,
-    /** @deprecated Use `titleShort`. */
-    contentTitleShort: r.title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
@@ -1608,13 +1601,6 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
     summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
-    /** @deprecated Use `summary`. */
-    contentSummary:
-      r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    /** @deprecated Use `titleGenerated`. */
-    contentTitle: r.title_generated,
-    /** @deprecated Use `titleShort`. */
-    contentTitleShort: r.title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
@@ -2080,12 +2066,6 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     titleGenerated?: string;
     /** AI-generated smart-brevity headline (#860). */
     titleShort?: string;
-    /** @deprecated Use `summary`. */
-    contentSummary?: string;
-    /** @deprecated Use `titleGenerated`. */
-    contentTitle?: string;
-    /** @deprecated Use `titleShort`. */
-    contentTitleShort?: string;
     url?: string;
     contentHash?: string;
     metadata?: string;
@@ -2110,9 +2090,9 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
         type: body.type ?? "feature",
         title: body.title,
         content: body.content,
-        summary: body.summary ?? body.contentSummary ?? null,
-        titleGenerated: body.titleGenerated ?? body.contentTitle ?? null,
-        titleShort: body.titleShort ?? body.contentTitleShort ?? null,
+        summary: body.summary ?? null,
+        titleGenerated: body.titleGenerated ?? null,
+        titleShort: body.titleShort ?? null,
         url: body.url ?? null,
         contentHash: body.contentHash ?? null,
         metadata: body.metadata ?? "{}",

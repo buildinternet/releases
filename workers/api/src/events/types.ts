@@ -23,12 +23,6 @@ export interface ReleaseEventPayload {
   titleGenerated: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). Same caveat as titleGenerated. */
   titleShort: string | null;
-  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
-  contentSummary: string | null;
-  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
-  contentTitle: string | null;
-  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
-  contentTitleShort: string | null;
   media: MediaItem[];
 }
 

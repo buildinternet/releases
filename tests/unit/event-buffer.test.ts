@@ -43,9 +43,6 @@ function payload(id: string): ReleaseEventPayload {
     summary: null,
     titleGenerated: null,
     titleShort: null,
-    contentSummary: null,
-    contentTitle: null,
-    contentTitleShort: null,
     media: [],
   };
 }

@@ -219,12 +219,6 @@ export interface ReleaseDetail {
   titleGenerated?: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). Same fallback as `titleGenerated`. */
   titleShort?: string | null;
-  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
-  contentSummary: string | null;
-  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
-  contentTitle?: string | null;
-  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
-  contentTitleShort?: string | null;
   url: string | null;
   media: MediaItem[];
   publishedAt: string | null;
@@ -354,12 +348,6 @@ export interface SearchReleaseHit {
   titleGenerated?: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). Same caveat as titleGenerated. */
   titleShort?: string | null;
-  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
-  contentTitle?: string | null;
-  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
-  contentTitleShort?: string | null;
-  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
-  contentSummary?: string;
   /**
    * Full release body, media URLs hydrated through the MEDIA_ORIGIN proxy.
    * Present so the web can render the same markdown + thumbnail treatment
@@ -817,12 +805,6 @@ export interface ReleaseWithSource {
   titleGenerated?: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). */
   titleShort?: string | null;
-  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
-  contentSummary: string | null;
-  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
-  contentTitle?: string | null;
-  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
-  contentTitleShort?: string | null;
   url: string | null;
   contentHash: string | null;
   metadata: string | null;
@@ -847,12 +829,6 @@ export interface LatestRelease {
   titleGenerated?: string | null;
   /** AI-generated smart-brevity headline (#852, renamed in #860). */
   titleShort?: string | null;
-  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
-  contentSummary: string | null;
-  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
-  contentTitle?: string | null;
-  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
-  contentTitleShort?: string | null;
   media: MediaItem[];
 }
 

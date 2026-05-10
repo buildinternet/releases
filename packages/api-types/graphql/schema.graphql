@@ -114,9 +114,6 @@ type Release {
   Full markdown body. Often large — request only when you need it (this is the field-selection win).
   """
   content: String!
-  contentSummary: String @deprecated(reason: "Use `summary`.")
-  contentTitle: String @deprecated(reason: "Use `titleGenerated`.")
-  contentTitleShort: String @deprecated(reason: "Use `titleShort`.")
   fetchedAt: DateTime!
   id: ID!
 

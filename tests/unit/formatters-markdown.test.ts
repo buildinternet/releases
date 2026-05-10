@@ -21,7 +21,6 @@ const fullRelease: ReleaseDetail = {
   title: "Next.js 15",
   content: "Full content here with **markdown**.",
   summary: "Major release with React 19 support",
-  contentSummary: "Major release with React 19 support",
   url: "https://github.com/vercel/next.js/releases/tag/v15.0.0",
   media: [],
   publishedAt: "2024-06-15T00:00:00Z",

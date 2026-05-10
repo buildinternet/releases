@@ -28,21 +28,6 @@ export const ReleaseType = builder.objectType("Release", {
       description:
         "AI-generated smart-brevity headline (#852, renamed in #860). Same fallback as `titleGenerated`.",
     }),
-    /** @deprecated Use `summary`. */
-    contentSummary: t.exposeString("summary", {
-      nullable: true,
-      deprecationReason: "Use `summary`.",
-    }),
-    /** @deprecated Use `titleGenerated`. */
-    contentTitle: t.exposeString("titleGenerated", {
-      nullable: true,
-      deprecationReason: "Use `titleGenerated`.",
-    }),
-    /** @deprecated Use `titleShort`. */
-    contentTitleShort: t.exposeString("titleShort", {
-      nullable: true,
-      deprecationReason: "Use `titleShort`.",
-    }),
     content: t.exposeString("content", {
       description:
         "Full markdown body. Often large — request only when you need it (this is the field-selection win).",

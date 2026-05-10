@@ -71,10 +71,6 @@ interface RelatedReleaseItem {
   summary: string;
   titleGenerated: string | null;
   titleShort: string | null;
-  /** @deprecated Use `titleGenerated`. */
-  contentTitle: string | null;
-  /** @deprecated Use `titleShort`. */
-  contentTitleShort: string | null;
   thumbnail: { url: string; alt?: string } | null;
   score: number;
   source: {
@@ -265,8 +261,6 @@ async function hydrateReleaseNeighbors(
       summary: row.summary,
       titleGenerated: row.titleGenerated,
       titleShort: row.titleShort,
-      contentTitle: row.titleGenerated,
-      contentTitleShort: row.titleShort,
       thumbnail: firstImageThumbnail(row.media, mediaOrigin),
       score: m.score,
       source: {

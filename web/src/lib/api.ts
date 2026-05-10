@@ -355,10 +355,6 @@ export interface RelatedReleaseItem {
   summary: string;
   titleGenerated: string | null;
   titleShort: string | null;
-  /** @deprecated Use `titleGenerated`. */
-  contentTitle: string | null;
-  /** @deprecated Use `titleShort`. */
-  contentTitleShort: string | null;
   thumbnail: { url: string; alt?: string } | null;
   score: number;
   source: {

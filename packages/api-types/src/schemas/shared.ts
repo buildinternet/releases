@@ -63,12 +63,6 @@ export const ReleaseItemSchema = z.object({
   // `.optional()` for the same mid-deploy / pinned-worker reason as `type`.
   titleGenerated: z.string().nullable().optional(),
   titleShort: z.string().nullable().optional(),
-  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
-  contentTitle: z.string().nullable().optional(),
-  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
-  contentTitleShort: z.string().nullable().optional(),
-  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
-  contentSummary: z.string().nullable().optional(),
 });
 
 export const ReleaseSummaryItemSchema = z.object({
