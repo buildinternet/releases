@@ -57,9 +57,9 @@ export const organizations = sqliteTable(
       .default("curated"),
     // Per-org opt-in for ingest-time release content generation. When true,
     // the poll-fetch / scrape-agent workflows call Haiku 4.5 to populate
-    // content_title / content_title_short / content_summary on newly-inserted
-    // releases. Default false — every existing org is opted out; toggle in
-    // via SQL for the initial roster.
+    // title_generated / title_short / summary on newly-inserted releases.
+    // Default false — every existing org is opted out; toggle in via SQL
+    // for the initial roster.
     autoGenerateContent: integer("auto_generate_content", { mode: "boolean" })
       .notNull()
       .default(false),
@@ -304,9 +304,9 @@ export const releases = sqliteTable(
     type: text("type", { enum: RELEASE_TYPES }).notNull().default("feature"),
     title: text("title").notNull(),
     content: text("content").notNull(),
-    contentSummary: text("content_summary"),
-    contentTitle: text("content_title"),
-    contentTitleShort: text("content_title_short"),
+    summary: text("summary"),
+    titleGenerated: text("title_generated"),
+    titleShort: text("title_short"),
     url: text("url"),
     contentHash: text("content_hash"),
     metadata: text("metadata").default("{}"),
@@ -905,9 +905,9 @@ export const releasesVisible = sqliteView("releases_visible", {
   type: text("type", { enum: RELEASE_TYPES }).notNull(),
   title: text("title").notNull(),
   content: text("content").notNull(),
-  contentSummary: text("content_summary"),
-  contentTitle: text("content_title"),
-  contentTitleShort: text("content_title_short"),
+  summary: text("summary"),
+  titleGenerated: text("title_generated"),
+  titleShort: text("title_short"),
   url: text("url"),
   contentHash: text("content_hash"),
   metadata: text("metadata"),

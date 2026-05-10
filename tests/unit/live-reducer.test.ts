@@ -132,6 +132,7 @@ describe("normalizers", () => {
         publishedAt: "2026-04-23T10:00:00Z",
         sourceName: "ACME",
         sourceSlug: "acme",
+        summary: null,
         contentSummary: null,
         media: [],
       },

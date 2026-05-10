@@ -215,9 +215,9 @@ export type SourceReleaseRow = {
   version: string | null;
   type: ReleaseType;
   title: string;
-  content_summary: string | null;
-  content_title: string | null;
-  content_title_short: string | null;
+  summary: string | null;
+  title_generated: string | null;
+  title_short: string | null;
   content: string;
   published_at: string | null;
   url: string | null;
@@ -233,7 +233,7 @@ export async function getSourceReleasesPaginated(
 ): Promise<SourceReleaseRow[]> {
   const releasesTable = opts.includeCoverage ? "releases" : "releases_visible";
   return db.all<SourceReleaseRow>(sql`
-    SELECT id, version, type, title, content_summary, content_title, content_title_short,
+    SELECT id, version, type, title, summary, title_generated, title_short,
            content, published_at, url, media
     FROM ${sql.raw(releasesTable)}
     WHERE source_id = ${sourceId}
@@ -287,8 +287,8 @@ export async function getSourceReleasesFeed(
   const stmt = d1
     .prepare(
       `
-    SELECT r.id, r.version, r.type, r.title, r.content_summary, r.content_title,
-           r.content_title_short, r.content,
+    SELECT r.id, r.version, r.type, r.title, r.summary, r.title_generated,
+           r.title_short, r.content,
            r.published_at, r.fetched_at, r.url, r.media, r.prerelease
     FROM ${releasesTable} r
     WHERE r.source_id = ?

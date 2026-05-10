@@ -23,7 +23,7 @@ export async function generateMetadata({
   try {
     const release = await api.release(id);
     const heading = release.version ?? release.title;
-    const rawDesc = release.contentSummary ?? release.content ?? "";
+    const rawDesc = release.summary ?? release.content ?? "";
     const stripped = rawDesc
       .replace(/[#*[\]`>_~]/g, "")
       .replace(/\s+/g, " ")

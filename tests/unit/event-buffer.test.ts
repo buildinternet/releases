@@ -40,7 +40,12 @@ function payload(id: string): ReleaseEventPayload {
     publishedAt: null,
     sourceName: "Acme",
     sourceSlug: "acme",
+    summary: null,
+    titleGenerated: null,
+    titleShort: null,
     contentSummary: null,
+    contentTitle: null,
+    contentTitleShort: null,
     media: [],
   };
 }

@@ -96,8 +96,8 @@ export interface HybridReleaseHit {
     orgName: string | null;
     /** Release type — "feature" (default) or "rollup". */
     type: ReleaseType;
-    contentTitle: string | null;
-    contentTitleShort: string | null;
+    titleGenerated: string | null;
+    titleShort: string | null;
   };
 }
 
@@ -175,8 +175,8 @@ interface RawReleaseRow {
   orgName: string | null;
   /** Release type — "feature" (default) or "rollup". */
   type: ReleaseType;
-  contentTitle: string | null;
-  contentTitleShort: string | null;
+  titleGenerated: string | null;
+  titleShort: string | null;
 }
 
 async function hydrateReleases(
@@ -192,9 +192,9 @@ async function hydrateReleases(
            r.version as version,
            r.url as url,
            r.published_at as publishedAt,
-           COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
-           r.content_title as contentTitle,
-           r.content_title_short as contentTitleShort,
+           COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.title_generated as titleGenerated,
+           r.title_short as titleShort,
            r.content as content,
            r.media as media,
            r.type as type,
@@ -480,8 +480,8 @@ async function buildReleaseHits(
         url: row.url,
         publishedAt: row.publishedAt,
         summary: row.summary,
-        contentTitle: row.contentTitle,
-        contentTitleShort: row.contentTitleShort,
+        titleGenerated: row.titleGenerated,
+        titleShort: row.titleShort,
         content: row.content,
         media: row.media,
         source: {

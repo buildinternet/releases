@@ -43,7 +43,12 @@ async function publish(hub: any, n: number) {
       publishedAt: null,
       sourceName: "s",
       sourceSlug: "s",
+      summary: null,
+      titleGenerated: null,
+      titleShort: null,
       contentSummary: null,
+      contentTitle: null,
+      contentTitleShort: null,
       media: [],
     });
   }

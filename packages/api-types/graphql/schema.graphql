@@ -114,17 +114,9 @@ type Release {
   Full markdown body. Often large — request only when you need it (this is the field-selection win).
   """
   content: String!
-  contentSummary: String
-
-  """
-  AI-generated self-contained news-headline form (#852). Nullable; populated opportunistically. Fall back to `title` for display.
-  """
-  contentTitle: String
-
-  """
-  AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`.
-  """
-  contentTitleShort: String
+  contentSummary: String @deprecated(reason: "Use `summary`.")
+  contentTitle: String @deprecated(reason: "Use `titleGenerated`.")
+  contentTitleShort: String @deprecated(reason: "Use `titleShort`.")
   fetchedAt: DateTime!
   id: ID!
 
@@ -132,7 +124,22 @@ type Release {
   media: [Media!]!
   publishedAt: DateTime
   source: Source!
+
+  """
+  AI-generated summary (#852, renamed in #860). Nullable — most rows unpopulated.
+  """
+  summary: String
   title: String!
+
+  """
+  AI-generated self-contained news-headline form (#852, renamed in #860). Nullable; populated opportunistically. Fall back to `title` for display.
+  """
+  titleGenerated: String
+
+  """
+  AI-generated smart-brevity headline (#852, renamed in #860). Same fallback as `titleGenerated`.
+  """
+  titleShort: String
   type: ReleaseType!
   url: String
   version: String

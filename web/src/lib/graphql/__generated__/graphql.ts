@@ -29,9 +29,9 @@ export type HomepageTickerQuery = {
       type: ReleaseType;
       url: string | null;
       publishedAt: string | null;
-      contentSummary: string | null;
-      contentTitle: string | null;
-      contentTitleShort: string | null;
+      summary: string | null;
+      titleGenerated: string | null;
+      titleShort: string | null;
       media: Array<{ type: MediaKind; url: string; alt: string | null; r2Url: string | null }>;
       source: { slug: string; name: string; type: SourceType; org: { slug: string; name: string } };
     }>;
@@ -39,7 +39,7 @@ export type HomepageTickerQuery = {
 };
 
 export const HomepageTickerDocument = {
-  __meta__: { hash: "sha256:c2a5a35cd255be3dc41c19c6d9b5fd501ae28333cb392553e9bec5d72a1fa6ac" },
+  __meta__: { hash: "sha256:25eedd0241ec74a3becd144b9a09d831e3fb4fa70316d8bb13e5431756651382" },
   kind: "Document",
   definitions: [
     {
@@ -103,9 +103,9 @@ export const HomepageTickerDocument = {
                       { kind: "Field", name: { kind: "Name", value: "type" } },
                       { kind: "Field", name: { kind: "Name", value: "url" } },
                       { kind: "Field", name: { kind: "Name", value: "publishedAt" } },
-                      { kind: "Field", name: { kind: "Name", value: "contentSummary" } },
-                      { kind: "Field", name: { kind: "Name", value: "contentTitle" } },
-                      { kind: "Field", name: { kind: "Name", value: "contentTitleShort" } },
+                      { kind: "Field", name: { kind: "Name", value: "summary" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleGenerated" } },
+                      { kind: "Field", name: { kind: "Name", value: "titleShort" } },
                       {
                         kind: "Field",
                         name: { kind: "Name", value: "media" },

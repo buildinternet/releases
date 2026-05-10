@@ -654,7 +654,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
               id: string;
               title: string;
               content: string;
-              contentSummary: string | null;
+              summary: string | null;
               version: string | null;
               publishedAt: string | null;
               sourceId: string;
@@ -668,7 +668,7 @@ const postReleasesBatchHandler = async (c: import("hono").Context<Env>) => {
                   id: releases.id,
                   title: releases.title,
                   content: releases.content,
-                  contentSummary: releases.contentSummary,
+                  summary: releases.summary,
                   version: releases.version,
                   publishedAt: releases.publishedAt,
                   sourceId: releases.sourceId,
@@ -1430,10 +1430,16 @@ const getSourceDetailHandler = async (c: import("hono").Context<Env>) => {
     version: r.version,
     type: r.type,
     title: r.title,
-    summary:
-      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    contentTitle: r.content_title,
-    contentTitleShort: r.content_title_short,
+    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    titleGenerated: r.title_generated,
+    titleShort: r.title_short,
+    /** @deprecated Use `summary`. */
+    contentSummary:
+      r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    /** @deprecated Use `titleGenerated`. */
+    contentTitle: r.title_generated,
+    /** @deprecated Use `titleShort`. */
+    contentTitleShort: r.title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
@@ -1599,10 +1605,16 @@ const getSourceReleasesFeedHandler = async (c: import("hono").Context<Env>) => {
     version: r.version,
     type: r.type,
     title: r.title,
-    summary:
-      r.content_summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    contentTitle: r.content_title,
-    contentTitleShort: r.content_title_short,
+    summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    titleGenerated: r.title_generated,
+    titleShort: r.title_short,
+    /** @deprecated Use `summary`. */
+    contentSummary:
+      r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
+    /** @deprecated Use `titleGenerated`. */
+    contentTitle: r.title_generated,
+    /** @deprecated Use `titleShort`. */
+    contentTitleShort: r.title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,
@@ -2062,7 +2074,18 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
     version?: string;
     title: string;
     content: string;
+    /** AI-generated summary (#860). */
+    summary?: string;
+    /** AI-generated headline (#860). */
+    titleGenerated?: string;
+    /** AI-generated smart-brevity headline (#860). */
+    titleShort?: string;
+    /** @deprecated Use `summary`. */
     contentSummary?: string;
+    /** @deprecated Use `titleGenerated`. */
+    contentTitle?: string;
+    /** @deprecated Use `titleShort`. */
+    contentTitleShort?: string;
     url?: string;
     contentHash?: string;
     metadata?: string;
@@ -2087,7 +2110,9 @@ sourceRoutes.post("/sources/:slug/releases", async (c) => {
         type: body.type ?? "feature",
         title: body.title,
         content: body.content,
-        contentSummary: body.contentSummary ?? null,
+        summary: body.summary ?? body.contentSummary ?? null,
+        titleGenerated: body.titleGenerated ?? body.contentTitle ?? null,
+        titleShort: body.titleShort ?? body.contentTitleShort ?? null,
         url: body.url ?? null,
         contentHash: body.contentHash ?? null,
         metadata: body.metadata ?? "{}",
@@ -2173,6 +2198,12 @@ sourceRoutes.patch("/releases/:id", async (c) => {
     url?: string;
     publishedAt?: string;
     contentHash?: string;
+    /** AI-generated summary (#860). Pass null to clear. */
+    summary?: string | null;
+    /** AI-generated self-contained headline (#860). Pass null to clear. */
+    titleGenerated?: string | null;
+    /** AI-generated smart-brevity headline (#860). Pass null to clear. */
+    titleShort?: string | null;
   }>();
 
   const [existing] = await db.select().from(releases).where(eq(releases.id, id));
@@ -2190,6 +2221,11 @@ sourceRoutes.patch("/releases/:id", async (c) => {
   if (body.url !== undefined) updates.url = body.url;
   if (body.publishedAt !== undefined) updates.publishedAt = body.publishedAt;
   if (body.contentHash !== undefined) updates.contentHash = body.contentHash;
+  // The three AI-generated fields are nullable; treat `null` as an explicit
+  // clear and only skip the column when the caller omits it entirely.
+  if (body.summary !== undefined) updates.summary = body.summary;
+  if (body.titleGenerated !== undefined) updates.titleGenerated = body.titleGenerated;
+  if (body.titleShort !== undefined) updates.titleShort = body.titleShort;
 
   const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
   return c.json(updated);

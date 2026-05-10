@@ -1,5 +1,5 @@
 /**
- * Generate `content_title`, `content_title_short`, and `content_summary`
+ * Generate `title_generated`, `title_short`, and `summary`
  * for a release row via Anthropic Haiku 4.5 + a tuned system prompt.
  *
  * Used by:

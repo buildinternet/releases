@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 /**
- * Manual release-content generator. Populates `content_title`,
- * `content_title_short`, and `content_summary` on `releases` rows that
+ * Manual release-content generator. Populates `title_generated`,
+ * `title_short`, and `summary` on `releases` rows that
  * match a filter, via Anthropic Haiku 4.5 + a single tuned system prompt.
  *
  * This is an operational tool — run as needed, not on a cron. Ingest
@@ -143,7 +143,7 @@ async function writeRow(
   titleShort: string | null,
 ): Promise<void> {
   const lit = (v: string | null) => (v == null ? "NULL" : `'${escapeSql(v)}'`);
-  const sql = `UPDATE releases SET content_summary = ${lit(summary)}, content_title = ${lit(title)}, content_title_short = ${lit(titleShort)} WHERE id = '${escapeSql(id)}';`;
+  const sql = `UPDATE releases SET summary = ${lit(summary)}, title_generated = ${lit(title)}, title_short = ${lit(titleShort)} WHERE id = '${escapeSql(id)}';`;
   await runWrangler([
     "d1",
     "execute",

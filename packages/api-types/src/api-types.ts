@@ -208,15 +208,22 @@ export interface ReleaseDetail {
   version: string | null;
   title: string;
   content: string;
-  contentSummary: string | null;
+  /** AI-generated summary (#852, renamed in #860). Nullable — most rows unpopulated. */
+  summary: string | null;
   /**
-   * AI-generated self-contained news-headline form of the release (#852).
-   * Nullable because most rows are unpopulated — fall back to `title` for
-   * display. `.optional()` for the same mid-deploy / pinned-worker reason
-   * as `type` on {@link ReleaseItem}.
+   * AI-generated self-contained news-headline form of the release (#852,
+   * renamed in #860). Nullable because most rows are unpopulated — fall
+   * back to `title` for display. `.optional()` for the same mid-deploy /
+   * pinned-worker reason as `type` on {@link ReleaseItem}.
    */
+  titleGenerated?: string | null;
+  /** AI-generated smart-brevity headline (#852, renamed in #860). Same fallback as `titleGenerated`. */
+  titleShort?: string | null;
+  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
+  contentSummary: string | null;
+  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
   contentTitle?: string | null;
-  /** AI-generated smart-brevity headline (#852). Same fallback as `contentTitle`. */
+  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort?: string | null;
   url: string | null;
   media: MediaItem[];
@@ -343,10 +350,16 @@ export interface SearchReleaseHit {
   version: string | null;
   title: string;
   summary: string;
-  /** AI-generated headline (#852). Optional + nullable: most rows are unpopulated. */
+  /** AI-generated headline (#852, renamed in #860). Optional + nullable: most rows are unpopulated. */
+  titleGenerated?: string | null;
+  /** AI-generated smart-brevity headline (#852, renamed in #860). Same caveat as titleGenerated. */
+  titleShort?: string | null;
+  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
   contentTitle?: string | null;
-  /** AI-generated smart-brevity headline (#852). Same caveat as contentTitle. */
+  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort?: string | null;
+  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
+  contentSummary?: string;
   /**
    * Full release body, media URLs hydrated through the MEDIA_ORIGIN proxy.
    * Present so the web can render the same markdown + thumbnail treatment
@@ -798,10 +811,17 @@ export interface ReleaseWithSource {
   version: string | null;
   title: string;
   content: string;
+  /** AI-generated summary (#852, renamed in #860). Nullable — most rows unpopulated. */
+  summary: string | null;
+  /** AI-generated headline (#852, renamed in #860). See {@link ReleaseDetail.titleGenerated}. */
+  titleGenerated?: string | null;
+  /** AI-generated smart-brevity headline (#852, renamed in #860). */
+  titleShort?: string | null;
+  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
   contentSummary: string | null;
-  /** AI-generated headline (#852). See {@link ReleaseDetail.contentTitle}. */
+  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
   contentTitle?: string | null;
-  /** AI-generated smart-brevity headline (#852). */
+  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort?: string | null;
   url: string | null;
   contentHash: string | null;
@@ -821,10 +841,17 @@ export interface LatestRelease {
   publishedAt: string | null;
   sourceName: string;
   sourceSlug: string;
+  /** AI-generated summary (#852, renamed in #860). Nullable — most rows unpopulated. */
+  summary: string | null;
+  /** AI-generated headline (#852, renamed in #860). See {@link ReleaseDetail.titleGenerated}. */
+  titleGenerated?: string | null;
+  /** AI-generated smart-brevity headline (#852, renamed in #860). */
+  titleShort?: string | null;
+  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
   contentSummary: string | null;
-  /** AI-generated headline (#852). See {@link ReleaseDetail.contentTitle}. */
+  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
   contentTitle?: string | null;
-  /** AI-generated smart-brevity headline (#852). */
+  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort?: string | null;
   media: MediaItem[];
 }

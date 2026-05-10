@@ -491,8 +491,8 @@ export async function searchReleases(
     id: string;
     title: string;
     summary: string;
-    contentTitle: string | null;
-    contentTitleShort: string | null;
+    titleGenerated: string | null;
+    titleShort: string | null;
     version: string | null;
     type: ReleaseType;
     publishedAt: string | null;
@@ -502,9 +502,9 @@ export async function searchReleases(
   }>(sql`
     SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
            r.version, r.title, r.type,
-           COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
-           r.content_title as contentTitle,
-           r.content_title_short as contentTitleShort,
+           COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
+           r.title_generated as titleGenerated,
+           r.title_short as titleShort,
            r.published_at as publishedAt,
            o.slug as orgSlug
     FROM releases_fts
@@ -759,9 +759,9 @@ export async function getLatestReleases(
       version: releasesTable.version,
       type: releasesTable.type,
       content: releasesTable.content,
-      contentSummary: releasesTable.contentSummary,
-      contentTitle: releasesTable.contentTitle,
-      contentTitleShort: releasesTable.contentTitleShort,
+      summary: releasesTable.summary,
+      titleGenerated: releasesTable.titleGenerated,
+      titleShort: releasesTable.titleShort,
       publishedAt: releasesTable.publishedAt,
       sourceName: sources.name,
       sourceSlug: sources.slug,
@@ -802,7 +802,7 @@ export async function getLatestReleases(
 
   const body = pageRows
     .map((r) => {
-      const preview = (r.contentSummary || r.content).slice(0, 500);
+      const preview = (r.summary || r.content).slice(0, 500);
       const titleLine = formatReleaseTitle(r);
       const srcCoord = r.orgSlug ? `${r.orgSlug}/${r.sourceSlug}` : r.sourceSlug;
       return [
@@ -1342,9 +1342,9 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
       version: releases.version,
       type: releases.type,
       content: releases.content,
-      contentSummary: releases.contentSummary,
-      contentTitle: releases.contentTitle,
-      contentTitleShort: releases.contentTitleShort,
+      summary: releases.summary,
+      titleGenerated: releases.titleGenerated,
+      titleShort: releases.titleShort,
       publishedAt: releases.publishedAt,
       url: releases.url,
       suppressed: releases.suppressed,
@@ -1363,7 +1363,7 @@ export async function getRelease(db: D1Db, params: { id: string }): Promise<Tool
   const r = rows[0];
   if (r.suppressed) return text(`No release found matching "${params.id}"`);
 
-  const body = r.content && r.content.length > 0 ? r.content : (r.contentSummary ?? "");
+  const body = r.content && r.content.length > 0 ? r.content : (r.summary ?? "");
 
   const lines: string[] = [];
   const titleLine = formatReleaseTitle(r);
@@ -2004,8 +2004,8 @@ export async function search(
     id: string;
     title: string;
     summary: string;
-    contentTitle: string | null;
-    contentTitleShort: string | null;
+    titleGenerated: string | null;
+    titleShort: string | null;
     version: string | null;
     type: ReleaseType;
     publishedAt: string | null;
@@ -2055,9 +2055,9 @@ export async function search(
         const rows = await db.all<LexicalReleaseRow>(sql`
           SELECT r.id as id, s.slug as sourceSlug, s.name as sourceName,
                  r.version, r.title, r.type,
-                 COALESCE(r.content_summary, SUBSTR(r.content, 1, 300)) as summary,
-                 r.content_title as contentTitle,
-                 r.content_title_short as contentTitleShort,
+                 COALESCE(r.summary, SUBSTR(r.content, 1, 300)) as summary,
+                 r.title_generated as titleGenerated,
+                 r.title_short as titleShort,
                  r.published_at as publishedAt,
                  o.slug as orgSlug
           FROM releases_fts
@@ -2363,7 +2363,7 @@ export async function getCollectionReleases(
 
   const body = pageRows
     .map((r) => {
-      const preview = (r.content_summary || r.content).slice(0, 500);
+      const preview = (r.summary || r.content).slice(0, 500);
       const titleLine = formatReleaseTitle(r);
       const srcCoord = `${r.org_slug}/${r.source_slug}`;
       return [

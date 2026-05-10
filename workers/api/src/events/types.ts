@@ -14,14 +14,20 @@ export interface ReleaseEventPayload {
   publishedAt: string | null;
   sourceName: string;
   sourceSlug: string;
-  contentSummary: string | null;
+  summary: string | null;
   /**
-   * AI-generated headline (#852). Always null at event time — the generator
-   * runs post-insert. Present here only so the wire shape mirrors
+   * AI-generated headline (#852, renamed in #860). Always null at event time —
+   * the generator runs post-insert. Present here only so the wire shape mirrors
    * {@link LatestRelease}; clients can fall back to `title`.
    */
+  titleGenerated: string | null;
+  /** AI-generated smart-brevity headline (#852, renamed in #860). Same caveat as titleGenerated. */
+  titleShort: string | null;
+  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
+  contentSummary: string | null;
+  /** @deprecated Use `titleGenerated`. Kept as an alias populated with the same value. */
   contentTitle: string | null;
-  /** AI-generated smart-brevity headline (#852). Same caveat as contentTitle. */
+  /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort: string | null;
   media: MediaItem[];
 }

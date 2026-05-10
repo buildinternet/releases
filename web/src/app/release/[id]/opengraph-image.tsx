@@ -32,7 +32,7 @@ export default async function Image({ params }: { params: Promise<{ id: string }
     const subtitle = orgName && orgName !== sourceName ? `${sourceName} · ${orgName}` : sourceName;
     const description = heroImage
       ? undefined
-      : stripMarkdown(release.contentSummary ?? release.content) || undefined;
+      : stripMarkdown(release.summary ?? release.content) || undefined;
     const published = formatDate(release.publishedAt);
 
     return renderOgImage({

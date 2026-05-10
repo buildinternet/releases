@@ -167,9 +167,7 @@ function ReleaseCard({ item, scope }: { item: RelatedReleaseItem; scope: "org" |
   const heading = item.version ?? item.title;
   const showSubtitle = !!item.version && item.title && item.title !== item.version;
   const subtitleText =
-    item.contentTitleShort?.trim() ||
-    item.contentTitle?.trim() ||
-    (showSubtitle ? item.title : null);
+    item.titleShort?.trim() || item.titleGenerated?.trim() || (showSubtitle ? item.title : null);
   const source = subtitleForSource(item.source.orgName, item.source.name, scope);
   const preview = releasePreview(item, subtitleText);
   return (
