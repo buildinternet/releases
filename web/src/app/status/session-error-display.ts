@@ -73,6 +73,21 @@ export interface IncidentGroup {
 
 const INCIDENT_WINDOW_MS = 60_000;
 const INCIDENT_MIN_SESSIONS = 3;
+/**
+ * If no new errors land in this window, treat the cluster as resolved. Tuned
+ * loose enough to ride out an incident's tail (a few stragglers retrying out
+ * of band) without making yesterday's resolved incident still look active.
+ */
+export const INCIDENT_RESOLVED_AFTER_MS = 30 * 60_000;
+
+/**
+ * `true` when no new errors have joined the cluster in INCIDENT_RESOLVED_AFTER_MS.
+ * Resolved incidents stay visible (so operators can confirm what happened) but
+ * render in a neutral style — distinct from active "needs eyes now" amber.
+ */
+export function isIncidentResolved(group: IncidentGroup, now: number = Date.now()): boolean {
+  return now - group.endedAt > INCIDENT_RESOLVED_AFTER_MS;
+}
 
 /**
  * Group provider-side errored sessions into incident clusters by `errorType`

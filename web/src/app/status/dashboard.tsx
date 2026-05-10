@@ -14,12 +14,14 @@ import { DAY_MS } from "@/lib/cadence";
 import { SOURCE_STALE_DAYS as STALE_THRESHOLD_DAYS } from "@buildinternet/releases-core/sources";
 import type { OrgsRollupResponse, OrgsRollupRow } from "@buildinternet/releases-api-types";
 import { describeCadence } from "./cadence-helpers";
+import { evaluateFetchPending } from "./source-fetch-status";
 import { CronRunsTab } from "./cron-runs-tab";
 import { SearchQueriesTab } from "./search-queries-tab";
 import { ForceDrainTile } from "./force-drain-tile";
 import {
   formatSessionError,
   groupProviderIncidents,
+  isIncidentResolved,
   type IncidentGroup,
 } from "./session-error-display";
 
@@ -584,7 +586,10 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
               return next;
             });
           }}
-          onDismiss={(id) => setSessions((prev) => prev.filter((s) => s.sessionId !== id))}
+          onDismiss={(ids) => {
+            const dismissed = new Set(ids);
+            setSessions((prev) => prev.filter((s) => !dismissed.has(s.sessionId)));
+          }}
         />
       )}
       {tab === "fetch-log" && (
@@ -637,7 +642,7 @@ function SessionsTable({
   perPage: number;
   onPageChange: (page: number) => void;
   onToggle: (id: string) => void;
-  onDismiss: (id: string) => void;
+  onDismiss: (ids: string[]) => void;
 }) {
   if (sessions.length === 0) {
     return (
@@ -653,9 +658,21 @@ function SessionsTable({
   const totalPages = Math.max(1, Math.ceil(visible.length / perPage));
   const paginated = visible.slice(page * perPage, (page + 1) * perPage);
 
+  // Rolled-up rows aren't reachable from the table — they're hidden under the
+  // banner — so without this the only way to clear yesterday's incident is to
+  // wait for the date filter or the 30-day session retention.
+  const dismissIncident = (group: IncidentGroup) => {
+    void Promise.all(
+      group.sessionIds.map((id) =>
+        fetch(`/api/proxy/sessions/${id}`, { method: "DELETE" }).catch(() => {}),
+      ),
+    );
+    onDismiss(group.sessionIds);
+  };
+
   return (
     <div>
-      <IncidentBanner groups={incidents} />
+      <IncidentBanner groups={incidents} onDismiss={dismissIncident} />
       {visible.length === 0 && incidents.length > 0 && (
         <div className="text-sm text-stone-400 dark:text-stone-500 py-4 text-center">
           All sessions in view are rolled up into the incident{incidents.length > 1 ? "s" : ""}{" "}
@@ -745,13 +762,13 @@ function SessionsTable({
                       onClick={(e) => {
                         e.stopPropagation();
                         fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
-                        onDismiss(session.sessionId);
+                        onDismiss([session.sessionId]);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.stopPropagation();
                           fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
-                          onDismiss(session.sessionId);
+                          onDismiss([session.sessionId]);
                         }
                       }}
                     >
@@ -815,22 +832,86 @@ function SessionErrorCell({ session }: { session: SessionState }): ReactNode {
   );
 }
 
-function IncidentBanner({ groups }: { groups: IncidentGroup[] }): ReactNode {
+const incidentDateFormatter = new Intl.DateTimeFormat([], {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+const incidentTimeFormatter = new Intl.DateTimeFormat([], {
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+function isSameLocalDay(a: number, b: number): boolean {
+  const da = new Date(a);
+  const db = new Date(b);
+  return (
+    da.getFullYear() === db.getFullYear() &&
+    da.getMonth() === db.getMonth() &&
+    da.getDate() === db.getDate()
+  );
+}
+
+/**
+ * "9:05 PM" if the incident is from today, "May 9, 9:05 PM" otherwise. Without
+ * the date, an incident from yesterday looks indistinguishable from one
+ * happening right now.
+ */
+function formatIncidentTime(ts: number, now: number): string {
+  return isSameLocalDay(ts, now)
+    ? incidentTimeFormatter.format(ts)
+    : incidentDateFormatter.format(ts);
+}
+
+const incidentBannerColors = {
+  active:
+    "border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-200",
+  resolved:
+    "border-stone-200 dark:border-stone-700 bg-stone-50 dark:bg-stone-900/40 text-stone-600 dark:text-stone-400",
+};
+
+function IncidentBanner({
+  groups,
+  onDismiss,
+}: {
+  groups: IncidentGroup[];
+  onDismiss: (group: IncidentGroup) => void;
+}): ReactNode {
   if (groups.length === 0) return null;
+  const now = Date.now();
   return (
     <div className="mb-3 space-y-2">
       {groups.map((g) => {
-        const when = new Date(g.startedAt).toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
+        const resolved = isIncidentResolved(g, now);
+        const startLabel = formatIncidentTime(g.startedAt, now);
+        const endLabel = formatIncidentTime(g.endedAt, now);
+        const timeRange =
+          resolved && g.endedAt !== g.startedAt
+            ? `${startLabel} – ${endLabel}`
+            : `started ${startLabel}`;
+        const className = `px-3 py-2 rounded border text-xs flex items-center gap-2 ${incidentBannerColors[resolved ? "resolved" : "active"]}`;
+        const headline = resolved ? "managed-agents (resolved)" : "managed-agents incident";
         return (
-          <div
-            key={`${g.errorType}-${g.startedAt}`}
-            className="px-3 py-2 rounded border border-amber-300 dark:border-amber-700 bg-amber-50 dark:bg-amber-950/40 text-xs text-amber-900 dark:text-amber-200"
-          >
-            <span className="font-medium">managed-agents incident</span> · {g.count} sessions ·{" "}
-            {g.errorType} · started {when}
+          <div key={`${g.errorType}-${g.startedAt}`} className={className}>
+            <span className="flex-1">
+              <span className="font-medium">{headline}</span> · {g.count} sessions · {g.errorType} ·{" "}
+              {timeRange}
+            </span>
+            {/* Active incidents stay sticky on purpose — they're meant to nag.
+                Resolved ones get a dismiss so operators can clear historical
+                noise without waiting on the 30-day session-retention sweep. */}
+            {resolved && (
+              <button
+                type="button"
+                onClick={() => onDismiss(g)}
+                title={`Dismiss ${g.count} resolved sessions`}
+                className="text-stone-400 hover:text-stone-600 dark:hover:text-stone-200 transition-colors px-1"
+                aria-label="Dismiss resolved incident"
+              >
+                &times;
+              </button>
+            )}
           </div>
         );
       })}
@@ -1344,9 +1425,9 @@ function SourcesTable() {
                       <span className="text-amber-500">Queued</span>
                     ) : null}
                   </span>
-                ) : src.changeDetectedAt && (src.type === "scrape" || src.type === "agent") ? (
-                  <span className="text-xs text-amber-500">Pending fetch</span>
-                ) : null}
+                ) : (
+                  <FetchPendingBadge src={src} />
+                )}
               </div>
             </div>
           );
@@ -1388,6 +1469,24 @@ function SourceTypeBadge({ type }: { type: string }) {
     agent: "text-green-500",
   };
   return <span className={`capitalize ${styles[type] ?? "text-stone-400"}`}>{type}</span>;
+}
+
+const fetchPendingToneClass = {
+  pending: "text-amber-500",
+  stuck: "text-red-500",
+};
+
+function FetchPendingBadge({ src }: { src: SourceEntry }): ReactNode {
+  const status = evaluateFetchPending(src);
+  if (status.tone === null) return null;
+  return (
+    <span
+      className={`text-xs cursor-help ${fetchPendingToneClass[status.tone]}`}
+      title={status.tooltip}
+    >
+      {status.label}
+    </span>
+  );
 }
 
 type OrgRow = OrgsRollupRow;
