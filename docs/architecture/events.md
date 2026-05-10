@@ -21,7 +21,7 @@ buffer for short-window resume.
     "publishedAt": "2026-04-18T10:00:00Z",
     "sourceName": "Claude Code",
     "sourceSlug": "claude-code",
-    "contentSummary": null, // omitted on publish; clients fetch via REST if needed
+    "summary": null, // omitted on publish; clients fetch via REST if needed
     "media": [],
   },
 }
