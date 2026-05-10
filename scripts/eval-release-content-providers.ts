@@ -17,17 +17,22 @@
  *   bun scripts/eval-release-content-providers.ts --providers=anthropic-haiku,openai-mini
  *   bun scripts/eval-release-content-providers.ts --since=14            # past 14 days
  *
+ * Provider scope: only providers Cloudflare AI Gateway can front, so flipping
+ * to gateway-routed later is a one-line baseURL change. Kimi K2 ships via
+ * Groq's hosting (Groq is in the gateway's supported list; Moonshot direct
+ * is not).
+ *
  * Required env (set whichever providers you want to include):
  *   ANTHROPIC_API_KEY    — for anthropic-haiku
  *   OPENAI_API_KEY       — for openai-mini
- *   KIMI_API_KEY         — for moonshot-kimi (Moonshot AI)
- *   ZHIPU_API_KEY        — for zhipu-glm    (Z.ai / Zhipu)
+ *   GROQ_API_KEY         — for groq-kimi    (hosts moonshotai/kimi-k2-instruct)
+ *   DEEPSEEK_API_KEY     — for deepseek     (deepseek-chat / V3 family)
  *
  * Model ID overrides (defaults shown — reset via env when provider-side IDs shift):
  *   ANTHROPIC_MODEL=claude-haiku-4-5
  *   OPENAI_MODEL=gpt-5-mini
- *   KIMI_MODEL=kimi-k2-0905-preview
- *   GLM_MODEL=glm-4-flash
+ *   GROQ_MODEL=moonshotai/kimi-k2-instruct
+ *   DEEPSEEK_MODEL=deepseek-chat
  *
  * Pricing in this script is list-price approximation as of 2026-05-09 —
  * verify with each provider's pricing page before quoting in roadmap docs.
@@ -73,7 +78,13 @@ if (Number.isNaN(sinceDays) || sinceDays < 1) {
 
 // ─── Provider config ─────────────────────────────────────────────────────────
 
-type ProviderId = "anthropic-haiku" | "openai-mini" | "moonshot-kimi" | "zhipu-glm";
+// Limited to providers that Cloudflare AI Gateway can front (per its supported
+// provider list as of 2026-05-09: Anthropic, OpenAI, Groq, DeepSeek, …). Calls
+// are direct today; switching to gateway-routed is a one-line baseURL flip when
+// we want unified observability. Kimi K2 ships via Groq's hosting; Moonshot
+// direct + Z.ai direct were dropped because neither is in the gateway's
+// provider list and OpenRouter detours add a hop without adding signal.
+type ProviderId = "anthropic-haiku" | "openai-mini" | "groq-kimi" | "deepseek";
 
 interface ProviderConfig {
   id: ProviderId;
@@ -90,7 +101,7 @@ interface ProviderConfig {
 const PROVIDERS: ProviderConfig[] = [
   {
     id: "anthropic-haiku",
-    label: "Anthropic Haiku 4.5 (direct)",
+    label: "Anthropic Haiku 4.5",
     model: process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5",
     apiKey: process.env.ANTHROPIC_API_KEY,
     inputPricePerM: 1.0,
@@ -106,22 +117,22 @@ const PROVIDERS: ProviderConfig[] = [
     outputPricePerM: 2.0,
   },
   {
-    id: "moonshot-kimi",
-    label: "Moonshot Kimi K2",
-    model: process.env.KIMI_MODEL ?? "kimi-k2-0905-preview",
-    apiKey: process.env.KIMI_API_KEY,
-    baseURL: "https://api.moonshot.ai/v1",
-    inputPricePerM: 0.15,
-    outputPricePerM: 2.5,
+    id: "groq-kimi",
+    label: "Groq · Kimi K2 Instruct",
+    model: process.env.GROQ_MODEL ?? "moonshotai/kimi-k2-instruct",
+    apiKey: process.env.GROQ_API_KEY,
+    baseURL: "https://api.groq.com/openai/v1",
+    inputPricePerM: 1.0,
+    outputPricePerM: 3.0,
   },
   {
-    id: "zhipu-glm",
-    label: "Z.ai GLM-4 Flash",
-    model: process.env.GLM_MODEL ?? "glm-4-flash",
-    apiKey: process.env.ZHIPU_API_KEY,
-    baseURL: "https://api.z.ai/api/paas/v4",
-    inputPricePerM: 0.07,
-    outputPricePerM: 0.07,
+    id: "deepseek",
+    label: "DeepSeek V3",
+    model: process.env.DEEPSEEK_MODEL ?? "deepseek-chat",
+    apiKey: process.env.DEEPSEEK_API_KEY,
+    baseURL: "https://api.deepseek.com/v1",
+    inputPricePerM: 0.27,
+    outputPricePerM: 1.1,
   },
 ];
 
