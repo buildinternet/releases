@@ -93,6 +93,17 @@ describe("parseForceDrainCounts", () => {
       stranded: 4,
     });
   });
+
+  it("does not match suffixed lookalike keys", () => {
+    // The word-boundary anchor on the regex means substrings like
+    // "pre_forced=" or "_stranded_total=" don't accidentally satisfy the
+    // match. Catches the case where a future note format embeds the key
+    // name inside a longer identifier.
+    expect(parseForceDrainCounts("pre_forced=9 _stranded_total=5")).toEqual({
+      forced: 0,
+      stranded: 0,
+    });
+  });
 });
 
 describe("summarizeForceDrain", () => {
@@ -100,9 +111,13 @@ describe("summarizeForceDrain", () => {
 
   it("returns 'never run' tone when no row exists", () => {
     const out = summarizeForceDrain(null, NOW);
-    expect(out.tone).toBe("never");
-    expect(out.label).toBe("never run");
-    expect(out.stranded).toBe(0);
+    expect(out).toMatchObject({
+      tone: "never",
+      label: "never run",
+      stranded: 0,
+      forced: 0,
+      skipped: 0,
+    });
   });
 
   it("reports healthy when stranded=0", () => {
@@ -171,7 +186,12 @@ describe("summarizeForceDrain", () => {
       },
       NOW,
     );
-    expect(out.tone).toBe("failed");
-    expect(out.label).toBe("last run failed (2h ago)");
+    expect(out).toMatchObject({
+      tone: "failed",
+      label: "last run failed (2h ago)",
+      stranded: 0,
+      forced: 0,
+      skipped: 0,
+    });
   });
 });

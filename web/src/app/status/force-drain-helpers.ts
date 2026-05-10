@@ -19,8 +19,10 @@ export type ForceDrainSummary = {
   label: string;
 };
 
-const STRANDED_RE = /stranded_total=(\d+)/;
-const FORCED_RE = /forced=(\d+)/;
+// Anchor the keys at word boundaries so substrings like "pre_forced=5" or
+// "_stranded_total=2" can't satisfy the match by accident.
+const STRANDED_RE = /\bstranded_total=(\d+)/;
+const FORCED_RE = /\bforced=(\d+)/;
 
 function parseNonNegativeInt(raw: string | undefined): number {
   if (!raw) return 0;

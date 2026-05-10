@@ -221,6 +221,21 @@ function formatElapsed(startedAt: number, endedAt?: number): string {
   return `${minutes}m ${secs}s`;
 }
 
+/**
+ * DELETE a session from the StatusHub DO. Returns whether the server accepted
+ * the call so callers can decide between optimistic (per-row click) and
+ * verified (incident batch dismiss) UI updates. Network failures and non-2xx
+ * responses both resolve to `false`.
+ */
+async function dismissSession(id: string): Promise<boolean> {
+  try {
+    const res = await fetch(`/api/proxy/sessions/${id}`, { method: "DELETE" });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
 export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -466,6 +481,18 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
     return () => clearInterval(interval);
   }, [hasRunningSessions, visible]);
 
+  // Slow tick for time-based thresholds (incident-resolved, fetch-stuck) so
+  // they re-evaluate while the page is idle. The 1s elapsed-time tick above
+  // is gated on running sessions, so without this an open page would hold
+  // stale Date.now() values until the user interacted or refetched.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    if (!visible) return;
+    setNow(Date.now());
+    const interval = setInterval(() => setNow(Date.now()), 60_000);
+    return () => clearInterval(interval);
+  }, [visible]);
+
   // Fetch persisted logs and stdout once when expanding a session
   const fetchedLogsRef = useRef<Set<string>>(new Set());
   const fetchLogsForSession = useCallback((sid: string) => {
@@ -571,6 +598,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
       {tab === "sessions" && (
         <SessionsTable
           sessions={filteredSessions}
+          now={now}
           expandedSessions={expandedSessions}
           sessionLogs={sessionLogs}
           sessionStdout={sessionStdout}
@@ -600,7 +628,7 @@ export function StatusDashboard({ apiUrl }: { apiUrl: string }) {
           onSortChange={setFetchLogSort}
         />
       )}
-      {tab === "sources" && <SourcesTable />}
+      {tab === "sources" && <SourcesTable now={now} />}
       {tab === "orgs" && <OrgsTable />}
       {tab === "cron" && <CronRunsTab />}
       {tab === "searches" && <SearchQueriesTab />}
@@ -625,6 +653,7 @@ function formatTime(ts: number): string {
 
 function SessionsTable({
   sessions,
+  now,
   expandedSessions,
   sessionLogs,
   sessionStdout,
@@ -635,6 +664,7 @@ function SessionsTable({
   onDismiss,
 }: {
   sessions: SessionState[];
+  now: number;
   expandedSessions: Set<string>;
   sessionLogs: Record<string, string[]>;
   sessionStdout: Record<string, string[]>;
@@ -660,19 +690,26 @@ function SessionsTable({
 
   // Rolled-up rows aren't reachable from the table — they're hidden under the
   // banner — so without this the only way to clear yesterday's incident is to
-  // wait for the date filter or the 30-day session retention.
-  const dismissIncident = (group: IncidentGroup) => {
-    void Promise.all(
-      group.sessionIds.map((id) =>
-        fetch(`/api/proxy/sessions/${id}`, { method: "DELETE" }).catch(() => {}),
-      ),
+  // wait for the date filter or the 30-day session retention. Verified path:
+  // unlike the per-row × (which is single-target and stays optimistic for
+  // instant UX), we await each DELETE and only drop the sessions that the
+  // server actually accepted, so a partial failure leaves the banner visible
+  // instead of silently desynchronizing the UI from storage.
+  const dismissIncident = async (group: IncidentGroup) => {
+    const settled = await Promise.all(
+      group.sessionIds.map(async (id) => ({ id, ok: await dismissSession(id) })),
     );
-    onDismiss(group.sessionIds);
+    const succeeded = settled.filter((r) => r.ok).map((r) => r.id);
+    const failed = settled.filter((r) => !r.ok).map((r) => r.id);
+    if (failed.length > 0) {
+      console.error("Incident dismiss: DELETE failed for sessions", failed);
+    }
+    if (succeeded.length > 0) onDismiss(succeeded);
   };
 
   return (
     <div>
-      <IncidentBanner groups={incidents} onDismiss={dismissIncident} />
+      <IncidentBanner groups={incidents} now={now} onDismiss={dismissIncident} />
       {visible.length === 0 && incidents.length > 0 && (
         <div className="text-sm text-stone-400 dark:text-stone-500 py-4 text-center">
           All sessions in view are rolled up into the incident{incidents.length > 1 ? "s" : ""}{" "}
@@ -761,13 +798,17 @@ function SessionsTable({
                       title="Dismiss"
                       onClick={(e) => {
                         e.stopPropagation();
-                        fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
+                        // Optimistic for the single-row case — instant UX, and
+                        // the worst case is one row reappears on next reload.
+                        // The incident batch path goes through the verified
+                        // helper instead.
+                        void dismissSession(session.sessionId);
                         onDismiss([session.sessionId]);
                       }}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
                           e.stopPropagation();
-                          fetch(`/api/proxy/sessions/${session.sessionId}`, { method: "DELETE" });
+                          void dismissSession(session.sessionId);
                           onDismiss([session.sessionId]);
                         }
                       }}
@@ -873,13 +914,15 @@ const incidentBannerColors = {
 
 function IncidentBanner({
   groups,
+  now,
   onDismiss,
 }: {
   groups: IncidentGroup[];
+  /** Current time, threaded from the parent's slow tick so resolution thresholds re-evaluate while idle. */
+  now: number;
   onDismiss: (group: IncidentGroup) => void;
 }): ReactNode {
   if (groups.length === 0) return null;
-  const now = Date.now();
   return (
     <div className="mb-3 space-y-2">
       {groups.map((g) => {
@@ -1186,7 +1229,7 @@ function FetchLogTable({
 
 type SourceTypeFilter = "all" | "feed" | "github" | "scrape" | "agent";
 
-function SourcesTable() {
+function SourcesTable({ now }: { now: number }) {
   const [sources, setSources] = useState<SourceEntry[]>([]);
   const [totalItems, setTotalItems] = useState<number | null>(null);
   const [error, setError] = useState(false);
@@ -1426,7 +1469,7 @@ function SourcesTable() {
                     ) : null}
                   </span>
                 ) : (
-                  <FetchPendingBadge src={src} />
+                  <FetchPendingBadge src={src} now={now} />
                 )}
               </div>
             </div>
@@ -1476,8 +1519,8 @@ const fetchPendingToneClass = {
   stuck: "text-red-500",
 };
 
-function FetchPendingBadge({ src }: { src: SourceEntry }): ReactNode {
-  const status = evaluateFetchPending(src);
+function FetchPendingBadge({ src, now }: { src: SourceEntry; now: number }): ReactNode {
+  const status = evaluateFetchPending(src, now);
   if (status.tone === null) return null;
   return (
     <span
