@@ -130,6 +130,8 @@ releaseRoutes.get("/releases/latest", async (c) => {
       summary: r.summary,
       titleGenerated: r.title_generated,
       titleShort: r.title_short,
+      /** @deprecated Use `summary`. */
+      contentSummary: r.summary,
       /** @deprecated Use `titleGenerated`. */
       contentTitle: r.title_generated,
       /** @deprecated Use `titleShort`. */

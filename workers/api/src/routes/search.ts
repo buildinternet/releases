@@ -89,6 +89,8 @@ function hydrateReleaseHit(
     summary: row.summary,
     titleGenerated: row.titleGenerated,
     titleShort: row.titleShort,
+    /** @deprecated Use `summary`. */
+    contentSummary: row.summary,
     /** @deprecated Use `titleGenerated`. */
     contentTitle: row.titleGenerated,
     /** @deprecated Use `titleShort`. */

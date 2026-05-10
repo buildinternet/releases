@@ -358,6 +358,8 @@ export interface SearchReleaseHit {
   contentTitle?: string | null;
   /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort?: string | null;
+  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
+  contentSummary?: string;
   /**
    * Full release body, media URLs hydrated through the MEDIA_ORIGIN proxy.
    * Present so the web can render the same markdown + thumbnail treatment

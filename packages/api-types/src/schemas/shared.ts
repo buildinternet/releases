@@ -67,6 +67,8 @@ export const ReleaseItemSchema = z.object({
   contentTitle: z.string().nullable().optional(),
   /** @deprecated Use `titleShort`. Kept as an alias populated with the same value. */
   contentTitleShort: z.string().nullable().optional(),
+  /** @deprecated Use `summary`. Kept as an alias populated with the same value. */
+  contentSummary: z.string().nullable().optional(),
 });
 
 export const ReleaseSummaryItemSchema = z.object({
