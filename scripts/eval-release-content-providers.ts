@@ -14,25 +14,28 @@
  * Usage:
  *   bun scripts/eval-release-content-providers.ts                       # default 10 releases past 30d
  *   bun scripts/eval-release-content-providers.ts --n=3                 # smaller sample
- *   bun scripts/eval-release-content-providers.ts --providers=anthropic-haiku,openai-mini
+ *   bun scripts/eval-release-content-providers.ts --providers=anthropic-haiku,cf-glm
  *   bun scripts/eval-release-content-providers.ts --since=14            # past 14 days
  *
- * Provider scope: only providers Cloudflare AI Gateway can front, so flipping
- * to gateway-routed later is a one-line baseURL change. Kimi K2 ships via
- * Groq's hosting (Groq is in the gateway's supported list; Moonshot direct
- * is not).
+ * Provider scope: Anthropic Haiku 4.5 (production baseline, direct) plus
+ * Workers AI hosted models reached via the existing CLOUDFLARE_API_TOKEN.
+ * No new third-party API keys required — everything else (OpenAI, Groq,
+ * DeepSeek, etc.) is dropped from this iteration. Workers AI is itself an
+ * AI Gateway-supported provider, so flipping every call to gateway-routed
+ * later is a one-line baseURL change.
  *
- * Required env (set whichever providers you want to include):
- *   ANTHROPIC_API_KEY    — for anthropic-haiku
- *   OPENAI_API_KEY       — for openai-mini
- *   GROQ_API_KEY         — for groq-kimi    (hosts moonshotai/kimi-k2-instruct)
- *   DEEPSEEK_API_KEY     — for deepseek     (deepseek-chat / V3 family)
+ * Required env (already in .env for any active engineer on this repo):
+ *   ANTHROPIC_API_KEY      — for anthropic-haiku
+ *   CLOUDFLARE_ACCOUNT_ID  — for the cf-* providers (Workers AI)
+ *   CLOUDFLARE_API_TOKEN   — for the cf-* providers (Workers AI)
  *
  * Model ID overrides (defaults shown — reset via env when provider-side IDs shift):
  *   ANTHROPIC_MODEL=claude-haiku-4-5
- *   OPENAI_MODEL=gpt-5-mini
- *   GROQ_MODEL=moonshotai/kimi-k2-instruct
- *   DEEPSEEK_MODEL=deepseek-chat
+ *   CF_KIMI_MODEL=@cf/moonshotai/kimi-k2.6
+ *   CF_GLM_MODEL=@cf/zai-org/glm-4.7-flash
+ *   CF_QWEN_MODEL=@cf/qwen/qwen3-30b-a3b-fp8
+ *   CF_LLAMA_MODEL=@cf/meta/llama-4-scout-17b-16e-instruct
+ *   CF_GPT_OSS_MODEL=@cf/openai/gpt-oss-120b
  *
  * Pricing in this script is list-price approximation as of 2026-05-09 —
  * verify with each provider's pricing page before quoting in roadmap docs.
@@ -66,6 +69,11 @@ const providersFilter = arg("providers")
   ?.split(",")
   .map((s) => s.trim())
   .filter(Boolean);
+// Production uses MAX_OUTPUT_TOKENS (220). Bump via --max-tokens=600 for
+// diagnostic runs against models that emit chain-of-thought before the
+// final answer (e.g. GLM-4.7-Flash on Workers AI runs in thinking mode by
+// default and exhausts the budget on reasoning).
+const maxTokens = Number.parseInt(arg("max-tokens") ?? String(MAX_OUTPUT_TOKENS), 10);
 
 if (Number.isNaN(sampleSize) || sampleSize < 1) {
   logger.error("--n must be a positive integer");
@@ -75,19 +83,21 @@ if (Number.isNaN(sinceDays) || sinceDays < 1) {
   logger.error("--since must be a positive integer");
   process.exit(1);
 }
+if (Number.isNaN(maxTokens) || maxTokens < 1) {
+  logger.error("--max-tokens must be a positive integer");
+  process.exit(1);
+}
 
 // ─── Provider config ─────────────────────────────────────────────────────────
 
-// Limited to providers that Cloudflare AI Gateway can front (per its supported
-// provider list as of 2026-05-09: Anthropic, OpenAI, Groq, DeepSeek, …). Calls
-// are direct today; switching to gateway-routed is a one-line baseURL flip when
-// we want unified observability. Kimi K2 ships via Groq's hosting; Moonshot
-// direct + Z.ai direct were dropped because neither is in the gateway's
-// provider list and OpenRouter detours add a hop without adding signal.
-type ProviderId = "anthropic-haiku" | "openai-mini" | "groq-kimi" | "deepseek";
-
+// Anthropic Haiku 4.5 (production baseline, direct) plus Workers AI hosted
+// models reached via the existing CLOUDFLARE_API_TOKEN. No third-party API
+// keys beyond what's already in .env. Workers AI is an AI Gateway-supported
+// provider, so flipping calls to gateway-routed (cf-aig observability) is a
+// one-line baseURL change later. Provider catalog reviewed 2026-05-09:
+// https://developers.cloudflare.com/ai/models/index.md.
 interface ProviderConfig {
-  id: ProviderId;
+  id: string;
   label: string;
   model: string;
   apiKey: string | undefined;
@@ -98,6 +108,64 @@ interface ProviderConfig {
   baseURL?: string;
 }
 
+const cfAccountId = process.env.CLOUDFLARE_ACCOUNT_ID;
+const cfToken = process.env.CLOUDFLARE_API_TOKEN;
+const cfBaseUrl = cfAccountId
+  ? `https://api.cloudflare.com/client/v4/accounts/${cfAccountId}/ai/v1`
+  : undefined;
+
+interface CfModelEntry {
+  id: string;
+  label: string;
+  envVar: string;
+  defaultModel: string;
+  inputPricePerM: number;
+  outputPricePerM: number;
+}
+
+const CF_MODELS: CfModelEntry[] = [
+  {
+    id: "cf-kimi",
+    label: "CF · Kimi K2.6",
+    envVar: "CF_KIMI_MODEL",
+    defaultModel: "@cf/moonshotai/kimi-k2.6",
+    inputPricePerM: 0.95,
+    outputPricePerM: 4.0,
+  },
+  {
+    id: "cf-glm",
+    label: "CF · GLM-4.7-Flash",
+    envVar: "CF_GLM_MODEL",
+    defaultModel: "@cf/zai-org/glm-4.7-flash",
+    inputPricePerM: 0.06,
+    outputPricePerM: 0.4,
+  },
+  {
+    id: "cf-qwen",
+    label: "CF · Qwen3 30B A3B",
+    envVar: "CF_QWEN_MODEL",
+    defaultModel: "@cf/qwen/qwen3-30b-a3b-fp8",
+    inputPricePerM: 0.051,
+    outputPricePerM: 0.34,
+  },
+  {
+    id: "cf-llama",
+    label: "CF · Llama 4 Scout 17B",
+    envVar: "CF_LLAMA_MODEL",
+    defaultModel: "@cf/meta/llama-4-scout-17b-16e-instruct",
+    inputPricePerM: 0.27,
+    outputPricePerM: 0.85,
+  },
+  {
+    id: "cf-gpt-oss",
+    label: "CF · GPT-OSS-120B",
+    envVar: "CF_GPT_OSS_MODEL",
+    defaultModel: "@cf/openai/gpt-oss-120b",
+    inputPricePerM: 0.35,
+    outputPricePerM: 0.75,
+  },
+];
+
 const PROVIDERS: ProviderConfig[] = [
   {
     id: "anthropic-haiku",
@@ -107,33 +175,15 @@ const PROVIDERS: ProviderConfig[] = [
     inputPricePerM: 1.0,
     outputPricePerM: 5.0,
   },
-  {
-    id: "openai-mini",
-    label: "OpenAI GPT-5-mini",
-    model: process.env.OPENAI_MODEL ?? "gpt-5-mini",
-    apiKey: process.env.OPENAI_API_KEY,
-    baseURL: "https://api.openai.com/v1",
-    inputPricePerM: 0.25,
-    outputPricePerM: 2.0,
-  },
-  {
-    id: "groq-kimi",
-    label: "Groq · Kimi K2 Instruct",
-    model: process.env.GROQ_MODEL ?? "moonshotai/kimi-k2-instruct",
-    apiKey: process.env.GROQ_API_KEY,
-    baseURL: "https://api.groq.com/openai/v1",
-    inputPricePerM: 1.0,
-    outputPricePerM: 3.0,
-  },
-  {
-    id: "deepseek",
-    label: "DeepSeek V3",
-    model: process.env.DEEPSEEK_MODEL ?? "deepseek-chat",
-    apiKey: process.env.DEEPSEEK_API_KEY,
-    baseURL: "https://api.deepseek.com/v1",
-    inputPricePerM: 0.27,
-    outputPricePerM: 1.1,
-  },
+  ...CF_MODELS.map((m) => ({
+    id: m.id,
+    label: m.label,
+    model: process.env[m.envVar] ?? m.defaultModel,
+    apiKey: cfToken,
+    baseURL: cfBaseUrl,
+    inputPricePerM: m.inputPricePerM,
+    outputPricePerM: m.outputPricePerM,
+  })),
 ];
 
 const enabled = PROVIDERS.filter((p) => {
@@ -250,7 +300,7 @@ async function callAnthropic(cfg: ProviderConfig, userBlock: string): Promise<Pr
   try {
     const res = await client.messages.create({
       model: cfg.model,
-      max_tokens: MAX_OUTPUT_TOKENS,
+      max_tokens: maxTokens,
       system: [{ type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } }],
       messages: [{ role: "user", content: userBlock }],
     });
@@ -298,7 +348,7 @@ async function callOpenAICompat(cfg: ProviderConfig, userBlock: string): Promise
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userBlock },
         ],
-        max_completion_tokens: MAX_OUTPUT_TOKENS,
+        max_completion_tokens: maxTokens,
         temperature: 0,
       }),
     });
@@ -307,10 +357,21 @@ async function callOpenAICompat(cfg: ProviderConfig, userBlock: string): Promise
       throw new Error(`HTTP ${res.status}: ${body.slice(0, 500)}`);
     }
     const data = (await res.json()) as {
-      choices: Array<{ message: { content: string } }>;
+      choices: Array<{ message: { content?: string; reasoning_content?: string } }>;
       usage: { prompt_tokens: number; completion_tokens: number };
     };
-    const raw = data.choices[0]?.message?.content ?? "";
+    // Some open-weight models route the user-visible answer to `content`
+    // but spend most output tokens on `reasoning_content`. If `content` is
+    // empty, fall back to reasoning so the eval still has text to score.
+    const msg = data.choices[0]?.message ?? {};
+    const raw = msg.content || msg.reasoning_content || "";
+    if (process.env.EVAL_DEBUG && !raw) {
+      // eslint-disable-next-line no-console -- diagnostic only
+      console.error(
+        `[DEBUG ${cfg.id}] empty content; full response:`,
+        JSON.stringify(data, null, 2),
+      );
+    }
     return {
       ok: true,
       rawText: raw,
@@ -376,7 +437,7 @@ logger.info(`got ${releases.length} releases`);
 
 interface RowResult {
   release: ReleaseRow;
-  byProvider: Map<ProviderId, ProviderResult>;
+  byProvider: Map<string, ProviderResult>;
 }
 
 const rowResults: RowResult[] = [];
@@ -501,6 +562,14 @@ for (const row of rowResults) {
     lines.push(`  · title:       ${r.title || "(missing)"}`);
     lines.push(`  · title_short: ${r.titleShort || "(missing)"}`);
     lines.push(`  · summary:     ${r.summary || "(missing)"}`);
+    // When the model returned text but none of the expected tags parsed,
+    // dump the raw output (truncated) so the operator can see what shape
+    // it actually used — common for open-weights that drift to fenced
+    // code blocks, JSON, or markdown.
+    if (r.ok && !r.title && !r.titleShort && !r.summary && r.rawText) {
+      const preview = r.rawText.length > 500 ? `${r.rawText.slice(0, 500)}…` : r.rawText;
+      lines.push(`  · RAW (no tags parsed): ${preview.replace(/\n/g, "\\n")}`);
+    }
     lines.push("");
   }
 }
