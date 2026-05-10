@@ -1,0 +1,173 @@
+/**
+ * Tests for getCollectionReleasesFeed (#862).
+ *
+ * Key coverage:
+ * 1. Large orgIds list (150 IDs) — previously exceeded D1's 100-bind-parameter
+ *    ceiling; now chunked into batches of 90.
+ * 2. Ordering is preserved across chunk boundaries (published_at DESC,
+ *    fetched_at DESC, id DESC; null published_at sorted last).
+ * 3. Cursor pagination remains stable across multiple pages.
+ * 4. Null published_at rows sort after all dated rows (null-tail branch).
+ */
+
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
+import { createTestDb, clearAllTables, type TestDatabase } from "../../../tests/db-helper.js";
+import { organizations, sources, releases } from "@buildinternet/releases-core/schema";
+import { getCollectionReleasesFeed, buildFeedCursor } from "./collection-feed.js";
+import type { D1Db } from "../../../workers/api/src/db.js";
+
+// Cast the Drizzle bun-sqlite db to the D1Db interface used by collection-feed.
+const asD1 = (db: TestDatabase["db"]): D1Db => db as unknown as D1Db;
+
+describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
+  let tdb: TestDatabase;
+
+  beforeAll(() => {
+    tdb = createTestDb();
+  });
+
+  beforeEach(() => {
+    clearAllTables(tdb.db);
+  });
+
+  afterAll(() => {
+    tdb.cleanup();
+  });
+
+  /**
+   * D1 caps prepared-statement parameters at 100. Chunk sizes are derived
+   * from the number of columns each insert actually binds:
+   *   organizations: 4 cols (id, name, slug, discovery)       → floor(100/4) = 25
+   *   sources:       7 cols (id, name, slug, type, url,
+   *                          orgId, discovery)                 → floor(100/7) = 14
+   *   releases:      7 cols (id, sourceId, title, content,
+   *                          type, publishedAt, fetchedAt)     → floor(100/7) = 14
+   *
+   * Use the strictest value (14) across all three tables so a single constant
+   * is safe regardless of insert order.
+   */
+  const SEED_CHUNK = 14;
+
+  /**
+   * Build N org + source + release rows. Returns the org IDs in insertion order.
+   * Every 20th release has publishedAt = null to exercise the null-tail sort
+   * branch in getCollectionReleasesFeed.
+   */
+  async function seedOrgs(db: TestDatabase["db"], count: number): Promise<string[]> {
+    const orgIds: string[] = [];
+    const orgRows: (typeof organizations.$inferInsert)[] = [];
+    const srcRows: (typeof sources.$inferInsert)[] = [];
+    const relRows: (typeof releases.$inferInsert)[] = [];
+
+    for (let i = 0; i < count; i++) {
+      const orgId = `org_${String(i).padStart(5, "0")}`;
+      const srcId = `src_${String(i).padStart(5, "0")}`;
+      orgIds.push(orgId);
+      orgRows.push({ id: orgId, name: `Org ${i}`, slug: `org-${i}`, discovery: "curated" });
+      srcRows.push({
+        id: srcId,
+        name: `Source ${i}`,
+        slug: `src-${i}`,
+        type: "github",
+        url: `https://github.com/example/repo-${i}`,
+        orgId,
+        discovery: "curated",
+      });
+      // Every 20th release has null publishedAt to exercise the null-tail branch.
+      // fetchedAt is unique-per-row (encodes i) so null-tail ordering is stable.
+      const isNullPublished = i % 20 === 0;
+      relRows.push({
+        id: `rel_${String(i).padStart(5, "0")}`,
+        sourceId: srcId,
+        title: `Release ${i}`,
+        content: `Content for release ${i}`,
+        type: "feature",
+        publishedAt: isNullPublished
+          ? null
+          : `2026-01-${String((i % 28) + 1).padStart(2, "0")}T00:00:00Z`,
+        fetchedAt: `2026-02-${String((i % 28) + 1).padStart(2, "0")}T${String(i % 24).padStart(2, "0")}:00:00Z`,
+      });
+    }
+
+    // Insert in per-table chunks that respect D1's 100-bind-parameter cap.
+    for (let i = 0; i < orgRows.length; i += SEED_CHUNK) {
+      await db.insert(organizations).values(orgRows.slice(i, i + SEED_CHUNK)); // eslint-disable-line no-await-in-loop
+      await db.insert(sources).values(srcRows.slice(i, i + SEED_CHUNK)); // eslint-disable-line no-await-in-loop
+      await db.insert(releases).values(relRows.slice(i, i + SEED_CHUNK)); // eslint-disable-line no-await-in-loop
+    }
+
+    return orgIds;
+  }
+
+  it("returns rows when orgIds has 150 elements (previously exceeded D1 100-bind cap)", async () => {
+    const orgIds = await seedOrgs(tdb.db, 150);
+
+    // This would throw "too many SQL variables" (D1-equivalent) before the fix.
+    const rows = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, null, 200);
+
+    // We seeded one release per org, so we should get all 150 back.
+    expect(rows.length).toBe(150);
+  });
+
+  it("returns an empty array for an empty orgIds list", async () => {
+    const rows = await getCollectionReleasesFeed(asD1(tdb.db), [], null, 10);
+    expect(rows).toEqual([]);
+  });
+
+  it("preserves published_at DESC ordering with null-tail across chunk boundaries (150 orgs)", async () => {
+    const orgIds = await seedOrgs(tdb.db, 150);
+    const rows = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, null, 200);
+
+    // Verify every dated row comes before any null-published row,
+    // and within dated rows, descending order is maintained.
+    let prevPublishedAt: string | null | undefined;
+    let hitNull = false;
+
+    for (const row of rows) {
+      if (row.published_at === null) {
+        hitNull = true;
+      } else {
+        // Once we have hit null rows we should not see dated rows again.
+        expect(hitNull).toBe(false);
+        if (prevPublishedAt !== undefined && prevPublishedAt !== null) {
+          expect(row.published_at <= prevPublishedAt).toBe(true);
+        }
+        prevPublishedAt = row.published_at;
+      }
+    }
+
+    // The seed puts every 20th row (i=0,20,40,...) as null-published.
+    // With 150 orgs that is 8 null rows (i=0,20,40,60,80,100,120,140).
+    // Assert the null-tail branch was actually exercised.
+    expect(hitNull).toBe(true);
+  });
+
+  it("cursor pagination is stable across pages with 150 orgs", async () => {
+    const orgIds = await seedOrgs(tdb.db, 150);
+
+    // Collect pages sequentially — pagination is inherently sequential since
+    // each page cursor depends on the previous page's last row.
+    const pageSize = 40;
+    const pages: string[][] = [];
+    let cursor: string | null = null;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      // Pages are fetched sequentially by design (cursor depends on prev page).
+      // eslint-disable-next-line no-await-in-loop
+      const rows = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, cursor, pageSize);
+      if (rows.length === 0) break;
+      pages.push(rows.map((r) => r.id));
+      const last = rows[rows.length - 1]!;
+      cursor = buildFeedCursor(last);
+      if (rows.length < pageSize) break;
+    }
+
+    const allIds = pages.flat();
+    const uniqueIds = new Set(allIds);
+
+    // All 150 releases should be returned with no duplicates.
+    expect(uniqueIds.size).toBe(150);
+    expect(allIds.length).toBe(150);
+  });
+});
