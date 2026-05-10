@@ -7,6 +7,7 @@
  * 2. Ordering is preserved across chunk boundaries (published_at DESC,
  *    fetched_at DESC, id DESC; null published_at sorted last).
  * 3. Cursor pagination remains stable across multiple pages.
+ * 4. Null published_at rows sort after all dated rows (null-tail branch).
  */
 
 import { describe, it, expect, beforeAll, beforeEach, afterAll } from "bun:test";
@@ -34,9 +35,23 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
   });
 
   /**
+   * D1 caps prepared-statement parameters at 100. Chunk sizes are derived
+   * from the number of columns each insert actually binds:
+   *   organizations: 4 cols (id, name, slug, discovery)       → floor(100/4) = 25
+   *   sources:       7 cols (id, name, slug, type, url,
+   *                          orgId, discovery)                 → floor(100/7) = 14
+   *   releases:      7 cols (id, sourceId, title, content,
+   *                          type, publishedAt, fetchedAt)     → floor(100/7) = 14
+   *
+   * Use the strictest value (14) across all three tables so a single constant
+   * is safe regardless of insert order.
+   */
+  const SEED_CHUNK = 14;
+
+  /**
    * Build N org + source + release rows. Returns the org IDs in insertion order.
-   * Inserts are batched into groups of 50 to avoid any bind-cap issues in the
-   * seed path itself while still being fast (no sequential await-in-loop).
+   * Every 20th release has publishedAt = null to exercise the null-tail sort
+   * branch in getCollectionReleasesFeed.
    */
   async function seedOrgs(db: TestDatabase["db"], count: number): Promise<string[]> {
     const orgIds: string[] = [];
@@ -58,20 +73,23 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
         orgId,
         discovery: "curated",
       });
+      // Every 20th release has null publishedAt to exercise the null-tail branch.
+      // fetchedAt is unique-per-row (encodes i) so null-tail ordering is stable.
+      const isNullPublished = i % 20 === 0;
       relRows.push({
         id: `rel_${String(i).padStart(5, "0")}`,
         sourceId: srcId,
         title: `Release ${i}`,
         content: `Content for release ${i}`,
         type: "feature",
-        // Vary published_at so ordering is deterministic.
-        publishedAt: `2026-01-${String((i % 28) + 1).padStart(2, "0")}T00:00:00Z`,
-        fetchedAt: `2026-02-01T00:00:00Z`,
+        publishedAt: isNullPublished
+          ? null
+          : `2026-01-${String((i % 28) + 1).padStart(2, "0")}T00:00:00Z`,
+        fetchedAt: `2026-02-${String((i % 28) + 1).padStart(2, "0")}T${String(i % 24).padStart(2, "0")}:00:00Z`,
       });
     }
 
-    // Insert in chunks of 50 to respect D1's 100-bind cap inside tests too.
-    const SEED_CHUNK = 50;
+    // Insert in per-table chunks that respect D1's 100-bind-parameter cap.
     for (let i = 0; i < orgRows.length; i += SEED_CHUNK) {
       await db.insert(organizations).values(orgRows.slice(i, i + SEED_CHUNK)); // eslint-disable-line no-await-in-loop
       await db.insert(sources).values(srcRows.slice(i, i + SEED_CHUNK)); // eslint-disable-line no-await-in-loop
@@ -96,7 +114,7 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
     expect(rows).toEqual([]);
   });
 
-  it("preserves published_at DESC ordering across chunk boundaries (150 orgs)", async () => {
+  it("preserves published_at DESC ordering with null-tail across chunk boundaries (150 orgs)", async () => {
     const orgIds = await seedOrgs(tdb.db, 150);
     const rows = await getCollectionReleasesFeed(asD1(tdb.db), orgIds, null, 200);
 
@@ -117,6 +135,11 @@ describe("getCollectionReleasesFeed — large orgIds (>90, fixes #862)", () => {
         prevPublishedAt = row.published_at;
       }
     }
+
+    // The seed puts every 20th row (i=0,20,40,...) as null-published.
+    // With 150 orgs that is 8 null rows (i=0,20,40,60,80,100,120,140).
+    // Assert the null-tail branch was actually exercised.
+    expect(hitNull).toBe(true);
   });
 
   it("cursor pagination is stable across pages with 150 orgs", async () => {
