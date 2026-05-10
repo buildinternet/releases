@@ -1,6 +1,7 @@
 import { describe, it, expect } from "bun:test";
 import {
   parseStrandedTotal,
+  parseForceDrainCounts,
   formatForceDrainAge,
   summarizeForceDrain,
 } from "../../web/src/app/status/force-drain-helpers";
@@ -66,14 +67,57 @@ describe("formatForceDrainAge", () => {
   });
 });
 
+describe("parseForceDrainCounts", () => {
+  it("returns zeros for null/empty notes", () => {
+    expect(parseForceDrainCounts(null)).toEqual({ forced: 0, stranded: 0 });
+    expect(parseForceDrainCounts("")).toEqual({ forced: 0, stranded: 0 });
+  });
+
+  it("returns zeros for the healthy-quiet note", () => {
+    expect(parseForceDrainCounts("no stale/unreliable sources")).toEqual({
+      forced: 0,
+      stranded: 0,
+    });
+  });
+
+  it("extracts both fields from the active-drain note", () => {
+    expect(parseForceDrainCounts("forced=3 (unreliable=1, stale=2) stranded_total=3")).toEqual({
+      forced: 3,
+      stranded: 3,
+    });
+  });
+
+  it("extracts both fields when the cap was hit", () => {
+    expect(parseForceDrainCounts("forced=2 (unreliable=0, stale=2) stranded_total=4")).toEqual({
+      forced: 2,
+      stranded: 4,
+    });
+  });
+
+  it("does not match suffixed lookalike keys", () => {
+    // The word-boundary anchor on the regex means substrings like
+    // "pre_forced=" or "_stranded_total=" don't accidentally satisfy the
+    // match. Catches the case where a future note format embeds the key
+    // name inside a longer identifier.
+    expect(parseForceDrainCounts("pre_forced=9 _stranded_total=5")).toEqual({
+      forced: 0,
+      stranded: 0,
+    });
+  });
+});
+
 describe("summarizeForceDrain", () => {
   const NOW = new Date("2026-04-23T12:00:00.000Z").getTime();
 
   it("returns 'never run' tone when no row exists", () => {
     const out = summarizeForceDrain(null, NOW);
-    expect(out.tone).toBe("never");
-    expect(out.label).toBe("never run");
-    expect(out.stranded).toBe(0);
+    expect(out).toMatchObject({
+      tone: "never",
+      label: "never run",
+      stranded: 0,
+      forced: 0,
+      skipped: 0,
+    });
   });
 
   it("reports healthy when stranded=0", () => {
@@ -85,12 +129,37 @@ describe("summarizeForceDrain", () => {
       },
       NOW,
     );
-    expect(out.tone).toBe("healthy");
-    expect(out.stranded).toBe(0);
-    expect(out.label).toBe("0 stranded · 4h ago");
+    expect(out).toMatchObject({
+      tone: "healthy",
+      stranded: 0,
+      forced: 0,
+      skipped: 0,
+      label: "no stranded · 4h ago",
+    });
   });
 
-  it("reports stranded when stranded_total > 0", () => {
+  it("reports healthy when the cron drained everything it found (forced == stranded)", () => {
+    // The whole point of the safety net — found 2, drained 2, backlog is 0.
+    // Coloring this amber would make routine background activity look like an
+    // active problem.
+    const out = summarizeForceDrain(
+      {
+        startedAt: new Date(NOW - 8 * 3600_000).toISOString(),
+        status: "done",
+        notes: "forced=2 (unreliable=0, stale=2) stranded_total=2",
+      },
+      NOW,
+    );
+    expect(out).toMatchObject({
+      tone: "healthy",
+      stranded: 2,
+      forced: 2,
+      skipped: 0,
+      label: "drained 2 · 8h ago",
+    });
+  });
+
+  it("reports stranded when the per-run cap was hit (skipped > 0)", () => {
     const out = summarizeForceDrain(
       {
         startedAt: new Date(NOW - 8 * 3600_000).toISOString(),
@@ -99,9 +168,13 @@ describe("summarizeForceDrain", () => {
       },
       NOW,
     );
-    expect(out.tone).toBe("stranded");
-    expect(out.stranded).toBe(7);
-    expect(out.label).toBe("7 stranded · 8h ago");
+    expect(out).toMatchObject({
+      tone: "stranded",
+      stranded: 7,
+      forced: 3,
+      skipped: 4,
+      label: "4 backlog · drained 3 · 8h ago",
+    });
   });
 
   it("reports failed tone for non-done statuses", () => {
@@ -113,7 +186,12 @@ describe("summarizeForceDrain", () => {
       },
       NOW,
     );
-    expect(out.tone).toBe("failed");
-    expect(out.label).toBe("last run failed (2h ago)");
+    expect(out).toMatchObject({
+      tone: "failed",
+      label: "last run failed (2h ago)",
+      stranded: 0,
+      forced: 0,
+      skipped: 0,
+    });
   });
 });

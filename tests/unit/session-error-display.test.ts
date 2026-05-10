@@ -2,6 +2,8 @@ import { describe, it, expect } from "bun:test";
 import {
   formatSessionError,
   groupProviderIncidents,
+  isIncidentResolved,
+  INCIDENT_RESOLVED_AFTER_MS,
   type ClassifiedSession,
 } from "../../web/src/app/status/session-error-display";
 
@@ -173,5 +175,39 @@ describe("groupProviderIncidents", () => {
     ]);
     expect(groups).toHaveLength(1);
     expect(groups[0].count).toBe(3);
+  });
+});
+
+describe("isIncidentResolved", () => {
+  const t = 1_700_000_000_000;
+  const baseGroup = {
+    errorType: "mcp_connection_failed_error",
+    count: 5,
+    startedAt: t,
+    sessionIds: ["a", "b", "c", "d", "e"],
+  };
+
+  it("treats a fresh cluster (last error within window) as active", () => {
+    const now = t + INCIDENT_RESOLVED_AFTER_MS - 1_000;
+    expect(isIncidentResolved({ ...baseGroup, endedAt: t + 60_000 }, now)).toBe(false);
+  });
+
+  it("treats a quiet cluster (last error past window) as resolved", () => {
+    // 24h gap since the last error in the cluster — this is what was making
+    // yesterday's incident look like it was happening right now.
+    const now = t + 24 * 60 * 60_000;
+    expect(isIncidentResolved({ ...baseGroup, endedAt: t + 60_000 }, now)).toBe(true);
+  });
+
+  it("flips at the exact threshold boundary", () => {
+    const endedAt = t + 60_000;
+    // ms < threshold → still active
+    expect(
+      isIncidentResolved({ ...baseGroup, endedAt }, endedAt + INCIDENT_RESOLVED_AFTER_MS),
+    ).toBe(false);
+    // ms > threshold → resolved
+    expect(
+      isIncidentResolved({ ...baseGroup, endedAt }, endedAt + INCIDENT_RESOLVED_AFTER_MS + 1),
+    ).toBe(true);
   });
 });
