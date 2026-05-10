@@ -419,6 +419,7 @@ async function buildReleaseHits(
     if (!row) continue;
     if (params.sourceId && row.sourceId !== params.sourceId) continue;
     if (params.orgSourceIds && !params.orgSourceIds.includes(row.sourceId)) continue;
+    if (params.type && row.type !== params.type) continue;
     out.push({
       kind: "release",
       score: entry.score,
