@@ -293,13 +293,6 @@ collectionRoutes.get("/collections/:slug/releases", async (c) => {
     summary: r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
     titleGenerated: r.title_generated,
     titleShort: r.title_short,
-    /** @deprecated Use `summary`. */
-    contentSummary:
-      r.summary ?? (r.content.length > 150 ? r.content.slice(0, 150) + "..." : r.content),
-    /** @deprecated Use `titleGenerated`. */
-    contentTitle: r.title_generated,
-    /** @deprecated Use `titleShort`. */
-    contentTitleShort: r.title_short,
     content: hydrateMediaUrls(r.content, mediaOrigin),
     publishedAt: r.published_at,
     url: r.url,

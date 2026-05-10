@@ -133,7 +133,6 @@ describe("normalizers", () => {
         sourceName: "ACME",
         sourceSlug: "acme",
         summary: null,
-        contentSummary: null,
         media: [],
       },
     });

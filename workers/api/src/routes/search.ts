@@ -89,12 +89,6 @@ function hydrateReleaseHit(
     summary: row.summary,
     titleGenerated: row.titleGenerated,
     titleShort: row.titleShort,
-    /** @deprecated Use `summary`. */
-    contentSummary: row.summary,
-    /** @deprecated Use `titleGenerated`. */
-    contentTitle: row.titleGenerated,
-    /** @deprecated Use `titleShort`. */
-    contentTitleShort: row.titleShort,
     content: hydrateMediaUrls(row.content, mediaOrigin),
     media,
     publishedAt: row.publishedAt,
