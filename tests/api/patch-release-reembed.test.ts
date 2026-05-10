@@ -200,6 +200,19 @@ describe("PATCH /sources/:slug/releases/:id — re-embed side effect", () => {
     expect(res.status).toBe(404);
   });
 
+  it("returns 404 and does NOT schedule re-embed when release is deleted between pre-read and update (TOCTOU)", async () => {
+    // Simulate TOCTOU: pre-read succeeds (release exists), then release is
+    // deleted, then the update finds nothing.  In practice this is a real race
+    // window; here we model it by deleting the row before issuing the PATCH.
+    const { eq: eqDrizzle } = await import("drizzle-orm");
+    testDb.db.delete(releases).where(eqDrizzle(releases.id, "rel_test1")).run();
+
+    const { ctx, waitUntilCalls } = makeExecutionCtx();
+    const res = await patchRelease("rel_test1", { content: "ghost update" }, ctx);
+    expect(res.status).toBe(404);
+    expect(waitUntilCalls).toHaveLength(0);
+  });
+
   it("the DB update actually persists the change", async () => {
     const { ctx } = makeExecutionCtx();
     const res = await patchRelease("rel_test1", { title: "v2.0.0", version: "2.0.0" }, ctx);

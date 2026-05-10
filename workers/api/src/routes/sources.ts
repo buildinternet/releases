@@ -2234,6 +2234,7 @@ sourceRoutes.patch("/releases/:id", async (c) => {
   if (body.titleShort !== undefined) updates.titleShort = body.titleShort;
 
   const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
+  if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
 
   // Re-embed when any field that feeds the embedding text changes. Metadata-
   // only edits (version, url, publishedAt, contentHash) do not affect the
