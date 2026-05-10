@@ -14,8 +14,12 @@
 import type Anthropic from "@anthropic-ai/sdk";
 
 const MODEL = "claude-haiku-4-5";
-const MAX_BODY_CHARS = 8000;
-const MAX_OUTPUT_TOKENS = 220;
+
+/** Maximum characters of release body sent to the model (truncated at this length). */
+export const MAX_BODY_CHARS = 8000;
+
+/** Cap on the model's response. Sized for ~80-char title + ~70-char short + 1-2 sentence summary in tagged XML. */
+export const MAX_OUTPUT_TOKENS = 220;
 
 // In-prompt sentinel emitted by the model when the body is boilerplate-only.
 // The empty-body short-circuit (isEmptyContent) is a separate path — those
@@ -62,7 +66,11 @@ export function isEmptyContent(raw: string): boolean {
   return words.length === 0;
 }
 
-const SYSTEM_PROMPT = `You write a title, a short title, and a summary for a release-notes entry, used in a developer-facing changelog index.
+/**
+ * The production system prompt. Exported so cross-provider evaluations can keep
+ * the prompt constant as the comparison axis (see issue #851).
+ */
+export const SYSTEM_PROMPT = `You write a title, a short title, and a summary for a release-notes entry, used in a developer-facing changelog index.
 
 <output_structure>
 Output exactly one <title>...</title> tag, then one <title_short>...</title_short> tag, then one <summary>...</summary> tag, in that order. Output nothing before, between, or after these tags.
@@ -299,7 +307,11 @@ export interface SummarizeReleaseResult {
   skipped: boolean;
 }
 
-function buildReleaseBlock(input: SummarizeReleaseInput): string {
+/**
+ * Render the user-message block from a release. Exported for cross-provider
+ * evaluations that need the same input shape.
+ */
+export function buildReleaseBlock(input: SummarizeReleaseInput): string {
   const body =
     input.content.length > MAX_BODY_CHARS
       ? input.content.slice(0, MAX_BODY_CHARS) + "\n\n[truncated]"
@@ -325,7 +337,12 @@ function buildReleaseBlock(input: SummarizeReleaseInput): string {
     .join("\n");
 }
 
-function extractTagged(text: string, tag: string): string {
+/**
+ * Pull a single tagged value out of a model response. Returns "" when the tag
+ * is missing — callers should treat empty as "field not provided", not as an
+ * error condition.
+ */
+export function extractTagged(text: string, tag: string): string {
   const re = new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`, "i");
   const m = text.match(re);
   return (m?.[1] ?? "").trim();
