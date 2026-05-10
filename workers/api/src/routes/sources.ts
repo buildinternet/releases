@@ -67,7 +67,7 @@ import {
 import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { sourceToMarkdown, releaseToMarkdown } from "@releases/rendering/formatters.js";
-import { fetchOne } from "../cron/poll-fetch.js";
+import { fetchOne, embedReleasesForSource } from "../cron/poll-fetch.js";
 import { getSourceMeta, isGitHubFetched } from "@releases/adapters/feed.js";
 import { sanitizeVersion } from "@releases/adapters/extract/shared.js";
 import {
@@ -2206,8 +2206,14 @@ sourceRoutes.patch("/releases/:id", async (c) => {
     titleShort?: string | null;
   }>();
 
-  const [existing] = await db.select().from(releases).where(eq(releases.id, id));
-  if (!existing) return c.json({ error: "not_found", message: "Release not found" }, 404);
+  // Join sources so we have the source row available for the re-embed side
+  // effect without a second round-trip after the update.
+  const [row] = await db
+    .select({ release: releases, source: sources })
+    .from(releases)
+    .innerJoin(sources, eq(sources.id, releases.sourceId))
+    .where(eq(releases.id, id));
+  if (!row) return c.json({ error: "not_found", message: "Release not found" }, 404);
 
   const updates: Record<string, unknown> = {};
   if (body.title !== undefined) updates.title = body.title;
@@ -2228,6 +2234,30 @@ sourceRoutes.patch("/releases/:id", async (c) => {
   if (body.titleShort !== undefined) updates.titleShort = body.titleShort;
 
   const [updated] = await db.update(releases).set(updates).where(eq(releases.id, id)).returning();
+  if (!updated) return c.json({ error: "not_found", message: "Release not found" }, 404);
+
+  // Re-embed when any field that feeds the embedding text changes. Metadata-
+  // only edits (version, url, publishedAt, contentHash) do not affect the
+  // vector and are skipped to avoid wasting Voyage budget.
+  const embeddingRelevant =
+    body.content !== undefined ||
+    body.title !== undefined ||
+    body.summary !== undefined ||
+    body.titleGenerated !== undefined ||
+    body.titleShort !== undefined;
+
+  if (embeddingRelevant) {
+    logEvent("info", {
+      component: "patch-release",
+      event: "reembed-triggered",
+      releaseId: id,
+      sourceId: row.source.id,
+    });
+    c.executionCtx.waitUntil(
+      embedReleasesForSource(db, row.source, [id], c.env, { throwOnError: false }),
+    );
+  }
+
   return c.json(updated);
 });
 
