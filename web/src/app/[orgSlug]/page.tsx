@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { api, ApiSetupError, type OrgHeatmap } from "@/lib/api";
 import { ReleaseTimeline } from "@/components/release-timeline";
 import { OverviewView } from "@/components/overview-view";
@@ -42,9 +43,7 @@ export default async function OrgOverviewPage({
 }) {
   const { orgSlug } = await params;
 
-  const twoYearsAgo = new Date();
-  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-  const activityFrom = twoYearsAgo.toISOString().slice(0, 10);
+  const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   let org;
   let activity;

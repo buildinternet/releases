@@ -1,4 +1,4 @@
-import { notFound, redirect } from "next/navigation";
+import { notFound, permanentRedirect } from "next/navigation";
 import { api } from "@/lib/api";
 
 /**
@@ -34,5 +34,5 @@ export default async function LegacySourceRedirect({
   if (path) forward.set("path", path);
   if (offset) forward.set("offset", offset);
   const qs = forward.toString();
-  redirect(`/${resolved.orgSlug}/${resolved.sourceSlug}${subpath}${qs ? `?${qs}` : ""}`);
+  permanentRedirect(`/${resolved.orgSlug}/${resolved.sourceSlug}${subpath}${qs ? `?${qs}` : ""}`);
 }

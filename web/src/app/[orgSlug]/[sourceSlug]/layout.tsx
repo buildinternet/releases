@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { daysAgoIso } from "@buildinternet/releases-core/dates";
 import { ApiSetupError } from "@/lib/api";
 import { ViewTransition } from "react";
 import { Header } from "@/components/header";
@@ -28,9 +29,7 @@ export default async function SourceLayout({
 }) {
   const { orgSlug, sourceSlug } = await params;
 
-  const twoYearsAgo = new Date();
-  twoYearsAgo.setFullYear(twoYearsAgo.getFullYear() - 2);
-  const activityFrom = twoYearsAgo.toISOString().slice(0, 10);
+  const activityFrom = daysAgoIso(365 * 2).slice(0, 10);
 
   let source;
   let activity;

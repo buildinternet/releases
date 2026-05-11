@@ -26,15 +26,26 @@ export async function generateMetadata({
   }
 }
 
+function firstParam(v: string | string[] | undefined): string | undefined {
+  return Array.isArray(v) ? v[0] : v;
+}
+
 export default async function SourceChangelogPage({
   params,
   searchParams,
 }: {
   params: Promise<{ orgSlug: string; sourceSlug: string }>;
-  searchParams: Promise<{ path?: string; offset?: string }>;
+  // Next.js delivers repeated query params as `string[]`; collapse to the
+  // first value so `?path=a&path=b` doesn't reach the API as an array.
+  searchParams: Promise<{
+    path?: string | string[];
+    offset?: string | string[];
+  }>;
 }) {
   const { orgSlug, sourceSlug } = await params;
-  const { path: changelogPath, offset: offsetParam } = await searchParams;
+  const sp = await searchParams;
+  const changelogPath = firstParam(sp.path);
+  const offsetParam = firstParam(sp.offset);
   // `offset` arrives from search chunk deep-links so the changelog view can
   // start its initial slice at byte N instead of 0 (the range API's
   // heading-aware slicer snaps forward to the next `##` heading).
