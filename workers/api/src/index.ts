@@ -358,12 +358,18 @@ v1.use("/lookups/by-domain", cacheControl(60, { staleWhileRevalidate: 30, isPubl
 v1.use("/lookups/source-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/product-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/categories/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
+v1.use(
+  "/categories/:slug/releases",
+  cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+  varyOnAccept(),
+);
 v1.use("/tags/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/collections", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/collections/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use(
   "/collections/:slug/releases",
   cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }),
+  varyOnAccept(),
 );
 v1.use("/openapi.json", cacheControl(3600, { staleWhileRevalidate: 300, isPublic: true }));
 

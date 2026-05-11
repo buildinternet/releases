@@ -538,9 +538,10 @@ export function collectionToMarkdown(
   return lines.join("\n");
 }
 
-// ── Collection Release Feed → Markdown ─────────────────────────────
+// ── Aggregated Release Feed → Markdown ────────────────────────────
 
-export function collectionReleaseFeedToMarkdown(
+function aggregateReleaseFeedToMarkdown(
+  scope: "collection" | "category",
   slug: string,
   name: string,
   releases: CollectionReleaseItem[],
@@ -548,16 +549,18 @@ export function collectionReleaseFeedToMarkdown(
   opts: FormatOptions = {},
 ): string {
   const lines: string[] = [];
+  const basePath = scope === "collection" ? "collections" : "categories";
+  const nameKey = scope === "collection" ? "collection_name" : "category_name";
 
   lines.push("---");
-  lines.push(yamlLine("collection", slug));
-  lines.push(yamlLine("collection_name", name));
+  lines.push(yamlLine(scope, slug));
+  lines.push(yamlLine(nameKey, name));
   lines.push(yamlLine("release_count", releases.length));
   if (pagination.nextCursor) {
     lines.push(yamlLine("has_more", "true"));
   }
   if (opts.baseUrl) {
-    lines.push(yamlLine("canonical", `${opts.baseUrl}/collections/${slug}`));
+    lines.push(yamlLine("canonical", `${opts.baseUrl}/${basePath}/${slug}`));
   }
   lines.push("---");
   lines.push("");
@@ -573,10 +576,30 @@ export function collectionReleaseFeedToMarkdown(
   pushPaginationFooter(
     lines,
     pagination,
-    opts.baseUrl ? `${opts.baseUrl}/collections/${slug}/releases` : null,
+    opts.baseUrl ? `${opts.baseUrl}/${basePath}/${slug}/releases` : null,
   );
 
   return lines.join("\n");
+}
+
+export function collectionReleaseFeedToMarkdown(
+  slug: string,
+  name: string,
+  releases: CollectionReleaseItem[],
+  pagination: { nextCursor: string | null; limit: number },
+  opts: FormatOptions = {},
+): string {
+  return aggregateReleaseFeedToMarkdown("collection", slug, name, releases, pagination, opts);
+}
+
+export function categoryReleaseFeedToMarkdown(
+  slug: string,
+  name: string,
+  releases: CollectionReleaseItem[],
+  pagination: { nextCursor: string | null; limit: number },
+  opts: FormatOptions = {},
+): string {
+  return aggregateReleaseFeedToMarkdown("category", slug, name, releases, pagination, opts);
 }
 
 // ── Search Results → Markdown ──────────────────────────────────────

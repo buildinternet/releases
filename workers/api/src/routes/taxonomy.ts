@@ -8,9 +8,22 @@ import {
   orgTags,
   productTags,
 } from "@buildinternet/releases-core/schema";
-import { isValidCategory } from "@buildinternet/releases-core/categories";
+import { categoryDisplayName, isValidCategory } from "@buildinternet/releases-core/categories";
+import { getCategoryReleasesFeed } from "@releases/core-internal/category-feed";
+import {
+  buildFeedCursor,
+  formatAggregateReleaseRow,
+  parseBoolParam,
+  parseLimitParam,
+} from "../utils.js";
+import { wantsMarkdown, markdownResponse } from "../middleware/content-negotiation.js";
+import { categoryReleaseFeedToMarkdown } from "@releases/rendering/formatters.js";
 import type { Env } from "../index.js";
-import type { CategoryDetail, TagDetail } from "@buildinternet/releases-api-types";
+import type {
+  CategoryDetail,
+  CategoryReleaseItem,
+  TagDetail,
+} from "@buildinternet/releases-api-types";
 
 export const taxonomyRoutes = new Hono<Env>();
 
@@ -52,6 +65,49 @@ taxonomyRoutes.get("/categories/:slug", async (c) => {
 
   const body: CategoryDetail = { slug, orgs, products: productsList };
   return c.json(body);
+});
+
+// Aggregated release feed for a category — mirrors
+// /v1/collections/:slug/releases (cursor, pagination, content negotiation).
+// Effective category = COALESCE(product.category, org.category), see
+// @releases/core-internal/category-feed for details.
+taxonomyRoutes.get("/categories/:slug/releases", async (c) => {
+  const slug = c.req.param("slug");
+  if (!isValidCategory(slug)) {
+    return c.json({ error: "not_found", message: "Category not found" }, 404);
+  }
+  const cursorParam = c.req.query("cursor") ?? null;
+  const limit = parseLimitParam(c.req.query("limit"), 20, 100);
+  const includePrereleases = parseBoolParam(c.req.query("include_prereleases"));
+
+  const db = createDb(c.env.DB);
+  const results = await getCategoryReleasesFeed(db, slug, cursorParam, limit + 1, {
+    includePrereleases,
+  });
+
+  const hasMore = results.length > limit;
+  const pageRows = hasMore ? results.slice(0, limit) : results;
+
+  let nextCursor: string | null = null;
+  if (hasMore && pageRows.length > 0) {
+    nextCursor = buildFeedCursor(pageRows[pageRows.length - 1]);
+  }
+
+  const mediaOrigin = c.env.MEDIA_ORIGIN ?? "";
+  const releasesFormatted: CategoryReleaseItem[] = pageRows.map((r) =>
+    formatAggregateReleaseRow(r, mediaOrigin),
+  );
+
+  const pagination = { nextCursor, limit };
+
+  if (wantsMarkdown(c)) {
+    return markdownResponse(
+      c,
+      categoryReleaseFeedToMarkdown(slug, categoryDisplayName(slug), releasesFormatted, pagination),
+    );
+  }
+
+  return c.json({ releases: releasesFormatted, pagination });
 });
 
 taxonomyRoutes.get("/tags/:slug", async (c) => {

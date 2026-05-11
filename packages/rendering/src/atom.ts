@@ -131,7 +131,7 @@ function buildEntry(input: EntryInput, baseUrl: string): { xml: string; updated:
 // ── Feed assembly ────────────────────────────────────────────────────
 
 interface FeedShell {
-  scope: "org" | "source" | "collection";
+  scope: "org" | "source" | "collection" | "category";
   slug: string;
   title: string;
   subtitle?: string;
@@ -255,6 +255,41 @@ export function orgReleasesToAtom(
   );
 }
 
+function aggregateReleaseEntries(releases: CollectionReleaseItem[], baseUrl: string): EntryInput[] {
+  return releases.map((release) => ({
+    release,
+    sourceSlug: release.source.slug,
+    sourceName: release.source.name,
+    orgName: release.org.name,
+    linkHref: release.id ? `${baseUrl}/release/${release.id}` : release.url,
+  }));
+}
+
+/** Atom feed for a category rollup — aggregated releases across all orgs/products in the category. */
+export function categoryReleasesToAtom(
+  params: {
+    categorySlug: string;
+    categoryName: string;
+    releases: CollectionReleaseItem[];
+  },
+  opts: AtomFeedOptions,
+): string {
+  const path = `${opts.baseUrl}/categories/${params.categorySlug}`;
+  return buildFeed(
+    {
+      scope: "category",
+      slug: params.categorySlug,
+      title: `${params.categoryName} — releases`,
+      subtitle: `Aggregated releases from organizations and products in the ${params.categoryName} category`,
+      selfUrl: `${path}.atom`,
+      alternateUrl: path,
+      authorName: params.categoryName,
+      entries: aggregateReleaseEntries(params.releases, opts.baseUrl),
+    },
+    opts,
+  );
+}
+
 /** Atom feed for a collection — aggregated releases across multiple member orgs. */
 export function collectionReleasesToAtom(
   params: {
@@ -265,16 +300,7 @@ export function collectionReleasesToAtom(
   },
   opts: AtomFeedOptions,
 ): string {
-  const collectionPath = `${opts.baseUrl}/collections/${params.collectionSlug}`;
-
-  const entries: EntryInput[] = params.releases.map((release) => ({
-    release,
-    sourceSlug: release.source.slug,
-    sourceName: release.source.name,
-    orgName: release.org.name,
-    linkHref: release.id ? `${opts.baseUrl}/release/${release.id}` : release.url,
-  }));
-
+  const path = `${opts.baseUrl}/collections/${params.collectionSlug}`;
   return buildFeed(
     {
       scope: "collection",
@@ -282,10 +308,10 @@ export function collectionReleasesToAtom(
       title: `${params.collectionName} — releases`,
       subtitle:
         params.description ?? `Aggregated releases from organizations in ${params.collectionName}`,
-      selfUrl: `${collectionPath}.atom`,
-      alternateUrl: collectionPath,
+      selfUrl: `${path}.atom`,
+      alternateUrl: path,
       authorName: params.collectionName,
-      entries,
+      entries: aggregateReleaseEntries(params.releases, opts.baseUrl),
     },
     opts,
   );

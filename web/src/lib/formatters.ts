@@ -7,6 +7,7 @@ export {
   knowledgeToMarkdown,
   collectionToMarkdown,
   collectionReleaseFeedToMarkdown,
+  categoryReleaseFeedToMarkdown,
 } from "@releases/rendering/formatters";
 
 export type {

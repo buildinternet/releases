@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { api, ApiSetupError } from "@/lib/api";
+import { CATEGORIES } from "@buildinternet/releases-core/categories";
 import { adminDocs, statusDashboard } from "@/flags";
 import { getStaticBaseUrl } from "@/lib/base-url";
 import { docsManifest } from "@/lib/docs-manifest";
@@ -126,7 +127,20 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.6,
     }));
 
-    dynamicEntries = [...orgEntries, ...productEntries, ...sourceEntries, ...collectionEntries];
+    const categoryEntries: MetadataRoute.Sitemap = CATEGORIES.map((slug) => ({
+      url: `${BASE_URL}/categories/${slug}`,
+      lastModified: now,
+      changeFrequency: "daily" as const,
+      priority: 0.5,
+    }));
+
+    dynamicEntries = [
+      ...orgEntries,
+      ...productEntries,
+      ...sourceEntries,
+      ...collectionEntries,
+      ...categoryEntries,
+    ];
   } catch (err) {
     if (!(err instanceof ApiSetupError)) throw err;
   }

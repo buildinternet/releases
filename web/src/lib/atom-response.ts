@@ -5,8 +5,14 @@ import type {
   OrgReleasesResponse,
   CollectionDetail,
   CollectionReleasesResponse,
+  CategoryReleasesResponse,
 } from "@/lib/api";
-import { sourceToAtom, orgReleasesToAtom, collectionReleasesToAtom } from "@/lib/atom";
+import {
+  sourceToAtom,
+  orgReleasesToAtom,
+  collectionReleasesToAtom,
+  categoryReleasesToAtom,
+} from "@/lib/atom";
 import { atomEtag, formatLastModified, shouldReturn304 } from "@releases/rendering/atom-http";
 import { getBaseUrl } from "@/lib/base-url";
 
@@ -71,6 +77,25 @@ export function collectionAtomResponse(
       collectionSlug: collection.slug,
       collectionName: collection.name,
       description: collection.description,
+      releases: feed.releases,
+    },
+    { baseUrl },
+  );
+  const lastModified = feed.releases[0]?.publishedAt ?? null;
+  return atomResponse(request, body, { lastModified });
+}
+
+/** Render a category rollup's aggregated release feed into an Atom response. */
+export function categoryAtomResponse(
+  request: NextRequest,
+  category: { slug: string; name: string },
+  feed: CategoryReleasesResponse,
+): NextResponse {
+  const baseUrl = getBaseUrl(request);
+  const body = categoryReleasesToAtom(
+    {
+      categorySlug: category.slug,
+      categoryName: category.name,
       releases: feed.releases,
     },
     { baseUrl },

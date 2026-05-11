@@ -2,13 +2,21 @@ import type { Metadata } from "next";
 import { cache } from "react";
 import { notFound } from "next/navigation";
 import Link from "next/link";
-import { categoryDisplayName } from "@buildinternet/releases-core/categories";
-import { api, ApiSetupError, type CategoryDetail } from "@/lib/api";
+import { categoryDisplayName, isValidCategory } from "@buildinternet/releases-core/categories";
+import {
+  api,
+  ApiSetupError,
+  type CategoryDetail,
+  type CategoryReleasesResponse,
+  type CollectionMemberOrg,
+} from "@/lib/api";
 import { Header } from "@/components/header";
 import { SetupMessage } from "@/components/setup-message";
+import { CollectionTimeline } from "@/components/collection-timeline";
 import { TaxonomyList } from "@/components/taxonomy-list";
 
 const getCategory = cache((slug: string) => api.categoryDetail(slug));
+const getCategoryReleases = cache((slug: string) => api.categoryReleases(slug, { limit: 20 }));
 
 export async function generateMetadata({
   params,
@@ -16,20 +24,40 @@ export async function generateMetadata({
   params: Promise<{ slug: string }>;
 }): Promise<Metadata> {
   const { slug } = await params;
+  if (!isValidCategory(slug)) return { title: "Category" };
   const title = categoryDisplayName(slug);
+  const description = `Recent releases from organizations and products in the ${title} category.`;
+  const url = `/categories/${slug}`;
   return {
     title,
-    description: `Organizations and products in the ${title} category`,
-    alternates: { canonical: `/categories/${slug}` },
+    description,
+    openGraph: {
+      type: "website",
+      url,
+      title: `${title} — releases.sh`,
+      description,
+    },
+    twitter: {
+      title: `${title} — releases.sh`,
+      description,
+    },
+    alternates: {
+      canonical: url,
+      types: {
+        "application/atom+xml": [{ url: `${url}.atom`, title: `${title} release notes` }],
+      },
+    },
   };
 }
 
 export default async function CategoryPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
+  if (!isValidCategory(slug)) notFound();
 
   let detail: CategoryDetail;
+  let releases: CategoryReleasesResponse;
   try {
-    detail = await getCategory(slug);
+    [detail, releases] = await Promise.all([getCategory(slug), getCategoryReleases(slug)]);
   } catch (err) {
     if (err instanceof ApiSetupError) {
       return (
@@ -43,6 +71,18 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
   }
 
   const title = categoryDisplayName(detail.slug);
+  // The collections feed expects `CollectionMemberOrg` for chip rendering;
+  // category detail returns the narrower `TaxonomyOrg` (no githubHandle /
+  // description). Shim missing fields to `null` — OrgAvatar falls back to
+  // initials when both avatarUrl and githubHandle are absent.
+  const memberOrgs: CollectionMemberOrg[] = detail.orgs.map((o) => ({
+    slug: o.slug,
+    name: o.name,
+    domain: o.domain,
+    avatarUrl: o.avatarUrl,
+    githubHandle: null,
+    description: null,
+  }));
 
   return (
     <div className="min-h-screen">
@@ -58,14 +98,30 @@ export default async function CategoryPage({ params }: { params: Promise<{ slug:
           <span className="text-stone-600 dark:text-stone-300 font-medium">{title}</span>
         </div>
 
-        <h1 className="text-[28px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
+        <h1 className="text-[34px] font-bold tracking-tight text-stone-900 dark:text-stone-100 mt-4">
           {title}
         </h1>
-        <p className="text-sm text-stone-500 dark:text-stone-400 mt-1">
-          Organizations and products in category <span className="font-medium">{title}</span>.
+        <p className="text-[15px] text-stone-500 dark:text-stone-400 mt-1">
+          Recent releases from organizations and products in the{" "}
+          <span className="font-medium">{title}</span> category.
         </p>
 
-        <TaxonomyList orgs={detail.orgs} products={detail.products} />
+        <div className="mt-7 pb-10">
+          <CollectionTimeline
+            key={slug}
+            fetchEndpoint={`/api/category-releases/${slug}`}
+            formatPath={`/categories/${slug}`}
+            initialReleases={releases.releases}
+            initialCursor={releases.pagination.nextCursor}
+            orgs={memberOrgs}
+          />
+        </div>
+
+        {(detail.orgs.length > 0 || detail.products.length > 0) && (
+          <div className="border-t border-stone-200 dark:border-stone-800 pt-2">
+            <TaxonomyList orgs={detail.orgs} products={detail.products} />
+          </div>
+        )}
       </div>
     </div>
   );
