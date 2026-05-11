@@ -5,6 +5,7 @@ import { ApiSetupError, ApiNotFoundError } from "@/lib/api";
 import { JsonLd } from "@/components/json-ld";
 import { SourceReleaseList } from "@/components/source-release-list";
 import { RelatedRail } from "@/components/related-rail";
+import { buildSourceEntityJsonLd } from "@/lib/schema-org";
 import { getSource } from "./_lib/source-data";
 
 export async function generateMetadata({
@@ -108,18 +109,10 @@ export default async function SourceReleasesPage({
       : null;
 
   const sourceUrl = `https://releases.sh/${orgSlug}/${sourceSlug}`;
-  const lastModified = source.lastFetchedAt ?? source.lastPolledAt ?? undefined;
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
-      {
-        "@type": "SoftwareApplication",
-        name: source.name,
-        softwareVersion: source.latestVersion ?? undefined,
-        url: sourceUrl,
-        ...(source.org ? { publisher: { "@type": "Organization", name: source.org.name } } : {}),
-        ...(lastModified ? { dateModified: lastModified } : {}),
-      },
+      buildSourceEntityJsonLd(source, sourceUrl),
       {
         "@type": "BreadcrumbList",
         itemListElement: [
