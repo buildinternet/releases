@@ -702,6 +702,22 @@ export interface CategoryDetail {
 }
 
 /**
+ * Item shape on GET /v1/categories — the overview list. Categories are a
+ * fixed taxonomy (`CATEGORIES` in `@buildinternet/releases-core/categories`),
+ * so the API always returns every slug, including ones with zero members.
+ * `orgCount` counts orgs whose `category` matches; `productCount` counts
+ * products whose own `category` matches (overriding any parent-org category).
+ * Both counts pass through `organizations_public`, so on_demand and
+ * soft-deleted orgs are excluded.
+ */
+export interface CategoryListItem {
+  slug: string;
+  name: string;
+  orgCount: number;
+  productCount: number;
+}
+
+/**
  * Aggregated release feed row for a category rollup — same wire shape as
  * `CollectionReleaseItem` (both surfaces aggregate releases across multiple
  * orgs). Aliased rather than duplicated so renderers can treat them as one.

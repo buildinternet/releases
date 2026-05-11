@@ -357,6 +357,7 @@ v1.use("/sitemap", cacheControl(600, { staleWhileRevalidate: 600, isPublic: true
 v1.use("/lookups/by-domain", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/source-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
 v1.use("/lookups/product-by-slug", cacheControl(60, { staleWhileRevalidate: 30, isPublic: true }));
+v1.use("/categories", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use("/categories/:slug", cacheControl(300, { staleWhileRevalidate: 60, isPublic: true }));
 v1.use(
   "/categories/:slug/releases",
@@ -406,24 +407,6 @@ v1.route("/", workflowsRoutes);
 v1.route("/", telemetryRoutes);
 v1.route("/", taxonomyRoutes);
 v1.route("/", collectionRoutes);
-
-// Static endpoint — categories are defined in code, not DB
-v1.get("/categories", (c) => {
-  // Import would create a circular dep, so we inline the list here.
-  // Must stay in sync with src/lib/categories.ts.
-  return c.json([
-    "ai",
-    "cloud",
-    "database",
-    "design",
-    "developer-tools",
-    "devops",
-    "framework",
-    "infrastructure",
-    "observability",
-    "security",
-  ]);
-});
 
 // OpenAPI spec + Scalar reference UI. Mounted after all v1 routes so the
 // generator sees the complete route table. Public — no auth gate so external
