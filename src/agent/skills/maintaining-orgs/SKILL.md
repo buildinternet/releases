@@ -104,60 +104,98 @@ Use the Agent tool with `run_in_background: true` and `model: "sonnet"` for each
 
 **Have agents return markdown inline, not upload it.** Dispatched sub-agents commonly get their `Write` and `Bash` denied against `/tmp`, which breaks the write-file-then-`overview update` handoff. Shape the prompt so the agent returns generated markdown in its final report; the parent session writes the file and uploads. This also keeps the failure surface in one place — if an agent bails, the parent falls back to generating in-session from `overview inputs`.
 
+**Always have agents return citations too.** `overview update` is replace-all on citations — if `--citations-file` is omitted, existing citations are CLEARED. Batch refreshes that skip citations silently strip every inline source link from the page. Require a citations JSON in the agent's return payload (even when model-asserted rather than Anthropic-emitted), then upload both with `--content-file` and `--citations-file`. The two existing-content sub-agents that wrote `/tmp/<slug>-overview-citations.json` proved this works in practice.
+
 Prompt template:
 
 ```
 Regenerate the AI overview for the `{slug}` org in the Releases registry.
 The `releases` CLI is installed and authenticated against production.
-Invoke the `regenerating-overviews` skill for the prompt and workflow.
+Read the `regenerating-overviews` skill for the full prompt; the style rules
+below are the load-bearing subset and override anything else.
 
   1. (If scrape/agent sources) skim `releases admin playbook {slug}`.
   2. `releases admin source fetch --org {slug} --json --wait 600` if needed.
      If exit code != 0, STOP and report the error verbatim — do not generate
      from older data.
   3. `releases admin overview inputs {slug} --json`. If `selected` is empty,
-     stop and report "empty-window".
-  4. Generate the markdown inline per the skill.
+     stop and report "empty-window". Use the URLs in `selected[*].url` as
+     the citation source set — do not invent URLs.
+  4. Generate the markdown and a citations array per the rules below.
 
-Output rules — these are not negotiable:
+Style rules — these are not negotiable; the parent lints for violations:
+  - HARD: do NOT open with the org's own name as the sentence subject.
+    The page header already shows the org name. Bad: "Apify's SDK shipped…",
+    "Tinybird shipped multi-region…", "pnpm's biggest release…". Good:
+    "Recently shipped X" or naming a product ("Nuxt Agent launched…").
+    Product names containing the org name ("Linear Agent", "Cloudflare
+    Workers") are fine — the rule targets bare org-as-subject openers.
+  - HARD: opening sentence ≤25 words. Count and trim.
+  - HARD: bold-tease section headers describe the user-facing claim, NOT
+    the version or endpoint. Bad: "**3.2.0 added X**", "**Vault 1.21.3
+    patched CVE…**". Good: "**Persistent state landed**", "**CVE patches
+    shipped across the 1.21.x line**".
+  - HARD: no editorializing. Ban: "biggest", "doubling down", "leap
+    forward", "in the best sense", "powerful", "seamless", "comprehensive",
+    "world-class", "transformative", "next-generation", "cutting-edge".
+  - HARD: no admissions of ingestion gaps ("release notes were not
+    indexed"). If a release isn't in `selected`, just don't mention it.
   - 250 words target. 300 words is the HARD CEILING. Strip until it fits.
-  - No markdown headings (`#`, `##`, …). The UI renders the org header.
-  - Return ONLY the markdown inside a fenced code block. No preamble, no
-    word-count notes, no "Here you go", no commentary after.
+  - 80 words is the floor. Don't pad — if signal is thin, ship a shorter
+    page.
+  - No markdown headings (`#`, `##`, …).
 
-Acceptable shape (for reference — do not copy verbatim):
+Citations — model-asserted is acceptable in batch:
+  - For each major claim, pick the release URL from `selected[*].url` that
+    most directly backs it.
+  - Emit a JSON array of `{startIndex, endIndex, sourceUrl, title, citedText}`
+    where `startIndex`/`endIndex` are character offsets into your generated
+    markdown body (compute against the final body you return), `sourceUrl`
+    is the chosen release URL, `title` is its release title, and
+    `citedText` is a short substring of your body that the citation backs.
+  - Spans should not overlap stripped characters and `endIndex` must not
+    exceed the body length.
 
-~~~markdown
-**Vercel** focused on AI Gateway GA and Cache Components in the last 90 days.
+Return EXACTLY two fenced blocks in your final message — nothing else
+between them, no preamble, no commentary after:
 
-**AI Gateway shipped GA** with bring-your-own-key, request caching, and per-
-project budget caps. Pricing tiers are now metered per million tokens; the
-free tier covers experimentation but not production traffic. Vercel SDK 6.0
-removes the legacy `experimental_streamText` export — `streamText` is the
-canonical API.
+  Slug: {slug}
+  Selected/Total: {n}/{total}
+  Status: generated | empty-window | fetch-error
 
-**Cache Components became stable** in Next.js 16. `use cache` directives now
-participate in PPR, and `unstable_cache` is deprecated in favor of
-`cacheTag` / `cacheLife`. The migration codemod handles ~80% of call sites.
-~~~
+  ~~~markdown
+  …the overview body…
+  ~~~
 
-Return in your final message:
-  - Slug, Selected/Total
-  - Status: generated | empty-window | fetch-error
-  - The generated markdown in a fenced code block (required when generated).
+  ~~~json
+  [ {"startIndex": …, "endIndex": …, "sourceUrl": "…", "title": "…",
+     "citedText": "…"}, … ]
+  ~~~
 
-Do not attempt to upload. The parent session handles writes.
+Do not attempt to upload. The parent session writes both files and runs
+`releases admin overview update`.
 ```
 
 ### Tracking results
 
-After agents complete, the parent harvests each returned code block, writes `/tmp/<slug>-overview.md`, and runs `releases admin overview update` in parallel (idempotent, last write wins). For any agent that bailed without content, re-fetch `overview inputs` locally and generate inline.
+After agents complete, the parent runs a **lint pass** on each returned body before uploading. Reject and re-prompt (or fix in-session) any body that trips:
+
+- Opens with `{OrgName}` or `**{OrgName}**` followed by a space — bare org-as-subject.
+- Opening sentence longer than 25 words.
+- A bold-tease that leads with a version number or CVE identifier.
+- Any banned phrase from the prompt's editorializing list.
+
+Then write `/tmp/<slug>-overview.md` and `/tmp/<slug>-overview-citations.json`, and run `releases admin overview update <slug> --content-file … --citations-file …` in parallel (idempotent, last write wins). Both files are required — omitting `--citations-file` clears existing citations on the page.
+
+**Citation offsets are JS string length, not bytes.** The API validates `endIndex <= content.length` where `content.length` is the JS `String.prototype.length` (UTF-16 code units). `wc -c` reports bytes — em-dashes (—), curly quotes, and other multi-byte UTF-8 characters inflate the byte count vs. the JS length. When clamping/validating offsets, use `bun --eval "const c=require('fs').readFileSync(path,'utf8'); process.stdout.write(String(c.length))"` to get the real ceiling. The API also rejects `endIndex` equal to the trailing newline position, so clamp to the JS length of the trimmed body.
+
+For any agent that bailed without content, re-fetch `overview inputs` locally and generate inline. When generating in-session, the parent can produce richer Anthropic-emitted citations per the `regenerating-overviews` skill (search_result blocks); batch sub-agents produce model-asserted citations from the URLs visible in `overview inputs` — accept the tradeoff.
 
 Summary table format:
 
 | Org | Window | Selected/Total | Result                                |
 | --- | ------ | -------------- | ------------------------------------- |
-| …   | 90d    | 9/9            | regenerated (1.7k chars)              |
+| …   | 90d    | 9/9            | regenerated (1.7k chars, 8 citations) |
 | …   | 90d    | 0/0            | skipped — no releases in window       |
 | …   | 90d    | 14/14          | regenerated in-session (agent bailed) |
 
