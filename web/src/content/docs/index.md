@@ -10,6 +10,8 @@ Changelog index for AI agents and developers.
 
 Releases tracks release notes, changelogs, and version updates across hundreds of developer tools, frameworks, and services. It provides a CLI, REST API, MCP server, and a set of auto-triggering agent skills for querying structured release data.
 
+For the motivations behind the project, see [Why](/docs/why).
+
 New here? [Install the CLI](/docs/installation), [add the skills](/docs/skills) to your agent, or jump to [Examples](/docs/examples).
 
 ## What you can do
